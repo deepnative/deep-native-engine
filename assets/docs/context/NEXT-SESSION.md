@@ -1,5 +1,7 @@
 # Handoff
 
+The current direction is the [Deep Native Engine AI learning and participation ecosystem](../PRODUCT-DIRECTION.md), serving IT practitioners, other professionals and general learners. Contractor-only positioning is superseded. Shared learning, practical application, bounded participation and reviewed contributions are core; career/contractor services and coaching offers are optional. [ECO-01 through ECO-08](ECOSYSTEM-JOURNEYS.md) extend the QA-002 acceptance register.
+
 Current authorization: context migration, planning, and repository agent/skill/workflow setup. Application implementation, deployment, and live integrations remain on hold until explicitly requested. Historical start-coding instructions do not change that scope.
 
 - [Project backlog](https://github.com/orgs/deepnative/projects/1/views/1)

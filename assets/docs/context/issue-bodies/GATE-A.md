@@ -6,7 +6,7 @@ Phase A — Define and demonstrate.
 
 **Accountable role:** Product owner / stage owner (name the actual owner before execution).
 
-**Status:** Planned / Backlog. This issue specifies future work. The current assignment authorizes planning only; it does not authorize coding or live commercial actions.
+**Status:** Planned / Backlog. This issue specifies future work. Planning and repository agent/skill/workflow setup are authorized. Application implementation and live commercial actions still require explicit authorization.
 
 **Roadmap:** [ROADMAP #1](https://github.com/deepnative/deep-native-engine/issues/1)
 
@@ -21,6 +21,7 @@ Before starting, confirm scope, a named accountable owner, required decisions, t
 - [ ] Offer scope, private prototype, common foundation, assessment method, rights and capacity are reviewable. Missing real-world decisions are explicit launch blockers; no unavailable expertise is advertised.
 - [ ] All mandatory child AC/DoD outcomes are evidenced, with linked defects and explicit stop decisions; deferred options are recorded as such.
 - [ ] Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate.
+- [ ] Approve the cross-audience story map, common learning/participation scope, access model and contribution/moderation rules under PRODUCT-DIRECTION.md. Contractor-only admission is superseded.
 
 ## Verification and acceptance evidence
 
@@ -30,6 +31,7 @@ Use reviewable documents and actual source/operational evidence for this issue. 
 
 ## Definition of done
 
+- [ ] Audience-dependent criteria are evidenced for applicable IT, non-IT professional and general-learner cases; the [expanded journey register](https://github.com/deepnative/deep-native-engine/blob/main/assets/docs/context/ECOSYSTEM-JOURNEYS.md) maps the changed requirements without silently deleting original coverage obligations.
 - [ ] Every acceptance criterion is checked with a linked artifact, result or recorded decision; unmet external requirements remain visible.
 - [ ] Dependencies and accountable reviewer are confirmed; the delivered result receives review and blocking findings are resolved.
 - [ ] Evidence is reproducible or source-verifiable, dated and scoped; demo/test/manual/configured/live-verified states and assumptions are explicit.
@@ -39,13 +41,17 @@ Use reviewable documents and actual source/operational evidence for this issue. 
 
 ## Non-goals and stop conditions
 
-Indicative timing is not a promise. Current permission is planning only. Stop the affected work when required authorization, qualified capacity, privacy boundaries or promised terms cannot be satisfied; record the blocker and continue independent authorized work.
+Indicative timing is not a promise. Current authorization covers planning and repository setup; application implementation remains on hold. Stop the affected work when required authorization, qualified capacity, privacy boundaries or promised terms cannot be satisfied; record the blocker and continue independent authorized work.
+
+## Current audience and product direction
+
+The [current product direction](https://github.com/deepnative/deep-native-engine/blob/main/assets/docs/PRODUCT-DIRECTION.md) supersedes contractor-only admission and career assumptions in the archived source. Deep Native Engine serves IT practitioners, professionals in other fields and people with general learning interests. Shared AI learning, practical projects, bounded participation and reviewed contributions form the core; contractor/career goals and high-touch coaching are optional paths. Preserve applicable privacy, consent, money/date and coverage invariants. Current authorization remains planning/repository setup; application implementation is not started.
 
 ## Source and traceability
 
 Weeks 1-2 (relative estimate)
 
-Original package preserved locally under `assets/docs/context/source-2026-09-15/outputs/contractor-platform/`; the complete copied source is checksum-listed in `assets/docs/context/source-manifest.json`. Archived start-coding instructions are superseded by the current planning-only request. Source documents are local and are not claimed to be committed or published.
+Original package preserved locally under `assets/docs/context/source-2026-09-15/outputs/contractor-platform/`; the complete copied source is checksum-listed in `assets/docs/context/source-manifest.json`. Archived start-coding instructions do not authorize application implementation. The preserved context is versioned in [repository setup PR #56](https://github.com/deepnative/deep-native-engine/pull/56); [browse this source snapshot](https://github.com/deepnative/deep-native-engine/tree/b1cb29fcc16dc537f9efa298a9add7de30ae7fe2/assets/docs/context).
 
 ## Phase work inventory
 

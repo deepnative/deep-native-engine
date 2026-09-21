@@ -2,7 +2,7 @@
 
 ## 1. Establish scope
 
-Read the root [working agreement](../../../AGENTS.md), [context index](../context/README.md), [quality gates](../context/QUALITY-GATES.md), and the live issue. Name the actual accountable owner, observable acceptance criteria, dependencies, non-goals, and a test/evidence plan. A Backlog issue or historical build prompt alone does not authorize implementation.
+Read the root [working agreement](../../../AGENTS.md), [current product direction](../PRODUCT-DIRECTION.md), [context index](../context/README.md), [quality gates](../context/QUALITY-GATES.md), and the live issue. Name the actual accountable owner, observable acceptance criteria, dependencies, non-goals, and a test/evidence plan. A Backlog issue or historical build prompt alone does not authorize implementation.
 
 Current scope is planning and repository setup. [GOV-001](https://github.com/deepnative/deep-native-engine/issues/11) tracks the working agreement. QA-001/002/003 remain application testing work. This setup does not close their acceptance criteria.
 

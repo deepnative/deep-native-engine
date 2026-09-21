@@ -6,7 +6,7 @@ Reserve qualified expert capacity and define service operations.
 
 **Accountable role:** Service operations lead (name the actual owner before execution).
 
-**Status:** Planned / Backlog. This issue specifies future work. The current assignment authorizes planning only; it does not authorize coding or live commercial actions.
+**Status:** Planned / Backlog. This issue specifies future work. Planning and repository agent/skill/workflow setup are authorized. Application implementation and live commercial actions still require explicit authorization.
 
 **Roadmap:** [ROADMAP #1](https://github.com/deepnative/deep-native-engine/issues/1) · **Phase gate:** [GATE-A #2](https://github.com/deepnative/deep-native-engine/issues/2)
 
@@ -22,7 +22,7 @@ Before starting, confirm scope, a named accountable owner, required decisions, t
 - [ ] Model pilot two 60-minute coaching units, four 30-minute review units and two monthly 60-minute support allocations, plus internal onboarding reserve of 60 coach/30 support minutes.
 - [ ] Plan four one-hour pooled clinics per month with at most 16 members per group; count preparation, notes, QA, scheduling slack and support once.
 - [ ] Publish proposed scope/turnaround/24-hour cancellation/no-show/service-recovery rules and staffed hours separately from final accepted terms.
-- [ ] Admission is limited by the scarcest qualified service and confirmed coverage; absent experts block tailored paid promises but not shared-foundation planning.
+- [ ] Confirm capacity before promising tailored paid coaching or formal expert review. Missing specialized coverage must be visible without excluding people from the common learning/participation path or requiring everyone to buy coaching.
 
 ## Verification and acceptance evidence
 
@@ -32,6 +32,7 @@ Use reviewable documents and actual source/operational evidence for this issue. 
 
 ## Definition of done
 
+- [ ] Audience-dependent criteria are evidenced for applicable IT, non-IT professional and general-learner cases; the [expanded journey register](https://github.com/deepnative/deep-native-engine/blob/main/assets/docs/context/ECOSYSTEM-JOURNEYS.md) maps the changed requirements without silently deleting original coverage obligations.
 - [ ] Every acceptance criterion is checked with a linked artifact, result or recorded decision; unmet external requirements remain visible.
 - [ ] Dependencies and accountable reviewer are confirmed; the delivered result receives review and blocking findings are resolved.
 - [ ] Evidence is reproducible or source-verifiable, dated and scoped; demo/test/manual/configured/live-verified states and assumptions are explicit.
@@ -43,8 +44,12 @@ Use reviewable documents and actual source/operational evidence for this issue. 
 
 No invented expert credentials, hiring commitments, unlimited service or customer admission. Stop the affected work when required authorization, qualified capacity, privacy boundaries or promised terms cannot be satisfied; record the blocker and continue independent authorized work.
 
+## Current audience and product direction
+
+The [current product direction](https://github.com/deepnative/deep-native-engine/blob/main/assets/docs/PRODUCT-DIRECTION.md) supersedes contractor-only admission and career assumptions in the archived source. Deep Native Engine serves IT practitioners, professionals in other fields and people with general learning interests. Shared AI learning, practical projects, bounded participation and reviewed contributions form the core; contractor/career goals and high-touch coaching are optional paths. Preserve applicable privacy, consent, money/date and coverage invariants. Current authorization remains planning/repository setup; application implementation is not started.
+
 ## Source and traceability
 
 Derived from the final September 15 business/build package and the September 21 planning instructions.
 
-Original package preserved locally under `assets/docs/context/source-2026-09-15/outputs/contractor-platform/`; the complete copied source is checksum-listed in `assets/docs/context/source-manifest.json`. Archived start-coding instructions are superseded by the current planning-only request. Source documents are local and are not claimed to be committed or published.
+Original package preserved locally under `assets/docs/context/source-2026-09-15/outputs/contractor-platform/`; the complete copied source is checksum-listed in `assets/docs/context/source-manifest.json`. Archived start-coding instructions do not authorize application implementation. The preserved context is versioned in [repository setup PR #56](https://github.com/deepnative/deep-native-engine/pull/56); [browse this source snapshot](https://github.com/deepnative/deep-native-engine/tree/b1cb29fcc16dc537f9efa298a9add7de30ae7fe2/assets/docs/context).

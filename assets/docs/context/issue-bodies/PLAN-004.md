@@ -6,7 +6,7 @@ Prepare the common foundation and reviewed demonstration content pack.
 
 **Accountable role:** Curriculum lead and qualified reviewers (name the actual owner before execution).
 
-**Status:** Planned / Backlog. This issue specifies future work. The current assignment authorizes planning only; it does not authorize coding or live commercial actions.
+**Status:** Planned / Backlog. This issue specifies future work. Planning and repository agent/skill/workflow setup are authorized. Application implementation and live commercial actions still require explicit authorization.
 
 **Roadmap:** [ROADMAP #1](https://github.com/deepnative/deep-native-engine/issues/1) · **Phase gate:** [GATE-A #2](https://github.com/deepnative/deep-native-engine/issues/2)
 
@@ -18,11 +18,12 @@ Before starting, confirm scope, a named accountable owner, required decisions, t
 
 ## Acceptance criteria
 
-- [ ] Specify six concise foundation lessons with accessible text/transcripts and one role-appropriate exercise brief for each named role family plus a fit-review route for other specialties.
-- [ ] Prepare two complete synthetic reference assignments (for example QA and business analysis), versioned rubrics and reviewer calibration examples.
+- [ ] Specify six accessible foundation lessons covering AI literacy, useful prompting, checking outputs, privacy/rights, practical workflows and collaborative participation. Include beginner, IT and non-IT exercise paths, with no mandatory coding or employment prerequisite.
+- [ ] Prepare at least two complete synthetic reference assignments spanning a technical path (such as QA) and a nontechnical professional/general-learner path (such as meeting-action planning), with versioned rubrics and reviewer calibration.
 - [ ] Prepare three maintained workflow demonstrations: requirements-to-acceptance drafting, test-case review and meeting-action extraction.
-- [ ] Every asset has owner, sources/rights, version, limitations, intended roles, review date and readiness; generated examples remain demonstrations until real expert review.
-- [ ] Review scope fits the funded review allocation and no noncoding role is forced into a generic coding assessment.
+- [ ] Every asset has owner, sources/rights, version, limitations, intended goals/backgrounds, prerequisites, review date and readiness; generated examples remain demonstrations until reviewed for their intended use.
+- [ ] Exercises and formal reviews fit their actual scope and funded allocation; noncoding learners receive a complete suitable path and formal expert assessment is distinct from peer/AI feedback.
+- [ ] Prepare examples of learner questions, peer responses and a reviewed contribution with attribution. Distinguish community participation from qualified assessment and verify plain-language and accessibility requirements.
 
 ## Verification and acceptance evidence
 
@@ -32,6 +33,7 @@ Use reviewable documents and actual source/operational evidence for this issue. 
 
 ## Definition of done
 
+- [ ] Audience-dependent criteria are evidenced for applicable IT, non-IT professional and general-learner cases; the [expanded journey register](https://github.com/deepnative/deep-native-engine/blob/main/assets/docs/context/ECOSYSTEM-JOURNEYS.md) maps the changed requirements without silently deleting original coverage obligations.
 - [ ] Every acceptance criterion is checked with a linked artifact, result or recorded decision; unmet external requirements remain visible.
 - [ ] Dependencies and accountable reviewer are confirmed; the delivered result receives review and blocking findings are resolved.
 - [ ] Evidence is reproducible or source-verifiable, dated and scoped; demo/test/manual/configured/live-verified states and assumptions are explicit.
@@ -43,8 +45,12 @@ Use reviewable documents and actual source/operational evidence for this issue. 
 
 No claims of expert approval, accreditation or paid curriculum readiness without evidence. Stop the affected work when required authorization, qualified capacity, privacy boundaries or promised terms cannot be satisfied; record the blocker and continue independent authorized work.
 
+## Current audience and product direction
+
+The [current product direction](https://github.com/deepnative/deep-native-engine/blob/main/assets/docs/PRODUCT-DIRECTION.md) supersedes contractor-only admission and career assumptions in the archived source. Deep Native Engine serves IT practitioners, professionals in other fields and people with general learning interests. Shared AI learning, practical projects, bounded participation and reviewed contributions form the core; contractor/career goals and high-touch coaching are optional paths. Preserve applicable privacy, consent, money/date and coverage invariants. Current authorization remains planning/repository setup; application implementation is not started.
+
 ## Source and traceability
 
 Derived from the final September 15 business/build package and the September 21 planning instructions.
 
-Original package preserved locally under `assets/docs/context/source-2026-09-15/outputs/contractor-platform/`; the complete copied source is checksum-listed in `assets/docs/context/source-manifest.json`. Archived start-coding instructions are superseded by the current planning-only request. Source documents are local and are not claimed to be committed or published.
+Original package preserved locally under `assets/docs/context/source-2026-09-15/outputs/contractor-platform/`; the complete copied source is checksum-listed in `assets/docs/context/source-manifest.json`. Archived start-coding instructions do not authorize application implementation. The preserved context is versioned in [repository setup PR #56](https://github.com/deepnative/deep-native-engine/pull/56); [browse this source snapshot](https://github.com/deepnative/deep-native-engine/tree/b1cb29fcc16dc537f9efa298a9add7de30ae7fe2/assets/docs/context).
