@@ -5,6 +5,7 @@ import {
   symlinkSync,
   writeFileSync,
   readFileSync,
+  existsSync,
   mkdirSync,
   rmSync,
 } from "node:fs";
@@ -52,6 +53,10 @@ try {
   requireGate(
     result.status !== 0 && result.status !== null,
     "Unimported-source probe did not fail",
+  );
+  requireGate(
+    existsSync(path.join(sandbox, "artifacts/coverage/coverage-summary.json")),
+    "Unimported-source probe produced no coverage report; inspect artifacts/probes/unimported.log",
   );
   const coverage = JSON.parse(
     readFileSync(
