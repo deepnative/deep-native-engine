@@ -1,0 +1,67 @@
+import { it, expect, vi } from "vitest";
+import type { Pool } from "pg";
+import { store, hash, migrate } from "../../src/store.ts";
+function pool() {
+  const query = vi.fn().mockResolvedValue({ rows: [] });
+  return { query, value: { query } as unknown as Pool };
+}
+it("binds the hash rather than raw bearer tokens and distinguishes new, expired and active sessions", async () => {
+  const p = pool(),
+    db = store(p.value);
+  expect(await db.session("private-token")).toEqual({ kind: "new" });
+  expect(p.query.mock.calls[0]![1]).toEqual([hash("private-token")]);
+  p.query.mockResolvedValueOnce({
+    rows: [{ id: "a", background: "explorer", goal: "work", active: false }],
+  });
+  expect(await db.session("private-token")).toEqual({ kind: "expired" });
+  p.query.mockResolvedValueOnce({
+    rows: [{ id: "a", background: "explorer", goal: "work", active: true }],
+  });
+  expect(await db.session("private-token")).toEqual({
+    kind: "active",
+    learner: { id: "a", background: "explorer", goal: "work" },
+  });
+});
+it("passes untrusted answers as bound parameters and scopes versioned reads and deletes by learner", async () => {
+  const p = pool(),
+    db = store(p.value);
+  await db.create("private-token", { background: "technical", goal: "build" });
+  expect(p.query.mock.calls[0]![1]).toEqual([
+    expect.any(String),
+    hash("private-token"),
+    "technical",
+    "build",
+  ]);
+  expect(await db.progress("owned")).toBeUndefined();
+  const answer = "'; DROP TABLE learners;--";
+  await db.save("owned", {
+    instruction: answer,
+    verification: "check",
+    complete: true,
+  });
+  expect(p.query.mock.calls[2]![1]).toEqual([
+    "owned",
+    "clear-instructions",
+    1,
+    answer,
+    "check",
+    true,
+  ]);
+  expect(p.query.mock.calls[2]![0]).not.toContain(answer);
+  await db.remove("owned");
+  expect(p.query.mock.calls[3]![1]).toEqual(["owned"]);
+});
+it("applies the transactional migration and surfaces database failures to the caller", async () => {
+  const p = pool();
+  await migrate(p.value);
+  expect(p.query.mock.calls[0]![0]).toContain("BEGIN;");
+  expect(p.query.mock.calls[0]![0]).toContain("ON DELETE CASCADE");
+  p.query.mockRejectedValueOnce(new Error("offline"));
+  await expect(
+    store(p.value).save("a", {
+      instruction: "",
+      verification: "",
+      complete: false,
+    }),
+  ).rejects.toThrow("offline");
+});

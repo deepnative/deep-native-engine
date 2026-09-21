@@ -12,7 +12,7 @@ Describe the concrete issue and observable change. Link the issue; use `Refs` wh
 ## Validation
 
 - Local tested commit/tree, environment, commands, exit statuses:
-- `make verify` report (repository setup scope):
+- `make verify` reports (repository and explicitly scoped application slice):
 - Application unit metrics / E2E register and counts / critical journeys / required test results, or explicitly not implemented:
 - CI tested SHA and check links:
 - Merge SHA and post-merge main CI (complete during delivery):

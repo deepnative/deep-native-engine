@@ -1,43 +1,41 @@
 # Verification contract
 
-## Reproduce the repository check
+## Reproduce the complete check
 
-Use Git, GNU Make, and Python 3.11+ (CI uses 3.12). All verifier dependencies are in the Python standard library. On Windows use a POSIX checkout such as WSL; native Windows hook behavior is not tested.
+Prerequisites: Git, GNU Make, Python 3.11+ (CI uses 3.12), Node 24 at the version in `.nvmrc`, npm, and Docker with Compose and a running daemon. On macOS Docker Desktop or a running Colima VM works. Linux browser installation may request system-package privileges. Native Windows is not tested; use WSL with Docker.
 
 ```sh
-make bootstrap
+make setup
 make verify
+make dev
 ```
 
-Bootstrap configures `core.hooksPath=.githooks` in the local repository only and makes `pre-push` executable. It refuses a different configured hook path or an existing active `.git/hooks/pre-push`; integrate the checks into the existing team policy deliberately instead of overwriting it. Repeating bootstrap is safe. In Git worktrees, repository-local Git config may be shared; the relative path resolves within each worktree, which must contain this setup before pushing.
+Open `http://127.0.0.1:3000`. `make setup` installs the local hook, runs `npm ci`, starts the digest-pinned PostgreSQL 18 image on loopback port 54329, installs Chromium and its OS dependencies, and copies `.env.example` only if `.env` is absent. No provider credentials are needed. The published database password is a local disposable fixture. Never reuse it for hosting. Startup applies the initial migration and listens on loopback only. `DNE_DATABASE_URL` and `DNE_PORT` configure the preview; dotenv is read by the Node start commands. Verification uses the default local URL or an explicitly exported `DNE_DATABASE_URL` with database-creation permission.
 
-`make verify` runs the complete setup gate:
+`make bootstrap` refuses a conflicting hook path or active foreign pre-push hook. Repeating it is safe. In worktrees the local Git config may be shared; the relative `.githooks` path resolves within each worktree. `make db` restarts the local database. `npm run build && npm start` runs compiled output. Stop the app with Ctrl-C; `docker compose stop` preserves data. For an intentional deletion of **all local preview data**, stop the app and run `docker compose down --volumes`; then `make db` creates an empty database. Do not use a reset to conceal a test failure.
 
-1. Validate allowed planning/tooling file scope, source archive hashes/size/inventory, planning IDs/dependencies/model mapping, local Markdown link targets, skill metadata and named agent TOML.
-2. Run repository regression tests, including negative fixtures for corrupt archives, incomplete metadata, unexpected application code, and incorrect pre-push revisions.
-3. Write `artifacts/repository-verification.json` with revision/tree, dirty state, Python/platform, exact command, exit status, and scope. The report is ignored by Git. The gate needs no network or GitHub credentials.
+## One gate locally, before push and in CI
 
-A local check may pass on uncommitted changes during editing; its report explicitly records that state. Such a report is not evidence for a later commit. Commit first, then rerun the command before pushing. The hook requires a clean checkout, including non-ignored untracked files, and every non-deletion pushed ref to point to HEAD. It rejects pushing another checkout's commit or a tag/object it cannot verify as HEAD. A deletion-only push has no code to validate. GitHub protection should separately control destructive remote operations.
+`make verify` executes:
 
-CI runs the same command on Linux and macOS for pull requests and pushes to `main` and `codex/**`. It runs without secrets and with read-only repository permission. PR CI validates GitHub's merge candidate, which may differ from local HEAD. It prints the report in the job log. Local hooks can be removed, so required CI and review remain necessary; bootstrap changes no repository protection settings.
+1. Repository scope, immutable 25-file archive, 55 planning IDs, dependencies, model routing, skill/agent definitions and local links; regression tests include missing application gates and stale/wrong revision evidence.
+2. Locked-tool formatting, ESLint and TypeScript checks.
+3. Vitest behavioral unit tests and V8 coverage of **all `src/**/*.ts`**, including unimported files, views, adapters and startup. Require >=99% statements, branches, functions and lines globally and per file, checked from raw counts. No executable application exclusions. SQL is declarative and exercised against PostgreSQL; CSS is checked and rendered in browser tests. Tests, tooling and generated `dist/` are outside the application coverage denominator and have separate behavioral checks.
+4. Isolated negative probes proving that unimported source and a deliberately broken CSRF comparison fail.
+5. Production TypeScript build, PostgreSQL integration tests and the complete desktop/mobile Chromium browser matrix against the compiled server and real database. Each run creates its own random `dne_test_<32-hex>` database and drops only that database in `finally`. Test helpers refuse other database names. Nothing truncates the development database.
+6. Exact scenario mapping to [initial-learning-v1](../../../tests/e2e/scenarios.json): >=99% approved slice journeys, 100% critical journeys and executed tests. All projects must pass for a journey to count. Missing/empty reports, skips, expected failures, focused tests, retries, duplicate/unmapped scenarios and reduced preserved full-MVP inventory fail. Twenty-seven outstanding full-MVP requirements remain separate; this gate does not claim the whole MVP.
+7. Runtime dependency audit (`npm audit --omit=dev --audit-level=high`). This requires network access; unavailable audit data fails the gate. It does not replace source/security review.
 
-## Merge verification
+Reports in ignored `artifacts/` include repository/application revision and tree, dirty state, runtime/environment, commands, raw unit counts, unit/integration assertions, browser mapping, failure traces and probe results. Each run replaces previous authoritative reports; repository status becomes verified only after fresh application evidence matches its revision. No report from a failed run constitutes a pass. CI uploads evidence for 14 days using synthetic fixtures only.
 
-The [team workflow](TEAM-WORKFLOW.md) includes merging authorized work to `main`. Before merging, verify the current PR head, target branch, reviewed diff, required reviews and successful CI. Guard the merge with the expected head SHA. After merging, record the resulting commit and check the `main` push workflow for that exact SHA; a green PR run alone is not the final handoff. Synchronize local `main` with a fast-forward only when the checkout can be switched safely. Never bypass protections or substitute a different commit's evidence.
+A dirty working-tree run is useful during editing but is not evidence for a later commit. Commit first, then rerun `make verify`. The pre-push hook requires a clean checkout and every non-deletion pushed ref to equal HEAD, runs the complete gate again and rejects changes made during verification. No `--no-verify`, threshold reductions, silent exclusions or retry-only passes.
 
-## Current scope and application transition
+CI runs the same `make verify` on Linux and macOS for PRs and pushes to `main` and `codex/**`. Linux uses the pinned PostgreSQL container; macOS starts an isolated PostgreSQL 18 Homebrew cluster bound to loopback with trust authentication only inside the ephemeral CI runner. Both use Node 24 and Chromium. PR CI verifies GitHub's merge candidate; record its SHA separately from the branch. Local hooks are not repository protection. Required-check rules must refer to real executed job names and require owner authorization to change repository settings.
 
-Passing means planning assets and repository tooling are consistent. Application status is `not-implemented`; unit/E2E metrics are `null`, never 100%. Historical scripts/workbook evidence are archived data and are never executed by verification.
+## Review and merge evidence
 
-Before the first application push, explicitly authorize implementation and complete the applicable QA-001/002/003 slice. Replace the setup-only file restriction with real application checks in the **same** entry point. Add locked bootstrap dependencies, formatting/lint, type checks, unit/integration tests, production build, relevant security checks, and the approved complete browser matrix. Test bootstrap/harness code with behavioral fixtures before relying on it. Document runtime versions, deterministic provider boundaries, database isolation, and reproducible startup.
+Follow [the team workflow](TEAM-WORKFLOW.md). Independent review must inspect the actual diff and reports. Before merging, verify current head/base, required reviews and successful CI; guard the merge with expected head SHA. Then verify the `main` workflow for the resulting merge commit and safely fast-forward local main. A green PR does not prove post-merge main, deployment or commercial readiness.
 
-Enforce the [quality gates](../context/QUALITY-GATES.md): >=99% unit lines, statements, branches, functions globally and per module including unimported source; >=99% approved E2E journeys; 100% critical journeys and required test passes. Pin the versioned scenario denominator, include unimplemented scenarios for the release, and report slice/full-MVP scope separately. Fail on missing reports, zero collected tests, empty denominators, skips, quarantine, failures, and retry-only success. Review every source exclusion.
+## Recovery
 
-## Failure recovery
-
-- Checksum failure: restore preserved source and inspect the diff; do not regenerate the manifest to hide corruption.
-- Scope failure: unexpected application/configuration files need the application test gate, or a reviewed setup-tool extension with regression tests. Never merely ignore failing paths.
-- Metadata/link failure: fix the maintained file, leaving historical source unchanged.
-- Hook conflict: inspect current Git hooks and integrate by review. Do not erase another team's hooks.
-- Dirty/wrong-revision push: check out and commit the intended state, rerun verification, then retry. Do not bypass the hook.
-- Test/CI failure: reproduce the error, fix it, and regenerate evidence. Missing coverage or provider access is an explicit gap, not a passed check.
+Fix failures, then regenerate evidence on the changed revision. Preserve archive hashes; never regenerate the manifest to hide corruption. Extend scope validation and coverage together when adding an executable source type. Resolve hook conflicts deliberately. If the database is unavailable, start it with `make db`; do not skip integration/E2E. Failed test-database cleanup is a gate failure and records the problem. Refresh stale browser forms after restarting the app. See the [slice decision record](../INITIAL-LEARNING-SLICE.md) for privacy, retention, migration and release limitations.

@@ -6,3 +6,7 @@ artifacts/
 .env
 .env.*
 !.env.example
+node_modules/
+dist/
+test-results/
+playwright-report/

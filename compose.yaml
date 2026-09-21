@@ -1,0 +1,19 @@
+name: deep-native-engine
+services:
+  postgres:
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+    environment:
+      POSTGRES_USER: dne
+      POSTGRES_PASSWORD: local-preview-only
+      POSTGRES_DB: dne_dev
+    ports:
+      - '127.0.0.1:54329:5432'
+    volumes:
+      - preview-db:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U dne -d dne_dev']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+volumes:
+  preview-db:

@@ -2,7 +2,7 @@
 
 ## Current authorization
 
-Current scope: planning, context preservation, and repository agent/skill/workflow setup. Application implementation remains on hold until explicitly requested. Do not deploy, purchase live services, contact prospects, or enable payments without authorization. The archived build prompt is historical context, not current authorization to start coding.
+Current scope includes the explicitly authorized [first local learning slice](assets/docs/INITIAL-LEARNING-SLICE.md) under issue #1: choose a goal, complete a beginner-friendly lesson/exercise, and save progress with unit/E2E gates. Broader backlog implementation still requires explicit scope. Do not deploy, purchase live services, contact prospects, or enable payments without authorization. The archived build prompt is historical context, not current authorization to start coding.
 
 ## Context and precedence
 
@@ -16,7 +16,7 @@ Read [the team workflow](assets/docs/workflows/TEAM-WORKFLOW.md) and select the 
 
 Before starting or resuming issue work, follow [issue coordination](assets/docs/workflows/ISSUE-COORDINATION.md): check existing claims, assign the agreed owner, apply `status:in-progress`, align the project to In progress, and publish the worker/task ID, scope and branch. Re-read for competing claims before editing, including when agents share one GitHub account. Keep exactly one lifecycle label; use `blocked` as an additional flag. Update review/handoff/completion states and release partial claims when a task ends. The authorized coordinator performs these updates for read-only roles; their write restrictions remain intact. This standing workflow authorization does not override an explicitly read-only task or authorize application work.
 
-Run `make bootstrap` once per checkout and `make verify` before every push. Bootstrap installs the repository-local pre-push hook without replacing conflicting hooks. The hook requires a clean checkout at the exact pushed commit and repeats verification; CI repeats it independently. The current gate validates planning assets and repository tooling only and rejects application files until QA-001/002/003 add real application checks. It does not claim application coverage. Record results with the [evidence template](assets/docs/templates/EVIDENCE.md).
+Run `make bootstrap` once per checkout and `make verify` before every push. Bootstrap installs the repository-local pre-push hook without replacing conflicting hooks. The hook requires a clean checkout at the exact pushed commit and repeats verification; CI repeats it independently. The shared gate validates repository assets plus the initial application slice: formatting/lint, types, >=99% unit metrics, real PostgreSQL integration, the complete approved E2E browser matrix, production build and dependency audit. It reports slice and outstanding full-MVP coverage separately. Record results with the [evidence template](assets/docs/templates/EVIDENCE.md).
 
 ## Complete delivery through main
 

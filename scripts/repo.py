@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline repository setup gate. This does not measure application coverage."""
+"""Shared repository and initial learning application verification gate."""
 
 import hashlib
 import json
@@ -32,6 +32,13 @@ SETUP_FILES = {
     "docs/planning/README.md", "scripts/repo.py", "tests/repository/test_repo.py",
 }
 
+APP_FILES = {
+    ".env.example", ".nvmrc", "compose.yaml", "eslint.config.mjs", "package.json", "package-lock.json",
+    "playwright.config.ts", "tsconfig.json", "tsconfig.build.json", "vitest.config.ts",
+    "vitest.integration.config.ts", "scripts/quality-gates.mjs", "scripts/gate-probes.mjs",
+    "scripts/verify-app.mjs", "tests/e2e/scenarios.json", "src/main.ts", "migrations/001-learning.sql",
+}
+
 
 class GateError(Exception):
     """A reviewable gate failure, not a successful empty result."""
@@ -55,17 +62,22 @@ def repository_files(root):
 
 def validate_scope(root, files):
     require(SETUP_FILES <= set(files), "Required setup files missing: " + str(sorted(SETUP_FILES - set(files))))
+    require(APP_FILES <= set(files), "Required application gate files missing: " + str(sorted(APP_FILES - set(files))))
     for name in files:
         p = Path(name)
         allowed = (
-            name in SETUP_FILES
+            name in SETUP_FILES or name in APP_FILES
+            or (p.is_relative_to(Path("src")) and p.suffix == ".ts")
+            or (p.is_relative_to(Path("public")) and p.suffix == ".css")
+            or (p.parent == Path("migrations") and p.suffix == ".sql")
+            or (any(p.is_relative_to(Path("tests") / group) for group in ("unit", "integration", "e2e", "support")) and p.suffix in (".ts", ".mjs"))
             or p.is_relative_to(ARCHIVE)
             or (p.is_relative_to(Path("assets/docs")) and p.suffix == ".md")
             or (p.parent == CONTEXT and p.suffix == ".json")
             or (p.parent == Path(".codex/agents") and p.stem in ROLES and p.suffix == ".toml")
             or name in {f".agents/skills/{s}/{f}" for s in SKILLS for f in ("SKILL.md", "agents/openai.yaml")}
         )
-        require(allowed, f"Outside planning/tooling scope: {name}. Implement the application gate before application pushes.")
+        require(allowed, f"Outside verified repository/application scope: {name}. Extend the reviewed gate before adding a new executable source type.")
         require((root / p).is_file() and not (root / p).is_symlink(), f"Missing file or unsupported symlink: {name}")
         require((root / p).resolve().is_relative_to(root.resolve()), f"Path escapes repository: {name}")
 
@@ -197,6 +209,9 @@ def validate(root):
     validate_archive(root)
     validate_planning(root)
     validate_agents_skills(root)
+    register = json.loads((root / "tests/e2e/scenarios.json").read_text())
+    baseline = {f"ROADMAP-{n:02d}" for n in range(1, 10)} | {f"BUILD-{n:02d}" for n in range(1, 11)} | {f"ECO-{n:02d}" for n in range(1, 9)}
+    require(baseline <= {row["id"] for row in register["fullMvp"]}, "Full-MVP journey inventory was reduced")
     validate_links(root, files)
 
 
@@ -205,8 +220,33 @@ def state(root):
             "dirty": bool(git(root, "status", "--porcelain", "--untracked-files=all"))}
 
 
+def run_application(root):
+    subprocess.run(["npm", "run", "verify:app"], cwd=root, check=True)
+
+
+def verify_application(root):
+    output = root / "artifacts/application-verification.json"
+    output.unlink(missing_ok=True)
+    before = state(root)
+    run_application(root)
+    require(output.is_file(), "Application verification report missing")
+    report = json.loads(output.read_text())
+    require(report["exitStatus"] == 0 and report["scope"] == "initial-learning-v1", "Application verification failed or wrong scope")
+    require(report["revision"] == before and state(root) == before, "Application verification revision changed")
+    require(report["unitTests"]["passed"] == report["unitTests"]["total"] > 0, "Missing application unit evidence")
+    require(report["integrationTests"]["passed"] == report["integrationTests"]["total"] > 0, "Missing application integration evidence")
+    for metric in ("statements", "branches", "functions", "lines"):
+        counts = report["unitCoverage"][metric]
+        require(counts["total"] > 0 and counts["covered"] / counts["total"] >= .99 and counts["skipped"] == 0,
+                "Application unit threshold failed")
+    journeys = report["journeys"]
+    require(journeys["total"] > 0 and journeys["passed"] / journeys["total"] >= .99
+            and journeys["criticalPassed"] == journeys["criticalTotal"] > 0, "Application journey threshold failed")
+    return report
+
+
 def verify(root):
-    report = {"scope": "repository-planning-and-tooling", "application_status": "not-implemented",
+    report = {"scope": "repository-and-initial-learning-v1", "application_status": "not-verified",
               "application_unit_coverage": None, "application_e2e_journey_coverage": None,
               "timestamp_utc": datetime.now(timezone.utc).isoformat(),
               "python": platform.python_version(), "platform": platform.platform(),
@@ -221,6 +261,9 @@ def verify(root):
                       errors=len(result.errors), expected_failures=len(result.expectedFailures))
         require(result.wasSuccessful() and not result.skipped and not result.expectedFailures,
                 "Repository tests failed, were skipped, or had expected failures")
+        app = verify_application(root)
+        report.update(application_status="verified-local-slice", application_unit_coverage=app["unitCoverage"],
+                      application_e2e_journey_coverage=app["journeys"])
         report["exit_status"] = 0
     except (GateError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
         report["error"] = str(exc)
@@ -229,7 +272,7 @@ def verify(root):
         output = root / "artifacts/repository-verification.json"
         output.parent.mkdir(exist_ok=True)
         output.write_text(json.dumps(report, indent=2) + "\n")
-    print(f"Repository verification {'PASS' if report['exit_status'] == 0 else 'FAIL'}; application coverage is not implemented.")
+    print(f"Repository verification {'PASS' if report['exit_status'] == 0 else 'FAIL'}; application status: {report['application_status']}.")
     return report["exit_status"]
 
 

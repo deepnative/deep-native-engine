@@ -97,15 +97,43 @@ class RepositoryFixture(unittest.TestCase):
         with self.assertRaises(gate.GateError):
             gate.validate_archive(self.root)
 
-    def test_application_source_and_manifest_fail_scope(self):
-        for name in ("app/main.py", "package.json", "assets/docs/application.js"):
+    def test_unmeasured_application_source_fails_scope(self):
+        for name in ("app/main.py", "src/hidden.js", "assets/docs/application.js"):
             with self.subTest(name=name):
                 path = self.root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("application")
-                with self.assertRaisesRegex(gate.GateError, "Outside planning/tooling"):
+                with self.assertRaisesRegex(gate.GateError, "Outside verified"):
                     gate.validate_scope(self.root, gate.repository_files(self.root))
                 path.unlink()
+
+    def test_removing_application_gate_files_blocks_verification(self):
+        files = gate.repository_files(self.root)
+        for name in ("package-lock.json", "scripts/verify-app.mjs", "vitest.config.ts", "tests/e2e/scenarios.json"):
+            with self.subTest(name=name), self.assertRaisesRegex(gate.GateError, "Required application"):
+                gate.validate_scope(self.root, [f for f in files if f != name])
+
+    def test_application_runner_requires_fresh_successful_revision_evidence(self):
+        output = self.root / "artifacts/application-verification.json"
+        output.parent.mkdir(exist_ok=True)
+        output.write_text('{"stale": true}')
+        with patch.object(gate, "run_application"), self.assertRaisesRegex(gate.GateError, "report missing"):
+            gate.verify_application(self.root)
+        metrics = {k: {"total": 100, "covered": 100, "skipped": 0} for k in ("statements", "branches", "functions", "lines")}
+        report = {"exitStatus": 0, "scope": "initial-learning-v1", "revision": gate.state(self.root),
+                  "unitTests": {"passed": 1, "total": 1}, "integrationTests": {"passed": 1, "total": 1},
+                  "unitCoverage": metrics, "journeys": {"passed": 1, "total": 1, "criticalPassed": 1, "criticalTotal": 1}}
+        def write_report(*args, **kwargs):
+            output.write_text(json.dumps(report))
+        with patch.object(gate, "run_application", side_effect=write_report):
+            self.assertEqual(gate.verify_application(self.root), report)
+            report["revision"]["commit"] = "a" * 40
+            with self.assertRaisesRegex(gate.GateError, "revision changed"):
+                gate.verify_application(self.root)
+            report["revision"] = gate.state(self.root)
+            report["unitCoverage"]["branches"]["covered"] = 98
+            with self.assertRaisesRegex(gate.GateError, "threshold failed"):
+                gate.verify_application(self.root)
 
     def test_missing_setup_and_symlink_fail_scope(self):
         files = gate.repository_files(self.root)
@@ -243,7 +271,7 @@ class RepositoryFixture(unittest.TestCase):
             self.assertEqual(gate.verify(self.root), 1)
         report = json.loads((self.root / "artifacts/repository-verification.json").read_text())
         self.assertEqual(report["exit_status"], 1)
-        self.assertEqual(report["application_status"], "not-implemented")
+        self.assertEqual(report["application_status"], "not-verified")
         self.assertIsNone(report["application_unit_coverage"])
         self.assertIsNone(report["application_e2e_journey_coverage"])
 

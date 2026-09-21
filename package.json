@@ -1,0 +1,43 @@
+{
+  "name": "deep-native-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^24.0.0 || >=26.0.0"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch src/main.ts",
+    "start": "node --env-file-if-exists=.env dist/main.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests scripts/*.mjs *.ts",
+    "format:check": "prettier --check 'src/**/*.ts' 'tests/**/*.{ts,mjs,json}' 'scripts/*.mjs' '*.{ts,mjs}' 'public/*.css' 'package.json' 'tsconfig*.json'",
+    "test:unit": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "playwright test",
+    "verify:app": "node scripts/verify-app.mjs"
+  },
+  "dependencies": {
+    "cookie-parser": "1.4.7",
+    "express": "5.2.1",
+    "helmet": "8.3.0",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "@types/cookie-parser": "1.4.10",
+    "@types/express": "5.0.6",
+    "@types/node": "24.13.6",
+    "@types/pg": "8.23.1",
+    "@types/supertest": "7.2.1",
+    "@vitest/coverage-v8": "5.0.1",
+    "eslint": "10.11.0",
+    "prettier": "3.9.8",
+    "supertest": "7.2.2",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.1",
+    "vitest": "5.0.1"
+  }
+}

@@ -1,6 +1,6 @@
 # Quality and AI-assisted development gates
 
-These are planned requirements, not achieved measurements. No application or application test harness exists yet. Repository-tooling checks are available via `make verify`; their results do not establish application coverage or passing application tests. See [verification scope](../workflows/VERIFICATION.md).
+These requirements are enforced for the [initial local learning slice](../INITIAL-LEARNING-SLICE.md) by `make verify`. Read the generated reports for current revision-specific measurements. Full-MVP requirements remain outstanding; a slice pass does not satisfy a phase gate. See [verification scope](../workflows/VERIFICATION.md).
 
 The [current product direction](../PRODUCT-DIRECTION.md) broadens eligibility and learning/participation goals. Include [the expanded audience journeys](ECOSYSTEM-JOURNEYS.md) alongside the original applicable invariants; no silent denominator reduction is permitted.
 

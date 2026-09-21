@@ -2,7 +2,7 @@
 
 Planning date: 21 September 2026. Repository: [deepnative/deep-native-engine](https://github.com/deepnative/deep-native-engine). [Project board](https://github.com/orgs/deepnative/projects/1/views/1).
 
-The current assignment authorizes context migration, GitHub planning, and repository agent/skill/workflow setup. Application implementation remains on hold. See [the team workflow](../workflows/TEAM-WORKFLOW.md) for the current process. No application implementation, deployment, live service purchase, payment collection, or external outreach is authorized by the archived build prompt. The user subsequently enabled Projects access. All 55 issues are now on project 1 in Backlog, with Phase/Roadmap priority fields, native phase-parent hierarchy and eight milestones. See `github-project.json` and `github-issues.json` for identifiers.
+The owner has authorized the [initial local learning slice](../INITIAL-LEARNING-SLICE.md) in addition to context migration, planning and team setup. See [the team workflow](../workflows/TEAM-WORKFLOW.md) for the current process. No application implementation, deployment, live service purchase, payment collection, or external outreach is authorized by the archived build prompt. The user subsequently enabled Projects access. At initial publication, all 55 issues were on project 1 in Backlog, with Phase/Roadmap priority fields, native phase-parent hierarchy and eight milestones. See `github-project.json` and `github-issues.json` for identifiers.
 
 ## Preserved source
 
@@ -21,13 +21,13 @@ Read [PRODUCT-DIRECTION.md](../PRODUCT-DIRECTION.md), [ROADMAP.md](ROADMAP.md) a
 
 ## Initial repository evidence (before this setup)
 
-At inspection, `main` was clean at `a30f87f` and contained no tracked source files, test harness, workflows, or repository instructions. There were no existing issues or milestones. Older repository history and the legacy CI/CD repository description do not establish current implementation. No other project's code is imported. Repository setup now adds team instructions, skills, agent roles and checks. This does not establish an application harness or completed roadmap execution.
+At inspection, `main` was clean at `a30f87f` and contained no tracked source files, test harness, workflows, or repository instructions. There were no existing issues or milestones. Older repository history and the legacy CI/CD repository description do not establish current implementation. No other project's code is imported. Repository setup now adds team instructions, skills, agent roles and checks. The subsequent first slice adds an application harness; neither setup nor that slice establishes completed roadmap execution.
 
 ## Current audience and offer scope
 
 People across IT, other professions and general learning interests share an accessible AI foundation, goal-based practical work, bounded participation and reviewed contributions. The nine IT role families and contractor/career paths are optional specializations, not admission requirements. Foundation/participation access and pricing require explicit separate decisions. The archived CAD 3,000 pilot, CAD 9,000 continuation and CAD 12,000 annual Professional service remain optional coaching-offer hypotheses, with their original consent/date/ledger invariants; higher tiers remain gated hypotheses. No universal price or free tier is inferred.
 
-No demand, expert appointments, legal clearance, live integrations, paid pilots, or completed software is claimed. Jurisdiction, entity, budget, real roster, rights, terms, tax, and provider selection have owners and blocking decisions in the roadmap.
+No demand, expert appointments, legal clearance, live integrations, paid pilots, or completed full-MVP software is claimed. Jurisdiction, entity, budget, real roster, rights, terms, tax, and provider selection have owners and blocking decisions in the roadmap.
 
 ## Board conventions
 
