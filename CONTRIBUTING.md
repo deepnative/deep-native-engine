@@ -2,6 +2,8 @@
 
 Read [AGENTS.md](AGENTS.md), then follow [the team workflow](assets/docs/workflows/TEAM-WORKFLOW.md). Begin with an authorized issue and a small `codex/` branch. Preserve source provenance and other contributors' work.
 
+Claim the issue before editing: check existing ownership, assign the agreed owner, apply `status:in-progress`, set project In progress and record your task/branch and scope. Re-read to detect competing claims. Follow [issue coordination](assets/docs/workflows/ISSUE-COORDINATION.md) for review, blockers, handoff and release; update the live status when the task ends.
+
 ```sh
 make bootstrap
 make verify

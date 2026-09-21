@@ -241,10 +241,13 @@
         "Definition of ready requires AC, dependencies, accountable owner, risk boundaries and test plan; backlog existence does not authorize coding.",
         "Definition of done requires evidence on the intended revision, all AC, review, successful prescribed pre-push checks and CI, and relevant operational documentation.",
         "Generated code and dependencies require independent review; current official APIs, licenses, lockfiles and secret/privacy boundaries are checked.",
-        "No automatic coding-agent assignment, test/coverage bypass, invented live results, or unrelated refactors; no remote actions outside actual authorization."
+        "No automatic coding-agent assignment, test/coverage bypass, invented live results, or unrelated refactors; no remote actions outside actual authorization.",
+        "Before authorized issue work, verify existing claims, assign the agreed GitHub owner, publish worker/task ID, bounded scope and branch, apply status:in-progress and align project Status; re-read for competing claims, including agents sharing one account.",
+        "Maintain exactly one lifecycle label with matching project Status; record review, blocker ownership and handoffs. Read-only workers use an authorized coordinator for GitHub mutations without expanding their permissions.",
+        "At completion, reconcile the live claim and status with evidence. Full AC/DoD completion becomes Done; partial delivery stays open, records remaining work and explicitly releases or transfers the claim without leaving an abandoned In progress label."
       ],
-      "evidence": "Review of working agreement and issue/PR examples against this roadmap; repository guidance is unambiguous about the current planning-only boundary.",
-      "non_goals": "Do not implement workflows, install tools or change repository protections in this planning issue.",
+      "evidence": "Review of working agreement and issue/PR examples against this roadmap, plus a live claim/review/release or completion record. Verify labels, assignee and project Status agree; repository guidance preserves the current application-implementation hold.",
+      "non_goals": "The subsequent user request authorizes repository agent/skill/workflow setup, merged in PR #56. Application implementation and repository protection changes are outside this setup scope.",
       "owner": "Engineering lead",
       "extra": "References: https://docs.github.com/en/copilot/responsible-use/agents and https://playwright.dev/docs/best-practices . These support review and behavioral testing; the 99% target is the user requirement."
     },

@@ -5,6 +5,8 @@ description: "Review a Deep Native Engine branch or pull request against issue a
 
 # Review a change
 
+Use [issue coordination](../../../assets/docs/workflows/ISSUE-COORDINATION.md) through the authorized coordinator: record the reviewing worker and scope under the delivery claim, keep `status:in-review` and project In review aligned, and return findings/status for handoff. Preserve the delivery owner and this role's read-only restrictions; do not claim or mutate an issue merely to inspect it in an explicitly read-only task.
+
 1. Read [AGENTS.md](../../../AGENTS.md), live issue AC/DoD, the intended base/head diff, and [quality gates](../../../assets/docs/context/QUALITY-GATES.md). Establish reviewed SHAs and authorized scope; do not rely on a builder summary as evidence.
 2. Inspect actual behavior and test design for missing requirements, cross-user access, money/date boundaries, idempotency, races, recovery, provider state honesty, secrets and generated dependencies. Preserve historical source integrity.
 3. Check test evidence against the exact revision and [verification contract](../../../assets/docs/workflows/VERIFICATION.md). Distinguish repository checks from application metrics, and local commit from CI merge SHA. Challenge exclusions, empty reports, changed denominators, skipped/retried cases, and fixtures that replace business logic.
