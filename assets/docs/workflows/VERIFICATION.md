@@ -21,6 +21,10 @@ A local check may pass on uncommitted changes during editing; its report explici
 
 CI runs the same command on Linux and macOS for pull requests and pushes to `main` and `codex/**`. It runs without secrets and with read-only repository permission. PR CI validates GitHub's merge candidate, which may differ from local HEAD. It prints the report in the job log. Local hooks can be removed, so required CI and review remain necessary; bootstrap changes no repository protection settings.
 
+## Merge verification
+
+The [team workflow](TEAM-WORKFLOW.md) includes merging authorized work to `main`. Before merging, verify the current PR head, target branch, reviewed diff, required reviews and successful CI. Guard the merge with the expected head SHA. After merging, record the resulting commit and check the `main` push workflow for that exact SHA; a green PR run alone is not the final handoff. Synchronize local `main` with a fast-forward only when the checkout can be switched safely. Never bypass protections or substitute a different commit's evidence.
+
 ## Current scope and application transition
 
 Passing means planning assets and repository tooling are consistent. Application status is `not-implemented`; unit/E2E metrics are `null`, never 100%. Historical scripts/workbook evidence are archived data and are never executed by verification.

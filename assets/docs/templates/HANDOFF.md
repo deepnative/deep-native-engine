@@ -1,6 +1,7 @@
 # Task handoff
 
 - Goal, issue, PR, branch, current commit:
+- Merge state, main merge SHA, post-merge CI, and local synchronization:
 - Current authorization and next permitted action:
 - Completed outcomes with evidence links:
 - Verification commands/results and tested SHA (local and CI):

@@ -16,6 +16,10 @@ Read [the team workflow](assets/docs/workflows/TEAM-WORKFLOW.md) and select the 
 
 Run `make bootstrap` once per checkout and `make verify` before every push. Bootstrap installs the repository-local pre-push hook without replacing conflicting hooks. The hook requires a clean checkout at the exact pushed commit and repeats verification; CI repeats it independently. The current gate validates planning assets and repository tooling only and rejects application files until QA-001/002/003 add real application checks. It does not claim application coverage. Record results with the [evidence template](assets/docs/templates/EVIDENCE.md).
 
+## Complete delivery through main
+
+The owner has authorized merging completed repository work to `main` as part of the delivery workflow. Carry authorized changes through commit, pre-push verification, PR, review, passing CI, merge, and verification of the resulting `main` commit. Do not stop at a draft PR or ask for merge permission again when this standing authorization applies. Honor an explicit review-only or draft-only request, unresolved blockers, required reviews, and repository protections; never use an admin bypass. Recheck the current PR head and base before merging so evidence applies to the actual revision. Record the merge SHA and post-merge CI result, then synchronize the local checkout safely. Merging does not authorize new application work, deployment, or commercial activity.
+
 ## When application implementation is authorized
 
 - Start from a ready issue with acceptance criteria, dependencies, non-goals, test scenarios, and a definition of done. Implement one reviewable vertical slice at a time; record architectural decisions and preserve unrelated work.

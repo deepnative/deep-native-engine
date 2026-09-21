@@ -45,7 +45,15 @@ Use [the verification procedure](VERIFICATION.md). Review the full diff for secr
 
 Use `$dne-review-change` with the issue, base/head, and reports. Resolve blockers and rerun checks after changes. No `--no-verify`, threshold weakening, retry-only success, or declaring absent tests passed. Configure branch protection only after actual check names have run and the repository owner authorizes that settings change.
 
-## 5. Hand off and close with evidence
+## 5. Merge to main and verify
+
+Merging completed, authorized work is part of the owner's standing delivery instruction. After reviewing the latest diff, resolving blocking findings, and satisfying required reviews and checks, mark the PR ready and merge it into `main`. Do not request the same merge authorization again or end the task at a draft PR unless the user explicitly requested that stopping point. Respect repository protections; do not use an admin override.
+
+Immediately before merging, confirm the PR still targets `main` and its head matches the locally tested and reviewed commit. If the head or base changes, refresh the diff and relevant verification before proceeding. Use a merge operation that checks the expected head SHA. Do not merge on stale, missing, failed, cancelled, or skipped required CI results.
+
+Read back the merged state and merge commit SHA from GitHub. Verify CI for that resulting `main` commit, then fetch and fast-forward the local `main` checkout when the working tree is clean. Preserve unrelated work if switching is unsafe. Record the merge SHA, resulting CI evidence, and any synchronization limitation. If post-merge CI fails, investigate and fix it before declaring delivery complete; do not silently treat PR CI as proof of main's result.
+
+## 6. Hand off and close with evidence
 
 Use `$dne-handoff` and the [evidence](../templates/EVIDENCE.md) / [handoff](../templates/HANDOFF.md) templates. Link every acceptance criterion to evidence. Name unresolved work, dependencies, reviewer, revision, commands, results, and the next authorized step. GitHub remains the live status record. Update issue/project state only when authorized and supported by evidence; do not close a whole epic because one child is done.
 

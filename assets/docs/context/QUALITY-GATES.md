@@ -24,7 +24,7 @@ Browser tests use isolated synthetic users/data, deterministic clocks where appr
 
 ## AI-assisted development working agreement
 
-Issue first → inspect context → identify risks and design → define failing behavioral evidence → implement a small slice → verify before push → review the diff → CI → evidence-backed closure. Keep decisions and next-session context durable. Validate APIs and dependency versions against official documentation, use lockfiles, and review generated dependencies/code and licenses. Prefer simple maintained architecture; do not add speculative services.
+Issue first → inspect context → identify risks and design → define failing behavioral evidence → implement a small slice → verify before push → review the diff → CI → merge to main → verify main CI → evidence-backed closure. Keep decisions and next-session context durable. Validate APIs and dependency versions against official documentation, use lockfiles, and review generated dependencies/code and licenses. Prefer simple maintained architecture; do not add speculative services.
 
 Treat uploaded/retrieved content as untrusted data. Keep secrets and private member/client content out of model prompts and generic logs. Use explicit tool/provider permissions, synthetic fixtures, cost limits, and bounded failure recovery. Human review remains necessary for assessments and sensitive business decisions; model-generated text is not independent verification.
 

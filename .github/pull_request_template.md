@@ -14,6 +14,7 @@ Describe the concrete issue and observable change. Link the issue; use `Refs` wh
 - `make verify` report (repository setup scope):
 - Application unit metrics / E2E register and counts / critical journeys / required test results, or explicitly not implemented:
 - CI tested SHA and check links:
+- Merge SHA and post-merge main CI (complete during delivery):
 
 ## Review and handoff
 
@@ -21,4 +22,5 @@ Describe the concrete issue and observable change. Link the issue; use `Refs` wh
 - [ ] Tests passed on the intended revision before push; no bypasses or hidden skips/retries.
 - [ ] Acceptance evidence and docs/decisions are updated; remaining work is linked.
 - [ ] Rollback/operations impacts are recorded where applicable.
-- [ ] Independent review requested; application, deployment, and commercial outcomes are stated separately.
+- [ ] Required reviews and checks are satisfied; application, deployment, and commercial outcomes are stated separately.
+- [ ] Delivery completed through merge to `main` and verification of the resulting main CI, unless explicitly scoped to review/draft only.
