@@ -40,6 +40,8 @@ class RepositoryFixture(unittest.TestCase):
         # Avoid a user's global hook or signing settings in these isolated fixtures.
         gate.git(self.root, "config", "core.hooksPath", ".githooks")
         gate.git(self.root, "config", "commit.gpgsign", "false")
+        # These disposable repositories must not outlive cleanup through detached Git jobs.
+        gate.git(self.root, "config", "maintenance.auto", "false")
         gate.git(self.root, "config", "user.name", "Repository Gate Test")
         gate.git(self.root, "config", "user.email", "test@example.invalid")
         gate.git(self.root, "add", ".")
@@ -56,6 +58,16 @@ class RepositoryFixture(unittest.TestCase):
 
     def test_complete_fixture_validates(self):
         gate.validate(self.root)
+
+    def test_fixture_commits_do_not_start_background_maintenance(self):
+        trace = self.root / "artifacts/git-trace.jsonl"
+        trace.parent.mkdir(exist_ok=True)
+        env = dict(os.environ, GIT_TRACE2_EVENT=str(trace))
+        subprocess.run(["git", "-C", str(self.root), "commit", "--allow-empty", "-qm", "probe"],
+                       env=env, check=True)
+        events = [json.loads(line) for line in trace.read_text().splitlines()]
+        children = [event.get("argv", []) for event in events if event.get("event") == "child_start"]
+        self.assertFalse(any("maintenance" in argv or "gc" in argv for argv in children), children)
 
     def test_archive_corruption_is_detected(self):
         path = self.root / gate.ARCHIVE / "outputs/contractor-platform/00-START-HERE.md"
