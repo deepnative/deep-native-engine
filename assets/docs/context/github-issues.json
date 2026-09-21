@@ -1,0 +1,377 @@
+{
+  "repo": "deepnative/deep-native-engine",
+  "milestones": {
+    "A": {
+      "number": 1,
+      "url": "https://github.com/deepnative/deep-native-engine/milestone/1",
+      "title": "A - Definition and delivery readiness"
+    },
+    "B1": {
+      "number": 2,
+      "url": "https://github.com/deepnative/deep-native-engine/milestone/2",
+      "title": "B1 - First member-to-reviewer journey"
+    },
+    "B2": {
+      "number": 3,
+      "url": "https://github.com/deepnative/deep-native-engine/milestone/3",
+      "title": "B2 - Full private MVP"
+    },
+    "B3": {
+      "number": 4,
+      "url": "https://github.com/deepnative/deep-native-engine/milestone/4",
+      "title": "B3 - Verification and release evidence"
+    },
+    "C": {
+      "number": 5,
+      "url": "https://github.com/deepnative/deep-native-engine/milestone/5",
+      "title": "C - Controlled paid pilot"
+    },
+    "D": {
+      "number": 6,
+      "url": "https://github.com/deepnative/deep-native-engine/milestone/6",
+      "title": "D - Paid continuation"
+    },
+    "E": {
+      "number": 7,
+      "url": "https://github.com/deepnative/deep-native-engine/milestone/7",
+      "title": "E - Repeatability"
+    },
+    "F": {
+      "number": 8,
+      "url": "https://github.com/deepnative/deep-native-engine/milestone/8",
+      "title": "F - Selective expansion"
+    }
+  },
+  "issues": {
+    "ROADMAP": {
+      "number": 1,
+      "id": 5530814484,
+      "node_id": "I_kwDOHaBlLs8AAAABSamIFA",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/1"
+    },
+    "GATE-A": {
+      "number": 2,
+      "id": 5530814757,
+      "node_id": "I_kwDOHaBlLs8AAAABSamJJQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/2"
+    },
+    "GATE-B": {
+      "number": 3,
+      "id": 5530815029,
+      "node_id": "I_kwDOHaBlLs8AAAABSamKNQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/3"
+    },
+    "GATE-C": {
+      "number": 4,
+      "id": 5530815322,
+      "node_id": "I_kwDOHaBlLs8AAAABSamLWg",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/4"
+    },
+    "GATE-D": {
+      "number": 5,
+      "id": 5530815611,
+      "node_id": "I_kwDOHaBlLs8AAAABSamMew",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/5"
+    },
+    "GATE-E": {
+      "number": 6,
+      "id": 5530815951,
+      "node_id": "I_kwDOHaBlLs8AAAABSamNzw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/6"
+    },
+    "GATE-F": {
+      "number": 7,
+      "id": 5530816265,
+      "node_id": "I_kwDOHaBlLs8AAAABSamPCQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/7"
+    },
+    "PLAN-001": {
+      "number": 8,
+      "id": 5530816622,
+      "node_id": "I_kwDOHaBlLs8AAAABSamQbg",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/8"
+    },
+    "EXP-003": {
+      "number": 9,
+      "id": 5530816910,
+      "node_id": "I_kwDOHaBlLs8AAAABSamRjg",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/9"
+    },
+    "EXP-004": {
+      "number": 10,
+      "id": 5530817231,
+      "node_id": "I_kwDOHaBlLs8AAAABSamSzw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/10"
+    },
+    "GOV-001": {
+      "number": 11,
+      "id": 5530817514,
+      "node_id": "I_kwDOHaBlLs8AAAABSamT6g",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/11"
+    },
+    "PLAN-002": {
+      "number": 12,
+      "id": 5530817800,
+      "node_id": "I_kwDOHaBlLs8AAAABSamVCA",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/12"
+    },
+    "PLAN-003": {
+      "number": 13,
+      "id": 5530818109,
+      "node_id": "I_kwDOHaBlLs8AAAABSamWPQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/13"
+    },
+    "PLAN-004": {
+      "number": 14,
+      "id": 5530818406,
+      "node_id": "I_kwDOHaBlLs8AAAABSamXZg",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/14"
+    },
+    "CTP-001": {
+      "number": 15,
+      "id": 5530818691,
+      "node_id": "I_kwDOHaBlLs8AAAABSamYgw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/15"
+    },
+    "QA-001": {
+      "number": 16,
+      "id": 5530818995,
+      "node_id": "I_kwDOHaBlLs8AAAABSamZsw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/16"
+    },
+    "QA-002": {
+      "number": 17,
+      "id": 5530819261,
+      "node_id": "I_kwDOHaBlLs8AAAABSamavQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/17"
+    },
+    "QA-004": {
+      "number": 18,
+      "id": 5530819558,
+      "node_id": "I_kwDOHaBlLs8AAAABSamb5g",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/18"
+    },
+    "CTP-002": {
+      "number": 19,
+      "id": 5530819867,
+      "node_id": "I_kwDOHaBlLs8AAAABSamdGw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/19"
+    },
+    "CTP-003": {
+      "number": 20,
+      "id": 5530820157,
+      "node_id": "I_kwDOHaBlLs8AAAABSamePQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/20"
+    },
+    "OPS-001": {
+      "number": 21,
+      "id": 5530820541,
+      "node_id": "I_kwDOHaBlLs8AAAABSamfvQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/21"
+    },
+    "QA-003": {
+      "number": 22,
+      "id": 5530820923,
+      "node_id": "I_kwDOHaBlLs8AAAABSamhOw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/22"
+    },
+    "CTP-004": {
+      "number": 23,
+      "id": 5530821276,
+      "node_id": "I_kwDOHaBlLs8AAAABSaminA",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/23"
+    },
+    "CTP-005": {
+      "number": 24,
+      "id": 5530821648,
+      "node_id": "I_kwDOHaBlLs8AAAABSamkEA",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/24"
+    },
+    "CTP-006": {
+      "number": 25,
+      "id": 5530821934,
+      "node_id": "I_kwDOHaBlLs8AAAABSamlLg",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/25"
+    },
+    "CTP-007": {
+      "number": 26,
+      "id": 5530822247,
+      "node_id": "I_kwDOHaBlLs8AAAABSammZw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/26"
+    },
+    "CTP-011": {
+      "number": 27,
+      "id": 5530822729,
+      "node_id": "I_kwDOHaBlLs8AAAABSamoSQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/27"
+    },
+    "CTP-008": {
+      "number": 28,
+      "id": 5530823177,
+      "node_id": "I_kwDOHaBlLs8AAAABSamqCQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/28"
+    },
+    "CTP-012": {
+      "number": 29,
+      "id": 5530823500,
+      "node_id": "I_kwDOHaBlLs8AAAABSamrTA",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/29"
+    },
+    "CTP-013": {
+      "number": 30,
+      "id": 5530823821,
+      "node_id": "I_kwDOHaBlLs8AAAABSamsjQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/30"
+    },
+    "CTP-014": {
+      "number": 31,
+      "id": 5530824190,
+      "node_id": "I_kwDOHaBlLs8AAAABSamt_g",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/31"
+    },
+    "CTP-016": {
+      "number": 32,
+      "id": 5530824511,
+      "node_id": "I_kwDOHaBlLs8AAAABSamvPw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/32"
+    },
+    "CTP-009": {
+      "number": 33,
+      "id": 5530824826,
+      "node_id": "I_kwDOHaBlLs8AAAABSamweg",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/33"
+    },
+    "CTP-015": {
+      "number": 34,
+      "id": 5530825127,
+      "node_id": "I_kwDOHaBlLs8AAAABSamxpw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/34"
+    },
+    "CTP-017": {
+      "number": 35,
+      "id": 5530825444,
+      "node_id": "I_kwDOHaBlLs8AAAABSamy5A",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/35"
+    },
+    "CTP-018": {
+      "number": 36,
+      "id": 5530826109,
+      "node_id": "I_kwDOHaBlLs8AAAABSam1fQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/36"
+    },
+    "CTP-020": {
+      "number": 37,
+      "id": 5530826503,
+      "node_id": "I_kwDOHaBlLs8AAAABSam3Bw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/37"
+    },
+    "CTP-010": {
+      "number": 38,
+      "id": 5530826790,
+      "node_id": "I_kwDOHaBlLs8AAAABSam4Jg",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/38"
+    },
+    "CTP-019": {
+      "number": 39,
+      "id": 5530827078,
+      "node_id": "I_kwDOHaBlLs8AAAABSam5Rg",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/39"
+    },
+    "CTP-021": {
+      "number": 40,
+      "id": 5530827395,
+      "node_id": "I_kwDOHaBlLs8AAAABSam6gw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/40"
+    },
+    "CTP-022": {
+      "number": 41,
+      "id": 5530827701,
+      "node_id": "I_kwDOHaBlLs8AAAABSam7tQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/41"
+    },
+    "CTP-023": {
+      "number": 42,
+      "id": 5530828039,
+      "node_id": "I_kwDOHaBlLs8AAAABSam9Bw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/42"
+    },
+    "QA-005": {
+      "number": 43,
+      "id": 5530828305,
+      "node_id": "I_kwDOHaBlLs8AAAABSam-EQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/43"
+    },
+    "CTP-024": {
+      "number": 44,
+      "id": 5530828548,
+      "node_id": "I_kwDOHaBlLs8AAAABSam_BA",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/44"
+    },
+    "CTP-025": {
+      "number": 45,
+      "id": 5530828832,
+      "node_id": "I_kwDOHaBlLs8AAAABSanAIA",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/45"
+    },
+    "OPS-002": {
+      "number": 46,
+      "id": 5530829185,
+      "node_id": "I_kwDOHaBlLs8AAAABSanBgQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/46"
+    },
+    "OPS-003": {
+      "number": 47,
+      "id": 5530829461,
+      "node_id": "I_kwDOHaBlLs8AAAABSanClQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/47"
+    },
+    "OPS-004": {
+      "number": 48,
+      "id": 5530829741,
+      "node_id": "I_kwDOHaBlLs8AAAABSanDrQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/48"
+    },
+    "OPS-005": {
+      "number": 49,
+      "id": 5530830024,
+      "node_id": "I_kwDOHaBlLs8AAAABSanEyA",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/49"
+    },
+    "EXP-001": {
+      "number": 50,
+      "id": 5530830306,
+      "node_id": "I_kwDOHaBlLs8AAAABSanF4g",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/50"
+    },
+    "EXP-005": {
+      "number": 51,
+      "id": 5530830619,
+      "node_id": "I_kwDOHaBlLs8AAAABSanHGw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/51"
+    },
+    "EXP-006": {
+      "number": 52,
+      "id": 5530830935,
+      "node_id": "I_kwDOHaBlLs8AAAABSanIVw",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/52"
+    },
+    "EXP-007": {
+      "number": 53,
+      "id": 5530831261,
+      "node_id": "I_kwDOHaBlLs8AAAABSanJnQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/53"
+    },
+    "EXP-008": {
+      "number": 54,
+      "id": 5530831656,
+      "node_id": "I_kwDOHaBlLs8AAAABSanLKA",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/54"
+    },
+    "EXP-002": {
+      "number": 55,
+      "id": 5530832061,
+      "node_id": "I_kwDOHaBlLs8AAAABSanMvQ",
+      "url": "https://github.com/deepnative/deep-native-engine/issues/55"
+    }
+  }
+}

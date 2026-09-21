@@ -1,0 +1,840 @@
+{
+  "basis": "User-approved routing recommendation from this conversation; labels only, not execution authorization.",
+  "issues": [
+    {
+      "id": "ROADMAP",
+      "number": 1,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/1",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": null,
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high"
+      ]
+    },
+    {
+      "id": "GATE-A",
+      "number": 2,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/2",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": null,
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high"
+      ]
+    },
+    {
+      "id": "GATE-B",
+      "number": 3,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/3",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": null,
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high"
+      ]
+    },
+    {
+      "id": "GATE-C",
+      "number": 4,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/4",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": null,
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high"
+      ]
+    },
+    {
+      "id": "GATE-D",
+      "number": 5,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/5",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": null,
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high"
+      ]
+    },
+    {
+      "id": "GATE-E",
+      "number": 6,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/6",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": null,
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high"
+      ]
+    },
+    {
+      "id": "GATE-F",
+      "number": 7,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/7",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": null,
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high"
+      ]
+    },
+    {
+      "id": "PLAN-001",
+      "number": 8,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/8",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "GOV-001",
+      "number": 11,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/11",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "PLAN-002",
+      "number": 12,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/12",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "PLAN-003",
+      "number": 13,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/13",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "PLAN-004",
+      "number": 14,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/14",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "QA-001",
+      "number": 16,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/16",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": "gpt-6-astra",
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "design:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "QA-002",
+      "number": 17,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/17",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": "gpt-6-astra",
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "design:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "QA-003",
+      "number": 22,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/22",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": "gpt-6-astra",
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "design:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "QA-004",
+      "number": 18,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/18",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": true,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "escalate:xhigh"
+      ]
+    },
+    {
+      "id": "QA-005",
+      "number": 43,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/43",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-001",
+      "number": 15,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/15",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": true,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "escalate:xhigh"
+      ]
+    },
+    {
+      "id": "CTP-002",
+      "number": 19,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/19",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": true,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "escalate:xhigh"
+      ]
+    },
+    {
+      "id": "CTP-003",
+      "number": 20,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/20",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-004",
+      "number": 23,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/23",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-005",
+      "number": 24,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/24",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": true,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "escalate:xhigh"
+      ]
+    },
+    {
+      "id": "CTP-006",
+      "number": 25,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/25",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": true,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "escalate:xhigh"
+      ]
+    },
+    {
+      "id": "CTP-007",
+      "number": 26,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/26",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-008",
+      "number": 28,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/28",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-009",
+      "number": 33,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/33",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-010",
+      "number": 38,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/38",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-011",
+      "number": 27,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/27",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": true,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "escalate:xhigh"
+      ]
+    },
+    {
+      "id": "CTP-012",
+      "number": 29,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/29",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": true,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "escalate:xhigh"
+      ]
+    },
+    {
+      "id": "CTP-013",
+      "number": 30,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/30",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-014",
+      "number": 31,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/31",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": true,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "escalate:xhigh"
+      ]
+    },
+    {
+      "id": "CTP-015",
+      "number": 34,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/34",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-016",
+      "number": 32,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/32",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": true,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "escalate:xhigh"
+      ]
+    },
+    {
+      "id": "CTP-017",
+      "number": 35,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/35",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": true,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "escalate:xhigh"
+      ]
+    },
+    {
+      "id": "CTP-018",
+      "number": 36,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/36",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-019",
+      "number": 39,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/39",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-020",
+      "number": 37,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/37",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-021",
+      "number": 40,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/40",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": true,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "escalate:xhigh"
+      ]
+    },
+    {
+      "id": "CTP-022",
+      "number": 41,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/41",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-023",
+      "number": 42,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/42",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": "gpt-6-astra",
+      "escalate_to_xhigh": true,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "design:gpt-6-astra",
+        "escalate:xhigh"
+      ]
+    },
+    {
+      "id": "CTP-024",
+      "number": 44,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/44",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "CTP-025",
+      "number": 45,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/45",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": true,
+      "labels": [
+        "model:gpt-6-astra",
+        "reasoning:high",
+        "review:gpt-6-astra",
+        "escalate:xhigh"
+      ]
+    },
+    {
+      "id": "OPS-001",
+      "number": 21,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/21",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "OPS-002",
+      "number": 46,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/46",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "OPS-003",
+      "number": 47,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/47",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "OPS-004",
+      "number": 48,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/48",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "OPS-005",
+      "number": 49,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/49",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "EXP-001",
+      "number": 50,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/50",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "EXP-002",
+      "number": 55,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/55",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "EXP-003",
+      "number": 9,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/9",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "EXP-004",
+      "number": 10,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/10",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "EXP-005",
+      "number": 51,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/51",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "EXP-006",
+      "number": 52,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/52",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "EXP-007",
+      "number": 53,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/53",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    },
+    {
+      "id": "EXP-008",
+      "number": 54,
+      "url": "https://github.com/deepnative/deep-native-engine/issues/54",
+      "primary_model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "review_model": "gpt-6-astra",
+      "design_model": null,
+      "escalate_to_xhigh": false,
+      "labels": [
+        "model:gpt-5.6-sol",
+        "reasoning:high",
+        "review:gpt-6-astra"
+      ]
+    }
+  ]
+}

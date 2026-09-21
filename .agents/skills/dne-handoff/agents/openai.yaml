@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify and hand off"
+  short_description: "Record tested revisions, acceptance evidence, and next steps"
+  default_prompt: "Use $dne-handoff to verify the current task and prepare an evidence-based handoff."

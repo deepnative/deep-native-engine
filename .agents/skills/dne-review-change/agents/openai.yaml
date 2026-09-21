@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review a change"
+  short_description: "Audit behavior, risks, and acceptance evidence independently"
+  default_prompt: "Use $dne-review-change to independently review the selected diff and its issue evidence."

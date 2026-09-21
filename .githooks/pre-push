@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+exec "${PYTHON:-python3}" scripts/repo.py pre-push

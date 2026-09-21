@@ -1,0 +1,16 @@
+{
+  "verified_issues": 55,
+  "primary_model_counts": {
+    "gpt-6-astra": 19,
+    "gpt-5.6-sol": 36
+  },
+  "review_labels": 48,
+  "design_labels": 4,
+  "xhigh_escalation_labels": 13,
+  "all_preexisting_labels_preserved": true,
+  "issue_status_assignees_milestones_preserved": true,
+  "application_code_changes": false,
+  "commits_or_pushes": false,
+  "project_labels_verified": 55,
+  "all_project_items_still_backlog": true
+}

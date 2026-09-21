@@ -1,0 +1,25 @@
+{
+  "checks": [
+    {
+      "case": "Downside",
+      "revenue": 57743.572555007195,
+      "collections": 61777.74552744569,
+      "operating_result": -108955.97360770513
+    },
+    {
+      "case": "Base",
+      "revenue": 159768.3402822818,
+      "collections": 206468.35112581644,
+      "operating_result": -59797.604893209544
+    },
+    {
+      "case": "Capacity",
+      "revenue": 362127.66939414485,
+      "collections": 509179.4917259359,
+      "operating_result": 42367.53728167675
+    }
+  ],
+  "input_perturbation": "M12 Base pilot start5 to6 adds1455 recognizedrevenue; restored",
+  "blank_test": "Unselected blank does not affect Base; selected blank exposesmissing; restored",
+  "errors": "{\"kind\":\"notice\",\"message\":\"Cell search matched 0 entries.\"}"
+}
