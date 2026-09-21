@@ -5,6 +5,9 @@ export default defineConfig({
     passWithNoTests: false,
     allowOnly: false,
     retry: 0,
+    // Unit files mock shared runtime modules. Serial file execution avoids the
+    // observed order-sensitive full-suite failure in the isolated gate probe.
+    fileParallelism: false,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
