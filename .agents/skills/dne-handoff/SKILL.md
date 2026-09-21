@@ -5,6 +5,8 @@ description: "Verify and hand off a Deep Native Engine task or prepare release e
 
 # Verify and hand off
 
+Check the current [issue claim](../../../assets/docs/workflows/ISSUE-COORDINATION.md) before verification. At handoff, report the worker/claim ID, assignee, lifecycle/blocker labels and project Status; reconcile them through the authorized coordinator when this role is read only. Full acceptance becomes Done; partial delivery records remaining AC and releases or transfers the claim without closing the issue.
+
 1. Read [AGENTS.md](../../../AGENTS.md), the live issue/PR, [verification contract](../../../assets/docs/workflows/VERIFICATION.md), and current branch/commit/dirty state. Identify the requested stage: planning, tooling, application slice, deployed verification or commercial gate.
 2. Run `make verify` for the current checkout without editing implementation, tests, or thresholds. It may create ignored reports. If execution is unavailable or unauthorized, explicitly report it as unverified. Do not label a dirty-tree check as a later commit's evidence.
 3. Read the actual report and applicable test logs. Record command, exit status, environment, SHA/tree, numerator/denominator, scenario register and uncovered IDs. Repository-only checks do not measure application unit or E2E coverage. Report first-attempt failures separately from reruns.

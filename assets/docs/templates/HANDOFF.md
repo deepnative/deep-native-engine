@@ -1,6 +1,7 @@
 # Task handoff
 
 - Goal, issue, PR, branch, current commit:
+- Claim ID/worker, assignee, lifecycle/blocker labels, project Status, and claim released/transferred/completed:
 - Merge state, main merge SHA, post-merge CI, and local synchronization:
 - Current authorization and next permitted action:
 - Completed outcomes with evidence links:

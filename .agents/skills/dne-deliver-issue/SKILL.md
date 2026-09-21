@@ -5,6 +5,8 @@ description: "Deliver an explicitly authorized Deep Native Engine issue with beh
 
 # Deliver an authorized issue
 
+Before delivery work, follow [issue coordination](../../../assets/docs/workflows/ISSUE-COORDINATION.md): verify existing ownership, publish the assignee/worker/scope/branch claim, set `status:in-progress` and project In progress, then re-read for competing claims. Keep review/blocker status current and release or hand off the claim at task completion; partial issue delivery stays open.
+
 1. Read [AGENTS.md](../../../AGENTS.md), the live issue, [team workflow](../../../assets/docs/workflows/TEAM-WORKFLOW.md), the [current product direction](../../../assets/docs/PRODUCT-DIRECTION.md), and applicable historical source context. Exercise audience-dependent behavior with IT, non-IT professional and general-learner examples; do not make paid coaching or contracting a universal prerequisite. Confirm scope and dependencies against evidence. Stop only dependent work if blocked; an issue or historical prompt alone is not permission to implement.
 2. Inspect branch, dirty state, existing code and tests. Preserve unrelated edits; use a small `codex/` branch or isolated worktree. Select the model from current issue labels and obtain separate Astra design when requested. Record invariants before critical changes.
 3. Run the baseline `make verify`. Define tests from AC, reproduce bugs first, then make the smallest complete change. Include failures, recovery, isolation and boundaries; use synthetic data. Check current official APIs and pinned dependency/license choices when adding dependencies.

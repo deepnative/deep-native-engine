@@ -8,6 +8,7 @@ Current authorization: context migration, planning, and repository agent/skill/w
 - [Master roadmap](https://github.com/deepnative/deep-native-engine/issues/1)
 - [GOV-001 working agreement](https://github.com/deepnative/deep-native-engine/issues/11)
 - [Team workflow](../workflows/TEAM-WORKFLOW.md)
+- [Issue coordination](../workflows/ISSUE-COORDINATION.md): claim authorized work before starting; keep labels, owner and project Status current.
 - [Verification procedure](../workflows/VERIFICATION.md)
 
 Open this repository as the working directory. Read root `AGENTS.md`, [the context index](README.md), [quality gates](QUALITY-GATES.md), and the assigned live issue. The prior source folder is archived under `source-2026-09-15/`; final outputs take precedence over older drafts. All 25 manifest-listed files retain their original hashes. A personal runtime dependency symlink is deliberately excluded.
