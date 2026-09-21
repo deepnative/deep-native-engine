@@ -13,18 +13,19 @@
   "issues": [
     {
       "id": "ROADMAP",
-      "title": "[ROADMAP] Contractor Success Platform roadmap and delivery gates",
+      "title": "[ROADMAP] Deep Native Engine AI learning ecosystem roadmap and delivery gates",
       "phase": "A",
       "milestone": "A",
       "kind": "roadmap",
       "priority": "P0",
       "deps": [],
       "ac": [
-        "All 25 original CTP specifications retain stable IDs, source acceptance criteria and linked dependencies.",
+        "All 25 original CTP IDs and source provenance are retained. The current product direction supersedes contractor-only audience/admission assumptions, with explicit mapping to revised acceptance criteria.",
         "Six phase epics and eight delivery milestones distinguish definition, first slice, full private MVP, verification, pilot, continuation, repeatability and expansion.",
         "Every execution issue records acceptance criteria, non-goals, dependencies, accountable role, verification evidence and definition of done.",
         "The user-confirmed 99% unit / 99% E2E journey coverage / 100% critical journey and required test-pass gates are explicit and consistent.",
-        "Current scope remains planning only; implementation, live integration verification and commercial evidence have separate gates."
+        "Current authorization covers planning, product-direction refactoring and repository setup, including verified merge to main. Application implementation, live integration verification and commercial activity retain their separate authorization gates.",
+        "Shared foundations, goal-based learning, bounded participation and reviewed contributions serve IT, non-IT professional and general learners in the private MVP. Contractor/career paths and paid coaching are optional."
       ],
       "evidence": "Published issue inventory, dependency audit, local source-copy checksums, milestone listing and planning-only git status.",
       "non_goals": "This tracking issue is not authorization to implement, spend, publish a live product, contact prospects or collect payments. The planning deliverable can be complete while roadmap execution remains open.",
@@ -33,7 +34,7 @@
     },
     {
       "id": "GATE-A",
-      "title": "[GATE-A] Phase A \u2014 Define and demonstrate",
+      "title": "[GATE-A] Phase A — Define and demonstrate",
       "phase": "A",
       "milestone": "A",
       "kind": "epic",
@@ -50,16 +51,17 @@
       "ac": [
         "Offer scope, private prototype, common foundation, assessment method, rights and capacity are reviewable. Missing real-world decisions are explicit launch blockers; no unavailable expertise is advertised.",
         "All mandatory child AC/DoD outcomes are evidenced, with linked defects and explicit stop decisions; deferred options are recorded as such.",
-        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate."
+        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate.",
+        "Approve the cross-audience story map, common learning/participation scope, access model and contribution/moderation rules under PRODUCT-DIRECTION.md. Contractor-only admission is superseded."
       ],
       "evidence": "Linked child evidence, stage review and explicit owner go/no-go/defer decision.",
-      "non_goals": "Indicative timing is not a promise. Current permission is planning only.",
+      "non_goals": "Indicative timing is not a promise. Current permission covers planning and repository setup; application implementation remains on hold.",
       "owner": "Product owner / stage owner",
       "extra": "Weeks 1-2 (relative estimate)"
     },
     {
       "id": "GATE-B",
-      "title": "[GATE-B] Phase B \u2014 Complete and verify the private MVP",
+      "title": "[GATE-B] Phase B — Complete and verify the private MVP",
       "phase": "B",
       "milestone": "B3",
       "kind": "epic",
@@ -96,16 +98,17 @@
       "ac": [
         "First complete member-review journey, then every required member/coach/operator flow, then full verification. Deterministic AI/payment/manual-provider flows work honestly. >=99% each unit metric; >=99% E2E scenario coverage; 100% critical coverage and required test passes. All full-MVP AC and release evidence pass.",
         "All mandatory child AC/DoD outcomes are evidenced, with linked defects and explicit stop decisions; deferred options are recorded as such.",
-        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate."
+        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate.",
+        "Full MVP includes ECO-01 through ECO-08: nontechnical/exploratory onboarding, suitable practical learning, opt-in learning circles and reviewed contributions, with optional coaching kept separate from common membership."
       ],
       "evidence": "Linked child evidence, stage review and explicit owner go/no-go/defer decision.",
-      "non_goals": "Indicative timing is not a promise. Current permission is planning only.",
+      "non_goals": "Indicative timing is not a promise. Current permission covers planning and repository setup; application implementation remains on hold.",
       "owner": "Product owner / stage owner",
       "extra": "Weeks 3-6 (relative estimate)"
     },
     {
       "id": "GATE-C",
-      "title": "[GATE-C] Phase C \u2014 Deliver the controlled first paid pilot",
+      "title": "[GATE-C] Phase C — Validate the optional coached pilot",
       "phase": "C",
       "milestone": "C",
       "kind": "epic",
@@ -120,16 +123,17 @@
       "ac": [
         "Actual launch prerequisites and authorization precede real service. Five paid members across multiple roles, at least four useful reviewed completions, obligations fulfilled and measured delivery cost. Paid continuation is evaluated in Phase D.",
         "All mandatory child AC/DoD outcomes are evidenced, with linked defects and explicit stop decisions; deferred options are recorded as such.",
-        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate."
+        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate.",
+        "This gate validates the optional coached service, not eligibility for the broader ecosystem. Record background/goal coverage and learning outcomes without implying all audiences must buy the original pilot."
       ],
       "evidence": "Linked child evidence, stage review and explicit owner go/no-go/defer decision.",
-      "non_goals": "Indicative timing is not a promise. Current permission is planning only.",
+      "non_goals": "Indicative timing is not a promise. Current permission covers planning and repository setup; application implementation remains on hold.",
       "owner": "Product owner / stage owner",
       "extra": "Weeks 7-14 (relative estimate)"
     },
     {
       "id": "GATE-D",
-      "title": "[GATE-D] Phase D \u2014 Validate paid continuation",
+      "title": "[GATE-D] Phase D — Validate paid continuation",
       "phase": "D",
       "milestone": "D",
       "kind": "epic",
@@ -141,16 +145,17 @@
       "ac": [
         "At least three actual paid continuations plus useful recurring service and reviewed delivery economics. Failed thresholds trigger redesign/stop. A five-member sample remains directional.",
         "All mandatory child AC/DoD outcomes are evidenced, with linked defects and explicit stop decisions; deferred options are recorded as such.",
-        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate."
+        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate.",
+        "Continuation thresholds apply to the accepted coached offer; evaluate ongoing learning/participation independently of paid conversion and do not reinterpret unpaid learning as a paid sale."
       ],
       "evidence": "Linked child evidence, stage review and explicit owner go/no-go/defer decision.",
-      "non_goals": "Indicative timing is not a promise. Current permission is planning only.",
+      "non_goals": "Indicative timing is not a promise. Current permission covers planning and repository setup; application implementation remains on hold.",
       "owner": "Product owner / stage owner",
       "extra": "Weeks 15-20 (relative estimate)"
     },
     {
       "id": "GATE-E",
-      "title": "[GATE-E] Phase E \u2014 Establish repeatability",
+      "title": "[GATE-E] Phase E — Establish repeatability",
       "phase": "E",
       "milestone": "E",
       "kind": "epic",
@@ -163,16 +168,17 @@
       "ac": [
         "Repeated buying and ongoing service, funded qualified backup capacity and measured acquisition/delivery economics. Specialist receives an explicit proceed/defer decision; its launch is optional.",
         "All mandatory child AC/DoD outcomes are evidenced, with linked defects and explicit stop decisions; deferred options are recorded as such.",
-        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate."
+        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate.",
+        "Measure repeatable usefulness and accessible participation across learner backgrounds as well as the optional paid service; broaden supported tracks only with content and service evidence."
       ],
       "evidence": "Linked child evidence, stage review and explicit owner go/no-go/defer decision.",
-      "non_goals": "Indicative timing is not a promise. Current permission is planning only.",
+      "non_goals": "Indicative timing is not a promise. Current permission covers planning and repository setup; application implementation remains on hold.",
       "owner": "Product owner / stage owner",
       "extra": "Months 6-9 (relative estimate)"
     },
     {
       "id": "GATE-F",
-      "title": "[GATE-F] Phase F \u2014 Selectively expand after separate evidence",
+      "title": "[GATE-F] Phase F — Selectively expand after separate evidence",
       "phase": "F",
       "milestone": "F",
       "kind": "epic",
@@ -191,10 +197,11 @@
       "ac": [
         "Each candidate expansion has an evidence-backed proceed/defer/decline decision. Only selected expansions need delivery proof; deferred options are not required to ship. No earlier gate implies approval for a new tier, country, integration or business model.",
         "All mandatory child AC/DoD outcomes are evidenced, with linked defects and explicit stop decisions; deferred options are recorded as such.",
-        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate."
+        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate.",
+        "Non-IT/general learners and bounded learning circles/contributions are already in the core roadmap; they are not deferred expansion audiences."
       ],
       "evidence": "Linked child evidence, stage review and explicit owner go/no-go/defer decision.",
-      "non_goals": "Indicative timing is not a promise. Current permission is planning only.",
+      "non_goals": "Indicative timing is not a promise. Current permission covers planning and repository setup; application implementation remains on hold.",
       "owner": "Product owner / stage owner",
       "extra": "Months 10-12+ (relative estimate)"
     },
@@ -207,14 +214,15 @@
       "priority": "P0",
       "deps": [],
       "ac": [
-        "Finalized September 15 outputs take precedence over older working drafts; copied sources and SHA-256 manifest are preserved.",
-        "Record the individual-contractor/all-role scope, nine role families plus other specialty, offer-version rules, and deferred employer/agency business.",
+        "The current PRODUCT-DIRECTION.md and revised live issues supersede contractor-only scope in the September 15 package; the original files and SHA-256 manifest remain unchanged.",
+        "Define the shared AI learning and participation ecosystem for IT practitioners, professionals in other fields, students/career changers, creators/entrepreneurs and curious learners. Backgrounds and goals may overlap; the nine IT families and contractor/career services are optional specializations.",
         "Record owner, due decision, evidence and downstream blocker for entity, province/countries, budget, founder availability, providers, rights, experts and terms; unknowns are not guessed.",
         "Produce a reviewable member/coach/operator story map and low-fidelity private prototype; distinguish first vertical slice from full Phase B.",
-        "Resolve source differences explicitly: preserve all nine roadmap journeys plus build-prompt usability/recovery, late-return and commercial-truth criteria."
+        "Resolve source differences explicitly: preserve all nine roadmap journeys plus build-prompt usability/recovery, late-return and commercial-truth criteria.",
+        "Document foundation/participation access and pricing decisions separately from optional coaching hypotheses; do not assume a free tier or apply archived high-touch prices to every learner. Record which archived audience assumptions are superseded and preserve applicable commercial invariants."
       ],
       "evidence": "Source comparison, decision log, story-map/prototype review and scope sign-off.",
-      "non_goals": "No application implementation or business promises.",
+      "non_goals": "No application implementation, live offer launch or fabricated demand. Preserve historical source and explicitly supersede contractor-only positioning with the current cross-audience learning ecosystem.",
       "owner": "Product owner",
       "extra": ""
     },
@@ -254,7 +262,8 @@
         "Record actual operating entity/province, enabled customer countries, decision owners and qualified advice needed before launch; unresolved items visibly block live sales.",
         "Review offer/cancellation/refund/renewal language, invoice and tax classification, training classification, privacy/retention, AI vendors, insurance and IP permissions for the actual jurisdiction.",
         "Separate learning, AI processing, recording, portfolio and marketing consent; define retention exceptions and accurate deletion statements.",
-        "Prepare an owner-reviewed launch decision checklist and evidence locations without asserting legal clearance from a draft or from software tests."
+        "Prepare an owner-reviewed launch decision checklist and evidence locations without asserting legal clearance from a draft or from software tests.",
+        "Define member-contribution attribution/rights, opt-in public or group visibility, community rules, reporting/moderation responsibilities and consent boundaries for the actual supported audiences before public participation."
       ],
       "evidence": "Dated decision register, reviewed draft terms/policies, adviser/owner determinations and unresolved launch blockers.",
       "non_goals": "No signing, tax/legal conclusions from generic guidance, purchases, card charges or publication.",
@@ -276,7 +285,7 @@
         "Model pilot two 60-minute coaching units, four 30-minute review units and two monthly 60-minute support allocations, plus internal onboarding reserve of 60 coach/30 support minutes.",
         "Plan four one-hour pooled clinics per month with at most 16 members per group; count preparation, notes, QA, scheduling slack and support once.",
         "Publish proposed scope/turnaround/24-hour cancellation/no-show/service-recovery rules and staffed hours separately from final accepted terms.",
-        "Admission is limited by the scarcest qualified service and confirmed coverage; absent experts block tailored paid promises but not shared-foundation planning."
+        "Confirm capacity before promising tailored paid coaching or formal expert review. Missing specialized coverage must be visible without excluding people from the common learning/participation path or requiring everyone to buy coaching."
       ],
       "evidence": "Capacity workbook/roster, example cohort allocation, expert evidence and owner-reviewed operating procedures.",
       "non_goals": "No invented expert credentials, hiring commitments, unlimited service or customer admission.",
@@ -295,11 +304,12 @@
         "PLAN-003"
       ],
       "ac": [
-        "Specify six concise foundation lessons with accessible text/transcripts and one role-appropriate exercise brief for each named role family plus a fit-review route for other specialties.",
-        "Prepare two complete synthetic reference assignments (for example QA and business analysis), versioned rubrics and reviewer calibration examples.",
+        "Specify six accessible foundation lessons covering AI literacy, useful prompting, checking outputs, privacy/rights, practical workflows and collaborative participation. Include beginner, IT and non-IT exercise paths, with no mandatory coding or employment prerequisite.",
+        "Prepare at least two complete synthetic reference assignments spanning a technical path (such as QA) and a nontechnical professional/general-learner path (such as meeting-action planning), with versioned rubrics and reviewer calibration.",
         "Prepare three maintained workflow demonstrations: requirements-to-acceptance drafting, test-case review and meeting-action extraction.",
-        "Every asset has owner, sources/rights, version, limitations, intended roles, review date and readiness; generated examples remain demonstrations until real expert review.",
-        "Review scope fits the funded review allocation and no noncoding role is forced into a generic coding assessment."
+        "Every asset has owner, sources/rights, version, limitations, intended goals/backgrounds, prerequisites, review date and readiness; generated examples remain demonstrations until reviewed for their intended use.",
+        "Exercises and formal reviews fit their actual scope and funded allocation; noncoding learners receive a complete suitable path and formal expert assessment is distinct from peer/AI feedback.",
+        "Prepare examples of learner questions, peer responses and a reviewed contribution with attribution. Distinguish community participation from qualified assessment and verify plain-language and accessibility requirements."
       ],
       "evidence": "Content inventory, sample lessons/assignments/reference outputs, rights checks, calibration notes and qualified sign-off where available.",
       "non_goals": "No claims of expert approval, accreditation or paid curriculum readiness without evidence.",
@@ -347,7 +357,8 @@
         "Critical isolation, payments/dates, consent, ledgers/races, AI failures/budgets, deletion and the complete member-review journey require 100% coverage; all required executed tests pass.",
         "Keep first-slice and full-MVP scopes explicit; the full-release denominator includes unimplemented scenarios. Denominator changes require reviewed scope decisions, never silent removal.",
         "Run real UI/server/database with independent synthetic contexts and external-only deterministic adapters; use observable outcomes and resilient accessible locators.",
-        "Demonstrate gate failure for missing mapping, skipped critical case, empty report and failing test; preserve traces and first-attempt failure information."
+        "Demonstrate gate failure for missing mapping, skipped critical case, empty report and failing test; preserve traces and first-attempt failure information.",
+        "Add ECO-01 through ECO-08 from ECOSYSTEM-JOURNEYS.md, mapping IT, non-IT and general learners to applicable AC. Preserve original cases and record reviewed overlap/scope changes; broader audiences cannot be used to remove difficult commercial/privacy tests."
       ],
       "evidence": "Versioned journey register, scenario-to-test map, reproducible runner, denominator report and deliberate failure checks.",
       "non_goals": "Do not equate test count, test pass rate, UI code coverage or mocked pages with journey coverage.",
@@ -393,7 +404,8 @@
         "Map trust boundaries for workspaces, staff grants, object storage, uploads, AI retrieval, jobs, payments, secrets and operator access.",
         "Specify negative cases for cross-record ownership, privilege escalation, expiring/revoked links, unsafe files, prompt injection, consent bypass, leaked logs and unauthorized exports.",
         "Specify transaction, idempotency, timeout/retry and date invariants with reproduction plans; connect them to CTP-023 and every affected feature.",
-        "Define dependency/secret/security scan policy, threat owners, response procedure and release-blocking severity; no unsupported security certification claims."
+        "Define dependency/secret/security scan policy, threat owners, response procedure and release-blocking severity; no unsupported security certification claims.",
+        "Threat-model cohort membership, moderator permissions, learner-contribution publication, reports and removal/revocation. Treat member-provided content as untrusted; joining a group never implicitly shares private work or permits unsolicited outreach."
       ],
       "evidence": "Reviewed data-flow/threat model, abuse-case register and issue/test mapping with owners.",
       "non_goals": "No security code or production security settings changed yet.",
@@ -414,7 +426,8 @@
         "Core member/coach/operator journeys work at mobile and desktop widths, keyboard-only navigation, readable labels/focus/errors and page-reload recovery.",
         "Run the approved Chromium/Firefox/WebKit matrix with deterministic data; automate meaningful accessibility checks and perform manual keyboard/focus review.",
         "Approve quantitative response-time, concurrency, upload-size and background-job budgets based on the five-member pilot and operator workloads before measuring.",
-        "Record test environment, data volume, p50/p95 timings, failures and accessibility defects; agreed budgets and critical usability criteria pass before release."
+        "Record test environment, data volume, p50/p95 timings, failures and accessibility defects; agreed budgets and critical usability criteria pass before release.",
+        "Verify the common learning and participation journeys with noncoding/beginner language, accessible contribution/group controls and the same browser/keyboard expectations as technical paths."
       ],
       "evidence": "Browser matrix reports/traces, keyboard/accessibility review and measured workload results compared with approved budgets.",
       "non_goals": "No arbitrary performance promise, screenshot-only acceptance or universal accessibility certification.",
@@ -435,7 +448,8 @@
       "ac": [
         "Read project instructions; inventory reusable auth, design, billing, tests, and owned content; record reuse/greenfield decision and exact tools chosen from current official docs.",
         "No unrelated repository changes.",
-        "Record current empty checkout and legacy repository-description mismatch without resurrecting removed historical code. Decide app placement, modular monolith boundaries, relational schema/migrations, storage/jobs and maintained packages in an ADR."
+        "Record the current planning/tooling-only checkout and its product direction without resurrecting removed historical code. Decide app placement, modular monolith boundaries, relational schema/migrations, storage/jobs and maintained packages in an ADR.",
+        "Separate learner goals/backgrounds, curated tracks, participation/contributions, optional offers and privileged staff authorization in the domain model; legacy Professional pricing or contractor fields cannot define the universal member identity."
       ],
       "evidence": "Repository inventory, architecture/data-flow ADRs, official-doc references and first-slice test plan.",
       "non_goals": "No copying other projects or choosing a stack solely from the old repository description.",
@@ -444,7 +458,7 @@
     },
     {
       "id": "CTP-002",
-      "title": "[CTP-002] Encode commercial catalog, terms, and subscription phases",
+      "title": "[CTP-002] Define learning access and optional coaching offers",
       "phase": "B",
       "milestone": "B1",
       "kind": "implementation",
@@ -453,11 +467,12 @@
         "CTP-001"
       ],
       "ac": [
-        "Professional/Specialist/Practice/Partner prices and service-minute quotas match the business plan.",
+        "Represent shared learning/participation access separately from optional coaching offers. The archived Professional/Specialist/Practice/Partner prices and service quotas are coaching-offer hypotheses, not universal membership requirements.",
         "Pilot grants two 60-minute coaching units and four 30-minute review units across two billing periods, plus stated support/AI.",
-        "CAD 3,000\u2192CAD 9,000\u2192CAD 12,000 phases preserve anniversary.",
-        "Only approved live offer is purchasable; higher plans are applications.",
-        "Use integer CAD cents and immutable offer/terms versions. Professional monthly service is 60 coach/30 review/30 support minutes; pilot support is 60 minutes per billing month; preserve internal onboarding reserve separately. No annual prepayment releases all future monthly credits."
+        "CAD 3,000→CAD 9,000→CAD 12,000 phases preserve anniversary.",
+        "Only explicitly approved live offers are purchasable. Separate foundational access rules from coaching purchase; background tags such as professional do not assign a paid plan or staff privileges.",
+        "Use integer CAD cents and immutable offer/terms versions. Professional monthly service is 60 coach/30 review/30 support minutes; pilot support is 60 minutes per billing month; preserve internal onboarding reserve separately. No annual prepayment releases all future monthly credits.",
+        "Foundation/participation access must have explicit approved rules and limits independent of coaching acceptance. Mark unsettled commercial choices as pending; never silently grant unbudgeted services or invent a new price/free tier."
       ],
       "evidence": "Table-driven offer, price, quota and historical-version tests plus UI/server agreement comparison.",
       "non_goals": "No live checkout or unauthorized higher-tier sale.",
@@ -466,7 +481,7 @@
     },
     {
       "id": "CTP-003",
-      "title": "[CTP-003] Implement all-role taxonomy, readiness, and expert registry",
+      "title": "[CTP-003] Implement learner backgrounds, goals, track readiness and expert registry",
       "phase": "B",
       "milestone": "B1",
       "kind": "implementation",
@@ -475,13 +490,13 @@
         "CTP-001"
       ],
       "ac": [
-        "All nine named IT role families plus other specialty can register; multi-role choice works.",
+        "Support IT practitioners, non-IT professionals and general/exploratory learners with optional multi-background/domain tags, experience and goals. The nine IT role families remain optional technical subcategories; no job, client or contractor status is required.",
         "Available/limited coverage/in preparation/retired states display accurately.",
         "Expert role/domain, service types, dates, costs, and backup coverage are recorded.",
         "No unsupported tailored service can be committed.",
-        "Record multiple roles and a primary goal; other-specialty intake has manual fit review. Readiness requires actual content and qualified coverage, not a placeholder expert account."
+        "Members can choose or revise a primary learning goal and an exploratory path. General learners can enter the common foundation; manual fit/capacity review applies to specialized services, not blanket admission. Track readiness reflects reviewed content and real qualified coverage where promised."
       ],
-      "evidence": "Role/readiness transition tests and member/operator demonstrations including unsupported specialty.",
+      "evidence": "Background/goal/track-readiness transition tests for IT, non-IT professional and exploratory learners; unsupported tailored-service states without blanket admission refusal.",
       "non_goals": "No claim of full domain expertise from broad intake.",
       "owner": "Engineering lead",
       "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-003. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
@@ -500,7 +515,7 @@
         "QA-003"
       ],
       "ac": [
-        "Synthetic seed includes two members, multiple roles, an assigned/revoked coach, reviewer, editor, and operator.",
+        "Synthetic seeds cover distinct IT, non-IT professional and general-learner accounts; multiple goals; paid and non-coaching membership states; an assigned/revoked coach, reviewer, editor, moderator and operator.",
         "AI/payment/storage/calendar/email adapters separate demo/test/live modes.",
         "Missing live settings produce actionable disabled states; no fake sent message or live payment confirmation.",
         "Isolate test/live databases, buckets and credentials; validate auth and analytics adapters too. Demo impersonation cannot run live. Failed jobs survive reload with sanitized errors and bounded retries."
@@ -525,7 +540,8 @@
         "Members own private workspaces.",
         "Coach/reviewer access is assignment-scoped and time-bounded; editor role grants no member-data access.",
         "Direct API requests cannot bypass boundaries; revocation prevents new access; privileged support access is logged.",
-        "Server derives identity/workspace; members cannot self-grant staff roles. Cross-record references cannot join another workspace. Support content access has purpose, expiry and an audit trail."
+        "Server derives identity/workspace; members cannot self-grant staff roles. Cross-record references cannot join another workspace. Support content access has purpose, expiry and an audit trail.",
+        "Learner background/goal changes do not grant coach/reviewer/editor/moderator privileges; cohort membership grants only its explicitly permitted shared content."
       ],
       "evidence": "Role/record authorization matrix, expiry/revocation integration cases and adversarial direct-API tests.",
       "non_goals": "No client-only authorization or global staff access.",
@@ -546,7 +562,8 @@
         "Allowlisted size/type rules, malware/quarantine state, sharing permission, and private object storage work.",
         "Invalid objects cannot reach review.",
         "Every download rechecks authorization; short-lived links, metadata/log redaction, and deletion hooks are verified.",
-        "Require explicit rights/sharing scope, never execute uploads, and cover rejected types, quarantine transitions, revoked grants and derived-data deletion. Logs contain no raw evidence."
+        "Require explicit rights/sharing scope, never execute uploads, and cover rejected types, quarantine transitions, revoked grants and derived-data deletion. Logs contain no raw evidence.",
+        "Separate permission to submit privately for review from permission to publish a community contribution or share with a learning circle; each destination requires explicit scope."
       ],
       "evidence": "Storage policy tests and browser upload/download/rejection/revocation cases with independent members.",
       "non_goals": "No public storage bucket or unrestricted client-document intake.",
@@ -566,9 +583,9 @@
       ],
       "ac": [
         "Draft/preview/review/publish/retire workflow is real.",
-        "Each available item has owner, sources/rights, review date, supported role/domain, and version.",
+        "Each available item has owner, sources/rights, review date, supported goals/backgrounds/domain, prerequisites and version.",
         "Assessments pin rubric/content versions; new releases do not rewrite earlier results.",
-        "Search/filter and accessible previews use eligible published versions. Support six foundation lessons, role briefs and two demo assignments from PLAN-004; demonstration authorship is not qualified approval."
+        "Search/filter and accessible previews use eligible published versions. Support the shared six-lesson foundation and cross-audience exercises from PLAN-004; distinguish curated instruction, proposed member contributions and qualified formal assessment."
       ],
       "evidence": "Publication/retirement/rights/version-pinning tests and editor/member browser evidence.",
       "non_goals": "No fake reviewer sign-off or retroactive assessment rewrite.",
@@ -577,7 +594,7 @@
     },
     {
       "id": "CTP-008",
-      "title": "[CTP-008] Implement application, covered offer acceptance, and baseline plan",
+      "title": "[CTP-008] Implement learner onboarding, goal-based plans and optional offers",
       "phase": "B",
       "milestone": "B1",
       "kind": "implementation",
@@ -589,13 +606,13 @@
         "CTP-007"
       ],
       "ac": [
-        "All roles can join the common foundation.",
-        "Prospect sees exact covered scope and capacity before acceptance/payment.",
+        "People across IT, other professions and general learning interests can join the common foundation without a job title, client, contract, coding experience or purchase of the Professional coaching offer.",
+        "Present foundation/participation access conditions separately from optional paid services; a member sees actual covered scope, price and confirmed capacity before any paid acceptance.",
         "Self-reported experience remains labelled.",
-        "Baseline and 90-day plan fit funded human services; no fabricated credential or fixed coding test for noncoding roles.",
+        "An initial learning plan fits the member goals, experience and available time. Exploratory/noncoding paths are valid; optional 90-day coaching plans fit funded services and never fabricate credentials.",
         "Capture timezone/goals/weekly availability and separate consent choices; sensitive income/client/contract dates stay optional. Require real qualified capacity before accepting tailored paid scope."
       ],
-      "evidence": "All-role application/onboarding browser flow, uncovered-role refusal and accepted-offer snapshot tests.",
+      "evidence": "Browser onboarding for IT, non-IT professional and general learners without mandatory contractor/coding/coaching-purchase fields; optional covered-offer acceptance and declined-specialized-service tests.",
       "non_goals": "No identity documents or client credentials in normal onboarding.",
       "owner": "Engineering lead",
       "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-008. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
@@ -613,9 +630,9 @@
       ],
       "ac": [
         "A member reads actual accessible material/transcript, completes an exercise, and sees accurate next actions.",
-        "Role-appropriate assignment is selected.",
+        "Choose assignments by learning goal, experience, interests and actual prerequisites; include complete noncoding and exploratory paths.",
         "Progress reflects observed activity/completion, never synthetic earnings or hiring outcomes.",
-        "Lesson/transcript and progress survive reload; return useful empty/error states. Exercise choice is tied to role and eligible content rather than generic coding assumptions."
+        "Lesson/transcript and progress survive reload; useful empty/error states and next actions work after a goal change. Role or employment labels do not force a generic coding assessment."
       ],
       "evidence": "Reader/progress/assignment browser traces with reload and error recovery.",
       "non_goals": "No completion flag treated as verified competence.",
@@ -637,7 +654,8 @@
         "Qualified assigned reviewer sees only the authorized version, records criterion-level feedback with evidence references and time spent, and publishes a review.",
         "Revision creates new evidence; prior feedback remains intact.",
         "Simulated assignments stay labelled in any portfolio output.",
-        "Only the assigned human can publish formal assessment; distinguish AI suggestions/self-report/human review. Include bounded clarification/appeal. Account for prep/time, then reconcile funded review consumption with CTP-011 before full-MVP closure."
+        "Only the assigned human can publish formal assessment; distinguish AI suggestions/self-report/human review. Include bounded clarification/appeal. Account for prep/time, then reconcile funded review consumption with CTP-011 before full-MVP closure.",
+        "Offer goal-appropriate evidence and revisions across technical and nontechnical paths. Peer/AI feedback is labelled and cannot publish formal assessment or consume expert service credits as if delivered by a qualified reviewer."
       ],
       "evidence": "Submission/rubric immutability, reviewer authorization, revision/appeal and time/entitlement integration evidence.",
       "non_goals": "No unlimited revisions or AI-only formal assessment.",
@@ -660,7 +678,8 @@
         "Atomic checks prevent overspending.",
         "Whole-minute human budgets include preparation; separate categories never silently substitute.",
         "Pilot/continuation/month-end grants reconcile without a duplicate annual bundle.",
-        "Test integer-minute/category invariants, membership-anchored months, leap years, Jan-31 and expiry. Pilot plus continuation yields 12 bookable coach hours and 7 review hours in year one; onboarding capacity is separate. Integrate review/support/AI settlements exactly once."
+        "Test integer-minute/category invariants, membership-anchored months, leap years, Jan-31 and expiry. Pilot plus continuation yields 12 bookable coach hours and 7 review hours in year one; onboarding capacity is separate. Integrate review/support/AI settlements exactly once.",
+        "Model learning/participation access separately from optional paid service-minute and AI budgets; joining a cohort or changing professional background never mints paid-service grants."
       ],
       "evidence": "Transactional/property-based ledger tests, last-unit races and full annual reconciliation fixture.",
       "non_goals": "No mutable historical ledger, category substitution or duplicate annual bundles.",
@@ -684,7 +703,8 @@
         "Concurrent booking has one winner; booking reserves service and capacity atomically.",
         "The 24-hour proposed window/no-show/provider-cancel policies behave as disclosed.",
         "Provider-caused failure issues a dated replacement credit and logs both histories.",
-        "Expire holds safely; distinguish allowance from qualified availability. Test DST/timezones, 45-call-plus-15-prep coach allocation and staff rescheduling. No unconfigured email/calendar success claim."
+        "Expire holds safely; distinguish allowance from qualified availability. Test DST/timezones, 45-call-plus-15-prep coach allocation and staff rescheduling. No unconfigured email/calendar success claim.",
+        "Capacity admission applies to a promised expert service, not ordinary membership or peer learning. Present unavailable specialized coverage without blocking the shared foundation."
       ],
       "evidence": "Real-database last-slot/last-credit races and browser booking/cancellation/recovery cases.",
       "non_goals": "No overselling capacity or silent service-credit loss.",
@@ -705,7 +725,8 @@
         "Published bundles have setup, synthetic inputs, expected outputs, tests, permission/cost limits, version compatibility, license, owner, and last verification.",
         "Retired/stale versions warn accurately.",
         "Downloading does not execute code or connect to a client system.",
-        "Seed the three specified synthetic workflows, with copy/download and private feedback. Demonstrate supported examples without connecting member/client systems."
+        "Seed the three specified synthetic workflows, with copy/download and private feedback. Demonstrate supported examples without connecting member/client systems.",
+        "Include goal/prerequisite tags and approachable nontechnical workflows. Members can propose attributed improvements through the reviewed contribution lifecycle; downloading or sharing a proposal never executes it."
       ],
       "evidence": "Bundle completeness/license review, declared-environment example verification and download UI test.",
       "non_goals": "No server-side arbitrary code execution or automatic external actions.",
@@ -729,7 +750,8 @@
         "Approved models, input limits, queue/concurrency, idempotency, cost reservation/reconciliation, and kill switch work.",
         "Timeout ambiguity is reconciled before costly retry.",
         "Estimated cost is labelled; platform failures restore allowances.",
-        "Treat evidence/retrieval as untrusted data; validate output schema and ownership. Persist job state, provider IDs and prompt/model versions without raw private telemetry. Handle ambiguous timeouts before redispatch."
+        "Treat evidence/retrieval as untrusted data; validate output schema and ownership. Persist job state, provider IDs and prompt/model versions without raw private telemetry. Handle ambiguous timeouts before redispatch.",
+        "Apply consent and budget checks equally across learner paths; community posts and contributed resources are untrusted context, not instructions that can override provider permissions or private-data boundaries."
       ],
       "evidence": "Consent/queue/idempotency/budget-kill/failure-restoration tests and provider contract fault injection.",
       "non_goals": "No unbounded paid retries or AI permission inferred from documents.",
@@ -738,7 +760,7 @@
     },
     {
       "id": "CTP-015",
-      "title": "[CTP-015] Implement text mock interviews and study assistance",
+      "title": "[CTP-015] Implement AI study assistance and goal-based practice",
       "phase": "B",
       "milestone": "B2",
       "kind": "implementation",
@@ -748,14 +770,15 @@
         "CTP-014"
       ],
       "ac": [
-        "Professional/pilot: 20 mocks and 100 study requests per billing month; Specialist: 40/200, Practice: 60/300, Partner configured contract max.",
+        "Configure study/practice budgets by an explicitly versioned access or optional service offer. Preserve the archived coaching-package hypotheses (Professional/pilot 20 mocks and 100 study requests per billing month; Specialist 40/200; Practice 60/300; Partner contract maximum) only when that package applies. Do not infer a universal paid requirement or unlimited foundation allowance.",
         "Mocks capped at 30 turns; feedback cites actual responses and marks insufficient evidence.",
         "Study answers use eligible versioned sources.",
         "Deterministic demo is visibly simulated; live mode disabled until configured.",
         "Human mock requires coach quota.",
-        "Feedback cites actual permitted responses; sources remain versioned and retired/ineligible content is excluded. Label practice and uncertainty, allow session reload, and keep formal assessment human-owned."
+        "Feedback cites actual permitted responses; sources remain versioned and retired/ineligible content is excluded. Label practice and uncertainty, allow session reload, and keep formal assessment human-owned.",
+        "Provide source-grounded study and goal-based practice for beginners, IT and non-IT professionals. Interviews and professional scenarios are optional modes; no job title or client is required for study assistance."
       ],
-      "evidence": "Mock/study browser flows, quota/turn-cap edge cases, malformed/ungrounded/wrong-role/unsafe-response fixtures.",
+      "evidence": "Goal-based study/practice and optional interview browser flows; configured allowance/turn-cap boundaries and malformed/ungrounded/ineligible/unsafe-response fixtures.",
       "non_goals": "No voice/video, hiring prediction or fabricated precision score.",
       "owner": "Engineering lead",
       "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-015. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
@@ -801,7 +824,8 @@
         "Ten CAD 900 instalments or upfront schedule works; direct/renewal Professional uses twelve CAD 1,000 instalments or CAD 12,000.",
         "Term-end cancellation is visible; early release/refund/dispute is operator-reviewed.",
         "Tax remains separate and configured.",
-        "Reject standard continuation after month two; late return requires a separately accepted priced/date/credit agreement, with no retroactive service charges/grants. Show reduced review/support frequency before continuation and keep remaining export/access rights explicit."
+        "Reject standard continuation after month two; late return requires a separately accepted priced/date/credit agreement, with no retroactive service charges/grants. Show reduced review/support frequency before continuation and keep remaining export/access rights explicit.",
+        "Keep optional coaching purchase/continuation/cancellation separate from foundation or cohort participation state. Disclose the applicable access/export policy; cancelling coaching does not invent undisclosed loss or free extension of other access."
       ],
       "evidence": "Jan-31/leap-year/late-acceptance/anniversary/instalment/default-recovery/cancellation browser and state tests.",
       "non_goals": "No automatic pilot conversion, hidden policy invention or extra first-year CAD 12,000 charge.",
@@ -810,7 +834,7 @@
     },
     {
       "id": "CTP-018",
-      "title": "[CTP-018] Implement member-owned opportunity, renewal, and goal tracker",
+      "title": "[CTP-018] Implement learning goals, project milestones and optional career tracking",
       "phase": "B",
       "milestone": "B2",
       "kind": "implementation",
@@ -820,12 +844,12 @@
         "CTP-008"
       ],
       "ac": [
-        "Member records an opportunity or contract date, approved evidence, next action, and local reminder.",
+        "Members record learning goals, practical project milestones, evidence, next actions and local reminders. Optional career/opportunity/contract tracking is selected by the member and is not required for ordinary learning.",
         "It is not a supplied-job marketplace.",
-        "Draft client/proposal/renewal text needs member approval and remains unsent; no automatic external outreach.",
+        "Optional professional/career/proposal/renewal drafts require member approval and remain unsent; general learners have goal/project planning without client fields or automatic external outreach.",
         "Goals/reminders and drafts stay private and member controlled; member-provided commercial outcomes remain labelled self-reported. Local reminders do not claim a sent email."
       ],
-      "evidence": "Create/edit/permission/reminder timezone and unsent-draft browser checks.",
+      "evidence": "Learning/project goal creation, optional career tracking, permission/reminder timezone and unsent-draft browser checks.",
       "non_goals": "No job feed, scraping, client introduction or automatic outreach.",
       "owner": "Engineering lead",
       "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-018. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
@@ -846,7 +870,8 @@
         "Assigned queue shows review age, bookings, allowed scope, and available expert time.",
         "Preparation/review/notes/support time counted once against category budgets and costs.",
         "Acknowledgement target differs from resolution; uncovered work goes to a quoted or coverage-review path.",
-        "Distinguish member-facing and internal notes; scope queues to staff grants. Support acknowledgement target is two business days in published Eastern staffed hours, separate from resolution; uncovered work is not silently granted."
+        "Distinguish member-facing and internal notes; scope queues to staff grants. Support acknowledgement target is two business days in published Eastern staffed hours, separate from resolution; uncovered work is not silently granted.",
+        "Provide an authorized, auditable moderation/report queue for bounded shared spaces, separated from private paid-service queues and member-private notes. Name the moderation owner and escalation policy."
       ],
       "evidence": "Queue/ownership/holiday-clock/time-deduplication/cost-to-allowance reconciliation tests.",
       "non_goals": "No unlimited consulting or uncosted preparation.",
@@ -855,7 +880,7 @@
     },
     {
       "id": "CTP-020",
-      "title": "[CTP-020] Implement pooled clinics and attendance",
+      "title": "[CTP-020] Implement learning circles, clinics and attendance",
       "phase": "B",
       "milestone": "B2",
       "kind": "implementation",
@@ -866,20 +891,21 @@
         "CTP-012"
       ],
       "ac": [
-        "Four one-hour clinics per month per pooled group and maximum 16 members are configurable.",
-        "Seat capacity cannot be oversold; group hours do not consume/create private coaching time.",
+        "Support bounded learning circles and clinic/event discovery, membership/attendance and configurable capacity. The archived four one-hour clinics per month and 16-member cap apply to the relevant coaching offer, not every community interaction.",
+        "Event seats cannot be oversold. Peer participation and paid expert services have separate permissions/capacity; joining a circle neither requires nor creates private coaching credits.",
         "Specialized clinics require funded qualified experts.",
         "Recording consent and written-summary option are implemented.",
-        "Test concurrent last-seat enrollment; a group is costed once and no individual allowance is minted. Record consent per actual recording choice and provide written-summary access."
+        "Test concurrent last-seat enrollment; a group is costed once and no individual allowance is minted. Record consent per actual recording choice and provide written-summary access.",
+        "Members can discover suitable goal/interest groups and events with truthful readiness, join/leave explicitly, and see membership visibility rules; participation records do not expose private learning evidence."
       ],
-      "evidence": "Clinic capacity/race/consent/attendance tests and group-cost reconciliation.",
+      "evidence": "Circle membership/visibility and event discovery tests; clinic seat races/consent/attendance and separate group-service cost reconciliation.",
       "non_goals": "No assumed senior expertise in every pooled clinic or automatic recordings.",
       "owner": "Engineering lead",
       "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-020. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
     },
     {
       "id": "CTP-021",
-      "title": "[CTP-021] Implement member sharing, export/deletion requests, and audit",
+      "title": "[CTP-021] Implement cohort participation, reviewed contributions and member privacy",
       "phase": "B",
       "milestone": "B2",
       "kind": "implementation",
@@ -887,22 +913,28 @@
       "deps": [
         "CTP-006",
         "CTP-010",
-        "CTP-017"
+        "CTP-017",
+        "CTP-007",
+        "CTP-013",
+        "CTP-020",
+        "QA-004"
       ],
       "ac": [
         "Sharing defaults private, explicitly publishes, and revokes.",
         "Own evidence export is authorized; request/deletion job includes storage and platform-derived records subject to documented retention.",
         "Staff access/exports, billing adjustments, and privilege changes are logged without secrets.",
-        "Cover storage, extracted text, embeddings, AI feedback and other derived records; document separately retained billing and backup expiry. Export job/download requires current authorization and revocation."
+        "Cover storage, extracted text, embeddings, AI feedback and other derived records; document separately retained billing and backup expiry. Export job/download requires current authorization and revocation.",
+        "Implement bounded opt-in cohort spaces with join/leave, scoped discussion or peer feedback, reporting and authorized moderation. Joining does not publish private evidence; leaving/revocation removes access according to disclosed rules.",
+        "Members propose attributed examples/workflows/resources, explicitly choose sharing scope and undergo review before curated publication; rejected/draft/revoked contributions cannot appear as approved instruction. Peer contributions are not formal credentials or guaranteed work opportunities."
       ],
-      "evidence": "Cross-member export denial, expiring-share revocation and deletion job/retention reconciliation evidence.",
+      "evidence": "Opt-in cohort participation/report/moderation and contribution draft/review/publication/revocation traces; cross-member export denial and deletion/retention reconciliation.",
       "non_goals": "No universal immediate-backup-deletion promise or secret-bearing audit logs.",
       "owner": "Engineering lead",
       "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-021. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
     },
     {
       "id": "CTP-022",
-      "title": "[CTP-022] Implement metric definitions and operational reconciliation",
+      "title": "[CTP-022] Implement learning, participation and service metrics with reconciliation",
       "phase": "B",
       "milestone": "B2",
       "kind": "implementation",
@@ -912,15 +944,17 @@
         "CTP-014",
         "CTP-017",
         "CTP-019",
-        "CTP-020"
+        "CTP-020",
+        "CTP-021"
       ],
       "ac": [
-        "Dashboard separates paid pilots, conversion, renewal, service revenue, cash, direct service cost, reserved qualified capacity, and reported outcomes.",
+        "Report defined learning activation, useful exercise/project completion, continued learning, participation and reviewed contributions separately from optional paid-pilot conversion, renewal, service revenue/cash/cost/capacity and self-reported career outcomes.",
         "Ledger and job/provider totals reconcile.",
         "Demo records cannot enter live metrics; unverified self-reports remain labelled.",
-        "Define fixed denominators for activation/completion/continuation/renewal and dated event semantics; withdrawals stay in relevant denominators. Actuals, estimates, forecasts and self-reports remain distinct; reconcile time costs without double-counting prep."
+        "Define fixed denominators for activation/completion/continuation/renewal and dated event semantics; withdrawals stay in relevant denominators. Actuals, estimates, forecasts and self-reports remain distinct; reconcile time costs without double-counting prep.",
+        "Define cohort- and background/goal-aware denominators with appropriate aggregation/privacy; segment overlap must be explicit. Separate observed learning, member-reported usefulness, participation volume, reviewed contribution quality and actual paid outcomes."
       ],
-      "evidence": "Metric fixture expected values, ledger/provider/manual totals and environment isolation checks.",
+      "evidence": "Learning/participation/contribution and paid-service metric fixtures with explicit overlapping-segment denominators; ledger/provider/manual reconciliation and privacy/environment isolation.",
       "non_goals": "No simulated sales, causal earnings claims or prepaid receipts counted as immediate profit.",
       "owner": "Engineering lead",
       "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-022. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
@@ -948,7 +982,8 @@
       "ac": [
         "Targeted tests exercise cross-workspace access, booking/allowance races, duplicate events, phase boundaries, provider failures, prompt injection, cost stops, and evidence-grounded output.",
         "Failed criteria produce actionable defects; rubric tests do not pretend to prove hiring prediction.",
-        "Implement the threat/risk matrix in QA-004, including own-server API abuse, malformed model output, cross-record links, expired grants, deletion and first-failure reliability reporting. Reproduce and fix failures before closing."
+        "Implement the threat/risk matrix in QA-004, including own-server API abuse, malformed model output, cross-record links, expired grants, deletion and first-failure reliability reporting. Reproduce and fix failures before closing.",
+        "Exercise ECO-01 through ECO-08 critical subcases, especially background-to-staff privilege escalation, cohort privacy/revocation, contribution rights/moderation, AI context injection and optional-offer entitlement isolation."
       ],
       "evidence": "Adversarial regression suite, transaction race results, injection/consent/budget tests and resolved defect links.",
       "non_goals": "No green unit percentage substituted for integration/security evidence.",
@@ -982,11 +1017,11 @@
         "QA-005"
       ],
       "ac": [
-        "All nine journeys below run against a seeded private build, including AI practice/study and test/manual billing.",
+        "Run all original applicable source journeys plus ECO-01 through ECO-08 against the seeded private build, covering IT, non-IT professional and general-learner paths, bounded participation/contributions, AI assistance and optional test/manual billing.",
         "Desktop/mobile and keyboard checks cover complete flows.",
         "Report live/test/manual/disabled state separately; remaining defects and human-coverage gaps are explicit.",
         "First slice alone fails this gate.",
-        "Preserve all nine source-roadmap journeys and the build-prompt usability/recovery, late-return and commercial-truth cases. Report >=99% journey coverage, 100% critical coverage, all tests passing and >=99% each unit metric; include exact revision/build."
+        "Preserve original privacy, money/date, usability/recovery, late-return and commercial-truth cases while expanding the QA-002 register for the current audience. Report >=99% journey coverage, 100% critical coverage, all required tests passing and >=99% each unit metric on the exact revision/build."
       ],
       "evidence": "Full browser rehearsal traces, raw coverage/scenario reports, manual UX evidence and explicit live/test/manual/disabled status matrix.",
       "non_goals": "No first-slice-only completion, retry-hidden failure or production-readiness inference from CI.",
@@ -1008,7 +1043,8 @@
       "ac": [
         "Concrete release artifact, migration/rollback plan, tested backup restore, access/retention settings, provider/tax/terms configuration, billing reconciliation, spend caps, support owner, funded expert roster, and incident procedure are reviewable.",
         "Enable live publication/payments/communications only within actual authorization.",
-        "Review a concrete release artifact and actual launch checklist: jurisdiction, approved terms/tax, real coverage, provider sandbox/live evidence, secrets, spend controls, incident owner and verified restore. Record actual measured RPO/RTO against approved targets; leave enablement pending authorization."
+        "Review a concrete release artifact and actual launch checklist: jurisdiction, approved terms/tax, real coverage, provider sandbox/live evidence, secrets, spend controls, incident owner and verified restore. Record actual measured RPO/RTO against approved targets; leave enablement pending authorization.",
+        "Release review covers the shared foundation and actual participation/contribution controls for supported audiences. Optional paid-service activation needs its own approved offer/capacity; do not advertise unsupported expertise or a universal coaching requirement."
       ],
       "evidence": "Release/rollback/migration runbook, restore rehearsal, provider status and dated owner-approved go/no-go record.",
       "non_goals": "No production deployment, publication, external communication or charge merely because this issue is planned.",
@@ -1028,10 +1064,11 @@
         "PLAN-004"
       ],
       "ac": [
-        "Prepare truthful sample, fit-conversation guide and objection/price/source tracking for a target of 40 qualified prospects, 15 conversations and five paid pilots across at least three role families.",
+        "Prepare distinct truthful examples and discovery questions for IT practitioners, non-IT professionals and general learners. Segment needs, access/price objections and sources; the original 40-prospect/15-conversation/five-paid-pilot targets apply only to the optional coached-offer experiment, not total ecosystem membership.",
         "Record consent/source/suppression and actual authorized channel owners; no assumed partnerships or fabricated responses.",
         "Separate planned funnel targets, conversations, applications and actual paid purchases; log reasons for decline and prior alternatives.",
-        "Obtain applicable campaign authorization before sending; measure actual results before treating the experiment as complete."
+        "Obtain applicable campaign authorization before sending; measure actual results before treating the experiment as complete.",
+        "Record learning and participation needs separately from paid coaching interest; no employment/income promises or invented partner/community participation count as validation."
       ],
       "evidence": "Reviewed campaign materials, authorized channel/consent records and actual funnel/purchase evidence at execution.",
       "non_goals": "No outreach is authorized by this planning session; no scraping/mass messaging.",
@@ -1040,7 +1077,7 @@
     },
     {
       "id": "OPS-002",
-      "title": "[OPS-002] Deliver the first five-member paid pilot with measured outcomes and costs",
+      "title": "[OPS-002] Deliver the optional five-member coached pilot with measured learning outcomes",
       "phase": "C",
       "milestone": "C",
       "kind": "operations",
@@ -1051,10 +1088,11 @@
         "PLAN-004"
       ],
       "ac": [
-        "Admit five actual paying members across multiple roles only after go-live authorization, accepted scope and reserved qualified capacity.",
+        "For the optional coached-pilot experiment, admit five actual paying members with different relevant backgrounds/goals only after go-live authorization, accepted scope and reserved qualified capacity. Contractor or employment status is not an admission prerequisite.",
         "Deliver eight instruction weeks within the two actual billing periods, two funded coach calls, four scoped reviews, support/AI/clinics and separately costed onboarding.",
         "At least four members complete useful reviewer-accepted work; withdrawals remain in cohort denominators and all paid obligations/refunds are reconciled.",
-        "Measure real preparation/delivery/support/AI/payment costs and complaints against the budget; failure triggers a documented stop/redesign decision."
+        "Measure real preparation/delivery/support/AI/payment costs and complaints against the budget; failure triggers a documented stop/redesign decision.",
+        "Assess useful learning/project outcomes against member goals, including suitable noncoding work. Do not require a contract win, job placement or income increase to count a legitimate learning outcome."
       ],
       "evidence": "Private/redacted paid-cohort ledger, delivery/time/cost evidence, reviewed artifacts and dated gate review.",
       "non_goals": "No synthetic purchase counted as a pilot or automatic expansion from a five-person sample.",
@@ -1077,7 +1115,8 @@
         "Offer explicit CAD 9,000 remaining-ten-month continuation with disclosed lower ongoing review/support allowance and the original anniversary.",
         "Record at least three actual paid continuations from the first five pilots; surveys or promises do not count.",
         "Track intended continuing use, actual last-30-day meaningful activity and the 90-day usefulness check; measure service economics and payment recovery.",
-        "Failure to reach purchase/usefulness/cost gates results in a documented change or stop decision, not claimed recurring-product validation."
+        "Failure to reach purchase/usefulness/cost gates results in a documented change or stop decision, not claimed recurring-product validation.",
+        "Keep meaningful learning, peer participation and contribution evidence separate from the optional coached-offer continuation denominator."
       ],
       "evidence": "Redacted accepted agreements/payment evidence, cohort denominators, usage/cost reports and owner gate decision.",
       "non_goals": "No auto-conversion or assumption that course completion guarantees retention.",
@@ -1098,7 +1137,8 @@
         "Approve next-cohort success thresholds and spend cap before recruitment, then replicate paid demand/continuation with actual measured acquisition costs.",
         "Maintain funded backup experts and support coverage; test handling of unavailable experts without breaking existing commitments.",
         "Review fast-changing workflows monthly or after breaking changes and domain content quarterly; stale claims/readiness are corrected.",
-        "Reconcile actual delivery margin, cash vs undelivered service obligations and founder-time treatment; authorize scale only after repeated evidence."
+        "Reconcile actual delivery margin, cash vs undelivered service obligations and founder-time treatment; authorize scale only after repeated evidence.",
+        "Track repeated learning usefulness, return participation and reviewed contributions for supported audiences separately from coached-cohort economics; do not promise universal expert coverage from one successful track."
       ],
       "evidence": "Repeat-cohort results, maintenance ledger, backup-capacity exercise and reviewed economics.",
       "non_goals": "No forecast treated as traction or unconditional full-year spending.",
@@ -1278,7 +1318,7 @@
         "OPS-004"
       ],
       "ac": [
-        "Evaluate employer/agency accounts, supplied-opportunity marketplace and materials-only pricing as separate hypotheses with buyer evidence and distinct economics.",
+        "Evaluate organization/employer/agency accounts and supplied-opportunity marketplaces as separate expansion hypotheses with buyer evidence and distinct economics. Defining individual foundation/participation access and its pricing belongs to PLAN-001/CTP-002 now, not a deferred materials-only experiment.",
         "Preserve the individual-first MVP; for each hypothesis record defer/decline/approve, data/access and operating obligations, then split approved work into dedicated scoped issues.",
         "Do not start implementation until the selected expansion has owner approval, staffed capacity, measurable AC, a test plan and a bounded budget."
       ],
@@ -1287,5 +1327,8 @@
       "owner": "Product owner with relevant specialists",
       "extra": ""
     }
-  ]
+  ],
+  "revision": "ecosystem-v1",
+  "product_direction": "assets/docs/PRODUCT-DIRECTION.md",
+  "revision_note": "Owner-directed audience refactor; original source remains immutable. IDs and model recommendations retained; applicable billing/privacy invariants preserved."
 }

@@ -2,6 +2,8 @@
 
 These are planned requirements, not achieved measurements. No application or application test harness exists yet. Repository-tooling checks are available via `make verify`; their results do not establish application coverage or passing application tests. See [verification scope](../workflows/VERIFICATION.md).
 
+The [current product direction](../PRODUCT-DIRECTION.md) broadens eligibility and learning/participation goals. Include [the expanded audience journeys](ECOSYSTEM-JOURNEYS.md) alongside the original applicable invariants; no silent denominator reduction is permitted.
+
 ## Coverage contract
 
 - **Unit coverage:** at least 99% for each of statements, branches, functions and lines across first-party executable application source, including files not imported by tests. Enforce per logical module as well as globally so one module cannot conceal an untested one. Tests, generated/vendor artifacts and genuinely non-executable configuration may be excluded only through a visible reviewed allowlist. No exclusion of business logic, error handling, authorization, adapters, jobs, or UI behavior just to meet the threshold.

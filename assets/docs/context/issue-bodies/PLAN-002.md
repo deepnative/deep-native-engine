@@ -6,7 +6,7 @@ Prepare entity, jurisdiction, terms, privacy and payment launch decisions.
 
 **Accountable role:** Business owner with qualified advisers (name the actual owner before execution).
 
-**Status:** Planned / Backlog. This issue specifies future work. The current assignment authorizes planning only; it does not authorize coding or live commercial actions.
+**Status:** Planned / Backlog. This issue specifies future work. Planning and repository agent/skill/workflow setup are authorized. Application implementation and live commercial actions still require explicit authorization.
 
 **Roadmap:** [ROADMAP #1](https://github.com/deepnative/deep-native-engine/issues/1) · **Phase gate:** [GATE-A #2](https://github.com/deepnative/deep-native-engine/issues/2)
 
@@ -22,6 +22,7 @@ Before starting, confirm scope, a named accountable owner, required decisions, t
 - [ ] Review offer/cancellation/refund/renewal language, invoice and tax classification, training classification, privacy/retention, AI vendors, insurance and IP permissions for the actual jurisdiction.
 - [ ] Separate learning, AI processing, recording, portfolio and marketing consent; define retention exceptions and accurate deletion statements.
 - [ ] Prepare an owner-reviewed launch decision checklist and evidence locations without asserting legal clearance from a draft or from software tests.
+- [ ] Define member-contribution attribution/rights, opt-in public or group visibility, community rules, reporting/moderation responsibilities and consent boundaries for the actual supported audiences before public participation.
 
 ## Verification and acceptance evidence
 
@@ -31,6 +32,7 @@ Use reviewable documents and actual source/operational evidence for this issue. 
 
 ## Definition of done
 
+- [ ] Audience-dependent criteria are evidenced for applicable IT, non-IT professional and general-learner cases; the [expanded journey register](https://github.com/deepnative/deep-native-engine/blob/main/assets/docs/context/ECOSYSTEM-JOURNEYS.md) maps the changed requirements without silently deleting original coverage obligations.
 - [ ] Every acceptance criterion is checked with a linked artifact, result or recorded decision; unmet external requirements remain visible.
 - [ ] Dependencies and accountable reviewer are confirmed; the delivered result receives review and blocking findings are resolved.
 - [ ] Evidence is reproducible or source-verifiable, dated and scoped; demo/test/manual/configured/live-verified states and assumptions are explicit.
@@ -42,8 +44,12 @@ Use reviewable documents and actual source/operational evidence for this issue. 
 
 No signing, tax/legal conclusions from generic guidance, purchases, card charges or publication. Stop the affected work when required authorization, qualified capacity, privacy boundaries or promised terms cannot be satisfied; record the blocker and continue independent authorized work.
 
+## Current audience and product direction
+
+The [current product direction](https://github.com/deepnative/deep-native-engine/blob/main/assets/docs/PRODUCT-DIRECTION.md) supersedes contractor-only admission and career assumptions in the archived source. Deep Native Engine serves IT practitioners, professionals in other fields and people with general learning interests. Shared AI learning, practical projects, bounded participation and reviewed contributions form the core; contractor/career goals and high-touch coaching are optional paths. Preserve applicable privacy, consent, money/date and coverage invariants. Current authorization remains planning/repository setup; application implementation is not started.
+
 ## Source and traceability
 
 Derived from the final September 15 business/build package and the September 21 planning instructions.
 
-Original package preserved locally under `assets/docs/context/source-2026-09-15/outputs/contractor-platform/`; the complete copied source is checksum-listed in `assets/docs/context/source-manifest.json`. Archived start-coding instructions are superseded by the current planning-only request. Source documents are local and are not claimed to be committed or published.
+Original package preserved locally under `assets/docs/context/source-2026-09-15/outputs/contractor-platform/`; the complete copied source is checksum-listed in `assets/docs/context/source-manifest.json`. Archived start-coding instructions do not authorize application implementation. The preserved context is versioned in [repository setup PR #56](https://github.com/deepnative/deep-native-engine/pull/56); [browse this source snapshot](https://github.com/deepnative/deep-native-engine/tree/b1cb29fcc16dc537f9efa298a9add7de30ae7fe2/assets/docs/context).

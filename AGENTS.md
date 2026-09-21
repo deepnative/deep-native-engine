@@ -6,9 +6,9 @@ Current scope: planning, context preservation, and repository agent/skill/workfl
 
 ## Context and precedence
 
-Read `assets/docs/context/README.md`, `assets/docs/context/QUALITY-GATES.md`, and the relevant GitHub issue before work. Current explicit user instructions take precedence. The finalized files in `assets/docs/context/source-2026-09-15/outputs/contractor-platform/` take precedence over the older `work/` drafts. Preserve the archived files unchanged.
+Read [the current product direction](assets/docs/PRODUCT-DIRECTION.md), `assets/docs/context/README.md`, `assets/docs/context/QUALITY-GATES.md`, and the relevant live GitHub issue before work. Current explicit user instructions take precedence, followed by the product direction and revised live issues. The finalized historical outputs take precedence over older working drafts only where still applicable; contractor-only assumptions are superseded. Preserve the archived files unchanged.
 
-The product is the Contractor Success Platform for individual IT contractors across all IT roles. The repository's older CI/CD description does not redefine that product. Keep original CTP identifiers and commercial rules traceable. All prices and demand forecasts remain hypotheses.
+Deep Native Engine serves people across IT, other professions and general learning interests who want to learn, apply AI, participate and contribute. Use learner/member as the common identity; background and goals do not grant staff privileges or assign a paid plan. Contracting, career preparation and high-touch coaching are optional paths. Preserve CTP IDs and applicable commercial/privacy invariants; the original coaching prices are not universal membership prices. Foundation access/pricing require their own explicit decisions. All prices and demand forecasts remain hypotheses.
 
 ## Every task
 

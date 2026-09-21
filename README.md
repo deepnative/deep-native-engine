@@ -1,6 +1,6 @@
 # Deep Native Engine
 
-The Contractor Success Platform roadmap and team workspace. Application implementation has not started. The [GitHub project](https://github.com/orgs/deepnative/projects/1/views/1) and [master roadmap](https://github.com/deepnative/deep-native-engine/issues/1) track delivery.
+An AI learning and participation ecosystem for IT practitioners, professionals in other fields, and anyone who wants to learn, apply AI and contribute with others. See [the product direction](assets/docs/PRODUCT-DIRECTION.md) for audiences, shared learning paths and optional coaching services. Application implementation has not started. The [GitHub project](https://github.com/orgs/deepnative/projects/1/views/1) and [master roadmap](https://github.com/deepnative/deep-native-engine/issues/1) track delivery.
 
 ## Team setup
 
