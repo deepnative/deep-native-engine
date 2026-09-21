@@ -1,0 +1,22 @@
+{
+  "verified_at": "2026-09-21",
+  "issue_count": 55,
+  "project_item_count": 55,
+  "native_parent_relationships": 54,
+  "phase_epics": 6,
+  "milestones": 8,
+  "source_files_sha256_verified": 25,
+  "all_open_unassigned_backlog": true,
+  "criteria_dod_dependencies_labels_milestones_present": true,
+  "all_issue_bodies_match_local_snapshot": true,
+  "phase_priority_verified": true,
+  "project_private_visibility_preserved": true,
+  "repository_link_verified": true,
+  "planning_fields_visible_in_views": [
+    1,
+    2
+  ],
+  "application_tests": "Not run: no application implementation or harness exists; coverage is a future gate, not an achieved result.",
+  "application_implementation": "None",
+  "commits_or_pushes": "None"
+}

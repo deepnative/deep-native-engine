@@ -1,0 +1,4 @@
+interface:
+  display_name: "Deliver an issue"
+  short_description: "Implement an authorized slice with tests and evidence"
+  default_prompt: "Use $dne-deliver-issue to complete the authorized scope of the selected issue."

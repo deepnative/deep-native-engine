@@ -1,0 +1,36 @@
+{
+  "files": [
+    "00-START-HERE.md",
+    "01-business-plan.md",
+    "02-codex-build-prompt.md",
+    "03-roadmap-and-backlog.md",
+    "04-financial-model.xlsx",
+    "05-evidence-and-decisions.md"
+  ],
+  "issues": 25,
+  "scenario_crosscheck": [
+    {
+      "case": "Downside",
+      "independent_revenue": 57743.57,
+      "pilot_starts": 15
+    },
+    {
+      "case": "Base",
+      "independent_revenue": 159768.34,
+      "pilot_starts": 37
+    },
+    {
+      "case": "Capacity",
+      "independent_revenue": 362127.67,
+      "pilot_starts": 82
+    }
+  ],
+  "workbook_sheets": [
+    "Summary",
+    "Assumptions",
+    "Forecast",
+    "Cohorts",
+    "Unit economics"
+  ],
+  "checks": "All package structure, pricing, pilot, cached formula error, and independent revenue checks passed. Native Excel was not tested."
+}

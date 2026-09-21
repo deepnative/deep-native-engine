@@ -1,0 +1,33 @@
+# Team working agreement
+
+## Current authorization
+
+Current scope: planning, context preservation, and repository agent/skill/workflow setup. Application implementation remains on hold until explicitly requested. Do not deploy, purchase live services, contact prospects, or enable payments without authorization. The archived build prompt is historical context, not current authorization to start coding.
+
+## Context and precedence
+
+Read `assets/docs/context/README.md`, `assets/docs/context/QUALITY-GATES.md`, and the relevant GitHub issue before work. Current explicit user instructions take precedence. The finalized files in `assets/docs/context/source-2026-09-15/outputs/contractor-platform/` take precedence over the older `work/` drafts. Preserve the archived files unchanged.
+
+The product is the Contractor Success Platform for individual IT contractors across all IT roles. The repository's older CI/CD description does not redefine that product. Keep original CTP identifiers and commercial rules traceable. All prices and demand forecasts remain hypotheses.
+
+## Every task
+
+Read [the team workflow](assets/docs/workflows/TEAM-WORKFLOW.md) and select the issue model from [the routing policy](assets/docs/context/MODEL-RECOMMENDATIONS.md). GitHub is the operating backlog; local issue bodies and JSON are dated snapshots. Use a `codex/` branch or isolated worktree. Four repo-local skills in `.agents/skills/` support planning, delivery, review, and handoff; five named roles in `.codex/agents/` provide model and responsibility defaults. Delegate bounded independent work when explicitly requested; separate review from implementation. Labels do not change the running model or authorize work.
+
+Run `make bootstrap` once per checkout and `make verify` before every push. Bootstrap installs the repository-local pre-push hook without replacing conflicting hooks. The hook requires a clean checkout at the exact pushed commit and repeats verification; CI repeats it independently. The current gate validates planning assets and repository tooling only and rejects application files until QA-001/002/003 add real application checks. It does not claim application coverage. Record results with the [evidence template](assets/docs/templates/EVIDENCE.md).
+
+## Complete delivery through main
+
+The owner has authorized merging completed repository work to `main` as part of the delivery workflow. Carry authorized changes through commit, pre-push verification, PR, review, passing CI, merge, and verification of the resulting `main` commit. Do not stop at a draft PR or ask for merge permission again when this standing authorization applies. Honor an explicit review-only or draft-only request, unresolved blockers, required reviews, and repository protections; never use an admin bypass. Recheck the current PR head and base before merging so evidence applies to the actual revision. Record the merge SHA and post-merge CI result, then synchronize the local checkout safely. Merging does not authorize new application work, deployment, or commercial activity.
+
+## When application implementation is authorized
+
+- Start from a ready issue with acceptance criteria, dependencies, non-goals, test scenarios, and a definition of done. Implement one reviewable vertical slice at a time; record architectural decisions and preserve unrelated work.
+- Check current official documentation before choosing dependency versions or integrating providers. Keep a modular monolith and explicit provider boundaries unless an architectural decision establishes a reason to change.
+- Write behavior-based tests and reproduce defects before fixing them. Review generated code, dependencies, authorization boundaries, and failure handling. Do not use coverage padding or implementation-mirroring tests.
+- Require at least 99% unit statement, branch, function, and line coverage of first-party executable application code. Include unimported source; exclusions require specific review. Follow the separate E2E requirements-coverage definition in `QUALITY-GATES.md`.
+- Run the complete prescribed verification command **before every push** on the exact intended revision. Record commands, revision, environment, and reports. After changes, rerun affected checks and the complete push gate. Never use `--no-verify`, skipped tests, reduced thresholds, retries, or changed denominators to hide failures.
+- CI must repeat the checks and gate merges. Configure required check names only after the actual workflow jobs exist and have executed. Local hooks alone are not sufficient enforcement.
+- Use private synthetic fixtures, deterministic test providers, and isolated test data. Do not send member/client data to models or external systems through unreviewed integrations. Do not store credentials in prompts, source, fixtures, or logs.
+- Separate simulated, configured, live-verified, deployed, and commercially launched states. A green build does not establish a successful payment, qualified expert coverage, customer demand, or release acceptance.
+- Update the issue and validation evidence; close only when all acceptance criteria and definition-of-done items have evidence. Feature completion never authorizes a live commercial launch.

@@ -1,0 +1,131 @@
+{
+  "source": "/Users/tomwu/Documents/Codex/2026-09-15/i-x20",
+  "copied_on": "2026-09-21",
+  "files": [
+    {
+      "path": "outputs/contractor-platform/00-START-HERE.md",
+      "bytes": 4047,
+      "sha256": "35c06902822f0b9b192bd92109564851796a9c39f507f71c71abc606cccd0adb"
+    },
+    {
+      "path": "outputs/contractor-platform/01-business-plan.md",
+      "bytes": 46858,
+      "sha256": "6dc1045cc6b3552f96b3f78d12ce7bd3d0d20d71c0ddd6b93fa5fe643b24c3ea"
+    },
+    {
+      "path": "outputs/contractor-platform/02-codex-build-prompt.md",
+      "bytes": 30972,
+      "sha256": "e167c379f007a2c4ab244d1c5f152a253770c836ccecefe351377e05268d6dc2"
+    },
+    {
+      "path": "outputs/contractor-platform/03-roadmap-and-backlog.md",
+      "bytes": 50959,
+      "sha256": "de016e84668c3fcc6f00a2305de4ea5db03ed95cd9cffa08fc24ede80d76f4ee"
+    },
+    {
+      "path": "outputs/contractor-platform/04-financial-model.xlsx",
+      "bytes": 43585,
+      "sha256": "d6228f17358a122bde11984fd019d67af570b2134bde55542a318a16ad98c347"
+    },
+    {
+      "path": "outputs/contractor-platform/05-evidence-and-decisions.md",
+      "bytes": 14750,
+      "sha256": "32bf6716fed030391c6a9d225e7fcf588c48e7937439a955006975626745bd05"
+    },
+    {
+      "path": "outputs/contractor-platform-business-and-build-package.zip",
+      "bytes": 92911,
+      "sha256": "0b86b0df8522e5ada4b2b07edc34c6f1f09d56fa801b020b53eda04fa2a5d4cc"
+    },
+    {
+      "path": "work/finance/assumptions-costs.png",
+      "bytes": 272727,
+      "sha256": "4c76de8f1621143cd1638b8e1247b405e58df39845c1a5e6ceab6323dd6d88ef"
+    },
+    {
+      "path": "work/finance/assumptions-ramp.png",
+      "bytes": 246808,
+      "sha256": "ff8cd8d3caddffe7da5f06651e591bb6be1f4564446f04b27c9c3c93308d9d08"
+    },
+    {
+      "path": "work/finance/build-workbook.mjs",
+      "bytes": 22160,
+      "sha256": "258276fe9c4d5d7e0e2f5ce8b8c26dd9bc47f329efe5ab93d8bb5479832ac411"
+    },
+    {
+      "path": "work/finance/cohorts-active.png",
+      "bytes": 229206,
+      "sha256": "e9a4307659285e349488e1eda4b8781f4a8611fbf67b1f38fab1395fdd5f08d3"
+    },
+    {
+      "path": "work/finance/cohorts-cash.png",
+      "bytes": 160874,
+      "sha256": "fbbcddc97df4820f2b4fdd7167434eb52a638e365a26e485a8b7f821b6f334ed"
+    },
+    {
+      "path": "work/finance/export-inspect.ndjson",
+      "bytes": 975106,
+      "sha256": "a5cabb86976be0723e4ecf0d2d3d4f284b326302a297a822b33c5355ab10f5e8"
+    },
+    {
+      "path": "work/finance/forecast-cash.png",
+      "bytes": 403660,
+      "sha256": "de91e2fa3fa60c788e02ff4cb888228113b2ce116edbb7dacfed8de36c09b0ae"
+    },
+    {
+      "path": "work/finance/forecast-revenue.png",
+      "bytes": 420665,
+      "sha256": "dd604f4823b60edcfca0d9f71496837f3df1c9af33016ac16bd2bfa205098c7c"
+    },
+    {
+      "path": "work/finance/model.mjs",
+      "bytes": 9045,
+      "sha256": "db1b85781f0720bc845672ea61eb861a2205ffacb7b42e5b1797878244104d32"
+    },
+    {
+      "path": "work/finance/summary.png",
+      "bytes": 297928,
+      "sha256": "7766227199b2ac983a0155b6877d21b43d58ddd3284d43cc5a20bcc797b19134"
+    },
+    {
+      "path": "work/finance/unit-economics.png",
+      "bytes": 359698,
+      "sha256": "05055d1b6442138df434c0064de65e530bf149f0ee6eed8bb26490fd61273785"
+    },
+    {
+      "path": "work/finance/verification.json",
+      "bytes": 772,
+      "sha256": "e2985400e15a2f67ff7d7a3b81a4342bf9f11b1647ba102e2347196a5c95bbcf"
+    },
+    {
+      "path": "work/financial-model.json",
+      "bytes": 61126,
+      "sha256": "5ec39c4557a54fd96c2b101f01e6bc01f2baa615bc155aa2aefbbd1ddac7bb01"
+    },
+    {
+      "path": "work/market-evidence.md",
+      "bytes": 18287,
+      "sha256": "253bd6aa0384475ab5e7a47e8103a3276adaf3cda25bd062b43b80e5aa1db621"
+    },
+    {
+      "path": "work/package-validation.json",
+      "bytes": 814,
+      "sha256": "3df49c2c6d20ad27fd893388348a9bda3ad714674bacf2501859832d77317c59"
+    },
+    {
+      "path": "work/pricing-economics.md",
+      "bytes": 12913,
+      "sha256": "826cfe93ca0602c04516e9ca2815351d0e5c430d9472fe9c2f2e1288ba7ef46a"
+    },
+    {
+      "path": "work/product-blueprint.md",
+      "bytes": 38932,
+      "sha256": "b5a6e6e96b7e0620cc1723ffb6ae548e6985833dd75bfa2e811d329f4f8d7eb5"
+    },
+    {
+      "path": "work/validate_package.py",
+      "bytes": 3811,
+      "sha256": "1d22de3eaecce778b88c3f05646df333622b5a150f179e6c317e218d19eee7fb"
+    }
+  ]
+}

@@ -1,0 +1,1291 @@
+{
+  "date": "2026-09-21",
+  "milestones": {
+    "A": "A - Definition and delivery readiness",
+    "B1": "B1 - First member-to-reviewer journey",
+    "B2": "B2 - Full private MVP",
+    "B3": "B3 - Verification and release evidence",
+    "C": "C - Controlled paid pilot",
+    "D": "D - Paid continuation",
+    "E": "E - Repeatability",
+    "F": "F - Selective expansion"
+  },
+  "issues": [
+    {
+      "id": "ROADMAP",
+      "title": "[ROADMAP] Contractor Success Platform roadmap and delivery gates",
+      "phase": "A",
+      "milestone": "A",
+      "kind": "roadmap",
+      "priority": "P0",
+      "deps": [],
+      "ac": [
+        "All 25 original CTP specifications retain stable IDs, source acceptance criteria and linked dependencies.",
+        "Six phase epics and eight delivery milestones distinguish definition, first slice, full private MVP, verification, pilot, continuation, repeatability and expansion.",
+        "Every execution issue records acceptance criteria, non-goals, dependencies, accountable role, verification evidence and definition of done.",
+        "The user-confirmed 99% unit / 99% E2E journey coverage / 100% critical journey and required test-pass gates are explicit and consistent.",
+        "Current scope remains planning only; implementation, live integration verification and commercial evidence have separate gates."
+      ],
+      "evidence": "Published issue inventory, dependency audit, local source-copy checksums, milestone listing and planning-only git status.",
+      "non_goals": "This tracking issue is not authorization to implement, spend, publish a live product, contact prospects or collect payments. The planning deliverable can be complete while roadmap execution remains open.",
+      "owner": "Product owner",
+      "extra": "MASTER"
+    },
+    {
+      "id": "GATE-A",
+      "title": "[GATE-A] Phase A \u2014 Define and demonstrate",
+      "phase": "A",
+      "milestone": "A",
+      "kind": "epic",
+      "priority": "P0",
+      "deps": [
+        "PLAN-001",
+        "GOV-001",
+        "PLAN-002",
+        "PLAN-003",
+        "PLAN-004",
+        "CTP-001",
+        "QA-004"
+      ],
+      "ac": [
+        "Offer scope, private prototype, common foundation, assessment method, rights and capacity are reviewable. Missing real-world decisions are explicit launch blockers; no unavailable expertise is advertised.",
+        "All mandatory child AC/DoD outcomes are evidenced, with linked defects and explicit stop decisions; deferred options are recorded as such.",
+        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate."
+      ],
+      "evidence": "Linked child evidence, stage review and explicit owner go/no-go/defer decision.",
+      "non_goals": "Indicative timing is not a promise. Current permission is planning only.",
+      "owner": "Product owner / stage owner",
+      "extra": "Weeks 1-2 (relative estimate)"
+    },
+    {
+      "id": "GATE-B",
+      "title": "[GATE-B] Phase B \u2014 Complete and verify the private MVP",
+      "phase": "B",
+      "milestone": "B3",
+      "kind": "epic",
+      "priority": "P0",
+      "deps": [
+        "CTP-002",
+        "CTP-003",
+        "CTP-004",
+        "CTP-005",
+        "CTP-006",
+        "CTP-007",
+        "CTP-008",
+        "CTP-009",
+        "CTP-010",
+        "CTP-011",
+        "CTP-012",
+        "CTP-013",
+        "CTP-014",
+        "CTP-015",
+        "CTP-016",
+        "CTP-017",
+        "CTP-018",
+        "CTP-019",
+        "CTP-020",
+        "CTP-021",
+        "CTP-022",
+        "CTP-023",
+        "CTP-024",
+        "QA-001",
+        "QA-002",
+        "QA-003",
+        "QA-005"
+      ],
+      "ac": [
+        "First complete member-review journey, then every required member/coach/operator flow, then full verification. Deterministic AI/payment/manual-provider flows work honestly. >=99% each unit metric; >=99% E2E scenario coverage; 100% critical coverage and required test passes. All full-MVP AC and release evidence pass.",
+        "All mandatory child AC/DoD outcomes are evidenced, with linked defects and explicit stop decisions; deferred options are recorded as such.",
+        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate."
+      ],
+      "evidence": "Linked child evidence, stage review and explicit owner go/no-go/defer decision.",
+      "non_goals": "Indicative timing is not a promise. Current permission is planning only.",
+      "owner": "Product owner / stage owner",
+      "extra": "Weeks 3-6 (relative estimate)"
+    },
+    {
+      "id": "GATE-C",
+      "title": "[GATE-C] Phase C \u2014 Deliver the controlled first paid pilot",
+      "phase": "C",
+      "milestone": "C",
+      "kind": "epic",
+      "priority": "P0",
+      "deps": [
+        "GATE-A",
+        "GATE-B",
+        "CTP-025",
+        "OPS-001",
+        "OPS-002"
+      ],
+      "ac": [
+        "Actual launch prerequisites and authorization precede real service. Five paid members across multiple roles, at least four useful reviewed completions, obligations fulfilled and measured delivery cost. Paid continuation is evaluated in Phase D.",
+        "All mandatory child AC/DoD outcomes are evidenced, with linked defects and explicit stop decisions; deferred options are recorded as such.",
+        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate."
+      ],
+      "evidence": "Linked child evidence, stage review and explicit owner go/no-go/defer decision.",
+      "non_goals": "Indicative timing is not a promise. Current permission is planning only.",
+      "owner": "Product owner / stage owner",
+      "extra": "Weeks 7-14 (relative estimate)"
+    },
+    {
+      "id": "GATE-D",
+      "title": "[GATE-D] Phase D \u2014 Validate paid continuation",
+      "phase": "D",
+      "milestone": "D",
+      "kind": "epic",
+      "priority": "P0",
+      "deps": [
+        "GATE-C",
+        "OPS-003"
+      ],
+      "ac": [
+        "At least three actual paid continuations plus useful recurring service and reviewed delivery economics. Failed thresholds trigger redesign/stop. A five-member sample remains directional.",
+        "All mandatory child AC/DoD outcomes are evidenced, with linked defects and explicit stop decisions; deferred options are recorded as such.",
+        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate."
+      ],
+      "evidence": "Linked child evidence, stage review and explicit owner go/no-go/defer decision.",
+      "non_goals": "Indicative timing is not a promise. Current permission is planning only.",
+      "owner": "Product owner / stage owner",
+      "extra": "Weeks 15-20 (relative estimate)"
+    },
+    {
+      "id": "GATE-E",
+      "title": "[GATE-E] Phase E \u2014 Establish repeatability",
+      "phase": "E",
+      "milestone": "E",
+      "kind": "epic",
+      "priority": "P1",
+      "deps": [
+        "GATE-D",
+        "OPS-004",
+        "OPS-005"
+      ],
+      "ac": [
+        "Repeated buying and ongoing service, funded qualified backup capacity and measured acquisition/delivery economics. Specialist receives an explicit proceed/defer decision; its launch is optional.",
+        "All mandatory child AC/DoD outcomes are evidenced, with linked defects and explicit stop decisions; deferred options are recorded as such.",
+        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate."
+      ],
+      "evidence": "Linked child evidence, stage review and explicit owner go/no-go/defer decision.",
+      "non_goals": "Indicative timing is not a promise. Current permission is planning only.",
+      "owner": "Product owner / stage owner",
+      "extra": "Months 6-9 (relative estimate)"
+    },
+    {
+      "id": "GATE-F",
+      "title": "[GATE-F] Phase F \u2014 Selectively expand after separate evidence",
+      "phase": "F",
+      "milestone": "F",
+      "kind": "epic",
+      "priority": "P1",
+      "deps": [
+        "GATE-E",
+        "EXP-001",
+        "EXP-002",
+        "EXP-003",
+        "EXP-004",
+        "EXP-005",
+        "EXP-006",
+        "EXP-007",
+        "EXP-008"
+      ],
+      "ac": [
+        "Each candidate expansion has an evidence-backed proceed/defer/decline decision. Only selected expansions need delivery proof; deferred options are not required to ship. No earlier gate implies approval for a new tier, country, integration or business model.",
+        "All mandatory child AC/DoD outcomes are evidenced, with linked defects and explicit stop decisions; deferred options are recorded as such.",
+        "Owner records a dated stage decision; technical completion, production verification and commercial validation remain separate."
+      ],
+      "evidence": "Linked child evidence, stage review and explicit owner go/no-go/defer decision.",
+      "non_goals": "Indicative timing is not a promise. Current permission is planning only.",
+      "owner": "Product owner / stage owner",
+      "extra": "Months 10-12+ (relative estimate)"
+    },
+    {
+      "id": "PLAN-001",
+      "title": "[PLAN-001] Reconcile source context, scope, story map and open decisions",
+      "phase": "A",
+      "milestone": "A",
+      "kind": "planning",
+      "priority": "P0",
+      "deps": [],
+      "ac": [
+        "Finalized September 15 outputs take precedence over older working drafts; copied sources and SHA-256 manifest are preserved.",
+        "Record the individual-contractor/all-role scope, nine role families plus other specialty, offer-version rules, and deferred employer/agency business.",
+        "Record owner, due decision, evidence and downstream blocker for entity, province/countries, budget, founder availability, providers, rights, experts and terms; unknowns are not guessed.",
+        "Produce a reviewable member/coach/operator story map and low-fidelity private prototype; distinguish first vertical slice from full Phase B.",
+        "Resolve source differences explicitly: preserve all nine roadmap journeys plus build-prompt usability/recovery, late-return and commercial-truth criteria."
+      ],
+      "evidence": "Source comparison, decision log, story-map/prototype review and scope sign-off.",
+      "non_goals": "No application implementation or business promises.",
+      "owner": "Product owner",
+      "extra": ""
+    },
+    {
+      "id": "GOV-001",
+      "title": "[GOV-001] Adopt the AI-assisted development working agreement",
+      "phase": "A",
+      "milestone": "A",
+      "kind": "planning",
+      "priority": "P0",
+      "deps": [
+        "PLAN-001"
+      ],
+      "ac": [
+        "AGENTS.md and contribution/issue/PR guidance encode context-first, issue-first, bounded changes, behavior-first tests, diff review and durable decision/validation notes.",
+        "Definition of ready requires AC, dependencies, accountable owner, risk boundaries and test plan; backlog existence does not authorize coding.",
+        "Definition of done requires evidence on the intended revision, all AC, review, successful prescribed pre-push checks and CI, and relevant operational documentation.",
+        "Generated code and dependencies require independent review; current official APIs, licenses, lockfiles and secret/privacy boundaries are checked.",
+        "No automatic coding-agent assignment, test/coverage bypass, invented live results, or unrelated refactors; no remote actions outside actual authorization."
+      ],
+      "evidence": "Review of working agreement and issue/PR examples against this roadmap; repository guidance is unambiguous about the current planning-only boundary.",
+      "non_goals": "Do not implement workflows, install tools or change repository protections in this planning issue.",
+      "owner": "Engineering lead",
+      "extra": "References: https://docs.github.com/en/copilot/responsible-use/agents and https://playwright.dev/docs/best-practices . These support review and behavioral testing; the 99% target is the user requirement."
+    },
+    {
+      "id": "PLAN-002",
+      "title": "[PLAN-002] Prepare entity, jurisdiction, terms, privacy and payment launch decisions",
+      "phase": "A",
+      "milestone": "A",
+      "kind": "planning",
+      "priority": "P0",
+      "deps": [
+        "PLAN-001"
+      ],
+      "ac": [
+        "Record actual operating entity/province, enabled customer countries, decision owners and qualified advice needed before launch; unresolved items visibly block live sales.",
+        "Review offer/cancellation/refund/renewal language, invoice and tax classification, training classification, privacy/retention, AI vendors, insurance and IP permissions for the actual jurisdiction.",
+        "Separate learning, AI processing, recording, portfolio and marketing consent; define retention exceptions and accurate deletion statements.",
+        "Prepare an owner-reviewed launch decision checklist and evidence locations without asserting legal clearance from a draft or from software tests."
+      ],
+      "evidence": "Dated decision register, reviewed draft terms/policies, adviser/owner determinations and unresolved launch blockers.",
+      "non_goals": "No signing, tax/legal conclusions from generic guidance, purchases, card charges or publication.",
+      "owner": "Business owner with qualified advisers",
+      "extra": ""
+    },
+    {
+      "id": "PLAN-003",
+      "title": "[PLAN-003] Reserve qualified expert capacity and define service operations",
+      "phase": "A",
+      "milestone": "A",
+      "kind": "planning",
+      "priority": "P0",
+      "deps": [
+        "PLAN-001"
+      ],
+      "ac": [
+        "Roster records verifiable expertise, role/domain, service types, availability, loaded cost, conflicts and backup; distinguish proposed contacts from actual commitments.",
+        "Model pilot two 60-minute coaching units, four 30-minute review units and two monthly 60-minute support allocations, plus internal onboarding reserve of 60 coach/30 support minutes.",
+        "Plan four one-hour pooled clinics per month with at most 16 members per group; count preparation, notes, QA, scheduling slack and support once.",
+        "Publish proposed scope/turnaround/24-hour cancellation/no-show/service-recovery rules and staffed hours separately from final accepted terms.",
+        "Admission is limited by the scarcest qualified service and confirmed coverage; absent experts block tailored paid promises but not shared-foundation planning."
+      ],
+      "evidence": "Capacity workbook/roster, example cohort allocation, expert evidence and owner-reviewed operating procedures.",
+      "non_goals": "No invented expert credentials, hiring commitments, unlimited service or customer admission.",
+      "owner": "Service operations lead",
+      "extra": ""
+    },
+    {
+      "id": "PLAN-004",
+      "title": "[PLAN-004] Prepare the common foundation and reviewed demonstration content pack",
+      "phase": "A",
+      "milestone": "A",
+      "kind": "planning",
+      "priority": "P0",
+      "deps": [
+        "PLAN-001",
+        "PLAN-003"
+      ],
+      "ac": [
+        "Specify six concise foundation lessons with accessible text/transcripts and one role-appropriate exercise brief for each named role family plus a fit-review route for other specialties.",
+        "Prepare two complete synthetic reference assignments (for example QA and business analysis), versioned rubrics and reviewer calibration examples.",
+        "Prepare three maintained workflow demonstrations: requirements-to-acceptance drafting, test-case review and meeting-action extraction.",
+        "Every asset has owner, sources/rights, version, limitations, intended roles, review date and readiness; generated examples remain demonstrations until real expert review.",
+        "Review scope fits the funded review allocation and no noncoding role is forced into a generic coding assessment."
+      ],
+      "evidence": "Content inventory, sample lessons/assignments/reference outputs, rights checks, calibration notes and qualified sign-off where available.",
+      "non_goals": "No claims of expert approval, accreditation or paid curriculum readiness without evidence.",
+      "owner": "Curriculum lead and qualified reviewers",
+      "extra": ""
+    },
+    {
+      "id": "QA-001",
+      "title": "[QA-001] Establish meaningful unit coverage gates at 99%",
+      "phase": "B",
+      "milestone": "B1",
+      "kind": "quality",
+      "priority": "P0",
+      "deps": [
+        "CTP-001",
+        "GOV-001"
+      ],
+      "ac": [
+        "Choose and document the maintained runner/instrumentation and cover all first-party executable app source, including unimported files.",
+        "Enforce >=99% independently for lines, branches, statements and functions globally and per logical module; record raw counts, scope and reviewed exclusions.",
+        "Only justified generated/vendor/non-executable artifacts may be excluded; missing reports, no tests and zero denominators fail.",
+        "Behavioral cases exercise money/date/permission/state/validation errors; targeted mutation or fault injection demonstrates assertions detect broken critical rules.",
+        "Intentionally lower coverage on a throwaway fixture to demonstrate the gate fails, restore it, and record a successful meaningful baseline."
+      ],
+      "evidence": "Runner config, inclusion/exclusion review, machine-readable report and failure/success gate demonstration on an identified revision.",
+      "non_goals": "No coverage padding, mocked-away business rules, threshold reductions or claimed current 99% result.",
+      "owner": "Engineering lead",
+      "extra": "Coverage guidance: https://vitest.dev/config/coverage.html . Tool choice remains an implementation decision."
+    },
+    {
+      "id": "QA-002",
+      "title": "[QA-002] Build E2E scenario traceability and the 99% journey coverage gate",
+      "phase": "B",
+      "milestone": "B1",
+      "kind": "quality",
+      "priority": "P0",
+      "deps": [
+        "CTP-001",
+        "GOV-001",
+        "PLAN-001"
+      ],
+      "ac": [
+        "Version a scenario register mapping each source journey and issue AC to actor, preconditions, steps, observable results, risk and browser test IDs.",
+        "Coverage = distinct passing automated in-scope scenario IDs / all approved in-scope scenario IDs; >=99% is mandatory. Pending, missing, failed, skipped, quarantined or retry-only scenarios remain uncovered.",
+        "Critical isolation, payments/dates, consent, ledgers/races, AI failures/budgets, deletion and the complete member-review journey require 100% coverage; all required executed tests pass.",
+        "Keep first-slice and full-MVP scopes explicit; the full-release denominator includes unimplemented scenarios. Denominator changes require reviewed scope decisions, never silent removal.",
+        "Run real UI/server/database with independent synthetic contexts and external-only deterministic adapters; use observable outcomes and resilient accessible locators.",
+        "Demonstrate gate failure for missing mapping, skipped critical case, empty report and failing test; preserve traces and first-attempt failure information."
+      ],
+      "evidence": "Versioned journey register, scenario-to-test map, reproducible runner, denominator report and deliberate failure checks.",
+      "non_goals": "Do not equate test count, test pass rate, UI code coverage or mocked pages with journey coverage.",
+      "owner": "Engineering lead",
+      "extra": "The user explicitly selected journey coverage rather than browser-instrumented code coverage. Reference: https://playwright.dev/docs/best-practices ."
+    },
+    {
+      "id": "QA-003",
+      "title": "[QA-003] Enforce full verification before every push and required CI checks",
+      "phase": "B",
+      "milestone": "B1",
+      "kind": "quality",
+      "priority": "P0",
+      "deps": [
+        "QA-001",
+        "QA-002"
+      ],
+      "ac": [
+        "Provide one documented local command for formatting/lint, type checks, unit coverage, integration tests, applicable full E2E matrix, production build and relevant security checks.",
+        "Pre-push execution fails closed on test/report/coverage failure and records exact intended tree or revision, environment, commands and report locations; changed code invalidates prior evidence.",
+        "Document and exercise a verified bootstrap path while the harness is introduced; no application change is pushed without executable verification.",
+        "CI independently repeats gates on the PR/merge candidate; install required-check settings only after observed workflow jobs exist and have run.",
+        "Demonstrate a failing push gate locally without sending a failing revision; demonstrate successful checks before a permitted push. No --no-verify, skipped assertions, hidden retries or reduced targets.",
+        "Record reviewer approval and resolve blocking findings before merge; checks unavailable due to infrastructure remain blocked rather than waived silently."
+      ],
+      "evidence": "Pre-push failure/success evidence, exact-revision local reports, CI URLs and verified required-job names once implementation is authorized.",
+      "non_goals": "No hook or Actions code, protection changes, commit, push or merge during the current planning session.",
+      "owner": "Engineering lead",
+      "extra": ""
+    },
+    {
+      "id": "QA-004",
+      "title": "[QA-004] Define the threat model, data boundaries and risk-based test matrix",
+      "phase": "A",
+      "milestone": "A",
+      "kind": "planning",
+      "priority": "P0",
+      "deps": [
+        "CTP-001",
+        "PLAN-001"
+      ],
+      "ac": [
+        "Map trust boundaries for workspaces, staff grants, object storage, uploads, AI retrieval, jobs, payments, secrets and operator access.",
+        "Specify negative cases for cross-record ownership, privilege escalation, expiring/revoked links, unsafe files, prompt injection, consent bypass, leaked logs and unauthorized exports.",
+        "Specify transaction, idempotency, timeout/retry and date invariants with reproduction plans; connect them to CTP-023 and every affected feature.",
+        "Define dependency/secret/security scan policy, threat owners, response procedure and release-blocking severity; no unsupported security certification claims."
+      ],
+      "evidence": "Reviewed data-flow/threat model, abuse-case register and issue/test mapping with owners.",
+      "non_goals": "No security code or production security settings changed yet.",
+      "owner": "Engineering lead",
+      "extra": ""
+    },
+    {
+      "id": "QA-005",
+      "title": "[QA-005] Verify accessibility, browser compatibility and performance budgets",
+      "phase": "B",
+      "milestone": "B3",
+      "kind": "quality",
+      "priority": "P0",
+      "deps": [
+        "CTP-023"
+      ],
+      "ac": [
+        "Core member/coach/operator journeys work at mobile and desktop widths, keyboard-only navigation, readable labels/focus/errors and page-reload recovery.",
+        "Run the approved Chromium/Firefox/WebKit matrix with deterministic data; automate meaningful accessibility checks and perform manual keyboard/focus review.",
+        "Approve quantitative response-time, concurrency, upload-size and background-job budgets based on the five-member pilot and operator workloads before measuring.",
+        "Record test environment, data volume, p50/p95 timings, failures and accessibility defects; agreed budgets and critical usability criteria pass before release."
+      ],
+      "evidence": "Browser matrix reports/traces, keyboard/accessibility review and measured workload results compared with approved budgets.",
+      "non_goals": "No arbitrary performance promise, screenshot-only acceptance or universal accessibility certification.",
+      "owner": "Engineering lead",
+      "extra": ""
+    },
+    {
+      "id": "CTP-001",
+      "title": "[CTP-001] Audit project and record architecture decisions",
+      "phase": "A",
+      "milestone": "A",
+      "kind": "planning",
+      "priority": "P0",
+      "deps": [
+        "PLAN-001",
+        "GOV-001"
+      ],
+      "ac": [
+        "Read project instructions; inventory reusable auth, design, billing, tests, and owned content; record reuse/greenfield decision and exact tools chosen from current official docs.",
+        "No unrelated repository changes.",
+        "Record current empty checkout and legacy repository-description mismatch without resurrecting removed historical code. Decide app placement, modular monolith boundaries, relational schema/migrations, storage/jobs and maintained packages in an ADR."
+      ],
+      "evidence": "Repository inventory, architecture/data-flow ADRs, official-doc references and first-slice test plan.",
+      "non_goals": "No copying other projects or choosing a stack solely from the old repository description.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-001. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-002",
+      "title": "[CTP-002] Encode commercial catalog, terms, and subscription phases",
+      "phase": "B",
+      "milestone": "B1",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-001"
+      ],
+      "ac": [
+        "Professional/Specialist/Practice/Partner prices and service-minute quotas match the business plan.",
+        "Pilot grants two 60-minute coaching units and four 30-minute review units across two billing periods, plus stated support/AI.",
+        "CAD 3,000\u2192CAD 9,000\u2192CAD 12,000 phases preserve anniversary.",
+        "Only approved live offer is purchasable; higher plans are applications.",
+        "Use integer CAD cents and immutable offer/terms versions. Professional monthly service is 60 coach/30 review/30 support minutes; pilot support is 60 minutes per billing month; preserve internal onboarding reserve separately. No annual prepayment releases all future monthly credits."
+      ],
+      "evidence": "Table-driven offer, price, quota and historical-version tests plus UI/server agreement comparison.",
+      "non_goals": "No live checkout or unauthorized higher-tier sale.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-002. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-003",
+      "title": "[CTP-003] Implement all-role taxonomy, readiness, and expert registry",
+      "phase": "B",
+      "milestone": "B1",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-001"
+      ],
+      "ac": [
+        "All nine named IT role families plus other specialty can register; multi-role choice works.",
+        "Available/limited coverage/in preparation/retired states display accurately.",
+        "Expert role/domain, service types, dates, costs, and backup coverage are recorded.",
+        "No unsupported tailored service can be committed.",
+        "Record multiple roles and a primary goal; other-specialty intake has manual fit review. Readiness requires actual content and qualified coverage, not a placeholder expert account."
+      ],
+      "evidence": "Role/readiness transition tests and member/operator demonstrations including unsupported specialty.",
+      "non_goals": "No claim of full domain expertise from broad intake.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-003. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-004",
+      "title": "[CTP-004] Create deterministic adapters and configuration validation",
+      "phase": "B",
+      "milestone": "B1",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-001",
+        "QA-001",
+        "QA-002",
+        "QA-003"
+      ],
+      "ac": [
+        "Synthetic seed includes two members, multiple roles, an assigned/revoked coach, reviewer, editor, and operator.",
+        "AI/payment/storage/calendar/email adapters separate demo/test/live modes.",
+        "Missing live settings produce actionable disabled states; no fake sent message or live payment confirmation.",
+        "Isolate test/live databases, buckets and credentials; validate auth and analytics adapters too. Demo impersonation cannot run live. Failed jobs survive reload with sanitized errors and bounded retries."
+      ],
+      "evidence": "Adapter contract tests and missing-configuration/demo-to-live isolation checks.",
+      "non_goals": "No paid services, real messages or production credentials required for the private MVP.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-004. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-005",
+      "title": "[CTP-005] Implement identity, workspace authorization, and staff grants",
+      "phase": "B",
+      "milestone": "B1",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-001",
+        "CTP-004"
+      ],
+      "ac": [
+        "Members own private workspaces.",
+        "Coach/reviewer access is assignment-scoped and time-bounded; editor role grants no member-data access.",
+        "Direct API requests cannot bypass boundaries; revocation prevents new access; privileged support access is logged.",
+        "Server derives identity/workspace; members cannot self-grant staff roles. Cross-record references cannot join another workspace. Support content access has purpose, expiry and an audit trail."
+      ],
+      "evidence": "Role/record authorization matrix, expiry/revocation integration cases and adversarial direct-API tests.",
+      "non_goals": "No client-only authorization or global staff access.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-005. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-006",
+      "title": "[CTP-006] Implement evidence consent, private upload, and quarantine",
+      "phase": "B",
+      "milestone": "B1",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-005"
+      ],
+      "ac": [
+        "Allowlisted size/type rules, malware/quarantine state, sharing permission, and private object storage work.",
+        "Invalid objects cannot reach review.",
+        "Every download rechecks authorization; short-lived links, metadata/log redaction, and deletion hooks are verified.",
+        "Require explicit rights/sharing scope, never execute uploads, and cover rejected types, quarantine transitions, revoked grants and derived-data deletion. Logs contain no raw evidence."
+      ],
+      "evidence": "Storage policy tests and browser upload/download/rejection/revocation cases with independent members.",
+      "non_goals": "No public storage bucket or unrestricted client-document intake.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-006. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-007",
+      "title": "[CTP-007] Implement versioned content, sources, rubrics, and publication",
+      "phase": "B",
+      "milestone": "B1",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-003",
+        "CTP-005"
+      ],
+      "ac": [
+        "Draft/preview/review/publish/retire workflow is real.",
+        "Each available item has owner, sources/rights, review date, supported role/domain, and version.",
+        "Assessments pin rubric/content versions; new releases do not rewrite earlier results.",
+        "Search/filter and accessible previews use eligible published versions. Support six foundation lessons, role briefs and two demo assignments from PLAN-004; demonstration authorship is not qualified approval."
+      ],
+      "evidence": "Publication/retirement/rights/version-pinning tests and editor/member browser evidence.",
+      "non_goals": "No fake reviewer sign-off or retroactive assessment rewrite.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-007. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-008",
+      "title": "[CTP-008] Implement application, covered offer acceptance, and baseline plan",
+      "phase": "B",
+      "milestone": "B1",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-002",
+        "CTP-003",
+        "CTP-005",
+        "CTP-007"
+      ],
+      "ac": [
+        "All roles can join the common foundation.",
+        "Prospect sees exact covered scope and capacity before acceptance/payment.",
+        "Self-reported experience remains labelled.",
+        "Baseline and 90-day plan fit funded human services; no fabricated credential or fixed coding test for noncoding roles.",
+        "Capture timezone/goals/weekly availability and separate consent choices; sensitive income/client/contract dates stay optional. Require real qualified capacity before accepting tailored paid scope."
+      ],
+      "evidence": "All-role application/onboarding browser flow, uncovered-role refusal and accepted-offer snapshot tests.",
+      "non_goals": "No identity documents or client credentials in normal onboarding.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-008. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-009",
+      "title": "[CTP-009] Implement lesson reader, progress, and assignment selection",
+      "phase": "B",
+      "milestone": "B1",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-007",
+        "CTP-008"
+      ],
+      "ac": [
+        "A member reads actual accessible material/transcript, completes an exercise, and sees accurate next actions.",
+        "Role-appropriate assignment is selected.",
+        "Progress reflects observed activity/completion, never synthetic earnings or hiring outcomes.",
+        "Lesson/transcript and progress survive reload; return useful empty/error states. Exercise choice is tied to role and eligible content rather than generic coding assumptions."
+      ],
+      "evidence": "Reader/progress/assignment browser traces with reload and error recovery.",
+      "non_goals": "No completion flag treated as verified competence.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-009. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-010",
+      "title": "[CTP-010] Implement submission versions, human review, and revisions",
+      "phase": "B",
+      "milestone": "B1",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-006",
+        "CTP-009"
+      ],
+      "ac": [
+        "Qualified assigned reviewer sees only the authorized version, records criterion-level feedback with evidence references and time spent, and publishes a review.",
+        "Revision creates new evidence; prior feedback remains intact.",
+        "Simulated assignments stay labelled in any portfolio output.",
+        "Only the assigned human can publish formal assessment; distinguish AI suggestions/self-report/human review. Include bounded clarification/appeal. Account for prep/time, then reconcile funded review consumption with CTP-011 before full-MVP closure."
+      ],
+      "evidence": "Submission/rubric immutability, reviewer authorization, revision/appeal and time/entitlement integration evidence.",
+      "non_goals": "No unlimited revisions or AI-only formal assessment.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-010. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-011",
+      "title": "[CTP-011] Implement immutable entitlement reservations and ledger",
+      "phase": "B",
+      "milestone": "B2",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-002",
+        "CTP-005"
+      ],
+      "ac": [
+        "Grant/reserve/consume/release/expire/adjust events use idempotency keys and immutable history.",
+        "Atomic checks prevent overspending.",
+        "Whole-minute human budgets include preparation; separate categories never silently substitute.",
+        "Pilot/continuation/month-end grants reconcile without a duplicate annual bundle.",
+        "Test integer-minute/category invariants, membership-anchored months, leap years, Jan-31 and expiry. Pilot plus continuation yields 12 bookable coach hours and 7 review hours in year one; onboarding capacity is separate. Integrate review/support/AI settlements exactly once."
+      ],
+      "evidence": "Transactional/property-based ledger tests, last-unit races and full annual reconciliation fixture.",
+      "non_goals": "No mutable historical ledger, category substitution or duplicate annual bundles.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-011. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-012",
+      "title": "[CTP-012] Implement expert capacity, booking, and policy exceptions",
+      "phase": "B",
+      "milestone": "B2",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-003",
+        "CTP-005",
+        "CTP-011"
+      ],
+      "ac": [
+        "Local timezone availability shows qualified slots.",
+        "Concurrent booking has one winner; booking reserves service and capacity atomically.",
+        "The 24-hour proposed window/no-show/provider-cancel policies behave as disclosed.",
+        "Provider-caused failure issues a dated replacement credit and logs both histories.",
+        "Expire holds safely; distinguish allowance from qualified availability. Test DST/timezones, 45-call-plus-15-prep coach allocation and staff rescheduling. No unconfigured email/calendar success claim."
+      ],
+      "evidence": "Real-database last-slot/last-credit races and browser booking/cancellation/recovery cases.",
+      "non_goals": "No overselling capacity or silent service-credit loss.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-012. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-013",
+      "title": "[CTP-013] Implement maintained workflow registry and downloads",
+      "phase": "B",
+      "milestone": "B2",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-007"
+      ],
+      "ac": [
+        "Published bundles have setup, synthetic inputs, expected outputs, tests, permission/cost limits, version compatibility, license, owner, and last verification.",
+        "Retired/stale versions warn accurately.",
+        "Downloading does not execute code or connect to a client system.",
+        "Seed the three specified synthetic workflows, with copy/download and private feedback. Demonstrate supported examples without connecting member/client systems."
+      ],
+      "evidence": "Bundle completeness/license review, declared-environment example verification and download UI test.",
+      "non_goals": "No server-side arbitrary code execution or automatic external actions.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-013. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-014",
+      "title": "[CTP-014] Implement AI gateway, consent, token/cost budgets, and jobs",
+      "phase": "B",
+      "milestone": "B2",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-004",
+        "CTP-005",
+        "CTP-011"
+      ],
+      "ac": [
+        "No sharing consent means no dispatch of private evidence.",
+        "Approved models, input limits, queue/concurrency, idempotency, cost reservation/reconciliation, and kill switch work.",
+        "Timeout ambiguity is reconciled before costly retry.",
+        "Estimated cost is labelled; platform failures restore allowances.",
+        "Treat evidence/retrieval as untrusted data; validate output schema and ownership. Persist job state, provider IDs and prompt/model versions without raw private telemetry. Handle ambiguous timeouts before redispatch."
+      ],
+      "evidence": "Consent/queue/idempotency/budget-kill/failure-restoration tests and provider contract fault injection.",
+      "non_goals": "No unbounded paid retries or AI permission inferred from documents.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-014. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-015",
+      "title": "[CTP-015] Implement text mock interviews and study assistance",
+      "phase": "B",
+      "milestone": "B2",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-007",
+        "CTP-014"
+      ],
+      "ac": [
+        "Professional/pilot: 20 mocks and 100 study requests per billing month; Specialist: 40/200, Practice: 60/300, Partner configured contract max.",
+        "Mocks capped at 30 turns; feedback cites actual responses and marks insufficient evidence.",
+        "Study answers use eligible versioned sources.",
+        "Deterministic demo is visibly simulated; live mode disabled until configured.",
+        "Human mock requires coach quota.",
+        "Feedback cites actual permitted responses; sources remain versioned and retired/ineligible content is excluded. Label practice and uncertainty, allow session reload, and keep formal assessment human-owned."
+      ],
+      "evidence": "Mock/study browser flows, quota/turn-cap edge cases, malformed/ungrounded/wrong-role/unsafe-response fixtures.",
+      "non_goals": "No voice/video, hiring prediction or fabricated precision score.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-015. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-016",
+      "title": "[CTP-016] Implement test billing and manual-provider payment events",
+      "phase": "B",
+      "milestone": "B2",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-002",
+        "CTP-004",
+        "CTP-005",
+        "CTP-011"
+      ],
+      "ac": [
+        "Signed provider events are validated; duplicate IDs grant once; delayed/out-of-order events reconcile.",
+        "Redirect alone never grants access.",
+        "Manual receipt records actor/date/evidence/status and cannot claim independent provider verification.",
+        "Test success/failure/refund events update immutable invoice and service records correctly.",
+        "Separate application, agreement, invoice, payment and service states. Bad signatures fail; a stale failed event cannot undo later paid status. Refund is not inferred from payment failure; manual evidence remains explicitly unverified by a provider."
+      ],
+      "evidence": "Signed/invalid/duplicate/disordered/refund fixtures, manual actor audit and reconciliation tests.",
+      "non_goals": "No real charge, stored card data or redirect-only activation.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-016. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-017",
+      "title": "[CTP-017] Implement continuation, renewal, cancellation, and invoice views",
+      "phase": "B",
+      "milestone": "B2",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-016"
+      ],
+      "ac": [
+        "Standalone pilot never auto-converts.",
+        "Explicit CAD 9,000 purchase starts month 3 and ends at original anniversary.",
+        "Ten CAD 900 instalments or upfront schedule works; direct/renewal Professional uses twelve CAD 1,000 instalments or CAD 12,000.",
+        "Term-end cancellation is visible; early release/refund/dispute is operator-reviewed.",
+        "Tax remains separate and configured.",
+        "Reject standard continuation after month two; late return requires a separately accepted priced/date/credit agreement, with no retroactive service charges/grants. Show reduced review/support frequency before continuation and keep remaining export/access rights explicit."
+      ],
+      "evidence": "Jan-31/leap-year/late-acceptance/anniversary/instalment/default-recovery/cancellation browser and state tests.",
+      "non_goals": "No automatic pilot conversion, hidden policy invention or extra first-year CAD 12,000 charge.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-017. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-018",
+      "title": "[CTP-018] Implement member-owned opportunity, renewal, and goal tracker",
+      "phase": "B",
+      "milestone": "B2",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-005",
+        "CTP-008"
+      ],
+      "ac": [
+        "Member records an opportunity or contract date, approved evidence, next action, and local reminder.",
+        "It is not a supplied-job marketplace.",
+        "Draft client/proposal/renewal text needs member approval and remains unsent; no automatic external outreach.",
+        "Goals/reminders and drafts stay private and member controlled; member-provided commercial outcomes remain labelled self-reported. Local reminders do not claim a sent email."
+      ],
+      "evidence": "Create/edit/permission/reminder timezone and unsent-draft browser checks.",
+      "non_goals": "No job feed, scraping, client introduction or automatic outreach.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-018. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-019",
+      "title": "[CTP-019] Implement staff worklist, support allowances, and time capture",
+      "phase": "B",
+      "milestone": "B2",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-010",
+        "CTP-012",
+        "CTP-017"
+      ],
+      "ac": [
+        "Assigned queue shows review age, bookings, allowed scope, and available expert time.",
+        "Preparation/review/notes/support time counted once against category budgets and costs.",
+        "Acknowledgement target differs from resolution; uncovered work goes to a quoted or coverage-review path.",
+        "Distinguish member-facing and internal notes; scope queues to staff grants. Support acknowledgement target is two business days in published Eastern staffed hours, separate from resolution; uncovered work is not silently granted."
+      ],
+      "evidence": "Queue/ownership/holiday-clock/time-deduplication/cost-to-allowance reconciliation tests.",
+      "non_goals": "No unlimited consulting or uncosted preparation.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-019. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-020",
+      "title": "[CTP-020] Implement pooled clinics and attendance",
+      "phase": "B",
+      "milestone": "B2",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-003",
+        "CTP-011",
+        "CTP-012"
+      ],
+      "ac": [
+        "Four one-hour clinics per month per pooled group and maximum 16 members are configurable.",
+        "Seat capacity cannot be oversold; group hours do not consume/create private coaching time.",
+        "Specialized clinics require funded qualified experts.",
+        "Recording consent and written-summary option are implemented.",
+        "Test concurrent last-seat enrollment; a group is costed once and no individual allowance is minted. Record consent per actual recording choice and provide written-summary access."
+      ],
+      "evidence": "Clinic capacity/race/consent/attendance tests and group-cost reconciliation.",
+      "non_goals": "No assumed senior expertise in every pooled clinic or automatic recordings.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-020. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-021",
+      "title": "[CTP-021] Implement member sharing, export/deletion requests, and audit",
+      "phase": "B",
+      "milestone": "B2",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-006",
+        "CTP-010",
+        "CTP-017"
+      ],
+      "ac": [
+        "Sharing defaults private, explicitly publishes, and revokes.",
+        "Own evidence export is authorized; request/deletion job includes storage and platform-derived records subject to documented retention.",
+        "Staff access/exports, billing adjustments, and privilege changes are logged without secrets.",
+        "Cover storage, extracted text, embeddings, AI feedback and other derived records; document separately retained billing and backup expiry. Export job/download requires current authorization and revocation."
+      ],
+      "evidence": "Cross-member export denial, expiring-share revocation and deletion job/retention reconciliation evidence.",
+      "non_goals": "No universal immediate-backup-deletion promise or secret-bearing audit logs.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-021. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-022",
+      "title": "[CTP-022] Implement metric definitions and operational reconciliation",
+      "phase": "B",
+      "milestone": "B2",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-011",
+        "CTP-014",
+        "CTP-017",
+        "CTP-019",
+        "CTP-020"
+      ],
+      "ac": [
+        "Dashboard separates paid pilots, conversion, renewal, service revenue, cash, direct service cost, reserved qualified capacity, and reported outcomes.",
+        "Ledger and job/provider totals reconcile.",
+        "Demo records cannot enter live metrics; unverified self-reports remain labelled.",
+        "Define fixed denominators for activation/completion/continuation/renewal and dated event semantics; withdrawals stay in relevant denominators. Actuals, estimates, forecasts and self-reports remain distinct; reconcile time costs without double-counting prep."
+      ],
+      "evidence": "Metric fixture expected values, ledger/provider/manual totals and environment isolation checks.",
+      "non_goals": "No simulated sales, causal earnings claims or prepaid receipts counted as immediate profit.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-022. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-023",
+      "title": "[CTP-023] Validate state, privacy, and AI reliability controls",
+      "phase": "B",
+      "milestone": "B3",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-006",
+        "CTP-010",
+        "CTP-011",
+        "CTP-012",
+        "CTP-013",
+        "CTP-014",
+        "CTP-015",
+        "CTP-016",
+        "CTP-017",
+        "CTP-021",
+        "QA-004"
+      ],
+      "ac": [
+        "Targeted tests exercise cross-workspace access, booking/allowance races, duplicate events, phase boundaries, provider failures, prompt injection, cost stops, and evidence-grounded output.",
+        "Failed criteria produce actionable defects; rubric tests do not pretend to prove hiring prediction.",
+        "Implement the threat/risk matrix in QA-004, including own-server API abuse, malformed model output, cross-record links, expired grants, deletion and first-failure reliability reporting. Reproduce and fix failures before closing."
+      ],
+      "evidence": "Adversarial regression suite, transaction race results, injection/consent/budget tests and resolved defect links.",
+      "non_goals": "No green unit percentage substituted for integration/security evidence.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-023. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-024",
+      "title": "[CTP-024] Complete full Phase B browser rehearsal and release report",
+      "phase": "B",
+      "milestone": "B3",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-008",
+        "CTP-009",
+        "CTP-010",
+        "CTP-011",
+        "CTP-012",
+        "CTP-013",
+        "CTP-014",
+        "CTP-015",
+        "CTP-016",
+        "CTP-017",
+        "CTP-018",
+        "CTP-019",
+        "CTP-020",
+        "CTP-021",
+        "CTP-022",
+        "CTP-023",
+        "QA-005"
+      ],
+      "ac": [
+        "All nine journeys below run against a seeded private build, including AI practice/study and test/manual billing.",
+        "Desktop/mobile and keyboard checks cover complete flows.",
+        "Report live/test/manual/disabled state separately; remaining defects and human-coverage gaps are explicit.",
+        "First slice alone fails this gate.",
+        "Preserve all nine source-roadmap journeys and the build-prompt usability/recovery, late-return and commercial-truth cases. Report >=99% journey coverage, 100% critical coverage, all tests passing and >=99% each unit metric; include exact revision/build."
+      ],
+      "evidence": "Full browser rehearsal traces, raw coverage/scenario reports, manual UX evidence and explicit live/test/manual/disabled status matrix.",
+      "non_goals": "No first-slice-only completion, retry-hidden failure or production-readiness inference from CI.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-024. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "CTP-025",
+      "title": "[CTP-025] Prepare controlled production launch and restore evidence",
+      "phase": "C",
+      "milestone": "C",
+      "kind": "implementation",
+      "priority": "P0",
+      "deps": [
+        "CTP-024",
+        "PLAN-002",
+        "PLAN-003"
+      ],
+      "ac": [
+        "Concrete release artifact, migration/rollback plan, tested backup restore, access/retention settings, provider/tax/terms configuration, billing reconciliation, spend caps, support owner, funded expert roster, and incident procedure are reviewable.",
+        "Enable live publication/payments/communications only within actual authorization.",
+        "Review a concrete release artifact and actual launch checklist: jurisdiction, approved terms/tax, real coverage, provider sandbox/live evidence, secrets, spend controls, incident owner and verified restore. Record actual measured RPO/RTO against approved targets; leave enablement pending authorization."
+      ],
+      "evidence": "Release/rollback/migration runbook, restore rehearsal, provider status and dated owner-approved go/no-go record.",
+      "non_goals": "No production deployment, publication, external communication or charge merely because this issue is planned.",
+      "owner": "Engineering lead",
+      "extra": "Original source: finalized 03-roadmap-and-backlog.md, CTP-025. Full source acceptance criteria are retained above; supplements preserve detail from the final build prompt."
+    },
+    {
+      "id": "OPS-001",
+      "title": "[OPS-001] Prepare and validate a permission-appropriate pilot acquisition experiment",
+      "phase": "C",
+      "milestone": "C",
+      "kind": "operations",
+      "priority": "P1",
+      "deps": [
+        "PLAN-002",
+        "PLAN-003",
+        "PLAN-004"
+      ],
+      "ac": [
+        "Prepare truthful sample, fit-conversation guide and objection/price/source tracking for a target of 40 qualified prospects, 15 conversations and five paid pilots across at least three role families.",
+        "Record consent/source/suppression and actual authorized channel owners; no assumed partnerships or fabricated responses.",
+        "Separate planned funnel targets, conversations, applications and actual paid purchases; log reasons for decline and prior alternatives.",
+        "Obtain applicable campaign authorization before sending; measure actual results before treating the experiment as complete."
+      ],
+      "evidence": "Reviewed campaign materials, authorized channel/consent records and actual funnel/purchase evidence at execution.",
+      "non_goals": "No outreach is authorized by this planning session; no scraping/mass messaging.",
+      "owner": "Founder / commercial owner",
+      "extra": ""
+    },
+    {
+      "id": "OPS-002",
+      "title": "[OPS-002] Deliver the first five-member paid pilot with measured outcomes and costs",
+      "phase": "C",
+      "milestone": "C",
+      "kind": "operations",
+      "priority": "P0",
+      "deps": [
+        "CTP-025",
+        "OPS-001",
+        "PLAN-004"
+      ],
+      "ac": [
+        "Admit five actual paying members across multiple roles only after go-live authorization, accepted scope and reserved qualified capacity.",
+        "Deliver eight instruction weeks within the two actual billing periods, two funded coach calls, four scoped reviews, support/AI/clinics and separately costed onboarding.",
+        "At least four members complete useful reviewer-accepted work; withdrawals remain in cohort denominators and all paid obligations/refunds are reconciled.",
+        "Measure real preparation/delivery/support/AI/payment costs and complaints against the budget; failure triggers a documented stop/redesign decision."
+      ],
+      "evidence": "Private/redacted paid-cohort ledger, delivery/time/cost evidence, reviewed artifacts and dated gate review.",
+      "non_goals": "No synthetic purchase counted as a pilot or automatic expansion from a five-person sample.",
+      "owner": "Service operations lead",
+      "extra": ""
+    },
+    {
+      "id": "OPS-003",
+      "title": "[OPS-003] Validate paid continuation and recurring usefulness",
+      "phase": "D",
+      "milestone": "D",
+      "kind": "operations",
+      "priority": "P0",
+      "deps": [
+        "OPS-002",
+        "CTP-017",
+        "CTP-022"
+      ],
+      "ac": [
+        "Offer explicit CAD 9,000 remaining-ten-month continuation with disclosed lower ongoing review/support allowance and the original anniversary.",
+        "Record at least three actual paid continuations from the first five pilots; surveys or promises do not count.",
+        "Track intended continuing use, actual last-30-day meaningful activity and the 90-day usefulness check; measure service economics and payment recovery.",
+        "Failure to reach purchase/usefulness/cost gates results in a documented change or stop decision, not claimed recurring-product validation."
+      ],
+      "evidence": "Redacted accepted agreements/payment evidence, cohort denominators, usage/cost reports and owner gate decision.",
+      "non_goals": "No auto-conversion or assumption that course completion guarantees retention.",
+      "owner": "Product and commercial owner",
+      "extra": ""
+    },
+    {
+      "id": "OPS-004",
+      "title": "[OPS-004] Demonstrate repeatable cohorts, maintained content and delivery resilience",
+      "phase": "E",
+      "milestone": "E",
+      "kind": "operations",
+      "priority": "P1",
+      "deps": [
+        "OPS-003"
+      ],
+      "ac": [
+        "Approve next-cohort success thresholds and spend cap before recruitment, then replicate paid demand/continuation with actual measured acquisition costs.",
+        "Maintain funded backup experts and support coverage; test handling of unavailable experts without breaking existing commitments.",
+        "Review fast-changing workflows monthly or after breaking changes and domain content quarterly; stale claims/readiness are corrected.",
+        "Reconcile actual delivery margin, cash vs undelivered service obligations and founder-time treatment; authorize scale only after repeated evidence."
+      ],
+      "evidence": "Repeat-cohort results, maintenance ledger, backup-capacity exercise and reviewed economics.",
+      "non_goals": "No forecast treated as traction or unconditional full-year spending.",
+      "owner": "Founder and service operations lead",
+      "extra": ""
+    },
+    {
+      "id": "OPS-005",
+      "title": "[OPS-005] Evaluate the Specialist offer with buyer and capacity gates",
+      "phase": "E",
+      "milestone": "E",
+      "kind": "operations",
+      "priority": "P2",
+      "deps": [
+        "OPS-004"
+      ],
+      "ac": [
+        "Validate a specific buyer need for CAD 24,000/year and the proposed 2h coach/1h review/1h implementation/1h support monthly budget.",
+        "Cost qualified staffing, clinic allocation, AI 40 mocks/200 study requests, onboarding, acquisition and service reserve before an offer.",
+        "Produce a versioned scope/acceptance/terms and publish-or-defer decision using actual buyer and delivery evidence.",
+        "If approved later, create bounded implementation/launch issues; existing Professional obligations remain protected."
+      ],
+      "evidence": "Buyer evidence, staffed cost model, versioned draft offer and owner decision.",
+      "non_goals": "No checkout enablement, new contract or assumed high-tier demand.",
+      "owner": "Commercial and service leads",
+      "extra": ""
+    },
+    {
+      "id": "EXP-001",
+      "title": "[EXP-001] Evaluate Practice as a bounded individual consulting offer",
+      "phase": "F",
+      "milestone": "F",
+      "kind": "future",
+      "priority": "P3",
+      "deps": [
+        "OPS-004"
+      ],
+      "ac": [
+        "Test CAD 48,000 buyer value and proposed 3h coach/2h review/3h engineering/2h support monthly service against a specific solo-practice use case.",
+        "Produce staffing, delivery acceptance, costs, rights and a publish/defer decision; approved follow-on work gets separate ready issues.",
+        "Do not start implementation until the selected expansion has owner approval, staffed capacity, measurable AC, a test plan and a bounded budget."
+      ],
+      "evidence": "Dated discovery brief, buyer/operational evidence, alternatives and owner-reviewed proceed/defer decision; future implementation issues if approved.",
+      "non_goals": "No agency pivot or managed-client delivery without a separate contract.",
+      "owner": "Product owner with relevant specialists",
+      "extra": ""
+    },
+    {
+      "id": "EXP-002",
+      "title": "[EXP-002] Evaluate Partner managed support with a costed statement of work",
+      "phase": "F",
+      "milestone": "F",
+      "kind": "future",
+      "priority": "P3",
+      "deps": [
+        "EXP-001"
+      ],
+      "ac": [
+        "Require an established individual consulting business, actual buyer evidence and a specific outcome case for CAD 120,000.",
+        "Cost 4h coach/2h senior advisor/4h review/12h engineering/8h analyst/4h support monthly plus AI limits, backup, overhead and risk; produce bounded SOW acceptance and a proceed/defer decision.",
+        "Do not start implementation until the selected expansion has owner approval, staffed capacity, measurable AC, a test plan and a bounded budget."
+      ],
+      "evidence": "Dated discovery brief, buyer/operational evidence, alternatives and owner-reviewed proceed/defer decision; future implementation issues if approved.",
+      "non_goals": "No assumption that software alone fulfils a managed service or that upper-tier revenue funds MVP viability.",
+      "owner": "Product owner with relevant specialists",
+      "extra": ""
+    },
+    {
+      "id": "EXP-003",
+      "title": "[EXP-003] Assess voice and video practice, consent and accessibility",
+      "phase": "F",
+      "milestone": "F",
+      "kind": "future",
+      "priority": "P3",
+      "deps": [
+        "GATE-B"
+      ],
+      "ac": [
+        "Validate demand and costs versus text practice; map recording consent, retention, export/deletion, latency and accessibility alternatives.",
+        "Prototype/evaluate only after separate authorization; define measurable quality, cost and privacy acceptance before implementation tickets.",
+        "Do not start implementation until the selected expansion has owner approval, staffed capacity, measurable AC, a test plan and a bounded budget."
+      ],
+      "evidence": "Dated discovery brief, buyer/operational evidence, alternatives and owner-reviewed proceed/defer decision; future implementation issues if approved.",
+      "non_goals": "No audio recording, biometric/hiring claims or fake microphone integration.",
+      "owner": "Product owner with relevant specialists",
+      "extra": ""
+    },
+    {
+      "id": "EXP-004",
+      "title": "[EXP-004] Assess calendar, email and learning-system integrations",
+      "phase": "F",
+      "milestone": "F",
+      "kind": "future",
+      "priority": "P3",
+      "deps": [
+        "GATE-B"
+      ],
+      "ac": [
+        "Prioritize verified member/operator needs and define minimum scopes, provider limits, outbox/idempotency, timezones, revocation and truthful delivery status.",
+        "Produce provider-specific contract tests and rollout/rollback criteria in future ready issues; manual flows remain clearly described until verified.",
+        "Do not start implementation until the selected expansion has owner approval, staffed capacity, measurable AC, a test plan and a bounded budget."
+      ],
+      "evidence": "Dated discovery brief, buyer/operational evidence, alternatives and owner-reviewed proceed/defer decision; future implementation issues if approved.",
+      "non_goals": "No live messages or third-party account connections from this issue.",
+      "owner": "Product owner with relevant specialists",
+      "extra": ""
+    },
+    {
+      "id": "EXP-005",
+      "title": "[EXP-005] Assess controlled hosted agent execution",
+      "phase": "F",
+      "milestone": "F",
+      "kind": "future",
+      "priority": "P3",
+      "deps": [
+        "OPS-004"
+      ],
+      "ac": [
+        "Establish a concrete buyer need beyond downloadable workflows and a viable per-run cost model.",
+        "Specify sandbox isolation, network/tool allowlists, permissions, secrets, prompt-injection boundaries, approval, audit, quotas, kill switch and deletion; threat-model before any runtime implementation.",
+        "Do not start implementation until the selected expansion has owner approval, staffed capacity, measurable AC, a test plan and a bounded budget."
+      ],
+      "evidence": "Dated discovery brief, buyer/operational evidence, alternatives and owner-reviewed proceed/defer decision; future implementation issues if approved.",
+      "non_goals": "No arbitrary user code execution, default unrestricted network or client-system access.",
+      "owner": "Product owner with relevant specialists",
+      "extra": ""
+    },
+    {
+      "id": "EXP-006",
+      "title": "[EXP-006] Assess client-system access and repository integrations",
+      "phase": "F",
+      "milestone": "F",
+      "kind": "future",
+      "priority": "P3",
+      "deps": [
+        "OPS-004"
+      ],
+      "ac": [
+        "Document authorized customer use, data rights, least-privilege scoped access, dry-run/diff review, reversible changes, revocation and audit.",
+        "Define required client permissions, test environments and incident/rollback ownership; create provider-specific issues only after a go/no-go decision.",
+        "Do not start implementation until the selected expansion has owner approval, staffed capacity, measurable AC, a test plan and a bounded budget."
+      ],
+      "evidence": "Dated discovery brief, buyer/operational evidence, alternatives and owner-reviewed proceed/defer decision; future implementation issues if approved.",
+      "non_goals": "No production credentials, automatic commits, client communications or implied employer permission.",
+      "owner": "Product owner with relevant specialists",
+      "extra": ""
+    },
+    {
+      "id": "EXP-007",
+      "title": "[EXP-007] Assess additional countries and language support",
+      "phase": "F",
+      "milestone": "F",
+      "kind": "future",
+      "priority": "P3",
+      "deps": [
+        "OPS-004",
+        "PLAN-002"
+      ],
+      "ac": [
+        "Choose expansion from demand evidence and review jurisdiction, tax/payment, privacy, service timezone and expert/content readiness for each country/language.",
+        "Cost translation/accessibility/qualified review and localization semantics; record enable/defer decisions and isolated rollout acceptance.",
+        "Do not start implementation until the selected expansion has owner approval, staffed capacity, measurable AC, a test plan and a bounded budget."
+      ],
+      "evidence": "Dated discovery brief, buyer/operational evidence, alternatives and owner-reviewed proceed/defer decision; future implementation issues if approved.",
+      "non_goals": "No claim that remote delivery implies global commercial availability.",
+      "owner": "Product owner with relevant specialists",
+      "extra": ""
+    },
+    {
+      "id": "EXP-008",
+      "title": "[EXP-008] Assess organization accounts, marketplace and alternative pricing separately",
+      "phase": "F",
+      "milestone": "F",
+      "kind": "future",
+      "priority": "P3",
+      "deps": [
+        "OPS-004"
+      ],
+      "ac": [
+        "Evaluate employer/agency accounts, supplied-opportunity marketplace and materials-only pricing as separate hypotheses with buyer evidence and distinct economics.",
+        "Preserve the individual-first MVP; for each hypothesis record defer/decline/approve, data/access and operating obligations, then split approved work into dedicated scoped issues.",
+        "Do not start implementation until the selected expansion has owner approval, staffed capacity, measurable AC, a test plan and a bounded budget."
+      ],
+      "evidence": "Dated discovery brief, buyer/operational evidence, alternatives and owner-reviewed proceed/defer decision; future implementation issues if approved.",
+      "non_goals": "No multi-tenant organization redesign, recruiting promise or cheaper tier added merely to simplify the original model.",
+      "owner": "Product owner with relevant specialists",
+      "extra": ""
+    }
+  ]
+}

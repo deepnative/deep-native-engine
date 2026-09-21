@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan an issue"
+  short_description: "Define scope, acceptance criteria, risks, and evidence"
+  default_prompt: "Use $dne-plan-issue to refine the selected issue into a bounded, testable plan."
