@@ -5,10 +5,10 @@ Read [AGENTS.md](AGENTS.md), then follow [the team workflow](assets/docs/workflo
 Claim the issue before editing: check existing ownership, assign the agreed owner, apply `status:in-progress`, set project In progress and record your task/branch and scope. Re-read to detect competing claims. Follow [issue coordination](assets/docs/workflows/ISSUE-COORDINATION.md) for review, blockers, handoff and release; update the live status when the task ends.
 
 ```sh
-make bootstrap
+make setup
 make verify
 ```
 
 Commit your changes, then run `make verify` again on the intended commit before pushing. The installed pre-push hook also checks the pushed revision and reruns verification. Use the PR template to record evidence and request review. CI is required evidence, not a substitute for local checks. Complete authorized delivery by merging the reviewed PR into `main` after required reviews and checks pass, verify the resulting main CI, and record the merge SHA. The owner has provided standing authorization for this step; do not stop at a draft unless explicitly requested.
 
-See [verification and hook recovery](assets/docs/workflows/VERIFICATION.md) for prerequisites, failures, and the transition to application testing. Repository setup is authorized; application implementation and live commercial activity still require explicit scope.
+See [verification and hook recovery](assets/docs/workflows/VERIFICATION.md) for prerequisites, failures and application tests. The initial local learning slice is authorized; broader implementation and live commercial activity require explicit scope.

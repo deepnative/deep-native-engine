@@ -6,7 +6,7 @@ Read [the current product direction](../PRODUCT-DIRECTION.md) and [expanded jour
 
 A: cross-audience scope, learning foundation, participation/access decisions and qualified service boundaries. B1: goal-based onboarding, appropriate lesson/exercise, private progress and review. B2: bounded cohort participation and contributions plus the remaining private-MVP capabilities and optional paid-service paths. B3: complete browser rehearsal and quality evidence. C/D: optional coached pilot and explicit continuation. E: repeatable learning usefulness, participation and sustainable service delivery. F: separately approved expansions.
 
-Non-IT and exploratory learners are in the core roadmap. Their common learning path does not require contractor status, a client or purchase of the legacy Professional coaching offer. Timings remain estimates; application implementation and live launch remain on hold.
+Non-IT and exploratory learners are in the core roadmap. Their common learning path does not require contractor status, a client or purchase of the legacy Professional coaching offer. Timings remain estimates; the first local learning slice is authorized; live launch remains separately gated.
 
 ## Issue inventory
 
@@ -70,7 +70,7 @@ Non-IT and exploratory learners are in the core roadmap. Their common learning p
 
 ## Quality and commercial boundaries
 
-[Quality gates](QUALITY-GATES.md) remain >=99% each unit metric, >=99% approved E2E journeys, 100% critical journeys and required test passes. ECO-01 through ECO-08 extend the original acceptance scope; no application tests have been executed yet. Verify before each push, merge authorized work after checks/review, and verify main CI.
+[Quality gates](QUALITY-GATES.md) remain >=99% each unit metric, >=99% approved E2E journeys, 100% critical journeys and required test passes. ECO-01 through ECO-08 extend the original acceptance scope; the initial slice now has real unit, PostgreSQL and browser checks; the full-MVP journeys remain outstanding. Verify before each push, merge authorized work after checks/review, and verify main CI.
 
 Foundation/participation access and pricing need their own explicit decisions. The original CAD 3,000 pilot, CAD 9,000 continuation and CAD 12,000 annual Professional service are optional coaching-offer hypotheses, not universal member prices. Keep their dates, consent and service-ledger rules when applicable. No new price, free tier, expert capacity or demand is inferred.
 

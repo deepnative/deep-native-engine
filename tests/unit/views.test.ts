@@ -1,0 +1,57 @@
+import { it, expect } from "vitest";
+import {
+  escape,
+  page,
+  notice,
+  welcome,
+  dashboard,
+  lesson,
+  errorPage,
+} from "../../src/views.ts";
+const learner = {
+  id: "a",
+  background: "explorer" as const,
+  goal: "everyday" as const,
+};
+const draft = {
+  instruction: "<script>\"x\" & 'y'</script>",
+  verification: "Check original notes",
+  completed_at: null,
+};
+it("escapes every HTML-sensitive character in submitted content and page titles", () => {
+  expect(escape("&<>\"'")).toBe("&amp;&lt;&gt;&quot;&#39;");
+  expect(page("<unsafe>", "safe")).toContain("&lt;unsafe&gt;");
+  expect(lesson(learner, draft, "token")).not.toContain(draft.instruction);
+  expect(
+    lesson(learner, { ...draft, completed_at: new Date() }, "token"),
+  ).toContain("&lt;script&gt;");
+});
+it("renders all accessible entry choices and actionable validation", () => {
+  expect(welcome("token")).toContain("Working in another field");
+  expect(welcome("token", ["Fix <field>"])).toContain("Fix &lt;field&gt;");
+  expect(notice([])).toBe("");
+  expect(errorPage("Oops", "Try <again>")).toContain("Try &lt;again&gt;");
+});
+it("distinguishes unsaved, draft and self-assessed completion without inventing progress", () => {
+  expect(dashboard(learner, undefined, "token")).toContain(
+    "Ready when you are",
+  );
+  expect(dashboard(learner, draft, "token")).toContain("Draft saved");
+  const completed = { ...draft, completed_at: new Date() };
+  expect(dashboard(learner, completed, "token")).toContain(
+    "Completed · self-assessed",
+  );
+  expect(lesson(learner, undefined, "token")).not.toContain(
+    "Your draft is saved",
+  );
+  expect(lesson(learner, draft, "token")).toContain("Your draft is saved");
+  expect(lesson(learner, draft, "token", ["Invalid"])).not.toContain(
+    "Your draft is saved",
+  );
+  expect(lesson(learner, completed, "token")).toContain(
+    "No AI or qualified reviewer",
+  );
+  expect(lesson(learner, completed, "token")).not.toContain(
+    'name="instruction"',
+  );
+});

@@ -1,0 +1,316 @@
+{
+  "version": "initial-learning-v1",
+  "scope": "User-approved first local learning preview, not the full B1 member-to-reviewer journey",
+  "projects": ["desktop-chromium", "mobile-chromium"],
+  "slice": [
+    {
+      "id": "L01",
+      "actor": "General learner",
+      "preconditions": "Fresh browser; local preview database",
+      "steps": "Choose explorer/everyday, read lesson, complete both answers and self-check, reload progress",
+      "expected": "Suitable noncoding exercise, saved self-assessed completion, 1/1 progress",
+      "issues": [20, 28, 33],
+      "critical": true
+    },
+    {
+      "id": "L02",
+      "actor": "Non-IT professional",
+      "preconditions": "Fresh browser",
+      "steps": "Choose professional/work and complete the meeting-notes exercise",
+      "expected": "Domain-relevant noncoding exercise with saved completion",
+      "issues": [20, 28, 33],
+      "critical": true
+    },
+    {
+      "id": "L03",
+      "actor": "IT practitioner",
+      "preconditions": "Fresh browser",
+      "steps": "Choose technical/build and complete sign-up test planning",
+      "expected": "Suitable technical-workflow exercise, no required code or paid plan",
+      "issues": [20, 28, 33],
+      "critical": true
+    },
+    {
+      "id": "L04",
+      "actor": "Returning learner",
+      "preconditions": "Active session with unfinished lesson",
+      "steps": "Save an unfinished draft, reload, return to dashboard",
+      "expected": "Exact draft persists; completion stays 0/1",
+      "issues": [33],
+      "critical": false
+    },
+    {
+      "id": "L05",
+      "actor": "Learner submitting incomplete work",
+      "preconditions": "Active session without a saved exercise",
+      "steps": "Submit a short answer without attestation, then reopen lesson",
+      "expected": "Input and errors visible; no false saved notice or database row",
+      "issues": [28, 33],
+      "critical": true
+    },
+    {
+      "id": "L06",
+      "actor": "Two independent learners",
+      "preconditions": "Two browser contexts with different preview sessions",
+      "steps": "Save A work; B tries a caller-provided learner ID for read/write",
+      "expected": "Only B data changes and A work stays private",
+      "issues": [24, 33],
+      "critical": true
+    },
+    {
+      "id": "L07",
+      "actor": "Attacker and learner",
+      "preconditions": "Active session with a saved draft",
+      "steps": "Attempt wrong/missing CSRF and cross-origin writes/deletion",
+      "expected": "403 responses; saved draft remains uncompleted and undeleted",
+      "issues": [18, 24],
+      "critical": true
+    },
+    {
+      "id": "L08",
+      "actor": "Learner with completed work",
+      "preconditions": "Active session",
+      "steps": "Complete, replay completion and submit a late draft",
+      "expected": "One immutable versioned completion with unchanged text and timestamp",
+      "issues": [26, 33],
+      "critical": true
+    },
+    {
+      "id": "L09",
+      "actor": "Learner ending a preview",
+      "preconditions": "Active session with saved work",
+      "steps": "Confirm deletion, check rows, replay old cookie",
+      "expected": "Learner and exercise removed; old cookie cannot recover them",
+      "issues": [24, 33],
+      "critical": true
+    },
+    {
+      "id": "L10",
+      "actor": "Expired or forged session",
+      "preconditions": "Session at/after expiry",
+      "steps": "Navigate with expired token, restart onboarding, then forge unknown token",
+      "expected": "No prior-work access; expired token rotates; fresh preview can start",
+      "issues": [24, 28],
+      "critical": true
+    },
+    {
+      "id": "L11",
+      "actor": "Keyboard/mobile learner",
+      "preconditions": "Two welcome tabs sharing a browser",
+      "steps": "Start from first tab using keyboard, save script-like text, inspect viewport",
+      "expected": "Tabs work; text stays escaped; no horizontal overflow on supported viewports",
+      "issues": [26, 28, 33],
+      "critical": true
+    },
+    {
+      "id": "L12",
+      "actor": "Learner encountering storage failure",
+      "preconditions": "Saved draft; real test database",
+      "steps": "Temporarily make exercise table unavailable, attempt save, restore table and return",
+      "expected": "503 reports unconfirmed outcome; prior persisted draft remains recoverable",
+      "issues": [33],
+      "critical": true
+    },
+    {
+      "id": "L13",
+      "actor": "learner with a saved draft",
+      "preconditions": "Active session and an idle application PostgreSQL connection",
+      "steps": "Terminate the real idle database connections; reload then reopen the lesson",
+      "expected": "Server remains available; any interrupted request is honest; saved draft recovers",
+      "issues": [18, 22, 24, 33],
+      "critical": true
+    }
+  ],
+  "fullMvp": [
+    {
+      "id": "ROADMAP-01",
+      "title": "Accepted member to reviewed evidence",
+      "requirement": "an accepted pilot member receives the exact test/manual-paid entitlement, onboards, opens the common foundation, selects an appropriate assignment, submits a valid artifact, receives authorized human review, revises, and exports a portfolio statement labelled as simulated work. Verify each 30-minute review includes preparation and consumes one of the pilot's four units; publishing content alone does not mark member competence.",
+      "source": "03-roadmap-and-backlog.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ROADMAP-02",
+      "title": "Privacy attack and revocation",
+      "requirement": "member B cannot read member A's evidence through guessed routes, object identifiers, or staff APIs. A reviewer sees only assigned material. Revocation prevents obtaining a new download link; prior short-lived links follow the documented expiry. Editor access cannot reveal member submissions.",
+      "source": "03-roadmap-and-backlog.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ROADMAP-03",
+      "title": "Last slot and last unit",
+      "requirement": "two members attempt the same slot; exactly one booking wins. One member opens two bookings with only one unit; exactly one reserves it. Cancellation/no-show/platform failure applies the disclosed policy and restores a replacement credit exactly once. The monthly coach unit reserves 45 call minutes plus 15 preparation minutes.",
+      "source": "03-roadmap-and-backlog.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ROADMAP-04",
+      "title": "Pilot, continuation, renewal, and payment interruption",
+      "requirement": "run standalone CAD 3,000 pilot, explicit CAD 9,000 ten-month conversion, and twelve-month renewal/direct Professional. Ensure original anniversary, exact allowance totals, invoices, and payment schedule are correct. Duplicate/delayed/out-of-order test events, failed instalment/recovery, cancellation, and manual refund decisions remain consistent. Unconverted pilot is never charged again.",
+      "source": "03-roadmap-and-backlog.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ROADMAP-05",
+      "title": "AI consent, grounding, quota, and cost",
+      "requirement": "opt-out prevents dispatch. Deterministic demo is visibly simulated. Live provider absence disables live execution without breaking demo. A timeout is recoverable without duplicate paid work. Monthly 20-mock/100-study allowances and the 30-turn cap are enforced. Sparse interviews return insufficient evidence; study output uses permitted sources; a budget stop triggers a truthful service-recovery path.",
+      "source": "03-roadmap-and-backlog.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ROADMAP-06",
+      "title": "Content and template update",
+      "requirement": "member starts version 1; editor publishes version 2; original review retains its rubric/content references. New enrollment uses eligible current material. A template shows tested compatibility, known failures, and stale/retired status. Nothing in an uploaded document can grant AI permission to send messages or access systems.",
+      "source": "03-roadmap-and-backlog.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ROADMAP-07",
+      "title": "Post-program ongoing service",
+      "requirement": "after explicit continuation, member receives only the next month's Professional allowance, attends an available clinic, uses one goal/renewal workflow, books covered support, and sees appropriate activity. Clinic participation does not create private hours; training completion never auto-increments rate increases or verified contracts.",
+      "source": "03-roadmap-and-backlog.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ROADMAP-08",
+      "title": "All-role admission and truthful expertise",
+      "requirement": "a cybersecurity or product contractor can onboard into the foundation when their branch is limited. They see actual scope, readiness, and reviewer coverage. Tailored service waits for coverage; an appropriate available service proceeds. A project manager is not assessed using a generic coding rubric.",
+      "source": "03-roadmap-and-backlog.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ROADMAP-09",
+      "title": "Operator reconciliation and privacy lifecycle",
+      "requirement": "operator resolves a booking exception, reviews an early-release/refund request, reconciles invoice/ledger/provider/manual records, exports an authorized member's data, and completes a deletion workflow with retained-record exceptions documented. Cost report counts preparation once, distinguishes estimated AI cost, and excludes demo events from live business metrics.",
+      "source": "03-roadmap-and-backlog.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "BUILD-01",
+      "title": "All-role access and honest coverage",
+      "requirement": "a cybersecurity member and a business-analysis member can both apply and use the shared foundation. A branch without qualified coverage cannot sell tailored review. A demo expert does not satisfy live readiness.",
+      "source": "02-codex-build-prompt.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "BUILD-02",
+      "title": "Private assessment",
+      "requirement": "member A uploads and revises evidence; assigned reviewer publishes feedback; member B and an unassigned coach cannot read it. Revoking the reviewer stops subsequent downloads, including through an old link after its short expiry.",
+      "source": "02-codex-build-prompt.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "BUILD-03",
+      "title": "Booking and quota concurrency",
+      "requirement": "two simultaneous attempts for the last slot/credit yield one success and one clear, recoverable failure. Staff cancellation restores the correct dated credit without erasing history.",
+      "source": "02-codex-build-prompt.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "BUILD-04",
+      "title": "Pilot conversion",
+      "requirement": "a CAD 3,000 pilot followed by a timely accepted CAD 9,000 continuation yields twelve total service months anchored at the pilot start, correct remaining monthly grants, and no duplicate charge or grant. A non-converter is not charged. Late acceptance cannot activate the standard continuation or bill missed service; it requires an explicitly accepted replacement agreement. Direct annual enrollment and a later renewal use their own correct phases.",
+      "source": "02-codex-build-prompt.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "BUILD-05",
+      "title": "Payment disorder",
+      "requirement": "duplicate and out-of-order payment events are idempotent; stale events cannot overwrite a newer paid state; refunds and early-release decisions produce an auditable result. Reconciliation exposes exceptions.",
+      "source": "02-codex-build-prompt.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "BUILD-06",
+      "title": "AI reliability and budget",
+      "requirement": "role-specific interview feedback links to member responses; insufficient evidence is explicit; malicious uploaded instructions cannot access other workspaces or tools; provider timeout/malformed output restores or settles the correct usage reservation and is shown honestly.",
+      "source": "02-codex-build-prompt.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "BUILD-07",
+      "title": "Content and template versions",
+      "requirement": "a revised rubric does not change a completed assessment. A retired or unverified template is not presented as currently supported. Downloads and sample tests work for the declared version.",
+      "source": "02-codex-build-prompt.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "BUILD-08",
+      "title": "Privacy and deletion",
+      "requirement": "exports include only the requesting member's permitted records; revoked sharing stops access; a deletion request removes the configured active and derived material while accurately reporting any separately retained billing/backup records.",
+      "source": "02-codex-build-prompt.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "BUILD-09",
+      "title": "Commercial truth",
+      "requirement": "demo payments and seed outcomes are excluded from production metrics. Higher tiers cannot be purchased without publication, capacity, and scope. Pricing, quotas, and terms shown at acceptance match the offer version stored with the agreement.",
+      "source": "02-codex-build-prompt.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "BUILD-10",
+      "title": "Usability and recovery",
+      "requirement": "the core journey works at narrow/mobile widths, with keyboard navigation, labels, readable validation, empty/error/loading states, and page-reload recovery. No non-functional button is presented as a completed feature.",
+      "source": "02-codex-build-prompt.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ECO-01",
+      "title": "General learner with no job title, client, contract or coding experience",
+      "requirement": "Register with an exploratory goal, enter the foundation, complete a noncoding exercise and see private progress; no professional-coaching purchase or IT-fit approval is required",
+      "source": "ECOSYSTEM-JOURNEYS.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ECO-02",
+      "title": "IT practitioner and non-IT professional with different goals",
+      "requirement": "Each selects a suitable path, opens accessible material and completes a relevant assignment; IT coding tasks are not imposed on noncoding paths",
+      "source": "ECOSYSTEM-JOURNEYS.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ECO-03",
+      "title": "Member changes interests or returns after a gap",
+      "requirement": "Update goals and resume; preserved evidence remains versioned, next actions reflect eligible content, and empty/error/recovery states stay useful",
+      "source": "ECOSYSTEM-JOURNEYS.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ECO-04",
+      "title": "Member with private work joins a learning circle",
+      "requirement": "Opt into a suitable group, participate within its rules, report a problem and leave; private evidence is not disclosed, revoked access is enforced, and moderation is accountable",
+      "source": "ECOSYSTEM-JOURNEYS.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ECO-05",
+      "title": "Member proposes a reusable workflow or learning resource",
+      "requirement": "Provide attribution/rights, submit for review, publish only after explicit consent and approval, then revoke sharing; unreviewed contributions cannot masquerade as qualified instruction",
+      "source": "ECOSYSTEM-JOURNEYS.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ECO-06",
+      "title": "Learner wants study help rather than an interview or contract",
+      "requirement": "Use source-grounded study/practice, choose a goal-appropriate format and see labelled feedback; career practice remains optional and unconfigured providers remain disabled",
+      "source": "ECOSYSTEM-JOURNEYS.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ECO-07",
+      "title": "Member considers an optional coaching offer",
+      "requirement": "See actual scope/capacity, accept the versioned offer explicitly, receive correct allowances and cancellation/export rights; no automatic upgrade or confusion between background and paid tier",
+      "source": "ECOSYSTEM-JOURNEYS.md",
+      "status": "outstanding"
+    },
+    {
+      "id": "ECO-08",
+      "title": "Operator reviews learner/community outcomes and paid-service outcomes",
+      "requirement": "View separate, defined measures for learning, participation, reviewed contributions and paid conversion; demo data/self-reported outcomes remain labelled and sensitive member data is not exposed",
+      "source": "ECOSYSTEM-JOURNEYS.md",
+      "status": "outstanding"
+    }
+  ],
+  "note": "Original nine roadmap journeys, ten build-prompt journeys (including late continuation/recovery), and eight ecosystem journeys remain separately visible. Overlap is intentional until reviewed decomposition maps every AC; no whole full-MVP journey is claimed complete by this local slice."
+}

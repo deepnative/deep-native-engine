@@ -4,7 +4,7 @@
 
 Read the root [working agreement](../../../AGENTS.md), [current product direction](../PRODUCT-DIRECTION.md), [context index](../context/README.md), [quality gates](../context/QUALITY-GATES.md), and the live issue. Name the actual accountable owner, observable acceptance criteria, dependencies, non-goals, and a test/evidence plan. A Backlog issue or historical build prompt alone does not authorize implementation.
 
-Current scope is planning and repository setup. [GOV-001](https://github.com/deepnative/deep-native-engine/issues/11) tracks the working agreement. QA-001/002/003 remain application testing work. This setup does not close their acceptance criteria.
+Current scope includes the owner-approved [initial local learning slice](../INITIAL-LEARNING-SLICE.md). [GOV-001](https://github.com/deepnative/deep-native-engine/issues/11) tracks the working agreement. QA-001/002/003 now have initial-slice checks; their broader release criteria remain open.
 
 Use `$dne-plan-issue` for incomplete issues. Resolve blocking decisions; distinguish external launch dependencies from work that can proceed with synthetic fixtures. Retain stable source IDs. Do not silently shrink acceptance scope or promise an unavailable expert/provider.
 
@@ -39,7 +39,7 @@ Native role definitions live in `.codex/agents/*.toml`; skills live in `.agents/
 
 Create a `codex/` branch or isolated worktree. Run `make bootstrap` once per checkout; it refuses conflicting hook settings. Establish the baseline with `make verify`. Use `$dne-deliver-issue`, read existing code before editing, and define behavioral acceptance tests before implementation. Reproduce bugs, use deterministic synthetic fixtures, and inspect real failure paths. Validate official APIs and locked dependency versions. Record material choices with the [decision template](../templates/DECISION.md).
 
-Application work must first extend the verification entry point under QA-001/002/003. The current scope check rejects application source and manifests outside the setup allowlist. Adding an exception is not implementation of a test gate; reviewers must verify that real application checks replace the setup restriction.
+Application work uses the shared repository/application gate under QA-001/002/003. New source types need measured coverage and a reviewed scope extension. Reviewers must inspect real behavioral checks and preserve the approved journey inventory.
 
 ## 4. Verify, push, and review
 

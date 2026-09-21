@@ -1,6 +1,6 @@
 # Deep Native Engine: AI learning and participation ecosystem
 
-Decision date: 21 September 2026. The owner broadened the audience from individual contractors to IT practitioners, professionals in other fields, and other people who want to learn and take part in the future of AI. This is the current product direction. Application implementation remains on hold.
+Decision date: 21 September 2026. The owner broadened the audience from individual contractors to IT practitioners, professionals in other fields, and other people who want to learn and take part in the future of AI. This is the current product direction. The owner subsequently authorized the [initial local learning slice](INITIAL-LEARNING-SLICE.md); broader implementation and live launch remain separately scoped.
 
 **Purpose:** help people understand AI, use it in meaningful work and everyday projects, build practical skills, and participate in a community where they can learn with others and contribute what they create.
 
@@ -44,7 +44,7 @@ PLAN-001 and CTP-002 must define and review the foundation/participation access 
 
 Success evidence includes useful exercise/project completion, continued learning, helpful participation, reviewed contributions and accessibility across learner backgrounds. Paid conversion, coaching delivery cost and member-reported career/commercial outcomes are separate measures with explicit denominators. Attendance, generated text or a model forecast does not prove learning, employment or income.
 
-The existing quality contract remains >=99% for every unit metric, >=99% documented E2E journeys, 100% critical journeys and required test passes. The broader scope adds acceptance scenarios; it does not remove difficult old cases or lower thresholds. No application coverage has been measured yet.
+The existing quality contract remains >=99% for every unit metric, >=99% documented E2E journeys, 100% critical journeys and required test passes. The broader scope adds acceptance scenarios; it does not remove difficult old cases or lower thresholds. Application measurements are recorded by the shared gate for the initial slice; full-MVP journeys remain separately outstanding.
 
 ## Precedence and traceability
 
