@@ -4,10 +4,31 @@ import cookieParser from "cookie-parser";
 import { fileURLToPath } from "node:url";
 import { COOKIE, COOKIE_OPTIONS, token, csrf, validCsrf } from "./session.ts";
 import { profile, submission, type Fields } from "./validation.ts";
-import { welcome, dashboard, lesson, errorPage } from "./views.ts";
+import {
+  welcome,
+  dashboard,
+  lesson,
+  readinessPage,
+  errorPage,
+} from "./views.ts";
 import type { Store, Learner } from "./store.ts";
-export function app(store: Store, options: { origin: string; secret: string }) {
+import {
+  adapterReadiness,
+  type AdapterReadiness,
+  type ApplicationMode,
+} from "./adapters.ts";
+export function app(
+  store: Store,
+  options: {
+    origin: string;
+    secret: string;
+    mode?: ApplicationMode;
+    adapters?: AdapterReadiness[];
+  },
+) {
   const app = express();
+  const mode = options.mode ?? "demo";
+  const adapters = options.adapters ?? adapterReadiness({}, mode);
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -67,6 +88,7 @@ export function app(store: Store, options: { origin: string; secret: string }) {
     }
     next();
   });
+  app.get("/readiness", (_req, res) => res.send(readinessPage(mode, adapters)));
   app.get("/", async (req, res) => {
     const session = await store.session(res.locals.token as string);
     if (session.kind === "active") {

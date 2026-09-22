@@ -149,7 +149,7 @@ The current local slice remains valid evidence for local behavior. A separately 
 - Independent member sessions remain isolated; deletion removes the configured dynamic state without deleting shared content.
 - Local and hosted configuration tests reject unsafe database/origin/cookie combinations and never print credentials.
 - Migration, database interruption, rollback and restore scenarios have observable evidence.
-- The existing 13 slice journeys remain in the register and pass on the complete supported browser matrix; the 27 full-MVP requirements remain visible until implemented.
+- The existing learning journeys and the deterministic-adapter readiness journey remain in the register and pass on the complete supported browser matrix; the 27 full-MVP requirements remain visible until implemented.
 - Unit statements, branches, functions and lines remain at least 99% globally and per executable module, including the new loader and unimported source.
 
 ## Alternatives considered

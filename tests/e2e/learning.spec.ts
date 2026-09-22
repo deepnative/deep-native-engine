@@ -352,3 +352,27 @@ test("[L13] lost idle database connections do not terminate the server and saved
     instruction,
   );
 });
+
+test("[L14] integration readiness labels every provider as simulated", async ({
+  page,
+}) => {
+  await page.goto("/readiness");
+  await expect(
+    page.getByRole("heading", { name: "Integration readiness" }),
+  ).toBeVisible();
+  await expect(page.getByText("TEST ENVIRONMENT")).toBeVisible();
+  for (const kind of [
+    "ai",
+    "payment",
+    "storage",
+    "calendar",
+    "email",
+    "auth",
+    "analytics",
+  ])
+    await expect(page.getByText(`${kind} · simulated`)).toBeVisible();
+  await expect(
+    page.getByText("no external side effect occurs", { exact: false }),
+  ).toHaveCount(7);
+  await expect(page.getByText("configured", { exact: false })).toHaveCount(0);
+});

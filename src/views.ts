@@ -1,5 +1,6 @@
 import { BACKGROUNDS, GOALS, LESSON, exercise } from "./content.ts";
 import type { Learner, Exercise } from "./store.ts";
+import type { AdapterReadiness, ApplicationMode } from "./adapters.ts";
 export function escape(value: string) {
   return value.replace(
     /[&<>"']/g,
@@ -10,7 +11,7 @@ export function escape(value: string) {
   );
 }
 export function page(title: string, body: string) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a><header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a><span class="preview-tag">LOCAL LEARNING PREVIEW</span></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><span>Local preview · Use sample information only. No AI provider, payment or formal assessment is connected.</span></footer></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a><header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a><span class="preview-tag">LOCAL LEARNING PREVIEW</span></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><span>Local preview · Use sample information only. No AI provider, payment or formal assessment is connected. <a href="/readiness">Integration readiness</a>.</span></footer></body></html>`;
 }
 export function notice(errors: string[]) {
   return errors.length
@@ -19,6 +20,22 @@ export function notice(errors: string[]) {
 }
 export function hidden(csrf: string) {
   return `<input type="hidden" name="csrf" value="${csrf}">`;
+}
+export function readinessPage(
+  mode: ApplicationMode,
+  adapters: AdapterReadiness[],
+) {
+  return page(
+    "Integration readiness",
+    `<section class="error-page"><p class="eyebrow">${escape(mode.toUpperCase())} ENVIRONMENT</p><h1>Integration readiness</h1><p class="lead">This page reports integration boundaries. Simulated results never mean a message, payment, upload or provider request happened.</p><ul>${adapters
+      .map(
+        (adapter) =>
+          `<li><strong>${escape(adapter.kind)}</strong> · ${escape(adapter.state)}<br><span>${escape(adapter.message)}</span></li>`,
+      )
+      .join(
+        "",
+      )}</ul><a class="button" href="/">Return to the learning preview</a></section>`,
+  );
 }
 export function welcome(csrf: string, error: string[] = []) {
   return page(

@@ -56,6 +56,7 @@ it("applies the transactional migration and surfaces database failures to the ca
   await migrate(p.value);
   expect(p.query.mock.calls[0]![0]).toContain("BEGIN;");
   expect(p.query.mock.calls[0]![0]).toContain("ON DELETE CASCADE");
+  expect(p.query.mock.calls[0]![0]).toContain("adapter_jobs");
   p.query.mockRejectedValueOnce(new Error("offline"));
   await expect(
     store(p.value).save("a", {
