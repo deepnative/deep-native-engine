@@ -10,7 +10,7 @@ All 25 substantive files from `/Users/tomwu/Documents/Codex/2026-09-15/i-x20` we
 
 The [current product direction](../PRODUCT-DIRECTION.md) and revised live issues supersede contractor-only positioning and universal paid-coaching assumptions. The final `outputs/contractor-platform/` package takes precedence over earlier `work/` drafts only for still-applicable historical requirements. In particular, the final roadmap has 25 CTP specifications; an older working blueprint has fewer. Use both final documents' acceptance journeys: the roadmap has nine cross-module journeys and the build prompt adds explicit usability/recovery and late-continuation details.
 
-Read [PRODUCT-DIRECTION.md](../PRODUCT-DIRECTION.md), [ROADMAP.md](ROADMAP.md) and [ECOSYSTEM-JOURNEYS.md](ECOSYSTEM-JOURNEYS.md) first. For original provenance, read:
+Read [PRODUCT-DIRECTION.md](../PRODUCT-DIRECTION.md), [PLAN-001-SCOPE-RECONCILIATION.md](../PLAN-001-SCOPE-RECONCILIATION.md), [ROADMAP.md](ROADMAP.md) and [ECOSYSTEM-JOURNEYS.md](ECOSYSTEM-JOURNEYS.md) first. For original provenance, read:
 
 1. `source-2026-09-15/outputs/contractor-platform/00-START-HERE.md`
 2. `source-2026-09-15/outputs/contractor-platform/01-business-plan.md`
