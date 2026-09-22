@@ -2,6 +2,10 @@ import { beforeEach, it, expect, vi } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.ts";
 import type { Store } from "../../src/store.ts";
+import {
+  disabledAuthorizationStore,
+  type AuthorizationStore,
+} from "../../src/authorization.ts";
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
 const member = {
@@ -55,6 +59,58 @@ it("reports deterministic integration readiness without claiming live effects", 
   expect(res.text).toMatch(/<strong>payment<\/strong> · simulated/);
   expect(res.text).toContain("no external side effect occurs");
   expect(res.text).not.toContain("configured");
+});
+it("enforces private workspace and cohort decisions on direct API requests", async () => {
+  const authorization: AuthorizationStore = {
+    ...disabledAuthorizationStore(),
+    readWorkspace: vi
+      .fn()
+      .mockResolvedValueOnce({ kind: "denied" })
+      .mockResolvedValueOnce({
+        kind: "allowed",
+        via: "member",
+        workspaceId: "owned",
+        purpose: null,
+        records: [],
+      }),
+    readCohort: vi
+      .fn()
+      .mockResolvedValueOnce({ kind: "denied" })
+      .mockResolvedValueOnce({
+        kind: "allowed",
+        cohortId: "group",
+        contentId: "guide",
+        body: "Shared guide",
+      }),
+  };
+  const agent = request.agent(
+    app(db, { origin, secret: "secret", authorization }),
+  );
+  await agent.get("/").set("Host", host).expect(200);
+  await agent
+    .get("/api/workspaces/other/private?purpose=ticket")
+    .set("Host", host)
+    .expect(403, { error: "forbidden" });
+  await agent
+    .get("/api/workspaces/owned/private")
+    .set("Host", host)
+    .expect(200)
+    .expect((response) => expect(response.body.via).toBe("member"));
+  expect(authorization.readWorkspace).toHaveBeenNthCalledWith(
+    1,
+    expect.stringMatching(/^[a-f0-9]{64}$/),
+    "other",
+    "ticket",
+  );
+  await agent
+    .get("/api/cohorts/group/content/other")
+    .set("Host", host)
+    .expect(403, { error: "forbidden" });
+  await agent
+    .get("/api/cohorts/group/content/guide")
+    .set("Host", host)
+    .expect(200)
+    .expect((response) => expect(response.body.body).toBe("Shared guide"));
 });
 it("preserves an unregistered session across tabs and rotates an expired session", async () => {
   const { agent, csrf } = await client();

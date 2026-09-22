@@ -2,6 +2,7 @@ import { Pool } from "pg";
 import { config } from "./config.ts";
 import { migrate, store } from "./store.ts";
 import { app } from "./app.ts";
+import { authorizationStore } from "./authorization.ts";
 export async function start(env: NodeJS.ProcessEnv) {
   const settings = config(env);
   const pool = new Pool({
@@ -15,10 +16,10 @@ export async function start(env: NodeJS.ProcessEnv) {
   );
   try {
     await migrate(pool);
-    const server = app(store(pool), settings).listen(
-      settings.port,
-      "127.0.0.1",
-    );
+    const server = app(store(pool), {
+      ...settings,
+      authorization: authorizationStore(pool),
+    }).listen(settings.port, "127.0.0.1");
     await new Promise<void>((resolve, reject) => {
       server.once("listening", resolve);
       server.once("error", reject);
