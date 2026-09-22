@@ -3,6 +3,7 @@
 Start with [the current product direction](PRODUCT-DIRECTION.md): the AI learning and participation ecosystem for IT, other professionals and general learners. It supersedes contractor-only assumptions in historical source.
 
 - [Initial learning slice](INITIAL-LEARNING-SLICE.md): acceptance, architecture, privacy and outstanding scope.
+- [Deterministic adapters and configuration](CTP-004-DETERMINISTIC-ADAPTERS.md): demo/test/live isolation, synthetic fixtures, honest readiness and durable failed jobs.
 - [ADR-0002: file-first hosted modular monolith](decisions/ADR-0002-file-first-hosted-modular-monolith.md): dynamic hosting, file/database boundaries, content versioning, recovery and implementation acceptance tests.
 - [Context and source precedence](context/README.md): complete historical package, checksums, roadmap, issue IDs, and model labels.
 - [Team workflow](workflows/TEAM-WORKFLOW.md): readiness, model/role selection, delivery, review, and completion.

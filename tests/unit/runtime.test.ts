@@ -27,8 +27,10 @@ vi.mock("../../src/app.ts", () => ({
 }));
 import { start } from "../../src/runtime.ts";
 const env = {
-  DNE_DATABASE_URL: "postgresql://localhost/test",
+  DNE_DATABASE_URL:
+    "postgresql://localhost/dne_test_0123456789abcdef0123456789abcdef",
   DNE_PORT: "4567",
+  DNE_APP_MODE: "test",
 };
 beforeEach(() => {
   vi.clearAllMocks();

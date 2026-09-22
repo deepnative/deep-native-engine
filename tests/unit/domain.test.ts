@@ -10,10 +10,18 @@ describe("local-only configuration", () => {
     expect(c.port).toBe(3000);
     expect(c.origin).toBe("http://127.0.0.1:3000");
     expect(c.secret).toHaveLength(64);
+    expect(c.mode).toBe("demo");
+    expect(c.adapters.every((adapter) => adapter.state === "simulated")).toBe(
+      true,
+    );
+    expect(c.demoImpersonation).toBe(false);
     expect(
-      config({ DNE_DATABASE_URL: "postgres://localhost/dne", DNE_PORT: "4000" })
-        .port,
-    ).toBe(4000);
+      config({
+        DNE_DATABASE_URL: "postgres://localhost/dne_dev",
+        DNE_PORT: "4000",
+        DNE_DEMO_IMPERSONATION: "true",
+      }),
+    ).toMatchObject({ port: 4000, demoImpersonation: true });
   });
   it.each([
     {},
@@ -23,6 +31,11 @@ describe("local-only configuration", () => {
     { DNE_DATABASE_URL: database + "?host=remote.invalid" },
     { DNE_DATABASE_URL: database + "?%68ost=remote.invalid&host=localhost" },
     { DNE_DATABASE_URL: database + "#fragment" },
+    { DNE_DATABASE_URL: database, DNE_APP_MODE: "live" },
+    {
+      DNE_DATABASE_URL: "postgresql://localhost/dne_test_shared",
+      DNE_APP_MODE: "test",
+    },
   ])("rejects missing, malformed or remote/overridden targets %j", (env) =>
     expect(() => config(env)).toThrow(),
   );
@@ -131,7 +144,9 @@ describe("preview tokens and CSRF", () => {
 
 it("normalizes the default HTTP port for origin checks", () => {
   expect(
-    config({ DNE_DATABASE_URL: "postgresql://127.0.0.1/local", DNE_PORT: "80" })
-      .origin,
+    config({
+      DNE_DATABASE_URL: "postgresql://127.0.0.1/dne_dev",
+      DNE_PORT: "80",
+    }).origin,
   ).toBe("http://127.0.0.1");
 });

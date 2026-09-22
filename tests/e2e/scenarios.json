@@ -1,6 +1,6 @@
 {
-  "version": "initial-learning-v1",
-  "scope": "User-approved first local learning preview, not the full B1 member-to-reviewer journey",
+  "version": "initial-learning-v2",
+  "scope": "User-approved local learning preview plus deterministic adapter readiness, not the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -118,6 +118,15 @@
       "steps": "Terminate the real idle database connections; reload then reopen the lesson",
       "expected": "Server remains available; any interrupted request is honest; saved draft recovers",
       "issues": [18, 22, 24, 33],
+      "critical": true
+    },
+    {
+      "id": "L14",
+      "actor": "Operator checking local integration boundaries",
+      "preconditions": "Compiled application running in isolated test mode without provider credentials",
+      "steps": "Open integration readiness and inspect AI, payment, storage, calendar, email, auth and analytics states",
+      "expected": "Every provider is labelled simulated and explicitly reports no external side effect; no live-configured claim appears",
+      "issues": [23],
       "critical": true
     }
   ],

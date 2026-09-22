@@ -45,6 +45,17 @@ it("serves the local welcome, stylesheet and safe security headers", async () =>
   expect(res.headers["x-powered-by"]).toBeUndefined();
   expect(res.headers["cache-control"]).toBe("no-store");
 });
+it("reports deterministic integration readiness without claiming live effects", async () => {
+  const res = await request(app(db, { origin, secret: "s" }))
+    .get("/readiness")
+    .set("Host", host)
+    .expect(200);
+  expect(res.text).toContain("DEMO ENVIRONMENT");
+  expect(res.text).toMatch(/<strong>ai<\/strong> · simulated/);
+  expect(res.text).toMatch(/<strong>payment<\/strong> · simulated/);
+  expect(res.text).toContain("no external side effect occurs");
+  expect(res.text).not.toContain("configured");
+});
 it("preserves an unregistered session across tabs and rotates an expired session", async () => {
   const { agent, csrf } = await client();
   const next = await agent.get("/").set("Host", host);

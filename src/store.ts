@@ -31,12 +31,12 @@ export function hash(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 export async function migrate(pool: Pool) {
-  await pool.query(
-    await readFile(
-      new URL("../migrations/001-learning.sql", import.meta.url),
-      "utf8",
+  const scripts = await Promise.all(
+    ["001-learning.sql", "002-adapter-jobs.sql"].map((name) =>
+      readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
   );
+  await pool.query(scripts.join("\n"));
 }
 export function store(pool: Pool): Store {
   return {
