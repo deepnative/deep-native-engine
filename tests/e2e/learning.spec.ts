@@ -1,6 +1,7 @@
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { testPool } from "../support/database.ts";
+import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
 const pool = testPool();
 const origin = "http://127.0.0.1:4317";
 const instruction =
@@ -32,6 +33,29 @@ async function session(context: BrowserContext) {
     hash,
   ]);
   return { cookie, id: rows.rows[0]?.id as string };
+}
+async function staff(role: StaffRole) {
+  const credential = randomBytes(32).toString("hex");
+  return {
+    token: credential,
+    id: await authorizationStore(pool).provisionStaff(
+      credential,
+      role,
+      new Date(Date.now() + 86_400_000),
+    ),
+  };
+}
+async function useToken(context: BrowserContext, value: string) {
+  await context.clearCookies();
+  await context.addCookies([
+    {
+      name: "dne_preview",
+      value,
+      url: origin,
+      httpOnly: true,
+      sameSite: "Strict",
+    },
+  ]);
 }
 for (const [id, background, goal, title] of [
   ["L01", "explorer", "everyday", "Plan a small community event"],
@@ -256,7 +280,7 @@ test("[L10] expired and forged sessions cannot recover private work and can rest
   await begin(page);
   const old = await session(context);
   await pool.query(
-    "UPDATE learners SET expires_at=CURRENT_TIMESTAMP-interval '1 second' WHERE id=$1",
+    "UPDATE principals SET expires_at=CURRENT_TIMESTAMP-interval '1 second' WHERE id=$1",
     [old.id],
   );
   await page.goto("/learn");
@@ -375,4 +399,221 @@ test("[L14] integration readiness labels every provider as simulated", async ({
     page.getByText("no external side effect occurs", { exact: false }),
   ).toHaveCount(7);
   await expect(page.getByText("configured", { exact: false })).toHaveCount(0);
+});
+
+test("[L15] member identity owns one private workspace and direct API parameters cannot cross it", async ({
+  page,
+  context,
+  browser,
+}) => {
+  await begin(page);
+  await page.getByLabel("Your instruction to AI").fill("Private member A work");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  const a = await session(context);
+  const own = await page.request.get(`/api/workspaces/${a.id}/private`);
+  expect(own.status()).toBe(200);
+  expect((await own.json()).records[0].instruction).toBe(
+    "Private member A work",
+  );
+  const other = await browser.newContext();
+  try {
+    const b = await other.newPage();
+    await begin(b, "professional", "work");
+    const denied = await b.request.get(
+      `/api/workspaces/${a.id}/private?workspace_id=${a.id}`,
+    );
+    expect(denied.status()).toBe(403);
+    expect(await denied.json()).toEqual({ error: "forbidden" });
+  } finally {
+    await other.close();
+  }
+});
+
+test("[L16] staff assignments expire or revoke and purpose-bound support reads are audited", async ({
+  page,
+  context,
+  browser,
+}) => {
+  await begin(page);
+  await fill(page);
+  await page.getByRole("button", { name: "Save draft" }).click();
+  const owner = await session(context),
+    access = authorizationStore(pool),
+    admin = await staff("platform_admin"),
+    coach = await staff("coach"),
+    reviewer = await staff("reviewer"),
+    editor = await staff("editor"),
+    operator = await staff("operator"),
+    future = new Date(Date.now() + 60_000);
+  const coachGrant = await access.grantAssignment(
+    admin.id,
+    coach.id,
+    owner.id,
+    "coach",
+    "coach assigned lesson",
+    future,
+  );
+  const reviewerGrant = await access.grantAssignment(
+    admin.id,
+    reviewer.id,
+    owner.id,
+    "reviewer",
+    "review assigned lesson",
+    future,
+  );
+  const supportGrant = await access.grantSupport(
+    admin.id,
+    operator.id,
+    owner.id,
+    "operator",
+    "resolve browser case",
+    future,
+  );
+  for (const [credential, status] of [
+    [coach.token, 200],
+    [reviewer.token, 200],
+    [editor.token, 403],
+  ] as const) {
+    const staffContext = await browser.newContext();
+    try {
+      await useToken(staffContext, credential);
+      expect(
+        (
+          await staffContext.request.get(`/api/workspaces/${owner.id}/private`)
+        ).status(),
+      ).toBe(status);
+    } finally {
+      await staffContext.close();
+    }
+  }
+  await pool.query(
+    `UPDATE assignment_grants
+     SET starts_at=CURRENT_TIMESTAMP-INTERVAL '2 hours',
+         expires_at=CURRENT_TIMESTAMP-INTERVAL '1 hour'
+     WHERE id=$1`,
+    [reviewerGrant],
+  );
+  const expiredReviewer = await browser.newContext();
+  try {
+    await useToken(expiredReviewer, reviewer.token);
+    expect(
+      (
+        await expiredReviewer.request.get(`/api/workspaces/${owner.id}/private`)
+      ).status(),
+    ).toBe(403);
+  } finally {
+    await expiredReviewer.close();
+  }
+  expect(await access.revokeAssignment(admin.id, coachGrant)).toBe(true);
+  const revokedCoach = await browser.newContext();
+  try {
+    await useToken(revokedCoach, coach.token);
+    expect(
+      (
+        await revokedCoach.request.get(`/api/workspaces/${owner.id}/private`)
+      ).status(),
+    ).toBe(403);
+  } finally {
+    await revokedCoach.close();
+  }
+  const support = await browser.newContext();
+  try {
+    await useToken(support, operator.token);
+    expect(
+      (
+        await support.request.get(`/api/workspaces/${owner.id}/private`)
+      ).status(),
+    ).toBe(403);
+    expect(
+      (
+        await support.request.get(
+          `/api/workspaces/${owner.id}/private?purpose=resolve%20browser%20case`,
+        )
+      ).status(),
+    ).toBe(200);
+    await pool.query(
+      "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE id=$1",
+      [operator.id],
+    );
+    expect(
+      (
+        await support.request.get(
+          `/api/workspaces/${owner.id}/private?purpose=resolve%20browser%20case`,
+        )
+      ).status(),
+    ).toBe(403);
+  } finally {
+    await support.close();
+  }
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*) FROM authorization_audit WHERE support_access_id=$1",
+        [supportGrant],
+      )
+    ).rows[0].count,
+  ).toBe("1");
+});
+
+test("[L17] cohort membership exposes only its shared content and cannot grant staff privilege", async ({
+  page,
+  context,
+  browser,
+}, testInfo) => {
+  await begin(page, "technical", "build");
+  const member = await session(context),
+    cohort = `group-${testInfo.project.name}`;
+  await pool.query("INSERT INTO cohorts(id) VALUES($1)", [cohort]);
+  await pool.query(
+    "INSERT INTO cohort_content(cohort_id,content_id,body) VALUES($1,'guide','Permitted shared guide')",
+    [cohort],
+  );
+  await pool.query(
+    "INSERT INTO cohort_memberships(cohort_id,member_id,can_read_shared_content) VALUES($1,$2,true)",
+    [cohort, member.id],
+  );
+  const shared = await page.request.get(`/api/cohorts/${cohort}/content/guide`);
+  expect(shared.status()).toBe(200);
+  expect((await shared.json()).body).toBe("Permitted shared guide");
+  expect(
+    (await page.request.get(`/api/cohorts/${cohort}/content/private`)).status(),
+  ).toBe(403);
+  await pool.query(
+    `UPDATE cohort_memberships
+     SET expires_at=CURRENT_TIMESTAMP-INTERVAL '1 hour'
+     WHERE cohort_id=$1 AND member_id=$2`,
+    [cohort, member.id],
+  );
+  expect(
+    (await page.request.get(`/api/cohorts/${cohort}/content/guide`)).status(),
+  ).toBe(403);
+  await pool.query(
+    `UPDATE cohort_memberships
+     SET expires_at=NULL,revoked_at=CURRENT_TIMESTAMP
+     WHERE cohort_id=$1 AND member_id=$2`,
+    [cohort, member.id],
+  );
+  expect(
+    (await page.request.get(`/api/cohorts/${cohort}/content/guide`)).status(),
+  ).toBe(403);
+  const outsider = await browser.newContext();
+  try {
+    const other = await outsider.newPage();
+    await begin(other, "explorer", "everyday");
+    expect(
+      (
+        await other.request.get(`/api/cohorts/${cohort}/content/guide`)
+      ).status(),
+    ).toBe(403);
+  } finally {
+    await outsider.close();
+  }
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*) FROM staff_profiles WHERE principal_id=$1",
+        [member.id],
+      )
+    ).rows[0].count,
+  ).toBe("0");
 });

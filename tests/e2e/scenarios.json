@@ -1,6 +1,6 @@
 {
-  "version": "initial-learning-v2",
-  "scope": "User-approved local learning preview plus deterministic adapter readiness, not the full B1 member-to-reviewer journey",
+  "version": "initial-learning-v3",
+  "scope": "User-approved local learning preview plus deterministic adapters and workspace authorization, not the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -127,6 +127,33 @@
       "steps": "Open integration readiness and inspect AI, payment, storage, calendar, email, auth and analytics states",
       "expected": "Every provider is labelled simulated and explicitly reports no external side effect; no live-configured claim appears",
       "issues": [23],
+      "critical": true
+    },
+    {
+      "id": "L15",
+      "actor": "Member attempting direct private-workspace access",
+      "preconditions": "Two synthetic members with separate server-derived sessions and private workspaces",
+      "steps": "Read the owned workspace, then submit another member workspace ID through the direct API",
+      "expected": "Owned private work is returned; the other workspace is denied without revealing its content",
+      "issues": [24],
+      "critical": true
+    },
+    {
+      "id": "L16",
+      "actor": "Assigned staff and purpose-bound support operator",
+      "preconditions": "Synthetic coach, reviewer, editor and operator identities with bounded grants",
+      "steps": "Read assigned work, revoke coach access, attempt editor access, and use exact-purpose support access",
+      "expected": "Active assignments work; revocation and editor denial apply immediately; support needs its exact purpose and produces an audit record",
+      "issues": [24],
+      "critical": true
+    },
+    {
+      "id": "L17",
+      "actor": "Cohort member and outsider",
+      "preconditions": "One explicit cohort membership and one shared content item",
+      "steps": "Read the permitted shared item, request an unpermitted item, and repeat as an outsider",
+      "expected": "Only the exact shared cohort item is visible; membership creates no staff privilege",
+      "issues": [24],
       "critical": true
     }
   ],

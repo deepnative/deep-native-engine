@@ -17,6 +17,10 @@ import {
   type AdapterReadiness,
   type ApplicationMode,
 } from "./adapters.ts";
+import {
+  disabledAuthorizationStore,
+  type AuthorizationStore,
+} from "./authorization.ts";
 export function app(
   store: Store,
   options: {
@@ -24,11 +28,13 @@ export function app(
     secret: string;
     mode?: ApplicationMode;
     adapters?: AdapterReadiness[];
+    authorization?: AuthorizationStore;
   },
 ) {
   const app = express();
   const mode = options.mode ?? "demo";
   const adapters = options.adapters ?? adapterReadiness({}, mode);
+  const authorization = options.authorization ?? disabledAuthorizationStore();
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -89,6 +95,32 @@ export function app(
     next();
   });
   app.get("/readiness", (_req, res) => res.send(readinessPage(mode, adapters)));
+  app.get("/api/workspaces/:workspaceId/private", async (req, res) => {
+    const purpose =
+      typeof req.query.purpose === "string" ? req.query.purpose : undefined;
+    const access = await authorization.readWorkspace(
+      res.locals.token as string,
+      req.params.workspaceId as string,
+      purpose,
+    );
+    if (access.kind === "denied") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    res.json(access);
+  });
+  app.get("/api/cohorts/:cohortId/content/:contentId", async (req, res) => {
+    const access = await authorization.readCohort(
+      res.locals.token as string,
+      req.params.cohortId as string,
+      req.params.contentId as string,
+    );
+    if (access.kind === "denied") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    res.json(access);
+  });
   app.get("/", async (req, res) => {
     const session = await store.session(res.locals.token as string);
     if (session.kind === "active") {
