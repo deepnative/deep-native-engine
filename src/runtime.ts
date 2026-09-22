@@ -3,6 +3,7 @@ import { config } from "./config.ts";
 import { migrate, store } from "./store.ts";
 import { app } from "./app.ts";
 import { authorizationStore } from "./authorization.ts";
+import { evidenceStore, fileObjectStorage } from "./evidence.ts";
 export async function start(env: NodeJS.ProcessEnv) {
   const settings = config(env);
   const pool = new Pool({
@@ -19,6 +20,11 @@ export async function start(env: NodeJS.ProcessEnv) {
     const server = app(store(pool), {
       ...settings,
       authorization: authorizationStore(pool),
+      evidence: evidenceStore(
+        pool,
+        fileObjectStorage(settings.privateStorageRoot),
+        settings.secret,
+      ),
     }).listen(settings.port, "127.0.0.1");
     await new Promise<void>((resolve, reject) => {
       server.once("listening", resolve);

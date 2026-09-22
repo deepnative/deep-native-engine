@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .venv/
 artifacts/
+.dne-private/
 .DS_Store
 .env
 .env.*

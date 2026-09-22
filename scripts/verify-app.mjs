@@ -5,7 +5,10 @@ import {
   writeFileSync,
   readdirSync,
   rmSync,
+  mkdtempSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import {
@@ -16,7 +19,7 @@ import {
 } from "./quality-gates.mjs";
 const root = process.cwd();
 const report = {
-  scope: "initial-learning-v3",
+  scope: "initial-learning-v4",
   startedAt: new Date().toISOString(),
   node: process.version,
   commands: [],
@@ -39,6 +42,7 @@ const git = (...args) => {
 let admin;
 let created = false;
 let name;
+let privateStorageRoot;
 function run(command, args, env = process.env) {
   const start = new Date().toISOString();
   const result = spawnSync(command, args, { stdio: "inherit", env });
@@ -103,6 +107,10 @@ try {
   created = true;
   url.pathname = `/${name}`;
   const env = { ...process.env, DNE_TEST_DATABASE_URL: url.toString() };
+  privateStorageRoot = mkdtempSync(
+    path.join(tmpdir(), "dne-private-evidence-"),
+  );
+  env.DNE_TEST_PRIVATE_STORAGE_ROOT = privateStorageRoot;
   run("npm", ["run", "test:integration"], env);
   report.integrationTests = assertUnitResults(read("integration-results.json"));
   run("npm", ["run", "test:e2e"], env);
@@ -123,6 +131,8 @@ try {
     report.cleanupError = "Test database cleanup failed";
   }
   if (admin) await admin.end();
+  if (privateStorageRoot)
+    rmSync(privateStorageRoot, { recursive: true, force: true });
   report.finishedAt = new Date().toISOString();
   writeFileSync(
     "artifacts/application-verification.json",

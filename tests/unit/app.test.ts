@@ -6,6 +6,11 @@ import {
   disabledAuthorizationStore,
   type AuthorizationStore,
 } from "../../src/authorization.ts";
+import {
+  disabledEvidenceStore,
+  MAX_EVIDENCE_BYTES,
+  type EvidenceStore,
+} from "../../src/evidence.ts";
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
 const member = {
@@ -22,12 +27,33 @@ function storage() {
     remove: vi.fn<Store["remove"]>().mockResolvedValue(undefined),
   };
 }
+function evidenceStorage() {
+  return {
+    ...disabledEvidenceStore(),
+    upload: vi.fn<EvidenceStore["upload"]>().mockResolvedValue({
+      kind: "denied",
+    }),
+    submitForReview: vi
+      .fn<EvidenceStore["submitForReview"]>()
+      .mockResolvedValue(false),
+    issueDownload: vi.fn<EvidenceStore["issueDownload"]>().mockResolvedValue({
+      kind: "denied",
+    }),
+    download: vi.fn<EvidenceStore["download"]>().mockResolvedValue({
+      kind: "denied",
+    }),
+    remove: vi.fn<EvidenceStore["remove"]>().mockResolvedValue(false),
+    removeWorkspace: vi
+      .fn<EvidenceStore["removeWorkspace"]>()
+      .mockResolvedValue(undefined),
+  };
+}
 let db: ReturnType<typeof storage>;
 beforeEach(() => {
   db = storage();
 });
-async function client() {
-  const agent = request.agent(app(db, { origin, secret: "secret" }));
+async function client(evidence?: EvidenceStore) {
+  const agent = request.agent(app(db, { origin, secret: "secret", evidence }));
   const response = await agent.get("/").set("Host", host).expect(200);
   const csrf = response.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   return { agent, csrf };
@@ -215,7 +241,8 @@ it("retains invalid answers without claiming they were saved, then saves valid i
   );
 });
 it("requires confirmation and deletes only the current learner before clearing its cookie", async () => {
-  const { agent, csrf } = await client();
+  const files = evidenceStorage(),
+    { agent, csrf } = await client(files);
   active();
   await agent
     .post("/delete")
@@ -233,9 +260,169 @@ it("requires confirmation and deletes only the current learner before clearing i
     .send({ csrf, confirm: "yes", learner_id: "other" })
     .expect(303);
   expect(db.remove).toHaveBeenCalledWith("owned");
+  expect(files.removeWorkspace).toHaveBeenCalledWith(
+    expect.stringMatching(/^[a-f0-9]{64}$/),
+  );
   expect(String(deleted.headers["set-cookie"])).toContain(
     "Expires=Thu, 01 Jan 1970",
   );
+});
+it("validates evidence upload consent and returns only safe result metadata", async () => {
+  const files = evidenceStorage(),
+    { agent, csrf } = await client(files);
+  files.upload
+    .mockResolvedValueOnce({ kind: "denied" })
+    .mockResolvedValueOnce({ kind: "invalid" })
+    .mockResolvedValueOnce({
+      kind: "created",
+      id: "11111111-1111-4111-8111-111111111111",
+      state: "pending",
+    });
+  const upload = () =>
+    agent
+      .post("/api/evidence")
+      .set("Host", host)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", csrf)
+      .set("Content-Type", "text/plain")
+      .set("X-Evidence-Name", "sample.txt")
+      .set("X-Evidence-Rights", "confirmed")
+      .set("X-Evidence-Scopes", "private-review")
+      .send(Buffer.from("Synthetic evidence"));
+  await upload().expect(403, { error: "forbidden" });
+  await upload().expect(422, { error: "invalid_evidence" });
+  await upload().expect(201, {
+    kind: "created",
+    id: "11111111-1111-4111-8111-111111111111",
+    state: "pending",
+  });
+  expect(files.upload).toHaveBeenLastCalledWith(
+    expect.stringMatching(/^[a-f0-9]{64}$/),
+    expect.objectContaining({
+      name: "sample.txt",
+      mediaType: "text/plain",
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+        learningCircleId: undefined,
+      },
+      data: Buffer.from("Synthetic evidence"),
+    }),
+  );
+  await agent
+    .post("/api/evidence")
+    .set("Host", host)
+    .set("Origin", origin)
+    .set("X-CSRF-Token", csrf)
+    .set("X-Evidence-Scopes", "learning-circle")
+    .set("X-Learning-Circle-Id", "group-a")
+    .expect(403);
+  expect(files.upload).toHaveBeenLastCalledWith(
+    expect.any(String),
+    expect.objectContaining({
+      consent: expect.objectContaining({ learningCircleId: "group-a" }),
+      data: Buffer.alloc(0),
+    }),
+  );
+  await agent
+    .post("/api/evidence")
+    .set("Host", host)
+    .set("Origin", origin)
+    .set("X-CSRF-Token", csrf)
+    .expect(403);
+  await agent
+    .post("/api/evidence")
+    .set("Host", host)
+    .set("Origin", origin)
+    .set("X-CSRF-Token", csrf)
+    .set("X-Evidence-Scopes", "learning-circle")
+    .expect(403);
+  expect(files.upload).toHaveBeenLastCalledWith(
+    expect.any(String),
+    expect.objectContaining({
+      consent: expect.objectContaining({ learningCircleId: "" }),
+    }),
+  );
+});
+
+it("rejects oversized evidence without passing its bytes to storage", async () => {
+  const files = evidenceStorage(),
+    { agent, csrf } = await client(files);
+  await agent
+    .post("/api/evidence")
+    .set("Host", host)
+    .set("Origin", origin)
+    .set("X-CSRF-Token", csrf)
+    .set("Content-Type", "application/pdf")
+    .send(Buffer.alloc(MAX_EVIDENCE_BYTES + 1))
+    .expect(413, { error: "invalid_evidence" });
+  expect(files.upload).not.toHaveBeenCalled();
+});
+
+it("gates review, short-lived download and deletion through evidence decisions", async () => {
+  const files = evidenceStorage(),
+    { agent, csrf } = await client(files),
+    id = "11111111-1111-4111-8111-111111111111",
+    write = (path: string) =>
+      agent
+        .post(path)
+        .set("Host", host)
+        .set("Origin", origin)
+        .set("X-CSRF-Token", csrf);
+  files.submitForReview
+    .mockResolvedValueOnce(false)
+    .mockResolvedValueOnce(true);
+  await write(`/api/evidence/${id}/review`).expect(409, {
+    error: "evidence_not_ready",
+  });
+  await write(`/api/evidence/${id}/review`).expect(204);
+  files.issueDownload
+    .mockResolvedValueOnce({ kind: "denied" })
+    .mockResolvedValueOnce({
+      kind: "issued",
+      capability: "safe-capability",
+      expiresAt: new Date("2030-01-01T00:00:00.000Z"),
+    });
+  await write(`/api/evidence/${id}/download-link`).expect(403, {
+    error: "forbidden",
+  });
+  const link = await write(`/api/evidence/${id}/download-link`).expect(200);
+  expect(link.body).toEqual({
+    href: `/api/evidence/${id}/download?capability=safe-capability`,
+    expiresAt: "2030-01-01T00:00:00.000Z",
+  });
+  files.download
+    .mockResolvedValueOnce({ kind: "denied" })
+    .mockResolvedValueOnce({
+      kind: "allowed",
+      name: "sample.pdf",
+      mediaType: "application/pdf",
+      data: Buffer.from("%PDF-synthetic"),
+    });
+  await agent
+    .get(`/api/evidence/${id}/download?capability=bad`)
+    .set("Host", host)
+    .expect(403, { error: "forbidden" });
+  const download = await agent
+    .get(`/api/evidence/${id}/download?capability=one&capability=two`)
+    .set("Host", host)
+    .expect(200);
+  expect(download.headers["content-disposition"]).toBe(
+    'attachment; filename="sample.pdf"',
+  );
+  expect(download.headers["content-type"]).toContain("application/pdf");
+  expect(download.body).toEqual(Buffer.from("%PDF-synthetic"));
+  expect(files.download).toHaveBeenLastCalledWith(expect.any(String), id, "");
+  files.remove.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  const remove = () =>
+    agent
+      .delete(`/api/evidence/${id}`)
+      .set("Host", host)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", csrf);
+  await remove().expect(403, { error: "forbidden" });
+  await remove().expect(204);
 });
 it("rejects unrecognized Host and cross-origin, missing-origin or invalid-CSRF writes", async () => {
   await request(app(db, { origin, secret: "s" }))

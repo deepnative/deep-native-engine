@@ -1,7 +1,10 @@
-import { beforeAll, afterAll, beforeEach, it, expect } from "vitest";
+import { beforeAll, afterAll, beforeEach, afterEach, it, expect } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import type { Pool } from "pg";
+import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Pool, PoolClient } from "pg";
 import { migrate, store, hash, type Learner } from "../../src/store.ts";
 import {
   deterministicRegistry,
@@ -9,9 +12,15 @@ import {
 } from "../../src/adapters.ts";
 import { enqueueAdapterJob, jobStore, runAdapterJob } from "../../src/jobs.ts";
 import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+import {
+  evidenceStore,
+  fileObjectStorage,
+  type ObjectStorage,
+} from "../../src/evidence.ts";
 import { testPool } from "../support/database.ts";
 const pool = testPool(),
   db = store(pool);
+let privateStorageRoot = "";
 const input = {
   instruction: "Use the provided sample to make a plan.",
   verification: "Compare the plan with the original details.",
@@ -23,6 +32,12 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await pool.query("TRUNCATE adapter_jobs, principals, cohorts CASCADE");
+  privateStorageRoot = await mkdtemp(
+    join(tmpdir(), "dne-evidence-integration-"),
+  );
+});
+afterEach(async () => {
+  await rm(privateStorageRoot, { recursive: true, force: true });
 });
 afterAll(async () => {
   await pool.end();
@@ -36,6 +51,30 @@ async function member() {
     token,
     learner: (session as { kind: "active"; learner: Learner }).learner,
   };
+}
+
+function wrappedPool(wrap: (client: PoolClient) => PoolClient) {
+  return {
+    query: pool.query.bind(pool),
+    connect: async () => wrap(await pool.connect()),
+  } as unknown as Pool;
+}
+
+async function blockingPids(queryFragment: string) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const row = (
+      await pool.query<{ blockers: number[] }>(
+        `SELECT pg_blocking_pids(pid) AS blockers FROM pg_stat_activity
+         WHERE datname=current_database() AND state='active'
+           AND wait_event_type='Lock' AND position($1 in query)>0
+         LIMIT 1`,
+        [queryFragment],
+      )
+    ).rows[0];
+    if (row?.blockers.length) return row.blockers;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return [];
 }
 it("backfills and safely reruns authorization migration over populated learning data", async () => {
   const schema = `migration_${randomBytes(8).toString("hex")}`;
@@ -213,6 +252,450 @@ async function staff(role: StaffRole) {
     ),
   };
 }
+
+it("keeps evidence private through consent, quarantine and review eligibility", async () => {
+  const owner = await member(),
+    outsider = await member(),
+    evidence = evidenceStore(
+      pool,
+      fileObjectStorage(privateStorageRoot),
+      "integration-secret",
+    );
+  await pool.query("INSERT INTO cohorts(id) VALUES('group-a'),('group-b')");
+  await pool.query(
+    `INSERT INTO cohort_memberships(cohort_id,member_id,can_read_shared_content)
+     VALUES('group-a',$1,true)`,
+    [owner.learner.id],
+  );
+  const created = await evidence.upload(owner.token, {
+    name: "sample.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Synthetic private evidence"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: true,
+      learningCircleId: "group-a",
+    },
+  });
+  expect(created).toMatchObject({ kind: "created", state: "pending" });
+  if (created.kind !== "created") throw new Error("evidence not created");
+  const row = (
+    await pool.query(
+      `SELECT original_name,media_type,byte_size,sha256,storage_key,
+              quarantine_state,private_review_allowed,
+              community_publication_allowed,learning_circle_id
+       FROM evidence_objects WHERE id=$1`,
+      [created.id],
+    )
+  ).rows[0];
+  expect(row).toMatchObject({
+    original_name: "sample.txt",
+    media_type: "text/plain",
+    byte_size: 26,
+    quarantine_state: "pending",
+    private_review_allowed: true,
+    community_publication_allowed: true,
+    learning_circle_id: "group-a",
+  });
+  expect(row.sha256).toMatch(/^[a-f0-9]{64}$/);
+  expect(
+    (await stat(join(privateStorageRoot, row.storage_key))).mode & 0o077,
+  ).toBe(0);
+  expect(await evidence.submitForReview(owner.token, created.id)).toBe(false);
+  await expect(
+    evidence.destinationAllowed(created.id, "private-review"),
+  ).resolves.toBe(false);
+  expect(await evidence.transitionQuarantine(created.id, "clean")).toBe(true);
+  expect(await evidence.transitionQuarantine(created.id, "infected")).toBe(
+    false,
+  );
+  expect(await evidence.submitForReview(owner.token, created.id)).toBe(true);
+  await expect(
+    evidence.destinationAllowed(created.id, "private-review"),
+  ).resolves.toBe(true);
+  await expect(
+    evidence.destinationAllowed(created.id, "community-publication"),
+  ).resolves.toBe(true);
+  await expect(
+    evidence.destinationAllowed(created.id, "learning-circle:group-a"),
+  ).resolves.toBe(true);
+  await expect(
+    evidence.destinationAllowed(created.id, "learning-circle:group-b"),
+  ).resolves.toBe(false);
+  await evidence.addDerivative(
+    created.id,
+    "text-extract",
+    Buffer.from("derived synthetic text"),
+  );
+  await expect(
+    evidence.upload(outsider.token, {
+      name: "outside.txt",
+      mediaType: "text/plain",
+      data: Buffer.from("Outsider synthetic evidence"),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: false,
+        communityPublication: false,
+        learningCircleId: "group-a",
+      },
+    }),
+  ).resolves.toEqual({ kind: "denied" });
+  await expect(
+    evidence.upload(owner.token, {
+      name: "unsafe.html",
+      mediaType: "text/html",
+      data: Buffer.from("<script>never run</script>"),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    }),
+  ).resolves.toEqual({ kind: "invalid" });
+  expect(
+    (await pool.query("SELECT count(*) FROM evidence_objects")).rows[0].count,
+  ).toBe("1");
+  expect((await readdir(privateStorageRoot)).length).toBe(2);
+});
+
+it("rechecks authorization and quarantine for every short-lived evidence download", async () => {
+  let now = 1_800_000_000_000;
+  const owner = await member(),
+    circleMember = await member(),
+    outsider = await member(),
+    admin = await staff("platform_admin"),
+    reviewer = await staff("reviewer"),
+    editor = await staff("editor"),
+    access = authorizationStore(pool),
+    evidence = evidenceStore(
+      pool,
+      fileObjectStorage(privateStorageRoot),
+      "integration-secret",
+      () => now,
+    );
+  await pool.query("INSERT INTO cohorts(id) VALUES('group-a')");
+  await pool.query(
+    `INSERT INTO cohort_memberships(cohort_id,member_id,can_read_shared_content)
+     VALUES('group-a',$1,true),('group-a',$2,true)`,
+    [owner.learner.id, circleMember.learner.id],
+  );
+  const created = await evidence.upload(owner.token, {
+    name: "review.pdf",
+    mediaType: "application/pdf",
+    data: Buffer.from("%PDF-synthetic-private"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+      learningCircleId: "group-a",
+    },
+  });
+  if (created.kind !== "created") throw new Error("evidence not created");
+  await evidence.transitionQuarantine(created.id, "clean");
+  const ownerLink = await evidence.issueDownload(owner.token, created.id);
+  if (ownerLink.kind !== "issued") throw new Error("link not issued");
+  await expect(
+    evidence.download(owner.token, created.id, ownerLink.capability),
+  ).resolves.toMatchObject({
+    kind: "allowed",
+    name: "review.pdf",
+    mediaType: "application/pdf",
+  });
+  await expect(
+    evidence.issueDownload(outsider.token, created.id),
+  ).resolves.toEqual({ kind: "denied" });
+  await expect(
+    evidence.issueDownload(editor.token, created.id),
+  ).resolves.toEqual({ kind: "denied" });
+  const reviewerGrant = await access.grantAssignment(
+    admin.id,
+    reviewer.id,
+    owner.learner.id,
+    "reviewer",
+    "review synthetic evidence",
+    new Date(Date.now() + 60_000),
+  );
+  const reviewerLink = await evidence.issueDownload(reviewer.token, created.id);
+  expect(reviewerLink.kind).toBe("issued");
+  if (reviewerLink.kind !== "issued") throw new Error("link not issued");
+  expect(await access.revokeAssignment(admin.id, reviewerGrant)).toBe(true);
+  await expect(
+    evidence.download(reviewer.token, created.id, reviewerLink.capability),
+  ).resolves.toEqual({ kind: "denied" });
+  const circleLink = await evidence.issueDownload(
+    circleMember.token,
+    created.id,
+  );
+  expect(circleLink.kind).toBe("issued");
+  if (circleLink.kind !== "issued") throw new Error("link not issued");
+  await pool.query(
+    "UPDATE cohort_memberships SET revoked_at=CURRENT_TIMESTAMP WHERE cohort_id='group-a' AND member_id=$1",
+    [circleMember.learner.id],
+  );
+  await expect(
+    evidence.download(circleMember.token, created.id, circleLink.capability),
+  ).resolves.toEqual({ kind: "denied" });
+  now += 300_001;
+  await expect(
+    evidence.download(owner.token, created.id, ownerLink.capability),
+  ).resolves.toEqual({ kind: "denied" });
+  await pool.query(
+    "UPDATE evidence_objects SET quarantine_state='infected' WHERE id=$1",
+    [created.id],
+  );
+  await expect(
+    evidence.issueDownload(owner.token, created.id),
+  ).resolves.toEqual({ kind: "denied" });
+});
+
+it("deletes stored evidence, review state and derived objects through explicit hooks", async () => {
+  const owner = await member(),
+    other = await member(),
+    evidence = evidenceStore(
+      pool,
+      fileObjectStorage(privateStorageRoot),
+      "integration-secret",
+    ),
+    upload = async (name: string) => {
+      const created = await evidence.upload(owner.token, {
+        name,
+        mediaType: "text/plain",
+        data: Buffer.from(`Synthetic evidence for ${name}`),
+        consent: {
+          rightsConfirmed: true,
+          privateReview: true,
+          communityPublication: false,
+        },
+      });
+      if (created.kind !== "created") throw new Error("evidence not created");
+      await evidence.transitionQuarantine(created.id, "clean");
+      return created.id;
+    };
+  const first = await upload("first.txt");
+  await evidence.submitForReview(owner.token, first);
+  await evidence.addDerivative(first, "thumbnail", Buffer.from("thumbnail"));
+  await expect(evidence.remove(other.token, first)).resolves.toBe(false);
+  await expect(evidence.remove(owner.token, first)).resolves.toBe(true);
+  expect(
+    (await pool.query("SELECT count(*) FROM evidence_objects")).rows[0].count,
+  ).toBe("0");
+  expect(
+    (await pool.query("SELECT count(*) FROM evidence_review_submissions"))
+      .rows[0].count,
+  ).toBe("0");
+  expect((await readdir(privateStorageRoot)).length).toBe(0);
+  await upload("second.txt");
+  await upload("third.txt");
+  await evidence.removeWorkspace(owner.token);
+  await db.remove(owner.learner.id);
+  expect((await readdir(privateStorageRoot)).length).toBe(0);
+  expect(
+    (await pool.query("SELECT count(*) FROM evidence_objects")).rows[0].count,
+  ).toBe("0");
+});
+
+it("serializes derivative creation with evidence deletion and removes every object", async () => {
+  const owner = await member(),
+    files = fileObjectStorage(privateStorageRoot),
+    setup = evidenceStore(pool, files, "integration-secret"),
+    created = await setup.upload(owner.token, {
+      name: "race.txt",
+      mediaType: "text/plain",
+      data: Buffer.from("Synthetic source"),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    });
+  if (created.kind !== "created") throw new Error("evidence not created");
+  await setup.transitionQuarantine(created.id, "clean");
+
+  let releaseWrite!: () => void,
+    enteredWrite!: () => void,
+    lockerPid = 0;
+  const entered = new Promise<void>((resolve) => (enteredWrite = resolve));
+  const gate = new Promise<void>((resolve) => (releaseWrite = resolve));
+  const blockedFiles: ObjectStorage = {
+    ...files,
+    async put(key, data) {
+      if (data.toString() === "blocked derivative") {
+        enteredWrite();
+        await gate;
+      }
+      await files.put(key, data);
+    },
+  };
+  const tracked = wrappedPool((client) => {
+    const query = client.query.bind(client);
+    return {
+      query: (async (statement: string, values?: unknown[]) => {
+        if (statement.startsWith("BEGIN") && lockerPid === 0) {
+          lockerPid = (
+            await query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+          ).rows[0]!.pid;
+        }
+        return query(statement, values);
+      }) as PoolClient["query"],
+      release: client.release.bind(client),
+    } as PoolClient;
+  });
+  const evidence = evidenceStore(tracked, blockedFiles, "integration-secret");
+  const derivative = evidence.addDerivative(
+    created.id,
+    "thumbnail",
+    Buffer.from("blocked derivative"),
+  );
+  await entered;
+  const removal = evidence.remove(owner.token, created.id);
+  const blockers = await blockingPids(
+    "UPDATE evidence_objects e SET quarantine_state='deleting'",
+  );
+  releaseWrite();
+  expect(blockers).toContain(lockerPid);
+  await derivative;
+  await expect(removal).resolves.toBe(true);
+  expect((await readdir(privateStorageRoot)).length).toBe(0);
+  expect(
+    (await pool.query("SELECT count(*) FROM evidence_objects")).rows[0].count,
+  ).toBe("0");
+});
+
+it("serializes uploads with workspace deletion and rejects later uploads", async () => {
+  const owner = await member(),
+    files = fileObjectStorage(privateStorageRoot);
+  let releaseWrite!: () => void,
+    enteredWrite!: () => void,
+    lockerPid = 0;
+  const entered = new Promise<void>((resolve) => (enteredWrite = resolve));
+  const gate = new Promise<void>((resolve) => (releaseWrite = resolve));
+  const blockedFiles: ObjectStorage = {
+    ...files,
+    async put(key, data) {
+      enteredWrite();
+      await gate;
+      await files.put(key, data);
+    },
+  };
+  const tracked = wrappedPool((client) => {
+    const query = client.query.bind(client);
+    return {
+      query: (async (statement: string, values?: unknown[]) => {
+        if (statement.startsWith("BEGIN") && lockerPid === 0) {
+          lockerPid = (
+            await query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+          ).rows[0]!.pid;
+        }
+        return query(statement, values);
+      }) as PoolClient["query"],
+      release: client.release.bind(client),
+    } as PoolClient;
+  });
+  const evidence = evidenceStore(tracked, blockedFiles, "integration-secret");
+  const upload = evidence.upload(owner.token, {
+    name: "concurrent.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Synthetic concurrent upload"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+  });
+  await entered;
+  const cleanup = evidence.removeWorkspace(owner.token);
+  const blockers = await blockingPids("SELECT w.id FROM workspaces w");
+  releaseWrite();
+  expect(blockers).toContain(lockerPid);
+  await expect(upload).resolves.toMatchObject({ kind: "created" });
+  await cleanup;
+  await expect(
+    evidence.upload(owner.token, {
+      name: "too-late.txt",
+      mediaType: "text/plain",
+      data: Buffer.from("Synthetic late upload"),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    }),
+  ).resolves.toEqual({ kind: "denied" });
+  expect((await readdir(privateStorageRoot)).length).toBe(0);
+  expect(
+    (await pool.query("SELECT count(*) FROM evidence_objects")).rows[0].count,
+  ).toBe("0");
+});
+
+it("rolls back acknowledged inserts and reconciles acknowledged commits", async () => {
+  const owner = await member(),
+    files = fileObjectStorage(privateStorageRoot),
+    uploadInput = {
+      name: "acknowledgement.txt",
+      mediaType: "text/plain",
+      data: Buffer.from("Synthetic acknowledgement evidence"),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    } as const;
+  let insertThrown = false;
+  const insertFailure = wrappedPool((client) => {
+    const query = client.query.bind(client);
+    return {
+      query: (async (statement: string, values?: unknown[]) => {
+        const result = await query(statement, values);
+        if (
+          !insertThrown &&
+          statement.includes("INSERT INTO evidence_objects")
+        ) {
+          insertThrown = true;
+          throw new Error("insert acknowledgement lost");
+        }
+        return result;
+      }) as PoolClient["query"],
+      release: client.release.bind(client),
+    } as PoolClient;
+  });
+  await expect(
+    evidenceStore(insertFailure, files, "integration-secret").upload(
+      owner.token,
+      uploadInput,
+    ),
+  ).rejects.toThrow("insert acknowledgement lost");
+  expect(
+    (await pool.query("SELECT count(*) FROM evidence_objects")).rows[0].count,
+  ).toBe("0");
+  expect((await readdir(privateStorageRoot)).length).toBe(0);
+
+  let commitThrown = false;
+  const commitFailure = wrappedPool((client) => {
+    const query = client.query.bind(client);
+    return {
+      query: (async (statement: string, values?: unknown[]) => {
+        const result = await query(statement, values);
+        if (!commitThrown && statement === "COMMIT") {
+          commitThrown = true;
+          throw new Error("commit acknowledgement lost");
+        }
+        return result;
+      }) as PoolClient["query"],
+      release: client.release.bind(client),
+    } as PoolClient;
+  });
+  await expect(
+    evidenceStore(commitFailure, files, "integration-secret").upload(
+      owner.token,
+      uploadInput,
+    ),
+  ).resolves.toMatchObject({ kind: "created", state: "pending" });
+  expect(
+    (await pool.query("SELECT count(*) FROM evidence_objects")).rows[0].count,
+  ).toBe("1");
+  expect((await readdir(privateStorageRoot)).length).toBe(1);
+});
 
 it("derives private workspace ownership and rejects cross-workspace references", async () => {
   const first = await member(),

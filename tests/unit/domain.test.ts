@@ -1,4 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { config } from "../../src/config.ts";
 import { exercise } from "../../src/content.ts";
 import { profile, submission } from "../../src/validation.ts";
@@ -15,6 +19,7 @@ describe("local-only configuration", () => {
       true,
     );
     expect(c.demoImpersonation).toBe(false);
+    expect(c.privateStorageRoot).toContain(".dne-private");
     expect(
       config({
         DNE_DATABASE_URL: "postgres://localhost/dne_dev",
@@ -22,6 +27,34 @@ describe("local-only configuration", () => {
         DNE_DEMO_IMPERSONATION: "true",
       }),
     ).toMatchObject({ port: 4000, demoImpersonation: true });
+    expect(
+      config({
+        DNE_DATABASE_URL: database,
+        DNE_PRIVATE_STORAGE_ROOT: "/tmp/dne-private-test",
+      }).privateStorageRoot,
+    ).toBe(join(realpathSync("/tmp"), "dne-private-test"));
+  });
+  it("rejects the served public tree from another cwd and through a symlink", () => {
+    const original = process.cwd();
+    const temporary = mkdtempSync(join(tmpdir(), "dne-config-"));
+    const publicRoot = fileURLToPath(new URL("../../public", import.meta.url));
+    const alias = join(temporary, "private-alias");
+    symlinkSync(publicRoot, alias);
+    try {
+      process.chdir(temporary);
+      expect(() =>
+        config({
+          DNE_DATABASE_URL: database,
+          DNE_PRIVATE_STORAGE_ROOT: publicRoot,
+        }),
+      ).toThrow("cannot be served publicly");
+      expect(() =>
+        config({ DNE_DATABASE_URL: database, DNE_PRIVATE_STORAGE_ROOT: alias }),
+      ).toThrow("cannot be served publicly");
+    } finally {
+      process.chdir(original);
+      rmSync(temporary, { recursive: true, force: true });
+    }
   });
   it.each([
     {},
@@ -35,6 +68,12 @@ describe("local-only configuration", () => {
     {
       DNE_DATABASE_URL: "postgresql://localhost/dne_test_shared",
       DNE_APP_MODE: "test",
+    },
+    { DNE_DATABASE_URL: database, DNE_PRIVATE_STORAGE_ROOT: "" },
+    { DNE_DATABASE_URL: database, DNE_PRIVATE_STORAGE_ROOT: "public" },
+    {
+      DNE_DATABASE_URL: database,
+      DNE_PRIVATE_STORAGE_ROOT: "public/evidence",
     },
   ])("rejects missing, malformed or remote/overridden targets %j", (env) =>
     expect(() => config(env)).toThrow(),
