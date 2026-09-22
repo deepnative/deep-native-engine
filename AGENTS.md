@@ -2,7 +2,7 @@
 
 ## Current authorization
 
-Current scope includes the explicitly authorized [first local learning slice](assets/docs/INITIAL-LEARNING-SLICE.md) under issue #1: choose a goal, complete a beginner-friendly lesson/exercise, and save progress with unit/E2E gates. Broader backlog implementation still requires explicit scope. Do not deploy, purchase live services, contact prospects, or enable payments without authorization. The archived build prompt is historical context, not current authorization to start coding.
+Current scope includes the explicitly authorized [first local learning slice](assets/docs/INITIAL-LEARNING-SLICE.md) and the synthetic supporting slices already accepted through their live issues. Each new backlog implementation still requires explicit issue scope; a lifecycle claim coordinates authorized work but does not create that authorization. Do not deploy, purchase live services, contact prospects, or enable payments without authorization. The archived build prompt is historical context, not current authorization to start coding. The adopted process and evidence are recorded in [GOV-001](assets/docs/GOV-001-WORKING-AGREEMENT-ACCEPTANCE.md).
 
 ## Context and precedence
 
