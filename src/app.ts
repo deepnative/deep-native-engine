@@ -21,6 +21,11 @@ import {
   disabledAuthorizationStore,
   type AuthorizationStore,
 } from "./authorization.ts";
+import {
+  disabledEvidenceStore,
+  MAX_EVIDENCE_BYTES,
+  type EvidenceStore,
+} from "./evidence.ts";
 export function app(
   store: Store,
   options: {
@@ -29,12 +34,14 @@ export function app(
     mode?: ApplicationMode;
     adapters?: AdapterReadiness[];
     authorization?: AuthorizationStore;
+    evidence?: EvidenceStore;
   },
 ) {
   const app = express();
   const mode = options.mode ?? "demo";
   const adapters = options.adapters ?? adapterReadiness({}, mode);
   const authorization = options.authorization ?? disabledAuthorizationStore();
+  const evidence = options.evidence ?? disabledEvidenceStore();
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -67,6 +74,10 @@ export function app(
     "/assets",
     express.static(fileURLToPath(new URL("../public", import.meta.url))),
   );
+  app.use(
+    "/api/evidence",
+    express.raw({ type: "*/*", limit: MAX_EVIDENCE_BYTES }),
+  );
   app.use(express.urlencoded({ extended: false, limit: "16kb" }));
   app.use(cookieParser());
   app.use((req, res, next) => {
@@ -74,10 +85,10 @@ export function app(
     res.locals.token = session;
     res.locals.csrf = csrf(session, options.secret);
     if (
-      req.method === "POST" &&
+      ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) &&
       (req.get("origin") !== options.origin ||
         !validCsrf(
-          (req.body as Fields | undefined)?.csrf,
+          req.get("x-csrf-token") ?? (req.body as Fields | undefined)?.csrf,
           session,
           options.secret,
         ))
@@ -120,6 +131,88 @@ export function app(
       return;
     }
     res.json(access);
+  });
+  app.post("/api/evidence", async (req, res) => {
+    const scopes = (req.get("x-evidence-scopes") ?? "")
+      .split(",")
+      .map((scope) => scope.trim())
+      .filter(Boolean);
+    const learningCircle = scopes.includes("learning-circle")
+      ? (req.get("x-learning-circle-id") ?? "")
+      : undefined;
+    const result = await evidence.upload(res.locals.token as string, {
+      name: req.get("x-evidence-name") ?? "",
+      mediaType: (req.get("content-type") ?? "").split(";", 1)[0]!,
+      consent: {
+        rightsConfirmed: req.get("x-evidence-rights") === "confirmed",
+        privateReview: scopes.includes("private-review"),
+        communityPublication: scopes.includes("community-publication"),
+        learningCircleId: learningCircle,
+      },
+      data: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0),
+    });
+    if (result.kind === "denied") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    if (result.kind === "invalid") {
+      res.status(422).json({ error: "invalid_evidence" });
+      return;
+    }
+    res.status(201).json(result);
+  });
+  app.post("/api/evidence/:evidenceId/review", async (req, res) => {
+    if (
+      !(await evidence.submitForReview(
+        res.locals.token as string,
+        req.params.evidenceId as string,
+      ))
+    ) {
+      res.status(409).json({ error: "evidence_not_ready" });
+      return;
+    }
+    res.status(204).end();
+  });
+  app.post("/api/evidence/:evidenceId/download-link", async (req, res) => {
+    const result = await evidence.issueDownload(
+      res.locals.token as string,
+      req.params.evidenceId as string,
+    );
+    if (result.kind === "denied") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    res.json({
+      href: `/api/evidence/${req.params.evidenceId as string}/download?capability=${result.capability}`,
+      expiresAt: result.expiresAt.toISOString(),
+    });
+  });
+  app.get("/api/evidence/:evidenceId/download", async (req, res) => {
+    const result = await evidence.download(
+      res.locals.token as string,
+      req.params.evidenceId as string,
+      typeof req.query.capability === "string" ? req.query.capability : "",
+    );
+    if (result.kind === "denied") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    res
+      .type(result.mediaType)
+      .set("Content-Disposition", `attachment; filename="${result.name}"`)
+      .send(result.data);
+  });
+  app.delete("/api/evidence/:evidenceId", async (req, res) => {
+    if (
+      !(await evidence.remove(
+        res.locals.token as string,
+        req.params.evidenceId as string,
+      ))
+    ) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    res.status(204).end();
   });
   app.get("/", async (req, res) => {
     const session = await store.session(res.locals.token as string);
@@ -212,6 +305,7 @@ export function app(
         );
       return;
     }
+    await evidence.removeWorkspace(res.locals.token as string);
     await store.remove((res.locals.learner as Learner).id);
     res.clearCookie(COOKIE, { httpOnly: true, sameSite: "strict", path: "/" });
     res.redirect(303, "/");
@@ -226,7 +320,11 @@ export function app(
         ),
       ),
   );
-  const failure: ErrorRequestHandler = (_error, _req, res, _next) => {
+  const failure: ErrorRequestHandler = (error, _req, res, _next) => {
+    if ((error as { type?: string }).type === "entity.too.large") {
+      res.status(413).json({ error: "invalid_evidence" });
+      return;
+    }
     res
       .status(503)
       .send(

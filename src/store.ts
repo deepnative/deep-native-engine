@@ -36,6 +36,7 @@ export async function migrate(pool: Pool) {
       "001-learning.sql",
       "002-adapter-jobs.sql",
       "003-workspace-authorization.sql",
+      "004-private-evidence.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

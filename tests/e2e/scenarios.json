@@ -1,6 +1,6 @@
 {
-  "version": "initial-learning-v3",
-  "scope": "User-approved local learning preview plus deterministic adapters and workspace authorization, not the full B1 member-to-reviewer journey",
+  "version": "initial-learning-v4",
+  "scope": "User-approved local learning preview plus deterministic adapters, workspace authorization and private evidence quarantine, not the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -154,6 +154,33 @@
       "steps": "Read the permitted shared item, request an unpermitted item, and repeat as an outsider",
       "expected": "Only the exact shared cohort item is visible; membership creates no staff privilege",
       "issues": [24],
+      "critical": true
+    },
+    {
+      "id": "L18",
+      "actor": "Member submitting private synthetic evidence",
+      "preconditions": "Active member session and isolated private object storage",
+      "steps": "Reject an unsafe type, upload consented evidence, attempt review while quarantined, mark clean, submit and download through a short-lived link; repeat the link as another member",
+      "expected": "Unsafe and quarantined objects cannot reach review; the clean owner download works; another member is denied",
+      "issues": [25],
+      "critical": true
+    },
+    {
+      "id": "L19",
+      "actor": "Assigned reviewer and unassigned editor",
+      "preconditions": "Clean private-review evidence and a bounded reviewer grant",
+      "steps": "Verify destination scopes, issue a reviewer link, revoke the assignment, replay the link, and attempt access as an editor",
+      "expected": "Only explicit private-review consent applies; revocation invalidates the still-unexpired link; editor access is denied",
+      "issues": [24, 25],
+      "critical": true
+    },
+    {
+      "id": "L20",
+      "actor": "Member sharing with one learning circle",
+      "preconditions": "Explicit circle-only consent, active membership, clean evidence and a derived private object",
+      "steps": "Issue a circle-member download, revoke membership, replay the link, then delete as the owner",
+      "expected": "Only current circle membership works; revocation is immediate; metadata, source bytes and derived data are deleted",
+      "issues": [25],
       "critical": true
     }
   ],

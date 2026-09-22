@@ -2,6 +2,8 @@ import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import { createHash, randomBytes } from "node:crypto";
 import { testPool } from "../support/database.ts";
 import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
+import { readdir } from "node:fs/promises";
 const pool = testPool();
 const origin = "http://127.0.0.1:4317";
 const instruction =
@@ -56,6 +58,35 @@ async function useToken(context: BrowserContext, value: string) {
       sameSite: "Strict",
     },
   ]);
+}
+async function csrfToken(page: Page) {
+  return page.locator('input[name="csrf"]').first().inputValue();
+}
+async function uploadEvidence(
+  page: Page,
+  csrf: string,
+  options: {
+    name?: string;
+    type?: string;
+    scopes?: string;
+    circle?: string;
+    rights?: boolean;
+    data?: Buffer;
+  } = {},
+) {
+  const headers: Record<string, string> = {
+    Origin: origin,
+    "X-CSRF-Token": csrf,
+    "Content-Type": options.type ?? "text/plain",
+    "X-Evidence-Name": options.name ?? "sample.txt",
+    "X-Evidence-Rights": options.rights === false ? "missing" : "confirmed",
+    "X-Evidence-Scopes": options.scopes ?? "private-review",
+  };
+  if (options.circle) headers["X-Learning-Circle-Id"] = options.circle;
+  return page.request.post("/api/evidence", {
+    headers,
+    data: options.data ?? Buffer.from("Synthetic private evidence"),
+  });
 }
 for (const [id, background, goal, title] of [
   ["L01", "explorer", "everyday", "Plan a small community event"],
@@ -616,4 +647,235 @@ test("[L17] cohort membership exposes only its shared content and cannot grant s
       )
     ).rows[0].count,
   ).toBe("0");
+});
+
+test("[L18] explicit consent, quarantine and fresh authorization protect private evidence", async ({
+  page,
+  context,
+  browser,
+}) => {
+  await begin(page);
+  const csrf = await csrfToken(page);
+  expect(
+    (
+      await uploadEvidence(page, csrf, {
+        name: "unsafe.html",
+        type: "text/html",
+        data: Buffer.from("<script>never run</script>"),
+      })
+    ).status(),
+  ).toBe(422);
+  const uploaded = await uploadEvidence(page, csrf);
+  expect(uploaded.status()).toBe(201);
+  const { id } = await uploaded.json();
+  expect(
+    (
+      await page.request.post(`/api/evidence/${id}/review`, {
+        headers: { Origin: origin, "X-CSRF-Token": csrf },
+      })
+    ).status(),
+  ).toBe(409);
+  const storageRoot = process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!;
+  const evidence = evidenceStore(
+    pool,
+    fileObjectStorage(storageRoot),
+    "test-only-scanner-secret",
+  );
+  expect(await evidence.transitionQuarantine(id, "clean")).toBe(true);
+  expect(
+    (
+      await page.request.post(`/api/evidence/${id}/review`, {
+        headers: { Origin: origin, "X-CSRF-Token": csrf },
+      })
+    ).status(),
+  ).toBe(204);
+  const linkResponse = await page.request.post(
+    `/api/evidence/${id}/download-link`,
+    { headers: { Origin: origin, "X-CSRF-Token": csrf } },
+  );
+  expect(linkResponse.status()).toBe(200);
+  const link = (await linkResponse.json()).href as string;
+  const download = await page.request.get(link);
+  expect(download.status()).toBe(200);
+  expect(await download.body()).toEqual(
+    Buffer.from("Synthetic private evidence"),
+  );
+  const outsider = await browser.newContext();
+  try {
+    const other = await outsider.newPage();
+    await begin(other, "professional", "work");
+    expect((await other.request.get(link)).status()).toBe(403);
+  } finally {
+    await outsider.close();
+  }
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*) FROM evidence_review_submissions WHERE evidence_id=$1",
+        [id],
+      )
+    ).rows[0].count,
+  ).toBe("1");
+  expect((await session(context)).id).toBeTruthy();
+});
+
+test("[L19] reviewer downloads stop immediately after grant revocation and scopes stay separate", async ({
+  page,
+  context,
+  browser,
+}) => {
+  await begin(page, "professional", "work");
+  const csrf = await csrfToken(page),
+    uploaded = await uploadEvidence(page, csrf, {
+      name: "review.pdf",
+      type: "application/pdf",
+      scopes: "private-review",
+      data: Buffer.from("%PDF-synthetic-review"),
+    }),
+    { id } = await uploaded.json(),
+    owner = await session(context),
+    access = authorizationStore(pool),
+    evidence = evidenceStore(
+      pool,
+      fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!),
+      "test-only-scanner-secret",
+    ),
+    admin = await staff("platform_admin"),
+    reviewer = await staff("reviewer"),
+    editor = await staff("editor");
+  expect(uploaded.status()).toBe(201);
+  await evidence.transitionQuarantine(id, "clean");
+  await expect(evidence.destinationAllowed(id, "private-review")).resolves.toBe(
+    true,
+  );
+  await expect(
+    evidence.destinationAllowed(id, "community-publication"),
+  ).resolves.toBe(false);
+  await expect(
+    evidence.destinationAllowed(id, "learning-circle:group-a"),
+  ).resolves.toBe(false);
+  const grant = await access.grantAssignment(
+    admin.id,
+    reviewer.id,
+    owner.id,
+    "reviewer",
+    "review browser evidence",
+    new Date(Date.now() + 60_000),
+  );
+  const reviewerPage = await browser.newPage();
+  try {
+    await useToken(reviewerPage.context(), reviewer.token);
+    await reviewerPage.goto("/");
+    const reviewerFormCsrf = await csrfToken(reviewerPage);
+    const issued = await reviewerPage.request.post(
+      `/api/evidence/${id}/download-link`,
+      { headers: { Origin: origin, "X-CSRF-Token": reviewerFormCsrf } },
+    );
+    expect(issued.status()).toBe(200);
+    const link = (await issued.json()).href as string;
+    expect(await access.revokeAssignment(admin.id, grant)).toBe(true);
+    expect((await reviewerPage.request.get(link)).status()).toBe(403);
+  } finally {
+    await reviewerPage.context().close();
+  }
+  const editorPage = await browser.newPage();
+  try {
+    await useToken(editorPage.context(), editor.token);
+    await editorPage.goto("/");
+    expect(
+      (
+        await editorPage.request.post(`/api/evidence/${id}/download-link`, {
+          headers: {
+            Origin: origin,
+            "X-CSRF-Token": await csrfToken(editorPage),
+          },
+        })
+      ).status(),
+    ).toBe(403);
+  } finally {
+    await editorPage.context().close();
+  }
+});
+
+test("[L20] circle sharing and deletion remove evidence and derived private data", async ({
+  page,
+  context,
+  browser,
+}, testInfo) => {
+  await begin(page, "technical", "build");
+  const owner = await session(context),
+    csrf = await csrfToken(page),
+    circle = `evidence-${testInfo.project.name}`;
+  await pool.query("INSERT INTO cohorts(id) VALUES($1)", [circle]);
+  await pool.query(
+    `INSERT INTO cohort_memberships(cohort_id,member_id,can_read_shared_content)
+     VALUES($1,$2,true)`,
+    [circle, owner.id],
+  );
+  const uploaded = await uploadEvidence(page, csrf, {
+      scopes: "learning-circle",
+      circle,
+    }),
+    { id } = await uploaded.json(),
+    evidence = evidenceStore(
+      pool,
+      fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!),
+      "test-only-scanner-secret",
+    );
+  expect(uploaded.status()).toBe(201);
+  await evidence.transitionQuarantine(id, "clean");
+  await evidence.addDerivative(id, "thumbnail", Buffer.from("thumbnail"));
+  const privateKeys = (
+    await pool.query(
+      `SELECT storage_key FROM evidence_objects WHERE id=$1
+       UNION ALL
+       SELECT storage_key FROM evidence_derivatives WHERE evidence_id=$1`,
+      [id],
+    )
+  ).rows.map((row) => row.storage_key as string);
+  const circleContext = await browser.newContext();
+  try {
+    const circlePage = await circleContext.newPage();
+    await begin(circlePage, "explorer", "everyday");
+    const circleMember = await session(circleContext);
+    await pool.query(
+      `INSERT INTO cohort_memberships(cohort_id,member_id,can_read_shared_content)
+       VALUES($1,$2,true)`,
+      [circle, circleMember.id],
+    );
+    const issued = await circlePage.request.post(
+      `/api/evidence/${id}/download-link`,
+      {
+        headers: {
+          Origin: origin,
+          "X-CSRF-Token": await csrfToken(circlePage),
+        },
+      },
+    );
+    expect(issued.status()).toBe(200);
+    const link = (await issued.json()).href as string;
+    await pool.query(
+      "UPDATE cohort_memberships SET revoked_at=CURRENT_TIMESTAMP WHERE cohort_id=$1 AND member_id=$2",
+      [circle, circleMember.id],
+    );
+    expect((await circlePage.request.get(link)).status()).toBe(403);
+  } finally {
+    await circleContext.close();
+  }
+  expect(
+    (
+      await page.request.delete(`/api/evidence/${id}`, {
+        headers: { Origin: origin, "X-CSRF-Token": csrf },
+      })
+    ).status(),
+  ).toBe(204);
+  expect(
+    (
+      await pool.query("SELECT count(*) FROM evidence_objects WHERE id=$1", [
+        id,
+      ])
+    ).rows[0].count,
+  ).toBe("0");
+  const remaining = await readdir(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!);
+  for (const key of privateKeys) expect(remaining).not.toContain(key);
 });
