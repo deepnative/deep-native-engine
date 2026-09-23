@@ -41,9 +41,16 @@ try {
     probe,
     'export function untestedGuard(value: boolean) { return value ? "allowed" : "denied"; }\n',
   );
+  // The full unit suite runs before this probe. A stable target keeps unrelated
+  // unit failures from suppressing the coverage report we inspect here.
   let result = spawnSync(
     process.execPath,
-    [path.join(root, "node_modules/vitest/vitest.mjs"), "run", "--coverage"],
+    [
+      path.join(root, "node_modules/vitest/vitest.mjs"),
+      "run",
+      "tests/unit/domain.test.ts",
+      "--coverage",
+    ],
     { cwd: sandbox, encoding: "utf8" },
   );
   writeFileSync(
