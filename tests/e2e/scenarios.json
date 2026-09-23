@@ -1,5 +1,5 @@
 {
-  "version": "initial-learning-v12",
+  "version": "initial-learning-v13",
   "fullMvpVersion": "full-mvp-v1",
   "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices and read-only access/coaching hypotheses; not live commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
@@ -44,9 +44,9 @@
       "id": "L05",
       "actor": "Learner submitting incomplete work",
       "preconditions": "Active session without a saved exercise",
-      "steps": "Submit a short answer without attestation, then reopen lesson",
-      "expected": "Input and errors visible; no false saved notice or database row",
-      "issues": [28, 33],
+      "steps": "Submit one short answer, follow its keyboard-accessible error link, correct it, complete and reload",
+      "expected": "Only the affected field is marked invalid and described; its answer is retained, the summary link focuses it, no invalid write occurs, and corrected completion survives reload",
+      "issues": [28, 33, 43],
       "critical": true
     },
     {

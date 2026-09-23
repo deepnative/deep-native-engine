@@ -582,6 +582,10 @@ it("retains invalid answers without claiming they were saved, then saves valid i
     .send({ csrf, intent: "complete", instruction: "short" })
     .expect(422);
   expect(invalid.text).toContain("short");
+  expect(invalid.text).toContain('href="#instruction"');
+  expect(invalid.text).toContain('href="#verification"');
+  expect(invalid.text).toContain('href="#checked"');
+  expect(invalid.text).toContain("<title>Error in your exercise");
   expect(invalid.text).not.toContain("Your draft is saved");
   expect(db.save).not.toHaveBeenCalled();
   await agent

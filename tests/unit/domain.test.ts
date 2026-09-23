@@ -183,7 +183,17 @@ describe("learner inputs", () => {
       complete: false,
       errors: [],
     });
-    expect(submission({ intent: "complete" }).errors).toHaveLength(2);
+    expect(submission({ intent: "complete" }).errors).toHaveLength(3);
+    expect(submission({ intent: "complete", checked: "yes" }).errors).toEqual([
+      {
+        field: "instruction",
+        message: expect.stringContaining("Your instruction to AI"),
+      },
+      {
+        field: "verification",
+        message: expect.stringContaining("How will you check the result?"),
+      },
+    ]);
     expect(
       submission({
         intent: "complete",
@@ -215,7 +225,48 @@ describe("learner inputs", () => {
         verification: "short",
         checked: "yes",
       }).errors,
-    ).toHaveLength(1);
+    ).toEqual([
+      {
+        field: "verification",
+        message: expect.stringContaining("at least 20 characters"),
+      },
+    ]);
+    expect(
+      submission({
+        intent: "complete",
+        instruction: "a".repeat(19) + " ",
+        verification: "b".repeat(20),
+        checked: "yes",
+      }).errors,
+    ).toEqual([
+      {
+        field: "instruction",
+        message: expect.stringContaining("at least 20 characters"),
+      },
+    ]);
+    expect(
+      submission({
+        intent: "complete",
+        instruction: "a".repeat(20),
+        verification: "b".repeat(20),
+      }).errors,
+    ).toEqual([
+      {
+        field: "checked",
+        message: expect.stringContaining("Confirm"),
+      },
+    ]);
+    expect(submission({ intent: "other" }).errors).toEqual([
+      { field: null, message: expect.stringContaining("Choose Save draft") },
+    ]);
+    expect(
+      submission({ intent: "draft", instruction: "a".repeat(2001) }).errors,
+    ).toEqual([
+      {
+        field: "instruction",
+        message: expect.stringContaining("2,000 characters"),
+      },
+    ]);
     expect(
       submission({
         intent: "complete",

@@ -343,10 +343,35 @@ test("[L05] invalid completion keeps input but does not claim it was saved", asy
   context,
 }) => {
   await begin(page);
-  await page.getByLabel("Your instruction to AI").fill("short");
+  await page.getByLabel("Your instruction to AI").fill(instruction);
+  await page.getByLabel("How will you check the result?").fill("Check notes");
+  await page.getByLabel("I checked the context").check();
   await page.getByRole("button", { name: "Complete exercise" }).click();
-  await expect(page.getByRole("alert")).toContainText("at least 20 characters");
-  await expect(page.getByLabel("Your instruction to AI")).toHaveValue("short");
+  await expect(page).toHaveTitle(/Error in your exercise/);
+  await expect(page.getByRole("alert")).toContainText(
+    "How will you check the result?",
+  );
+  await expect(page.getByRole("alert")).not.toContainText(
+    "Your instruction to AI",
+  );
+  const check = page.getByLabel("How will you check the result?");
+  await expect(check).toHaveValue("Check notes");
+  await expect(check).toHaveAttribute("aria-invalid", "true");
+  await expect(check).toHaveAttribute(
+    "aria-describedby",
+    "verification-help verification-error",
+  );
+  await expect(page.getByLabel("Your instruction to AI")).not.toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
+  await page.getByRole("link", { name: "Your learning path" }).focus();
+  await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("link", { name: /How will you check the result\?/ }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(check).toBeFocused();
   await expect(
     page.getByText("Your draft is saved", { exact: false }),
   ).toHaveCount(0);
@@ -358,8 +383,15 @@ test("[L05] invalid completion keeps input but does not claim it was saved", asy
       ])
     ).rows[0].count,
   ).toBe("0");
+  await check.fill(verification);
+  await page.getByLabel("I checked the context").check();
+  await page.getByRole("button", { name: "Complete exercise" }).click();
+  await expect(page).not.toHaveTitle(/Error in your exercise/);
+  await expect(page.getByText("Exercise completed")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Exercise completed")).toBeVisible();
   await page.goto("/lesson");
-  await expect(page.getByLabel("Your instruction to AI")).toHaveValue("");
+  await expect(page.getByText(instruction)).toBeVisible();
 });
 test("[L06] independent sessions cannot select another learner to read or overwrite", async ({
   page,

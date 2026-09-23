@@ -4,7 +4,7 @@ Owner: Tom Wu. Date: 21 September 2026. Claim: `initial-learning-20260921`. Pare
 
 ## Acceptance and evidence map
 
-The executable register is [initial-learning-v12](../../tests/e2e/scenarios.json). Each scenario defines actor, preconditions, steps, expected result, issue links and criticality. Thirty-seven scenarios run against the real server, PostgreSQL and disposable private object storage on desktop Chromium and mobile Chromium emulation; each must pass on both to count. The newest journeys check private, consented sample proposals, private time-fitting starter plans, choices from published synthetic assignments, and member-owned goal milestones with local-only reminders. No external AI, payment, identity, storage, scanner or other provider is used.
+The executable register is [initial-learning-v13](../../tests/e2e/scenarios.json). Each scenario defines actor, preconditions, steps, expected result, issue links and criticality. Thirty-seven scenarios run against the real server, PostgreSQL and disposable private object storage on desktop Chromium and mobile Chromium emulation; each must pass on both to count. The newest journeys check private, consented sample proposals, private time-fitting starter plans, choices from published synthetic assignments, member-owned goal milestones with local-only reminders, and accessible exercise-error recovery. No external AI, payment, identity, storage, scanner or other provider is used.
 
 | AC | Browser scenario | Observable result |
 | --- | --- | --- |
@@ -12,7 +12,7 @@ The executable register is [initial-learning-v12](../../tests/e2e/scenarios.json
 | Non-IT professionals have a suitable path | L02 | Choose work, practise with sample meeting notes, complete and reload |
 | IT learners have a suitable path | L03 | Choose building, review a sample sign-up flow, complete and reload |
 | Unfinished practice persists | L04 | Draft survives reload and return; completion stays zero |
-| Invalid completion is honest | L05 | Input retained, errors shown, no saved/completed claim and no database write |
+| Invalid completion is honest | L05 | Field-specific linked errors, keyboard focus, retained input, no invalid database write and corrected completion after reload |
 | Progress is private to its browser session | L06 | Separate sessions and injected learner IDs cannot read or overwrite each other's work |
 | Cross-origin writes are rejected | L07 | Wrong/null Origin and invalid/missing CSRF cannot save or delete |
 | Completion is versioned and idempotent | L08 | Duplicate completion and late drafts preserve the completed row and timestamp |
