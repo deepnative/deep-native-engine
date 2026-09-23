@@ -12,7 +12,9 @@ import {
   proposalListPage,
   proposalPreviewPage,
   moderationPage,
+  milestonesPage,
 } from "../../src/views.ts";
+import type { Milestone } from "../../src/store.ts";
 import type { ExpertRecord } from "../../src/track-readiness.ts";
 import type { Proposal } from "../../src/proposals.ts";
 const learner = {
@@ -25,6 +27,61 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("renders private goals, unsent reminders and escaped editable milestone notes", () => {
+  expect(milestonesPage(learner, [], "token")).toContain("No milestones yet");
+  expect(milestonesPage(learner, [], "token")).toContain("Not set");
+  const item: Milestone = {
+    id: "a4ff1471-0226-4d5b-8677-99c0a94cdf40",
+    goalTitle: "Learn <AI>",
+    milestoneTitle: "Test invented answers",
+    evidenceNote: "<script>private</script>",
+    nextAction: "Compare sources",
+    reminderDate: "2028-02-29",
+    reminderTime: "14:30",
+    reminderTimezone: "America/Toronto",
+    selfReportedComplete: true,
+    version: 2,
+    createdAt: new Date("2026-09-23"),
+    updatedAt: new Date("2026-09-23"),
+  };
+  const html = milestonesPage(
+    { ...learner, timezone: "America/Toronto" },
+    [item],
+    "token",
+    ["Fix <note>"],
+    { ...item, nextAction: "Try <again>" },
+    item.id,
+  );
+  expect(html).toContain("Fix &lt;note&gt;");
+  expect(html).toContain("Learn &lt;AI&gt;");
+  expect(html).toContain("&lt;script&gt;private&lt;/script&gt;");
+  expect(html).not.toContain("<script>private</script>");
+  expect(html).toContain("Try &lt;again&gt;");
+  expect(html).toContain("complete · self-reported");
+  expect(html).toContain("shown here only");
+  expect(html).toContain('name="version" value="2"');
+  expect(html).toContain('href="/learn"');
+  const planned = milestonesPage(
+    learner,
+    [
+      {
+        ...item,
+        evidenceNote: "",
+        reminderDate: null,
+        reminderTime: null,
+        reminderTimezone: null,
+        selfReportedComplete: false,
+      },
+    ],
+    "token",
+  );
+  expect(planned).toContain("planned or in progress");
+  expect(planned).toContain("Evidence note: None yet");
+  expect(planned).not.toContain("Local reminder: ");
+  expect(
+    milestonesPage(learner, [item], "token", [], undefined, item.id),
+  ).toContain("Edit this milestone");
+});
 it("escapes private proposal text and never renders a publish action", () => {
   const item: Proposal = {
     id: "test-id",

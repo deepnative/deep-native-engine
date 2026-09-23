@@ -182,6 +182,10 @@ function storage() {
     chooseAssignment: vi
       .fn<Store["chooseAssignment"]>()
       .mockResolvedValue(false),
+    milestones: vi.fn<Store["milestones"]>().mockResolvedValue([]),
+    createMilestone: vi.fn<Store["createMilestone"]>().mockResolvedValue(null),
+    updateMilestone: vi.fn<Store["updateMilestone"]>().mockResolvedValue(false),
+    deleteMilestone: vi.fn<Store["deleteMilestone"]>().mockResolvedValue(false),
     save: vi.fn<Store["save"]>().mockResolvedValue(undefined),
     remove: vi.fn<Store["remove"]>().mockResolvedValue(undefined),
   };
@@ -903,4 +907,101 @@ it("selects only an eligible published assignment for the active member and reje
   expect(db.chooseAssignment).toHaveBeenLastCalledWith(member.id, item.id, 1);
   catalog.search.mockResolvedValue([{ ...item, state: "retired" }]);
   await post({}).expect(409);
+});
+it("keeps private milestones local, validates edits and refuses stale or foreign writes", async () => {
+  const { agent, csrf } = await client();
+  await agent.get("/milestones").set("Host", host).expect(303);
+  db.session.mockResolvedValue({
+    kind: "active",
+    learner: { ...member, timezone: "America/Toronto" },
+  });
+  const empty = await agent.get("/milestones").set("Host", host).expect(200);
+  expect(empty.text).toContain("No milestones yet");
+  const id = "a4ff1471-0226-4d5b-8677-99c0a94cdf40";
+  const input = {
+    goal_title: "Understand AI for daily decisions",
+    milestone_title: "Compare invented answers",
+    evidence_note: "I checked the original sample and found a gap.",
+    next_action: "Ask one clearer question",
+    reminder_date: "2028-02-29",
+    reminder_time: "14:30",
+    sample_only: "yes",
+  };
+  const post = (path: string, values: Record<string, string>) =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...values });
+  await post("/milestones", { ...input, sample_only: "" }).expect(422);
+  expect(db.createMilestone).not.toHaveBeenCalled();
+  db.createMilestone.mockResolvedValueOnce(null).mockResolvedValueOnce(id);
+  await post("/milestones", input).expect(409);
+  await post("/milestones", input).expect(303);
+  expect(db.createMilestone).toHaveBeenLastCalledWith(
+    member.id,
+    expect.objectContaining({ reminderTimezone: "America/Toronto" }),
+  );
+  const saved = {
+    id,
+    goalTitle: "Understand <AI> for daily decisions",
+    milestoneTitle: "Compare invented answers",
+    evidenceNote: "I checked the original sample and found a gap.",
+    nextAction: "Ask one clearer question",
+    reminderDate: "2028-02-29",
+    reminderTime: "14:30",
+    reminderTimezone: "America/Toronto",
+    selfReportedComplete: false,
+    version: 1,
+    createdAt: new Date("2026-09-23"),
+    updatedAt: new Date("2026-09-23"),
+  };
+  db.milestones.mockResolvedValue([saved]);
+  const list = await agent.get("/milestones").set("Host", host).expect(200);
+  expect(list.text).toContain("Understand &lt;AI&gt;");
+  expect(list.text).not.toContain("Understand <AI>");
+  expect(list.text).toContain("shown here only");
+  await post("/milestones/not-an-id/update", { ...input, version: "1" }).expect(
+    409,
+  );
+  await post(`/milestones/${id}/update`, { ...input, version: "0" }).expect(
+    409,
+  );
+  await post(`/milestones/${id}/update`, {
+    ...input,
+    version: "1",
+    next_action: "",
+  }).expect(422);
+  db.updateMilestone.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  await post(`/milestones/${id}/update`, { ...input, version: "1" }).expect(
+    409,
+  );
+  await post(`/milestones/${id}/update`, {
+    ...input,
+    version: "1",
+    complete: "yes",
+  }).expect(303);
+  expect(db.updateMilestone).toHaveBeenLastCalledWith(
+    member.id,
+    id,
+    1,
+    expect.objectContaining({ selfReportedComplete: true }),
+  );
+  await post(`/milestones/${id}/delete`, { version: "2" }).expect(409);
+  await post(`/milestones/${id}/delete`, {
+    version: "bad",
+    confirm: "yes",
+  }).expect(409);
+  db.deleteMilestone.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  await post(`/milestones/${id}/delete`, {
+    version: "2",
+    confirm: "yes",
+  }).expect(409);
+  await post(`/milestones/${id}/delete`, {
+    version: "2",
+    confirm: "yes",
+  }).expect(303);
+  expect(db.deleteMilestone).toHaveBeenLastCalledWith(member.id, id, 2);
+  await post("/milestones", { ...input, csrf: "invalid" }).expect(403);
 });

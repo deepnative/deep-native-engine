@@ -1,6 +1,7 @@
 import { it, expect, vi } from "vitest";
 import type { Pool } from "pg";
 import { store, hash, migrate } from "../../src/store.ts";
+import type { MilestoneInput } from "../../src/milestones.ts";
 function pool() {
   const query = vi.fn().mockResolvedValue({ rows: [] });
   return { query, value: { query } as unknown as Pool };
@@ -199,4 +200,70 @@ it("pins only a currently published assignment version to a session-owned learne
   expect(p.query.mock.calls[2]![1]).toEqual(["member-1", "SYN-920", 1]);
   p.query.mockResolvedValueOnce({ rowCount: 0, rows: [] });
   expect(await db.chooseAssignment("member-1", "SYN-920", 2)).toBe(false);
+});
+it("keeps milestone reads and optimistic edits scoped to the owning member", async () => {
+  const p = pool(),
+    db = store(p.value);
+  const input: MilestoneInput = {
+    goalTitle: "Plan a local project",
+    milestoneTitle: "Draft the first example",
+    evidenceNote: "I checked the invented brief and its constraints.",
+    nextAction: "Compare two approaches",
+    reminderDate: "2028-02-29",
+    reminderTime: "14:30",
+    reminderTimezone: "America/Toronto",
+    selfReportedComplete: true,
+  };
+  expect(await db.milestones("member-a")).toEqual([]);
+  expect(p.query.mock.calls[0]![1]).toEqual(["member-a"]);
+  p.query.mockResolvedValueOnce({
+    rows: [{ id: "milestone-a", ...input, version: 1 }],
+  });
+  expect(await db.milestones("member-a")).toMatchObject([
+    { id: "milestone-a", version: 1 },
+  ]);
+  expect(await db.createMilestone("member-a", input)).toBeNull();
+  expect(p.query.mock.calls[2]![1]).toEqual([
+    "member-a",
+    expect.any(String),
+    input.goalTitle,
+    input.milestoneTitle,
+    input.evidenceNote,
+    input.nextAction,
+    input.reminderDate,
+    input.reminderTime,
+    input.reminderTimezone,
+    true,
+  ]);
+  p.query.mockResolvedValueOnce({ rows: [{ id: "milestone-a" }] });
+  expect(await db.createMilestone("member-a", input)).toBe("milestone-a");
+  p.query.mockResolvedValueOnce({ rowCount: 1 });
+  expect(await db.updateMilestone("member-a", "milestone-a", 1, input)).toBe(
+    true,
+  );
+  expect(p.query.mock.calls[4]![0]).toContain(
+    "WHERE member_id=$1 AND id=$2 AND version=$3",
+  );
+  expect(p.query.mock.calls[4]![1]).toEqual([
+    "member-a",
+    "milestone-a",
+    1,
+    input.goalTitle,
+    input.milestoneTitle,
+    input.evidenceNote,
+    input.nextAction,
+    input.reminderDate,
+    input.reminderTime,
+    input.reminderTimezone,
+    true,
+  ]);
+  p.query.mockResolvedValueOnce({ rowCount: 0 });
+  expect(await db.updateMilestone("member-b", "milestone-a", 1, input)).toBe(
+    false,
+  );
+  p.query.mockResolvedValueOnce({ rowCount: 1 });
+  expect(await db.deleteMilestone("member-a", "milestone-a", 2)).toBe(true);
+  expect(p.query.mock.calls[6]![1]).toEqual(["member-a", "milestone-a", 2]);
+  p.query.mockResolvedValueOnce({ rowCount: 0 });
+  expect(await db.deleteMilestone("member-a", "milestone-a", 1)).toBe(false);
 });

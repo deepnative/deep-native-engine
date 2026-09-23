@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { Pool } from "pg";
 import { LESSON, type LearnerProfile } from "./content.ts";
+import type { MilestoneInput } from "./milestones.ts";
 export interface Learner extends Pick<LearnerProfile, "background" | "goal"> {
   id: string;
   backgroundTags?: LearnerProfile["backgroundTags"];
@@ -22,6 +23,12 @@ export interface AssignmentChoice {
   contentId: string;
   contentVersion: number;
 }
+export interface Milestone extends MilestoneInput {
+  id: string;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
 export type Session =
   { kind: "new" } | { kind: "expired" } | { kind: "active"; learner: Learner };
 export interface Store {
@@ -37,6 +44,19 @@ export interface Store {
   chooseAssignment(
     id: string,
     contentId: string,
+    version: number,
+  ): Promise<boolean>;
+  milestones(id: string): Promise<Milestone[]>;
+  createMilestone(id: string, input: MilestoneInput): Promise<string | null>;
+  updateMilestone(
+    id: string,
+    milestoneId: string,
+    version: number,
+    input: MilestoneInput,
+  ): Promise<boolean>;
+  deleteMilestone(
+    id: string,
+    milestoneId: string,
     version: number,
   ): Promise<boolean>;
   save(
@@ -61,6 +81,7 @@ export async function migrate(pool: Pool) {
       "008-member-proposals.sql",
       "009-learning-plan.sql",
       "010-assignment-choice.sql",
+      "011-learning-milestones.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
@@ -192,6 +213,73 @@ export function store(pool: Pool): Store {
            content_id=EXCLUDED.content_id,content_version=EXCLUDED.content_version,
            chosen_at=CURRENT_TIMESTAMP`,
         [id, contentId, version],
+      );
+      return result.rowCount === 1;
+    },
+    async milestones(id) {
+      return (
+        await pool.query<Milestone>(
+          `SELECT id,goal_title AS "goalTitle",milestone_title AS "milestoneTitle",
+                  evidence_note AS "evidenceNote",next_action AS "nextAction",
+                  to_char(reminder_date,'YYYY-MM-DD') AS "reminderDate",
+                  to_char(reminder_time,'HH24:MI') AS "reminderTime",
+                  reminder_time_zone AS "reminderTimezone",
+                  self_reported_complete AS "selfReportedComplete",
+                  version,created_at AS "createdAt",updated_at AS "updatedAt"
+           FROM learning_milestones WHERE member_id=$1 ORDER BY created_at DESC,id`,
+          [id],
+        )
+      ).rows;
+    },
+    async createMilestone(id, input) {
+      const result = await pool.query<{ id: string }>(
+        `INSERT INTO learning_milestones(
+           id,member_id,goal_title,milestone_title,evidence_note,next_action,
+           reminder_date,reminder_time,reminder_time_zone,self_reported_complete)
+         SELECT $2,l.id,$3,$4,$5,$6,$7,$8,$9,$10 FROM learners l WHERE l.id=$1
+         RETURNING id`,
+        [
+          id,
+          randomUUID(),
+          input.goalTitle,
+          input.milestoneTitle,
+          input.evidenceNote,
+          input.nextAction,
+          input.reminderDate,
+          input.reminderTime,
+          input.reminderTimezone,
+          input.selfReportedComplete,
+        ],
+      );
+      return result.rows[0]?.id ?? null;
+    },
+    async updateMilestone(id, milestoneId, version, input) {
+      const result = await pool.query(
+        `UPDATE learning_milestones SET goal_title=$4,milestone_title=$5,
+           evidence_note=$6,next_action=$7,reminder_date=$8,reminder_time=$9,
+           reminder_time_zone=$10,self_reported_complete=$11,
+           version=version+1,updated_at=CURRENT_TIMESTAMP
+         WHERE member_id=$1 AND id=$2 AND version=$3`,
+        [
+          id,
+          milestoneId,
+          version,
+          input.goalTitle,
+          input.milestoneTitle,
+          input.evidenceNote,
+          input.nextAction,
+          input.reminderDate,
+          input.reminderTime,
+          input.reminderTimezone,
+          input.selfReportedComplete,
+        ],
+      );
+      return result.rowCount === 1;
+    },
+    async deleteMilestone(id, milestoneId, version) {
+      const result = await pool.query(
+        `DELETE FROM learning_milestones WHERE member_id=$1 AND id=$2 AND version=$3`,
+        [id, milestoneId, version],
       );
       return result.rowCount === 1;
     },

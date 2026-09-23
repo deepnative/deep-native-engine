@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Pool, PoolClient } from "pg";
 import { migrate, store, hash, type Learner } from "../../src/store.ts";
+import type { MilestoneInput } from "../../src/milestones.ts";
 import {
   deterministicRegistry,
   type AdapterRegistry,
@@ -76,6 +77,50 @@ const contentDraft: DraftContent = {
   rubric: "Check source and uncertainty.",
   rubricVersion: 1,
 };
+it("keeps goal milestones private, rejects stale edits and cascades on member deletion", async () => {
+  const owner = await member();
+  const outsider = await member();
+  const input: MilestoneInput = {
+    goalTitle: "Use AI for practical planning",
+    milestoneTitle: "Compare two invented plans",
+    evidenceNote: "I checked both plans against the original sample brief.",
+    nextAction: "Revise the missing details",
+    reminderDate: "2028-02-29",
+    reminderTime: "14:30",
+    reminderTimezone: "America/Toronto",
+    selfReportedComplete: false,
+  };
+  const id = await db.createMilestone(owner.learner.id, input);
+  expect(id).toMatch(/^[0-9a-f-]{36}$/);
+  expect(await db.milestones(outsider.learner.id)).toEqual([]);
+  expect(await db.milestones(owner.learner.id)).toMatchObject([
+    { id, ...input, version: 1 },
+  ]);
+  expect(await db.updateMilestone(outsider.learner.id, id!, 1, input)).toBe(
+    false,
+  );
+  expect(
+    await db.updateMilestone(owner.learner.id, id!, 1, {
+      ...input,
+      selfReportedComplete: true,
+    }),
+  ).toBe(true);
+  expect(await db.updateMilestone(owner.learner.id, id!, 1, input)).toBe(false);
+  expect(await db.deleteMilestone(outsider.learner.id, id!, 2)).toBe(false);
+  expect(await db.deleteMilestone(owner.learner.id, id!, 1)).toBe(false);
+  expect(await db.milestones(owner.learner.id)).toMatchObject([
+    { id, version: 2, selfReportedComplete: true },
+  ]);
+  await expect(
+    pool.query(
+      "UPDATE learning_milestones SET reminder_time_zone=NULL WHERE id=$1",
+      [id],
+    ),
+  ).rejects.toThrow();
+  await db.remove(owner.learner.id);
+  expect(await db.milestones(owner.learner.id)).toEqual([]);
+  expect(await db.deleteMilestone(owner.learner.id, id!, 2)).toBe(false);
+});
 it("stores a private pinned choice only for a currently published assignment and removes it with the member", async () => {
   const first = await member();
   const other = await member();

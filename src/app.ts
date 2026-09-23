@@ -18,10 +18,12 @@ import {
   proposalListPage,
   proposalPreviewPage,
   moderationPage,
+  milestonesPage,
   errorPage,
 } from "./views.ts";
 import type { Store, Learner } from "./store.ts";
 import { eligibleAssignments } from "./assignment-choice.ts";
+import { parseMilestone, validMilestoneId } from "./milestones.ts";
 import {
   adapterReadiness,
   type AdapterReadiness,
@@ -331,6 +333,7 @@ export function app(
       "/delete",
       "/library",
       "/assignments",
+      "/milestones",
       "/contribute",
     ],
     async (_req, res, next) => {
@@ -623,6 +626,118 @@ export function app(
       return;
     }
     res.redirect(303, "/learn");
+  });
+  app.get("/milestones", async (_req, res) => {
+    const member = res.locals.learner as Learner;
+    res.send(
+      milestonesPage(
+        member,
+        await store.milestones(member.id),
+        res.locals.csrf as string,
+      ),
+    );
+  });
+  app.post("/milestones", async (req, res) => {
+    const member = res.locals.learner as Learner;
+    const parsed = parseMilestone(req.body as Fields, member.timezone);
+    if (parsed.errors.length) {
+      res
+        .status(422)
+        .send(
+          milestonesPage(
+            member,
+            await store.milestones(member.id),
+            res.locals.csrf as string,
+            parsed.errors,
+            parsed.input,
+          ),
+        );
+      return;
+    }
+    if (!(await store.createMilestone(member.id, parsed.input))) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Milestone unchanged",
+            "Refresh your learning space and try again.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/milestones");
+  });
+  app.post("/milestones/:id/update", async (req, res) => {
+    const member = res.locals.learner as Learner;
+    const id = req.params.id as string;
+    const version = Number((req.body as Fields).version);
+    if (
+      !validMilestoneId(id) ||
+      !Number.isSafeInteger(version) ||
+      version < 1
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Milestone unchanged",
+            "Open your current milestone list and try again.",
+          ),
+        );
+      return;
+    }
+    const parsed = parseMilestone(req.body as Fields, member.timezone);
+    if (parsed.errors.length) {
+      res
+        .status(422)
+        .send(
+          milestonesPage(
+            member,
+            await store.milestones(member.id),
+            res.locals.csrf as string,
+            parsed.errors,
+            parsed.input,
+            id,
+          ),
+        );
+      return;
+    }
+    if (!(await store.updateMilestone(member.id, id, version, parsed.input))) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Milestone unchanged",
+            "It may have changed in another tab. Open your current milestone list and try again.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/milestones");
+  });
+  app.post("/milestones/:id/delete", async (req, res) => {
+    const member = res.locals.learner as Learner;
+    const id = req.params.id as string;
+    const fields = req.body as Fields;
+    const version = Number(fields.version);
+    if (
+      fields.confirm !== "yes" ||
+      !validMilestoneId(id) ||
+      !Number.isSafeInteger(version) ||
+      version < 1 ||
+      !(await store.deleteMilestone(member.id, id, version))
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Milestone unchanged",
+            "Confirm deletion on your current milestone list and try again.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/milestones");
   });
   app.post("/profile", async (req, res) => {
     const member = res.locals.learner as Learner;
