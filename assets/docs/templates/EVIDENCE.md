@@ -4,6 +4,7 @@
 - Scope and authorization (planning, tooling, application slice, release):
 - Local commit and tree / clean or dirty / CI tested SHA:
 - Merge SHA / resulting main CI / local synchronization:
+- Merged delivery branch/worktree cleanup or safety blocker:
 - Date, OS, runtime/dependency versions:
 - Commands and exit statuses / report links:
 
