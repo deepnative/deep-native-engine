@@ -12,7 +12,7 @@ Keep exactly one lifecycle label on an issue. Change it together with the **Stat
 | `status:ready` | Ready | Dependencies and scope are ready to claim within existing authorization |
 | `status:in-progress` | In progress | A named worker owns an active, bounded claim |
 | `status:in-review` | In review | Claimed work awaits review, required checks or delivery verification |
-| `status:done` | Done | All issue AC and DoD have evidence, including required merge/main verification |
+| `status:done` | Done | Owner-accepted, CI-verified delivery scope; unmet broader AC are linked to open follow-up issues |
 
 `blocked` is an additional flag, not a lifecycle label. Keep the lifecycle state and owner while awaiting a dependency; record the blocker, who can resolve it and the next action. Remove `blocked` when resolved. If work is released instead, use Backlog or Ready and explicitly record that the claim ended. A blocked or old claim is not permission to take over.
 
@@ -49,8 +49,8 @@ For concurrent work on one larger issue, the owner agrees on non-overlapping sco
 
 ## Finish or release
 
-After all issue acceptance criteria and the definition of done are evidenced, record the PR, merge SHA and successful main CI when repository changes are involved. Set `status:done` / Done, clear resolved blocker flags and close the issue. A merged PR covering only part of an issue does not satisfy this rule; use `Refs` instead of an automatic closing keyword in that PR.
+The owner directed on 23 September 2026 that changes passing CI be merged and their delivery issues moved to Done. After the exact-commit gate, recorded review, required PR checks, guarded merge and successful CI on the resulting `main` commit, record the PR, merge SHA and CI. Set `status:done` / Done, clear any blocker transferred to follow-up work, and close the delivery issue. CI proves the checked change, not every original product promise.
 
-If the current task finishes but the issue still has work, publish the completed scope, remaining AC, verification and next action. End the claim, remove only the releasing worker's assignment when no continuing ownership was agreed, and return the issue to Ready or Backlog as appropriate. Keep it open. Do not leave `status:in-progress` on an abandoned task or use Done for a partial delivery.
+If the issue described more than the delivered slice, first create linked open follow-up issues for every unmet acceptance area, with the original requirements, dependency/owner decision and stop conditions. In the original closeout, state the accepted slice, evidence, unresolved scope and follow-up links. Use `Refs` rather than an automatic closing keyword for a partial-scope PR so closure happens only after main verification and carryover. Keep the epic and release gates open. Never infer qualified approval, legal clearance, service capacity, payment success or full-MVP coverage from CI. A task that pauses without merged, verified delivery instead records its remaining work, releases or transfers the claim, and returns the open issue to Ready or Backlog.
 
 Check labels, assignees, issue open/closed state and project status again before the final handoff. If GitHub is unavailable or a claim cannot be coordinated, report the unsynchronized state and hold overlapping work; unrelated authorized work can continue.
