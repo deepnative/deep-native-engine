@@ -18,6 +18,11 @@ import {
   type ObjectStorage,
 } from "../../src/evidence.ts";
 import { testPool } from "../support/database.ts";
+import {
+  catalogStore,
+  seedDraftPack,
+  type DraftContent,
+} from "../../src/catalog.ts";
 const pool = testPool(),
   db = store(pool);
 let privateStorageRoot = "";
@@ -52,6 +57,193 @@ async function member() {
     learner: (session as { kind: "active"; learner: Learner }).learner,
   };
 }
+const contentDraft: DraftContent = {
+  id: "SYN-001",
+  version: 1,
+  kind: "assignment",
+  origin: "curated",
+  title: "Synthetic review task",
+  body: "Use only invented data.",
+  owner: "Test editor",
+  sources: "Original test brief",
+  rights: "Owned synthetic work",
+  goals: ["work", "build"],
+  backgrounds: ["explorer", "professional", "technical"],
+  domains: [],
+  prerequisites: "None",
+  rubric: "Check source and uncertainty.",
+  rubricVersion: 1,
+};
+it("imports the six-lesson content pack as hidden drafts that cannot self-certify qualified sign-off", async () => {
+  const catalog = catalogStore(pool);
+  const editorToken = randomBytes(32).toString("hex");
+  const reviewerToken = randomBytes(32).toString("hex");
+  await authorizationStore(pool).provisionStaff(
+    editorToken,
+    "editor",
+    new Date(Date.now() + 86_400_000),
+  );
+  await authorizationStore(pool).provisionStaff(
+    reviewerToken,
+    "reviewer",
+    new Date(Date.now() + 86_400_000),
+  );
+  expect(await seedDraftPack(pool)).toBe(12);
+  expect(await seedDraftPack(pool)).toBe(0);
+  expect(await catalog.search({})).toEqual([]);
+  expect(
+    (await catalog.staffList(editorToken)).map((item) => item.id),
+  ).toContain("FND-006");
+  expect(await catalog.preview("unrelated", "FND-001", 1)).toBeNull();
+  expect(await catalog.preview(editorToken, "FND-001", 1)).toMatchObject({
+    state: "draft",
+    requiresQualifiedSignoff: true,
+    kind: "lesson",
+    goals: ["everyday", "work", "build"],
+  });
+  expect(await catalog.submit(editorToken, "FND-001", 1)).toBe(true);
+  expect(await catalog.approve(reviewerToken, "FND-001", 1, true)).toBe(false);
+  expect(await catalog.publish(editorToken, "FND-001", 1)).toBe(false);
+  expect(await catalog.published("FND-001")).toBeNull();
+});
+it("enforces review, rights, retirement and immutable version-pinned simulated assessment history", async () => {
+  const catalog = catalogStore(pool);
+  const auth = authorizationStore(pool);
+  const editorToken = randomBytes(32).toString("hex");
+  const reviewerToken = randomBytes(32).toString("hex");
+  const adminToken = randomBytes(32).toString("hex");
+  const editorId = await auth.provisionStaff(
+    editorToken,
+    "editor",
+    new Date(Date.now() + 86_400_000),
+  );
+  const reviewerId = await auth.provisionStaff(
+    reviewerToken,
+    "reviewer",
+    new Date(Date.now() + 86_400_000),
+  );
+  const adminId = await auth.provisionStaff(
+    adminToken,
+    "platform_admin",
+    new Date(Date.now() + 86_400_000),
+  );
+  const person = await member();
+  expect(await catalog.createDraft(person.token, contentDraft)).toBe(false);
+  expect(
+    await catalog.createDraft(editorToken, { ...contentDraft, rights: "" }),
+  ).toBe(false);
+  expect(
+    await catalog.createDraft(editorToken, { ...contentDraft, version: 2 }),
+  ).toBe(false);
+  expect(await catalog.createDraft(editorToken, contentDraft)).toBe(true);
+  expect(await catalog.createDraft(editorToken, contentDraft)).toBe(false);
+  expect(await catalog.publish(editorToken, contentDraft.id, 1)).toBe(false);
+  expect(await catalog.approve(reviewerToken, contentDraft.id, 1, true)).toBe(
+    false,
+  );
+  expect(await catalog.submit(person.token, contentDraft.id, 1)).toBe(false);
+  expect(await catalog.submit(editorToken, contentDraft.id, 1)).toBe(true);
+  expect(await catalog.approve(reviewerToken, contentDraft.id, 1, false)).toBe(
+    false,
+  );
+  expect(await catalog.approve(editorToken, contentDraft.id, 1, true)).toBe(
+    false,
+  );
+  expect(await catalog.approve(reviewerToken, contentDraft.id, 1, true)).toBe(
+    true,
+  );
+  expect(await catalog.publish(editorToken, contentDraft.id, 1)).toBe(true);
+  expect(await catalog.search({ goal: "everyday" })).toEqual([]);
+  expect(
+    (
+      await catalog.search({
+        goal: "work",
+        background: "professional",
+        q: "review",
+      })
+    ).map((item) => item.version),
+  ).toEqual([1]);
+  expect(
+    await catalog.assess(
+      reviewerToken,
+      person.learner.id,
+      contentDraft.id,
+      1,
+      "Synthetic result",
+    ),
+  ).toBeNull();
+  await auth.grantAssignment(
+    adminId,
+    reviewerId,
+    person.learner.id,
+    "reviewer",
+    "synthetic task",
+    new Date(Date.now() + 86_400_000),
+  );
+  const assessmentId = await catalog.assess(
+    reviewerToken,
+    person.learner.id,
+    contentDraft.id,
+    1,
+    "Synthetic result",
+  );
+  expect(assessmentId).toEqual(expect.any(String));
+  await expect(
+    pool.query("UPDATE content_assessments SET result='changed' WHERE id=$1", [
+      assessmentId,
+    ]),
+  ).rejects.toThrow("Assessment history is immutable");
+  const next = {
+    ...contentDraft,
+    version: 2,
+    body: "New synthetic brief",
+    rubric: "Revised source check.",
+    rubricVersion: 2,
+  };
+  expect(await catalog.createDraft(editorToken, next)).toBe(true);
+  expect(await catalog.submit(editorToken, next.id, 2)).toBe(true);
+  expect(await catalog.approve(reviewerToken, next.id, 2, true)).toBe(true);
+  expect(await catalog.publish(editorToken, next.id, 2)).toBe(true);
+  expect((await catalog.published(next.id))?.version).toBe(2);
+  const pinned = (
+    await pool.query(
+      "SELECT content_version,rubric_version,result FROM content_assessments WHERE id=$1",
+      [assessmentId],
+    )
+  ).rows[0];
+  expect(pinned).toEqual({
+    content_version: 1,
+    rubric_version: 1,
+    result: "Synthetic result",
+  });
+  await expect(
+    pool.query(
+      "UPDATE content_versions SET title='rewritten' WHERE id=$1 AND version=1",
+      [next.id],
+    ),
+  ).rejects.toThrow("Released content is immutable");
+  await expect(
+    pool.query(
+      "UPDATE content_versions SET retired_at=CURRENT_TIMESTAMP WHERE id=$1 AND version=1",
+      [next.id],
+    ),
+  ).rejects.toThrow("Released content has an invalid retirement");
+  expect(await catalog.retire(editorToken, next.id)).toBe(true);
+  expect(await catalog.published(next.id)).toBeNull();
+  expect(await catalog.search({ q: "review" })).toEqual([]);
+  expect(await catalog.createDraft(editorToken, { ...next, version: 3 })).toBe(
+    false,
+  );
+  await db.remove(person.learner.id);
+  expect(
+    (
+      await pool.query("SELECT count(*) FROM content_assessments WHERE id=$1", [
+        assessmentId,
+      ])
+    ).rows[0].count,
+  ).toBe("0");
+  expect(editorId).toEqual(expect.any(String));
+});
 
 function wrappedPool(wrap: (client: PoolClient) => PoolClient) {
   return {

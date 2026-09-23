@@ -10,6 +10,9 @@ import {
   lesson,
   readinessPage,
   offerHypothesesPage,
+  libraryPage,
+  contentPreview,
+  staffLibraryPage,
   errorPage,
 } from "./views.ts";
 import type { Store, Learner } from "./store.ts";
@@ -28,6 +31,11 @@ import {
   type EvidenceStore,
 } from "./evidence.ts";
 import { FOUNDATION_ACCESS, COACHING_OFFERS } from "./offers.ts";
+import {
+  disabledCatalogStore,
+  type CatalogStore,
+  type DraftContent,
+} from "./catalog.ts";
 export function app(
   store: Store,
   options: {
@@ -37,6 +45,7 @@ export function app(
     adapters?: AdapterReadiness[];
     authorization?: AuthorizationStore;
     evidence?: EvidenceStore;
+    catalog?: CatalogStore;
   },
 ) {
   const app = express();
@@ -44,6 +53,7 @@ export function app(
   const adapters = options.adapters ?? adapterReadiness({}, mode);
   const authorization = options.authorization ?? disabledAuthorizationStore();
   const evidence = options.evidence ?? disabledEvidenceStore();
+  const catalog = options.catalog ?? disabledCatalogStore();
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -252,7 +262,7 @@ export function app(
     res.redirect(303, "/learn");
   });
   app.use(
-    ["/learn", "/lesson", "/exercise", "/profile", "/delete"],
+    ["/learn", "/lesson", "/exercise", "/profile", "/delete", "/library"],
     async (_req, res, next) => {
       const session = await store.session(res.locals.token as string);
       if (session.kind !== "active") {
@@ -263,6 +273,151 @@ export function app(
       next();
     },
   );
+  app.get("/library", async (req, res) => {
+    const q = typeof req.query.q === "string" ? req.query.q : "";
+    const goal =
+      typeof req.query.goal === "string" ? req.query.goal : undefined;
+    const background =
+      typeof req.query.background === "string"
+        ? req.query.background
+        : undefined;
+    const domain =
+      typeof req.query.domain === "string" ? req.query.domain : undefined;
+    res.send(
+      libraryPage(await catalog.search({ q, goal, background, domain }), {
+        q,
+        goal,
+        background,
+        domain,
+      }),
+    );
+  });
+  app.get("/library/:id", async (req, res) => {
+    const item = await catalog.published(req.params.id as string);
+    if (!item) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Content unavailable",
+            "Only published versions appear in the learning library.",
+          ),
+        );
+      return;
+    }
+    res.send(contentPreview(item, false));
+  });
+  app.get("/editor/library", async (_req, res) => {
+    res.send(
+      staffLibraryPage(
+        await catalog.staffList(res.locals.token as string),
+        res.locals.csrf as string,
+      ),
+    );
+  });
+  app.get("/editor/library/:id/:version", async (req, res) => {
+    const item = await catalog.preview(
+      res.locals.token as string,
+      req.params.id as string,
+      Number(req.params.version),
+    );
+    if (!item) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Staff preview unavailable",
+            "A current editor or reviewer identity is required.",
+          ),
+        );
+      return;
+    }
+    res.send(contentPreview(item, true, res.locals.csrf as string));
+  });
+  app.post("/editor/library", async (req, res) => {
+    const fields = req.body as Fields;
+    const value = (name: string) =>
+      typeof fields[name] === "string" ? (fields[name] as string) : "";
+    const draft: DraftContent = {
+      id: value("id"),
+      version: Number(value("version")),
+      kind: value("kind") as DraftContent["kind"],
+      origin: "curated",
+      title: value("title"),
+      body: value("body"),
+      owner: value("owner"),
+      sources: value("sources"),
+      rights: value("rights"),
+      goals: [],
+      backgrounds: [],
+      domains: [],
+      prerequisites: "",
+      rubric: null,
+      rubricVersion: null,
+    };
+    if (!(await catalog.createDraft(res.locals.token as string, draft))) {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Draft not saved",
+            "Check the fields, next version and editor access.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, `/editor/library/${draft.id}/${draft.version}`);
+  });
+  app.post("/editor/library/:id/:version/:action", async (req, res) => {
+    const credential = res.locals.token as string;
+    const id = req.params.id as string;
+    const version = Number(req.params.version);
+    const action = req.params.action;
+    const changed =
+      action === "submit"
+        ? await catalog.submit(credential, id, version)
+        : action === "approve"
+          ? await catalog.approve(
+              credential,
+              id,
+              version,
+              req.body.rights_confirmed === "yes",
+            )
+          : action === "publish"
+            ? await catalog.publish(credential, id, version)
+            : false;
+    if (!changed) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Content state unchanged",
+            "Check your staff role and the current review state.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, `/editor/library/${id}/${version}`);
+  });
+  app.post("/editor/library/:id/retire", async (req, res) => {
+    if (
+      !(await catalog.retire(
+        res.locals.token as string,
+        req.params.id as string,
+      ))
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Content state unchanged",
+            "Only a published version can be retired by an editor.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/editor/library");
+  });
   app.get("/learn", async (_req, res) => {
     const member = res.locals.learner as Learner;
     res.send(

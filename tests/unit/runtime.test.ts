@@ -3,6 +3,7 @@ import { beforeEach, it, expect, vi } from "vitest";
 const doubles = vi.hoisted(() => ({
   end: vi.fn(),
   migrate: vi.fn(),
+  seed: vi.fn(),
   listen: vi.fn(),
   pool: undefined as EventEmitter | undefined,
 }));
@@ -25,6 +26,10 @@ vi.mock("../../src/store.ts", () => ({
 vi.mock("../../src/app.ts", () => ({
   app: () => ({ listen: doubles.listen }),
 }));
+vi.mock("../../src/catalog.ts", () => ({
+  catalogStore: vi.fn(),
+  seedDraftPack: doubles.seed,
+}));
 import { start } from "../../src/runtime.ts";
 const env = {
   DNE_DATABASE_URL:
@@ -36,6 +41,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   doubles.end.mockResolvedValue(undefined);
   doubles.migrate.mockResolvedValue(undefined);
+  doubles.seed.mockResolvedValue(12);
 });
 function server(error?: Error) {
   const emitter = new EventEmitter();
@@ -50,6 +56,7 @@ it("starts after migration and closes both listener and pool", async () => {
   const s = server();
   const running = await start(env);
   expect(doubles.migrate).toHaveBeenCalledOnce();
+  expect(doubles.seed).toHaveBeenCalledOnce();
   expect(doubles.listen).toHaveBeenCalledWith(4567, "127.0.0.1");
   await running.close();
   expect(s.close).toHaveBeenCalledOnce();
@@ -71,6 +78,11 @@ it("still closes the pool after a listener-close failure", async () => {
   server(new Error("already closed"));
   const running = await start(env);
   await expect(running.close()).rejects.toThrow("already closed");
+  expect(doubles.end).toHaveBeenCalledOnce();
+});
+it("closes the pool when draft import fails", async () => {
+  doubles.seed.mockRejectedValueOnce(new Error("draft import failed"));
+  await expect(start(env)).rejects.toThrow("draft import failed");
   expect(doubles.end).toHaveBeenCalledOnce();
 });
 

@@ -4,7 +4,7 @@ Owner: Tom Wu. Date: 21 September 2026. Claim: `initial-learning-20260921`. Pare
 
 ## Acceptance and evidence map
 
-The executable register is [initial-learning-v6](../../tests/e2e/scenarios.json). Each scenario defines actor, preconditions, steps, expected result, issue links and criticality. Twenty-four scenarios run against the real server, PostgreSQL and disposable private object storage on desktop Chromium and mobile Chromium emulation; each must pass on both to count. The newest journey compares the read-only access/coaching planning page with its server catalog. No external AI, payment, identity, storage, scanner or other provider is used.
+The executable register is [initial-learning-v7](../../tests/e2e/scenarios.json). Each scenario defines actor, preconditions, steps, expected result, issue links and criticality. Twenty-six scenarios run against the real server, PostgreSQL and disposable private object storage on desktop Chromium and mobile Chromium emulation; each must pass on both to count. The newest journeys exercise the private content draft/review/publish/retire workflow and version-pinned synthetic assessment across staff and member views. No external AI, payment, identity, storage, scanner or other provider is used.
 
 | AC | Browser scenario | Observable result |
 | --- | --- | --- |

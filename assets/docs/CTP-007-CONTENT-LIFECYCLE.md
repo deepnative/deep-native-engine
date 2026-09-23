@@ -1,0 +1,21 @@
+# CTP-007: private content lifecycle slice
+
+Prepared 2026-09-23 for [CTP-007 #26](https://github.com/deepnative/deep-native-engine/issues/26), claim `ctp007-netcsc-20260923`. This is a local, synthetic implementation slice. It does not release the PLAN-004 curriculum, verify an expert or enable formal assessment.
+
+## Behavior and boundaries
+
+Migration `006-content-lifecycle.sql` stores immutable `(content ID, version)` records with kind, origin, owner, source/rights text, goals, backgrounds, domains, prerequisites, body, optional rubric/version, review date/actor and lifecycle state. A current editor can create the next draft version, submit it for review, publish an approved version and retire all published versions of an item. A separate current reviewer role can approve a submitted synthetic item only after attesting to its source and rights statement; the creator cannot approve their own draft. Every write checks the current staff principal in PostgreSQL, not a caller-supplied role. Invalid state transitions return no success. Published and retired content cannot be rewritten; retirement hides content from member search and previews.
+
+The twelve PLAN-004 markdown assets are imported at startup as **drafts with `requires_qualified_signoff=true`**. Import is idempotent and never overwrites an edited row. Even a synthetic reviewer cannot approve those records while sign-off remains pending. The editor preview shows the draft text and pending gate; member search returns only published versions. The current six lessons, assignments, workflows and community examples therefore stay hidden from members. A local editor can exercise the workflow with a separate invented item, and the UI always labels the environment as a local preview.
+
+The member library links from the learning path and offers text search plus goal, background and domain filters. Results select the highest **published** version per item. A direct content URL reads only published versions. Text is escaped and displayed without visual-only cues in a keyboard-accessible page with owner, rights, review date, audience and prerequisite metadata. Human screen-reader and curriculum review of the PLAN-004 material are still pending.
+
+`content_assessments` records **simulated** feedback only from a current reviewer with an active assignment to that member workspace, against a published item with a rubric. It copies the exact content and rubric version at assessment time. A later release cannot update that record; account deletion may remove it for privacy. No UI presents this as verified competence, and no credit, paid review unit or qualified human coverage is inferred.
+
+## Evidence and remaining criteria
+
+The `initial-learning-v7` browser register adds L25 (staff draft/review/publish/retire, qualified-signoff block, member visibility and HTML escaping) and L26 (search filters, latest publication, pinned earlier assessment and outsider denial) on desktop and mobile Chromium. Unit and real PostgreSQL integration checks cover rights validation, state transitions, role boundaries, import idempotence, assessment pinning, retirement and privacy deletion. The shared gate retains the separate full-MVP `full-mvp-v1` 100-case outstanding denominator.
+
+This slice does **not** resolve the owner's pending curriculum/domain sign-off for PLAN-004 #14. A real qualified reviewer registry and availability states remain under CTP-003 #20. Proposed member contributions have an explicit origin but no consent/moderation/revocation publication path yet. The editor form supports simple text drafts; full rubric editing and accessible rendered review of the six lessons remain. Formal assessment, paid reviewer time, live hosting and release acceptance are outside this local preview. CTP-007 stays open for those acceptance gaps. The next bounded owner decision is naming qualified curriculum/domain reviewers for the content pack; technical contribution work can continue in CTP-007 without representing their approval.
+
+Rollback is to the prior application commit. Migration 006 is additive; removing it would discard versioned content and assessment history and needs an explicit data decision. Imported draft files remain source-controlled planning assets. No live provider, payment or external content is connected.

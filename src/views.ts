@@ -10,6 +10,7 @@ import {
 import type { Learner, Exercise } from "./store.ts";
 import type { AdapterReadiness, ApplicationMode } from "./adapters.ts";
 import { COACHING_OFFERS } from "./offers.ts";
+import type { ContentVersion } from "./catalog.ts";
 export function escape(value: string) {
   return value.replace(
     /[&<>"']/g,
@@ -111,7 +112,7 @@ export function dashboard(
       : "Ready when you are";
   return page(
     "Your learning path",
-    `<section class="dashboard-head"><div><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment.</span></aside></section><section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? "Review your work" : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card"><p class="eyebrow">WHERE THIS CAN GO</p><h2>Learn together.<br>Contribute something useful.</h2><p>Learning circles, peer contributions and more paths are on the roadmap. This preview begins with your first practical exercise.</p><p class="small">Community and coaching features are not yet available.</p></aside></section><section class="profile-form"><h2>Adjust your direction</h2><p>Change goals and interests whenever you want. Your saved exercise stays with this preview.</p><form method="post" action="/profile">${hidden(csrf)}${notice(errors)}${profileFields(learner)}<button type="submit">Save my direction</button></form></section><form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete my local preview and all its saved work.</span></label><button class="secondary" type="submit">Delete this preview</button></form>`,
+    `<section class="dashboard-head"><div><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment.</span></aside></section><section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? "Review your work" : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card"><p class="eyebrow">WHERE THIS CAN GO</p><h2>Learn together.<br>Contribute something useful.</h2><p>Learning circles, peer contributions and more paths are on the roadmap. This preview begins with your first practical exercise.</p><p class="small">Community and coaching features are not yet available.</p></aside></section><p><a class="button secondary" href="/library">Browse published learning library</a></p><section class="profile-form"><h2>Adjust your direction</h2><p>Change goals and interests whenever you want. Your saved exercise stays with this preview.</p><form method="post" action="/profile">${hidden(csrf)}${notice(errors)}${profileFields(learner)}<button type="submit">Save my direction</button></form></section><form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete my local preview and all its saved work.</span></label><button class="secondary" type="submit">Delete this preview</button></form>`,
   );
 }
 export function lesson(
@@ -131,5 +132,45 @@ export function errorPage(title: string, message: string) {
   return page(
     title,
     `<section class="error-page"><p class="eyebrow">A SMALL PAUSE</p><h1>${escape(title)}</h1><p class="lead">${escape(message)}</p><a class="button" href="/learn">Return to your learning path</a></section>`,
+  );
+}
+export function libraryPage(
+  items: ContentVersion[],
+  filters: { q: string; goal?: string; background?: string; domain?: string },
+) {
+  const select = (
+    name: string,
+    label: string,
+    options: object,
+    chosen?: string,
+  ) =>
+    `<label for="library-${name}">${label}</label><select id="library-${name}" name="${name}"><option value="">All</option>${Object.entries(
+      options,
+    )
+      .map(
+        ([value, text]) =>
+          `<option value="${value}"${chosen === value ? " selected" : ""}>${escape(text)}</option>`,
+      )
+      .join("")}</select>`;
+  return page(
+    "Published learning library",
+    `<section class="lesson-heading"><p class="eyebrow">LOCAL PREVIEW · PUBLISHED VERSIONS ONLY</p><h1>Learning library</h1><p class="lead">Search released sample content. Drafts and retired versions are hidden; formal assessment is unavailable.</p><form method="get" action="/library"><label for="library-q">Search lessons and exercises</label><input id="library-q" name="q" value="${escape(filters.q)}" maxlength="100">${select("goal", "Goal", GOALS, filters.goal)}${select("background", "Background", BACKGROUNDS, filters.background)}${select("domain", "Domain", DOMAINS, filters.domain)}<button type="submit">Search</button></form></section><section aria-label="Published content"><ul>${items.map((item) => `<li><a href="/library/${escape(item.id)}">${escape(item.title)}</a> · ${escape(item.kind)} · version ${item.version} · ${escape(item.origin)}</li>`).join("")}</ul>${items.length ? "" : "<p>No published content matches. The foundation content pack is still awaiting qualified review.</p>"}</section><p><a href="/learn">Return to your learning path</a></p>`,
+  );
+}
+export function contentPreview(
+  item: ContentVersion,
+  staff: boolean,
+  csrf = "",
+) {
+  const base = `/editor/library/${encodeURIComponent(item.id)}/${item.version}`;
+  return page(
+    item.title,
+    `<nav class="breadcrumb"><a href="${staff ? "/editor/library" : "/library"}">← ${staff ? "Staff content" : "Learning library"}</a></nav><article class="reading"><p class="eyebrow">${staff ? "STAFF PREVIEW · " : "LOCAL PUBLISHED PREVIEW · "}${escape(item.state.toUpperCase())} · VERSION ${item.version}</p><h1>${escape(item.title)}</h1><p>${escape(item.kind)} · ${escape(item.origin)}</p><dl><dt>Owner</dt><dd>${escape(item.owner)}</dd><dt>Sources</dt><dd>${escape(item.sources)}</dd><dt>Rights</dt><dd>${escape(item.rights)}</dd><dt>Goals</dt><dd>${escape(item.goals.join(", ") || "All")}</dd><dt>Backgrounds</dt><dd>${escape(item.backgrounds.join(", ") || "All")}</dd><dt>Domains</dt><dd>${escape(item.domains.join(", ") || "All")}</dd><dt>Prerequisites</dt><dd>${escape(item.prerequisites || "None")}</dd><dt>Review date</dt><dd>${item.reviewedAt ? escape(item.reviewedAt.toISOString().slice(0, 10)) : "Pending"}</dd></dl>${item.requiresQualifiedSignoff ? '<p role="status">Qualified curriculum and domain sign-off is pending. This draft cannot be approved or published.</p>' : ""}<h2>Content text</h2><pre class="content-text">${escape(item.body)}</pre>${item.rubric ? `<h2>Versioned rubric ${item.rubricVersion}</h2><pre class="content-text">${escape(item.rubric)}</pre>` : ""}${staff ? `<section aria-label="Content workflow"><form method="post" action="${base}/submit">${hidden(csrf)}<button>Submit for review</button></form><form method="post" action="${base}/approve">${hidden(csrf)}<label class="check"><input type="checkbox" name="rights_confirmed" value="yes" required><span>I checked the source and rights statement for this synthetic item.</span></label><button>Approve synthetic review</button></form><form method="post" action="${base}/publish">${hidden(csrf)}<button>Publish to local library</button></form><form method="post" action="/editor/library/${encodeURIComponent(item.id)}/retire">${hidden(csrf)}<button>Retire published versions</button></form></section>` : ""}</article>`,
+  );
+}
+export function staffLibraryPage(items: ContentVersion[], csrf: string) {
+  return page(
+    "Staff content drafts",
+    `<section class="lesson-heading"><p class="eyebrow">LOCAL STAFF PREVIEW</p><h1>Content workflow</h1><p>PLAN-004 assets are unreviewed drafts and require separate qualified sign-off. Synthetic staff testing does not supply that approval.</p></section><ul>${items.map((item) => `<li><a href="/editor/library/${escape(item.id)}/${item.version}">${escape(item.title)}</a> · ${escape(item.state)} · version ${item.version}</li>`).join("")}</ul><section><h2>Create a synthetic draft</h2><form method="post" action="/editor/library">${hidden(csrf)}<label for="content-id">Content ID</label><input id="content-id" name="id" required pattern="[A-Z]{2,5}-[0-9]{3}"><label for="content-version">Version</label><input id="content-version" name="version" type="number" min="1" required><label for="content-kind">Kind</label><select id="content-kind" name="kind"><option value="lesson">Lesson</option><option value="assignment">Assignment</option><option value="workflow">Workflow</option><option value="community">Community</option></select><label for="content-title">Title</label><input id="content-title" name="title" required><label for="content-body">Body</label><textarea id="content-body" name="body" required></textarea><label for="content-owner">Owner</label><input id="content-owner" name="owner" required><label for="content-sources">Sources</label><input id="content-sources" name="sources" required><label for="content-rights">Rights</label><input id="content-rights" name="rights" required><button type="submit">Save draft</button></form></section>`,
   );
 }
