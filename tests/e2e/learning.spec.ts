@@ -365,9 +365,11 @@ test("[L05] invalid completion keeps input but does not claim it was saved", asy
     "aria-invalid",
     "true",
   );
-  await page
-    .getByRole("link", { name: /How will you check the result\?/ })
-    .focus();
+  await page.getByRole("link", { name: "Your learning path" }).focus();
+  await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("link", { name: /How will you check the result\?/ }),
+  ).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(check).toBeFocused();
   await expect(
