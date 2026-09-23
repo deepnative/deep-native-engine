@@ -120,11 +120,13 @@ it("never implies released foundation content from an incomplete six-lesson set"
 it("allows only current operators to see the full expert registry", async () => {
   const query = vi
     .fn()
-    .mockResolvedValueOnce({ rowCount: 0 })
-    .mockResolvedValueOnce({ rowCount: 1 })
-    .mockResolvedValueOnce({ rows: [evidence] });
+    .mockResolvedValueOnce({ rows: [{ allowed: false, id: null }] })
+    .mockResolvedValueOnce({ rows: [{ allowed: true, ...evidence }] })
+    .mockResolvedValueOnce({ rows: [{ allowed: true, id: null }] });
   const registry = trackStore({ query } as unknown as Pool);
   expect(await registry.registry("member")).toBeNull();
   expect(await registry.registry("operator")).toEqual([evidence]);
+  expect(await registry.registry("operator")).toEqual([]);
   expect(query.mock.calls[0]?.[0]).toContain("p.expires_at>CURRENT_TIMESTAMP");
+  expect(query.mock.calls[0]?.[0]).toContain("LEFT JOIN LATERAL");
 });

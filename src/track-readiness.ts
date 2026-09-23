@@ -144,18 +144,24 @@ export function trackStore(pool: Pool): TrackStore {
       return { foundation, specialties };
     },
     async registry(token) {
-      const authorized = await pool.query(
-        `SELECT 1 FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
-         WHERE p.token_hash=$1 AND p.kind='staff'
-           AND s.role IN ('operator','platform_admin')
-           AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP`,
+      const result = await pool.query<ExpertRecord & { allowed: boolean }>(
+        `SELECT access.allowed, roster.* FROM (
+           SELECT EXISTS(
+             SELECT 1 FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
+             WHERE p.token_hash=$1 AND p.kind='staff'
+               AND s.role IN ('operator','platform_admin')
+               AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
+           ) AS allowed
+         ) access LEFT JOIN LATERAL (
+           SELECT ${registryColumns} FROM expert_registry
+           WHERE access.allowed ORDER BY domain,service_type,starts_at
+         ) roster ON true`,
         [hash(token)],
       );
-      if (authorized.rowCount !== 1) return null;
-      const rows = await pool.query<ExpertRecord>(
-        `SELECT ${registryColumns} FROM expert_registry ORDER BY domain,service_type,starts_at`,
-      );
-      return rows.rows;
+      if (!result.rows[0]?.allowed) return null;
+      return result.rows
+        .filter((row) => row.id !== null)
+        .map(({ allowed: _allowed, ...record }) => record);
     },
   };
 }
