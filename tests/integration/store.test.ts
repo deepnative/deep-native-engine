@@ -19,6 +19,7 @@ import {
 } from "../../src/evidence.ts";
 import { testPool } from "../support/database.ts";
 import { trackStore } from "../../src/track-readiness.ts";
+import { proposalStore } from "../../src/proposals.ts";
 import {
   catalogStore,
   seedDraftPack,
@@ -75,6 +76,92 @@ const contentDraft: DraftContent = {
   rubric: "Check source and uncertainty.",
   rubricVersion: 1,
 };
+it("keeps consented member samples private through moderation, withdrawal and deletion", async () => {
+  const proposals = proposalStore(pool);
+  const first = await member();
+  const other = await member();
+  const moderatorToken = randomBytes(32).toString("hex");
+  const reviewerToken = randomBytes(32).toString("hex");
+  await authorizationStore(pool).provisionStaff(
+    moderatorToken,
+    "moderator",
+    new Date(Date.now() + 86_400_000),
+  );
+  await authorizationStore(pool).provisionStaff(
+    reviewerToken,
+    "reviewer",
+    new Date(Date.now() + 86_400_000),
+  );
+  const input = {
+    title: "Invented community event",
+    body: "Twelve invented volunteers plan a two-hour event.",
+    sources: "Original invented example; no external source",
+  };
+  expect(await proposals.createDraft(first.token, input, false)).toBeNull();
+  expect(await proposals.createDraft(reviewerToken, input, true)).toBeNull();
+  const id = await proposals.createDraft(first.token, input, true);
+  expect(id).toEqual(expect.any(String));
+  expect(await proposals.owned(other.token)).toEqual([]);
+  expect(await proposals.preview(other.token, id!)).toBeNull();
+  expect(await proposals.preview(first.token, id!)).toMatchObject({
+    title: input.title,
+    state: "draft",
+  });
+  expect(await proposals.submit(first.token, id!, false)).toBe(false);
+  expect(await proposals.submit(other.token, id!, true)).toBe(false);
+  expect(await proposals.submit(first.token, id!, true)).toBe(true);
+  expect(await proposals.submit(first.token, id!, true)).toBe(false);
+  expect(await proposals.moderationQueue(reviewerToken)).toBeNull();
+  expect((await proposals.moderationQueue(moderatorToken))?.[0]).toMatchObject({
+    id,
+    state: "submitted",
+  });
+  expect(await proposals.moderate(reviewerToken, id!, "quarantine")).toBe(
+    false,
+  );
+  expect(await proposals.moderate(moderatorToken, id!, "quarantine")).toBe(
+    true,
+  );
+  expect(await proposals.withdraw(other.token, id!)).toBe(false);
+  expect(await proposals.withdraw(first.token, id!)).toBe(true);
+  expect(await proposals.moderate(moderatorToken, id!, "reject")).toBe(false);
+  expect(await proposals.moderationQueue(moderatorToken)).toEqual([]);
+  expect(await proposals.preview(first.token, id!)).toMatchObject({
+    title: null,
+    body: null,
+    sources: null,
+    state: "withdrawn",
+  });
+  const second = await proposals.createDraft(first.token, input, true);
+  expect(await proposals.submit(first.token, second!, true)).toBe(true);
+  expect(await proposals.moderate(moderatorToken, second!, "reject")).toBe(
+    true,
+  );
+  expect(await proposals.preview(first.token, second!)).toMatchObject({
+    state: "rejected",
+    body: null,
+  });
+  const third = await proposals.createDraft(first.token, input, true);
+  expect(await proposals.submit(first.token, third!, true)).toBe(true);
+  expect(await proposals.moderate(moderatorToken, third!, "quarantine")).toBe(
+    true,
+  );
+  expect(await proposals.moderate(moderatorToken, third!, "reject")).toBe(true);
+  expect(await proposals.preview(first.token, third!)).toMatchObject({
+    state: "rejected",
+    body: null,
+  });
+  expect(await catalogStore(pool).search({ q: input.title })).toEqual([]);
+  await db.remove(first.learner.id);
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*)::integer AS n FROM member_proposals WHERE member_id=$1",
+        [first.learner.id],
+      )
+    ).rows[0],
+  ).toEqual({ n: 0 });
+});
 it("keeps the expert roster private and all live track states unprepared without qualified evidence", async () => {
   const tracks = trackStore(pool);
   const operatorToken = randomBytes(32).toString("hex");

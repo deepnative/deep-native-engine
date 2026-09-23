@@ -9,8 +9,12 @@ import {
   errorPage,
   contentPreview,
   expertRegistryPage,
+  proposalListPage,
+  proposalPreviewPage,
+  moderationPage,
 } from "../../src/views.ts";
 import type { ExpertRecord } from "../../src/track-readiness.ts";
+import type { Proposal } from "../../src/proposals.ts";
 const learner = {
   id: "a",
   background: "explorer" as const,
@@ -21,6 +25,44 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("escapes private proposal text and never renders a publish action", () => {
+  const item: Proposal = {
+    id: "test-id",
+    title: "<sample>",
+    body: "<script>unsafe</script>",
+    sources: "Original & invented",
+    state: "draft",
+    createdAt: new Date("2026-09-23"),
+    submittedAt: null,
+  };
+  expect(proposalListPage([], "csrf")).toContain("No sample proposals yet");
+  expect(proposalListPage([item], "csrf")).toContain("&lt;sample&gt;");
+  expect(
+    proposalListPage([{ ...item, title: null, state: "withdrawn" }], "csrf"),
+  ).toContain("Redacted proposal");
+  const preview = proposalPreviewPage(item, "csrf");
+  expect(preview).toContain("&lt;script&gt;unsafe&lt;/script&gt;");
+  expect(preview).toContain("Original &amp; invented");
+  expect(preview).toContain("Submit to private moderation");
+  expect(preview).toContain("Withdraw and redact");
+  expect(preview).not.toContain("Publish proposal");
+  expect(
+    proposalPreviewPage({ ...item, state: "submitted" }, "csrf"),
+  ).not.toContain("Submit to private moderation");
+  expect(
+    proposalPreviewPage(
+      { ...item, state: "withdrawn", title: null, body: null, sources: null },
+      "csrf",
+    ),
+  ).toContain("The proposal text has been removed");
+  expect(moderationPage([], "csrf")).toContain("No submitted proposals");
+  expect(moderationPage([{ ...item, state: "submitted" }], "csrf")).toContain(
+    "Quarantine for review",
+  );
+  expect(
+    moderationPage([{ ...item, state: "quarantined" }], "csrf"),
+  ).not.toContain("Quarantine for review");
+});
 it("shows evidence state without exposing registry details to the public track page", () => {
   const record: ExpertRecord = {
     id: "synthetic",
@@ -105,6 +147,9 @@ it("distinguishes unsaved, draft and self-assessed completion without inventing 
     "Ready when you are",
   );
   expect(dashboard(learner, undefined, "token")).toContain('href="/library"');
+  expect(dashboard(learner, undefined, "token")).toContain(
+    'href="/contribute"',
+  );
   expect(dashboard(learner, draft, "token")).toContain("Draft saved");
   const completed = { ...draft, completed_at: new Date() };
   expect(dashboard(learner, completed, "token")).toContain(
