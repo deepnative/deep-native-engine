@@ -1,5 +1,5 @@
 {
-  "version": "initial-learning-v11",
+  "version": "initial-learning-v12",
   "fullMvpVersion": "full-mvp-v1",
   "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices and read-only access/coaching hypotheses; not live commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
@@ -308,6 +308,33 @@
       "steps": "Revise self-reported experience, choose the sample, retire it, and attempt a stale choice",
       "expected": "Eligibility updates, retired content disappears, and a stale choice is rejected without a false completion claim",
       "issues": [33],
+      "critical": true
+    },
+    {
+      "id": "L35",
+      "actor": "Exploratory general learner and another member",
+      "preconditions": "Separate private local previews with no profile time zone",
+      "steps": "Reject a reminder without time zone, save a noncoding goal milestone, reload, inspect outsider isolation and revise learning direction",
+      "expected": "Only the owner sees the persisted milestone; no reminder is scheduled and a changed direction does not erase the original plan",
+      "issues": [36],
+      "critical": true
+    },
+    {
+      "id": "L36",
+      "actor": "Non-IT professional with a profile time zone",
+      "preconditions": "Private synthetic goal and two tabs sharing one member session",
+      "steps": "Save a local reminder, revise the next action, reject a stale-tab overwrite, reload and delete the milestone",
+      "expected": "The wall-clock reminder is displayed but never sent; version checks prevent stale updates and deletion removes the private note",
+      "issues": [36],
+      "critical": true
+    },
+    {
+      "id": "L37",
+      "actor": "IT learner and unrelated professional member",
+      "preconditions": "Separate synthetic member sessions",
+      "steps": "Record a self-reported milestone, try a cross-member edit and forged CSRF, then inspect the other member's unchanged milestone",
+      "expected": "No career or client field is required, completion is labelled self-reported, and neither cross-member nor forged writes succeed",
+      "issues": [36],
       "critical": true
     }
   ],

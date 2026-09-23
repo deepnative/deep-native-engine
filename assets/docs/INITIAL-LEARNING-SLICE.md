@@ -4,7 +4,7 @@ Owner: Tom Wu. Date: 21 September 2026. Claim: `initial-learning-20260921`. Pare
 
 ## Acceptance and evidence map
 
-The executable register is [initial-learning-v11](../../tests/e2e/scenarios.json). Each scenario defines actor, preconditions, steps, expected result, issue links and criticality. Thirty-four scenarios run against the real server, PostgreSQL and disposable private object storage on desktop Chromium and mobile Chromium emulation; each must pass on both to count. The newest journeys check private, consented sample proposals, private time-fitting starter plans, and choices from published synthetic assignments matched to a learner’s current direction and completed local prerequisites. No external AI, payment, identity, storage, scanner or other provider is used.
+The executable register is [initial-learning-v12](../../tests/e2e/scenarios.json). Each scenario defines actor, preconditions, steps, expected result, issue links and criticality. Thirty-seven scenarios run against the real server, PostgreSQL and disposable private object storage on desktop Chromium and mobile Chromium emulation; each must pass on both to count. The newest journeys check private, consented sample proposals, private time-fitting starter plans, choices from published synthetic assignments, and member-owned goal milestones with local-only reminders. No external AI, payment, identity, storage, scanner or other provider is used.
 
 | AC | Browser scenario | Observable result |
 | --- | --- | --- |
@@ -35,8 +35,9 @@ The executable register is [initial-learning-v11](../../tests/e2e/scenarios.json
 | Member proposals stay private and revocable | L28 | Sample attestations, moderator quarantine and withdrawal redaction without publication |
 | Starter plans fit available time and remain private | L29–L31 | Three backgrounds get noncoding plans; invalid time zones fail, goal revisions preserve prior work and separate sessions stay private |
 | Published sample assignment choice stays honest and private | L32–L34 | Three backgrounds see eligible choices, observed local practice can unlock a named prerequisite, and goal changes or retirement invalidate the recommendation without erasing saved work |
+| Private goals and milestones stay member-controlled | L35–L37 | General, non-IT and IT members can save evidence and next actions, view local-only reminders, recover from stale edits, and deny cross-member writes |
 
-L04 is noncritical; the other thirty-three are critical. Unit tests add configuration, validation boundaries, Host checks, missing Origin, startup and failure paths. Integration tests cover transaction constraints, session-expiry boundaries, independent connections, repeated migration, concurrent completion/draft writes, literal SQL-like text, private-object lifecycle and cascading deletion. Negative probes introduce an unimported executable file and a broken CSRF comparison in a temporary copy; both must fail verification.
+L04 is noncritical; the other thirty-six are critical. Unit tests add configuration, validation boundaries, Host checks, missing Origin, startup and failure paths. Integration tests cover transaction constraints, session-expiry boundaries, independent connections, repeated migration, concurrent completion/draft writes, literal SQL-like text, private-object lifecycle and cascading deletion. Negative probes introduce an unimported executable file and a broken CSRF comparison in a temporary copy; both must fail verification.
 
 Definition of done for this slice: all AC above evidenced; all required tests pass without retries/skips; >=99% each unit metric globally and per file; full shared gate passes on intended commit before pushing; independent review findings resolved; PR and resulting main CI pass; setup, privacy, operations and remaining scope documented; claims released with evidence. This does not close broader issue AC automatically.
 
