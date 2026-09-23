@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v10",
+  "version": "initial-learning-v11",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable learner interests, private evidence, gated content, honest track states, private synthetic member proposals, private time-fitting starter plans and read-only access/coaching hypotheses; not live commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices and read-only access/coaching hypotheses; not live commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -281,6 +281,33 @@
       "steps": "Choose a technical goal and weekly time, then inspect a separate learner's plan",
       "expected": "Experienced practice remains noncoding and private; the other learner does not see the time zone or goal",
       "issues": [28],
+      "critical": true
+    },
+    {
+      "id": "L32",
+      "actor": "Exploratory general learner and another member",
+      "preconditions": "One published, unqualified-signoff-free synthetic noncoding assignment",
+      "steps": "Read the published sample, choose it, reload, and compare an independent member's path",
+      "expected": "The exact choice persists privately; the other member has no chosen assignment",
+      "issues": [33],
+      "critical": true
+    },
+    {
+      "id": "L33",
+      "actor": "Non-IT professional with an education interest",
+      "preconditions": "Published synthetic assignment requires local foundation practice and self-reported some experience",
+      "steps": "Check unavailable state, complete the local exercise, choose the assignment, then change goal",
+      "expected": "Observed practice unlocks the sample, choice persists, and a goal change shows an honest unavailable state without erasing prior progress",
+      "issues": [33],
+      "critical": true
+    },
+    {
+      "id": "L34",
+      "actor": "Technical learner with a synthetic published assignment",
+      "preconditions": "Assignment recommends experienced AI use and can be retired",
+      "steps": "Revise self-reported experience, choose the sample, retire it, and attempt a stale choice",
+      "expected": "Eligibility updates, retired content disappears, and a stale choice is rejected without a false completion claim",
+      "issues": [33],
       "critical": true
     }
   ],

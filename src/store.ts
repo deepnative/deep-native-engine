@@ -18,6 +18,10 @@ export interface Exercise {
   completed_at: Date | null;
   goal_at_start?: LearnerProfile["goal"] | null;
 }
+export interface AssignmentChoice {
+  contentId: string;
+  contentVersion: number;
+}
 export type Session =
   { kind: "new" } | { kind: "expired" } | { kind: "active"; learner: Learner };
 export interface Store {
@@ -29,6 +33,12 @@ export interface Store {
   ): Promise<void>;
   updateProfile(id: string, profile: LearnerProfile): Promise<void>;
   progress(id: string): Promise<Exercise | undefined>;
+  assignmentChoice(id: string): Promise<AssignmentChoice | null>;
+  chooseAssignment(
+    id: string,
+    contentId: string,
+    version: number,
+  ): Promise<boolean>;
   save(
     id: string,
     input: { instruction: string; verification: string; complete: boolean },
@@ -50,6 +60,7 @@ export async function migrate(pool: Pool) {
       "007-expert-readiness.sql",
       "008-member-proposals.sql",
       "009-learning-plan.sql",
+      "010-assignment-choice.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
@@ -155,6 +166,34 @@ export function store(pool: Pool): Store {
           [id, LESSON.id, LESSON.version],
         )
       ).rows[0];
+    },
+    async assignmentChoice(id) {
+      return (
+        (
+          await pool.query<AssignmentChoice>(
+            `SELECT content_id AS "contentId",content_version AS "contentVersion"
+             FROM learner_assignment_choices WHERE member_id=$1`,
+            [id],
+          )
+        ).rows[0] ?? null
+      );
+    },
+    async chooseAssignment(id, contentId, version) {
+      const result = await pool.query(
+        `INSERT INTO learner_assignment_choices(member_id,content_id,content_version)
+         SELECT l.id,cv.id,cv.version FROM learners l
+         JOIN content_versions cv ON cv.id=$2 AND cv.version=$3
+         WHERE l.id=$1 AND cv.kind='assignment' AND cv.state='published'
+           AND NOT EXISTS(
+             SELECT 1 FROM content_versions newer WHERE newer.id=cv.id
+               AND newer.state='published' AND newer.version>cv.version
+           )
+         ON CONFLICT(member_id) DO UPDATE SET
+           content_id=EXCLUDED.content_id,content_version=EXCLUDED.content_version,
+           chosen_at=CURRENT_TIMESTAMP`,
+        [id, contentId, version],
+      );
+      return result.rowCount === 1;
     },
     async save(id, input) {
       await pool.query(

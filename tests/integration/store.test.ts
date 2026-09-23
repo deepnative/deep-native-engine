@@ -76,6 +76,65 @@ const contentDraft: DraftContent = {
   rubric: "Check source and uncertainty.",
   rubricVersion: 1,
 };
+it("stores a private pinned choice only for a currently published assignment and removes it with the member", async () => {
+  const first = await member();
+  const other = await member();
+  const editorToken = randomBytes(32).toString("hex");
+  const reviewerToken = randomBytes(32).toString("hex");
+  const auth = authorizationStore(pool);
+  await auth.provisionStaff(
+    editorToken,
+    "editor",
+    new Date(Date.now() + 86_400_000),
+  );
+  await auth.provisionStaff(
+    reviewerToken,
+    "reviewer",
+    new Date(Date.now() + 86_400_000),
+  );
+  const catalog = catalogStore(pool);
+  const draft = {
+    ...contentDraft,
+    id: "SYN-935",
+    goals: ["everyday"],
+    backgrounds: ["explorer"],
+    domains: [],
+    minimumExperience: "new" as const,
+  };
+  expect(await db.chooseAssignment(first.learner.id, draft.id, 1)).toBe(false);
+  expect(await catalog.createDraft(editorToken, draft)).toBe(true);
+  await expect(
+    pool.query(
+      "UPDATE content_versions SET minimum_experience='unknown' WHERE id=$1",
+      [draft.id],
+    ),
+  ).rejects.toThrow();
+  expect(await db.chooseAssignment(first.learner.id, draft.id, 1)).toBe(false);
+  expect(await catalog.submit(editorToken, draft.id, 1)).toBe(true);
+  expect(await catalog.approve(reviewerToken, draft.id, 1, true)).toBe(true);
+  expect(await catalog.publish(editorToken, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(first.learner.id, draft.id, 1)).toBe(true);
+  expect(await db.assignmentChoice(first.learner.id)).toEqual({
+    contentId: draft.id,
+    contentVersion: 1,
+  });
+  expect(await db.assignmentChoice(other.learner.id)).toBeNull();
+  const second = { ...draft, version: 2, body: "Revised invented task." };
+  expect(await catalog.createDraft(editorToken, second)).toBe(true);
+  expect(await catalog.submit(editorToken, draft.id, 2)).toBe(true);
+  expect(await catalog.approve(reviewerToken, draft.id, 2, true)).toBe(true);
+  expect(await catalog.publish(editorToken, draft.id, 2)).toBe(true);
+  expect(await db.chooseAssignment(first.learner.id, draft.id, 1)).toBe(false);
+  expect(await db.chooseAssignment(first.learner.id, draft.id, 2)).toBe(true);
+  expect(await catalog.retire(editorToken, draft.id)).toBe(true);
+  expect(await db.chooseAssignment(first.learner.id, draft.id, 2)).toBe(false);
+  expect(await db.assignmentChoice(first.learner.id)).toEqual({
+    contentId: draft.id,
+    contentVersion: 2,
+  });
+  await db.remove(first.learner.id);
+  expect(await db.assignmentChoice(first.learner.id)).toBeNull();
+});
 it("keeps consented member samples private through moderation, withdrawal and deletion", async () => {
   const proposals = proposalStore(pool);
   const first = await member();

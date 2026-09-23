@@ -21,6 +21,7 @@ import {
   errorPage,
 } from "./views.ts";
 import type { Store, Learner } from "./store.ts";
+import { eligibleAssignments } from "./assignment-choice.ts";
 import {
   adapterReadiness,
   type AdapterReadiness,
@@ -329,6 +330,7 @@ export function app(
       "/profile",
       "/delete",
       "/library",
+      "/assignments",
       "/contribute",
     ],
     async (_req, res, next) => {
@@ -507,7 +509,9 @@ export function app(
       goals: [],
       backgrounds: [],
       domains: [],
-      prerequisites: "",
+      prerequisites: value("prerequisites"),
+      minimumExperience: (value("minimum_experience") ||
+        "new") as DraftContent["minimumExperience"],
       rubric: null,
       rubricVersion: null,
     };
@@ -576,28 +580,71 @@ export function app(
   });
   app.get("/learn", async (_req, res) => {
     const member = res.locals.learner as Learner;
+    const [progress, published, choice] = await Promise.all([
+      store.progress(member.id),
+      catalog.search({}),
+      store.assignmentChoice(member.id),
+    ]);
     res.send(
       dashboard(
         member,
-        await store.progress(member.id),
+        progress,
         res.locals.csrf as string,
+        [],
+        eligibleAssignments(published, member, progress),
+        choice,
       ),
     );
+  });
+  app.post("/assignments/select", async (req, res) => {
+    const member = res.locals.learner as Learner;
+    const fields = req.body as Fields;
+    const id = typeof fields.content_id === "string" ? fields.content_id : "";
+    const version = Number(fields.content_version);
+    const progress = await store.progress(member.id);
+    const options = eligibleAssignments(
+      await catalog.search({}),
+      member,
+      progress,
+    );
+    if (
+      !Number.isSafeInteger(version) ||
+      !options.some((item) => item.id === id && item.version === version) ||
+      !(await store.chooseAssignment(member.id, id, version))
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Assignment choice unavailable",
+            "The published assignment or its prerequisites changed. Return to your learning path and choose an available sample.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/learn");
   });
   app.post("/profile", async (req, res) => {
     const member = res.locals.learner as Learner;
     const input = profile({ ...(req.body as Fields), synthetic: "yes" });
     if (!input) {
+      const [progress, published, choice] = await Promise.all([
+        store.progress(member.id),
+        catalog.search({}),
+        store.assignmentChoice(member.id),
+      ]);
       res
         .status(422)
         .send(
           dashboard(
             member,
-            await store.progress(member.id),
+            progress,
             res.locals.csrf as string,
             [
               "Choose valid profile, time zone and weekly time options before saving.",
             ],
+            eligibleAssignments(published, member, progress),
+            choice,
           ),
         );
       return;

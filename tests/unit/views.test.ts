@@ -155,6 +155,56 @@ it("renders an accessible plain-text content preview when filters and prerequisi
   expect(html).toContain("<dt>Goals</dt><dd>All</dd>");
   expect(html).toContain("<dt>Backgrounds</dt><dd>All</dd>");
   expect(html).toContain("<dt>Prerequisites</dt><dd>None</dd>");
+  expect(html).toContain("Suggested experience");
+});
+it("shows only current assignment choices, escapes titles and gives stale-choice recovery", () => {
+  const item = {
+    id: "SYN-920",
+    version: 1,
+    kind: "assignment" as const,
+    origin: "curated" as const,
+    title: "Invented <event>",
+    body: "Sample",
+    owner: "Editor",
+    sources: "Original",
+    rights: "Owned",
+    goals: ["everyday"],
+    backgrounds: ["explorer"],
+    domains: [],
+    prerequisites: "None",
+    minimumExperience: "new" as const,
+    rubric: null,
+    rubricVersion: null,
+    state: "published" as const,
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date("2026-09-23"),
+    publishedAt: new Date("2026-09-23"),
+  };
+  expect(dashboard(learner, undefined, "token")).toContain(
+    "No published assignment currently fits",
+  );
+  const available = dashboard(learner, undefined, "token", [], [item], {
+    contentId: item.id,
+    contentVersion: 1,
+  });
+  expect(available).toContain("Your chosen sample");
+  expect(available).toContain("Choose Invented &lt;event&gt;");
+  expect(available).not.toContain("Invented <event>");
+  const defaults = dashboard(
+    learner,
+    undefined,
+    "token",
+    [],
+    [{ ...item, minimumExperience: undefined, prerequisites: "" }],
+  );
+  expect(defaults).toContain("No prerequisite");
+  expect(defaults).toContain("Just starting");
+  const stale = dashboard(learner, undefined, "token", [], [], {
+    contentId: item.id,
+    contentVersion: 1,
+  });
+  expect(stale).toContain("no longer available");
+  expect(stale).not.toContain(item.title);
 });
 it("renders all accessible entry choices and actionable validation", () => {
   expect(welcome("token")).toContain("Working in another field");

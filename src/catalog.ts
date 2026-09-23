@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { Pool } from "pg";
-import { BACKGROUNDS, DOMAINS, GOALS } from "./content.ts";
+import {
+  BACKGROUNDS,
+  DOMAINS,
+  EXPERIENCE,
+  GOALS,
+  type Experience,
+} from "./content.ts";
 import { hash } from "./store.ts";
 
 export type ContentKind = "lesson" | "assignment" | "workflow" | "community";
@@ -22,6 +28,7 @@ export interface DraftContent {
   backgrounds: string[];
   domains: string[];
   prerequisites: string;
+  minimumExperience?: Experience;
   rubric: string | null;
   rubricVersion: number | null;
 }
@@ -108,6 +115,8 @@ export function validDraft(item: DraftContent): boolean {
     validTags(item.backgrounds, BACKGROUNDS) &&
     validTags(item.domains, DOMAINS) &&
     item.prerequisites.length <= 2000 &&
+    (item.minimumExperience === undefined ||
+      Object.hasOwn(EXPERIENCE, item.minimumExperience)) &&
     ((item.rubric === null && item.rubricVersion === null) ||
       (typeof item.rubric === "string" &&
         item.rubric.trim().length > 0 &&
@@ -117,6 +126,7 @@ export function validDraft(item: DraftContent): boolean {
   );
 }
 const columns = `id,version,kind,origin,title,body,owner,sources,rights,goals,backgrounds,domains,prerequisites,
+  minimum_experience AS "minimumExperience",
   rubric,rubric_version AS "rubricVersion",state,requires_qualified_signoff AS "requiresQualifiedSignoff",
   reviewed_at AS "reviewedAt",published_at AS "publishedAt"`;
 function role(role: "editor" | "reviewer") {
@@ -130,8 +140,8 @@ export function catalogStore(pool: Pool): CatalogStore {
       if (!validDraft(item)) return false;
       const result = await pool.query(
         `INSERT INTO content_versions(id,version,kind,origin,title,body,owner,sources,rights,
-          goals,backgrounds,domains,prerequisites,rubric,rubric_version,created_by)
-         SELECT $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,p.id
+          goals,backgrounds,domains,prerequisites,minimum_experience,rubric,rubric_version,created_by)
+         SELECT $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,p.id
          FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
          WHERE p.token_hash=$1 AND p.kind='staff' AND s.role='editor'
            AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
@@ -153,6 +163,7 @@ export function catalogStore(pool: Pool): CatalogStore {
           item.backgrounds,
           item.domains,
           item.prerequisites,
+          item.minimumExperience ?? "new",
           item.rubric,
           item.rubricVersion,
         ],

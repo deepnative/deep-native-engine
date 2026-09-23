@@ -11,7 +11,11 @@ import {
   MAX_EVIDENCE_BYTES,
   type EvidenceStore,
 } from "../../src/evidence.ts";
-import { disabledCatalogStore, type CatalogStore } from "../../src/catalog.ts";
+import {
+  disabledCatalogStore,
+  type CatalogStore,
+  type ContentVersion,
+} from "../../src/catalog.ts";
 import { disabledTrackStore } from "../../src/track-readiness.ts";
 import {
   disabledProposalStore,
@@ -172,6 +176,12 @@ function storage() {
     create: vi.fn<Store["create"]>().mockResolvedValue(undefined),
     updateProfile: vi.fn<Store["updateProfile"]>().mockResolvedValue(undefined),
     progress: vi.fn<Store["progress"]>().mockResolvedValue(undefined),
+    assignmentChoice: vi
+      .fn<Store["assignmentChoice"]>()
+      .mockResolvedValue(null),
+    chooseAssignment: vi
+      .fn<Store["chooseAssignment"]>()
+      .mockResolvedValue(false),
     save: vi.fn<Store["save"]>().mockResolvedValue(undefined),
     remove: vi.fn<Store["remove"]>().mockResolvedValue(undefined),
   };
@@ -840,4 +850,57 @@ it("handles completed or saved paths without inventing formal assessment", async
   });
   const page = await agent.get("/learn").set("Host", host);
   expect(page.text).toContain("Completed · self-assessed");
+});
+it("selects only an eligible published assignment for the active member and rejects stale or forged choices", async () => {
+  const item: ContentVersion = {
+    id: "SYN-920",
+    version: 1,
+    kind: "assignment",
+    origin: "curated",
+    title: "Invented event",
+    body: "Use invented details.",
+    owner: "Editor",
+    sources: "Original",
+    rights: "Owned",
+    goals: ["everyday"],
+    backgrounds: ["explorer"],
+    domains: [],
+    prerequisites: "None",
+    minimumExperience: "new",
+    rubric: null,
+    rubricVersion: null,
+    state: "published",
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date("2026-09-23"),
+    publishedAt: new Date("2026-09-23"),
+  };
+  const catalog = catalogMock();
+  catalog.search.mockResolvedValue([item]);
+  const agent = request.agent(app(db, { origin, secret: "secret", catalog }));
+  const entry = await agent.get("/").set("Host", host).expect(200);
+  const csrf = entry.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  const post = (values: Record<string, string>) =>
+    agent
+      .post("/assignments/select")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, content_id: item.id, content_version: "1", ...values });
+  await post({}).expect(303);
+  expect(db.chooseAssignment).not.toHaveBeenCalled();
+  active();
+  expect(
+    (await agent.get("/learn").set("Host", host).expect(200)).text,
+  ).toContain("Invented event");
+  await post({ csrf: "invalid" }).expect(403);
+  await post({ content_version: "1.5" }).expect(409);
+  await post({ content_id: "SYN-999" }).expect(409);
+  expect(db.chooseAssignment).not.toHaveBeenCalled();
+  db.chooseAssignment.mockResolvedValueOnce(false);
+  await post({}).expect(409);
+  db.chooseAssignment.mockResolvedValueOnce(true);
+  await post({}).expect(303);
+  expect(db.chooseAssignment).toHaveBeenLastCalledWith(member.id, item.id, 1);
+  catalog.search.mockResolvedValue([{ ...item, state: "retired" }]);
+  await post({}).expect(409);
 });
