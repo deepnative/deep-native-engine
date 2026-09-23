@@ -115,7 +115,7 @@
       "id": "L13",
       "actor": "learner with a saved draft",
       "preconditions": "Active session and an idle application PostgreSQL connection",
-      "steps": "Terminate the real idle database connections; reload then reopen the lesson",
+      "steps": "Terminate the real idle database connections; request the current lesson URL again, then reopen the lesson",
       "expected": "Server remains available; any interrupted request is honest; saved draft recovers",
       "issues": [18, 22, 24, 33],
       "critical": true
