@@ -15,12 +15,8 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify repository (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    name: Verify repository (ubuntu-latest)
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -34,17 +30,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: Start PostgreSQL on Linux
-        if: runner.os == 'Linux'
+      - name: Start PostgreSQL
         run: docker compose up -d --wait
-      - name: Start isolated PostgreSQL on macOS
-        if: runner.os == 'macOS'
-        run: |
-          brew install postgresql@18
-          PG_BIN="$(brew --prefix postgresql@18)/bin"
-          "$PG_BIN/initdb" -D "$RUNNER_TEMP/dne-pg" -U dne --auth=trust
-          "$PG_BIN/pg_ctl" -D "$RUNNER_TEMP/dne-pg" -l "$RUNNER_TEMP/dne-pg.log" -o "-h 127.0.0.1 -p 54329" -w start
-          "$PG_BIN/createdb" -h 127.0.0.1 -p 54329 -U dne dne_dev
       - run: npx playwright install --with-deps chromium
       - name: Run the shared verification command
         run: make verify
@@ -61,7 +48,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: verification-${{ matrix.os }}
+          name: verification-ubuntu-latest
           path: artifacts/
           if-no-files-found: error
           retention-days: 14

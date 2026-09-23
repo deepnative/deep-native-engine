@@ -20,7 +20,7 @@ The repository contains all 25 manifest-listed source files. `make verify` recal
 | Story and acceptance scope | Nine roadmap journeys, ten build-prompt journeys and eight ecosystem journeys | Preserve all 27 requirement families until QA-002 reviews overlap; do not shrink the denominator because some journeys overlap |
 | Prototype | Local server-rendered welcome/goal, lesson, progress, authorization and private-evidence flows | Treat this as a synthetic first-slice prototype, not the full member-to-reviewer journey or a hosted product |
 | Architecture | File-first hosted modular-monolith ADR and implemented TypeScript/PostgreSQL slice | Reuse it; authored public curriculum belongs in reviewed versioned files, while private/mutable/transactional state belongs in PostgreSQL |
-| Operations | Issue coordination, pre-push gate and Linux/macOS CI | Reuse as the delivery workflow; a green technical gate is not launch, customer or provider evidence |
+| Operations | Issue coordination, pre-push gate and Ubuntu CI | Reuse as the delivery workflow; a green technical gate is not launch, customer or provider evidence |
 | Commercial model | CAD 3,000 pilot, CAD 9,000 continuation and CAD 12,000 annual Professional package | Preserve as optional coaching hypotheses with their original rules; do not apply them to foundation access or every learner |
 
 No code, private course content or credentials from another repository are approved for reuse. Synthetic fixtures and the current repository's owned planning/application assets are the only present reuse base.
