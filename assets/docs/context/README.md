@@ -37,4 +37,4 @@ All new issues start open in Backlog; no agents are assigned to implement them. 
 
 ## Recommended models
 
-Every roadmap issue has one `model:*` label and `reasoning:high`. See [MODEL-RECOMMENDATIONS.md](MODEL-RECOMMENDATIONS.md) for the full routing table and label meanings. Astra is primary on 19 issues; Sol is primary on 36. Separate labels recommend Astra design/review and XHigh escalation where relevant. These labels do not assign agents, change active model settings, or authorize implementation.
+Every roadmap issue has one `model:*` label and one `reasoning:*` label. The [23 September routing policy](MODEL-RECOMMENDATIONS.md) records the current recommendation for all 55 issues: Astra leads 31 and Sol leads 24; 41 start at High, 10 at XHigh and 4 at Medium. `project-snapshot.json` is a dated publication snapshot; `model-recommendations.json` is the current routing source. Labels do not assign agents, change active model settings, or authorize implementation.

@@ -1,5 +1,5 @@
 {
-  "basis": "User-approved routing recommendation from this conversation; labels only, not execution authorization.",
+  "basis": "23 September 2026 routing review of all live issue acceptance criteria; GPT-6 Sol/Luna release and current official model-selection guidance. These are recommendations, not execution authorization or performance benchmarks.",
   "issues": [
     {
       "id": "ROADMAP",
@@ -13,7 +13,8 @@
       "labels": [
         "model:gpt-6-astra",
         "reasoning:high"
-      ]
+      ],
+      "rationale": "Cross-phase scope, dependencies and evidence gates"
     },
     {
       "id": "GATE-A",
@@ -27,7 +28,8 @@
       "labels": [
         "model:gpt-6-astra",
         "reasoning:high"
-      ]
+      ],
+      "rationale": "Phase A decision across product, content and capacity"
     },
     {
       "id": "GATE-B",
@@ -41,7 +43,8 @@
       "labels": [
         "model:gpt-6-astra",
         "reasoning:high"
-      ]
+      ],
+      "rationale": "Full private MVP acceptance and release gate"
     },
     {
       "id": "GATE-C",
@@ -55,7 +58,8 @@
       "labels": [
         "model:gpt-6-astra",
         "reasoning:high"
-      ]
+      ],
+      "rationale": "Paid-pilot decision with real service evidence"
     },
     {
       "id": "GATE-D",
@@ -69,7 +73,8 @@
       "labels": [
         "model:gpt-6-astra",
         "reasoning:high"
-      ]
+      ],
+      "rationale": "Continuation decision with money and usage evidence"
     },
     {
       "id": "GATE-E",
@@ -83,7 +88,8 @@
       "labels": [
         "model:gpt-6-astra",
         "reasoning:high"
-      ]
+      ],
+      "rationale": "Repeatability decision across delivery and economics"
     },
     {
       "id": "GATE-F",
@@ -97,161 +103,171 @@
       "labels": [
         "model:gpt-6-astra",
         "reasoning:high"
-      ]
+      ],
+      "rationale": "Expansion gate across distinct product and legal risks"
     },
     {
       "id": "PLAN-001",
       "number": 8,
       "url": "https://github.com/deepnative/deep-native-engine/issues/8",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Cross-audience story map and source reconciliation"
     },
     {
       "id": "GOV-001",
       "number": 11,
       "url": "https://github.com/deepnative/deep-native-engine/issues/11",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Repository governance and evidence controls"
     },
     {
       "id": "PLAN-002",
       "number": 12,
       "url": "https://github.com/deepnative/deep-native-engine/issues/12",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-astra",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-astra",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Jurisdiction, consent, terms and launch decision boundaries"
     },
     {
       "id": "PLAN-003",
       "number": 13,
       "url": "https://github.com/deepnative/deep-native-engine/issues/13",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Qualified staffing, cost and capacity planning"
     },
     {
       "id": "PLAN-004",
       "number": 14,
       "url": "https://github.com/deepnative/deep-native-engine/issues/14",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Accessible curriculum, rights and review calibration"
     },
     {
       "id": "QA-001",
       "number": 16,
       "url": "https://github.com/deepnative/deep-native-engine/issues/16",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": "gpt-6-astra",
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra",
         "design:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Executable coverage gate with independent test design"
     },
     {
       "id": "QA-002",
       "number": 17,
       "url": "https://github.com/deepnative/deep-native-engine/issues/17",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": "gpt-6-astra",
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra",
         "design:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Full journey denominator and browser gate design"
     },
     {
       "id": "QA-003",
       "number": 22,
       "url": "https://github.com/deepnative/deep-native-engine/issues/22",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": "gpt-6-astra",
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra",
         "design:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Push and CI quality enforcement with test design"
     },
     {
       "id": "QA-004",
       "number": 18,
       "url": "https://github.com/deepnative/deep-native-engine/issues/18",
       "primary_model": "gpt-6-astra",
-      "reasoning": "high",
+      "reasoning": "xhigh",
       "review_model": "gpt-6-astra",
       "design_model": null,
-      "escalate_to_xhigh": true,
+      "escalate_to_xhigh": false,
       "labels": [
         "model:gpt-6-astra",
-        "reasoning:high",
-        "review:gpt-6-astra",
-        "escalate:xhigh"
-      ]
+        "reasoning:xhigh",
+        "review:gpt-6-astra"
+      ],
+      "rationale": "Threat model spanning private data, payments and AI"
     },
     {
       "id": "QA-005",
       "number": 43,
       "url": "https://github.com/deepnative/deep-native-engine/issues/43",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Browser, accessibility and performance verification"
     },
     {
       "id": "CTP-001",
@@ -267,7 +283,8 @@
         "reasoning:high",
         "review:gpt-6-astra",
         "escalate:xhigh"
-      ]
+      ],
+      "rationale": "Architecture and domain boundary decisions"
     },
     {
       "id": "CTP-002",
@@ -283,37 +300,40 @@
         "reasoning:high",
         "review:gpt-6-astra",
         "escalate:xhigh"
-      ]
+      ],
+      "rationale": "Access, coaching offers, entitlements and pricing invariants"
     },
     {
       "id": "CTP-003",
       "number": 20,
       "url": "https://github.com/deepnative/deep-native-engine/issues/20",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Cross-audience profile, readiness and expert registry"
     },
     {
       "id": "CTP-004",
       "number": 23,
       "url": "https://github.com/deepnative/deep-native-engine/issues/23",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Deterministic adapters, configuration and durable jobs"
     },
     {
       "id": "CTP-005",
@@ -329,177 +349,184 @@
         "reasoning:high",
         "review:gpt-6-astra",
         "escalate:xhigh"
-      ]
+      ],
+      "rationale": "Identity, staff grants, revocation and audit"
     },
     {
       "id": "CTP-006",
       "number": 25,
       "url": "https://github.com/deepnative/deep-native-engine/issues/25",
       "primary_model": "gpt-6-astra",
-      "reasoning": "high",
+      "reasoning": "xhigh",
       "review_model": "gpt-6-astra",
       "design_model": null,
-      "escalate_to_xhigh": true,
+      "escalate_to_xhigh": false,
       "labels": [
         "model:gpt-6-astra",
-        "reasoning:high",
-        "review:gpt-6-astra",
-        "escalate:xhigh"
-      ]
+        "reasoning:xhigh",
+        "review:gpt-6-astra"
+      ],
+      "rationale": "Private evidence, quarantine and deletion races"
     },
     {
       "id": "CTP-007",
       "number": 26,
       "url": "https://github.com/deepnative/deep-native-engine/issues/26",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Versioned catalog and safe publication workflow"
     },
     {
       "id": "CTP-008",
       "number": 28,
       "url": "https://github.com/deepnative/deep-native-engine/issues/28",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Goal-based onboarding with optional paid acceptance"
     },
     {
       "id": "CTP-009",
       "number": 33,
       "url": "https://github.com/deepnative/deep-native-engine/issues/33",
-      "primary_model": "gpt-5.6-sol",
-      "reasoning": "high",
+      "primary_model": "gpt-6-sol",
+      "reasoning": "medium",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
-        "reasoning:high",
+        "model:gpt-6-sol",
+        "reasoning:medium",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Accessible lesson, progress and assignment behavior"
     },
     {
       "id": "CTP-010",
       "number": 38,
       "url": "https://github.com/deepnative/deep-native-engine/issues/38",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-astra",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-astra",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Qualified review publication and evidence authorization"
     },
     {
       "id": "CTP-011",
       "number": 27,
       "url": "https://github.com/deepnative/deep-native-engine/issues/27",
       "primary_model": "gpt-6-astra",
-      "reasoning": "high",
+      "reasoning": "xhigh",
       "review_model": "gpt-6-astra",
       "design_model": null,
-      "escalate_to_xhigh": true,
+      "escalate_to_xhigh": false,
       "labels": [
         "model:gpt-6-astra",
-        "reasoning:high",
-        "review:gpt-6-astra",
-        "escalate:xhigh"
-      ]
+        "reasoning:xhigh",
+        "review:gpt-6-astra"
+      ],
+      "rationale": "Immutable ledger and concurrent entitlement reservations"
     },
     {
       "id": "CTP-012",
       "number": 29,
       "url": "https://github.com/deepnative/deep-native-engine/issues/29",
       "primary_model": "gpt-6-astra",
-      "reasoning": "high",
+      "reasoning": "xhigh",
       "review_model": "gpt-6-astra",
       "design_model": null,
-      "escalate_to_xhigh": true,
+      "escalate_to_xhigh": false,
       "labels": [
         "model:gpt-6-astra",
-        "reasoning:high",
-        "review:gpt-6-astra",
-        "escalate:xhigh"
-      ]
+        "reasoning:xhigh",
+        "review:gpt-6-astra"
+      ],
+      "rationale": "Concurrent booking, time zones and credit exceptions"
     },
     {
       "id": "CTP-013",
       "number": 30,
       "url": "https://github.com/deepnative/deep-native-engine/issues/30",
-      "primary_model": "gpt-5.6-sol",
-      "reasoning": "high",
+      "primary_model": "gpt-6-sol",
+      "reasoning": "medium",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
-        "reasoning:high",
+        "model:gpt-6-sol",
+        "reasoning:medium",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Bounded published workflow catalog and safe downloads"
     },
     {
       "id": "CTP-014",
       "number": 31,
       "url": "https://github.com/deepnative/deep-native-engine/issues/31",
       "primary_model": "gpt-6-astra",
-      "reasoning": "high",
+      "reasoning": "xhigh",
       "review_model": "gpt-6-astra",
       "design_model": null,
-      "escalate_to_xhigh": true,
+      "escalate_to_xhigh": false,
       "labels": [
         "model:gpt-6-astra",
-        "reasoning:high",
-        "review:gpt-6-astra",
-        "escalate:xhigh"
-      ]
+        "reasoning:xhigh",
+        "review:gpt-6-astra"
+      ],
+      "rationale": "AI consent, budget, queue and ambiguous retry controls"
     },
     {
       "id": "CTP-015",
       "number": 34,
       "url": "https://github.com/deepnative/deep-native-engine/issues/34",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Grounded AI study feedback and allowance controls"
     },
     {
       "id": "CTP-016",
       "number": 32,
       "url": "https://github.com/deepnative/deep-native-engine/issues/32",
       "primary_model": "gpt-6-astra",
-      "reasoning": "high",
+      "reasoning": "xhigh",
       "review_model": "gpt-6-astra",
       "design_model": null,
-      "escalate_to_xhigh": true,
+      "escalate_to_xhigh": false,
       "labels": [
         "model:gpt-6-astra",
-        "reasoning:high",
-        "review:gpt-6-astra",
-        "escalate:xhigh"
-      ]
+        "reasoning:xhigh",
+        "review:gpt-6-astra"
+      ],
+      "rationale": "Payment event order, idempotency and refunds"
     },
     {
       "id": "CTP-017",
@@ -515,326 +542,345 @@
         "reasoning:high",
         "review:gpt-6-astra",
         "escalate:xhigh"
-      ]
+      ],
+      "rationale": "Renewal, cancellation, invoice and anniversary rules"
     },
     {
       "id": "CTP-018",
       "number": 36,
       "url": "https://github.com/deepnative/deep-native-engine/issues/36",
-      "primary_model": "gpt-5.6-sol",
-      "reasoning": "high",
+      "primary_model": "gpt-6-sol",
+      "reasoning": "medium",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
-        "reasoning:high",
+        "model:gpt-6-sol",
+        "reasoning:medium",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Member-owned goals, milestones and private drafts"
     },
     {
       "id": "CTP-019",
       "number": 39,
       "url": "https://github.com/deepnative/deep-native-engine/issues/39",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-astra",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-astra",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Staff scopes, moderation and time reconciliation"
     },
     {
       "id": "CTP-020",
       "number": 37,
       "url": "https://github.com/deepnative/deep-native-engine/issues/37",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-astra",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-astra",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Concurrent event seats, consent and service capacity"
     },
     {
       "id": "CTP-021",
       "number": 40,
       "url": "https://github.com/deepnative/deep-native-engine/issues/40",
       "primary_model": "gpt-6-astra",
-      "reasoning": "high",
+      "reasoning": "xhigh",
       "review_model": "gpt-6-astra",
       "design_model": null,
-      "escalate_to_xhigh": true,
+      "escalate_to_xhigh": false,
       "labels": [
         "model:gpt-6-astra",
-        "reasoning:high",
-        "review:gpt-6-astra",
-        "escalate:xhigh"
-      ]
+        "reasoning:xhigh",
+        "review:gpt-6-astra"
+      ],
+      "rationale": "Cohort privacy, contribution rights, export and deletion"
     },
     {
       "id": "CTP-022",
       "number": 41,
       "url": "https://github.com/deepnative/deep-native-engine/issues/41",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Reconciled learning and service metrics with privacy"
     },
     {
       "id": "CTP-023",
       "number": 42,
       "url": "https://github.com/deepnative/deep-native-engine/issues/42",
-      "primary_model": "gpt-5.6-sol",
-      "reasoning": "high",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "xhigh",
       "review_model": "gpt-6-astra",
       "design_model": "gpt-6-astra",
-      "escalate_to_xhigh": true,
+      "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
-        "reasoning:high",
+        "model:gpt-6-astra",
+        "reasoning:xhigh",
         "review:gpt-6-astra",
-        "design:gpt-6-astra",
-        "escalate:xhigh"
-      ]
+        "design:gpt-6-astra"
+      ],
+      "rationale": "Cross-domain state, privacy and AI reliability proof"
     },
     {
       "id": "CTP-024",
       "number": 44,
       "url": "https://github.com/deepnative/deep-native-engine/issues/44",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-astra",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-astra",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Full-MVP release rehearsal and acceptance evidence"
     },
     {
       "id": "CTP-025",
       "number": 45,
       "url": "https://github.com/deepnative/deep-native-engine/issues/45",
       "primary_model": "gpt-6-astra",
-      "reasoning": "high",
+      "reasoning": "xhigh",
       "review_model": "gpt-6-astra",
       "design_model": null,
-      "escalate_to_xhigh": true,
+      "escalate_to_xhigh": false,
       "labels": [
         "model:gpt-6-astra",
-        "reasoning:high",
-        "review:gpt-6-astra",
-        "escalate:xhigh"
-      ]
+        "reasoning:xhigh",
+        "review:gpt-6-astra"
+      ],
+      "rationale": "Production restore, privacy, billing and launch controls"
     },
     {
       "id": "OPS-001",
       "number": 21,
       "url": "https://github.com/deepnative/deep-native-engine/issues/21",
-      "primary_model": "gpt-5.6-sol",
-      "reasoning": "high",
+      "primary_model": "gpt-6-sol",
+      "reasoning": "medium",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
-        "reasoning:high",
+        "model:gpt-6-sol",
+        "reasoning:medium",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Bounded acquisition plan with truthful consent evidence"
     },
     {
       "id": "OPS-002",
       "number": 46,
       "url": "https://github.com/deepnative/deep-native-engine/issues/46",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-astra",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-astra",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Real paid-pilot delivery and cost evidence"
     },
     {
       "id": "OPS-003",
       "number": 47,
       "url": "https://github.com/deepnative/deep-native-engine/issues/47",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-astra",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-astra",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Paid continuation and actual recurring-use evidence"
     },
     {
       "id": "OPS-004",
       "number": 48,
       "url": "https://github.com/deepnative/deep-native-engine/issues/48",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-astra",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-astra",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Repeatable demand, funded capacity and service economics"
     },
     {
       "id": "OPS-005",
       "number": 49,
       "url": "https://github.com/deepnative/deep-native-engine/issues/49",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Specialist offer buyer, staffing and cost analysis"
     },
     {
       "id": "EXP-001",
       "number": 50,
       "url": "https://github.com/deepnative/deep-native-engine/issues/50",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Practice offer buyer test and service costing"
     },
     {
       "id": "EXP-002",
       "number": 55,
       "url": "https://github.com/deepnative/deep-native-engine/issues/55",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Partner service scope, staffing and costed decision"
     },
     {
       "id": "EXP-003",
       "number": 9,
       "url": "https://github.com/deepnative/deep-native-engine/issues/9",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Voice/video discovery with consent and accessibility"
     },
     {
       "id": "EXP-004",
       "number": 10,
       "url": "https://github.com/deepnative/deep-native-engine/issues/10",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Provider integration discovery and contract design"
     },
     {
       "id": "EXP-005",
       "number": 51,
       "url": "https://github.com/deepnative/deep-native-engine/issues/51",
-      "primary_model": "gpt-5.6-sol",
-      "reasoning": "high",
+      "primary_model": "gpt-6-astra",
+      "reasoning": "xhigh",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
-        "reasoning:high",
+        "model:gpt-6-astra",
+        "reasoning:xhigh",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Hosted agent sandbox, secrets and prompt-injection threat model"
     },
     {
       "id": "EXP-006",
       "number": 52,
       "url": "https://github.com/deepnative/deep-native-engine/issues/52",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-astra",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-astra",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Client-system permissions, revocation and rollback"
     },
     {
       "id": "EXP-007",
       "number": 53,
       "url": "https://github.com/deepnative/deep-native-engine/issues/53",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-sol",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-sol",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Country, language, tax and content readiness analysis"
     },
     {
       "id": "EXP-008",
       "number": 54,
       "url": "https://github.com/deepnative/deep-native-engine/issues/54",
-      "primary_model": "gpt-5.6-sol",
+      "primary_model": "gpt-6-astra",
       "reasoning": "high",
       "review_model": "gpt-6-astra",
       "design_model": null,
       "escalate_to_xhigh": false,
       "labels": [
-        "model:gpt-5.6-sol",
+        "model:gpt-6-astra",
         "reasoning:high",
         "review:gpt-6-astra"
-      ]
+      ],
+      "rationale": "Organization tenancy, marketplace and pricing tradeoffs"
     }
   ]
 }
