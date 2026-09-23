@@ -362,6 +362,24 @@ progress {
   padding-left: 24px;
   line-height: 1.7;
 }
+.assignment-options {
+  padding: 28px 34px;
+  margin-bottom: 24px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.assignment-options ul {
+  list-style: none;
+  padding: 0;
+}
+.assignment-options li {
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+.assignment-options li p {
+  margin: 8px 0;
+}
 .lesson-card,
 .next-card {
   padding: 34px;

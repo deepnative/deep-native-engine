@@ -182,3 +182,21 @@ it("applies the transactional migration and surfaces database failures to the ca
     }),
   ).rejects.toThrow("offline");
 });
+it("pins only a currently published assignment version to a session-owned learner", async () => {
+  const p = pool(),
+    db = store(p.value);
+  expect(await db.assignmentChoice("member-1")).toBeNull();
+  p.query.mockResolvedValueOnce({
+    rows: [{ contentId: "SYN-920", contentVersion: 1 }],
+  });
+  expect(await db.assignmentChoice("member-1")).toEqual({
+    contentId: "SYN-920",
+    contentVersion: 1,
+  });
+  p.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
+  expect(await db.chooseAssignment("member-1", "SYN-920", 1)).toBe(true);
+  expect(p.query.mock.calls[2]![0]).toContain("state='published'");
+  expect(p.query.mock.calls[2]![1]).toEqual(["member-1", "SYN-920", 1]);
+  p.query.mockResolvedValueOnce({ rowCount: 0, rows: [] });
+  expect(await db.chooseAssignment("member-1", "SYN-920", 2)).toBe(false);
+});

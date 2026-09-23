@@ -35,6 +35,13 @@ beforeEach(() => {
 });
 it("validates versioned metadata and audience tags before creating a draft", async () => {
   expect(validDraft(sample)).toBe(true);
+  expect(validDraft({ ...sample, minimumExperience: "some" })).toBe(true);
+  expect(
+    validDraft({
+      ...sample,
+      minimumExperience: "unknown",
+    } as unknown as DraftContent),
+  ).toBe(false);
   for (const change of [
     { id: "bad" },
     { version: 0 },
