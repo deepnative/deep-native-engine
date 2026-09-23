@@ -63,6 +63,26 @@ it("escapes private proposal text and never renders a publish action", () => {
     moderationPage([{ ...item, state: "quarantined" }], "csrf"),
   ).not.toContain("Quarantine for review");
 });
+it("shows a private plan for known time and time zone without a paid action", () => {
+  const html = dashboard(
+    {
+      ...learner,
+      goal: "work",
+      experience: "some",
+      weeklyMinutes: 60,
+      timezone: "America/Toronto",
+      exploratory: true,
+    },
+    undefined,
+    "token",
+  );
+  expect(html).toContain("Your starter plan");
+  expect(html).toContain("About 1 hour");
+  expect(html).toContain("America/Toronto");
+  expect(html).toContain("Turn meeting notes into next steps");
+  expect(html).toContain("another direction later");
+  expect(html).not.toContain("Next session: try");
+});
 it("shows evidence state without exposing registry details to the public track page", () => {
   const record: ExpertRecord = {
     id: "synthetic",

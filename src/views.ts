@@ -4,6 +4,7 @@ import {
   DOMAINS,
   IT_ROLES,
   EXPERIENCE,
+  WEEKLY_TIME,
   LESSON,
   exercise,
 } from "./content.ts";
@@ -13,6 +14,7 @@ import { COACHING_OFFERS } from "./offers.ts";
 import type { ContentVersion } from "./catalog.ts";
 import type { ExpertRecord, TrackSnapshot } from "./track-readiness.ts";
 import type { Proposal } from "./proposals.ts";
+import { learningPlan } from "./learning-plan.ts";
 export function escape(value: string) {
   return value.replace(
     /[&<>"']/g,
@@ -70,6 +72,8 @@ function profileFields(learner?: Learner) {
     ${checks("domain_tags", "Domains of interest (optional)", DOMAINS, learner?.domainTags ?? [])}
     ${checks("it_roles", "IT specialties (optional)", IT_ROLES, learner?.itRoles ?? [])}
     ${select("experience", "Experience with AI (optional)", EXPERIENCE, learner?.experience)}
+    <label for="timezone">Time zone (optional)</label><input type="text" id="timezone" name="timezone" value="${escape(learner?.timezone ?? "")}" maxlength="64" placeholder="e.g. America/Toronto"><p class="small">Use a location-style time zone. This preview does not schedule appointments.</p>
+    ${select("weekly_minutes", "Weekly time available (optional)", WEEKLY_TIME, learner?.weeklyMinutes?.toString())}
     <label class="check"><input type="checkbox" name="exploratory" value="yes" ${learner?.exploratory ? "checked" : ""}><span>Keep an exploratory path open alongside my primary goal.</span></label>`;
 }
 export function readinessPage(
@@ -146,9 +150,13 @@ export function dashboard(
     : progress
       ? "Draft saved"
       : "Ready when you are";
+  const plan = learningPlan(learner);
+  const time = learner.weeklyMinutes
+    ? WEEKLY_TIME[learner.weeklyMinutes as keyof typeof WEEKLY_TIME]
+    : undefined;
   return page(
     "Your learning path",
-    `<section class="dashboard-head"><div><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment.</span></aside></section><section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? "Review your work" : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card"><p class="eyebrow">WHERE THIS CAN GO</p><h2>Learn together.<br>Contribute something useful.</h2><p>Learning circles, peer contributions and more paths are on the roadmap. This preview begins with your first practical exercise.</p><p class="small">Community and coaching features are not yet available.</p></aside></section><p><a class="button secondary" href="/library">Browse published learning library</a> <a class="button secondary" href="/contribute">Draft a private sample contribution</a></p><section class="profile-form"><h2>Adjust your direction</h2><p>Change goals and interests whenever you want. Your saved exercise stays with this preview.</p><form method="post" action="/profile">${hidden(csrf)}${notice(errors)}${profileFields(learner)}<button type="submit">Save my direction</button></form></section><form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete my local preview and all its saved work.</span></label><button class="secondary" type="submit">Delete this preview</button></form>`,
+    `<section class="dashboard-head"><div><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment.</span></aside></section><section class="learning-plan" aria-labelledby="learning-plan-title"><p class="eyebrow">PRIVATE FOUNDATION PREVIEW</p><h2 id="learning-plan-title">Your starter plan</h2><p>Focus: ${escape(plan.focus)}. ${escape(plan.guidance)}</p><p class="small">Weekly time: ${escape(time ?? "Not specified")} · Time zone: ${escape(learner.timezone ?? "Not specified")} · AI experience: self-reported ${escape(learner.experience ? EXPERIENCE[learner.experience] : "Not specified")}</p><ol>${plan.steps.map((step) => `<li>${step.minutes} minutes · ${escape(step.action)}</li>`).join("")}</ol>${plan.nextSession ? `<p>${escape(plan.nextSession)}</p>` : ""}${plan.exploratory ? `<p>${escape(plan.exploratory)}</p>` : ""}<p class="small">Only the local starter lesson is available here. Revisit or skip steps you already completed. These suggestions do not book coaching or certify a skill.</p></section><section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? "Review your work" : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card"><p class="eyebrow">WHERE THIS CAN GO</p><h2>Learn together.<br>Contribute something useful.</h2><p>Learning circles, peer contributions and more paths are on the roadmap. This preview begins with your first practical exercise.</p><p class="small">Community and coaching features are not yet available.</p></aside></section><p><a class="button secondary" href="/library">Browse published learning library</a> <a class="button secondary" href="/contribute">Draft a private sample contribution</a></p><section class="profile-form"><h2>Adjust your direction</h2><p>Change goals and interests whenever you want. Your saved exercise stays with this preview.</p><form method="post" action="/profile">${hidden(csrf)}${notice(errors)}${profileFields(learner)}<button type="submit">Save my direction</button></form></section><form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete my local preview and all its saved work.</span></label><button class="secondary" type="submit">Delete this preview</button></form>`,
   );
 }
 export function lesson(

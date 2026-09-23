@@ -39,6 +39,12 @@ export const EXPERIENCE = {
   some: "Some practice",
   experienced: "Experienced",
 } as const;
+export const WEEKLY_TIME = {
+  15: "About 15 minutes",
+  30: "About 30 minutes",
+  60: "About 1 hour",
+  120: "About 2 hours",
+} as const;
 export type Background = keyof typeof BACKGROUNDS;
 export type Goal = keyof typeof GOALS;
 export type Domain = keyof typeof DOMAINS;
@@ -52,6 +58,8 @@ export interface LearnerProfile {
   itRoles: ItRole[];
   experience: Experience | null;
   exploratory: boolean;
+  timezone?: string | null;
+  weeklyMinutes?: number | null;
 }
 export function exercise(goal: Goal) {
   const examples = {

@@ -504,7 +504,7 @@ it("lets an active member revise their direction without selecting another owner
     .type("form")
     .send({ csrf, background: "explorer", goal: "admin" })
     .expect(422)
-    .expect(/Choose valid profile options/);
+    .expect(/Choose valid profile, time zone and weekly time options/);
   expect(db.updateProfile).not.toHaveBeenCalled();
   await agent
     .post("/profile")

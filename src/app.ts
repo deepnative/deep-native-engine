@@ -313,7 +313,7 @@ export function app(
         .status(422)
         .send(
           welcome(res.locals.csrf as string, [
-            "Choose valid starting point, goal and optional interests, and confirm you will use sample information.",
+            "Choose valid starting point, goal, time zone, weekly time and optional interests, and confirm you will use sample information.",
           ]),
         );
       return;
@@ -595,7 +595,9 @@ export function app(
             member,
             await store.progress(member.id),
             res.locals.csrf as string,
-            ["Choose valid profile options before saving."],
+            [
+              "Choose valid profile, time zone and weekly time options before saving.",
+            ],
           ),
         );
       return;

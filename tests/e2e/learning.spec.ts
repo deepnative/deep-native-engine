@@ -207,6 +207,120 @@ for (const [id, background, goal, extraName, extraValue] of [
     );
   });
 }
+test("[L29] exploratory learner revises a time-fitting plan without rewriting saved practice", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Your starting point").selectOption("explorer");
+  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await page.getByLabel("Experience with AI").selectOption("new");
+  await page.getByLabel("Time zone (optional)").fill("UTC");
+  await page.getByLabel("Weekly time available").selectOption("15");
+  await page.getByLabel("Keep an exploratory path open").check();
+  await page.getByLabel("I'll use invented or sample information").check();
+  await page.getByRole("button", { name: "Start my learning path" }).click();
+  const plan = page.getByRole("region", { name: "Your starter plan" });
+  await expect(plan).toContainText("Plan a small community event");
+  await expect(plan.locator("li")).toHaveCount(1);
+  await expect(plan).toContainText("Next session: try the sample exercise");
+  await expect(plan).toContainText("another direction later");
+  await page.reload();
+  await expect(page.getByLabel("Weekly time available")).toHaveValue("15");
+  await page.getByRole("link", { name: "Open lesson" }).click();
+  await page
+    .getByLabel("Your instruction to AI")
+    .fill("A sample draft for the community event");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("link", { name: "Your learning path" }).click();
+  await page.getByLabel("What would you like to do?").selectOption("work");
+  await page.getByLabel("Experience with AI").selectOption("some");
+  await page.getByLabel("Time zone (optional)").fill("America/Toronto");
+  await page.getByLabel("Weekly time available").selectOption("60");
+  await page.getByRole("button", { name: "Save my direction" }).click();
+  await expect(plan).toContainText("Turn meeting notes into next steps");
+  await expect(plan.locator("li")).toHaveCount(3);
+  await expect(plan).toContainText("America/Toronto");
+  await page.getByRole("link", { name: "Continue exercise" }).click();
+  await expect(page.getByLabel("Your instruction to AI")).toHaveValue(
+    "A sample draft for the community event",
+  );
+  await expect(page.locator("#exercise-title")).toHaveText(
+    "Plan a small community event",
+  );
+});
+test("[L30] professional can correct an invalid time zone and retain a noncoding 30-minute plan", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Your starting point").selectOption("professional");
+  await page.getByLabel("What would you like to do?").selectOption("work");
+  await page.getByLabel("Experience with AI").selectOption("some");
+  await page.getByLabel("Time zone (optional)").fill("Mars/Olympus");
+  await page.getByLabel("Weekly time available").selectOption("30");
+  await page.getByLabel("I'll use invented or sample information").check();
+  await page.getByRole("button", { name: "Start my learning path" }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page).not.toHaveURL(/\/learn$/);
+  await page.getByLabel("Your starting point").selectOption("professional");
+  await page.getByLabel("What would you like to do?").selectOption("work");
+  await page.getByLabel("Experience with AI").selectOption("some");
+  await page.getByLabel("Time zone (optional)").fill("America/Toronto");
+  await page.getByLabel("Weekly time available").selectOption("30");
+  await page.getByLabel("I'll use invented or sample information").check();
+  await page.getByRole("button", { name: "Start my learning path" }).click();
+  const plan = page.getByRole("region", { name: "Your starter plan" });
+  await expect(plan).toContainText("Turn meeting notes into next steps");
+  await expect(plan.locator("li")).toHaveCount(2);
+  await expect(plan).toContainText("America/Toronto");
+  await expect(
+    page.getByRole("button", { name: /buy|purchase|book/i }),
+  ).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByLabel("Weekly time available")).toHaveValue("30");
+});
+test("[L31] technical learner sees an experienced, private plan without a coding prerequisite", async ({
+  page,
+  browser,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Your starting point").selectOption("technical");
+  await page.getByLabel("What would you like to do?").selectOption("build");
+  await page.getByLabel("Experience with AI").selectOption("experienced");
+  await page.getByLabel("Time zone (optional)").fill("America/Vancouver");
+  await page.getByLabel("Weekly time available").selectOption("120");
+  await page.getByLabel("I'll use invented or sample information").check();
+  await page.getByRole("button", { name: "Start my learning path" }).click();
+  const plan = page.getByRole("region", { name: "Your starter plan" });
+  await expect(plan).toContainText("Review a sign-up flow");
+  await expect(plan).toContainText("self-reported Experienced");
+  await expect(plan).toContainText("No coding is required");
+  await expect(plan.locator("li")).toHaveCount(3);
+  const other = await browser.newContext();
+  try {
+    const anotherPage = await other.newPage();
+    await anotherPage.goto("/");
+    await anotherPage
+      .getByLabel("Your starting point")
+      .selectOption("explorer");
+    await anotherPage
+      .getByLabel("What would you like to do?")
+      .selectOption("everyday");
+    await anotherPage
+      .getByLabel("I'll use invented or sample information")
+      .check();
+    await anotherPage
+      .getByRole("button", { name: "Start my learning path" })
+      .click();
+    const anotherPlan = anotherPage.getByRole("region", {
+      name: "Your starter plan",
+    });
+    await expect(anotherPlan).not.toContainText("America/Vancouver");
+    await expect(anotherPlan).toContainText("Not specified");
+    await expect(anotherPlan).not.toContainText("Review a sign-up flow");
+  } finally {
+    await other.close();
+  }
+});
 test("[L04] draft survives reload and returning to the path", async ({
   page,
 }) => {

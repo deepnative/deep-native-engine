@@ -255,6 +255,7 @@ label {
   font-weight: 650;
   margin: 0 0 9px;
 }
+input[type="text"],
 select,
 textarea {
   width: 100%;
@@ -349,6 +350,17 @@ progress {
   display: grid;
   grid-template-columns: 1.3fr 1fr;
   gap: 24px;
+}
+.learning-plan {
+  padding: 28px 34px;
+  margin-bottom: 24px;
+  background: #f2f5e9;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.learning-plan ol {
+  padding-left: 24px;
+  line-height: 1.7;
 }
 .lesson-card,
 .next-card {

@@ -32,6 +32,8 @@ it("binds the hash rather than raw bearer tokens and distinguishes new, expired 
         itRoles: ["security"],
         experience: null,
         exploratory: false,
+        timezone: "America/Toronto",
+        weeklyMinutes: 30,
         active: true,
       },
     ],
@@ -44,6 +46,8 @@ it("binds the hash rather than raw bearer tokens and distinguishes new, expired 
       itRoles: ["security"],
       experience: null,
       exploratory: false,
+      timezone: "America/Toronto",
+      weeklyMinutes: 30,
     },
   });
 });
@@ -61,6 +65,8 @@ it("passes untrusted answers as bound parameters and scopes versioned reads and 
     [],
     null,
     false,
+    null,
+    null,
   ]);
   expect(await db.progress("owned")).toBeUndefined();
   const answer = "'; DROP TABLE learners;--";
@@ -92,6 +98,8 @@ it("saves profile changes by the session-derived learner and preserves the pract
     itRoles: ["analysis"],
     experience: "some",
     exploratory: true,
+    timezone: "UTC",
+    weeklyMinutes: 60,
   });
   expect(p.query.mock.calls[0]![1]).toEqual([
     expect.any(String),
@@ -103,6 +111,8 @@ it("saves profile changes by the session-derived learner and preserves the pract
     ["analysis"],
     "some",
     true,
+    "UTC",
+    60,
   ]);
   await db.updateProfile("owned", {
     background: "professional",
@@ -112,6 +122,8 @@ it("saves profile changes by the session-derived learner and preserves the pract
     itRoles: ["analysis"],
     experience: "some",
     exploratory: true,
+    timezone: "UTC",
+    weeklyMinutes: 60,
   });
   expect(p.query.mock.calls[1]![1]).toEqual([
     "owned",
@@ -122,13 +134,36 @@ it("saves profile changes by the session-derived learner and preserves the pract
     ["analysis"],
     "some",
     true,
+    "UTC",
+    60,
+  ]);
+  await db.updateProfile("owned", {
+    background: "explorer",
+    goal: "everyday",
+    backgroundTags: [],
+    domainTags: [],
+    itRoles: [],
+    experience: null,
+    exploratory: false,
+  });
+  expect(p.query.mock.calls[2]![1]).toEqual([
+    "owned",
+    "explorer",
+    "everyday",
+    [],
+    [],
+    [],
+    null,
+    false,
+    null,
+    null,
   ]);
   await db.save("owned", {
     instruction: "sample",
     verification: "check",
     complete: false,
   });
-  expect(p.query.mock.calls[2]![0]).toContain(
+  expect(p.query.mock.calls[3]![0]).toContain(
     "goal_at_start=COALESCE(exercises.goal_at_start",
   );
 });
