@@ -37,4 +37,4 @@ All new issues start open in Backlog; no agents are assigned to implement them. 
 
 ## Recommended models
 
-Every roadmap issue has one `model:*` label and one `reasoning:*` label. The [23 September routing policy](MODEL-RECOMMENDATIONS.md) records the current recommendation for all 55 issues: Astra leads 31 and Sol leads 24; 41 start at High, 10 at XHigh and 4 at Medium. `project-snapshot.json` is a dated publication snapshot; `model-recommendations.json` is the current routing source. Labels do not assign agents, change active model settings, or authorize implementation.
+Every roadmap issue has one `model:*` label and one `reasoning:*` label. The [23 September routing policy](MODEL-RECOMMENDATIONS.md) records the original 55 issue recommendations plus the later GOV-002 routing: Astra leads 31 and Sol leads 25; 41 start at High, 10 at XHigh and 5 at Medium. `project-snapshot.json` and `model-recommendations.json` preserve their 55-issue publication scope; live issue labels and the maintained policy govern new issues. Labels do not assign agents, change active model settings, or authorize implementation.

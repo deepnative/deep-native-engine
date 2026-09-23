@@ -17,3 +17,4 @@ For application work, record unit raw covered/total counts for each metric and m
 - Review findings resolved / unresolved:
 - Rollback and operational implications:
 - Follow-ups and decision (ready for review, blocked, accepted; who decided):
+- Next bounded issue or owner decision, why next, dependencies/claim status, and recommended lead model/starting effort plus applicable design/review settings (recommendation only):
