@@ -3,7 +3,7 @@
 - **Date:** 21 September 2026
 - **Owner:** Tom Wu
 - **Issue:** [CTP-001 #15](https://github.com/deepnative/deep-native-engine/issues/15)
-- **Status:** Accepted for architecture planning; implementation and deployment remain separately authorized
+- **Status:** Accepted and reconciled by the [CTP-001 architecture audit](../CTP-001-ARCHITECTURE-AUDIT.md); implementation and deployment remain separately authorized
 
 ## Problem and constraints
 
@@ -116,7 +116,9 @@ The initial hosting candidate is:
 
 Render requires a public web service to bind to `0.0.0.0` and recommends using its `PORT` value. Render also provides internal PostgreSQL URLs for private traffic when the service and database share a workspace and region, and point-in-time recovery on eligible paid PostgreSQL services. Workspace, region, plan, budget, retention and recovery objectives remain owner decisions before deployment.
 
-## Current-to-target changes
+## Audited current state and target changes
+
+The repository began CTP-001 as a planning/tooling checkout. At the 22 September 2026 audit it contains the authorized local synthetic learning slice plus deterministic adapter/jobs, workspace authorization and private evidence foundations. Authored lesson, goal and example definitions still live in `src/content.ts`; the proposed file layout below is a target for CTP-007, not a claim that file-backed content already exists. PostgreSQL migrations 001 through 004 implement learning/progress, adapter jobs, authorization/cohorts and private evidence metadata respectively. [The CTP-001 audit](../CTP-001-ARCHITECTURE-AUDIT.md) records the reuse/greenfield inventory, exact tool versions, schema and cross-audience domain model.
 
 The current local slice remains valid evidence for local behavior. A separately authorized implementation must:
 
