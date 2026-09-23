@@ -7,6 +7,7 @@ import {
   dashboard,
   lesson,
   errorPage,
+  contentPreview,
 } from "../../src/views.ts";
 const learner = {
   id: "a",
@@ -26,6 +27,35 @@ it("escapes every HTML-sensitive character in submitted content and page titles"
     lesson(learner, { ...draft, completed_at: new Date() }, "token"),
   ).toContain("&lt;script&gt;");
 });
+it("renders an accessible plain-text content preview when filters and prerequisites are universal", () => {
+  const html = contentPreview(
+    {
+      id: "SYN-001",
+      version: 1,
+      kind: "lesson",
+      origin: "curated",
+      title: "Sample",
+      body: "Text",
+      owner: "Editor",
+      sources: "Original",
+      rights: "Owned",
+      goals: [],
+      backgrounds: [],
+      domains: [],
+      prerequisites: "",
+      rubric: null,
+      rubricVersion: null,
+      state: "published",
+      requiresQualifiedSignoff: false,
+      reviewedAt: new Date("2026-09-23"),
+      publishedAt: new Date("2026-09-23"),
+    },
+    false,
+  );
+  expect(html).toContain("<dt>Goals</dt><dd>All</dd>");
+  expect(html).toContain("<dt>Backgrounds</dt><dd>All</dd>");
+  expect(html).toContain("<dt>Prerequisites</dt><dd>None</dd>");
+});
 it("renders all accessible entry choices and actionable validation", () => {
   expect(welcome("token")).toContain("Working in another field");
   expect(welcome("token", ["Fix <field>"])).toContain("Fix &lt;field&gt;");
@@ -36,6 +66,7 @@ it("distinguishes unsaved, draft and self-assessed completion without inventing 
   expect(dashboard(learner, undefined, "token")).toContain(
     "Ready when you are",
   );
+  expect(dashboard(learner, undefined, "token")).toContain('href="/library"');
   expect(dashboard(learner, draft, "token")).toContain("Draft saved");
   const completed = { ...draft, completed_at: new Date() };
   expect(dashboard(learner, completed, "token")).toContain(

@@ -11,6 +11,7 @@ import {
   MAX_EVIDENCE_BYTES,
   type EvidenceStore,
 } from "../../src/evidence.ts";
+import { disabledCatalogStore, type CatalogStore } from "../../src/catalog.ts";
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
 const member = {
@@ -85,6 +86,20 @@ let db: ReturnType<typeof storage>;
 beforeEach(() => {
   db = storage();
 });
+function catalogMock() {
+  return {
+    ...disabledCatalogStore(),
+    createDraft: vi.fn<CatalogStore["createDraft"]>().mockResolvedValue(false),
+    submit: vi.fn<CatalogStore["submit"]>().mockResolvedValue(false),
+    approve: vi.fn<CatalogStore["approve"]>().mockResolvedValue(false),
+    publish: vi.fn<CatalogStore["publish"]>().mockResolvedValue(false),
+    retire: vi.fn<CatalogStore["retire"]>().mockResolvedValue(false),
+    preview: vi.fn<CatalogStore["preview"]>().mockResolvedValue(null),
+    staffList: vi.fn<CatalogStore["staffList"]>().mockResolvedValue([]),
+    published: vi.fn<CatalogStore["published"]>().mockResolvedValue(null),
+    search: vi.fn<CatalogStore["search"]>().mockResolvedValue([]),
+  };
+}
 async function client(evidence?: EvidenceStore) {
   const agent = request.agent(app(db, { origin, secret: "secret", evidence }));
   const response = await agent.get("/").set("Host", host).expect(200);
@@ -180,6 +195,155 @@ it("preserves an unregistered session across tabs and rotates an expired session
   expect(expired.text).not.toContain(csrf);
   expect(String(expired.headers["set-cookie"])).toContain("HttpOnly");
   expect(String(expired.headers["set-cookie"])).toContain("SameSite=Strict");
+});
+it("shows only eligible published content to members and escapes draft previews", async () => {
+  const catalog = catalogMock();
+  const item = {
+    id: "SYN-001",
+    version: 1,
+    kind: "lesson" as const,
+    origin: "curated" as const,
+    title: "Sample <lesson>",
+    body: "<script>alert(1)</script>",
+    owner: "Test editor",
+    sources: "Original",
+    rights: "Owned",
+    goals: ["everyday"],
+    backgrounds: ["explorer"],
+    domains: [],
+    prerequisites: "None",
+    rubric: null,
+    rubricVersion: null,
+    state: "published" as const,
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date("2026-09-23"),
+    publishedAt: new Date("2026-09-23"),
+  };
+  const agent = request.agent(app(db, { origin, secret: "secret", catalog }));
+  await agent.get("/").set("Host", host).expect(200);
+  await agent.get("/library").set("Host", host).expect(303);
+  active();
+  catalog.search.mockResolvedValueOnce([item]);
+  const listing = await agent
+    .get("/library?q=sample&goal=everyday")
+    .set("Host", host)
+    .expect(200);
+  expect(listing.text).toContain("Sample &lt;lesson&gt;");
+  expect(catalog.search).toHaveBeenCalledWith({
+    q: "sample",
+    goal: "everyday",
+    background: undefined,
+    domain: undefined,
+  });
+  const filtered = await agent
+    .get("/library?background=explorer&domain=education")
+    .set("Host", host)
+    .expect(200);
+  expect(filtered.text).toContain('value="education" selected');
+  const empty = await agent.get("/library").set("Host", host).expect(200);
+  expect(empty.text).toContain("No published content matches");
+  catalog.published.mockResolvedValueOnce(item);
+  const opened = await agent
+    .get("/library/SYN-001")
+    .set("Host", host)
+    .expect(200);
+  expect(opened.text).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+  expect(opened.text).not.toContain("<script>");
+  await agent.get("/library/MISSING").set("Host", host).expect(404);
+  catalog.preview.mockResolvedValueOnce({
+    ...item,
+    state: "draft",
+    reviewedAt: null,
+    publishedAt: null,
+    requiresQualifiedSignoff: true,
+    rubric: "Synthetic rubric",
+    rubricVersion: 1,
+  });
+  const preview = await agent
+    .get("/editor/library/SYN-001/1")
+    .set("Host", host)
+    .expect(200);
+  expect(preview.text).toContain(
+    "Qualified curriculum and domain sign-off is pending",
+  );
+  expect(preview.text).toContain("Versioned rubric 1");
+  await agent.get("/editor/library/SYN-001/2").set("Host", host).expect(403);
+});
+it("supports the local editor/reviewer workflow without bypassing rejected transitions", async () => {
+  const catalog = catalogMock();
+  const agent = request.agent(app(db, { origin, secret: "secret", catalog }));
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  catalog.staffList.mockResolvedValueOnce([
+    {
+      id: "SYN-001",
+      version: 1,
+      kind: "lesson",
+      origin: "curated",
+      title: "Synthetic",
+      body: "Text",
+      owner: "Editor",
+      sources: "Original",
+      rights: "Owned",
+      goals: [],
+      backgrounds: [],
+      domains: [],
+      prerequisites: "",
+      rubric: null,
+      rubricVersion: null,
+      state: "draft",
+      requiresQualifiedSignoff: false,
+      reviewedAt: null,
+      publishedAt: null,
+    },
+  ]);
+  await agent.get("/editor/library").set("Host", host).expect(200);
+  const post = (path: string, body: Record<string, string> = {}) =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...body });
+  const fields = {
+    id: "SYN-001",
+    version: "1",
+    kind: "lesson",
+    title: "Sample",
+    body: "Synthetic",
+    owner: "Editor",
+    sources: "Original",
+    rights: "Owned",
+  };
+  await post("/editor/library").expect(422);
+  await post("/editor/library", fields).expect(422);
+  catalog.createDraft.mockResolvedValueOnce(true);
+  await post("/editor/library", fields).expect(303);
+  expect(catalog.createDraft).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({ id: "SYN-001", version: 1, origin: "curated" }),
+  );
+  for (const action of ["submit", "approve", "publish", "unknown"]) {
+    await post(`/editor/library/SYN-001/1/${action}`).expect(409);
+  }
+  catalog.submit.mockResolvedValueOnce(true);
+  catalog.approve.mockResolvedValueOnce(true);
+  catalog.publish.mockResolvedValueOnce(true);
+  for (const action of ["submit", "approve", "publish"]) {
+    await post(
+      `/editor/library/SYN-001/1/${action}`,
+      action === "approve" ? { rights_confirmed: "yes" } : {},
+    ).expect(303);
+  }
+  expect(catalog.approve).toHaveBeenLastCalledWith(
+    expect.any(String),
+    "SYN-001",
+    1,
+    true,
+  );
+  await post("/editor/library/SYN-001/retire").expect(409);
+  catalog.retire.mockResolvedValueOnce(true);
+  await post("/editor/library/SYN-001/retire").expect(303);
 });
 it("onboards only valid profiles and ignores caller-controlled ownership", async () => {
   const { agent, csrf } = await client();

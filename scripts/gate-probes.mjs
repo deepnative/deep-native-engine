@@ -22,6 +22,7 @@ try {
     "src",
     "public",
     "migrations",
+    "assets/docs/content",
     "tests/unit",
     "vitest.config.ts",
     "package.json",

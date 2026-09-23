@@ -600,3 +600,9 @@ footer span {
     scroll-behavior: auto;
   }
 }
+.content-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.65;
+}
