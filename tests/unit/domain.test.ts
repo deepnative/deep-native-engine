@@ -92,7 +92,15 @@ describe("learner inputs", () => {
     (background) =>
       expect(
         profile({ background, goal: "everyday", synthetic: "yes" }),
-      ).toEqual({ background, goal: "everyday" }),
+      ).toEqual({
+        background,
+        goal: "everyday",
+        backgroundTags: [],
+        domainTags: [],
+        itRoles: [],
+        experience: null,
+        exploratory: false,
+      }),
   );
   it.each([
     {},
@@ -103,6 +111,47 @@ describe("learner inputs", () => {
     { background: "explorer", goal: "work", synthetic: "no" },
     { background: "__proto__", goal: "work", synthetic: "yes" },
   ])("rejects invalid profile %j", (body) => expect(profile(body)).toBeNull());
+  it("accepts overlapping interests and an exploratory path without a work identity", () => {
+    expect(
+      profile({
+        background: "explorer",
+        goal: "work",
+        synthetic: "yes",
+        background_tags: ["professional", "technical"],
+        domain_tags: ["education", "creative"],
+        it_roles: ["security", "product"],
+        experience: "some",
+        exploratory: "yes",
+      }),
+    ).toEqual({
+      background: "explorer",
+      goal: "work",
+      backgroundTags: ["professional", "technical"],
+      domainTags: ["education", "creative"],
+      itRoles: ["security", "product"],
+      experience: "some",
+      exploratory: true,
+    });
+  });
+  it.each([
+    { background_tags: ["technical", "technical"] },
+    { background_tags: "admin" },
+    { background_tags: ["explorer", "professional", "technical", "explorer"] },
+    { domain_tags: ["education", "unknown"] },
+    { it_roles: ["software", 9] },
+    { experience: "expert" },
+    { experience: [] },
+    { exploratory: "no" },
+  ])("rejects unsupported optional choices %j", (extra) =>
+    expect(
+      profile({
+        background: "explorer",
+        goal: "everyday",
+        synthetic: "yes",
+        ...extra,
+      }),
+    ).toBeNull(),
+  );
   it("allows an unfinished draft but validates every completed answer", () => {
     expect(submission({ intent: "draft" })).toMatchObject({
       instruction: "",

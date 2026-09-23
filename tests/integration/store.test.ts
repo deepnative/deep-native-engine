@@ -93,6 +93,10 @@ it("backfills and safely reruns authorization migration over populated learning 
         ),
         "utf8",
       ),
+      learnerProfile = await readFile(
+        new URL("../../migrations/005-learner-profile.sql", import.meta.url),
+        "utf8",
+      ),
       activeId = randomUUID(),
       expiredId = randomUUID(),
       activeToken = randomBytes(32).toString("hex"),
@@ -114,6 +118,8 @@ it("backfills and safely reruns authorization migration over populated learning 
     );
     await client.query(authorization);
     await client.query(authorization);
+    await client.query(learnerProfile);
+    await client.query(learnerProfile);
     const migrated = store(client as unknown as Pool);
     await expect(migrated.session(activeToken)).resolves.toMatchObject({
       kind: "active",

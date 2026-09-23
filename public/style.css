@@ -218,11 +218,36 @@ p {
   padding-top: 12px;
 }
 .onboard form,
+.profile-form form,
 .exercise-card {
   padding: 30px;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+}
+.profile-form {
+  margin-top: 48px;
+  max-width: 760px;
+}
+.profile-form fieldset,
+.onboard fieldset {
+  border: 0;
+  padding: 0;
+  margin: 8px 0 18px;
+}
+.profile-form legend,
+.onboard legend {
+  font-size: 14px;
+  font-weight: 650;
+  margin-bottom: 10px;
+}
+.option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 2px 18px;
+}
+.option-grid .check {
+  margin-bottom: 10px;
 }
 label {
   display: block;

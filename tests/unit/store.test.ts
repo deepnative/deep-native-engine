@@ -21,6 +21,31 @@ it("binds the hash rather than raw bearer tokens and distinguishes new, expired 
     kind: "active",
     learner: { id: "a", background: "explorer", goal: "work" },
   });
+  p.query.mockResolvedValueOnce({
+    rows: [
+      {
+        id: "b",
+        background: "technical",
+        goal: "build",
+        backgroundTags: ["professional"],
+        domainTags: ["education"],
+        itRoles: ["security"],
+        experience: null,
+        exploratory: false,
+        active: true,
+      },
+    ],
+  });
+  expect(await db.session("private-token")).toMatchObject({
+    kind: "active",
+    learner: {
+      backgroundTags: ["professional"],
+      domainTags: ["education"],
+      itRoles: ["security"],
+      experience: null,
+      exploratory: false,
+    },
+  });
 });
 it("passes untrusted answers as bound parameters and scopes versioned reads and deletes by learner", async () => {
   const p = pool(),
@@ -31,6 +56,11 @@ it("passes untrusted answers as bound parameters and scopes versioned reads and 
     hash("private-token"),
     "technical",
     "build",
+    [],
+    [],
+    [],
+    null,
+    false,
   ]);
   expect(await db.progress("owned")).toBeUndefined();
   const answer = "'; DROP TABLE learners;--";
@@ -50,6 +80,57 @@ it("passes untrusted answers as bound parameters and scopes versioned reads and 
   expect(p.query.mock.calls[2]![0]).not.toContain(answer);
   await db.remove("owned");
   expect(p.query.mock.calls[3]![1]).toEqual(["owned"]);
+});
+it("saves profile changes by the session-derived learner and preserves the practice goal", async () => {
+  const p = pool(),
+    db = store(p.value);
+  await db.create("private-token", {
+    background: "professional",
+    goal: "work",
+    backgroundTags: ["technical"],
+    domainTags: ["education"],
+    itRoles: ["analysis"],
+    experience: "some",
+    exploratory: true,
+  });
+  expect(p.query.mock.calls[0]![1]).toEqual([
+    expect.any(String),
+    hash("private-token"),
+    "professional",
+    "work",
+    ["technical"],
+    ["education"],
+    ["analysis"],
+    "some",
+    true,
+  ]);
+  await db.updateProfile("owned", {
+    background: "professional",
+    goal: "work",
+    backgroundTags: ["technical"],
+    domainTags: ["education"],
+    itRoles: ["analysis"],
+    experience: "some",
+    exploratory: true,
+  });
+  expect(p.query.mock.calls[1]![1]).toEqual([
+    "owned",
+    "professional",
+    "work",
+    ["technical"],
+    ["education"],
+    ["analysis"],
+    "some",
+    true,
+  ]);
+  await db.save("owned", {
+    instruction: "sample",
+    verification: "check",
+    complete: false,
+  });
+  expect(p.query.mock.calls[2]![0]).toContain(
+    "goal_at_start=COALESCE(exercises.goal_at_start",
+  );
 });
 it("applies the transactional migration and surfaces database failures to the caller", async () => {
   const p = pool();

@@ -234,7 +234,7 @@ export function app(
         .status(422)
         .send(
           welcome(res.locals.csrf as string, [
-            "Choose your starting point and goal, and confirm you will use sample information.",
+            "Choose valid starting point, goal and optional interests, and confirm you will use sample information.",
           ]),
         );
       return;
@@ -243,7 +243,7 @@ export function app(
     res.redirect(303, "/learn");
   });
   app.use(
-    ["/learn", "/lesson", "/exercise", "/delete"],
+    ["/learn", "/lesson", "/exercise", "/profile", "/delete"],
     async (_req, res, next) => {
       const session = await store.session(res.locals.token as string);
       if (session.kind !== "active") {
@@ -263,6 +263,25 @@ export function app(
         res.locals.csrf as string,
       ),
     );
+  });
+  app.post("/profile", async (req, res) => {
+    const member = res.locals.learner as Learner;
+    const input = profile({ ...(req.body as Fields), synthetic: "yes" });
+    if (!input) {
+      res
+        .status(422)
+        .send(
+          dashboard(
+            member,
+            await store.progress(member.id),
+            res.locals.csrf as string,
+            ["Choose valid profile options before saving."],
+          ),
+        );
+      return;
+    }
+    await store.updateProfile(member.id, input);
+    res.redirect(303, "/learn");
   });
   app.get("/lesson", async (_req, res) => {
     const member = res.locals.learner as Learner;

@@ -22,6 +22,7 @@ function storage() {
   return {
     session: vi.fn<Store["session"]>().mockResolvedValue({ kind: "new" }),
     create: vi.fn<Store["create"]>().mockResolvedValue(undefined),
+    updateProfile: vi.fn<Store["updateProfile"]>().mockResolvedValue(undefined),
     progress: vi.fn<Store["progress"]>().mockResolvedValue(undefined),
     save: vi.fn<Store["save"]>().mockResolvedValue(undefined),
     remove: vi.fn<Store["remove"]>().mockResolvedValue(undefined),
@@ -173,7 +174,7 @@ it("onboards only valid profiles and ignores caller-controlled ownership", async
     .expect(303);
   expect(db.create).toHaveBeenCalledWith(
     expect.stringMatching(/^[a-f0-9]{64}$/),
-    { background: "explorer", goal: "everyday" },
+    expect.objectContaining({ background: "explorer", goal: "everyday" }),
   );
   active();
   await agent
@@ -182,7 +183,45 @@ it("onboards only valid profiles and ignores caller-controlled ownership", async
     .expect(303)
     .expect("Location", "/learn");
 });
-it.each(["/learn", "/lesson", "/exercise", "/delete"])(
+it("lets an active member revise their direction without selecting another owner", async () => {
+  const { agent, csrf } = await client();
+  active();
+  await agent
+    .post("/profile")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf, background: "explorer", goal: "admin" })
+    .expect(422)
+    .expect(/Choose valid profile options/);
+  expect(db.updateProfile).not.toHaveBeenCalled();
+  await agent
+    .post("/profile")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({
+      csrf,
+      background: "professional",
+      goal: "work",
+      domain_tags: "education",
+      it_roles: "analysis",
+      exploratory: "yes",
+      id: "other",
+    })
+    .expect(303)
+    .expect("Location", "/learn");
+  expect(db.updateProfile).toHaveBeenCalledWith(
+    "owned",
+    expect.objectContaining({
+      goal: "work",
+      domainTags: ["education"],
+      itRoles: ["analysis"],
+      exploratory: true,
+    }),
+  );
+});
+it.each(["/learn", "/lesson", "/exercise", "/profile", "/delete"])(
   "sends unauthenticated visitors away from %s",
   async (path) => {
     await request(app(db, { origin, secret: "s" }))

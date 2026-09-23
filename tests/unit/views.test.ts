@@ -55,3 +55,27 @@ it("distinguishes unsaved, draft and self-assessed completion without inventing 
     'name="instruction"',
   );
 });
+it("shows optional profile choices and retains the exercise context after a goal change", () => {
+  const profile = {
+    ...learner,
+    goal: "build" as const,
+    backgroundTags: ["technical" as const],
+    domainTags: ["education" as const],
+    itRoles: ["security" as const],
+    experience: "some" as const,
+    exploratory: true,
+  };
+  const path = dashboard(profile, undefined, "token", ["Invalid choice"]);
+  expect(path).toContain("Invalid choice");
+  expect(path).toContain('value="security" checked');
+  expect(path).toContain('name="exploratory" value="yes" checked');
+  const previous = lesson(
+    profile,
+    { ...draft, goal_at_start: "everyday" },
+    "token",
+  );
+  expect(previous).toContain("Plan a small community event");
+  expect(previous).toContain(
+    "saved practice remains tied to your earlier goal",
+  );
+});
