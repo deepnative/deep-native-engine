@@ -9,6 +9,7 @@ import {
 } from "./content.ts";
 import type { Learner, Exercise } from "./store.ts";
 import type { AdapterReadiness, ApplicationMode } from "./adapters.ts";
+import { COACHING_OFFERS } from "./offers.ts";
 export function escape(value: string) {
   return value.replace(
     /[&<>"']/g,
@@ -81,7 +82,13 @@ export function readinessPage(
       )
       .join(
         "",
-      )}</ul><a class="button" href="/">Return to the learning preview</a></section>`,
+      )}</ul><p><a href="/readiness/offers">Access and coaching planning</a></p><a class="button" href="/">Return to the learning preview</a></section>`,
+  );
+}
+export function offerHypothesesPage() {
+  return page(
+    "Access and coaching planning",
+    `<section class="error-page"><p class="eyebrow">PLANNING ONLY · NO LIVE PURCHASE</p><h1>Access and coaching planning</h1><p class="lead">The local foundation preview uses sample information only. Live learning and participation access rules, limits, AI allowance and price are pending owner approval. No live access or credits are granted here.</p><p>Coaching is optional. These historical prices and allowances are hypotheses, not available offers. A professional background never assigns the Professional coaching package or staff access.</p><ul>${COACHING_OFFERS.map((offer) => `<li><strong>${escape(offer.id)}</strong> · CAD ${(offer.priceCents / 100).toLocaleString("en-CA")} · ${offer.months} monthly periods · ${offer.monthly.coachMinutes} coach / ${offer.monthly.reviewMinutes} review / ${offer.monthly.supportMinutes} support minutes per period · ${escape(offer.termsVersion)} · ${escape(offer.state)}</li>`).join("")}</ul><p>Annual prepayment does not issue future monthly credits. The pilot's internal onboarding reserve is not a purchased member allowance. Qualified capacity, approved terms and an explicit access decision are required before any live service.</p><a class="button" href="/readiness">Integration readiness</a></section>`,
   );
 }
 export function welcome(csrf: string, error: string[] = []) {

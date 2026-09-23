@@ -1,6 +1,6 @@
 {
-  "version": "initial-learning-v5",
-  "scope": "User-approved local learning preview plus revisable learner interests, deterministic adapters, workspace authorization and private evidence quarantine, not the full B1 member-to-reviewer journey",
+  "version": "initial-learning-v6",
+  "scope": "Local learning preview with revisable learner interests, private evidence and read-only access/coaching hypotheses; not live commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -208,6 +208,15 @@
       "steps": "Choose technical starting point and security specialty, then revise goal",
       "expected": "Optional specialty persists, common foundation remains available, and original practice context is preserved",
       "issues": [20],
+      "critical": true
+    },
+    {
+      "id": "L24",
+      "actor": "Learner comparing access and optional coaching planning",
+      "preconditions": "Local preview; no approved live foundation rules or coaching offers",
+      "steps": "Open readiness, follow access planning, compare the read-only server catalog with the page, inspect purchase boundary",
+      "expected": "Foundation remains pending; every historic coaching price is a nonpurchasable versioned hypothesis; no live checkout or entitlement is created",
+      "issues": [19],
       "critical": true
     }
   ],

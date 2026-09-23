@@ -9,6 +9,7 @@ import {
   dashboard,
   lesson,
   readinessPage,
+  offerHypothesesPage,
   errorPage,
 } from "./views.ts";
 import type { Store, Learner } from "./store.ts";
@@ -26,6 +27,7 @@ import {
   MAX_EVIDENCE_BYTES,
   type EvidenceStore,
 } from "./evidence.ts";
+import { FOUNDATION_ACCESS, COACHING_OFFERS } from "./offers.ts";
 export function app(
   store: Store,
   options: {
@@ -106,6 +108,13 @@ export function app(
     next();
   });
   app.get("/readiness", (_req, res) => res.send(readinessPage(mode, adapters)));
+  app.get("/readiness/offers", (_req, res) => res.send(offerHypothesesPage()));
+  app.get("/api/offer-hypotheses", (_req, res) =>
+    res.json({
+      foundation: FOUNDATION_ACCESS,
+      coaching: COACHING_OFFERS,
+    }),
+  );
   app.get("/api/workspaces/:workspaceId/private", async (req, res) => {
     const purpose =
       typeof req.query.purpose === "string" ? req.query.purpose : undefined;

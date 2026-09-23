@@ -18,6 +18,38 @@ const member = {
   background: "explorer" as const,
   goal: "everyday" as const,
 };
+it("shows optional offer hypotheses while reporting foundation access as undecided", async () => {
+  const server = app(storage(), { origin, secret: "secret" });
+  const catalog = await request(server)
+    .get("/api/offer-hypotheses")
+    .set("Host", host)
+    .expect(200);
+  const planning = await request(server)
+    .get("/readiness/offers")
+    .set("Host", host)
+    .expect(200);
+  expect(catalog.body.foundation).toMatchObject({
+    live: "pending-owner-decision",
+    priceCents: null,
+    participationLimit: null,
+  });
+  expect(catalog.body.coaching).toHaveLength(6);
+  expect(
+    catalog.body.coaching.every(
+      (offer: { livePurchasable: boolean }) => offer.livePurchasable === false,
+    ),
+  ).toBe(true);
+  expect(planning.text).toContain("NO LIVE PURCHASE");
+  expect(planning.text).toContain("pending owner approval");
+  expect(planning.text).not.toContain("Buy now");
+  for (const offer of catalog.body.coaching) {
+    expect(planning.text).toContain(offer.termsVersion);
+    expect(planning.text).toContain(
+      (offer.priceCents / 100).toLocaleString("en-CA"),
+    );
+  }
+  await request(server).get("/checkout/pilot").set("Host", host).expect(404);
+});
 function storage() {
   return {
     session: vi.fn<Store["session"]>().mockResolvedValue({ kind: "new" }),
