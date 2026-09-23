@@ -24,6 +24,8 @@ Current issue labels take precedence over the archived routing table. Labels rec
 
 Role files provide defaults; the live issue's model and reasoning labels give the per-issue recommendation. For `design:gpt-6-astra`, obtain Astra's acceptance/test design before Sol implementation. `review:gpt-6-astra` requests independent Astra review. Start XHigh when `reasoning:xhigh` is present; for High issues, `escalate:xhigh` recommends changing the task setting if difficult invariants or failures arise. See the [complete model policy](../context/MODEL-RECOMMENDATIONS.md).
 
+Use the same live labels when recommending a **next** issue at handoff. State its lead model and starting effort, and distinguish any design/review model and effort. If labels are absent or conflict, use the routing rules and flag the proposed label correction; do not imply the current task has switched models.
+
 Example prompts:
 
 ```text
@@ -62,6 +64,8 @@ Read back the merged state and merge commit SHA from GitHub. Verify CI for that 
 Use `$dne-handoff` and the [evidence](../templates/EVIDENCE.md) / [handoff](../templates/HANDOFF.md) templates. Link every acceptance criterion to evidence. Name unresolved work, dependencies, reviewer, revision, commands, results, and the next authorized step. GitHub remains the live status record. Update issue/project state only when authorized and supported by evidence; do not close a whole epic because one child is done.
 
 Reconcile labels, assignees and project Status using the coordination workflow. Full accepted delivery becomes `status:done` / Done and closes the issue. Partial delivery records remaining AC, releases or explicitly hands off the claim, and returns the still-open issue to Ready or Backlog when no worker continues.
+
+Every completed, partial, blocked or paused handoff names **one next bounded action** with a live issue link and why it is the next priority, or a specific owner decision when no issue is ready. Check dependencies and active claims before recommending it; state any blocker and owner. Include the recommended lead model and starting reasoning effort from current labels/policy, plus separate design/review settings when relevant. This is a plan for the next handoff, not a claim, model switch or authorization to execute that issue.
 
 Model review, CI, deployment, provider verification, expert readiness, legal clearance, customer demand, and commercial launch are separate outcomes. A live launch requires its own recorded go/no-go decision.
 

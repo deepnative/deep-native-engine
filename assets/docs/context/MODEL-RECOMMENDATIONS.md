@@ -1,6 +1,6 @@
 # Recommended models for roadmap issues
 
-**Reviewed:** 23 September 2026 against all 55 live GitHub issue scopes and the newly released GPT-6 Sol/Luna family.
+**Reviewed:** 23 September 2026 against the original 55 roadmap scopes plus [GOV-002 #70](https://github.com/deepnative/deep-native-engine/issues/70), and the newly released GPT-6 Sol/Luna family. The 55-entry `model-recommendations.json` is the preserved original routing snapshot; current live labels take precedence.
 
 ## Routing rule
 
@@ -9,9 +9,11 @@
 - `reasoning:medium`, `reasoning:high` and `reasoning:xhigh` are mutually exclusive recommended starting efforts. Medium covers contained work; High is the usual choice for multi-step issue delivery; XHigh is reserved for the ten highest-risk cross-boundary issues. An `escalate:xhigh` label flags a High issue whose difficulty may warrant changing its actual task setting.
 - `review:gpt-6-astra` requests an independent Astra High review of the acceptance criteria, diff and evidence. An Astra-led issue still requires a separate reviewer when marked.
 - `design:gpt-6-astra` asks Astra High to design or review the test strategy before the primary model implements it.
-- GPT-6 Luna is suitable for small, precisely bounded subtasks such as extraction, triage or narrow edits. None of these 55 whole issues is narrow enough to route to Luna as lead; split and review a subtask when it is useful.
+- GPT-6 Luna is suitable for small, precisely bounded subtasks such as extraction, triage or narrow edits. None of the current whole issues is narrow enough to route to Luna as lead; split and review a subtask when it is useful.
 
 The recommendations are based on issue scope and [official OpenAI model-selection guidance](https://developers.openai.com/api/docs/guides/model-selection), [GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra), [GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol), [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) and the [22 September release note](https://developers.openai.com/api/docs/changelog). They are not measured repository benchmarks or a claim about account-specific availability. Confirm the model in the actual task before work; labels do not launch agents, grant authorization or change any quality/launch gate. Human owners retain legal, product, commercial and release decisions.
+
+At each handoff, recommend one next bounded issue using the live board's priority, dependencies and claims. Quote its current `model:*` and `reasoning:*` labels as the **lead model / starting effort**, explain why that issue is next, and identify any `design:*`, `review:*` or `escalate:*` recommendation separately. If no issue is ready, name the next owner decision and recommend a model/effort for that bounded planning task using the routing rules. Missing or conflicting labels call for a proposed correction, not a silent substitution. This recommendation does not start work or change the current task's model.
 
 Closed issues retain their completion evidence. Updated labels on them express the recommendation for a comparable future issue; they do not rewrite which model performed historical work.
 
@@ -26,6 +28,7 @@ Closed issues retain their completion evidence. Updated labels on them express t
 | [GATE-F #7](https://github.com/deepnative/deep-native-engine/issues/7) | gpt-6-astra | high | — | — | — | Expansion gate across distinct product and legal risks |
 | [PLAN-001 #8](https://github.com/deepnative/deep-native-engine/issues/8) | gpt-6-sol | high | — | gpt-6-astra | — | Cross-audience story map and source reconciliation |
 | [GOV-001 #11](https://github.com/deepnative/deep-native-engine/issues/11) | gpt-6-sol | high | — | gpt-6-astra | — | Repository governance and evidence controls |
+| [GOV-002 #70](https://github.com/deepnative/deep-native-engine/issues/70) | gpt-6-sol | medium | — | gpt-6-astra | — | Bounded next-action and model/effort handoff guidance |
 | [PLAN-002 #12](https://github.com/deepnative/deep-native-engine/issues/12) | gpt-6-astra | high | — | gpt-6-astra | — | Jurisdiction, consent, terms and launch decision boundaries |
 | [PLAN-003 #13](https://github.com/deepnative/deep-native-engine/issues/13) | gpt-6-sol | high | — | gpt-6-astra | — | Qualified staffing, cost and capacity planning |
 | [PLAN-004 #14](https://github.com/deepnative/deep-native-engine/issues/14) | gpt-6-sol | high | — | gpt-6-astra | — | Accessible curriculum, rights and review calibration |
