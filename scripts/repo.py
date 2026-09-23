@@ -10,6 +10,8 @@ import subprocess
 import sys
 import tomllib
 import unittest
+import zipfile
+from xml.etree import ElementTree
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -17,6 +19,7 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 CONTEXT = Path("assets/docs/context")
 ARCHIVE = CONTEXT / "source-2026-09-15"
+PLAN_WORKBOOK = Path("assets/docs/PLAN-003-CAPACITY-MODEL.xlsx")
 ROLES = {
     "dne-planner": ("gpt-6-astra", "read-only"),
     "dne-builder": ("gpt-6-sol", "workspace-write"),
@@ -73,6 +76,7 @@ def validate_scope(root, files):
             or (any(p.is_relative_to(Path("tests") / group) for group in ("unit", "integration", "e2e", "support")) and p.suffix in (".ts", ".mjs"))
             or p.is_relative_to(ARCHIVE)
             or (p.is_relative_to(Path("assets/docs")) and p.suffix == ".md")
+            or p == PLAN_WORKBOOK
             or (p.parent == CONTEXT and p.suffix == ".json")
             or (p.parent == Path(".codex/agents") and p.stem in ROLES and p.suffix == ".toml")
             or name in {f".agents/skills/{s}/{f}" for s in SKILLS for f in ("SKILL.md", "agents/openai.yaml")}
@@ -101,6 +105,25 @@ def validate_archive(root):
                 f"Source checksum mismatch: {relative}")
     inventory = {p.relative_to(archive).as_posix() for p in archive.rglob("*") if p.is_file() or p.is_symlink()}
     require(inventory == seen, f"Archive inventory mismatch: {sorted(inventory ^ seen)}")
+
+
+def validate_capacity_workbook(root):
+    """Keep the one approved planning workbook a local, macro-free OOXML asset."""
+    path = root / PLAN_WORKBOOK
+    require(path.is_file() and zipfile.is_zipfile(path), "Invalid PLAN-003 capacity workbook")
+    with zipfile.ZipFile(path) as workbook:
+        names = set(workbook.namelist())
+        require({"[Content_Types].xml", "xl/workbook.xml", "xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml"} <= names,
+                "Incomplete PLAN-003 capacity workbook")
+        require(not any(name.startswith(("xl/externalLinks/", "xl/embeddings/")) or
+                        name.lower().endswith(("vbaproject.bin", "connections.xml")) for name in names),
+                "Unsafe external or executable PLAN-003 workbook content")
+        require(not any(
+            relation.attrib.get("TargetMode", "").lower() == "external"
+            for name in names if name.endswith(".rels")
+            for relation in ElementTree.fromstring(workbook.read(name))
+        ),
+                "External relationship in PLAN-003 capacity workbook")
 
 
 def validate_planning(root):
@@ -209,6 +232,8 @@ def validate(root):
     files = repository_files(root)
     validate_scope(root, files)
     validate_archive(root)
+    if PLAN_WORKBOOK.as_posix() in files:
+        validate_capacity_workbook(root)
     validate_planning(root)
     validate_agents_skills(root)
     register = json.loads((root / "tests/e2e/scenarios.json").read_text())

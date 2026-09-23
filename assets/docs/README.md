@@ -9,6 +9,7 @@ Start with [the current product direction](PRODUCT-DIRECTION.md): the AI learnin
 - [QA-004 threat model](QA-004-THREAT-MODEL.md): current and future trust boundaries, risk owners, severity, scanning, response and launch stop conditions.
 - [QA-004 risk test matrix](QA-004-RISK-TEST-MATRIX.md): reproducible abuse, race, date and recovery cases mapped to current evidence and future issue owners.
 - [PLAN-001 scope reconciliation](PLAN-001-SCOPE-RECONCILIATION.md): source precedence, supersession map, cross-audience story map, prototype boundary and owner decision gates.
+- [PLAN-003 capacity and service operations](PLAN-003-CAPACITY-OPERATIONS.md): optional coaching workload, expert evidence gate, synthetic cohort allocation and proposed service rules.
 - [GOV-001 working agreement acceptance](GOV-001-WORKING-AGREEMENT-ACCEPTANCE.md): adopted issue lifecycle, definitions of ready/done, independent review controls and operational evidence.
 - [CTP-001 architecture audit](CTP-001-ARCHITECTURE-AUDIT.md): audited reuse/greenfield decisions, application placement, schema, storage/jobs, exact maintained tools and cross-audience domain boundaries.
 - [ADR-0002: file-first hosted modular monolith](decisions/ADR-0002-file-first-hosted-modular-monolith.md): dynamic hosting, file/database boundaries, content versioning, recovery and implementation acceptance tests.
