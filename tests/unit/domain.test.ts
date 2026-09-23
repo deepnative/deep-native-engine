@@ -100,6 +100,8 @@ describe("learner inputs", () => {
         itRoles: [],
         experience: null,
         exploratory: false,
+        timezone: null,
+        weeklyMinutes: null,
       }),
   );
   it.each([
@@ -122,6 +124,8 @@ describe("learner inputs", () => {
         it_roles: ["security", "product"],
         experience: "some",
         exploratory: "yes",
+        timezone: "America/Toronto",
+        weekly_minutes: "60",
       }),
     ).toEqual({
       background: "explorer",
@@ -131,6 +135,8 @@ describe("learner inputs", () => {
       itRoles: ["security", "product"],
       experience: "some",
       exploratory: true,
+      timezone: "America/Toronto",
+      weeklyMinutes: 60,
     });
   });
   it.each([
@@ -142,6 +148,13 @@ describe("learner inputs", () => {
     { experience: "expert" },
     { experience: [] },
     { exploratory: "no" },
+    { timezone: "Mars/Olympus" },
+    { timezone: " America/Toronto " },
+    { timezone: "x".repeat(65) },
+    { timezone: 42 },
+    { weekly_minutes: "0" },
+    { weekly_minutes: "31" },
+    { weekly_minutes: 30 },
   ])("rejects unsupported optional choices %j", (extra) =>
     expect(
       profile({
@@ -152,6 +165,17 @@ describe("learner inputs", () => {
       }),
     ).toBeNull(),
   );
+  it("accepts a small weekly budget and UTC without inventing paid access", () => {
+    expect(
+      profile({
+        background: "explorer",
+        goal: "everyday",
+        synthetic: "yes",
+        timezone: "UTC",
+        weekly_minutes: "15",
+      }),
+    ).toMatchObject({ timezone: "UTC", weeklyMinutes: 15 });
+  });
   it("allows an unfinished draft but validates every completed answer", () => {
     expect(submission({ intent: "draft" })).toMatchObject({
       instruction: "",

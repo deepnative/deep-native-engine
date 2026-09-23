@@ -9,6 +9,8 @@ export interface Learner extends Pick<LearnerProfile, "background" | "goal"> {
   itRoles?: LearnerProfile["itRoles"];
   experience?: LearnerProfile["experience"];
   exploratory?: boolean;
+  timezone?: LearnerProfile["timezone"];
+  weeklyMinutes?: LearnerProfile["weeklyMinutes"];
 }
 export interface Exercise {
   instruction: string;
@@ -47,6 +49,7 @@ export async function migrate(pool: Pool) {
       "006-content-lifecycle.sql",
       "007-expert-readiness.sql",
       "008-member-proposals.sql",
+      "009-learning-plan.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
@@ -60,7 +63,8 @@ export function store(pool: Pool): Store {
         await pool.query<Learner & { active: boolean }>(
           `SELECT l.id,l.background,l.goal,l.background_tags AS "backgroundTags",
                   l.domain_tags AS "domainTags",l.it_roles AS "itRoles",
-                  l.experience,l.exploratory,
+                  l.experience,l.exploratory,l.time_zone AS timezone,
+                  l.weekly_minutes AS "weeklyMinutes",
                   p.expires_at>CURRENT_TIMESTAMP AND p.revoked_at IS NULL AS active
            FROM principals p JOIN learners l ON l.id=p.id
            WHERE p.kind='member' AND p.token_hash=$1`,
@@ -88,6 +92,10 @@ export function store(pool: Pool): Store {
           ...(row.exploratory === undefined
             ? {}
             : { exploratory: row.exploratory }),
+          ...(row.timezone === undefined ? {} : { timezone: row.timezone }),
+          ...(row.weeklyMinutes === undefined
+            ? {}
+            : { weeklyMinutes: row.weeklyMinutes }),
         },
       };
     },
@@ -99,8 +107,9 @@ export function store(pool: Pool): Store {
            ON CONFLICT(token_hash) DO NOTHING RETURNING id,token_hash,expires_at
          ), member AS (
            INSERT INTO learners(id,token_hash,background,goal,expires_at,
-                                background_tags,domain_tags,it_roles,experience,exploratory)
-           SELECT id,token_hash,$3,$4,expires_at,$5,$6,$7,$8,$9 FROM identity
+                                background_tags,domain_tags,it_roles,experience,exploratory,
+                                time_zone,weekly_minutes)
+           SELECT id,token_hash,$3,$4,expires_at,$5,$6,$7,$8,$9,$10,$11 FROM identity
            RETURNING id
          )
          INSERT INTO workspaces(id,owner_principal_id)
@@ -115,13 +124,16 @@ export function store(pool: Pool): Store {
           profile.itRoles ?? [],
           profile.experience ?? null,
           profile.exploratory ?? false,
+          profile.timezone ?? null,
+          profile.weeklyMinutes ?? null,
         ],
       );
     },
     async updateProfile(id, profile) {
       await pool.query(
         `UPDATE learners SET background=$2,goal=$3,background_tags=$4,
-          domain_tags=$5,it_roles=$6,experience=$7,exploratory=$8 WHERE id=$1`,
+          domain_tags=$5,it_roles=$6,experience=$7,exploratory=$8,
+          time_zone=$9,weekly_minutes=$10 WHERE id=$1`,
         [
           id,
           profile.background,
@@ -131,6 +143,8 @@ export function store(pool: Pool): Store {
           profile.itRoles,
           profile.experience,
           profile.exploratory,
+          profile.timezone ?? null,
+          profile.weeklyMinutes ?? null,
         ],
       );
     },

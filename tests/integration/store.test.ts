@@ -449,6 +449,10 @@ it("backfills and safely reruns authorization migration over populated learning 
         new URL("../../migrations/005-learner-profile.sql", import.meta.url),
         "utf8",
       ),
+      learnerPlan = await readFile(
+        new URL("../../migrations/009-learning-plan.sql", import.meta.url),
+        "utf8",
+      ),
       activeId = randomUUID(),
       expiredId = randomUUID(),
       activeToken = randomBytes(32).toString("hex"),
@@ -472,6 +476,8 @@ it("backfills and safely reruns authorization migration over populated learning 
     await client.query(authorization);
     await client.query(learnerProfile);
     await client.query(learnerProfile);
+    await client.query(learnerPlan);
+    await client.query(learnerPlan);
     const migrated = store(client as unknown as Pool);
     await expect(migrated.session(activeToken)).resolves.toMatchObject({
       kind: "active",
@@ -531,6 +537,56 @@ it("persists drafts and completions across independent database connections and 
   } finally {
     await reopened.end();
   }
+});
+it("keeps each member's weekly plan preferences private and preserves saved practice after a goal change", async () => {
+  const token = randomBytes(32).toString("hex");
+  await db.create(token, {
+    background: "explorer",
+    goal: "everyday",
+    experience: "new",
+    timezone: "UTC",
+    weeklyMinutes: 15,
+  });
+  const first = await db.session(token);
+  expect(first.kind).toBe("active");
+  const id = (first as { kind: "active"; learner: Learner }).learner.id;
+  expect(first).toMatchObject({
+    learner: { timezone: "UTC", weeklyMinutes: 15 },
+  });
+  await db.save(id, { ...input, complete: false });
+  const other = await member();
+  expect(other.learner).toMatchObject({
+    timezone: null,
+    weeklyMinutes: null,
+  });
+  await db.updateProfile(id, {
+    background: "explorer",
+    goal: "work",
+    backgroundTags: [],
+    domainTags: [],
+    itRoles: [],
+    experience: "some",
+    exploratory: true,
+    timezone: "America/Toronto",
+    weeklyMinutes: 60,
+  });
+  expect(await db.session(token)).toMatchObject({
+    learner: {
+      goal: "work",
+      experience: "some",
+      timezone: "America/Toronto",
+      weeklyMinutes: 60,
+    },
+  });
+  expect(await db.progress(id)).toMatchObject({ goal_at_start: "everyday" });
+  await expect(
+    pool.query("UPDATE learners SET weekly_minutes=31 WHERE id=$1", [id]),
+  ).rejects.toThrow();
+  expect(await db.session(other.token)).toMatchObject({
+    learner: { timezone: null, weeklyMinutes: null },
+  });
+  await db.remove(id);
+  expect(await db.session(token)).toEqual({ kind: "new" });
 });
 it("makes duplicate onboarding and simultaneous completion idempotent without cross-member writes", async () => {
   const { learner, token } = await member();

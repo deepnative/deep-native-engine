@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v9",
+  "version": "initial-learning-v10",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable learner interests, private evidence, gated content, honest track states, private synthetic member proposals and read-only access/coaching hypotheses; not live commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable learner interests, private evidence, gated content, honest track states, private synthetic member proposals, private time-fitting starter plans and read-only access/coaching hypotheses; not live commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -254,6 +254,33 @@
       "steps": "Save sample with explicit attestation, deny another member and reviewer, submit with rights confirmation, quarantine as moderator, reject forged-CSRF withdrawal, then withdraw and inspect redaction",
       "expected": "Proposal stays private and out of the library; only moderator sees submitted sample; forged request cannot withdraw; authorized withdrawal removes text and queued view; no approval or publication path exists",
       "issues": [26],
+      "critical": true
+    },
+    {
+      "id": "L29",
+      "actor": "General exploratory learner with 15 minutes per week",
+      "preconditions": "Fresh local preview and sample-only consent",
+      "steps": "Choose a goal, self-reported experience, UTC and a small weekly budget; save practice, revise goal and available time, then reload",
+      "expected": "Private starter plan fits the selected time, recalculates for the new goal and preserves the prior exercise context",
+      "issues": [28],
+      "critical": true
+    },
+    {
+      "id": "L30",
+      "actor": "Non-IT professional with 30 minutes per week",
+      "preconditions": "Fresh local preview",
+      "steps": "Reject an invalid time zone, correct it and save a noncoding practice plan",
+      "expected": "Invalid input creates no learner; corrected time zone and weekly time persist without a paid-service action",
+      "issues": [28],
+      "critical": true
+    },
+    {
+      "id": "L31",
+      "actor": "Experienced IT learner and an unrelated general learner",
+      "preconditions": "Separate browser sessions",
+      "steps": "Choose a technical goal and weekly time, then inspect a separate learner's plan",
+      "expected": "Experienced practice remains noncoding and private; the other learner does not see the time zone or goal",
+      "issues": [28],
       "critical": true
     }
   ],
