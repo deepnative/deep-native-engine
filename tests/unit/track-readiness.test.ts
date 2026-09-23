@@ -28,6 +28,12 @@ const evidence: ExpertRecord = {
   verifiedAt: new Date("2026-09-20T00:00:00Z"),
   retiredAt: null,
 };
+const backup: ExpertRecord = {
+  ...evidence,
+  id: "e2",
+  staffId: "backup",
+  backupStaffId: "primary",
+};
 it("requires every current qualified and operational expert fact before claiming coverage", () => {
   expect(expertEligible(evidence, now)).toBe(true);
   const invalid: Partial<ExpertRecord>[] = [
@@ -54,17 +60,14 @@ it("separates retired, unprepared, limited and available specialist coverage", (
   expect(specialtyState(true, [{ ...evidence, verifiedBy: null }], now)).toBe(
     "in preparation",
   );
+  expect(specialtyState(true, [evidence], now)).toBe("in preparation");
   expect(
-    specialtyState(true, [{ ...evidence, committedMinutes: 60 }], now),
+    specialtyState(true, [evidence, { ...backup, committedMinutes: 90 }], now),
+  ).toBe("in preparation");
+  expect(
+    specialtyState(true, [{ ...evidence, committedMinutes: 60 }, backup], now),
   ).toBe("limited coverage");
-  expect(specialtyState(true, [evidence], now)).toBe("available");
-  expect(
-    specialtyState(
-      true,
-      [evidence, { ...evidence, committedMinutes: 60 }],
-      now,
-    ),
-  ).toBe("available");
+  expect(specialtyState(true, [evidence, backup], now)).toBe("available");
 });
 it("defaults every track to preparation and denies private roster access", async () => {
   const disabled = disabledTrackStore();
@@ -83,7 +86,7 @@ it("derives foundation and specialist states from published qualified content an
       { id: "SYN-010", goals: [], domains: ["education"] },
     ],
   });
-  query.mockResolvedValueOnce({ rows: [evidence] });
+  query.mockResolvedValueOnce({ rows: [evidence, backup] });
   const store = trackStore({ query } as unknown as Pool);
   const result = await store.snapshot();
   expect(result.foundation.map((track) => track.state)).toEqual([

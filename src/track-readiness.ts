@@ -66,7 +66,18 @@ export function specialtyState(
   if (records.length > 0 && records.every((record) => record.retiredAt))
     return "retired";
   if (!contentReady) return "in preparation";
-  const eligible = records.filter((record) => expertEligible(record, now));
+  const current = records.filter(
+    (record) =>
+      expertEligible(record, now) &&
+      record.capacityMinutes > record.committedMinutes,
+  );
+  const eligible = current.filter((record) =>
+    current.some(
+      (backup) =>
+        backup.staffId === record.backupStaffId &&
+        backup.capacityMinutes - backup.committedMinutes >= 60,
+    ),
+  );
   if (!eligible.length) return "in preparation";
   const minutes = eligible.reduce(
     (total, record) => total + record.capacityMinutes - record.committedMinutes,
