@@ -39,7 +39,7 @@ APP_FILES = {
     ".env.example", ".nvmrc", "compose.yaml", "eslint.config.mjs", "package.json", "package-lock.json",
     "playwright.config.ts", "tsconfig.json", "tsconfig.build.json", "vitest.config.ts",
     "vitest.integration.config.ts", "scripts/quality-gates.mjs", "scripts/gate-probes.mjs",
-    "scripts/verify-app.mjs", "tests/e2e/scenarios.json", "src/main.ts", "migrations/001-learning.sql",
+    "scripts/verify-app.mjs", "scripts/verify-full-release.mjs", "tests/e2e/scenarios.json", "src/main.ts", "migrations/001-learning.sql",
 }
 
 
