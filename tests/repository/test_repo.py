@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
@@ -98,7 +99,7 @@ class RepositoryFixture(unittest.TestCase):
             gate.validate_archive(self.root)
 
     def test_unmeasured_application_source_fails_scope(self):
-        for name in ("app/main.py", "src/hidden.js", "assets/docs/application.js"):
+        for name in ("app/main.py", "src/hidden.js", "assets/docs/application.js", "assets/docs/unreviewed.xlsx"):
             with self.subTest(name=name):
                 path = self.root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -106,6 +107,16 @@ class RepositoryFixture(unittest.TestCase):
                 with self.assertRaisesRegex(gate.GateError, "Outside verified"):
                     gate.validate_scope(self.root, gate.repository_files(self.root))
                 path.unlink()
+
+    def test_plan_workbook_is_narrowly_allowed_and_rejects_external_relationships(self):
+        workbook = self.root / gate.PLAN_WORKBOOK
+        self.assertTrue(workbook.is_file())
+        gate.validate_scope(self.root, gate.repository_files(self.root))
+        gate.validate_capacity_workbook(self.root)
+        with zipfile.ZipFile(workbook, "a") as archive:
+            archive.writestr("xl/_rels/extra.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdX" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" TargetMode="External" Target="https://example.invalid"/></Relationships>')
+        with self.assertRaisesRegex(gate.GateError, "External relationship"):
+            gate.validate_capacity_workbook(self.root)
 
     def test_removing_application_gate_files_blocks_verification(self):
         files = gate.repository_files(self.root)
