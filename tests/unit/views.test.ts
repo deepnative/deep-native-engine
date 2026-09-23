@@ -8,7 +8,9 @@ import {
   lesson,
   errorPage,
   contentPreview,
+  expertRegistryPage,
 } from "../../src/views.ts";
+import type { ExpertRecord } from "../../src/track-readiness.ts";
 const learner = {
   id: "a",
   background: "explorer" as const,
@@ -19,6 +21,42 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("shows evidence state without exposing registry details to the public track page", () => {
+  const record: ExpertRecord = {
+    id: "synthetic",
+    staffId: "reviewer",
+    staffRole: "reviewer",
+    domain: "education",
+    serviceType: "formal-review",
+    startsAt: new Date("2026-09-01"),
+    endsAt: new Date("2026-10-01"),
+    loadedCostCents: 12345,
+    capacityMinutes: 90,
+    committedMinutes: 30,
+    backupStaffId: null,
+    qualificationRef: "sample",
+    agreementRef: "sample",
+    conflictReviewRef: "sample",
+    verifiedBy: null,
+    verifiedAt: null,
+    retiredAt: null,
+  };
+  const html = expertRegistryPage([
+    record,
+    {
+      ...record,
+      backupStaffId: "backup",
+      verifiedAt: new Date("2026-09-20"),
+      retiredAt: new Date("2026-09-21"),
+    },
+  ]);
+  expect(html).toContain("CAD 123.45");
+  expect(html).toContain("backup missing");
+  expect(html).toContain("backup recorded");
+  expect(html).toContain("verification pending");
+  expect(html).toContain("verification recorded");
+  expect(html).toContain("retired");
+});
 it("escapes every HTML-sensitive character in submitted content and page titles", () => {
   expect(escape("&<>\"'")).toBe("&amp;&lt;&gt;&quot;&#39;");
   expect(page("<unsafe>", "safe")).toContain("&lt;unsafe&gt;");

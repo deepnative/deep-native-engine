@@ -13,6 +13,8 @@ import {
   libraryPage,
   contentPreview,
   staffLibraryPage,
+  trackReadinessPage,
+  expertRegistryPage,
   errorPage,
 } from "./views.ts";
 import type { Store, Learner } from "./store.ts";
@@ -36,6 +38,7 @@ import {
   type CatalogStore,
   type DraftContent,
 } from "./catalog.ts";
+import { disabledTrackStore, type TrackStore } from "./track-readiness.ts";
 export function app(
   store: Store,
   options: {
@@ -46,6 +49,7 @@ export function app(
     authorization?: AuthorizationStore;
     evidence?: EvidenceStore;
     catalog?: CatalogStore;
+    tracks?: TrackStore;
   },
 ) {
   const app = express();
@@ -54,6 +58,7 @@ export function app(
   const authorization = options.authorization ?? disabledAuthorizationStore();
   const evidence = options.evidence ?? disabledEvidenceStore();
   const catalog = options.catalog ?? disabledCatalogStore();
+  const tracks = options.tracks ?? disabledTrackStore();
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -119,6 +124,21 @@ export function app(
   });
   app.get("/readiness", (_req, res) => res.send(readinessPage(mode, adapters)));
   app.get("/readiness/offers", (_req, res) => res.send(offerHypothesesPage()));
+  app.get("/readiness/tracks", async (_req, res) =>
+    res.send(trackReadinessPage(await tracks.snapshot())),
+  );
+  app.get("/operator/experts", async (_req, res) => {
+    const records = await tracks.registry(res.locals.token as string);
+    if (!records) {
+      res
+        .status(403)
+        .send(
+          errorPage("Registry unavailable", "Operator access is required."),
+        );
+      return;
+    }
+    res.send(expertRegistryPage(records));
+  });
   app.get("/api/offer-hypotheses", (_req, res) =>
     res.json({
       foundation: FOUNDATION_ACCESS,

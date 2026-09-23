@@ -18,6 +18,7 @@ import {
   type ObjectStorage,
 } from "../../src/evidence.ts";
 import { testPool } from "../support/database.ts";
+import { trackStore } from "../../src/track-readiness.ts";
 import {
   catalogStore,
   seedDraftPack,
@@ -74,6 +75,78 @@ const contentDraft: DraftContent = {
   rubric: "Check source and uncertainty.",
   rubricVersion: 1,
 };
+it("keeps the expert roster private and all live track states unprepared without qualified evidence", async () => {
+  const tracks = trackStore(pool);
+  const operatorToken = randomBytes(32).toString("hex");
+  const reviewerToken = randomBytes(32).toString("hex");
+  const operatorId = await authorizationStore(pool).provisionStaff(
+    operatorToken,
+    "operator",
+    new Date(Date.now() + 86_400_000),
+  );
+  const reviewerId = await authorizationStore(pool).provisionStaff(
+    reviewerToken,
+    "reviewer",
+    new Date(Date.now() + 86_400_000),
+  );
+  await seedDraftPack(pool);
+  await pool.query(
+    `INSERT INTO expert_registry(id,staff_id,staff_role,domain,service_type,
+      starts_at,ends_at,loaded_cost_cents,capacity_minutes,qualification_ref)
+     VALUES($1,$2,'reviewer','education','formal-review',
+      CURRENT_TIMESTAMP,CURRENT_TIMESTAMP+INTERVAL '30 days',12000,120,'synthetic claim')`,
+    [randomUUID(), reviewerId],
+  );
+  expect(await tracks.registry(reviewerToken)).toBeNull();
+  const registry = await tracks.registry(operatorToken);
+  expect(registry).toHaveLength(1);
+  expect(registry?.[0]).toMatchObject({
+    staffId: reviewerId,
+    loadedCostCents: 12000,
+    verifiedBy: null,
+  });
+  expect(
+    (await tracks.snapshot()).foundation.every(
+      (track) => track.state === "in preparation",
+    ),
+  ).toBe(true);
+  expect(
+    (await tracks.snapshot()).specialties.every(
+      (track) => track.state === "in preparation",
+    ),
+  ).toBe(true);
+  await expect(
+    pool.query(
+      `UPDATE expert_registry SET verified_by=$1,verified_at=CURRENT_TIMESTAMP`,
+      [operatorId],
+    ),
+  ).rejects.toThrow();
+  await expect(
+    pool.query(
+      `UPDATE expert_registry SET qualification_ref='sample qualification',
+       agreement_ref='sample agreement',conflict_review_ref='sample conflict check',
+       backup_staff_id=$2,verified_by=$1,verified_at=CURRENT_TIMESTAMP`,
+      [operatorId, operatorId],
+    ),
+  ).rejects.toThrow();
+  const adminToken = randomBytes(32).toString("hex");
+  const adminId = await authorizationStore(pool).provisionStaff(
+    adminToken,
+    "platform_admin",
+    new Date(Date.now() + 86_400_000),
+  );
+  await pool.query(
+    `UPDATE expert_registry SET qualification_ref='synthetic qualification',
+     agreement_ref='synthetic agreement',conflict_review_ref='synthetic check',
+     backup_staff_id=$2,verified_by=$1,verified_at=CURRENT_TIMESTAMP`,
+    [adminId, operatorId],
+  );
+  expect(
+    (await tracks.snapshot()).specialties.every(
+      (track) => track.state === "in preparation",
+    ),
+  ).toBe(true);
+});
 it("imports the six-lesson content pack as hidden drafts that cannot self-certify qualified sign-off", async () => {
   const catalog = catalogStore(pool);
   const editorToken = randomBytes(32).toString("hex");

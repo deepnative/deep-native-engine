@@ -1,5 +1,5 @@
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
@@ -8,6 +8,52 @@ const pool = testPool();
 const origin = "http://127.0.0.1:4317";
 test.afterAll(async () => {
   await pool.end();
+});
+test("[L27] general learner sees preparation while operator alone sees pending expert evidence", async ({
+  browser,
+  page,
+}) => {
+  const operator = await staff("operator");
+  const reviewer = await staff("reviewer");
+  const recordId = randomUUID();
+  await pool.query(
+    `INSERT INTO expert_registry(id,staff_id,staff_role,domain,service_type,
+      starts_at,ends_at,loaded_cost_cents,capacity_minutes)
+     VALUES($1,$2,'reviewer','education','formal-review',
+      CURRENT_TIMESTAMP,CURRENT_TIMESTAMP+INTERVAL '30 days',12000,120)`,
+    [recordId, reviewer.id],
+  );
+  const operatorContext = await browser.newContext({ baseURL: origin });
+  const reviewerContext = await browser.newContext({ baseURL: origin });
+  try {
+    await page.goto("/readiness/tracks");
+    await expect(
+      page.getByRole("heading", { name: "Learning track readiness" }),
+    ).toBeVisible();
+    await expect(page.getByText("in preparation")).toHaveCount(15);
+    await expect(page.getByText("General learners may use")).toBeVisible();
+    await expect(page.getByRole("button", { name: /book|buy/i })).toHaveCount(
+      0,
+    );
+    await useToken(reviewerContext, reviewer.token);
+    const reviewerPage = await reviewerContext.newPage();
+    await reviewerPage.goto("/operator/experts");
+    await expect(
+      reviewerPage.getByRole("heading", { name: "Registry unavailable" }),
+    ).toBeVisible();
+    await useToken(operatorContext, operator.token);
+    const operatorPage = await operatorContext.newPage();
+    await operatorPage.goto("/operator/experts");
+    await expect(
+      operatorPage.getByRole("heading", { name: "Expert coverage registry" }),
+    ).toBeVisible();
+    await expect(operatorPage.getByText("verification pending")).toBeVisible();
+    await expect(operatorPage.getByText("backup missing")).toBeVisible();
+  } finally {
+    await pool.query("DELETE FROM expert_registry WHERE id=$1", [recordId]);
+    await operatorContext.close();
+    await reviewerContext.close();
+  }
 });
 async function staff(role: StaffRole) {
   const token = randomBytes(32).toString("hex");
