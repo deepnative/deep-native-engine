@@ -535,6 +535,16 @@ progress {
   line-height: 1.5;
   margin-bottom: 0;
 }
+.field-error {
+  color: #8b2020;
+  font-size: 14px;
+  font-weight: 650;
+  margin: 0 0 12px;
+}
+.exercise-card [aria-invalid="true"] {
+  border-color: #8b2020;
+  border-width: 2px;
+}
 .success {
   background: #eaf3e0;
   padding: 17px;

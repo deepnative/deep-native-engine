@@ -286,15 +286,39 @@ it("distinguishes unsaved, draft and self-assessed completion without inventing 
     "Your draft is saved",
   );
   expect(lesson(learner, draft, "token")).toContain("Your draft is saved");
-  expect(lesson(learner, draft, "token", ["Invalid"])).not.toContain(
-    "Your draft is saved",
-  );
+  expect(
+    lesson(learner, draft, "token", [{ field: null, message: "Invalid" }]),
+  ).not.toContain("Your draft is saved");
   expect(lesson(learner, completed, "token")).toContain(
     "No AI or qualified reviewer",
   );
   expect(lesson(learner, completed, "token")).not.toContain(
     'name="instruction"',
   );
+});
+it("links each exercise error to only its affected field and clears error state after correction", () => {
+  const invalid = lesson(learner, draft, "token", [
+    {
+      field: "verification",
+      message: "How will you check the result? Write at least 20 characters.",
+    },
+  ]);
+  expect(invalid).toContain("<title>Error in your exercise");
+  expect(invalid).toContain('href="#verification"');
+  expect(invalid).toContain('id="verification" name="verification"');
+  expect(invalid).toContain('aria-invalid="true"');
+  expect(invalid).toContain(
+    'aria-describedby="verification-help verification-error"',
+  );
+  expect(invalid).toContain('id="verification-error"');
+  expect(invalid).toContain('id="verification-help"');
+  expect(invalid).not.toContain('href="#instruction"');
+  expect(invalid).not.toContain('id="instruction-error"');
+  expect(invalid).toContain('aria-describedby="answer-help"');
+  const corrected = lesson(learner, draft, "token");
+  expect(corrected).not.toContain('aria-invalid="true"');
+  expect(corrected).not.toContain('id="verification-error"');
+  expect(corrected).not.toContain("<title>Error in your exercise");
 });
 it("shows optional profile choices and retains the exercise context after a goal change", () => {
   const profile = {

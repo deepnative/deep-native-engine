@@ -8,6 +8,11 @@ import {
   type LearnerProfile,
 } from "./content.ts";
 export type Fields = Record<string, unknown>;
+export type SubmissionField = "instruction" | "verification" | "checked";
+export interface SubmissionError {
+  field: SubmissionField | null;
+  message: string;
+}
 function timeZone(value: unknown): string | null | undefined {
   if (value === undefined || value === "") return null;
   if (typeof value !== "string" || value.length > 64 || value.trim() !== value)
@@ -80,20 +85,40 @@ export function submission(body: Fields) {
   const verification =
     typeof body.verification === "string" ? body.verification.trim() : "";
   const complete = body.intent === "complete";
-  const errors: string[] = [];
+  const errors: SubmissionError[] = [];
   if (body.intent !== "draft" && !complete)
-    errors.push("Choose Save draft or Complete exercise.");
-  if (instruction.length > 2000 || verification.length > 1000)
-    errors.push(
-      "Keep your instruction within 2,000 characters and your check within 1,000.",
-    );
-  if (complete && (instruction.length < 20 || verification.length < 20))
-    errors.push(
-      "Write at least 20 characters in each answer before completing the exercise.",
-    );
+    errors.push({
+      field: null,
+      message: "Choose Save draft or Complete exercise.",
+    });
+  if (instruction.length > 2000)
+    errors.push({
+      field: "instruction",
+      message: "Your instruction to AI: use no more than 2,000 characters.",
+    });
+  if (verification.length > 1000)
+    errors.push({
+      field: "verification",
+      message:
+        "How will you check the result? Use no more than 1,000 characters.",
+    });
+  if (complete && instruction.length < 20)
+    errors.push({
+      field: "instruction",
+      message:
+        "Your instruction to AI: write at least 20 characters to complete.",
+    });
+  if (complete && verification.length < 20)
+    errors.push({
+      field: "verification",
+      message:
+        "How will you check the result? Write at least 20 characters to complete.",
+    });
   if (complete && body.checked !== "yes")
-    errors.push(
-      "Confirm that you checked your instruction and used only sample information.",
-    );
+    errors.push({
+      field: "checked",
+      message:
+        "Confirm that you checked your instruction and used only sample information.",
+    });
   return { instruction, verification, complete, errors };
 }
