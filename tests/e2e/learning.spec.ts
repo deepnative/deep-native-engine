@@ -10,6 +10,43 @@ const instruction =
   "Using only the sample details, create a short plan with clear actions and flag any missing information.";
 const verification =
   "Compare every detail against the supplied sample, check the limits, and correct any unsupported claims.";
+test("[L24] foundation and coaching hypotheses agree across page and server", async ({
+  page,
+}) => {
+  await page.goto("/readiness");
+  await page
+    .getByRole("link", { name: "Access and coaching planning" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Access and coaching planning" }),
+  ).toBeVisible();
+  await expect(page.getByText("NO LIVE PURCHASE")).toBeVisible();
+  await expect(
+    page.getByText("pending owner approval", { exact: false }),
+  ).toBeVisible();
+  const response = await page.request.get("/api/offer-hypotheses");
+  expect(response.ok()).toBe(true);
+  const catalog = await response.json();
+  expect(catalog.foundation.live).toBe("pending-owner-decision");
+  expect(catalog.foundation.priceCents).toBeNull();
+  for (const offer of catalog.coaching) {
+    expect(offer.livePurchasable).toBe(false);
+    await expect(
+      page.getByText(
+        new RegExp(
+          `${offer.id}.*${(offer.priceCents / 100).toLocaleString("en-CA")}`,
+        ),
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByText(offer.termsVersion, { exact: false }).first(),
+    ).toBeVisible();
+  }
+  await expect(
+    page.getByRole("button", { name: /buy|purchase|accept/i }),
+  ).toHaveCount(0);
+  expect((await page.request.get("/checkout")).status()).toBe(404);
+});
 test.afterAll(async () => {
   await pool.end();
 });
