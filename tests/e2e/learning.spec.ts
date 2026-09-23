@@ -399,8 +399,8 @@ test("[L13] lost idle database connections do not terminate the server and saved
   expect(lost.rows.every((r: { terminated: boolean }) => r.terminated)).toBe(
     true,
   );
-  // A request concurrent with a disconnect may fail honestly; one explicit reload must recover.
-  const response = await page.reload();
+  // Re-request the current URL after the disconnect. A request concurrent with it may fail honestly.
+  const response = await page.goto(page.url());
   expect([200, 503]).toContain(response!.status());
   await page.goto("/lesson");
   await expect(page.getByLabel("Your instruction to AI")).toHaveValue(
