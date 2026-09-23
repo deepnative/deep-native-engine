@@ -34,7 +34,7 @@ CI runs the same `make verify` in one Ubuntu job for PRs and pushes to `main` an
 
 ## Review and merge evidence
 
-Follow [the team workflow](TEAM-WORKFLOW.md). Independent review must inspect the actual diff and reports. Before merging, verify current head/base, required reviews and successful CI; guard the merge with expected head SHA. Then verify the `main` workflow for the resulting merge commit and safely fast-forward local main. A green PR does not prove post-merge main, deployment or commercial readiness.
+Follow [the team workflow](TEAM-WORKFLOW.md). The author records a self-review of the actual diff and reports; a separate reviewer inspects them when requested or required. Before merging, verify current head/base, actual required reviews and successful current CI; guard the merge with expected head SHA. Do not hold a green PR solely for optional review. Then verify the `main` workflow for the resulting merge commit and safely fast-forward local main. A green PR does not prove post-merge main, deployment or commercial readiness.
 
 ## Recovery
 

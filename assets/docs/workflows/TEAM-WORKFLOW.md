@@ -22,7 +22,7 @@ Current issue labels take precedence over the archived routing table. Labels rec
 | `dne-reviewer` | GPT-6 Astra / high | Independent diff and evidence review; read only |
 | `dne-verifier` | GPT-6 Sol / high | Reproduce checks and record scoped evidence |
 
-Role files provide defaults; the live issue's model and reasoning labels give the per-issue recommendation. For `design:gpt-6-astra`, obtain Astra's acceptance/test design before Sol implementation. `review:gpt-6-astra` requests independent Astra review. Start XHigh when `reasoning:xhigh` is present; for High issues, `escalate:xhigh` recommends changing the task setting if difficult invariants or failures arise. See the [complete model policy](../context/MODEL-RECOMMENDATIONS.md).
+Role files provide defaults; the live issue's model and reasoning labels give the per-issue recommendation. For `design:gpt-6-astra`, obtain Astra's acceptance/test design before Sol implementation. `review:gpt-6-astra` recommends independent Astra review when a separate review is requested or required; the label alone does not hold a green PR. Start XHigh when `reasoning:xhigh` is present; for High issues, `escalate:xhigh` recommends changing the task setting if difficult invariants or failures arise. See the [complete model policy](../context/MODEL-RECOMMENDATIONS.md).
 
 Use the same live labels when recommending a **next** issue at handoff. State its lead model and starting effort, and distinguish any design/review model and effort. If labels are absent or conflict, use the routing rules and flag the proposed label correction; do not imply the current task has switched models.
 
@@ -35,7 +35,7 @@ $dne-review-change Review this branch against issue #11 and report blockers.
 $dne-handoff Prepare verification evidence and a next-step handoff for this PR.
 ```
 
-Native role definitions live in `.codex/agents/*.toml`; skills live in `.agents/skills/*/SKILL.md`. Skills guide tasks; role files configure custom subagents. A root task's model is selected separately. When delegation is requested, give the named role a bounded task, relevant issue/path, permitted writes, expected evidence, and stop conditions. Do not spawn every role for every task. A separate reviewer must inspect the diff and evidence, not just the builder's summary.
+Native role definitions live in `.codex/agents/*.toml`; skills live in `.agents/skills/*/SKILL.md`. Skills guide tasks; role files configure custom subagents. A root task's model is selected separately. When delegation is requested, give the named role a bounded task, relevant issue/path, permitted writes, expected evidence, and stop conditions. Do not spawn every role for every task. When separate review is required, that reviewer must inspect the diff and evidence, not just the builder's summary.
 
 ## 3. Deliver a reviewable slice
 
@@ -47,13 +47,13 @@ Application work uses the shared repository/application gate under QA-001/002/00
 
 Use [the verification procedure](VERIFICATION.md). Review the full diff for secrets, unintended changes, source archive mutations, and missing acceptance evidence. Commit, run `make verify` on that commit, then push; the hook reruns checks and rejects a dirty or different revision. CI independently repeats the command on the PR merge candidate. Record local HEAD and CI SHA separately.
 
-Use `$dne-review-change` with the issue, base/head, and reports. Resolve blockers and rerun checks after changes. No `--no-verify`, threshold weakening, retry-only success, or declaring absent tests passed. Configure branch protection only after actual check names have run and the repository owner authorizes that settings change.
+The PR author reviews the current diff against the issue's acceptance criteria, privacy/security boundaries and actual reports, then records findings and limitations as a self-review. Use `$dne-review-change` with the issue, base/head and reports when a separate review is explicitly requested or required; do not describe self-review as independent. Resolve blockers and rerun checks after changes. No `--no-verify`, threshold weakening, retry-only success, or declaring absent tests passed. Configure branch protection only after actual check names have run and the repository owner authorizes that settings change.
 
 Link the PR in the active claim and move the issue to `status:in-review` / In review when handing off for review or delivery checks. Requested changes return it to In progress. Preserve the delivery owner while recording the reviewing worker.
 
 ## 5. Merge to main and verify
 
-Merging completed, authorized work is part of the owner's standing delivery instruction. After reviewing the latest diff, resolving blocking findings, and satisfying required reviews and checks, mark the PR ready and merge it into `main`. Do not request the same merge authorization again or end the task at a draft PR unless the user explicitly requested that stopping point. Respect repository protections; do not use an admin override.
+Merging completed, authorized work is part of the owner's standing delivery instruction. Once the latest diff has a recorded self-review, blocking findings are resolved, the exact-commit local gate and current PR CI pass, and actual required reviews/protections are satisfied, mark the PR ready and merge it into `main` promptly. Do not leave a green PR open only for an optional reviewer, including one recommended by a model label; do not request the same merge authorization again or end at a draft PR unless the user explicitly requested that stopping point. Respect repository protections; do not use an admin override. If a check is missing, failed or stale, a finding is unresolved, or a required review or owner decision is pending, record the blocker and responsible owner and keep the PR open.
 
 Immediately before merging, confirm the PR still targets `main` and its head matches the locally tested and reviewed commit. If the head or base changes, refresh the diff and relevant verification before proceeding. Use a merge operation that checks the expected head SHA. Do not merge on stale, missing, failed, cancelled, or skipped required CI results.
 
@@ -61,7 +61,7 @@ Read back the merged state and merge commit SHA from GitHub. Verify CI for that 
 
 ## 6. Hand off and close with evidence
 
-Use `$dne-handoff` and the [evidence](../templates/EVIDENCE.md) / [handoff](../templates/HANDOFF.md) templates. Link every acceptance criterion to evidence. Name unresolved work, dependencies, reviewer, revision, commands, results, and the next authorized step. GitHub remains the live status record. Update issue/project state only when authorized and supported by evidence; do not close a whole epic because one child is done.
+Use `$dne-handoff` and the [evidence](../templates/EVIDENCE.md) / [handoff](../templates/HANDOFF.md) templates. Link every acceptance criterion to evidence. Name unresolved work, dependencies, self-review and any required separate reviewer, revision, commands, results, and the next authorized step. GitHub remains the live status record. Update issue/project state only when authorized and supported by evidence; do not close a whole epic because one child is done.
 
 Reconcile labels, assignees and project Status using the coordination workflow. Full accepted delivery becomes `status:done` / Done and closes the issue. Partial delivery records remaining AC, releases or explicitly hands off the claim, and returns the still-open issue to Ready or Backlog when no worker continues.
 

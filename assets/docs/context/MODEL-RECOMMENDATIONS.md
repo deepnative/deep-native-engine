@@ -5,9 +5,9 @@
 ## Routing rule
 
 - `model:gpt-6-astra` leads cross-domain architecture, authorization/privacy, money/ledger, concurrency, threat modeling and release or stage decisions.
-- `model:gpt-6-sol` leads bounded delivery, QA implementation, content, discovery and operational planning with independent Astra review where marked.
+- `model:gpt-6-sol` leads bounded delivery, QA implementation, content, discovery and operational planning; an Astra review label recommends a separate review when requested or required.
 - `reasoning:medium`, `reasoning:high` and `reasoning:xhigh` are mutually exclusive recommended starting efforts. Medium covers contained work; High is the usual choice for multi-step issue delivery; XHigh is reserved for the ten highest-risk cross-boundary issues. An `escalate:xhigh` label flags a High issue whose difficulty may warrant changing its actual task setting.
-- `review:gpt-6-astra` requests an independent Astra High review of the acceptance criteria, diff and evidence. An Astra-led issue still requires a separate reviewer when marked.
+- `review:gpt-6-astra` recommends Astra High for a separately requested or required review of the acceptance criteria, diff and evidence. It is a routing recommendation, not a required-review rule or reason to hold an otherwise green PR. The author still records a self-review, including on Astra-led issues.
 - `design:gpt-6-astra` asks Astra High to design or review the test strategy before the primary model implements it.
 - GPT-6 Luna is suitable for small, precisely bounded subtasks such as extraction, triage or narrow edits. None of the current whole issues is narrow enough to route to Luna as lead; split and review a subtask when it is useful.
 
