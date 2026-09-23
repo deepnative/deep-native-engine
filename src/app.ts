@@ -15,6 +15,9 @@ import {
   staffLibraryPage,
   trackReadinessPage,
   expertRegistryPage,
+  proposalListPage,
+  proposalPreviewPage,
+  moderationPage,
   errorPage,
 } from "./views.ts";
 import type { Store, Learner } from "./store.ts";
@@ -39,6 +42,7 @@ import {
   type DraftContent,
 } from "./catalog.ts";
 import { disabledTrackStore, type TrackStore } from "./track-readiness.ts";
+import { disabledProposalStore, type ProposalStore } from "./proposals.ts";
 export function app(
   store: Store,
   options: {
@@ -50,6 +54,7 @@ export function app(
     evidence?: EvidenceStore;
     catalog?: CatalogStore;
     tracks?: TrackStore;
+    proposals?: ProposalStore;
   },
 ) {
   const app = express();
@@ -59,6 +64,7 @@ export function app(
   const evidence = options.evidence ?? disabledEvidenceStore();
   const catalog = options.catalog ?? disabledCatalogStore();
   const tracks = options.tracks ?? disabledTrackStore();
+  const proposals = options.proposals ?? disabledProposalStore();
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -138,6 +144,40 @@ export function app(
       return;
     }
     res.send(expertRegistryPage(records));
+  });
+  app.get("/moderate/proposals", async (_req, res) => {
+    const queue = await proposals.moderationQueue(res.locals.token as string);
+    if (!queue) {
+      res
+        .status(403)
+        .send(
+          errorPage("Moderation unavailable", "Moderator access is required."),
+        );
+      return;
+    }
+    res.send(moderationPage(queue, res.locals.csrf as string));
+  });
+  app.post("/moderate/proposals/:id/:action", async (req, res) => {
+    const action = req.params.action;
+    if (
+      (action !== "quarantine" && action !== "reject") ||
+      !(await proposals.moderate(
+        res.locals.token as string,
+        req.params.id as string,
+        action,
+      ))
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Proposal unchanged",
+            "Check moderation access and current state.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/moderate/proposals");
   });
   app.get("/api/offer-hypotheses", (_req, res) =>
     res.json({
@@ -282,7 +322,15 @@ export function app(
     res.redirect(303, "/learn");
   });
   app.use(
-    ["/learn", "/lesson", "/exercise", "/profile", "/delete", "/library"],
+    [
+      "/learn",
+      "/lesson",
+      "/exercise",
+      "/profile",
+      "/delete",
+      "/library",
+      "/contribute",
+    ],
     async (_req, res, next) => {
       const session = await store.session(res.locals.token as string);
       if (session.kind !== "active") {
@@ -293,6 +341,94 @@ export function app(
       next();
     },
   );
+  app.get("/contribute", async (_req, res) =>
+    res.send(
+      proposalListPage(
+        await proposals.owned(res.locals.token as string),
+        res.locals.csrf as string,
+      ),
+    ),
+  );
+  app.post("/contribute", async (req, res) => {
+    const fields = req.body as Fields;
+    const value = (name: string) =>
+      typeof fields[name] === "string" ? (fields[name] as string) : "";
+    const id = await proposals.createDraft(
+      res.locals.token as string,
+      { title: value("title"), body: value("body"), sources: value("sources") },
+      fields.sample_confirmed === "yes",
+    );
+    if (!id) {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Proposal not saved",
+            "Use sample information and complete every field.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, `/contribute/${id}`);
+  });
+  app.get("/contribute/:id", async (req, res) => {
+    const proposal = await proposals.preview(
+      res.locals.token as string,
+      req.params.id as string,
+    );
+    if (!proposal) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Proposal unavailable",
+            "Only your own proposal can be opened.",
+          ),
+        );
+      return;
+    }
+    res.send(proposalPreviewPage(proposal, res.locals.csrf as string));
+  });
+  app.post("/contribute/:id/submit", async (req, res) => {
+    if (
+      !(await proposals.submit(
+        res.locals.token as string,
+        req.params.id as string,
+        req.body.rights_confirmed === "yes",
+      ))
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Proposal not submitted",
+            "Confirm original rights and check draft state.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, `/contribute/${req.params.id}`);
+  });
+  app.post("/contribute/:id/withdraw", async (req, res) => {
+    if (
+      req.body.confirm !== "yes" ||
+      !(await proposals.withdraw(
+        res.locals.token as string,
+        req.params.id as string,
+      ))
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Proposal not withdrawn",
+            "Confirm withdrawal and check the current state.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, `/contribute/${req.params.id}`);
+  });
   app.get("/library", async (req, res) => {
     const q = typeof req.query.q === "string" ? req.query.q : "";
     const goal =

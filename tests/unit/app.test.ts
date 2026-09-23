@@ -13,6 +13,11 @@ import {
 } from "../../src/evidence.ts";
 import { disabledCatalogStore, type CatalogStore } from "../../src/catalog.ts";
 import { disabledTrackStore } from "../../src/track-readiness.ts";
+import {
+  disabledProposalStore,
+  type ProposalStore,
+  type Proposal,
+} from "../../src/proposals.ts";
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
 const member = {
@@ -20,6 +25,94 @@ const member = {
   background: "explorer" as const,
   goal: "everyday" as const,
 };
+it("keeps member proposals private and moderation unable to publish", async () => {
+  const sample: Proposal = {
+    id: "sample-id",
+    title: "Original sample",
+    body: "Invented details",
+    sources: "Original",
+    state: "draft",
+    createdAt: new Date("2026-09-23"),
+    submittedAt: null,
+  };
+  const proposals = {
+    ...disabledProposalStore(),
+    createDraft: vi.fn<ProposalStore["createDraft"]>().mockResolvedValue(null),
+    owned: vi.fn<ProposalStore["owned"]>().mockResolvedValue([sample]),
+    preview: vi.fn<ProposalStore["preview"]>().mockResolvedValue(null),
+    submit: vi.fn<ProposalStore["submit"]>().mockResolvedValue(false),
+    withdraw: vi.fn<ProposalStore["withdraw"]>().mockResolvedValue(false),
+    moderationQueue: vi
+      .fn<ProposalStore["moderationQueue"]>()
+      .mockResolvedValue(null),
+    moderate: vi.fn<ProposalStore["moderate"]>().mockResolvedValue(false),
+  };
+  const agent = request.agent(
+    app(storage(), { origin, secret: "secret", proposals }),
+  );
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  await agent.get("/contribute").set("Host", host).expect(303);
+  await agent.get("/moderate/proposals").set("Host", host).expect(403);
+  proposals.moderationQueue.mockResolvedValue([]);
+  await agent.get("/moderate/proposals").set("Host", host).expect(200);
+  const post = (path: string, fields: Record<string, string>) =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  await post("/moderate/proposals/sample-id/approve", {}).expect(409);
+  await post("/moderate/proposals/sample-id/quarantine", {}).expect(409);
+  proposals.moderate.mockResolvedValue(true);
+  await post("/moderate/proposals/sample-id/reject", {}).expect(303);
+
+  const memberAgent = request.agent(
+    app(db, { origin, secret: "secret", proposals }),
+  );
+  const entry = await memberAgent.get("/").set("Host", host).expect(200);
+  const memberCsrf = entry.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const memberPost = (path: string, fields: Record<string, string>) =>
+    memberAgent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf: memberCsrf, ...fields });
+  await memberAgent.get("/contribute").set("Host", host).expect(200);
+  await memberPost("/contribute", {}).expect(422);
+  proposals.createDraft.mockResolvedValue(sample.id);
+  await memberPost("/contribute", {
+    title: sample.title!,
+    body: sample.body!,
+    sources: sample.sources!,
+    sample_confirmed: "yes",
+  }).expect(303);
+  await memberAgent
+    .get(`/contribute/${sample.id}`)
+    .set("Host", host)
+    .expect(404);
+  proposals.preview.mockResolvedValue(sample);
+  await memberAgent
+    .get(`/contribute/${sample.id}`)
+    .set("Host", host)
+    .expect(200);
+  await memberPost(`/contribute/${sample.id}/submit`, {}).expect(409);
+  proposals.submit.mockResolvedValue(true);
+  await memberPost(`/contribute/${sample.id}/submit`, {
+    rights_confirmed: "yes",
+  }).expect(303);
+  await memberPost(`/contribute/${sample.id}/withdraw`, {}).expect(409);
+  await memberPost(`/contribute/${sample.id}/withdraw`, {
+    confirm: "yes",
+  }).expect(409);
+  proposals.withdraw.mockResolvedValue(true);
+  await memberPost(`/contribute/${sample.id}/withdraw`, {
+    confirm: "yes",
+  }).expect(303);
+});
 it("shows honest track states and restricts the expert evidence roster", async () => {
   const tracks = disabledTrackStore();
   const server = app(storage(), { origin, secret: "secret", tracks });

@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v8",
+  "version": "initial-learning-v9",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable learner interests, private evidence and read-only access/coaching hypotheses; not live commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable learner interests, private evidence, gated content, honest track states, private synthetic member proposals and read-only access/coaching hypotheses; not live commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -245,6 +245,15 @@
       "steps": "Inspect public track states; attempt private registry read as reviewer; inspect pending roster as operator",
       "expected": "All tracks remain in preparation, no tailored booking is offered, reviewer is denied and operator sees missing verification and backup",
       "issues": [20],
+      "critical": true
+    },
+    {
+      "id": "L28",
+      "actor": "General member, another member, moderator and reviewer",
+      "preconditions": "Fresh private preview; synthetic original contribution only; no contribution license or publication policy",
+      "steps": "Save sample with explicit attestation, deny another member and reviewer, submit with rights confirmation, quarantine as moderator, reject forged-CSRF withdrawal, then withdraw and inspect redaction",
+      "expected": "Proposal stays private and out of the library; only moderator sees submitted sample; forged request cannot withdraw; authorized withdrawal removes text and queued view; no approval or publication path exists",
+      "issues": [26],
       "critical": true
     }
   ],

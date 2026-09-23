@@ -9,6 +9,101 @@ const origin = "http://127.0.0.1:4317";
 test.afterAll(async () => {
   await pool.end();
 });
+test("[L28] consented sample stays private, quarantines and redacts after withdrawal", async ({
+  browser,
+  page,
+}, testInfo) => {
+  const title = `Invented contribution ${testInfo.project.name}`;
+  const moderator = await staff("moderator");
+  const reviewer = await staff("reviewer");
+  const other = await browser.newContext({ baseURL: origin });
+  const moderatorContext = await browser.newContext({ baseURL: origin });
+  const reviewerContext = await browser.newContext({ baseURL: origin });
+  try {
+    await onboard(page);
+    await page.goto("/contribute");
+    await page.getByLabel("Title").fill(title);
+    await page
+      .getByLabel("Original sample")
+      .fill("An invented plan with no private people.");
+    await page
+      .getByLabel("Sources and rights notes")
+      .fill("Original invented sample.");
+    await page.getByLabel("I used only invented or sample information").check();
+    await page.getByRole("button", { name: "Save private draft" }).click();
+    const id = new URL(page.url()).pathname.split("/").at(-1)!;
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(
+      page.getByText("This is not published or licensed"),
+    ).toBeVisible();
+
+    const otherPage = await other.newPage();
+    await onboard(otherPage);
+    await otherPage.goto(`/contribute/${id}`);
+    await expect(
+      otherPage.getByRole("heading", { name: "Proposal unavailable" }),
+    ).toBeVisible();
+    await useToken(reviewerContext, reviewer.token);
+    const reviewerPage = await reviewerContext.newPage();
+    await reviewerPage.goto("/moderate/proposals");
+    await expect(
+      reviewerPage.getByRole("heading", { name: "Moderation unavailable" }),
+    ).toBeVisible();
+
+    await page.getByLabel("I created this sample or have the rights").check();
+    await page
+      .getByRole("button", { name: "Submit to private moderation" })
+      .click();
+    await expect(page.getByText("PRIVATE SAMPLE · SUBMITTED")).toBeVisible();
+    await useToken(moderatorContext, moderator.token);
+    const moderatorPage = await moderatorContext.newPage();
+    await moderatorPage.goto("/moderate/proposals");
+    await expect(moderatorPage.getByText(title)).toBeVisible();
+    await expect(
+      moderatorPage.getByRole("button", { name: /publish|approve/i }),
+    ).toHaveCount(0);
+    await moderatorPage
+      .getByRole("button", { name: "Quarantine for review" })
+      .click();
+    await expect(moderatorPage.getByText("quarantined")).toBeVisible();
+    const denied = await page.request.post(`/contribute/${id}/withdraw`, {
+      headers: { origin },
+      form: { csrf: "wrong", confirm: "yes" },
+    });
+    expect(denied.status()).toBe(403);
+    await page.reload();
+    await page
+      .getByLabel("Remove the proposal text and stop moderation")
+      .check();
+    await page.getByRole("button", { name: "Withdraw and redact" }).click();
+    await expect(
+      page.getByText("The proposal text has been removed"),
+    ).toBeVisible();
+    await moderatorPage.reload();
+    await expect(moderatorPage.getByText(title)).toHaveCount(0);
+    await expect(
+      moderatorPage.getByText("No submitted proposals await moderation"),
+    ).toBeVisible();
+    const record = (
+      await pool.query(
+        "SELECT title,body,sources,state FROM member_proposals WHERE id=$1",
+        [id],
+      )
+    ).rows[0];
+    expect(record).toEqual({
+      title: null,
+      body: null,
+      sources: null,
+      state: "withdrawn",
+    });
+    await page.goto(`/library?q=${encodeURIComponent(title)}`);
+    await expect(page.getByText("No published content matches")).toBeVisible();
+  } finally {
+    await other.close();
+    await moderatorContext.close();
+    await reviewerContext.close();
+  }
+});
 test("[L27] general learner sees preparation while operator alone sees pending expert evidence", async ({
   browser,
   page,
