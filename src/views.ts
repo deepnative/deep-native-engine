@@ -11,6 +11,7 @@ import type { Learner, Exercise } from "./store.ts";
 import type { AdapterReadiness, ApplicationMode } from "./adapters.ts";
 import { COACHING_OFFERS } from "./offers.ts";
 import type { ContentVersion } from "./catalog.ts";
+import type { ExpertRecord, TrackSnapshot } from "./track-readiness.ts";
 export function escape(value: string) {
   return value.replace(
     /[&<>"']/g,
@@ -83,7 +84,19 @@ export function readinessPage(
       )
       .join(
         "",
-      )}</ul><p><a href="/readiness/offers">Access and coaching planning</a></p><a class="button" href="/">Return to the learning preview</a></section>`,
+      )}</ul><p><a href="/readiness/offers">Access and coaching planning</a> · <a href="/readiness/tracks">Learning track readiness</a></p><a class="button" href="/">Return to the learning preview</a></section>`,
+  );
+}
+export function trackReadinessPage(snapshot: TrackSnapshot) {
+  return page(
+    "Learning track readiness",
+    `<section class="error-page"><p class="eyebrow">LOCAL PREVIEW · NO SERVICE BOOKINGS</p><h1>Learning track readiness</h1><p class="lead">Foundation lessons await qualified curriculum sign-off. Specialist services also need reviewed content and current, verified expert coverage. These states do not grant coaching, formal review or admission.</p><h2>Shared foundation</h2><ul>${snapshot.foundation.map(({ goal, state }) => `<li><strong>${escape(GOALS[goal])}</strong> · ${escape(state)}</li>`).join("")}</ul><h2>Specialist domains and services</h2><ul>${snapshot.specialties.map(({ domain, serviceType, state }) => `<li><strong>${escape(DOMAINS[domain])} · ${escape(serviceType)}</strong> · ${escape(state)}</li>`).join("")}</ul><p>General learners may use the separate local preview exercise without a specialist fit review. Tailored service cannot be committed from this page.</p><a href="/readiness">Integration readiness</a></section>`,
+  );
+}
+export function expertRegistryPage(records: ExpertRecord[]) {
+  return page(
+    "Expert coverage registry",
+    `<section class="error-page"><p class="eyebrow">OPERATOR VIEW · EVIDENCE PENDING</p><h1>Expert coverage registry</h1><p class="lead">Roster records alone do not prove qualification or availability. Verify evidence, dates, backup and uncommitted capacity before any owner-approved service offer.</p><ul>${records.map((record) => `<li><strong>${escape(DOMAINS[record.domain])} · ${escape(record.serviceType)}</strong> · ${escape(record.staffRole)} · ${record.startsAt.toISOString().slice(0, 10)} to ${record.endsAt.toISOString().slice(0, 10)} · CAD ${(record.loadedCostCents / 100).toFixed(2)} loaded cost · ${record.capacityMinutes - record.committedMinutes} uncommitted minutes · backup ${record.backupStaffId ? "recorded" : "missing"} · ${record.verifiedAt ? "verification recorded" : "verification pending"}${record.retiredAt ? " · retired" : ""}</li>`).join("")}</ul>${records.length ? "" : "<p>No expert commitments are recorded.</p>"}</section>`,
   );
 }
 export function offerHypothesesPage() {

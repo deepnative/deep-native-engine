@@ -5,6 +5,7 @@ import { app } from "./app.ts";
 import { authorizationStore } from "./authorization.ts";
 import { evidenceStore, fileObjectStorage } from "./evidence.ts";
 import { catalogStore, seedDraftPack } from "./catalog.ts";
+import { trackStore } from "./track-readiness.ts";
 export async function start(env: NodeJS.ProcessEnv) {
   const settings = config(env);
   const pool = new Pool({
@@ -23,6 +24,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       ...settings,
       authorization: authorizationStore(pool),
       catalog: catalogStore(pool),
+      tracks: trackStore(pool),
       evidence: evidenceStore(
         pool,
         fileObjectStorage(settings.privateStorageRoot),

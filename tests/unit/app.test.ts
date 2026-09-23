@@ -12,6 +12,7 @@ import {
   type EvidenceStore,
 } from "../../src/evidence.ts";
 import { disabledCatalogStore, type CatalogStore } from "../../src/catalog.ts";
+import { disabledTrackStore } from "../../src/track-readiness.ts";
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
 const member = {
@@ -19,6 +20,27 @@ const member = {
   background: "explorer" as const,
   goal: "everyday" as const,
 };
+it("shows honest track states and restricts the expert evidence roster", async () => {
+  const tracks = disabledTrackStore();
+  const server = app(storage(), { origin, secret: "secret", tracks });
+  const publicView = await request(server)
+    .get("/readiness/tracks")
+    .set("Host", host)
+    .expect(200);
+  expect(publicView.text).toContain("in preparation");
+  expect(publicView.text).toContain("General learners");
+  await request(server).get("/operator/experts").set("Host", host).expect(403);
+  const allowed = app(storage(), {
+    origin,
+    secret: "secret",
+    tracks: { ...tracks, registry: async () => [] },
+  });
+  const roster = await request(allowed)
+    .get("/operator/experts")
+    .set("Host", host)
+    .expect(200);
+  expect(roster.text).toContain("No expert commitments are recorded");
+});
 it("shows optional offer hypotheses while reporting foundation access as undecided", async () => {
   const server = app(storage(), { origin, secret: "secret" });
   const catalog = await request(server)
