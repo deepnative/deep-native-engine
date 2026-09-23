@@ -92,7 +92,7 @@ for (const [id, background, goal, title] of [
   ["L01", "explorer", "everyday", "Plan a small community event"],
   ["L02", "professional", "work", "Turn meeting notes into next steps"],
   ["L03", "technical", "build", "Review a sign-up flow"],
-]) {
+] as const) {
   test(`[${id}] ${background} completes a suitable learning exercise`, async ({
     page,
   }, testInfo) => {
@@ -118,6 +118,56 @@ for (const [id, background, goal, title] of [
         path: `artifacts/learning-${testInfo.project.name}.png`,
         fullPage: true,
       });
+  });
+}
+for (const [id, background, goal, extraName, extraValue] of [
+  ["L21", "explorer", "everyday", "domain_tags", "education"],
+  ["L22", "professional", "work", "background_tags", "technical"],
+  ["L23", "technical", "build", "it_roles", "security"],
+] as const) {
+  test(`[${id}] ${background} can revise direction while keeping original practice`, async ({
+    page,
+    context,
+  }) => {
+    await page.goto("/");
+    await page.getByLabel("Your starting point").selectOption(background);
+    await page.getByLabel("What would you like to do?").selectOption(goal);
+    await page
+      .locator(`input[name="${extraName}"][value="${extraValue}"]`)
+      .check();
+    await page.getByLabel("Experience with AI").selectOption("some");
+    await page.getByLabel("Keep an exploratory path open").check();
+    await page.getByLabel("I'll use invented or sample information").check();
+    await page.getByRole("button", { name: "Start my learning path" }).click();
+    await expect(page).toHaveURL(/\/learn$/);
+    const { id: learnerId } = await session(context);
+    const initial = await pool.query("SELECT * FROM learners WHERE id=$1", [
+      learnerId,
+    ]);
+    expect(initial.rows[0][extraName]).toContain(extraValue);
+    expect(initial.rows[0].experience).toBe("some");
+    expect(initial.rows[0].exploratory).toBe(true);
+    await page.getByRole("link", { name: "Open lesson" }).click();
+    const originalTitle = await page.locator("#exercise-title").innerText();
+    await page
+      .getByLabel("Your instruction to AI")
+      .fill("A sample draft that must retain its original context");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await page.getByRole("link", { name: "Your learning path" }).click();
+    await page
+      .getByLabel("What would you like to do?")
+      .selectOption(goal === "everyday" ? "work" : "everyday");
+    await page.getByRole("button", { name: "Save my direction" }).click();
+    await expect(page).toHaveURL(/\/learn$/);
+    await page.reload();
+    await page.getByRole("link", { name: "Continue exercise" }).click();
+    await expect(page.locator("#exercise-title")).toHaveText(originalTitle);
+    await expect(
+      page.getByText("saved practice remains tied to your earlier goal"),
+    ).toBeVisible();
+    await expect(page.getByLabel("Your instruction to AI")).toHaveValue(
+      "A sample draft that must retain its original context",
+    );
   });
 }
 test("[L04] draft survives reload and returning to the path", async ({

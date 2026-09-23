@@ -14,8 +14,45 @@ export const GOALS = {
   work: "Make everyday work clearer",
   build: "Improve a technical workflow",
 } as const;
+export const DOMAINS = {
+  education: "Education",
+  health: "Health and wellbeing",
+  finance: "Finance",
+  creative: "Creative work",
+  public: "Public service",
+  operations: "Operations",
+} as const;
+export const IT_ROLES = {
+  software: "Software development",
+  qa: "QA and testing",
+  data: "Data, analytics and AI",
+  cloud: "Cloud, DevOps and platform",
+  security: "Cybersecurity",
+  architecture: "Architecture",
+  analysis: "Business analysis",
+  delivery: "Project, program and delivery management",
+  product: "Product ownership and management",
+  other: "Other IT specialty",
+} as const;
+export const EXPERIENCE = {
+  new: "Just starting",
+  some: "Some practice",
+  experienced: "Experienced",
+} as const;
 export type Background = keyof typeof BACKGROUNDS;
 export type Goal = keyof typeof GOALS;
+export type Domain = keyof typeof DOMAINS;
+export type ItRole = keyof typeof IT_ROLES;
+export type Experience = keyof typeof EXPERIENCE;
+export interface LearnerProfile {
+  background: Background;
+  goal: Goal;
+  backgroundTags: Background[];
+  domainTags: Domain[];
+  itRoles: ItRole[];
+  experience: Experience | null;
+  exploratory: boolean;
+}
 export function exercise(goal: Goal) {
   const examples = {
     everyday: {

@@ -1,17 +1,54 @@
-import { BACKGROUNDS, GOALS, type Background, type Goal } from "./content.ts";
+import {
+  BACKGROUNDS,
+  GOALS,
+  DOMAINS,
+  IT_ROLES,
+  EXPERIENCE,
+  type LearnerProfile,
+} from "./content.ts";
 export type Fields = Record<string, unknown>;
-export function profile(
-  body: Fields,
-): { background: Background; goal: Goal } | null {
+function selections(value: unknown, choices: object): string[] | null {
+  if (value === undefined) return [];
+  const values = Array.isArray(value) ? value : [value];
+  if (
+    values.length > Object.keys(choices).length ||
+    values.some(
+      (item) => typeof item !== "string" || !Object.hasOwn(choices, item),
+    ) ||
+    new Set(values).size !== values.length
+  )
+    return null;
+  return values as string[];
+}
+export function profile(body: Fields): LearnerProfile | null {
+  const backgroundTags = selections(body.background_tags, BACKGROUNDS);
+  const domainTags = selections(body.domain_tags, DOMAINS);
+  const itRoles = selections(body.it_roles, IT_ROLES);
   if (
     typeof body.background !== "string" ||
     !Object.hasOwn(BACKGROUNDS, body.background) ||
     typeof body.goal !== "string" ||
     !Object.hasOwn(GOALS, body.goal) ||
-    body.synthetic !== "yes"
+    body.synthetic !== "yes" ||
+    !backgroundTags ||
+    !domainTags ||
+    !itRoles ||
+    (body.experience !== undefined &&
+      body.experience !== "" &&
+      (typeof body.experience !== "string" ||
+        !Object.hasOwn(EXPERIENCE, body.experience))) ||
+    (body.exploratory !== undefined && body.exploratory !== "yes")
   )
     return null;
-  return { background: body.background as Background, goal: body.goal as Goal };
+  return {
+    background: body.background as LearnerProfile["background"],
+    goal: body.goal as LearnerProfile["goal"],
+    backgroundTags: backgroundTags as LearnerProfile["backgroundTags"],
+    domainTags: domainTags as LearnerProfile["domainTags"],
+    itRoles: itRoles as LearnerProfile["itRoles"],
+    experience: (body.experience || null) as LearnerProfile["experience"],
+    exploratory: body.exploratory === "yes",
+  };
 }
 export function submission(body: Fields) {
   const instruction =

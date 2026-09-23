@@ -1,6 +1,6 @@
 {
-  "version": "initial-learning-v4",
-  "scope": "User-approved local learning preview plus deterministic adapters, workspace authorization and private evidence quarantine, not the full B1 member-to-reviewer journey",
+  "version": "initial-learning-v5",
+  "scope": "User-approved local learning preview plus revisable learner interests, deterministic adapters, workspace authorization and private evidence quarantine, not the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -181,6 +181,33 @@
       "steps": "Issue a circle-member download, revoke membership, replay the link, then delete as the owner",
       "expected": "Only current circle membership works; revocation is immediate; metadata, source bytes and derived data are deleted",
       "issues": [25],
+      "critical": true
+    },
+    {
+      "id": "L21",
+      "actor": "General exploratory learner",
+      "preconditions": "Fresh browser without job or coding identity",
+      "steps": "Add an education interest, save a draft, revise the primary goal and retain an exploratory path",
+      "expected": "Common foundation remains open; interests and revised goal persist; the saved exercise retains its original context",
+      "issues": [20],
+      "critical": true
+    },
+    {
+      "id": "L22",
+      "actor": "Non-IT professional with overlapping interests",
+      "preconditions": "Fresh browser",
+      "steps": "Choose a non-IT primary background, optional technical background and domain tags, then revise the goal",
+      "expected": "Multiple interests persist without granting roles or requiring a job, contract or paid service",
+      "issues": [20],
+      "critical": true
+    },
+    {
+      "id": "L23",
+      "actor": "IT practitioner with an optional specialty",
+      "preconditions": "Fresh browser",
+      "steps": "Choose technical starting point and security specialty, then revise goal",
+      "expected": "Optional specialty persists, common foundation remains available, and original practice context is preserved",
+      "issues": [20],
       "critical": true
     }
   ],
