@@ -30,7 +30,7 @@ Reports in ignored `artifacts/` include repository/application revision and tree
 
 A dirty working-tree run is useful during editing but is not evidence for a later commit. Commit first, then rerun `make verify`. The pre-push hook requires a clean checkout and every non-deletion pushed ref to equal HEAD, runs the complete gate again and rejects changes made during verification. No `--no-verify`, threshold reductions, silent exclusions or retry-only passes.
 
-CI runs the same `make verify` on Linux and macOS for PRs and pushes to `main` and `codex/**`. Linux uses the pinned PostgreSQL container; macOS starts an isolated PostgreSQL 18 Homebrew cluster bound to loopback with trust authentication only inside the ephemeral CI runner. Both use Node 24 and Chromium. PR CI verifies GitHub's merge candidate; record its SHA separately from the branch. Local hooks are not repository protection. Required-check rules must refer to real executed job names and require owner authorization to change repository settings.
+CI runs the same `make verify` in one Ubuntu job for PRs and pushes to `main` and `codex/**`. It uses the pinned PostgreSQL container, Node 24 and Chromium. Contributors can still run the full gate locally on macOS. The hosted OS choice does not change the desktop/mobile Chromium browser matrix or its scenario coverage. PR CI verifies GitHub's merge candidate; record its SHA separately from the branch. Local hooks are not repository protection. Required-check rules must refer to real executed job names and require owner authorization to change repository settings.
 
 ## Review and merge evidence
 
