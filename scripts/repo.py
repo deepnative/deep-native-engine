@@ -19,10 +19,10 @@ CONTEXT = Path("assets/docs/context")
 ARCHIVE = CONTEXT / "source-2026-09-15"
 ROLES = {
     "dne-planner": ("gpt-6-astra", "read-only"),
-    "dne-builder": ("gpt-5.6-sol", "workspace-write"),
+    "dne-builder": ("gpt-6-sol", "workspace-write"),
     "dne-critical-builder": ("gpt-6-astra", "workspace-write"),
     "dne-reviewer": ("gpt-6-astra", "read-only"),
-    "dne-verifier": ("gpt-5.6-sol", "workspace-write"),
+    "dne-verifier": ("gpt-6-sol", "workspace-write"),
 }
 SKILLS = {"dne-plan-issue", "dne-deliver-issue", "dne-review-change", "dne-handoff"}
 SETUP_FILES = {
@@ -137,9 +137,11 @@ def validate_planning(root):
     require(len(routes) == len(ids) and {r["id"] for r in routes} == set(ids), "Incomplete model routing")
     for row in routes:
         require(row["number"] == published[row["id"]]["number"], "Model route issue mismatch")
-        require(row["primary_model"] in {"gpt-6-astra", "gpt-5.6-sol"}, "Unknown primary model")
-        require(row["reasoning"] == "high", "Unexpected default reasoning effort")
-        expected = {"model:" + row["primary_model"], "reasoning:high"}
+        require(row["primary_model"] in {"gpt-6-astra", "gpt-6-sol"}, "Unknown primary model")
+        require(row["reasoning"] in {"medium", "high", "xhigh"}, "Unexpected reasoning effort")
+        require(bool(row.get("rationale")), "Missing model routing rationale")
+        require(not row["escalate_to_xhigh"] or row["reasoning"] == "high", "Redundant XHigh escalation")
+        expected = {"model:" + row["primary_model"], "reasoning:" + row["reasoning"]}
         for field, prefix in (("review_model", "review:"), ("design_model", "design:")):
             if row[field]:
                 expected.add(prefix + row[field])

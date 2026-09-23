@@ -165,6 +165,11 @@ class RepositoryFixture(unittest.TestCase):
         with self.assertRaisesRegex(gate.GateError, "Model labels"):
             gate.validate_planning(self.root)
 
+    def test_unsupported_model_effort_fails(self):
+        self.change_json("model-recommendations.json", lambda d: d["issues"][0].update(reasoning="none"))
+        with self.assertRaisesRegex(gate.GateError, "Unexpected reasoning effort"):
+            gate.validate_planning(self.root)
+
     def test_missing_acceptance_definition_fails(self):
         (self.root / gate.CONTEXT / "issue-bodies/ROADMAP.md").write_text("# No criteria")
         with self.assertRaisesRegex(gate.GateError, "AC/DoD"):

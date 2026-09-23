@@ -17,12 +17,12 @@ Current issue labels take precedence over the archived routing table. Labels rec
 | Role | Model / effort | Responsibility |
 | --- | --- | --- |
 | `dne-planner` | GPT-6 Astra / high | Architecture, epics, risks, AC and test design; read only |
-| `dne-builder` | GPT-5.6 Sol / high | Routine bounded delivery with tests |
+| `dne-builder` | GPT-6 Sol / high | Routine bounded delivery with tests |
 | `dne-critical-builder` | GPT-6 Astra / high | Authorization, billing, ledger, concurrency, privacy, core architecture |
 | `dne-reviewer` | GPT-6 Astra / high | Independent diff and evidence review; read only |
-| `dne-verifier` | GPT-5.6 Sol / high | Reproduce checks and record scoped evidence |
+| `dne-verifier` | GPT-6 Sol / high | Reproduce checks and record scoped evidence |
 
-For `design:gpt-6-astra`, obtain Astra's acceptance/test design before Sol implementation. `review:gpt-6-astra` requests independent Astra review. Escalate to xhigh for unresolved invariants or difficult failures with an explicit task setting. See the [complete model policy](../context/MODEL-RECOMMENDATIONS.md).
+Role files provide defaults; the live issue's model and reasoning labels give the per-issue recommendation. For `design:gpt-6-astra`, obtain Astra's acceptance/test design before Sol implementation. `review:gpt-6-astra` requests independent Astra review. Start XHigh when `reasoning:xhigh` is present; for High issues, `escalate:xhigh` recommends changing the task setting if difficult invariants or failures arise. See the [complete model policy](../context/MODEL-RECOMMENDATIONS.md).
 
 Example prompts:
 
