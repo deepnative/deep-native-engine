@@ -16,7 +16,8 @@
     "test:unit": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
-    "verify:app": "node scripts/verify-app.mjs"
+    "verify:app": "node scripts/verify-app.mjs",
+    "verify:full-e2e": "node scripts/verify-full-release.mjs"
   },
   "dependencies": {
     "cookie-parser": "1.4.7",

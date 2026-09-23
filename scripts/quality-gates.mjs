@@ -72,6 +72,7 @@ export function assertCoverage(report, sourceFiles, root) {
 export function assertJourneys(register, report) {
   requireGate(
     register.version &&
+      register.fullMvpVersion &&
       register.slice.length > 0 &&
       register.fullMvp.length > 0 &&
       register.projects.length > 0,
@@ -79,9 +80,46 @@ export function assertJourneys(register, report) {
   );
   const ids = register.slice.map((s) => s.id),
     full = register.fullMvp.map((s) => s.id);
+  const releaseCases = register.fullMvp.flatMap((s) => s.cases ?? []);
+  const releaseIds = releaseCases.map((s) => s.id);
   requireGate(
     new Set(ids).size === ids.length && new Set(full).size === full.length,
     "Duplicate scenario IDs",
+  );
+  requireGate(
+    new Set(releaseIds).size === releaseIds.length,
+    "Duplicate full-MVP browser test ID",
+  );
+  requireGate(
+    register.fullMvp.every(
+      (s) =>
+        s.source &&
+        s.requirement &&
+        s.actor &&
+        s.preconditions &&
+        s.steps &&
+        s.expected &&
+        s.risk &&
+        Array.isArray(s.cases) &&
+        s.cases.length > 0 &&
+        s.cases.every(
+          (test) =>
+            test.id?.startsWith(`F-${s.id}-`) &&
+            test.steps &&
+            test.expected &&
+            typeof test.critical === "boolean" &&
+            (!s.critical || test.critical),
+        ) &&
+        Array.isArray(s.issues) &&
+        s.issues.length > 0 &&
+        s.issues.every((id) => Number.isSafeInteger(id) && id > 0) &&
+        typeof s.critical === "boolean",
+    ),
+    "Incomplete full-MVP journey definition",
+  );
+  requireGate(
+    register.fullMvp.every((s) => s.status === "outstanding"),
+    "Unverified full-MVP completion claim",
   );
   requireGate(
     new Set(register.projects).size === register.projects.length,
@@ -160,6 +198,48 @@ export function assertJourneys(register, report) {
     criticalTotal: critical.length,
     executions: count,
     uncovered: missing,
-    fullMvp: { passed: 0, total: full.length, uncovered: full },
+    fullMvp: {
+      register: register.fullMvpVersion,
+      families: full.length,
+      passed: 0,
+      total: releaseIds.length,
+      criticalPassed: 0,
+      criticalTotal: releaseCases.filter((s) => s.critical).length,
+      uncovered: releaseIds,
+    },
+  };
+}
+
+// Run this gate on the full release browser report when the full MVP exists.
+// The local-slice gate keeps its own denominator and reports these rows as
+// outstanding; passing the local slice never promotes a release journey.
+export function assertFullReleaseJourneys(register, report) {
+  const release = assertJourneys(
+    {
+      ...register,
+      scope: "full-MVP",
+      slice: register.fullMvp.flatMap((scenario) =>
+        scenario.cases.map((test) => ({
+          id: test.id,
+          actor: scenario.actor,
+          preconditions: scenario.preconditions,
+          steps: test.steps,
+          expected: test.expected,
+          issues: scenario.issues,
+          critical: test.critical,
+        })),
+      ),
+    },
+    report,
+  );
+  return {
+    register: register.fullMvpVersion,
+    scope: release.scope,
+    passed: release.passed,
+    total: release.total,
+    criticalPassed: release.criticalPassed,
+    criticalTotal: release.criticalTotal,
+    executions: release.executions,
+    uncovered: release.uncovered,
   };
 }

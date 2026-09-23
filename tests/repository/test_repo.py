@@ -120,7 +120,7 @@ class RepositoryFixture(unittest.TestCase):
 
     def test_removing_application_gate_files_blocks_verification(self):
         files = gate.repository_files(self.root)
-        for name in ("package-lock.json", "scripts/verify-app.mjs", "vitest.config.ts", "tests/e2e/scenarios.json"):
+        for name in ("package-lock.json", "scripts/verify-app.mjs", "scripts/verify-full-release.mjs", "vitest.config.ts", "tests/e2e/scenarios.json"):
             with self.subTest(name=name), self.assertRaisesRegex(gate.GateError, "Required application"):
                 gate.validate_scope(self.root, [f for f in files if f != name])
 

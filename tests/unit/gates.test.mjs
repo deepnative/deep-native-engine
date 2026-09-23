@@ -2,6 +2,7 @@ import { it, expect } from "vitest";
 import {
   assertCoverage,
   assertJourneys,
+  assertFullReleaseJourneys,
   assertUnitResults,
 } from "../../scripts/quality-gates.mjs";
 const copy = (v) => JSON.parse(JSON.stringify(v));
@@ -16,6 +17,7 @@ const metrics = () =>
 const coverage = () => ({ total: metrics(), "/repo/src/app.ts": metrics() });
 const register = {
   version: "v1",
+  fullMvpVersion: "full-v1",
   scope: "test",
   projects: ["desktop", "mobile"],
   slice: [
@@ -29,7 +31,29 @@ const register = {
       critical: true,
     },
   ],
-  fullMvp: [{ id: "OUTSTANDING" }],
+  fullMvp: [
+    {
+      id: "OUTSTANDING",
+      source: "roadmap",
+      requirement: "full requirement",
+      actor: "member",
+      preconditions: "new member",
+      steps: "start journey",
+      expected: "observable result",
+      risk: "privacy",
+      issues: [24],
+      critical: true,
+      cases: [
+        {
+          id: "F-OUTSTANDING-A",
+          steps: "do full journey",
+          expected: "observable outcome",
+          critical: true,
+        },
+      ],
+      status: "outstanding",
+    },
+  ],
 };
 const execution = (projectName) => ({
   projectName,
@@ -109,10 +133,35 @@ it("requires every scenario on every supported browser and keeps full-MVP work o
   expect(result.passed).toBe(1);
   expect(result.executions).toBe(2);
   expect(result.fullMvp).toEqual({
+    register: "full-v1",
+    families: 1,
     passed: 0,
     total: 1,
-    uncovered: ["OUTSTANDING"],
+    criticalPassed: 0,
+    criticalTotal: 1,
+    uncovered: ["F-OUTSTANDING-A"],
   });
+});
+it("can gate the full-release denominator only when every reserved browser journey passes", () => {
+  const release = browser();
+  release.suites[0].suites[0].specs[0].title = "[F-OUTSTANDING-A] full journey";
+  expect(assertFullReleaseJourneys(register, release)).toMatchObject({
+    register: "full-v1",
+    passed: 1,
+    total: 1,
+    criticalPassed: 1,
+    criticalTotal: 1,
+    uncovered: [],
+  });
+  const missing = copy(release);
+  missing.suites[0].suites[0].specs[0].tests.pop();
+  expect(() => assertFullReleaseJourneys(register, missing)).toThrow();
+  const skipped = copy(release);
+  skipped.suites[0].suites[0].specs[0].tests[0].results[0].status = "skipped";
+  expect(() => assertFullReleaseJourneys(register, skipped)).toThrow();
+  expect(() => assertFullReleaseJourneys(register, browser())).toThrow(
+    /Unmapped/,
+  );
 });
 it.each([
   "missing",
@@ -151,4 +200,26 @@ it("rejects empty, duplicated or incomplete journey registers", () => {
   const incomplete = copy(register);
   delete incomplete.slice[0].steps;
   expect(() => assertJourneys(incomplete, browser())).toThrow(/Incomplete/);
+  const incompleteRelease = copy(register);
+  delete incompleteRelease.fullMvp[0].risk;
+  expect(() => assertJourneys(incompleteRelease, browser())).toThrow(
+    /Incomplete full/,
+  );
+  const duplicateBrowserId = copy(register);
+  duplicateBrowserId.fullMvp[0].cases.push({
+    ...duplicateBrowserId.fullMvp[0].cases[0],
+  });
+  expect(() => assertJourneys(duplicateBrowserId, browser())).toThrow(
+    /Duplicate full/,
+  );
+  const falseCompletion = copy(register);
+  falseCompletion.fullMvp[0].status = "passed";
+  expect(() => assertJourneys(falseCompletion, browser())).toThrow(
+    /Unverified full/,
+  );
+  const declassified = copy(register);
+  declassified.fullMvp[0].cases[0].critical = false;
+  expect(() => assertJourneys(declassified, browser())).toThrow(
+    /Incomplete full/,
+  );
 });

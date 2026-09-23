@@ -119,7 +119,7 @@ The ten build-prompt journeys retain the same high-risk flows while adding or ma
 
 ECO-01 through ECO-08 add: general-learner entry; equivalent IT/non-IT paths; changed interests and return after a gap; learning-circle participation; reviewed member contributions; study help outside career practice; optional coaching without identity/tier confusion; and separate learning/participation/service metrics.
 
-QA-002 must later publish the canonical scenario decomposition. Until then the denominator is 27 requirement families, no family is marked complete by overlap, and slice registers report their narrower numerator separately.
+QA-002's [proposed scenario decomposition](QA-002-JOURNEY-TRACEABILITY.md) retains all 27 requirement families and defines 100 reserved full-release browser IDs. No family or case is marked complete by overlap, and slice registers report their narrower numerator separately. Independent review is required before the proposed full-release denominator is approved.
 
 ## Open decision register
 
