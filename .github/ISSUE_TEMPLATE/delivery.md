@@ -16,7 +16,7 @@ Use the live assignee, one lifecycle label and matching project Status. Before w
 
 ## Dependencies and readiness
 
-List prerequisite issues, decisions, data/privacy boundaries, provider states, and stop conditions. Name the reviewer and test/evidence plan before execution.
+List prerequisite issues, decisions, data/privacy boundaries, provider states, and stop conditions. State the self-review and test/evidence plan before execution; name a separate reviewer only when requested or required.
 
 ## Acceptance criteria
 
@@ -35,7 +35,7 @@ List commands, behavior-based tests, scenario IDs, expected artifacts, and revie
 
 - [ ] Every AC has linked evidence; unresolved external prerequisites are explicit.
 - [ ] Required checks passed on the intended revision before push and in CI.
-- [ ] Independent review completed and blocking findings resolved.
+- [ ] Current diff and evidence self-reviewed and recorded; blocking findings resolved and any actually required separate review completed.
 - [ ] Docs, decisions, handoff, and relevant rollback/operations records updated.
 - [ ] Work claim, assignee, lifecycle/blocker labels and project Status reflect the actual outcome; partial delivery stays open.
-- [ ] Scope is accepted by the accountable owner; no inferred live or commercial readiness.
+- [ ] Scope was authorized by the accountable owner; no repeat merge approval or inferred live/commercial readiness.
