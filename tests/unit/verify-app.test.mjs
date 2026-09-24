@@ -46,6 +46,7 @@ vi.mock("../../scripts/quality-gates.mjs", async (original) => ({
 }));
 const marker = "synthetic-private-member-note";
 let output;
+let logOutput;
 beforeEach(() => {
   vi.resetModules();
   vi.resetAllMocks();
@@ -58,6 +59,7 @@ beforeEach(() => {
   doubles.query.mockResolvedValue({});
   doubles.end.mockResolvedValue(undefined);
   output = vi.spyOn(console, "error").mockImplementation(() => {});
+  logOutput = vi.spyOn(console, "log").mockImplementation(() => {});
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -69,10 +71,67 @@ async function run() {
   const report = JSON.parse(doubles.write.mock.calls.at(-1)[1]);
   expect(JSON.stringify(report)).not.toContain(marker);
   expect(JSON.stringify(output.mock.calls)).not.toContain(marker);
+  expect(JSON.stringify(logOutput.mock.calls)).not.toContain(marker);
   expect(report.finishedAt).toBeTruthy();
   expect(process.exitCode).toBe(report.exitStatus);
   return report;
 }
+it.each([0, 7])(
+  "keeps child stdout and stderr private while preserving command status %i",
+  async (status) => {
+    doubles.spawn.mockImplementation((command, args, options) => {
+      if (command === "git")
+        return {
+          status: 0,
+          stdout: args[0] !== "status" ? "a".repeat(40) : "",
+        };
+      if (options.stdio === "inherit") {
+        console.log(marker);
+        console.error(marker);
+      }
+      return {
+        status: command === "npm" && args[1] === "format:check" ? status : 0,
+        stdout: marker,
+        stderr: marker,
+      };
+    });
+    const report = await run();
+    expect(report.exitStatus).toBe(status === 0 ? 0 : 1);
+    if (status !== 0)
+      expect(report.error).toBe(
+        "Verification failed during npm run format:check.",
+      );
+    expect(
+      doubles.spawn.mock.calls.find(([command]) => command === "npm")?.[2],
+    ).not.toHaveProperty("stdio", "inherit");
+  },
+);
+it("fails safely when a child output buffer or launcher fails", async () => {
+  doubles.spawn.mockImplementation((command, args) => {
+    if (command === "git")
+      return {
+        status: 0,
+        stdout: args[0] !== "status" ? "a".repeat(40) : "",
+      };
+    return args[0] === "run" && args[1] === "format:check"
+      ? {
+          status: null,
+          error: new Error(marker),
+          stdout: marker,
+          stderr: marker,
+        }
+      : { status: 0, stdout: marker, stderr: marker };
+  });
+  const report = await run();
+  expect(report.exitStatus).toBe(1);
+  expect(report.error).toBe("Verification failed during npm run format:check.");
+  expect(report.commands.at(-1)).toEqual(
+    expect.objectContaining({
+      command: "npm run format:check",
+      exitStatus: null,
+    }),
+  );
+});
 it.each([new Error(marker), marker, null])(
   "fails database setup safely even for non-Error rejections (%s)",
   async (rejection) => {
