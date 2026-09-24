@@ -61,6 +61,9 @@ const register = {
     },
   ],
 };
+const proposal = JSON.parse(
+  readFileSync(new URL("../e2e/scenarios.json", import.meta.url), "utf8"),
+);
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 const revision = {
@@ -181,6 +184,42 @@ it("requires a separate reviewed mapping decision bound to every case and browse
     { ...approval(), version: "different-version" },
   ])
     expect(() => assertMappingApproval(register, invalid)).toThrow();
+});
+it("rejects the old source-obligation digest and every post-approval check change", () => {
+  // The prior published proposal fingerprint cannot approve this correction.
+  const oldApproval = {
+    ...approval(),
+    version: proposal.fullMvpVersion,
+    sha256: "14963de159ede2a79d43b963d0d7c974fc124538c7738ea1c36933fb90850631",
+  };
+  expect(() => assertMappingApproval(proposal, oldApproval)).toThrow(/digest/);
+  const newApproval = {
+    ...oldApproval,
+    sha256: releaseMappingDigest(proposal),
+  };
+  expect(assertMappingApproval(proposal, newApproval)).toBe(newApproval.sha256);
+  for (const [id, firstNewCheck] of [
+    ["F-ROADMAP-01-B", 2],
+    ["F-ROADMAP-09-D", 4],
+  ]) {
+    const original = proposal.fullMvp
+      .flatMap((family) => family.cases)
+      .find((test) => test.id === id);
+    for (
+      let index = firstNewCheck;
+      index < original.requiredChecks.length;
+      index++
+    ) {
+      const changed = clone(proposal);
+      const item = changed.fullMvp
+        .flatMap((family) => family.cases)
+        .find((test) => test.id === id);
+      item.requiredChecks[index].expected = "weaker assertion";
+      expect(() => assertMappingApproval(changed, newApproval)).toThrow(
+        /digest/,
+      );
+    }
+  }
 });
 
 it("binds a passing synthetic fixture to its run, revision, report and traces", () => {

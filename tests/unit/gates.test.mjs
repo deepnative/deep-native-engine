@@ -166,7 +166,7 @@ it("does not let the proposed full-MVP denominator or critical set shrink silent
     mapped.fullMvp
       .flatMap((family) => family.cases)
       .reduce((count, item) => count + item.requiredChecks.length, 0),
-  ).toBe(197);
+  ).toBe(202);
   for (const [id, minimum] of [
     ["F-ROADMAP-03-C", 2],
     ["F-ECO-06-C", 2],
@@ -193,6 +193,95 @@ it("does not let the proposed full-MVP denominator or critical set shrink silent
   const untracked = copy(mapped);
   delete untracked.fullMvp[0].cases[0].requiredChecks;
   expect(() => assertJourneys(untracked, browser())).toThrow(/Incomplete/);
+});
+it("keeps the roadmap's competence and operator-export obligations independently mandatory", () => {
+  const cases = proposal.fullMvp.flatMap((family) => family.cases);
+  const obligations = [
+    {
+      id: "F-ROADMAP-01-B",
+      action: /publish.*content.*no completed assessment/i,
+      expected: /neither assessed competence nor a completed human-review/i,
+    },
+    {
+      id: "F-ROADMAP-09-D",
+      action: /authorized operator.*recorded.*current export authorization/i,
+      expected:
+        /only records within.*authorization.*another member.*outside its scope/i,
+    },
+    {
+      id: "F-ROADMAP-09-D",
+      action: /operator.*without recorded member authorization/i,
+      expected: /denied.*no member records/i,
+    },
+    {
+      id: "F-ROADMAP-09-D",
+      action: /operator.*authorization expires/i,
+      expected: /denied.*no member records/i,
+    },
+    {
+      id: "F-ROADMAP-09-D",
+      action: /operator.*outside its permitted member or record scope/i,
+      expected: /denied.*no unauthorized records/i,
+    },
+  ];
+  for (const obligation of obligations) {
+    const item = cases.find((test) => test.id === obligation.id);
+    expect(item.critical).toBe(true);
+    const matches = item.requiredChecks.filter((check) =>
+      obligation.action.test(check.action),
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0].expected).toMatch(obligation.expected);
+  }
+
+  // Complete synthetic evidence tests the validator contract, not browser behavior.
+  const report = {
+    errors: [],
+    suites: [
+      {
+        specs: cases.map((item) => ({
+          title: `[${item.id}] synthetic check contract`,
+          tests: proposal.projects.map((projectName) => ({
+            ...execution(projectName),
+            results: [
+              {
+                status: "passed",
+                retry: 0,
+                annotations: item.requiredChecks.map((check, index) => ({
+                  type: "required-check",
+                  description: requiredCheckToken(item.id, index + 1, check),
+                })),
+              },
+            ],
+          })),
+        })),
+      },
+    ],
+  };
+  expect(assertFullReleaseJourneys(proposal, report)).toMatchObject({
+    passed: 100,
+    total: 100,
+    criticalPassed: 94,
+    executions: 200,
+  });
+  for (const obligation of obligations) {
+    const item = cases.find((test) => test.id === obligation.id);
+    const checkIndex = item.requiredChecks.findIndex((check) =>
+      obligation.action.test(check.action),
+    );
+    const specIndex = cases.findIndex((test) => test.id === obligation.id);
+    for (const [browserIndex, browserName] of proposal.projects.entries()) {
+      const incomplete = copy(report);
+      incomplete.suites[0].specs[specIndex].tests[
+        browserIndex
+      ].results[0].annotations.splice(checkIndex, 1);
+      expect(() => assertFullReleaseJourneys(proposal, incomplete)).toThrow(
+        new RegExp(
+          `Incomplete required subcases.*${obligation.id}.*${browserName}`,
+        ),
+      );
+    }
+  }
 });
 it("can gate the full-release denominator only when every reserved browser journey passes", () => {
   const release = browser();
