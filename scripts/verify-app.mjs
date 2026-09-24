@@ -15,6 +15,7 @@ import {
   assertUnitResults,
   assertCoverage,
   assertJourneys,
+  assertProvisionalReleaseJourneys,
   requireGate,
 } from "./quality-gates.mjs";
 const root = process.cwd();
@@ -66,6 +67,7 @@ try {
     "unit-results.json",
     "integration-results.json",
     "e2e-results.json",
+    "e2e-provisional-results.json",
     "application-verification.json",
   ])
     rmSync(`artifacts/${item}`, { recursive: true, force: true });
@@ -135,6 +137,12 @@ try {
   report.journeys = assertJourneys(
     JSON.parse(readFileSync("tests/e2e/scenarios.json", "utf8")),
     read("e2e-results.json"),
+  );
+  run("npm", ["run", "test:e2e:provisional"], env);
+  stage = "provisional full-MVP browser evidence";
+  report.provisionalFullMvpEvidence = assertProvisionalReleaseJourneys(
+    JSON.parse(readFileSync("tests/e2e/scenarios.json", "utf8")),
+    read("e2e-provisional-results.json"),
   );
   run("npm", ["audit", "--omit=dev", "--audit-level=high"]);
   report.exitStatus = report.databaseError ? 1 : 0;

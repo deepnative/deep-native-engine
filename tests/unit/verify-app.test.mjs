@@ -38,6 +38,11 @@ vi.mock("../../scripts/quality-gates.mjs", async (original) => ({
   assertUnitResults: () => ({ passed: 1, total: 1 }),
   assertCoverage: () => ({}),
   assertJourneys: () => ({ passed: 1, total: 1 }),
+  assertProvisionalReleaseJourneys: () => ({
+    approved: false,
+    passed: 3,
+    total: 3,
+  }),
 }));
 const marker = "synthetic-private-member-note";
 let output;
