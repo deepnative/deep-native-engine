@@ -315,8 +315,9 @@ def validate(root):
                 type(item["capacity"]) is int and item["capacity"] == 4 for item in circles),
             "Invalid local circle metadata or capacity")
     register = json.loads((root / "tests/e2e/scenarios.json").read_text())
+    require(register["fullMvpVersion"] == "full-mvp-v1", "Full-MVP proposal version changed without gate review")
     baseline = {f"ROADMAP-{n:02d}" for n in range(1, 10)} | {f"BUILD-{n:02d}" for n in range(1, 11)} | {f"ECO-{n:02d}" for n in range(1, 9)}
-    require(baseline <= {row["id"] for row in register["fullMvp"]}, "Full-MVP journey inventory was reduced")
+    require(baseline == {row["id"] for row in register["fullMvp"]}, "Full-MVP journey family inventory changed")
     validate_links(root, files)
     return {"status": "passed", "files_scanned": scanned,
             "rules": sorted(SECRET_MARKERS)}

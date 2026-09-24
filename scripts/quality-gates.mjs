@@ -90,6 +90,44 @@ export function assertJourneys(register, report) {
     new Set(releaseIds).size === releaseIds.length,
     "Duplicate full-MVP browser test ID",
   );
+  if (register.fullMvpVersion === "full-mvp-v1") {
+    // This is a proposed inventory, not approval or evidence of executed tests.
+    // Changing its denominator or criticality needs an explicit versioned review.
+    const expectedFamilies = [
+      ...Array.from(
+        { length: 9 },
+        (_, i) => `ROADMAP-${String(i + 1).padStart(2, "0")}`,
+      ),
+      ...Array.from(
+        { length: 10 },
+        (_, i) => `BUILD-${String(i + 1).padStart(2, "0")}`,
+      ),
+      ...Array.from(
+        { length: 8 },
+        (_, i) => `ECO-${String(i + 1).padStart(2, "0")}`,
+      ),
+    ];
+    const expectedCases = expectedFamilies.flatMap((id) =>
+      [...(id.startsWith("ECO-") ? "ABC" : "ABCD")].map(
+        (letter) => `F-${id}-${letter}`,
+      ),
+    );
+    const sameIds = (actual, expected) =>
+      JSON.stringify([...actual].sort()) ===
+      JSON.stringify([...expected].sort());
+    requireGate(
+      sameIds(full, expectedFamilies) && sameIds(releaseIds, expectedCases),
+      "Changed proposed full-MVP family or case inventory",
+    );
+    requireGate(
+      register.fullMvp.every(
+        (family) =>
+          family.critical === !["ECO-02", "ECO-03"].includes(family.id) &&
+          family.cases.every((test) => test.critical === family.critical),
+      ),
+      "Changed proposed full-MVP criticality",
+    );
+  }
   requireGate(
     register.fullMvp.every(
       (s) =>
