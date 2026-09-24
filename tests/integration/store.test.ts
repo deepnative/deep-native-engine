@@ -2411,7 +2411,7 @@ it("keeps terminal states when a late worker reports out of order", async () => 
     await jobs.fail(
       success.id,
       successAttempt!.attemptToken,
-      new Error("late failure"),
+      "provider_unavailable",
     ),
   ).toMatchObject({ status: "succeeded" });
 
@@ -2429,7 +2429,7 @@ it("keeps terminal states when a late worker reports out of order", async () => 
   await jobs.fail(
     failed.id,
     failedAttempt!.attemptToken,
-    new Error("provider failed"),
+    "provider_unavailable",
   );
   expect(
     await jobs.succeed(failed.id, failedAttempt!.attemptToken),

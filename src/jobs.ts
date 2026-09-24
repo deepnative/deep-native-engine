@@ -94,8 +94,7 @@ export interface JobStore {
   fail(
     id: string,
     attemptToken: string,
-    error: unknown,
-    safeError?: SafeJobError,
+    safeError: SafeJobError,
   ): Promise<AdapterJob>;
   succeed(id: string, attemptToken: string): Promise<AdapterJob>;
 }
@@ -195,7 +194,15 @@ export function jobStore(pool: Pool): JobStore {
       ).rows[0];
       return row && attempt(row);
     },
-    async fail(id, attemptToken, _error, safeError = "provider_unavailable") {
+    async fail(id, attemptToken, safeError) {
+      if (
+        ![
+          "provider_unavailable",
+          "provider_timeout",
+          "invalid_provider_response",
+        ].includes(safeError)
+      )
+        throw new Error("Adapter failure code must be allowlisted.");
       const row = (
         await pool.query<JobRow>(
           `UPDATE adapter_jobs
@@ -272,12 +279,11 @@ export async function runAdapterJob(
   let result: AdapterResult;
   try {
     result = await adapter.execute(claimed.operation, input);
-  } catch (error) {
+  } catch {
     return {
       job: await jobs.fail(
         claimed.id,
         claimed.attemptToken,
-        error,
         "provider_unavailable",
       ),
       result: null,

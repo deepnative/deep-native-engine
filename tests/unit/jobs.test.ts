@@ -6,6 +6,7 @@ import {
   jobStore,
   requestFingerprint,
   runAdapterJob,
+  type SafeJobError,
   type AdapterAttempt,
   type AdapterJob,
   type JobStore,
@@ -212,19 +213,31 @@ it("records only an allowlisted failure and preserves a terminal late-worker res
   };
   const db = database(failed, undefined, { ...failed, status: "succeeded" });
   expect(
-    await db.store.fail(
+    await db.store.fail(baseRow.id, "attempt-1", "provider_timeout"),
+  ).toMatchObject({ status: "failed", retryable: true });
+  expect(db.query.mock.calls[0]![1]).toEqual([
+    baseRow.id,
+    "attempt-1",
+    "provider_timeout",
+  ]);
+  expect(
+    await db.store.fail(baseRow.id, "late-attempt", "provider_unavailable"),
+  ).toMatchObject({ status: "succeeded", retryable: false });
+});
+
+it("rejects raw or unknown failure values before querying job state", async () => {
+  const db = database();
+  await expect(
+    db.store.fail(
       baseRow.id,
       "attempt-1",
-      new Error("token=private-secret"),
-      "provider_timeout",
+      new Error("credential=synthetic-private") as unknown as SafeJobError,
     ),
-  ).toMatchObject({ status: "failed", retryable: true });
-  expect(JSON.stringify(db.query.mock.calls[0])).not.toContain(
-    "private-secret",
-  );
-  expect(
-    await db.store.fail(baseRow.id, "late-attempt", new Error("secret")),
-  ).toMatchObject({ status: "succeeded", retryable: false });
+  ).rejects.toThrow("allowlisted");
+  await expect(
+    db.store.fail(baseRow.id, "attempt-1", "unexpected" as SafeJobError),
+  ).rejects.toThrow("allowlisted");
+  expect(db.query).not.toHaveBeenCalled();
 });
 
 it("succeeds only the active attempt and preserves exhaustion against a late success", async () => {
@@ -246,7 +259,7 @@ it("succeeds only the active attempt and preserves exhaustion against a late suc
 it("fails clearly when a conditional transition targets an unknown job", async () => {
   const db = database(undefined, undefined, undefined, undefined);
   await expect(
-    db.store.fail("missing", "attempt", new Error("secret")),
+    db.store.fail("missing", "attempt", "provider_unavailable"),
   ).rejects.toThrow("not found");
   await expect(db.store.succeed("missing", "attempt")).rejects.toThrow(
     "not found",
@@ -308,11 +321,13 @@ it("runs a persisted approved attempt to deterministic success", async () => {
   );
 });
 
-it("converts an adapter error to a safe failure on the active attempt", async () => {
+it("keeps raw adapter errors out of the job persistence boundary", async () => {
   const jobs = runStore();
   const result = await runAdapterJob(
     jobs,
-    registry(vi.fn().mockRejectedValue(new Error("credential=private"))),
+    registry(
+      vi.fn().mockRejectedValue(new Error("credential=synthetic-private")),
+    ),
     baseRow.id,
     { lesson: 1 },
   );
@@ -324,7 +339,6 @@ it("converts an adapter error to a safe failure on the active attempt", async ()
   expect(jobs.fail).toHaveBeenCalledWith(
     baseRow.id,
     "00000000-0000-4000-8000-000000000002",
-    expect.any(Error),
     "provider_unavailable",
   );
 });
