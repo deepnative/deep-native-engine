@@ -15,7 +15,12 @@ import { spawnSync } from "node:child_process";
 import { requireGate } from "./quality-gates.mjs";
 const root = process.cwd(),
   sandbox = realpathSync(mkdtempSync(path.join(tmpdir(), "dne-gate-probes-")));
-const evidence = { unimportedSourceRejected: false, brokenCsrfRejected: false };
+const evidence = {
+  unimportedSourceRejected: false,
+  brokenCsrfRejected: false,
+  brokenBillingAnniversaryRejected: false,
+};
+rmSync("artifacts/probes", { recursive: true, force: true });
 mkdirSync("artifacts/probes", { recursive: true });
 try {
   for (const name of [
@@ -107,12 +112,62 @@ try {
     "Broken CSRF behavior did not fail its regression",
   );
   evidence.brokenCsrfRejected = true;
+  writeFileSync(target, original);
+
+  const billingTarget = path.join(sandbox, "src/offers.ts"),
+    billingOriginal = readFileSync(billingTarget, "utf8"),
+    anniversarySite = /Math\.min\(anchor\.getUTCDate\(\),\s*lastDay\)/g;
+  requireGate(
+    [...billingOriginal.matchAll(anniversarySite)].length === 1,
+    "Billing-anniversary mutation target missing or ambiguous",
+  );
+  writeFileSync(
+    billingTarget,
+    billingOriginal.replace(anniversarySite, "anchor.getUTCDate()"),
+  );
+  result = spawnSync(
+    process.execPath,
+    [
+      path.join(root, "node_modules/vitest/vitest.mjs"),
+      "run",
+      "tests/unit/offers.test.ts",
+    ],
+    { cwd: sandbox, encoding: "utf8" },
+  );
+  writeFileSync(
+    "artifacts/probes/billing-anniversary-mutation.log",
+    result.stdout + result.stderr,
+  );
+  const billingReportPath = path.join(sandbox, "artifacts/unit-results.json");
+  requireGate(
+    existsSync(billingReportPath),
+    "Billing-anniversary mutation produced no unit report",
+  );
+  const billingReport = JSON.parse(readFileSync(billingReportPath, "utf8"));
+  requireGate(
+    result.status !== 0 &&
+      result.status !== null &&
+      billingReport.numFailedTests > 0 &&
+      billingReport.testResults.some((file) =>
+        file.assertionResults.some(
+          (assertion) =>
+            assertion.status === "failed" &&
+            assertion.fullName.includes("clips January 31 to February end"),
+        ),
+      ),
+    "Broken billing anniversary did not fail its regression",
+  );
+  cpSync(
+    billingReportPath,
+    "artifacts/probes/billing-anniversary-results.json",
+  );
+  evidence.brokenBillingAnniversaryRejected = true;
   writeFileSync(
     "artifacts/probes/summary.json",
     JSON.stringify(evidence, null, 2) + "\n",
   );
   console.info(
-    "Negative probes passed: unimported source and broken CSRF both fail the gate.",
+    "Negative probes passed: unimported source, broken CSRF and broken billing anniversary all fail the gate.",
   );
 } finally {
   rmSync(sandbox, { recursive: true, force: true });
