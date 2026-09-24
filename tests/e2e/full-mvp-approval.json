@@ -1,8 +1,8 @@
 {
-  "status": "pending",
+  "status": "approved",
   "version": "full-mvp-v1",
-  "sha256": null,
-  "reviewer": null,
-  "decisionUrl": null,
-  "decidedAt": null
+  "sha256": "581083999c08f794b3814470a2e2a708f3708ff0ea6dd9785999ce5a1bdf3a45",
+  "reviewer": "Codex dne-reviewer /root/qa002_corrected_mapping_review (GPT-6 Astra/high)",
+  "decisionUrl": "https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-5820945526",
+  "decidedAt": "2026-09-24T19:39:31Z"
 }
