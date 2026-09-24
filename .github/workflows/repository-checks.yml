@@ -35,8 +35,12 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Run the shared verification command
         run: make verify
+      - name: Scan generated artifacts before display or upload
+        id: artifact_scan
+        if: ${{ !cancelled() }}
+        run: python3 scripts/repo.py scan-artifacts
       - name: Show verification evidence
-        if: always()
+        if: ${{ !cancelled() && steps.artifact_scan.outcome == 'success' }}
         run: |
           if [ -f artifacts/repository-verification.json ]; then
             cat artifacts/repository-verification.json
@@ -45,7 +49,7 @@ jobs:
             exit 1
           fi
       - name: Preserve verification reports and failure traces
-        if: always()
+        if: ${{ !cancelled() && steps.artifact_scan.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: verification-ubuntu-latest
