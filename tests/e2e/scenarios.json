@@ -1,5 +1,5 @@
 {
-  "version": "initial-learning-v20",
+  "version": "initial-learning-v21",
   "fullMvpVersion": "full-mvp-v1",
   "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership and operator-only aggregate preview metrics; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
@@ -470,6 +470,15 @@
       "steps": "Submit during the write fault, inspect copyable text and actual database state, recover and submit, then replay the old request",
       "expected": "Unknown submission has no automatic retry; member checks state and submits once; replay cannot create another submission or attempt",
       "issues": [126],
+      "critical": true
+    },
+    {
+      "id": "L53",
+      "actor": "General, non-IT professional and IT learners using the local synthetic preview",
+      "preconditions": "Fresh private browser session for each background; desktop or mobile Chromium",
+      "steps": "Use Tab and Enter to reach labelled onboarding, lesson, error recovery and local-circle actions; reload saved exercise and membership",
+      "expected": "Keyboard focus is visible and reachable, the field error names and focuses its control, corrected completion and circle membership survive reload, and leave is keyboard operable",
+      "issues": [109, 129],
       "critical": true
     }
   ],
