@@ -11,6 +11,7 @@ import { careerStore } from "../../src/career.ts";
 import {
   deterministicRegistry,
   type AdapterRegistry,
+  type AdapterResult,
 } from "../../src/adapters.ts";
 import { enqueueAdapterJob, jobStore, runAdapterJob } from "../../src/jobs.ts";
 import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
@@ -2338,6 +2339,137 @@ it("persists retries across connections and stops invoking at exhaustion", async
   expect(
     JSON.stringify((await pool.query("SELECT * FROM adapter_jobs")).rows),
   ).not.toContain("private-secret");
+});
+
+it("persists only an allowlisted invalid-result code through bounded PostgreSQL retries", async () => {
+  const marker = "synthetic-private-provider-text";
+  let executions = 0;
+  const registry: AdapterRegistry = {
+    mode: "test",
+    adapter(kind) {
+      return {
+        kind,
+        mode: "test",
+        async execute() {
+          executions += 1;
+          return {
+            kind,
+            mode: "test",
+            state: "configured",
+            reference: "test_invalid",
+            message: marker,
+            privateText: marker,
+          } as unknown as AdapterResult;
+        },
+      };
+    },
+  };
+  const jobs = jobStore(pool);
+  const input = { scenario: "invalid-result" };
+  const created = await enqueueAdapterJob(
+    jobs,
+    registry,
+    "ai",
+    "summarize",
+    input,
+    "invalid-result",
+    2,
+  );
+  for (const [attempt, status] of [
+    [1, "failed"],
+    [2, "exhausted"],
+  ] as const) {
+    const result = await runAdapterJob(jobs, registry, created.id, input);
+    expect(result).toMatchObject({
+      executed: true,
+      result: null,
+      job: {
+        status,
+        attempts: attempt,
+        safeError: "invalid_provider_response",
+        retryable: attempt === 1,
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain(marker);
+    const row = (
+      await pool.query("SELECT * FROM adapter_jobs WHERE id=$1", [created.id])
+    ).rows[0];
+    expect(row).toMatchObject({
+      status,
+      attempt_count: attempt,
+      safe_error: "invalid_provider_response",
+      attempt_token: null,
+    });
+    expect(JSON.stringify(row)).not.toContain(marker);
+  }
+  expect(await runAdapterJob(jobs, registry, created.id, input)).toMatchObject({
+    executed: false,
+    result: null,
+    job: { status: "exhausted", attempts: 2 },
+  });
+  expect(executions).toBe(2);
+});
+
+it("recovers from an invalid result on the next attempt without returning extra fields", async () => {
+  let executions = 0;
+  const registry: AdapterRegistry = {
+    mode: "test",
+    adapter(kind) {
+      return {
+        kind,
+        mode: "test",
+        async execute() {
+          executions += 1;
+          if (executions === 1)
+            return {
+              kind,
+              mode: "test",
+              state: "simulated",
+              reference: 42,
+              message: "bad",
+            } as unknown as AdapterResult;
+          return {
+            kind,
+            mode: "test",
+            state: "simulated",
+            reference: "test_recovered",
+            message: "synthetic recovery",
+            privateText: "synthetic-private-provider-text",
+          } as AdapterResult;
+        },
+      };
+    },
+  };
+  const jobs = jobStore(pool);
+  const input = { scenario: "recover-invalid-result" };
+  const created = await enqueueAdapterJob(
+    jobs,
+    registry,
+    "ai",
+    "summarize",
+    input,
+    "recover-invalid-result",
+    2,
+  );
+  expect(await runAdapterJob(jobs, registry, created.id, input)).toMatchObject({
+    result: null,
+    job: { status: "failed", safeError: "invalid_provider_response" },
+  });
+  const recovered = await runAdapterJob(jobs, registry, created.id, input);
+  expect(recovered.result).toEqual({
+    kind: "ai",
+    mode: "test",
+    state: "simulated",
+    reference: "test_recovered",
+    message: "synthetic recovery",
+  });
+  expect(recovered.job).toMatchObject({
+    status: "succeeded",
+    attempts: 2,
+    safeError: null,
+  });
+  expect(await jobs.find(created.id)).toEqual(recovered.job);
+  expect(executions).toBe(2);
 });
 
 it("recovers an expired lease after a crash but does not steal an active lease", async () => {

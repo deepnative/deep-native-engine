@@ -321,6 +321,142 @@ it("runs a persisted approved attempt to deterministic success", async () => {
   );
 });
 
+const validResult = {
+  kind: "ai",
+  mode: "test",
+  state: "simulated",
+  reference: "test_result",
+  message: "simulated",
+};
+
+it.each([
+  ["null", null],
+  ["array", []],
+  ["primitive", 42],
+  ["missing field", { ...validResult, message: undefined }],
+  ["wrong field type", { ...validResult, reference: 42 }],
+  ["wrong adapter kind", { ...validResult, kind: "email" }],
+  ["wrong environment", { ...validResult, mode: "demo" }],
+  ["configured state", { ...validResult, state: "configured" }],
+  ["live state", { ...validResult, state: "live" }],
+  ["empty reference", { ...validResult, reference: "" }],
+  ["oversized reference", { ...validResult, reference: "r".repeat(129) }],
+  ["unsafe reference", { ...validResult, reference: "test\nprivate" }],
+  ["empty message", { ...validResult, message: "" }],
+  ["whitespace message", { ...validResult, message: "   " }],
+  ["oversized message", { ...validResult, message: "m".repeat(241) }],
+  ["control character", { ...validResult, message: "synthetic\nprivate" }],
+  ["hidden formatting", { ...validResult, message: "synthetic\u202eprivate" }],
+  [
+    "accessor field",
+    Object.defineProperty({ ...validResult }, "message", {
+      get() {
+        throw new Error("synthetic-private-marker");
+      },
+    }),
+  ],
+  [
+    "hostile property trap",
+    new Proxy(
+      {},
+      {
+        getOwnPropertyDescriptor() {
+          throw new Error("synthetic-private-marker");
+        },
+      },
+    ),
+  ],
+])(
+  "rejects %s synthetic adapter output before success",
+  async (_label, raw) => {
+    const failed = publicJob({
+      status: "failed",
+      attempts: 1,
+      safeError: "invalid_provider_response",
+      retryable: true,
+    });
+    const jobs = runStore({ fail: vi.fn().mockResolvedValue(failed) });
+    const execute = vi.fn().mockResolvedValue(raw);
+    await expect(
+      runAdapterJob(jobs, registry(execute), baseRow.id, { lesson: 1 }),
+    ).resolves.toEqual({ job: failed, result: null, executed: true });
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(jobs.fail).toHaveBeenCalledWith(
+      baseRow.id,
+      "00000000-0000-4000-8000-000000000002",
+      "invalid_provider_response",
+    );
+    expect(jobs.succeed).not.toHaveBeenCalled();
+  },
+);
+
+it("returns only bounded approved fields from a synthetic adapter result", async () => {
+  const jobs = runStore();
+  const raw = {
+    ...validResult,
+    reference: "r".repeat(128),
+    message: "m".repeat(240),
+    privateText: "synthetic-private-marker",
+  };
+  Object.defineProperty(raw, "ignored", {
+    get() {
+      throw new Error("synthetic-private-marker");
+    },
+  });
+  const result = await runAdapterJob(
+    jobs,
+    registry(vi.fn().mockResolvedValue(raw)),
+    baseRow.id,
+    { lesson: 1 },
+  );
+  expect(result.job.status).toBe("succeeded");
+  expect(result.result).toEqual({
+    kind: "ai",
+    mode: "test",
+    state: "simulated",
+    reference: raw.reference,
+    message: raw.message,
+  });
+  expect(JSON.stringify(result)).not.toContain("synthetic-private-marker");
+});
+
+it("accepts a simulated demo result only for a demo job in the current registry", async () => {
+  const pending = publicJob({ mode: "demo" });
+  const jobs = runStore({
+    find: vi.fn().mockResolvedValue(pending),
+    claim: vi.fn().mockResolvedValue({
+      ...pending,
+      status: "running",
+      attempts: 1,
+      attemptToken: "00000000-0000-4000-8000-000000000002",
+    }),
+  });
+  const demoRegistry: AdapterRegistry = {
+    mode: "demo",
+    adapter: vi.fn((kind) => ({
+      kind,
+      mode: "demo" as const,
+      execute: vi.fn().mockResolvedValue({ ...validResult, mode: "demo" }),
+    })),
+  };
+  expect(
+    (await runAdapterJob(jobs, demoRegistry, baseRow.id, { lesson: 1 })).result,
+  ).toEqual({ ...validResult, mode: "demo" });
+  expect(jobs.succeed).toHaveBeenCalledTimes(1);
+
+  const mismatched = runStore();
+  const outcome = await runAdapterJob(mismatched, demoRegistry, baseRow.id, {
+    lesson: 1,
+  });
+  expect(outcome).toMatchObject({ result: null, executed: true });
+  expect(mismatched.fail).toHaveBeenCalledWith(
+    baseRow.id,
+    "00000000-0000-4000-8000-000000000002",
+    "invalid_provider_response",
+  );
+  expect(mismatched.succeed).not.toHaveBeenCalled();
+});
+
 it("keeps raw adapter errors out of the job persistence boundary", async () => {
   const jobs = runStore();
   const result = await runAdapterJob(
@@ -464,7 +600,12 @@ it.each(["running", "failed", "exhausted", "succeeded"] as const)(
     const jobs = runStore({ succeed: vi.fn().mockResolvedValue(current) });
     const result = await runAdapterJob(
       jobs,
-      registry(vi.fn().mockResolvedValue({ reference: "superseded-result" })),
+      registry(
+        vi.fn().mockResolvedValue({
+          ...validResult,
+          reference: "superseded-result",
+        }),
+      ),
       baseRow.id,
       { lesson: 1 },
     );
@@ -484,7 +625,12 @@ it("does not attach a stale result to another attempt's recovered success", asyn
   await expect(
     runAdapterJob(
       jobs,
-      registry(vi.fn().mockResolvedValue({ reference: "superseded-result" })),
+      registry(
+        vi.fn().mockResolvedValue({
+          ...validResult,
+          reference: "superseded-result",
+        }),
+      ),
       baseRow.id,
       { lesson: 1 },
     ),
@@ -509,7 +655,10 @@ it.each(["missing", "unavailable"])(
       runAdapterJob(
         jobs,
         registry(
-          vi.fn().mockResolvedValue({ reference: "unconfirmed-result" }),
+          vi.fn().mockResolvedValue({
+            ...validResult,
+            reference: "unconfirmed-result",
+          }),
         ),
         baseRow.id,
         { lesson: 1 },

@@ -6,6 +6,7 @@ import {
   demoImpersonation,
   deterministicAdapter,
   deterministicRegistry,
+  validateAdapterResult,
   validateDatabaseIsolation,
 } from "../../src/adapters.ts";
 import { syntheticSeed } from "../../src/demo-seed.ts";
@@ -144,6 +145,22 @@ describe("adapter readiness", () => {
 });
 
 describe("deterministic adapter and synthetic fixtures", () => {
+  it("never accepts a live result as a simulated adapter result", () => {
+    expect(
+      validateAdapterResult(
+        {
+          kind: "ai",
+          mode: "live",
+          state: "simulated",
+          reference: "live_reference",
+          message: "not a verified provider result",
+        },
+        "ai",
+        "live",
+      ),
+    ).toBeNull();
+  });
+
   it("resolves only enabled adapters for its exact demo/test mode", async () => {
     const registry = deterministicRegistry({}, "test");
     await expect(
