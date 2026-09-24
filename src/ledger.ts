@@ -30,6 +30,31 @@ const categories: readonly LedgerCategory[] = [
   "study_requests",
 ];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const instant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+export interface ValidityWindow {
+  startsAt: string;
+  expiresAt: string;
+}
+function requireWindow(window: ValidityWindow) {
+  if (
+    !window ||
+    typeof window.startsAt !== "string" ||
+    typeof window.expiresAt !== "string"
+  )
+    throw new LedgerFailure("invalid_request");
+  const start = new Date(window.startsAt);
+  const end = new Date(window.expiresAt);
+  if (
+    !instant.test(window.startsAt) ||
+    !instant.test(window.expiresAt) ||
+    !Number.isFinite(start.getTime()) ||
+    !Number.isFinite(end.getTime()) ||
+    start.toISOString() !== window.startsAt ||
+    end.toISOString() !== window.expiresAt ||
+    start >= end
+  )
+    throw new LedgerFailure("invalid_request");
+}
 
 function requireId(value: string) {
   if (typeof value !== "string" || !uuid.test(value))
@@ -45,12 +70,13 @@ function requireQuantity(value: number) {
 }
 
 interface EventInput {
-  operation: "grant" | "reserve" | "consume" | "release";
+  operation: "grant" | "reserve" | "consume" | "release" | "expire";
   memberId: string;
   grantId?: string;
   reservationId?: string;
   category?: LedgerCategory;
   quantity?: number;
+  window?: ValidityWindow;
 }
 interface EventResult {
   resultId: string;
@@ -69,6 +95,7 @@ export interface SyntheticLedger {
     category: LedgerCategory,
     quantity: number,
     key: string,
+    window: ValidityWindow,
   ): Promise<string>;
   reserve(
     memberId: string,
@@ -86,9 +113,13 @@ export interface SyntheticLedger {
     reservationId: string,
     key: string,
   ): Promise<string>;
+  expire(memberId: string, grantId: string, key: string): Promise<string>;
 }
 
-export function syntheticLedger(pool: Pool): SyntheticLedger {
+export function syntheticLedger(
+  pool: Pool,
+  now: () => Date = () => new Date(),
+): SyntheticLedger {
   async function apply(
     key: string,
     input: EventInput,
@@ -168,8 +199,10 @@ export function syntheticLedger(pool: Pool): SyntheticLedger {
             grant_id: string;
             quantity: number;
             state: string;
+            expires_at: Date;
+            expired_at: Date | null;
           }>(
-            `SELECT r.grant_id,r.quantity,r.state
+            `SELECT r.grant_id,r.quantity,r.state,g.expires_at,g.expired_at
            FROM synthetic_entitlement_reservations r
            JOIN synthetic_entitlement_grants g ON g.id=r.grant_id
            WHERE r.id=$1 AND g.member_id=$2 FOR UPDATE OF r,g`,
@@ -179,12 +212,16 @@ export function syntheticLedger(pool: Pool): SyntheticLedger {
         if (!row) throw new LedgerFailure("unavailable");
         if (row.state !== "reserved")
           throw new LedgerFailure("already_settled");
+        const expired = row.expired_at !== null || now() >= row.expires_at;
         await client.query(
           operation === "consume"
             ? `UPDATE synthetic_entitlement_grants SET reserved=reserved-$2,
              consumed=consumed+$2 WHERE id=$1`
-            : `UPDATE synthetic_entitlement_grants SET reserved=reserved-$2,
-             available=available+$2 WHERE id=$1`,
+            : expired
+              ? `UPDATE synthetic_entitlement_grants SET reserved=reserved-$2,
+                 expired=expired+$2 WHERE id=$1`
+              : `UPDATE synthetic_entitlement_grants SET reserved=reserved-$2,
+                 available=available+$2 WHERE id=$1`,
           [row.grant_id, row.quantity],
         );
         await client.query(
@@ -202,14 +239,15 @@ export function syntheticLedger(pool: Pool): SyntheticLedger {
   }
 
   return {
-    async grant(memberId, category, quantity, key) {
+    async grant(memberId, category, quantity, key, window) {
       requireId(memberId);
       if (!categories.includes(category))
         throw new LedgerFailure("invalid_request");
       requireQuantity(quantity);
+      requireWindow(window);
       return apply(
         key,
-        { operation: "grant", memberId, category, quantity },
+        { operation: "grant", memberId, category, quantity, window },
         async (client) => {
           const member = (
             await client.query(
@@ -223,8 +261,16 @@ export function syntheticLedger(pool: Pool): SyntheticLedger {
           const grantId = randomUUID();
           await client.query(
             `INSERT INTO synthetic_entitlement_grants
-           (id,member_id,category,quantity,available) VALUES($1,$2,$3,$4,$4)`,
-            [grantId, memberId, category, quantity],
+           (id,member_id,category,quantity,available,starts_at,expires_at)
+           VALUES($1,$2,$3,$4,$4,$5,$6)`,
+            [
+              grantId,
+              memberId,
+              category,
+              quantity,
+              window.startsAt,
+              window.expiresAt,
+            ],
           );
           return { resultId: grantId, grantId, reservationId: null, quantity };
         },
@@ -239,8 +285,13 @@ export function syntheticLedger(pool: Pool): SyntheticLedger {
         { operation: "reserve", memberId, grantId, quantity },
         async (client) => {
           const grant = (
-            await client.query<{ available: number }>(
-              `SELECT g.available FROM synthetic_entitlement_grants g
+            await client.query<{
+              available: number;
+              starts_at: Date;
+              expires_at: Date;
+              expired_at: Date | null;
+            }>(
+              `SELECT g.available,g.starts_at,g.expires_at,g.expired_at FROM synthetic_entitlement_grants g
              JOIN principals p ON p.id=g.member_id
              WHERE g.id=$1 AND g.member_id=$2 AND p.kind='member'
                AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
@@ -249,6 +300,13 @@ export function syntheticLedger(pool: Pool): SyntheticLedger {
             )
           ).rows[0];
           if (!grant) throw new LedgerFailure("unavailable");
+          const current = now();
+          if (
+            grant.expired_at !== null ||
+            current < grant.starts_at ||
+            current >= grant.expires_at
+          )
+            throw new LedgerFailure("unavailable");
           if (grant.available < quantity)
             throw new LedgerFailure("insufficient");
           const reservationId = randomUUID();
@@ -271,6 +329,44 @@ export function syntheticLedger(pool: Pool): SyntheticLedger {
     },
     release(memberId, reservationId, key) {
       return settle("release", memberId, reservationId, key);
+    },
+    async expire(memberId, grantId, key) {
+      requireId(memberId);
+      requireId(grantId);
+      return apply(
+        key,
+        { operation: "expire", memberId, grantId },
+        async (client) => {
+          const grant = (
+            await client.query<{
+              available: number;
+              expires_at: Date;
+              expired_at: Date | null;
+            }>(
+              `SELECT available,expires_at,expired_at FROM synthetic_entitlement_grants
+           WHERE id=$1 AND member_id=$2 FOR UPDATE`,
+              [grantId, memberId],
+            )
+          ).rows[0];
+          if (!grant) throw new LedgerFailure("unavailable");
+          const current = now();
+          if (current < grant.expires_at)
+            throw new LedgerFailure("unavailable");
+          if (grant.expired_at !== null)
+            throw new LedgerFailure("already_settled");
+          await client.query(
+            `UPDATE synthetic_entitlement_grants SET expired=expired+available,
+           available=0,expired_at=$2 WHERE id=$1`,
+            [grantId, current],
+          );
+          return {
+            resultId: grantId,
+            grantId,
+            reservationId: null,
+            quantity: grant.available,
+          };
+        },
+      );
     },
   };
 }

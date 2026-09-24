@@ -2,11 +2,16 @@ import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { randomBytes } from "node:crypto";
 import { migrate, store } from "../../src/store.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
+import { billingMonth } from "../../src/offers.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
 const db = store(pool);
 const ledger = syntheticLedger(pool);
+const window = {
+  startsAt: "2020-01-01T00:00:00.000Z",
+  expiresAt: "2100-01-01T00:00:00.000Z",
+};
 beforeAll(async () => migrate(pool));
 beforeEach(async () => {
   await pool.query("TRUNCATE adapter_jobs, principals, cohorts CASCADE");
@@ -35,18 +40,20 @@ it("records separate immutable events without minting service units from learner
     "coach_minutes",
     3,
     "fixture-coach",
+    window,
   );
   const review = await ledger.grant(
     explorer,
     "review_minutes",
     2,
     "fixture-review",
+    window,
   );
   expect(
-    await ledger.grant(explorer, "coach_minutes", 3, "fixture-coach"),
+    await ledger.grant(explorer, "coach_minutes", 3, "fixture-coach", window),
   ).toBe(coach);
   await expect(
-    ledger.grant(explorer, "coach_minutes", 4, "fixture-coach"),
+    ledger.grant(explorer, "coach_minutes", 4, "fixture-coach", window),
   ).rejects.toMatchObject({ code: "idempotency_conflict" });
   await expect(
     ledger.reserve(professional, coach, 1, "other-member"),
@@ -140,6 +147,7 @@ it("serializes two last-unit reservations and makes release available once", asy
     "review_minutes",
     1,
     "last-unit-grant",
+    window,
   );
   const attempts = await Promise.allSettled([
     ledger.reserve(owner, grant, 1, "last-unit-a"),
@@ -182,6 +190,7 @@ it("rolls back a balance change when event persistence fails", async () => {
     "study_requests",
     1,
     "rollback-grant",
+    window,
   );
   await pool.query(`CREATE FUNCTION reject_test_ledger_event() RETURNS trigger AS $$
     BEGIN RAISE EXCEPTION 'synthetic rejected event'; END; $$ LANGUAGE plpgsql`);
@@ -219,4 +228,131 @@ it("rolls back a balance change when event persistence fails", async () => {
   expect(await ledger.reserve(owner, grant, 1, "failed-reserve")).toMatch(
     /^[0-9a-f-]{36}$/,
   );
+});
+
+it("expires Jan 31 and leap-year grants without reviving reserved units", async () => {
+  const owner = await member("professional");
+  let current = new Date("2028-02-28T23:59:59.999Z");
+  const clocked = syntheticLedger(pool, () => current);
+  const period = {
+    startsAt: `${billingMonth("2028-01-31", 0)}T00:00:00.000Z`,
+    expiresAt: `${billingMonth("2028-01-31", 1)}T00:00:00.000Z`,
+  };
+  const grant = await clocked.grant(
+    owner,
+    "coach_minutes",
+    3,
+    "leap-grant",
+    period,
+  );
+  const held = await clocked.reserve(owner, grant, 1, "leap-hold");
+  current = new Date(period.expiresAt);
+  await expect(
+    clocked.reserve(owner, grant, 1, "at-leap-end"),
+  ).rejects.toMatchObject({ code: "unavailable" });
+  const race = await Promise.allSettled([
+    clocked.expire(owner, grant, "leap-expire-a"),
+    clocked.expire(owner, grant, "leap-expire-b"),
+  ]);
+  expect(race.filter((item) => item.status === "fulfilled")).toHaveLength(1);
+  expect(race.filter((item) => item.status === "rejected")[0]).toMatchObject({
+    reason: { code: "already_settled" },
+  });
+  expect(await clocked.expire(owner, grant, "leap-expire-a")).toBe(grant);
+  expect(await clocked.release(owner, held, "leap-release")).toBe(held);
+  const balance = await pool.query(
+    "SELECT available,reserved,consumed,expired FROM synthetic_entitlement_grants WHERE id=$1",
+    [grant],
+  );
+  expect(balance.rows[0]).toEqual({
+    available: 0,
+    reserved: 0,
+    consumed: 0,
+    expired: 3,
+  });
+  const events = await pool.query(
+    "SELECT operation,quantity FROM synthetic_entitlement_events WHERE grant_id=$1 ORDER BY created_at",
+    [grant],
+  );
+  expect(events.rows.map((item) => item.operation).sort()).toEqual([
+    "expire",
+    "grant",
+    "release",
+    "reserve",
+  ]);
+  expect(
+    events.rows.find((item) => item.operation === "expire")?.quantity,
+  ).toBe(2);
+  const feb = `${billingMonth("2026-01-31", 1)}T00:00:00.000Z`;
+  expect(feb).toBe("2026-02-28T00:00:00.000Z");
+});
+
+it("rolls back an expiry event failure and leaves a held unit consumable", async () => {
+  const owner = await member("explorer");
+  const end = new Date("2026-02-28T00:00:00.000Z");
+  let current = new Date("2026-02-27T00:00:00.000Z");
+  const clocked = syntheticLedger(pool, () => current);
+  const period = {
+    startsAt: "2026-01-31T00:00:00.000Z",
+    expiresAt: end.toISOString(),
+  };
+  const grant = await clocked.grant(
+    owner,
+    "study_requests",
+    2,
+    "rollback-expiry-grant",
+    period,
+  );
+  const held = await clocked.reserve(owner, grant, 1, "rollback-expiry-hold");
+  current = end;
+  await pool.query(`CREATE FUNCTION reject_test_expiry_event() RETURNS trigger AS $$
+    BEGIN IF NEW.operation='expire' THEN RAISE EXCEPTION 'synthetic expiry rejected'; END IF;
+    RETURN NEW; END; $$ LANGUAGE plpgsql`);
+  await pool.query(`CREATE TRIGGER reject_test_expiry_event BEFORE INSERT
+    ON synthetic_entitlement_events FOR EACH ROW EXECUTE FUNCTION reject_test_expiry_event()`);
+  try {
+    await expect(
+      clocked.expire(owner, grant, "rollback-expiry"),
+    ).rejects.toMatchObject({ code: "unavailable" });
+  } finally {
+    await pool.query(
+      "DROP TRIGGER reject_test_expiry_event ON synthetic_entitlement_events",
+    );
+    await pool.query("DROP FUNCTION reject_test_expiry_event()");
+  }
+  expect(
+    (
+      await pool.query(
+        "SELECT available,reserved,expired,expired_at FROM synthetic_entitlement_grants WHERE id=$1",
+        [grant],
+      )
+    ).rows[0],
+  ).toEqual({ available: 1, reserved: 1, expired: 0, expired_at: null });
+  expect(
+    (
+      await pool.query(
+        "SELECT 1 FROM synthetic_entitlement_events WHERE idempotency_key='rollback-expiry'",
+      )
+    ).rowCount,
+  ).toBe(0);
+  expect(await clocked.expire(owner, grant, "rollback-expiry")).toBe(grant);
+  expect(await clocked.consume(owner, held, "consume-held")).toBe(held);
+  expect(
+    (
+      await pool.query(
+        "SELECT available,reserved,consumed,expired FROM synthetic_entitlement_grants WHERE id=$1",
+        [grant],
+      )
+    ).rows[0],
+  ).toEqual({ available: 0, reserved: 0, consumed: 1, expired: 1 });
+  await expect(
+    clocked.expire(owner, grant, "consume-held"),
+  ).rejects.toMatchObject({ code: "idempotency_conflict" });
+  await pool.query(
+    "UPDATE principals SET expires_at=CURRENT_TIMESTAMP WHERE id=$1",
+    [owner],
+  );
+  await expect(
+    clocked.reserve(owner, grant, 1, "inactive-member"),
+  ).rejects.toMatchObject({ code: "unavailable" });
 });
