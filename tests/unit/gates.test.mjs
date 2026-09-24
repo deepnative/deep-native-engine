@@ -4,6 +4,7 @@ import {
   assertCoverage,
   assertJourneys,
   assertFullReleaseJourneys,
+  assertProvisionalReleaseJourneys,
   assertUnitResults,
 } from "../../scripts/quality-gates.mjs";
 const copy = (v) => JSON.parse(JSON.stringify(v));
@@ -191,6 +192,37 @@ it("can gate the full-release denominator only when every reserved browser journ
   expect(() => assertFullReleaseJourneys(register, browser())).toThrow(
     /Unmapped/,
   );
+});
+it("reports only fully passing provisional ECO-01 browser evidence without approving release", () => {
+  const ids = ["F-ECO-01-A", "F-ECO-01-B", "F-ECO-01-C"];
+  const report = {
+    errors: [],
+    suites: [
+      {
+        specs: ids.map((id) => ({
+          title: `[${id}] proposed journey`,
+          tests: proposal.projects.map(execution),
+        })),
+      },
+    ],
+  };
+  expect(assertProvisionalReleaseJourneys(proposal, report)).toMatchObject({
+    approved: false,
+    passed: 3,
+    total: 3,
+    criticalPassed: 3,
+    criticalTotal: 3,
+    executions: 3 * proposal.projects.length,
+  });
+  const missing = copy(report);
+  missing.suites[0].specs.pop();
+  expect(() => assertProvisionalReleaseJourneys(proposal, missing)).toThrow();
+  const retried = copy(report);
+  retried.suites[0].specs[0].tests[0].results[0].retry = 1;
+  expect(() => assertProvisionalReleaseJourneys(proposal, retried)).toThrow();
+  const unmapped = copy(report);
+  unmapped.suites[0].specs[0].title = "[F-ECO-02-A] wrong journey";
+  expect(() => assertProvisionalReleaseJourneys(proposal, unmapped)).toThrow();
 });
 it.each([
   "missing",

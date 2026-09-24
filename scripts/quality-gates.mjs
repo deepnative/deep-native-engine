@@ -281,3 +281,43 @@ export function assertFullReleaseJourneys(register, report) {
     uncovered: release.uncovered,
   };
 }
+
+// This is executable evidence for a bounded part of the proposed register.
+// It cannot approve the denominator or satisfy the full-release gate.
+export function assertProvisionalReleaseJourneys(register, report) {
+  const ids = ["F-ECO-01-A", "F-ECO-01-B", "F-ECO-01-C"];
+  const cases = register.fullMvp.flatMap((family) =>
+    family.cases.map((test) => ({
+      id: test.id,
+      actor: family.actor,
+      preconditions: family.preconditions,
+      steps: test.steps,
+      expected: test.expected,
+      issues: family.issues,
+      critical: test.critical,
+    })),
+  );
+  requireGate(
+    ids.every((id) => cases.some((test) => test.id === id)),
+    "Missing proposed provisional browser ID",
+  );
+  const result = assertJourneys(
+    {
+      ...register,
+      scope: "provisional-full-MVP-tranche",
+      slice: cases.filter((test) => ids.includes(test.id)),
+    },
+    report,
+  );
+  return {
+    register: register.fullMvpVersion,
+    scope: result.scope,
+    approved: false,
+    passed: result.passed,
+    total: result.total,
+    criticalPassed: result.criticalPassed,
+    criticalTotal: result.criticalTotal,
+    executions: result.executions,
+    uncovered: result.uncovered,
+  };
+}

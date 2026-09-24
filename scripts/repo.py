@@ -37,7 +37,7 @@ SETUP_FILES = {
 
 APP_FILES = {
     ".env.example", ".nvmrc", "compose.yaml", "eslint.config.mjs", "package.json", "package-lock.json",
-    "playwright.config.ts", "tsconfig.json", "tsconfig.build.json", "vitest.config.ts",
+    "playwright.config.ts", "playwright.provisional.config.ts", "tsconfig.json", "tsconfig.build.json", "vitest.config.ts",
     "vitest.integration.config.ts", "scripts/quality-gates.mjs", "scripts/gate-probes.mjs",
     "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "tests/e2e/scenarios.json", "src/main.ts", "migrations/001-learning.sql",
     "assets/docs/content/circles/preview-circles.json",
@@ -100,7 +100,7 @@ def validate_scope(root, files):
             or (p.is_relative_to(Path("src")) and p.suffix == ".ts")
             or (p.is_relative_to(Path("public")) and p.suffix == ".css")
             or (p.parent == Path("migrations") and p.suffix == ".sql")
-            or (any(p.is_relative_to(Path("tests") / group) for group in ("unit", "integration", "e2e", "support")) and p.suffix in (".ts", ".mjs"))
+            or (any(p.is_relative_to(Path("tests") / group) for group in ("unit", "integration", "e2e", "full-e2e", "support")) and p.suffix in (".ts", ".mjs"))
             or p.is_relative_to(ARCHIVE)
             or (p.is_relative_to(Path("assets/docs")) and p.suffix == ".md")
             or p == PLAN_WORKBOOK
