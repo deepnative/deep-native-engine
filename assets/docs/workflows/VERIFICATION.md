@@ -42,3 +42,7 @@ Follow [the team workflow](TEAM-WORKFLOW.md). The author records a self-review o
 ## Recovery
 
 Fix failures, then regenerate evidence on the changed revision. Preserve archive hashes; never regenerate the manifest to hide corruption. Extend scope validation and coverage together when adding an executable source type. Resolve hook conflicts deliberately. If the database is unavailable, start it with `make db`; do not skip integration/E2E. Failed test-database cleanup is a gate failure and records the problem. Refresh stale browser forms after restarting the app. See the [slice decision record](../INITIAL-LEARNING-SLICE.md) for privacy, retention, migration and release limitations.
+
+## Synthetic restore rehearsal
+
+The integration gate also runs [the isolated restore rehearsal](../CTP-025-SYNTHETIC-RESTORE.md) using PostgreSQL tools inside the existing Compose fixture. It creates fresh source/target databases, restores a synthetic archive plus private object copy, verifies corruption rejection and restored privacy/deletion behavior, and removes its owned resources. `artifacts/restore-drill.json` records exact revision/tree, fixture counts and measured local durations after successful cleanup. It is local synthetic evidence, not approved production RPO/RTO or a production backup/retention policy. Custom database overrides outside the documented Compose fixture do not satisfy this rehearsal.
