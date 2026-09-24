@@ -18,6 +18,8 @@ The runner now reports only code-owned stage names and fixed cleanup messages. A
 
 Focused verification passed 18 tests across the runner and existing startup/runtime suites, plus ESLint on changed executable files. The final exact source/tree, clean-commit gate, pre-push repeat, self-review, PR/main CI, merge and branch cleanup evidence are recorded in the live delivery issue; a dirty run or this document alone does not establish completion. Tooling is outside the application coverage denominator and has these separate behavioral tests. No application coverage exclusion, journey denominator or retry setting changes.
 
+The subsequent [Python runner slice](CTP-023-SAFE-REPOSITORY-DIAGNOSTICS.md) addresses the Python diagnostic boundary listed below; this document records the original #137 scope.
+
 ## Remaining scope and recovery
 
 Inherited child-process stdout/stderr, Python repository exceptions, compressed artifact contents, hosted runtime logs, provider systems, backups, analytics and AI prompts remain outside this repair. The generated-artifact scanner is still required before CI display/upload. The full-MVP inventory and broader QA-004 matrix remain outstanding on #42. All fixtures are synthetic; no provider, publication or deployment is added.

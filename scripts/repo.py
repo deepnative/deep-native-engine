@@ -56,20 +56,37 @@ SECRET_MARKERS = {
 class GateError(Exception):
     """A reviewable gate failure, not a successful empty result."""
 
+    def __init__(self, message, *, public_message=None):
+        super().__init__(message)
+        self.public_message = public_message
+
 
 def require(condition, message):
+    # Callers supply code-owned text and opaque references, never raw input.
     if not condition:
-        raise GateError(message)
+        raise GateError(message, public_message=message)
+
+
+def diagnostic_ref(value):
+    """Identify an input locally without publishing its path, ID or contents."""
+    return "ref-sha256:" + hashlib.sha256(value.encode("utf-8", "surrogatepass")).hexdigest()[:12]
+
+
+def failure_message(error, fallback):
+    # Unexpected exceptions may contain private values, including in __str__.
+    if type(error) is GateError and error.public_message is not None:
+        return error.public_message
+    return fallback
 
 
 def git(root, *args):
-    return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
+    return subprocess.check_output(["git", "-C", str(root), *args], text=True, stderr=subprocess.PIPE).strip()
 
 
 def repository_files(root):
     raw = subprocess.check_output([
         "git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"
-    ])
+    ], stderr=subprocess.PIPE)
     return sorted({os.fsdecode(name) for name in raw.split(b"\0") if name})
 
 
@@ -91,9 +108,9 @@ def validate_scope(root, files):
             or (p.parent == Path(".codex/agents") and p.stem in ROLES and p.suffix == ".toml")
             or name in {f".agents/skills/{s}/{f}" for s in SKILLS for f in ("SKILL.md", "agents/openai.yaml")}
         )
-        require(allowed, f"Outside verified repository/application scope: {name}. Extend the reviewed gate before adding a new executable source type.")
-        require((root / p).is_file() and not (root / p).is_symlink(), f"Missing file or unsupported symlink: {name}")
-        require((root / p).resolve().is_relative_to(root.resolve()), f"Path escapes repository: {name}")
+        require(allowed, f"Outside verified repository/application scope: {diagnostic_ref(name)}. Extend the reviewed gate before adding a new executable source type.")
+        require((root / p).is_file() and not (root / p).is_symlink(), f"Missing file or unsupported symlink: {diagnostic_ref(name)}")
+        require((root / p).resolve().is_relative_to(root.resolve()), f"Path escapes repository: {diagnostic_ref(name)}")
 
 
 def validate_secret_markers(root, files):
@@ -104,11 +121,8 @@ def validate_secret_markers(root, files):
             match = pattern.search(content)
             if match:
                 line = content.count(b"\n", 0, match.start()) + 1
-                encoded_name = os.fsencode(name)
-                location = (f"path-sha256:{hashlib.sha256(encoded_name).hexdigest()[:12]}"
-                            if any(p.search(encoded_name) for p in SECRET_MARKERS.values()) else name)
-                raise GateError(
-                    f"High-confidence credential candidate at {location}:{line} ({rule}); "
+                require(False,
+                    f"High-confidence credential candidate at {diagnostic_ref(name)}:{line} ({rule}); "
                     "value suppressed. Remove it from source and rotate it if real."
                 )
     return len(files)
@@ -130,9 +144,9 @@ def scan_artifacts(root):
         encoded_name = os.fsencode(name)
         for rule, pattern in SECRET_MARKERS.items():
             if pattern.search(encoded_name):
-                raise GateError(
-                    f"High-confidence credential candidate in artifact path-sha256:"
-                    f"{hashlib.sha256(encoded_name).hexdigest()[:12]} ({rule}); value suppressed."
+                require(False,
+                    f"High-confidence credential candidate in artifact {diagnostic_ref(name)} "
+                    f"({rule}); value suppressed."
                 )
     return {"status": "passed", "files_scanned": validate_secret_markers(root, files),
             "rules": sorted(SECRET_MARKERS)}
@@ -151,12 +165,12 @@ def validate_archive(root):
         seen.add(entry["path"])
         target = archive / relative
         require(target.resolve().is_relative_to(archive.resolve()), "Archive path escapes source directory")
-        require(target.is_file() and not target.is_symlink(), f"Missing source file: {relative}")
+        require(target.is_file() and not target.is_symlink(), f"Missing source file: {diagnostic_ref(relative.as_posix())}")
         data = target.read_bytes()
         require(len(data) == entry["bytes"] and hashlib.sha256(data).hexdigest() == entry["sha256"],
-                f"Source checksum mismatch: {relative}")
+                f"Source checksum mismatch: {diagnostic_ref(relative.as_posix())}")
     inventory = {p.relative_to(archive).as_posix() for p in archive.rglob("*") if p.is_file() or p.is_symlink()}
-    require(inventory == seen, f"Archive inventory mismatch: {sorted(inventory ^ seen)}")
+    require(inventory == seen, "Archive inventory mismatch; compare files with the source manifest")
 
 
 def validate_capacity_workbook(root):
@@ -192,8 +206,8 @@ def validate_planning(root):
     visiting, visited = set(), set()
 
     def visit(key):
-        require(key in by_id, f"Unknown dependency: {key}")
-        require(key not in visiting, f"Dependency cycle at {key}")
+        require(key in by_id, f"Unknown dependency: {diagnostic_ref(key)}")
+        require(key not in visiting, f"Dependency cycle at {diagnostic_ref(key)}")
         if key in visited:
             return
         visiting.add(key)
@@ -203,10 +217,10 @@ def validate_planning(root):
         visited.add(key)
 
     for item in issues:
-        require(item["ac"] and item["owner"] and item["evidence"] and item["non_goals"], f"Incomplete planning criteria: {item['id']}")
+        require(item["ac"] and item["owner"] and item["evidence"] and item["non_goals"], f"Incomplete planning criteria: {diagnostic_ref(item['id'])}")
         require(item["milestone"] in plan["milestones"], "Unknown milestone")
         body = (context / "issue-bodies" / f"{item['id']}.md").read_text()
-        require("## Acceptance criteria" in body and "## Definition of done" in body, f"Missing AC/DoD in {item['id']}")
+        require("## Acceptance criteria" in body and "## Definition of done" in body, f"Missing AC/DoD in {diagnostic_ref(item['id'])}")
         visit(item["id"])
     routes = json.loads((context / "model-recommendations.json").read_text())["issues"]
     require(len(routes) == len(ids) and {r["id"] for r in routes} == set(ids), "Incomplete model routing")
@@ -277,7 +291,8 @@ def validate_links(root, files):
                 continue
             decoded = unquote(url.path)
             resolved = ((root if decoded.startswith("/") else (root / p).parent) / decoded.lstrip("/")).resolve()
-            require(resolved.is_relative_to(root.resolve()) and resolved.exists(), f"Broken local link in {name}: {target}")
+            require(resolved.is_relative_to(root.resolve()) and resolved.exists(),
+                    f"Broken local link in {diagnostic_ref(name)}: {diagnostic_ref(target)}")
 
 
 def validate(root):
@@ -342,10 +357,13 @@ def verify(root):
               "application_unit_coverage": None, "application_e2e_journey_coverage": None,
               "timestamp_utc": datetime.now(timezone.utc).isoformat(),
               "python": platform.python_version(), "platform": platform.platform(),
-              "command": f"{sys.executable} scripts/repo.py verify", "exit_status": 1}
+              "command": "python scripts/repo.py verify", "exit_status": 1}
+    stage = "revision identification"
     try:
         report.update(state(root))
+        stage = "repository assets"
         report["secret_scan"] = validate(root)
+        stage = "repository tests"
         suite = unittest.defaultTestLoader.discover(str(root / "tests/repository"), pattern="test_*.py")
         require(suite.countTestCases() > 0, "No repository tests collected")
         result = unittest.TextTestRunner(verbosity=2).run(suite)
@@ -353,18 +371,24 @@ def verify(root):
                       errors=len(result.errors), expected_failures=len(result.expectedFailures))
         require(result.wasSuccessful() and not result.skipped and not result.expectedFailures,
                 "Repository tests failed, were skipped, or had expected failures")
+        stage = "application verification"
         app = verify_application(root)
+        stage = "artifact scan"
         report["artifact_scan"] = scan_artifacts(root)
         report.update(application_status="verified-local-slice", application_unit_coverage=app["unitCoverage"],
                       application_e2e_journey_coverage=app["journeys"])
         report["exit_status"] = 0
-    except (GateError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
-        report["error"] = str(exc)
-        print(f"FAIL: {exc}", file=sys.stderr)
+    except Exception as exc:
+        report["error"] = failure_message(exc, f"Repository verification failed during {stage}.")
+        print(f"FAIL: {report['error']}", file=sys.stderr)
     finally:
-        output = root / "artifacts/repository-verification.json"
-        output.parent.mkdir(exist_ok=True)
-        output.write_text(json.dumps(report, indent=2) + "\n")
+        try:
+            output = root / "artifacts/repository-verification.json"
+            output.parent.mkdir(exist_ok=True)
+            output.write_text(json.dumps(report, indent=2) + "\n")
+        except Exception:
+            report["exit_status"] = 1
+            print("Repository verification report could not be written.", file=sys.stderr)
     print(f"Repository verification {'PASS' if report['exit_status'] == 0 else 'FAIL'}; application status: {report['application_status']}.")
     return report["exit_status"]
 
@@ -427,12 +451,16 @@ def main():
         result = scan_artifacts(ROOT)
         print(f"Artifact scan passed: {result['files_scanned']} files.")
         return 0
-    raise GateError(f"Unknown command: {command}")
+    require(False, "Unknown command; use bootstrap, verify, pre-push or scan-artifacts")
+
+
+def run_cli():
+    try:
+        return main()
+    except Exception as exc:
+        print("FAIL: " + failure_message(exc, "Repository command failed; check configuration and filesystem access."), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except GateError as exc:
-        print(f"FAIL: {exc}", file=sys.stderr)
-        sys.exit(1)
+    sys.exit(run_cli())
