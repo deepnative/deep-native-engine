@@ -64,6 +64,12 @@ const register = {
 const proposal = JSON.parse(
   readFileSync(new URL("../e2e/scenarios.json", import.meta.url), "utf8"),
 );
+const trackedApproval = JSON.parse(
+  readFileSync(
+    new URL("../e2e/full-mvp-approval.json", import.meta.url),
+    "utf8",
+  ),
+);
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 const revision = {
@@ -184,6 +190,28 @@ it("requires a separate reviewed mapping decision bound to every case and browse
     { ...approval(), version: "different-version" },
   ])
     expect(() => assertMappingApproval(register, invalid)).toThrow();
+});
+it("binds the tracked mapping approval to the independent technical decision", () => {
+  expect(trackedApproval).toEqual({
+    status: "approved",
+    version: "full-mvp-v1",
+    sha256: "581083999c08f794b3814470a2e2a708f3708ff0ea6dd9785999ce5a1bdf3a45",
+    reviewer:
+      "Codex dne-reviewer /root/qa002_corrected_mapping_review (GPT-6 Astra/high)",
+    decisionUrl:
+      "https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-5820945526",
+    decidedAt: "2026-09-24T19:39:31Z",
+  });
+  expect(assertMappingApproval(proposal, trackedApproval)).toBe(
+    trackedApproval.sha256,
+  );
+  expect(() =>
+    assertMappingApproval(proposal, {
+      ...trackedApproval,
+      sha256:
+        "0345855e5b331e2be1a4403a27f6af0128e0a1c3b83f9d50abaaef7bc623be81",
+    }),
+  ).toThrow(/digest/);
 });
 it("rejects preceding mapping digests and every post-approval check change", () => {
   // The prior published proposal fingerprint cannot approve this correction.
