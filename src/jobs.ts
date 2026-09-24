@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
-import type {
-  AdapterKind,
-  AdapterRegistry,
-  AdapterResult,
-  ApplicationMode,
+import {
+  validateAdapterResult,
+  type AdapterKind,
+  type AdapterRegistry,
+  type AdapterResult,
+  type ApplicationMode,
 } from "./adapters.ts";
 
 export type JobStatus =
@@ -276,9 +277,9 @@ export async function runAdapterJob(
       executed: false,
     };
 
-  let result: AdapterResult;
+  let rawResult: unknown;
   try {
-    result = await adapter.execute(claimed.operation, input);
+    rawResult = await adapter.execute(claimed.operation, input);
   } catch {
     return {
       job: await jobs.fail(
@@ -290,6 +291,20 @@ export async function runAdapterJob(
       executed: true,
     };
   }
+  const result =
+    claimed.mode === registry.mode
+      ? validateAdapterResult(rawResult, claimed.adapter, claimed.mode)
+      : null;
+  if (!result)
+    return {
+      job: await jobs.fail(
+        claimed.id,
+        claimed.attemptToken,
+        "invalid_provider_response",
+      ),
+      result: null,
+      executed: true,
+    };
 
   let completed: AdapterJob;
   try {

@@ -29,6 +29,44 @@ export interface AdapterResult {
   message: string;
 }
 
+// The runtime boundary accepts only data fields from the internal demo/test
+// contract. References are opaque ASCII tokens (1–128 characters); messages
+// are single-line visible text (1–240 characters). Extra fields are discarded.
+export function validateAdapterResult(
+  value: unknown,
+  kind: AdapterKind,
+  mode: ApplicationMode,
+): AdapterResult | null {
+  if (mode !== "demo" && mode !== "test") return null;
+  try {
+    if (typeof value !== "object" || value === null || Array.isArray(value))
+      return null;
+    const field = (name: keyof AdapterResult): unknown => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, name);
+      return descriptor && "value" in descriptor ? descriptor.value : undefined;
+    };
+    const reference = field("reference");
+    const message = field("message");
+    if (
+      field("kind") !== kind ||
+      field("mode") !== mode ||
+      field("state") !== "simulated" ||
+      typeof reference !== "string" ||
+      reference.trim() !== reference ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(reference) ||
+      typeof message !== "string" ||
+      message.length < 1 ||
+      message.length > 240 ||
+      message.trim() !== message ||
+      /\p{C}/u.test(message)
+    )
+      return null;
+    return { kind, mode, state: "simulated", reference, message };
+  } catch {
+    return null;
+  }
+}
+
 export interface Adapter {
   kind: AdapterKind;
   mode: ApplicationMode;
