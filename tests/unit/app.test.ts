@@ -24,6 +24,7 @@ import {
   type Proposal,
 } from "../../src/proposals.ts";
 import { CIRCLES, type CircleStore } from "../../src/circles.ts";
+import { type MetricsStore } from "../../src/metrics.ts";
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
 const member = {
@@ -32,6 +33,45 @@ const member = {
   goal: "everyday" as const,
 };
 const managedServers: Server[] = [];
+it("denies an unconfigured operator metrics route and returns only a configured aggregate", async () => {
+  const denied = managedAgent(app(storage(), { origin, secret: "secret" }));
+  await denied.get("/operator/metrics").set("Host", host).expect(403);
+  const metrics = {
+    snapshot: vi.fn<MetricsStore["snapshot"]>().mockResolvedValue({
+      scope: "synthetic-local-preview",
+      asOf: new Date("2026-09-24T00:00:00Z"),
+      definitions: {
+        denominator: "retained members",
+        activated: "lesson open",
+        selfAssessed: "self-report",
+        participated: "ever joined",
+        activeCircle: "currently joined",
+      },
+      counts: {
+        members: 3,
+        activated: 2,
+        selfAssessed: 1,
+        participated: 1,
+        activeCircle: 0,
+      },
+    }),
+  };
+  const allowed = managedAgent(
+    app(storage(), { origin, secret: "secret", metrics }),
+  );
+  const response = await allowed
+    .get("/operator/metrics")
+    .set("Host", host)
+    .expect(200);
+  expect(response.body.counts).toEqual({
+    members: 3,
+    activated: 2,
+    selfAssessed: 1,
+    participated: 1,
+    activeCircle: 0,
+  });
+  expect(response.body.scope).toBe("synthetic-local-preview");
+});
 function managedAgent(application: ReturnType<typeof app>) {
   const server = application.listen(0);
   managedServers.push(server);

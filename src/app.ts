@@ -59,6 +59,7 @@ import { disabledTrackStore, type TrackStore } from "./track-readiness.ts";
 import { disabledProposalStore, type ProposalStore } from "./proposals.ts";
 import { workflowBundle, workflowRegistry } from "./workflow-registry.ts";
 import { disabledCircleStore, type CircleStore } from "./circles.ts";
+import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
 export function app(
   store: Store,
   options: {
@@ -73,6 +74,7 @@ export function app(
     proposals?: ProposalStore;
     career?: CareerStore;
     circles?: CircleStore;
+    metrics?: MetricsStore;
   },
 ) {
   const app = express();
@@ -85,6 +87,7 @@ export function app(
   const proposals = options.proposals ?? disabledProposalStore();
   const career = options.career ?? disabledCareerStore();
   const circles = options.circles ?? disabledCircleStore();
+  const metrics = options.metrics ?? disabledMetricsStore();
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -164,6 +167,14 @@ export function app(
       return;
     }
     res.send(expertRegistryPage(records));
+  });
+  app.get("/operator/metrics", async (_req, res) => {
+    const snapshot = await metrics.snapshot(res.locals.token as string);
+    if (!snapshot) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    res.json(snapshot);
   });
   app.get("/moderate/proposals", async (_req, res) => {
     const queue = await proposals.moderationQueue(res.locals.token as string);
