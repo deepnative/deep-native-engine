@@ -6,6 +6,7 @@ import {
   assertFullReleaseJourneys,
   assertProvisionalReleaseJourneys,
   assertUnitResults,
+  requiredCheckToken,
 } from "../../scripts/quality-gates.mjs";
 const copy = (v) => JSON.parse(JSON.stringify(v));
 const proposal = JSON.parse(
@@ -53,6 +54,9 @@ const register = {
           id: "F-OUTSTANDING-A",
           steps: "do full journey",
           expected: "observable outcome",
+          requiredChecks: [
+            { action: "do full journey", expected: "observable outcome" },
+          ],
           critical: true,
         },
       ],
@@ -158,6 +162,21 @@ it("does not let the proposed full-MVP denominator or critical set shrink silent
     total: 100,
     criticalTotal: 94,
   });
+  expect(
+    mapped.fullMvp
+      .flatMap((family) => family.cases)
+      .reduce((count, item) => count + item.requiredChecks.length, 0),
+  ).toBe(197);
+  for (const [id, minimum] of [
+    ["F-ROADMAP-03-C", 2],
+    ["F-ECO-06-C", 2],
+    ["F-ECO-07-C", 3],
+  ]) {
+    const item = mapped.fullMvp
+      .flatMap((family) => family.cases)
+      .find((test) => test.id === id);
+    expect(item.requiredChecks.length).toBeGreaterThanOrEqual(minimum);
+  }
   const removed = copy(mapped);
   removed.fullMvp[0].cases.pop();
   expect(() => assertJourneys(removed, browser())).toThrow(/proposed full-MVP/);
@@ -171,10 +190,20 @@ it("does not let the proposed full-MVP denominator or critical set shrink silent
   expect(() => assertJourneys(downgraded, browser())).toThrow(
     /proposed full-MVP/,
   );
+  const untracked = copy(mapped);
+  delete untracked.fullMvp[0].cases[0].requiredChecks;
+  expect(() => assertJourneys(untracked, browser())).toThrow(/Incomplete/);
 });
 it("can gate the full-release denominator only when every reserved browser journey passes", () => {
   const release = browser();
   release.suites[0].suites[0].specs[0].title = "[F-OUTSTANDING-A] full journey";
+  const check = register.fullMvp[0].cases[0].requiredChecks[0];
+  const annotation = {
+    type: "required-check",
+    description: requiredCheckToken("F-OUTSTANDING-A", 1, check),
+  };
+  for (const result of release.suites[0].suites[0].specs[0].tests)
+    result.results[0].annotations = [annotation];
   expect(assertFullReleaseJourneys(register, release)).toMatchObject({
     register: "full-v1",
     passed: 1,
@@ -186,11 +215,55 @@ it("can gate the full-release denominator only when every reserved browser journ
   const missing = copy(release);
   missing.suites[0].suites[0].specs[0].tests.pop();
   expect(() => assertFullReleaseJourneys(register, missing)).toThrow();
+  const missingSubcase = copy(release);
+  missingSubcase.suites[0].suites[0].specs[0].tests[1].results[0].annotations =
+    [];
+  expect(() => assertFullReleaseJourneys(register, missingSubcase)).toThrow(
+    /Incomplete required subcases/,
+  );
+  const duplicateSubcase = copy(release);
+  duplicateSubcase.suites[0].suites[0].specs[0].tests[0].results[0].annotations.push(
+    annotation,
+  );
+  expect(() => assertFullReleaseJourneys(register, duplicateSubcase)).toThrow(
+    /Incomplete required subcases/,
+  );
+  const staleMapping = copy(register);
+  staleMapping.fullMvp[0].cases[0].requiredChecks[0].expected = "different";
+  expect(() => assertFullReleaseJourneys(staleMapping, release)).toThrow(
+    /Incomplete required subcases/,
+  );
   const skipped = copy(release);
   skipped.suites[0].suites[0].specs[0].tests[0].results[0].status = "skipped";
   expect(() => assertFullReleaseJourneys(register, skipped)).toThrow();
   expect(() => assertFullReleaseJourneys(register, browser())).toThrow(
     /Unmapped/,
+  );
+});
+it("requires every mandatory subcase on each browser under the same ID", () => {
+  const mapped = copy(register);
+  mapped.fullMvp[0].cases[0].requiredChecks.push({
+    action: "exercise second policy path",
+    expected: "second observable outcome",
+  });
+  const report = browser();
+  report.suites[0].suites[0].specs[0].title =
+    "[F-OUTSTANDING-A] both policy paths";
+  const item = mapped.fullMvp[0].cases[0];
+  const tokens = item.requiredChecks.map((check, index) => ({
+    type: "required-check",
+    description: requiredCheckToken(item.id, index + 1, check),
+  }));
+  for (const test of report.suites[0].suites[0].specs[0].tests)
+    test.results[0].annotations = copy(tokens);
+  expect(assertFullReleaseJourneys(mapped, report)).toMatchObject({
+    passed: 1,
+    total: 1,
+    executions: 2,
+  });
+  report.suites[0].suites[0].specs[0].tests[1].results[0].annotations.pop();
+  expect(() => assertFullReleaseJourneys(mapped, report)).toThrow(
+    /Incomplete required subcases.*mobile/,
   );
 });
 it("reports only fully passing provisional ECO-01 browser evidence without approving release", () => {

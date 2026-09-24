@@ -510,25 +510,69 @@
           "id": "F-ROADMAP-01-A",
           "steps": "Activate the test/manual-paid pilot and open its first billing period",
           "expected": "Exactly the first monthly coach, review, support and AI allowances are available",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Activate the accepted test/manual-paid pilot",
+              "expected": "Only the test/manual-paid pilot entitlement is active, with no live charge claimed"
+            },
+            {
+              "action": "Open pilot month one",
+              "expected": "The exact first-month coach, review, support and AI allowances are available"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-01-B",
           "steps": "Onboard across the common foundation and choose an eligible assignment",
           "expected": "The assignment and rubric fit the member goal and actual prerequisites",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Onboard through the common foundation",
+              "expected": "The member can open eligible foundation material without a career-path gate"
+            },
+            {
+              "action": "Choose an eligible assignment",
+              "expected": "The selected assignment and rubric match the member goal and real prerequisites"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-01-C",
           "steps": "Submit clean private evidence and have the assigned reviewer publish criterion feedback",
           "expected": "One 30-minute unit including preparation is consumed; unassigned users cannot assess",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Submit valid private evidence",
+              "expected": "Only its owner and assigned reviewer can read the pinned submission"
+            },
+            {
+              "action": "Have the assigned reviewer publish criterion feedback",
+              "expected": "Feedback is tied to the pinned evidence and one 30-minute unit including preparation is consumed"
+            },
+            {
+              "action": "Attempt assessment as an unassigned user",
+              "expected": "The assessment is denied without private evidence disclosure"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-01-D",
           "steps": "Revise the evidence and export a portfolio statement",
           "expected": "Original feedback stays pinned and the export says the work was simulated",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Revise submitted evidence",
+              "expected": "Original feedback remains pinned to the original version"
+            },
+            {
+              "action": "Export the portfolio statement",
+              "expected": "The export identifies the work as simulated"
+            }
+          ]
         }
       ]
     },
@@ -550,25 +594,65 @@
           "id": "F-ROADMAP-02-A",
           "steps": "As member B, request member A's workspace and evidence by guessed IDs",
           "expected": "All direct reads are denied without disclosing private content",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "As member B guess member A workspace route",
+              "expected": "The workspace read is denied without private content"
+            },
+            {
+              "action": "As member B guess member A evidence identifier",
+              "expected": "The evidence read is denied without private content"
+            },
+            {
+              "action": "As member B use a staff API route",
+              "expected": "The route grants no private content or staff authority"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-02-B",
           "steps": "As an assigned reviewer, open only the authorized submission version",
           "expected": "Only the bounded assignment is readable",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "As an assigned reviewer, open only the authorized submission version",
+              "expected": "Only the bounded assignment is readable"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-02-C",
           "steps": "Revoke the reviewer grant and attempt new and old download links",
           "expected": "New links fail and existing links obey their documented short expiry",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Revoke reviewer grant and request a new download link",
+              "expected": "No new capability issues"
+            },
+            {
+              "action": "Replay a pre-revocation link before its documented short expiry",
+              "expected": "Access follows the documented pre-expiry policy"
+            },
+            {
+              "action": "Replay that same link after expiry",
+              "expected": "The expired link is denied without private content"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-02-D",
           "steps": "As an editor, request private member work",
           "expected": "Publication permission does not grant evidence access",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "As an editor, request private member work",
+              "expected": "Publication permission does not grant evidence access"
+            }
+          ]
         }
       ]
     },
@@ -590,25 +674,65 @@
           "id": "F-ROADMAP-03-A",
           "steps": "Race two members for the last qualified slot",
           "expected": "Exactly one booking succeeds and the loser gets a recoverable explanation",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Race two members for the last qualified slot",
+              "expected": "Exactly one booking owns the slot"
+            },
+            {
+              "action": "Inspect the losing member outcome",
+              "expected": "The failed attempt has a clear recoverable explanation and no phantom reservation"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-03-B",
           "steps": "Race two reservations for one member's last unit",
           "expected": "Exactly one reservation commits and the unit balance cannot go negative",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Race two bookings against one final member unit",
+              "expected": "Exactly one unit reservation commits"
+            },
+            {
+              "action": "Inspect the balance after both outcomes",
+              "expected": "The unit balance never becomes negative"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-03-C",
           "steps": "Cancel or no-show under the disclosed policy",
           "expected": "The correct dated credit is restored or forfeited once with immutable history",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Cancel a booked appointment under the disclosed cancellation window",
+              "expected": "The policy-specific dated credit is restored or forfeited exactly once and immutable history records the decision"
+            },
+            {
+              "action": "Record a no-show under the disclosed no-show policy",
+              "expected": "The no-show-specific credit outcome is applied exactly once and immutable history records the decision"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-03-D",
           "steps": "Record a provider failure and inspect staff capacity",
           "expected": "One replacement credit is issued and the coach booking includes 45 call plus 15 preparation minutes",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Record a provider-caused appointment failure",
+              "expected": "Exactly one dated replacement credit is issued"
+            },
+            {
+              "action": "Inspect the coach booking and staff capacity",
+              "expected": "Forty-five call minutes plus fifteen preparation minutes are reserved and counted once"
+            }
+          ]
         }
       ]
     },
@@ -630,25 +754,85 @@
           "id": "F-ROADMAP-04-A",
           "steps": "Accept a standalone CAD 3,000 pilot",
           "expected": "Only two pilot periods and their exact allowances and invoices are created",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Accept a standalone CAD 3,000 pilot",
+              "expected": "Only the two pilot periods and correct total invoice obligation are created"
+            },
+            {
+              "action": "Inspect each pilot period",
+              "expected": "Exact dated coach, review, support and AI allowances issue once per period"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-04-B",
           "steps": "Explicitly accept the CAD 9,000 continuation before pilot period three",
           "expected": "Ten remaining periods preserve the original first anniversary without duplicate grants",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Explicitly accept CAD 9,000 continuation before pilot period three",
+              "expected": "The accepted agreement and schedule preserve the original first anniversary"
+            },
+            {
+              "action": "Inspect all remaining periods and invoices",
+              "expected": "Exactly ten remaining monthly grants occur with no duplicate grant or charge"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-04-C",
           "steps": "Enroll directly in CAD 12,000 Professional and renew after twelve periods",
           "expected": "The direct and renewal terms have their own correctly dated phases and monthly grants",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Enroll directly in CAD 12,000 annual Professional",
+              "expected": "The direct annual phase has its own correct terms, invoice schedule, dates and grants"
+            },
+            {
+              "action": "Renew after twelve service periods",
+              "expected": "The renewed phase starts on the correct date and grants its own allowances once"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-04-D",
           "steps": "Deliver duplicate/delayed payment events, fail an installment, cancel and request refund",
           "expected": "State and invoices reconcile without an unaccepted charge or automatic manual refund",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Replay a duplicate test payment event",
+              "expected": "Only one durable effect is recorded"
+            },
+            {
+              "action": "Deliver a delayed payment event",
+              "expected": "The delayed event reconciles without an extra charge or grant"
+            },
+            {
+              "action": "Deliver an older event after a newer paid event",
+              "expected": "The stale event cannot overwrite newer paid state"
+            },
+            {
+              "action": "Fail an installment",
+              "expected": "Entitlement and invoice state reflect the unpaid period without an unaccepted charge"
+            },
+            {
+              "action": "Recover the failed installment",
+              "expected": "The dated entitlement and invoice ledger reconcile once after recovery"
+            },
+            {
+              "action": "Cancel the accepted service",
+              "expected": "Cancellation applies only the disclosed dated terms"
+            },
+            {
+              "action": "Request a manual refund decision",
+              "expected": "No automatic refund is invented; the operator decision and audit trail remain visible"
+            }
+          ]
         }
       ]
     },
@@ -670,25 +854,77 @@
           "id": "F-ROADMAP-05-A",
           "steps": "Opt out of AI, then view deterministic demo and absent-live-provider modes",
           "expected": "Opt-out makes no dispatch and demo never claims a live provider result",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Opt out of AI and attempt a job",
+              "expected": "No provider dispatch or usage charge occurs"
+            },
+            {
+              "action": "View deterministic demo output",
+              "expected": "It is visibly simulated and cannot imply live provider execution"
+            },
+            {
+              "action": "Attempt live mode without a configured provider",
+              "expected": "Live execution is disabled while the demo remains usable"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-05-B",
           "steps": "Consume mock, study and conversation allowances at their boundary",
           "expected": "The 20/100 monthly limits and 30-turn cap block excess use without overcharge",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Reach the twentieth monthly mock interview",
+              "expected": "The twenty-first mock is blocked without an extra charge"
+            },
+            {
+              "action": "Reach the hundredth monthly study session",
+              "expected": "The hundred-first study session is blocked without an extra charge"
+            },
+            {
+              "action": "Reach thirty turns in a conversation",
+              "expected": "Turn thirty-one is blocked without an extra charge"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-05-C",
           "steps": "Timeout or retry a paid AI job",
           "expected": "The result is recoverable and usage reservation settles no more than once",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Timeout a paid AI job",
+              "expected": "Failure is visible and the reserved usage is restored or settled exactly once"
+            },
+            {
+              "action": "Retry the timed-out job",
+              "expected": "No duplicate paid work or second usage charge is created"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-05-D",
           "steps": "Provide sparse interview evidence, disallowed study source and budget exhaustion",
           "expected": "Feedback says insufficient evidence, grounds permitted sources and shows truthful budget recovery",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Submit sparse interview evidence",
+              "expected": "Feedback explicitly says evidence is insufficient"
+            },
+            {
+              "action": "Request study help with a disallowed source",
+              "expected": "Output uses only permitted cited sources and exposes no disallowed content"
+            },
+            {
+              "action": "Exhaust the AI budget",
+              "expected": "The job stops and the UI offers a truthful recovery path without excess charge"
+            }
+          ]
         }
       ]
     },
@@ -710,25 +946,65 @@
           "id": "F-ROADMAP-06-A",
           "steps": "Complete an assessment using content and rubric version one",
           "expected": "The result stores immutable version references",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Complete an assessment on version-one content",
+              "expected": "The completed result pins content version one"
+            },
+            {
+              "action": "Inspect its rubric reference",
+              "expected": "The result also pins rubric version one immutably"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-06-B",
           "steps": "Publish version two and enroll a new member",
           "expected": "New enrollment receives eligible current content while the old result stays unchanged",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Publish content and rubric version two",
+              "expected": "The previously completed assessment retains version-one references and result"
+            },
+            {
+              "action": "Enroll a new eligible member",
+              "expected": "The new enrollment sees the eligible current version"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-06-C",
           "steps": "Retire or mark a workflow template stale",
           "expected": "Compatibility, failures and support status are shown accurately",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Mark a workflow template stale",
+              "expected": "Its compatibility and known-failure information no longer present it as current support"
+            },
+            {
+              "action": "Retire a workflow template",
+              "expected": "It is not offered as currently supported and its past version remains identified"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-06-D",
           "steps": "Upload a document instructing the AI to send messages or access systems",
           "expected": "Document text cannot grant a tool or provider permission",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Upload text instructing AI to send a message",
+              "expected": "The uploaded instruction cannot grant message-sending permission"
+            },
+            {
+              "action": "Upload text instructing AI to access another system",
+              "expected": "The uploaded instruction cannot grant system or tool access"
+            }
+          ]
         }
       ]
     },
@@ -750,25 +1026,65 @@
           "id": "F-ROADMAP-07-A",
           "steps": "Advance an explicitly continued member into the next billing period",
           "expected": "Only that month's Professional service and AI allowances become available",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Advance an explicitly continued member one billing period",
+              "expected": "Only that month’s Professional service allowances become available"
+            },
+            {
+              "action": "Inspect AI grants for the same period",
+              "expected": "Only that month’s AI allowances become available, once"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-07-B",
           "steps": "Attend one available group clinic",
           "expected": "Attendance creates no private coaching minutes",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Attend one available group clinic",
+              "expected": "Attendance creates no private coaching minutes"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-07-C",
           "steps": "Book funded support and check staff time",
           "expected": "Support consumes the right category once and respects capacity",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Book funded support",
+              "expected": "The correct support category is consumed once"
+            },
+            {
+              "action": "Inspect staff capacity after booking",
+              "expected": "The booking reserves the actual support capacity"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-07-D",
           "steps": "Change goal and inspect renewal, rates and contract claims",
           "expected": "Next actions are useful while training alone creates no verified contract or rate increase",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Change the member learning goal",
+              "expected": "Next actions reflect the new eligible goal"
+            },
+            {
+              "action": "Inspect renewal information",
+              "expected": "Only an explicitly accepted renewal can create a renewed paid phase"
+            },
+            {
+              "action": "Inspect rate and contract outcome claims after training",
+              "expected": "Training alone creates neither a verified contract nor an automatic rate increase"
+            }
+          ]
         }
       ]
     },
@@ -790,25 +1106,65 @@
           "id": "F-ROADMAP-08-A",
           "steps": "Enter common foundation as cybersecurity, product and project-management learners",
           "expected": "All can learn without specialty approval or Professional purchase",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Join common foundation as a cybersecurity learner",
+              "expected": "The foundation works without specialist approval or paid purchase"
+            },
+            {
+              "action": "Join common foundation as a product learner",
+              "expected": "The foundation works without specialist approval or paid purchase"
+            },
+            {
+              "action": "Join common foundation as a project-management learner",
+              "expected": "The foundation works without specialist approval or paid purchase"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-08-B",
           "steps": "Inspect specialty readiness with no qualified coverage",
           "expected": "The actual missing reviewer or service capacity is visible",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Inspect a specialty with no qualified reviewer",
+              "expected": "Missing reviewer coverage is disclosed"
+            },
+            {
+              "action": "Inspect a specialty with no deliverable service capacity",
+              "expected": "Unavailable service capacity is disclosed"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-08-C",
           "steps": "Try to accept uncovered tailored service, then an available qualified service",
           "expected": "Uncovered sale is denied and genuinely available scope can proceed",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Attempt to buy tailored service without qualified coverage",
+              "expected": "The uncovered service cannot be accepted or charged"
+            },
+            {
+              "action": "Choose a genuinely available qualified service",
+              "expected": "Only its actual eligible scope can proceed under accepted terms"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-08-D",
           "steps": "Complete a project-management assignment",
           "expected": "A suitable rubric is used instead of a generic coding assessment",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Complete a project-management assignment",
+              "expected": "A suitable rubric is used instead of a generic coding assessment"
+            }
+          ]
         }
       ]
     },
@@ -830,25 +1186,73 @@
           "id": "F-ROADMAP-09-A",
           "steps": "Resolve a booking exception as an authorized operator",
           "expected": "Adjustment and staff time history remain auditable",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Resolve a booking exception as an authorized operator",
+              "expected": "Adjustment and staff time history remain auditable"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-09-B",
           "steps": "Review early release and refund requests",
           "expected": "No automatic refund is invented; decision and reason remain visible",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Review an early-release request",
+              "expected": "An operator decision and reason are recorded without automatic release"
+            },
+            {
+              "action": "Review a refund request",
+              "expected": "An operator decision and reason are recorded without an invented automatic refund"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-09-C",
           "steps": "Reconcile invoice, ledger, provider/manual events and cost report",
           "expected": "Differences surface; preparation counts once, AI estimates are labelled and demo events excluded",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Reconcile invoice, ledger and provider/manual payment records with a deliberate exception",
+              "expected": "The mismatch is visible and attributable"
+            },
+            {
+              "action": "Inspect the delivery cost report",
+              "expected": "Preparation is counted once and estimated AI cost is labelled"
+            },
+            {
+              "action": "Include demo events in input records",
+              "expected": "Live business metrics exclude demo activity"
+            }
+          ]
         },
         {
           "id": "F-ROADMAP-09-D",
           "steps": "Export member data and complete deletion with retention exceptions",
           "expected": "Only authorized records export, active/derived data is removed and retained categories are disclosed",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Export a member record as its authorized owner",
+              "expected": "Only that owner’s permitted records export"
+            },
+            {
+              "action": "Attempt the same export as an outsider",
+              "expected": "No owner record is disclosed"
+            },
+            {
+              "action": "Complete a deletion request with source and derived data",
+              "expected": "Configured active and derived data is removed"
+            },
+            {
+              "action": "Inspect separately retained records",
+              "expected": "Billing and backup retention exceptions and expiry are disclosed"
+            }
+          ]
         }
       ]
     },
@@ -870,25 +1274,49 @@
           "id": "F-BUILD-01-A",
           "steps": "Join the shared foundation as a cybersecurity learner",
           "expected": "The branch works even without a paid specialist service",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Join the shared foundation as a cybersecurity learner",
+              "expected": "The branch works even without a paid specialist service"
+            }
+          ]
         },
         {
           "id": "F-BUILD-01-B",
           "steps": "Join and learn as a business-analysis learner",
           "expected": "A suitable noncoding path is available",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Join and learn as a business-analysis learner",
+              "expected": "A suitable noncoding path is available"
+            }
+          ]
         },
         {
           "id": "F-BUILD-01-C",
           "steps": "Request tailored review where qualified coverage is absent",
           "expected": "The unavailable service cannot be purchased",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Request tailored review where qualified coverage is absent",
+              "expected": "The unavailable service cannot be purchased"
+            }
+          ]
         },
         {
           "id": "F-BUILD-01-D",
           "steps": "Add only a demo expert to the roster",
           "expected": "Demo status does not change live readiness",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Add only a demo expert to the roster",
+              "expected": "Demo status does not change live readiness"
+            }
+          ]
         }
       ]
     },
@@ -910,25 +1338,65 @@
           "id": "F-BUILD-02-A",
           "steps": "Upload private member evidence and submit a revision",
           "expected": "Both versions remain owned, separately identifiable and private",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Upload private member evidence",
+              "expected": "The original version is owned and private"
+            },
+            {
+              "action": "Submit a revision",
+              "expected": "Both versions remain separately identifiable, owner-bound and private"
+            }
+          ]
         },
         {
           "id": "F-BUILD-02-B",
           "steps": "Publish feedback as the assigned reviewer",
           "expected": "Feedback references only the authorized pinned version",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Publish feedback as the assigned reviewer",
+              "expected": "Feedback references only the authorized pinned version"
+            }
+          ]
         },
         {
           "id": "F-BUILD-02-C",
           "steps": "Request evidence as member B and an unassigned coach",
           "expected": "Both are denied",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Request member A evidence as member B",
+              "expected": "The read is denied without evidence disclosure"
+            },
+            {
+              "action": "Request member A evidence as an unassigned coach",
+              "expected": "The read is denied without evidence disclosure"
+            }
+          ]
         },
         {
           "id": "F-BUILD-02-D",
           "steps": "Revoke reviewer assignment and replay download capability",
           "expected": "No new capability issues and the old link obeys documented expiry",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Revoke the reviewer assignment and request a new download capability",
+              "expected": "No new capability issues"
+            },
+            {
+              "action": "Replay an old capability before its documented short expiry",
+              "expected": "The link follows the documented pre-expiry policy"
+            },
+            {
+              "action": "Replay that same capability after expiry",
+              "expected": "The expired link is denied"
+            }
+          ]
         }
       ]
     },
@@ -950,25 +1418,53 @@
           "id": "F-BUILD-03-A",
           "steps": "Race two attempts for the final available slot",
           "expected": "Exactly one succeeds",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Race two attempts for the final available slot",
+              "expected": "Exactly one succeeds"
+            }
+          ]
         },
         {
           "id": "F-BUILD-03-B",
           "steps": "Race two attempts for the final service credit",
           "expected": "Exactly one consumes or reserves the credit",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Race two attempts for the final service credit",
+              "expected": "Exactly one consumes or reserves the credit"
+            }
+          ]
         },
         {
           "id": "F-BUILD-03-C",
           "steps": "Cancel the winner as staff",
           "expected": "A single correctly dated replacement credit is available",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Cancel the winner as staff",
+              "expected": "A single correctly dated replacement credit is available"
+            }
+          ]
         },
         {
           "id": "F-BUILD-03-D",
           "steps": "Inspect failed and cancelled attempts",
           "expected": "The loser has a clear recovery path and history is not erased",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Inspect the failed racing attempt",
+              "expected": "The loser has a clear recovery path"
+            },
+            {
+              "action": "Inspect the subsequently cancelled winner",
+              "expected": "Its original and cancellation history remain auditable"
+            }
+          ]
         }
       ]
     },
@@ -990,25 +1486,65 @@
           "id": "F-BUILD-04-A",
           "steps": "Accept pilot then timely continuation",
           "expected": "Exactly twelve original-anchored service months result from CAD 3,000 plus CAD 9,000 phases",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Accept the CAD 3,000 pilot and timely CAD 9,000 continuation",
+              "expected": "The original pilot date anchors exactly twelve total service months"
+            },
+            {
+              "action": "Inspect continuation charges and monthly grants",
+              "expected": "Only the accepted CAD 9,000 continuation is charged and each remaining monthly grant issues once"
+            }
+          ]
         },
         {
           "id": "F-BUILD-04-B",
           "steps": "Complete pilot without conversion",
           "expected": "No further charge or grant occurs",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Complete a pilot without accepted conversion",
+              "expected": "No continuation charge occurs"
+            },
+            {
+              "action": "Inspect entitlements after the pilot expires",
+              "expected": "No further service or AI grant occurs"
+            }
+          ]
         },
         {
           "id": "F-BUILD-04-C",
           "steps": "Attempt late standard continuation",
           "expected": "It cannot bill missed months or activate without a separately accepted agreement",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Attempt late standard continuation after its acceptance window",
+              "expected": "The standard continuation cannot activate or bill missed months"
+            },
+            {
+              "action": "Explicitly accept a replacement agreement",
+              "expected": "Only the separately accepted replacement terms can activate future service"
+            }
+          ]
         },
         {
           "id": "F-BUILD-04-D",
           "steps": "Enroll directly in annual Professional and later renew",
           "expected": "Direct and renewal phases have exact terms, dates and allowances",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Enroll directly in annual Professional",
+              "expected": "The direct phase has exact terms, dates and dated allowances"
+            },
+            {
+              "action": "Later accept a renewal",
+              "expected": "The renewal uses its own correct phase, dates and dated allowances"
+            }
+          ]
         }
       ]
     },
@@ -1030,25 +1566,53 @@
           "id": "F-BUILD-05-A",
           "steps": "Deliver one provider payment event twice",
           "expected": "Only one durable financial effect is recorded",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Deliver one provider payment event twice",
+              "expected": "Only one durable financial effect is recorded"
+            }
+          ]
         },
         {
           "id": "F-BUILD-05-B",
           "steps": "Deliver an older event after a newer paid event",
           "expected": "Older state cannot overwrite current paid state",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Deliver an older event after a newer paid event",
+              "expected": "Older state cannot overwrite current paid state"
+            }
+          ]
         },
         {
           "id": "F-BUILD-05-C",
           "steps": "Apply a refund and early-release decision",
           "expected": "Both create auditable events without rewriting prior history",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Apply a refund decision",
+              "expected": "An auditable refund event is appended without rewriting earlier history"
+            },
+            {
+              "action": "Apply an early-release decision",
+              "expected": "An auditable release decision is appended without rewriting earlier history"
+            }
+          ]
         },
         {
           "id": "F-BUILD-05-D",
           "steps": "Inspect reconciliation with a deliberately missing event",
           "expected": "The exception is visible for operator action",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Inspect reconciliation with a deliberately missing event",
+              "expected": "The exception is visible for operator action"
+            }
+          ]
         }
       ]
     },
@@ -1070,25 +1634,57 @@
           "id": "F-BUILD-06-A",
           "steps": "Ask for interview feedback from specific member responses",
           "expected": "Feedback references the actual responses rather than fabricated evidence",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Ask for interview feedback from specific member responses",
+              "expected": "Feedback references the actual responses rather than fabricated evidence"
+            }
+          ]
         },
         {
           "id": "F-BUILD-06-B",
           "steps": "Submit sparse evidence",
           "expected": "The response explicitly says evidence is insufficient",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Submit sparse evidence",
+              "expected": "The response explicitly says evidence is insufficient"
+            }
+          ]
         },
         {
           "id": "F-BUILD-06-C",
           "steps": "Include malicious instructions in an uploaded document",
           "expected": "The AI cannot access other workspaces or unapproved tools",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Submit uploaded instructions asking AI to read another workspace",
+              "expected": "No other workspace data is disclosed"
+            },
+            {
+              "action": "Submit uploaded instructions asking AI to use an unapproved tool",
+              "expected": "No unapproved tool call occurs"
+            }
+          ]
         },
         {
           "id": "F-BUILD-06-D",
           "steps": "Cause timeout and malformed provider output",
           "expected": "Usage reservation is released or settled exactly once and the UI reports the real failure",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Cause a provider timeout",
+              "expected": "The reservation is restored or settled exactly once and the UI reports the timeout"
+            },
+            {
+              "action": "Cause malformed provider output",
+              "expected": "The reservation is restored or settled exactly once and the UI reports the malformed result"
+            }
+          ]
         }
       ]
     },
@@ -1110,25 +1706,61 @@
           "id": "F-BUILD-07-A",
           "steps": "Complete assessment and then revise its rubric",
           "expected": "The completed result retains the original rubric reference",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Complete an assessment on the original rubric",
+              "expected": "The completed result pins its rubric reference"
+            },
+            {
+              "action": "Publish a revised rubric and inspect that completed result",
+              "expected": "The completed result retains its original rubric and score"
+            }
+          ]
         },
         {
           "id": "F-BUILD-07-B",
           "steps": "Retire or unverify a template",
           "expected": "It no longer appears as currently supported",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Retire a template",
+              "expected": "The retired template is not presented as currently supported"
+            },
+            {
+              "action": "Mark a template unverified",
+              "expected": "The unverified template is not presented as currently supported"
+            }
+          ]
         },
         {
           "id": "F-BUILD-07-C",
           "steps": "Download a declared workflow version",
           "expected": "Bytes and compatibility label match that version",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Download a declared workflow version",
+              "expected": "Downloaded bytes match the declared immutable version"
+            },
+            {
+              "action": "Inspect the compatibility label",
+              "expected": "The label accurately describes that version’s tested compatibility"
+            }
+          ]
         },
         {
           "id": "F-BUILD-07-D",
           "steps": "Run the template's maintained sample tests",
           "expected": "Tested/known-failure status matches the observed result",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Run the template's maintained sample tests",
+              "expected": "Tested/known-failure status matches the observed result"
+            }
+          ]
         }
       ]
     },
@@ -1150,25 +1782,61 @@
           "id": "F-BUILD-08-A",
           "steps": "Export records as owner and as outsider",
           "expected": "Only the owner's permitted records export",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Export permitted records as their owner",
+              "expected": "Only the owner-permitted records appear"
+            },
+            {
+              "action": "Attempt the same export as an outsider",
+              "expected": "No owner records are disclosed"
+            }
+          ]
         },
         {
           "id": "F-BUILD-08-B",
           "steps": "Revoke an evidence-sharing scope",
           "expected": "Subsequent access through that scope stops",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Revoke an evidence-sharing scope",
+              "expected": "Subsequent access through that scope stops"
+            }
+          ]
         },
         {
           "id": "F-BUILD-08-C",
           "steps": "Request deletion after source and derived AI records exist",
           "expected": "Configured active source and derivatives are removed",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Delete configured active source material",
+              "expected": "The active source is removed"
+            },
+            {
+              "action": "Inspect derived AI material after the same deletion",
+              "expected": "Derived material is removed according to policy"
+            }
+          ]
         },
         {
           "id": "F-BUILD-08-D",
           "steps": "Inspect separately retained billing and backup categories",
           "expected": "The response names real retention exceptions and expiry instead of claiming total erasure",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Inspect retained billing records after deletion",
+              "expected": "Real billing retention and expiry are named"
+            },
+            {
+              "action": "Inspect separately retained backup records after deletion",
+              "expected": "Real backup retention and expiry are named without a false total-erasure claim"
+            }
+          ]
         }
       ]
     },
@@ -1190,25 +1858,61 @@
           "id": "F-BUILD-09-A",
           "steps": "View business metrics containing demo payments and seeded outcomes",
           "expected": "Demo and seed events are excluded from live production measures",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Include demo payments in production metric inputs",
+              "expected": "Demo payments are excluded from live production measures"
+            },
+            {
+              "action": "Include seeded outcomes in production metric inputs",
+              "expected": "Seeded outcomes are excluded from live production measures"
+            }
+          ]
         },
         {
           "id": "F-BUILD-09-B",
           "steps": "Try to buy an unpublished higher-tier offer",
           "expected": "Purchase is denied",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Try to buy an unpublished higher-tier offer",
+              "expected": "Purchase is denied"
+            }
+          ]
         },
         {
           "id": "F-BUILD-09-C",
           "steps": "Try to buy an offer without qualified capacity or agreed scope",
           "expected": "Purchase is denied with truthful availability",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Attempt higher-tier purchase without qualified capacity",
+              "expected": "Purchase is denied with truthful capacity status"
+            },
+            {
+              "action": "Attempt higher-tier purchase without agreed scope",
+              "expected": "Purchase is denied with truthful scope status"
+            }
+          ]
         },
         {
           "id": "F-BUILD-09-D",
           "steps": "Accept an approved versioned offer",
           "expected": "Displayed price, quotas and terms equal the stored agreement snapshot",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Accept an approved versioned offer",
+              "expected": "The displayed price, quota and terms equal the stored agreement version"
+            },
+            {
+              "action": "Inspect the stored agreement later",
+              "expected": "Its versioned price, quota and terms have not drifted from acceptance"
+            }
+          ]
         }
       ]
     },
@@ -1230,25 +1934,65 @@
           "id": "F-BUILD-10-A",
           "steps": "Complete the core journey on narrow mobile and with keyboard only",
           "expected": "Navigation, focus, labels and controls are usable",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Complete the core journey at narrow/mobile width",
+              "expected": "Navigation, controls and readable layout remain usable"
+            },
+            {
+              "action": "Complete the core journey with keyboard only",
+              "expected": "Focus, labels and all actionable controls remain usable"
+            }
+          ]
         },
         {
           "id": "F-BUILD-10-B",
           "steps": "Submit invalid input and visit empty states",
           "expected": "Readable validation and useful next actions are present",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Submit invalid input",
+              "expected": "Readable validation identifies the problem and recovery action"
+            },
+            {
+              "action": "Visit an empty state",
+              "expected": "A useful next action is present without false completion"
+            }
+          ]
         },
         {
           "id": "F-BUILD-10-C",
           "steps": "Trigger loading and recoverable server errors",
           "expected": "The UI states uncertainty honestly and allows safe recovery",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Start a loading operation",
+              "expected": "Loading state shows pending work without false success"
+            },
+            {
+              "action": "Trigger a recoverable server error",
+              "expected": "The error is honest and safe retry succeeds without duplicate work"
+            }
+          ]
         },
         {
           "id": "F-BUILD-10-D",
           "steps": "Reload during member-to-reviewer flow",
           "expected": "Persisted state returns and no inert control appears complete",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Reload during the member-to-reviewer flow",
+              "expected": "Persisted state returns with the correct authorization boundary"
+            },
+            {
+              "action": "Inspect visible controls after reload",
+              "expected": "No inert control is presented as completed functionality"
+            }
+          ]
         }
       ]
     },
@@ -1270,19 +2014,45 @@
           "id": "F-ECO-01-A",
           "steps": "Register with exploratory goal and no employment or coding fields",
           "expected": "Foundation access does not require a client, contract, IT fit or coaching purchase",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Register with an exploratory goal and no employment or coding details",
+              "expected": "Foundation access succeeds without a job, client, contract or coding prerequisite"
+            },
+            {
+              "action": "Enter common learning without IT-fit approval or coaching purchase",
+              "expected": "Foundation access succeeds and no paid service is implied"
+            }
+          ]
         },
         {
           "id": "F-ECO-01-B",
           "steps": "Complete a noncoding foundation exercise",
           "expected": "The exercise is a complete suitable experience",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Complete a noncoding foundation exercise",
+              "expected": "The exercise is a complete suitable experience"
+            }
+          ]
         },
         {
           "id": "F-ECO-01-C",
           "steps": "Reload private progress as owner and outsider",
           "expected": "Owner progress persists and outsider access is denied",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Reload completed private progress as its owner",
+              "expected": "The owner sees the persisted completion"
+            },
+            {
+              "action": "Request the owner progress as a different member",
+              "expected": "The outsider is denied and sees no private work"
+            }
+          ]
         }
       ]
     },
@@ -1304,19 +2074,49 @@
           "id": "F-ECO-02-A",
           "steps": "Choose an IT goal and complete a technical assignment",
           "expected": "Reviewed content and rubric suit the technical goal",
-          "critical": false
+          "critical": false,
+          "requiredChecks": [
+            {
+              "action": "Choose an IT goal and open its accessible material",
+              "expected": "Reviewed content suits the technical goal"
+            },
+            {
+              "action": "Complete a technical assignment",
+              "expected": "Its rubric evaluates that technical task"
+            }
+          ]
         },
         {
           "id": "F-ECO-02-B",
           "steps": "Choose a non-IT professional goal and complete its assignment",
           "expected": "Reviewed content and rubric suit that domain without mandatory code",
-          "critical": false
+          "critical": false,
+          "requiredChecks": [
+            {
+              "action": "Choose a non-IT professional goal and open its accessible material",
+              "expected": "Reviewed content suits that domain without mandatory code"
+            },
+            {
+              "action": "Complete the corresponding assignment",
+              "expected": "Its rubric evaluates the domain-appropriate task"
+            }
+          ]
         },
         {
           "id": "F-ECO-02-C",
           "steps": "Compare eligibility and readiness between both paths",
           "expected": "Neither audience is silently barred from common learning",
-          "critical": false
+          "critical": false,
+          "requiredChecks": [
+            {
+              "action": "Compare common-learning eligibility for IT and non-IT members",
+              "expected": "Neither background is barred from common learning"
+            },
+            {
+              "action": "Compare available specialist paths and readiness",
+              "expected": "Each path truthfully shows its own current readiness"
+            }
+          ]
         }
       ]
     },
@@ -1338,19 +2138,49 @@
           "id": "F-ECO-03-A",
           "steps": "Change goals after saving private evidence",
           "expected": "Old evidence remains owned and versioned",
-          "critical": false
+          "critical": false,
+          "requiredChecks": [
+            {
+              "action": "Change a goal after saving private evidence",
+              "expected": "The older evidence remains owned by the member"
+            },
+            {
+              "action": "Inspect the older evidence after the goal change",
+              "expected": "Its recorded content/rubric version remains intact"
+            }
+          ]
         },
         {
           "id": "F-ECO-03-B",
           "steps": "Return after a gap and resume",
           "expected": "Next actions reflect the new eligible goal and retained work",
-          "critical": false
+          "critical": false,
+          "requiredChecks": [
+            {
+              "action": "Return after a gap and resume saved work",
+              "expected": "Previously retained work is still available to its owner"
+            },
+            {
+              "action": "Inspect next actions under the new goal",
+              "expected": "Only eligible new-goal actions are recommended"
+            }
+          ]
         },
         {
           "id": "F-ECO-03-C",
           "steps": "Encounter empty and recoverable error states after the change",
           "expected": "The member gets a useful path forward without false completion",
-          "critical": false
+          "critical": false,
+          "requiredChecks": [
+            {
+              "action": "Encounter an empty eligible-content state after a goal change",
+              "expected": "A useful next action appears without false completion"
+            },
+            {
+              "action": "Encounter a recoverable error after a goal change",
+              "expected": "The error is honest and recovery can resume safely"
+            }
+          ]
         }
       ]
     },
@@ -1372,19 +2202,49 @@
           "id": "F-ECO-04-A",
           "steps": "Join a bounded learning circle with existing private work",
           "expected": "Only the chosen group scope is joined; private evidence stays private",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Opt into a bounded learning circle with private work",
+              "expected": "Only the chosen group scope is joined"
+            },
+            {
+              "action": "Inspect existing private evidence from the group",
+              "expected": "The private evidence is not disclosed by joining"
+            }
+          ]
         },
         {
           "id": "F-ECO-04-B",
           "steps": "Participate and report a problem",
           "expected": "Authorized moderation receives the report without exposing unrelated work",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Participate within the circle rules",
+              "expected": "Only permitted contributions appear in the circle"
+            },
+            {
+              "action": "Report a problem to moderation",
+              "expected": "An authorized moderator receives the report without unrelated private work"
+            }
+          ]
         },
         {
           "id": "F-ECO-04-C",
           "steps": "Leave the group and replay access",
           "expected": "Membership and content access revoke promptly",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Leave the learning circle",
+              "expected": "Membership is revoked promptly"
+            },
+            {
+              "action": "Replay access to prior group content after leaving",
+              "expected": "The revoked member cannot read content outside the documented retained scope"
+            }
+          ]
         }
       ]
     },
@@ -1406,19 +2266,53 @@
           "id": "F-ECO-05-A",
           "steps": "Propose a resource with attribution, rights and selected sharing scope",
           "expected": "It remains a private or review draft until approved",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Propose a resource with attribution and rights",
+              "expected": "The attribution and asserted rights are recorded and the draft is not curated"
+            },
+            {
+              "action": "Select an explicit sharing scope and submit for review",
+              "expected": "The resource remains a private or review draft until approved"
+            }
+          ]
         },
         {
           "id": "F-ECO-05-B",
           "steps": "Approve or reject the contribution as an authorized editor",
           "expected": "Only consented approved versions appear as curated instruction",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Approve a consented contribution as an authorized editor",
+              "expected": "Only the approved version appears as curated instruction in its agreed scope"
+            },
+            {
+              "action": "Reject a contribution as an authorized editor",
+              "expected": "The rejected version is not published or labelled qualified"
+            },
+            {
+              "action": "Attempt publication without member consent",
+              "expected": "The contribution remains unpublished"
+            }
+          ]
         },
         {
           "id": "F-ECO-05-C",
           "steps": "Revoke published sharing",
           "expected": "The resource ceases to appear and its contribution history remains accurate",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Revoke published sharing",
+              "expected": "The resource ceases to appear in its former shared scope"
+            },
+            {
+              "action": "Inspect contribution history after revocation",
+              "expected": "The record accurately shows publication and revocation without erasing history"
+            }
+          ]
         }
       ]
     },
@@ -1440,19 +2334,49 @@
           "id": "F-ECO-06-A",
           "steps": "Choose study help for a general or professional goal",
           "expected": "The format is useful without selecting career/interview services",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Choose study help for a general learning goal",
+              "expected": "A useful noncareer study format is available"
+            },
+            {
+              "action": "Choose study help for a professional goal",
+              "expected": "A useful domain format is available without selecting interviews or contracts"
+            }
+          ]
         },
         {
           "id": "F-ECO-06-B",
           "steps": "Opt in and request grounded study support",
           "expected": "Allowed sources are cited and feedback is labelled",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Opt in to AI study help",
+              "expected": "No provider dispatch precedes consent"
+            },
+            {
+              "action": "Request source-grounded support",
+              "expected": "The response cites allowed sources and clearly labels feedback"
+            }
+          ]
         },
         {
           "id": "F-ECO-06-C",
           "steps": "Disable provider or exhaust budget",
           "expected": "No unconfigured dispatch occurs and recovery is honest",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Disable the AI provider and request study help",
+              "expected": "No unconfigured provider dispatch occurs and the UI explains availability"
+            },
+            {
+              "action": "Exhaust the AI budget and request study help",
+              "expected": "The request stops without excess charge and offers honest recovery"
+            }
+          ]
         }
       ]
     },
@@ -1474,19 +2398,53 @@
           "id": "F-ECO-07-A",
           "steps": "Inspect optional coaching scope, price and qualified capacity",
           "expected": "The member sees the actual approved terms separately from foundation access",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Inspect optional coaching scope and price",
+              "expected": "Only actually approved terms appear separately from foundation access"
+            },
+            {
+              "action": "Inspect qualified capacity for that scope",
+              "expected": "Actual capacity and unavailable service status are disclosed"
+            }
+          ]
         },
         {
           "id": "F-ECO-07-B",
           "steps": "Explicitly accept an approved version",
           "expected": "Only its dated monthly allowances issue and the agreement stores that version",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Explicitly accept an approved versioned offer",
+              "expected": "The stored agreement identifies that accepted version"
+            },
+            {
+              "action": "Inspect monthly allowances after acceptance",
+              "expected": "Only correctly dated allowances for that version issue; no automatic upgrade occurs"
+            }
+          ]
         },
         {
           "id": "F-ECO-07-C",
           "steps": "Cancel or export and change professional background",
           "expected": "Cancellation rights remain visible; background change never mints paid service",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Cancel an accepted optional service",
+              "expected": "The disclosed cancellation rights and resulting entitlement state are enforced"
+            },
+            {
+              "action": "Export the member records covered by the accepted offer",
+              "expected": "The member can obtain authorized export with its rights and scope intact"
+            },
+            {
+              "action": "Change the member professional background",
+              "expected": "Background changes never mint paid service or upgrade the tier"
+            }
+          ]
         }
       ]
     },
@@ -1508,19 +2466,49 @@
           "id": "F-ECO-08-A",
           "steps": "View learning, participation, contribution and conversion measures",
           "expected": "Definitions and denominators remain separate",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "View learning measures",
+              "expected": "Definitions and denominators identify learning activity separately"
+            },
+            {
+              "action": "View participation and reviewed-contribution measures",
+              "expected": "Both categories have distinct definitions and denominators"
+            },
+            {
+              "action": "View paid-conversion measures",
+              "expected": "Conversion is distinct from learning and participation"
+            }
+          ]
         },
         {
           "id": "F-ECO-08-B",
           "steps": "Include demo and self-reported records",
           "expected": "Demo is excluded from live metrics and self-report is labelled",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Include demo records in metric inputs",
+              "expected": "Demo activity is excluded from live measures and labelled in demo views"
+            },
+            {
+              "action": "Include self-reported outcomes in metric inputs",
+              "expected": "The self-report is labelled and not presented as verified"
+            }
+          ]
         },
         {
           "id": "F-ECO-08-C",
           "steps": "Attempt unauthorized drill-down into member records",
           "expected": "Sensitive member data remains inaccessible",
-          "critical": true
+          "critical": true,
+          "requiredChecks": [
+            {
+              "action": "Attempt unauthorized drill-down into member records",
+              "expected": "Sensitive member data remains inaccessible"
+            }
+          ]
         }
       ]
     }

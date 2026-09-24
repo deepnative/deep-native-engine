@@ -14,6 +14,7 @@ import {
   assertReleaseEvidence,
   releaseMappingDigest,
 } from "../../scripts/full-release-evidence.mjs";
+import { requiredCheckToken } from "../../scripts/quality-gates.mjs";
 
 // One-case synthetic validator fixtures exercise the contract. They are not
 // browser runs and cannot approve the repository's 100-case register.
@@ -51,6 +52,9 @@ const register = {
           id: "F-FIXTURE-01-A",
           steps: "exercise synthetic path",
           expected: "observe result",
+          requiredChecks: [
+            { action: "exercise synthetic path", expected: "observe result" },
+          ],
           critical: true,
         },
       ],
@@ -99,6 +103,16 @@ function evidence() {
         {
           retry: 0,
           status: "passed",
+          annotations: [
+            {
+              type: "required-check",
+              description: requiredCheckToken(
+                "F-FIXTURE-01-A",
+                1,
+                register.fullMvp[0].cases[0].requiredChecks[0],
+              ),
+            },
+          ],
           attachments: [
             { name: "trace", contentType: "application/zip", path: file },
           ],
@@ -151,6 +165,7 @@ it("requires a separate reviewed mapping decision bound to every case and browse
   expect(assertMappingApproval(register, approval())).toBe(approval().sha256);
   for (const change of [
     (r) => (r.fullMvp[0].cases[0].expected = "weaker result"),
+    (r) => (r.fullMvp[0].cases[0].requiredChecks[0].expected = "weaker check"),
     (r) => (r.fullMvp[0].requirement = "changed source obligation"),
     (r) => (r.projects[0] = "different browser"),
     (r) => (r.fullMvp[0].cases[0].critical = false),

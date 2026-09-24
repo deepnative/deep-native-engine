@@ -1,6 +1,13 @@
 import path from "node:path";
+import { createHash } from "node:crypto";
 export function requireGate(value, message) {
   if (!value) throw new Error(message);
+}
+export function requiredCheckToken(id, index, check) {
+  const digest = createHash("sha256")
+    .update(JSON.stringify(check))
+    .digest("hex");
+  return `${id}:${index}:${digest}`;
 }
 export function assertUnitResults(report) {
   requireGate(
@@ -145,6 +152,17 @@ export function assertJourneys(register, report) {
             test.id?.startsWith(`F-${s.id}-`) &&
             test.steps &&
             test.expected &&
+            Array.isArray(test.requiredChecks) &&
+            test.requiredChecks.length > 0 &&
+            test.requiredChecks.every(
+              (check) =>
+                typeof check.action === "string" &&
+                check.action.trim().length > 0 &&
+                typeof check.expected === "string" &&
+                check.expected.trim().length > 0,
+            ) &&
+            new Set(test.requiredChecks.map((check) => JSON.stringify(check)))
+              .size === test.requiredChecks.length &&
             typeof test.critical === "boolean" &&
             (!s.critical || test.critical),
         ) &&
@@ -270,6 +288,36 @@ export function assertFullReleaseJourneys(register, report) {
     },
     report,
   );
+  const requiredById = new Map(
+    register.fullMvp.flatMap((family) =>
+      family.cases.map((test) => [
+        test.id,
+        test.requiredChecks.map((check, index) =>
+          requiredCheckToken(test.id, index + 1, check),
+        ),
+      ]),
+    ),
+  );
+  function checkEvidence(suite) {
+    for (const spec of suite.specs ?? []) {
+      const id = /^\[([A-Z0-9-]+)\]/.exec(spec.title)?.[1];
+      const required = requiredById.get(id);
+      requireGate(required, "Unmapped required-check evidence");
+      for (const test of spec.tests) {
+        const observed = (test.results[0].annotations ?? [])
+          .filter((annotation) => annotation.type === "required-check")
+          .map((annotation) => annotation.description);
+        requireGate(
+          observed.length === required.length &&
+            JSON.stringify([...observed].sort()) ===
+              JSON.stringify([...required].sort()),
+          `Incomplete required subcases for ${id} on ${test.projectName}`,
+        );
+      }
+    }
+    for (const child of suite.suites ?? []) checkEvidence(child);
+  }
+  report.suites.forEach(checkEvidence);
   return {
     register: register.fullMvpVersion,
     scope: release.scope,
