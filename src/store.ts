@@ -103,6 +103,7 @@ export async function migrate(pool: Pool) {
       "014-preview-circles.sql",
       "015-assignment-attempts.sql",
       "016-synthetic-entitlement-ledger.sql",
+      "017-synthetic-entitlement-expiry.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
