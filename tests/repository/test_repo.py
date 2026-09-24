@@ -60,6 +60,32 @@ class RepositoryFixture(unittest.TestCase):
     def test_complete_fixture_validates(self):
         gate.validate(self.root)
 
+    def test_source_credential_marker_fails_without_echoing_value(self):
+        marker = "ghp_" + "A" * 36
+        source = self.root / "src/session.ts"
+        source.write_text(source.read_text() + f"\n// {marker}\n")
+        with self.assertRaises(gate.GateError) as caught:
+            gate.validate(self.root)
+        self.assertIn("github-token", str(caught.exception))
+        self.assertIn("src/session.ts", str(caught.exception))
+        self.assertNotIn(marker, str(caught.exception))
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            self.assertEqual(gate.verify(self.root), 1)
+        report = (self.root / "artifacts/repository-verification.json").read_text()
+        self.assertIn("github-token", report)
+        self.assertNotIn(marker, report + stdout.getvalue() + stderr.getvalue())
+
+    def test_untracked_private_key_marker_fails_without_echoing_value(self):
+        marker = "-----BEGIN " + "PRIVATE KEY-----"
+        source = self.root / "src/new-adapter.ts"
+        source.write_text(f"// {marker}\n")
+        with self.assertRaises(gate.GateError) as caught:
+            gate.validate(self.root)
+        self.assertIn("private-key", str(caught.exception))
+        self.assertIn("src/new-adapter.ts", str(caught.exception))
+        self.assertNotIn(marker, str(caught.exception))
+
     def test_local_circle_capacity_change_requires_reviewed_gate_update(self):
         path = self.root / "assets/docs/content/circles/preview-circles.json"
         circles = json.loads(path.read_text())
