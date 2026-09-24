@@ -24,6 +24,7 @@ import { trackStore } from "../../src/track-readiness.ts";
 import { proposalStore } from "../../src/proposals.ts";
 import { circleStore } from "../../src/circles.ts";
 import { metricsStore } from "../../src/metrics.ts";
+import { attemptStore } from "../../src/attempts.ts";
 import {
   catalogStore,
   seedDraftPack,
@@ -1048,6 +1049,129 @@ async function staff(role: StaffRole) {
     ),
   };
 }
+
+it("pins one private assignment attempt, serializes drafts and preserves history through retirement", async () => {
+  const owner = await member(),
+    outsider = await member();
+  const editor = await staff("editor"),
+    reviewer = await staff("reviewer");
+  const catalog = catalogStore(pool),
+    attempts = attemptStore(pool);
+  const draft = {
+    ...contentDraft,
+    id: "SYN-960",
+    goals: ["everyday"],
+    backgrounds: ["explorer"],
+    rubric: "Check the invented source.",
+    rubricVersion: 1,
+  };
+  expect(await catalog.createDraft(editor.token, draft)).toBe(true);
+  expect(await catalog.submit(editor.token, draft.id, 1)).toBe(true);
+  expect(await catalog.approve(reviewer.token, draft.id, 1, true)).toBe(true);
+  expect(await catalog.publish(editor.token, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.learner.id, draft.id, 1)).toBe(true);
+  const ids = await Promise.all([
+    attempts.start(owner.token),
+    attempts.start(owner.token),
+  ]);
+  expect(ids[0]).toMatch(/^[a-f0-9-]{36}$/);
+  expect(ids[0]).toBe(ids[1]);
+  const id = ids[0]!;
+  expect((await attempts.list(owner.token)).map((entry) => entry.id)).toEqual([
+    id,
+  ]);
+  expect(await attempts.list(outsider.token)).toEqual([]);
+  expect(await attempts.detail(outsider.token, id)).toBeNull();
+  const first = await attempts.detail(owner.token, id);
+  expect(first).toMatchObject({
+    contentId: draft.id,
+    contentVersion: 1,
+    goalAtStart: "everyday",
+    revision: 1,
+    currentEligible: true,
+    savedAt: null,
+    submittedAt: null,
+  });
+  expect(
+    (
+      await pool.query(
+        "SELECT rubric_version FROM content_versions WHERE id=$1 AND version=1",
+        [draft.id],
+      )
+    ).rows[0].rubric_version,
+  ).toBe(1);
+  const writes = await Promise.all([
+    attempts.save(owner.token, id, 1, "Invented draft from tab one"),
+    attempts.save(owner.token, id, 1, "Invented draft from tab two"),
+  ]);
+  expect(writes.sort()).toEqual([false, true]);
+  const saved = await attempts.detail(owner.token, id);
+  expect(saved?.revision).toBe(2);
+  expect(saved?.response).toMatch(/^Invented draft from tab/);
+  expect(
+    await attempts.save(outsider.token, id, 2, "Forged other-member edit"),
+  ).toBe(false);
+  expect(await attempts.submit(owner.token, id, 1)).toBe(false);
+  expect(await attempts.submit(owner.token, id, 2)).toBe(true);
+  expect(await attempts.submit(owner.token, id, 2)).toBe(false);
+  expect(await attempts.save(owner.token, id, 2, "Late write")).toBe(false);
+  expect((await attempts.detail(owner.token, id))?.response).toBe(
+    saved?.response,
+  );
+  await pool.query("UPDATE learners SET goal='work' WHERE id=$1", [
+    owner.learner.id,
+  ]);
+  expect((await attempts.detail(owner.token, id))?.currentEligible).toBe(false);
+  expect(await attempts.start(owner.token)).toBeNull();
+  expect(await attempts.remove(outsider.token, id)).toBe(false);
+  expect(await attempts.remove(owner.token, id)).toBe(true);
+  expect(await attempts.detail(owner.token, id)).toBeNull();
+});
+
+it("keeps retired drafts readable but denies writes, and privacy deletion cascades", async () => {
+  const owner = await member(),
+    editor = await staff("editor"),
+    reviewer = await staff("reviewer");
+  const catalog = catalogStore(pool),
+    attempts = attemptStore(pool);
+  const draft = {
+    ...contentDraft,
+    id: "SYN-961",
+    goals: ["everyday"],
+    backgrounds: ["explorer"],
+  };
+  expect(await catalog.createDraft(editor.token, draft)).toBe(true);
+  expect(await catalog.submit(editor.token, draft.id, 1)).toBe(true);
+  expect(await catalog.approve(reviewer.token, draft.id, 1, true)).toBe(true);
+  expect(await catalog.publish(editor.token, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.learner.id, draft.id, 1)).toBe(true);
+  const id = (await attempts.start(owner.token))!;
+  expect(
+    await attempts.save(owner.token, id, 1, "Private synthetic draft text"),
+  ).toBe(true);
+  expect(await catalog.retire(editor.token, draft.id)).toBe(true);
+  expect((await attempts.detail(owner.token, id))?.currentPublished).toBe(
+    false,
+  );
+  expect(
+    await attempts.save(owner.token, id, 2, "New text after retirement"),
+  ).toBe(false);
+  expect(await attempts.submit(owner.token, id, 2)).toBe(false);
+  await pool.query(
+    "UPDATE principals SET expires_at=CURRENT_TIMESTAMP WHERE id=$1",
+    [owner.learner.id],
+  );
+  expect(await attempts.detail(owner.token, id)).toBeNull();
+  await db.remove(owner.learner.id);
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*)::integer AS n FROM assignment_attempts WHERE id=$1",
+        [id],
+      )
+    ).rows[0].n,
+  ).toBe(0);
+});
 
 it("counts retained preview learning and circle events once without granting metric access to members", async () => {
   const first = await member(),
