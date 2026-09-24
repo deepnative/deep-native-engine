@@ -370,10 +370,8 @@ it("serves the local welcome, stylesheet and safe security headers", async () =>
   expect(res.headers["cache-control"]).toBe("no-store");
 });
 it("reports deterministic integration readiness without claiming live effects", async () => {
-  const res = await request(app(db, { origin, secret: "s" }))
-    .get("/readiness")
-    .set("Host", host)
-    .expect(200);
+  const agent = managedAgent(app(db, { origin, secret: "s" }));
+  const res = await agent.get("/readiness").set("Host", host).expect(200);
   expect(res.text).toContain("DEMO ENVIRONMENT");
   expect(res.text).toMatch(/<strong>ai<\/strong> · simulated/);
   expect(res.text).toMatch(/<strong>payment<\/strong> · simulated/);
