@@ -382,28 +382,34 @@ progress {
 .assignment-options li p {
   margin: 8px 0;
 }
-.milestone-page {
+.milestone-page,
+.career-page {
   max-width: 850px;
 }
-.milestone-list {
+.milestone-list,
+.career-list {
   list-style: none;
   padding: 0;
 }
-.milestone-list > li {
+.milestone-list > li,
+.career-list > li {
   padding: 24px;
   margin: 20px 0;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
-.milestone-page form {
+.milestone-page form,
+.career-page form {
   padding: 22px;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
 .milestone-page details,
-.milestone-page form + form {
+.milestone-page form + form,
+.career-page details,
+.career-page form + form {
   margin-top: 18px;
 }
 .milestone-reminder {

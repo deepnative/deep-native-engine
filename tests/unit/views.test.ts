@@ -13,8 +13,10 @@ import {
   proposalPreviewPage,
   moderationPage,
   milestonesPage,
+  careerPage,
 } from "../../src/views.ts";
 import type { Milestone } from "../../src/store.ts";
+import type { CareerSnapshot } from "../../src/career.ts";
 import type { ExpertRecord } from "../../src/track-readiness.ts";
 import type { Proposal } from "../../src/proposals.ts";
 const learner = {
@@ -27,6 +29,65 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("keeps optional planning gated and renders escaped, unsent per-version drafts", () => {
+  const off = careerPage({ enabled: false, entries: [], drafts: [] }, "csrf");
+  expect(off).toContain("records are off");
+  expect(off).not.toContain('name="self_reported_outcome"');
+  const snapshot: CareerSnapshot = {
+    enabled: true,
+    entries: [
+      {
+        id: "entry-id",
+        kind: "opportunity",
+        title: "Sample <role>",
+        note: "<script>private</script>",
+        nextAction: "Review sample",
+        selfReportedOutcome: "Maybe later",
+        version: 2,
+      },
+    ],
+    drafts: [
+      {
+        id: "draft-id",
+        kind: "proposal",
+        title: "Sample proposal",
+        body: "<script>unsent</script>",
+        approved: false,
+        version: 3,
+      },
+    ],
+  };
+  const html = careerPage(snapshot, "csrf", ["Fix <draft>"], {
+    entry: { ...snapshot.entries[0]!, title: "Edited <role>" },
+    professional: { ...snapshot.drafts[0]!, body: "Revised <sample>" },
+    editEntryId: "entry-id",
+    editDraftId: "draft-id",
+  });
+  expect(html).toContain("Fix &lt;draft&gt;");
+  expect(html).toContain("Sample &lt;role&gt;");
+  expect(html).toContain("&lt;script&gt;private&lt;/script&gt;");
+  expect(html).toContain("&lt;script&gt;unsent&lt;/script&gt;");
+  expect(html).toContain("Revised &lt;sample&gt;");
+  expect(html).not.toContain("<script>");
+  expect(html).toContain("Maybe later · self-reported, not verified");
+  expect(html).toContain("unapproved · unsent");
+  expect(html).toContain('name="version" value="3"');
+  expect(
+    careerPage(
+      {
+        ...snapshot,
+        entries: [
+          { ...snapshot.entries[0]!, note: "", selfReportedOutcome: "" },
+        ],
+        drafts: [{ ...snapshot.drafts[0]!, approved: true }],
+      },
+      "csrf",
+    ),
+  ).toContain("member approved · unsent");
+  expect(
+    careerPage({ enabled: true, entries: [], drafts: [] }, "csrf"),
+  ).toContain("No optional planning records yet");
+});
 it("renders private goals, unsent reminders and escaped editable milestone notes", () => {
   expect(milestonesPage(learner, [], "token")).toContain("No milestones yet");
   expect(milestonesPage(learner, [], "token")).toContain("Not set");

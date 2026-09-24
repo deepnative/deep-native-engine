@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v13",
+  "version": "initial-learning-v14",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices and read-only access/coaching hypotheses; not live commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices, private goal milestones, optional private career plans and unsent member-approved drafts; not live commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -335,6 +335,33 @@
       "steps": "Record a self-reported milestone, try a cross-member edit and forged CSRF, then inspect the other member's unchanged milestone",
       "expected": "No career or client field is required, completion is labelled self-reported, and neither cross-member nor forged writes succeed",
       "issues": [36],
+      "critical": true
+    },
+    {
+      "id": "L38",
+      "actor": "General learner choosing optional career planning",
+      "preconditions": "Private noncoding milestone and career planning off by default",
+      "steps": "Use common learning without client fields, opt into a private career record, report an unverified outcome, opt out and revisit the milestone",
+      "expected": "Optional career records are private and removed on opt-out without deleting ordinary learning milestones",
+      "issues": [107],
+      "critical": true
+    },
+    {
+      "id": "L39",
+      "actor": "Non-IT professional with two tabs",
+      "preconditions": "Opted-in synthetic member and an unsent proposal draft",
+      "steps": "Approve an exact draft version, reject stale approval, revise it, confirm approval resets, then withdraw approval",
+      "expected": "Each approval is deliberate, current-version only and reversible; every state remains unsent",
+      "issues": [107],
+      "critical": true
+    },
+    {
+      "id": "L40",
+      "actor": "IT member and unrelated general learner",
+      "preconditions": "Separate synthetic private sessions",
+      "steps": "Save an optional contract plan and renewal draft, attempt cross-member approval and forged CSRF",
+      "expected": "Neither another member nor a forged form can read or approve the private draft; no outbound path exists",
+      "issues": [107],
       "critical": true
     }
   ],

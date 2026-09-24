@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { Pool, PoolClient } from "pg";
 import { migrate, store, hash, type Learner } from "../../src/store.ts";
 import type { MilestoneInput } from "../../src/milestones.ts";
+import { careerStore } from "../../src/career.ts";
 import {
   deterministicRegistry,
   type AdapterRegistry,
@@ -77,6 +78,104 @@ const contentDraft: DraftContent = {
   rubric: "Check source and uncertainty.",
   rubricVersion: 1,
 };
+it("keeps optional career plans and draft approvals private, versioned and removable", async () => {
+  const owner = await member();
+  const outsider = await member();
+  const career = careerStore(pool);
+  const entry = {
+    kind: "opportunity" as const,
+    title: "Invented role exploration",
+    note: "Only a sample scenario",
+    nextAction: "Compare sample requirements",
+    selfReportedOutcome: "I may explore this later",
+  };
+  const draft = {
+    kind: "proposal" as const,
+    title: "Invented proposal",
+    body: "I would plan a private sample project with a small review step.",
+  };
+  expect(await career.snapshot(owner.learner.id)).toEqual({
+    enabled: false,
+    entries: [],
+    drafts: [],
+  });
+  expect(await career.createEntry(owner.learner.id, entry)).toBe(false);
+  expect(await career.createDraft(owner.learner.id, draft)).toBe(false);
+  expect(await career.enable(owner.learner.id)).toBe(true);
+  expect(await career.enable(owner.learner.id)).toBe(true);
+  expect(await career.createEntry(owner.learner.id, entry)).toBe(true);
+  expect(await career.createDraft(owner.learner.id, draft)).toBe(true);
+  let own = await career.snapshot(owner.learner.id);
+  expect(own).toMatchObject({
+    enabled: true,
+    entries: [{ ...entry, version: 1 }],
+    drafts: [{ ...draft, approved: false, version: 1 }],
+  });
+  expect(await career.snapshot(outsider.learner.id)).toEqual({
+    enabled: false,
+    entries: [],
+    drafts: [],
+  });
+  const entryId = own.entries[0]!.id;
+  const draftId = own.drafts[0]!.id;
+  expect(await career.updateEntry(outsider.learner.id, entryId, 1, entry)).toBe(
+    false,
+  );
+  expect(await career.approveDraft(outsider.learner.id, draftId, 1)).toBe(
+    false,
+  );
+  expect(await career.approveDraft(owner.learner.id, draftId, 1)).toBe(true);
+  expect(await career.approveDraft(owner.learner.id, draftId, 1)).toBe(false);
+  expect(await career.updateDraft(owner.learner.id, draftId, 1, draft)).toBe(
+    false,
+  );
+  expect(
+    await career.updateDraft(owner.learner.id, draftId, 2, {
+      ...draft,
+      body: "A revised invented proposal with fresh sample details only.",
+    }),
+  ).toBe(true);
+  own = await career.snapshot(owner.learner.id);
+  expect(own.drafts[0]).toMatchObject({ approved: false, version: 3 });
+  expect(await career.revokeDraft(owner.learner.id, draftId, 3)).toBe(false);
+  expect(await career.approveDraft(owner.learner.id, draftId, 3)).toBe(true);
+  expect(await career.revokeDraft(owner.learner.id, draftId, 4)).toBe(true);
+  expect(
+    await career.updateEntry(owner.learner.id, entryId, 1, {
+      ...entry,
+      selfReportedOutcome: "An invented next step happened",
+    }),
+  ).toBe(true);
+  expect(await career.deleteEntry(owner.learner.id, entryId, 1)).toBe(false);
+  expect(await career.deleteEntry(owner.learner.id, entryId, 2)).toBe(true);
+  expect(await career.deleteDraft(outsider.learner.id, draftId, 5)).toBe(false);
+  expect(await career.deleteDraft(owner.learner.id, draftId, 5)).toBe(true);
+  expect(
+    await career.createEntry(owner.learner.id, { ...entry, kind: "contract" }),
+  ).toBe(true);
+  expect(
+    await career.createDraft(owner.learner.id, { ...draft, kind: "renewal" }),
+  ).toBe(true);
+  expect(await career.disable(outsider.learner.id)).toBe(false);
+  expect(await career.disable(owner.learner.id)).toBe(true);
+  expect(await career.snapshot(owner.learner.id)).toEqual({
+    enabled: false,
+    entries: [],
+    drafts: [],
+  });
+  expect(await career.enable(owner.learner.id)).toBe(true);
+  expect(await career.snapshot(owner.learner.id)).toEqual({
+    enabled: true,
+    entries: [],
+    drafts: [],
+  });
+  await db.remove(owner.learner.id);
+  expect(await career.snapshot(owner.learner.id)).toEqual({
+    enabled: false,
+    entries: [],
+    drafts: [],
+  });
+});
 it("keeps goal milestones private, rejects stale edits and cascades on member deletion", async () => {
   const owner = await member();
   const outsider = await member();

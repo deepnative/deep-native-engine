@@ -15,6 +15,11 @@ import type {
   Milestone,
 } from "./store.ts";
 import type { MilestoneInput } from "./milestones.ts";
+import type {
+  CareerSnapshot,
+  CareerEntryInput,
+  CareerDraftInput,
+} from "./career.ts";
 import type { AdapterReadiness, ApplicationMode } from "./adapters.ts";
 import { COACHING_OFFERS } from "./offers.ts";
 import type { ContentVersion } from "./catalog.ts";
@@ -176,6 +181,74 @@ export function milestonesPage(
     }<h2>Plan a private milestone</h2><form method="post" action="/milestones">${hidden(csrf)}${milestoneFields("new-milestone", editId ? undefined : draft)}<button type="submit">Save private milestone</button></form><p><a href="/learn">Return to learning</a></p></section>`,
   );
 }
+function careerEntryFields(prefix: string, value?: CareerEntryInput) {
+  const kinds = {
+    career: "Career goal",
+    opportunity: "Opportunity",
+    contract: "Contract or renewal",
+  };
+  return `<label for="${prefix}-kind">Planning kind</label><select id="${prefix}-kind" name="kind" required>${Object.entries(
+    kinds,
+  )
+    .map(
+      ([key, label]) =>
+        `<option value="${key}" ${value?.kind === key ? "selected" : ""}>${label}</option>`,
+    )
+    .join(
+      "",
+    )}</select><label for="${prefix}-title">Private title</label><input id="${prefix}-title" name="title" maxlength="160" required value="${escape(value?.title ?? "")}"><label for="${prefix}-note">Private note (sample information only)</label><textarea id="${prefix}-note" name="note" maxlength="1000">${escape(value?.note ?? "")}</textarea><label for="${prefix}-next">Next action</label><textarea id="${prefix}-next" name="next_action" maxlength="500" required>${escape(value?.nextAction ?? "")}</textarea><label for="${prefix}-outcome">Self-reported outcome (optional)</label><textarea id="${prefix}-outcome" name="self_reported_outcome" maxlength="500">${escape(value?.selfReportedOutcome ?? "")}</textarea><label class="check"><input type="checkbox" name="sample_only" value="yes" required><span>I used only invented or sample information.</span></label>`;
+}
+function careerDraftFields(prefix: string, value?: CareerDraftInput) {
+  const kinds = {
+    professional: "Professional note",
+    proposal: "Proposal",
+    renewal: "Renewal",
+  };
+  return `<label for="${prefix}-kind">Draft kind</label><select id="${prefix}-kind" name="kind" required>${Object.entries(
+    kinds,
+  )
+    .map(
+      ([key, label]) =>
+        `<option value="${key}" ${value?.kind === key ? "selected" : ""}>${label}</option>`,
+    )
+    .join(
+      "",
+    )}</select><label for="${prefix}-title">Draft title</label><input id="${prefix}-title" name="title" maxlength="160" required value="${escape(value?.title ?? "")}"><label for="${prefix}-body">Private draft text</label><textarea id="${prefix}-body" name="body" maxlength="4000" required>${escape(value?.body ?? "")}</textarea><label class="check"><input type="checkbox" name="sample_only" value="yes" required><span>I used only invented or sample information. This draft remains unsent.</span></label>`;
+}
+export function careerPage(
+  snapshot: CareerSnapshot,
+  csrf: string,
+  errors: string[] = [],
+  draft: {
+    entry?: CareerEntryInput;
+    professional?: CareerDraftInput;
+    editEntryId?: string;
+    editDraftId?: string;
+  } = {},
+) {
+  const intro = `<p class="eyebrow">OPTIONAL PRIVATE LOCAL PREVIEW · NO OUTREACH</p><h1>Career and professional planning</h1><p class="lead">This path is optional. Ordinary learning and projects do not need a client, contract or job title. Use invented information only.</p>${notice(errors)}`;
+  if (!snapshot.enabled)
+    return page(
+      "Optional career planning",
+      `<section class="error-page career-page">${intro}<p>Career, opportunity and contract records are off. You can choose this path without changing your learning goals or milestones.</p><form method="post" action="/career/enable">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Turn on optional private career planning</span></label><button type="submit">Turn on career planning</button></form><p><a href="/learn">Return to learning</a></p></section>`,
+    );
+  const entries = snapshot.entries
+    .map((item) => {
+      const url = `/career/entries/${encodeURIComponent(item.id)}`;
+      return `<li><h3>${escape(item.title)}</h3><p>${escape(item.kind)} · private</p><p>Note: ${escape(item.note || "None yet")}</p><p>Next action: ${escape(item.nextAction)}</p><p>Outcome: ${item.selfReportedOutcome ? `${escape(item.selfReportedOutcome)} · self-reported, not verified` : "None reported"}</p><details ${item.id === draft.editEntryId ? "open" : ""}><summary>Edit this planning record</summary><form method="post" action="${url}/update">${hidden(csrf)}<input type="hidden" name="version" value="${item.version}">${careerEntryFields(`entry-${item.id}`, item.id === draft.editEntryId ? draft.entry : item)}<button type="submit">Save planning record</button></form></details><form method="post" action="${url}/delete">${hidden(csrf)}<input type="hidden" name="version" value="${item.version}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete this planning record</span></label><button class="secondary" type="submit">Delete planning record</button></form></li>`;
+    })
+    .join("");
+  const drafts = snapshot.drafts
+    .map((item) => {
+      const url = `/career/drafts/${encodeURIComponent(item.id)}`;
+      return `<li><h3>${escape(item.title)}</h3><p>${escape(item.kind)} · ${item.approved ? "member approved" : "unapproved"} · unsent</p><p>${escape(item.body)}</p><details ${item.id === draft.editDraftId ? "open" : ""}><summary>Edit this private draft</summary><form method="post" action="${url}/update">${hidden(csrf)}<input type="hidden" name="version" value="${item.version}">${careerDraftFields(`draft-${item.id}`, item.id === draft.editDraftId ? draft.professional : item)}<button type="submit">Save draft changes</button></form></details><form method="post" action="${url}/${item.approved ? "revoke" : "approve"}">${hidden(csrf)}<input type="hidden" name="version" value="${item.version}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>${item.approved ? "Withdraw approval for this draft" : "Approve this exact private draft version; it remains unsent"}</span></label><button type="submit">${item.approved ? "Withdraw approval" : "Approve private draft"}</button></form><form method="post" action="${url}/delete">${hidden(csrf)}<input type="hidden" name="version" value="${item.version}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete this private draft</span></label><button class="secondary" type="submit">Delete private draft</button></form></li>`;
+    })
+    .join("");
+  return page(
+    "Optional career planning",
+    `<section class="error-page career-page">${intro}<p>Everything here stays private and unsent. Approval marks one saved draft version for your own planning; editing resets it. Outcomes are your own reports, not verified employment or income.</p><h2>Career, opportunity and contract plans</h2>${entries ? `<ul class="career-list">${entries}</ul>` : "<p>No optional planning records yet.</p>"}<h3>Add a planning record</h3><form method="post" action="/career/entries">${hidden(csrf)}${careerEntryFields("new-entry", draft.editEntryId ? undefined : draft.entry)}<button type="submit">Save planning record</button></form><h2>Private professional drafts</h2>${drafts ? `<ul class="career-list">${drafts}</ul>` : "<p>No private professional drafts yet.</p>"}<h3>Add an unsent draft</h3><form method="post" action="/career/drafts">${hidden(csrf)}${careerDraftFields("new-draft", draft.editDraftId ? undefined : draft.professional)}<button type="submit">Save unsent draft</button></form><h2>Leave this optional path</h2><form method="post" action="/career/disable">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete all optional career records and drafts; keep my learning milestones</span></label><button class="secondary" type="submit">Turn off and delete career planning</button></form><p><a href="/learn">Return to learning</a></p></section>`,
+  );
+}
 export function welcome(csrf: string, error: string[] = []) {
   return page(
     "A practical start with AI",
@@ -202,7 +275,7 @@ export function dashboard(
     : undefined;
   return page(
     "Your learning path",
-    `<section class="dashboard-head"><div><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment.</span></aside></section><section class="learning-plan" aria-labelledby="learning-plan-title"><p class="eyebrow">PRIVATE FOUNDATION PREVIEW</p><h2 id="learning-plan-title">Your starter plan</h2><p>Focus: ${escape(plan.focus)}. ${escape(plan.guidance)}</p><p class="small">Weekly time: ${escape(time ?? "Not specified")} · Time zone: ${escape(learner.timezone ?? "Not specified")} · AI experience: self-reported ${escape(learner.experience ? EXPERIENCE[learner.experience] : "Not specified")}</p><ol>${plan.steps.map((step) => `<li>${step.minutes} minutes · ${escape(step.action)}</li>`).join("")}</ol>${plan.nextSession ? `<p>${escape(plan.nextSession)}</p>` : ""}${plan.exploratory ? `<p>${escape(plan.exploratory)}</p>` : ""}<p class="small">Only the local starter lesson is available here. Revisit or skip steps you already completed. These suggestions do not book coaching or certify a skill.</p></section>${assignmentSection(assignments, choice, csrf)}<section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? "Review your work" : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card"><p class="eyebrow">WHERE THIS CAN GO</p><h2>Learn together.<br>Contribute something useful.</h2><p>Learning circles, peer contributions and more paths are on the roadmap. This preview begins with your first practical exercise.</p><p class="small">Community and coaching features are not yet available.</p></aside></section><p><a class="button secondary" href="/library">Browse published learning library</a> <a class="button secondary" href="/milestones">Plan goals and milestones</a> <a class="button secondary" href="/contribute">Draft a private sample contribution</a></p><section class="profile-form"><h2>Adjust your direction</h2><p>Change goals and interests whenever you want. Your saved exercise stays with this preview.</p><form method="post" action="/profile">${hidden(csrf)}${notice(errors)}${profileFields(learner)}<button type="submit">Save my direction</button></form></section><form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete my local preview and all its saved work.</span></label><button class="secondary" type="submit">Delete this preview</button></form>`,
+    `<section class="dashboard-head"><div><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment.</span></aside></section><section class="learning-plan" aria-labelledby="learning-plan-title"><p class="eyebrow">PRIVATE FOUNDATION PREVIEW</p><h2 id="learning-plan-title">Your starter plan</h2><p>Focus: ${escape(plan.focus)}. ${escape(plan.guidance)}</p><p class="small">Weekly time: ${escape(time ?? "Not specified")} · Time zone: ${escape(learner.timezone ?? "Not specified")} · AI experience: self-reported ${escape(learner.experience ? EXPERIENCE[learner.experience] : "Not specified")}</p><ol>${plan.steps.map((step) => `<li>${step.minutes} minutes · ${escape(step.action)}</li>`).join("")}</ol>${plan.nextSession ? `<p>${escape(plan.nextSession)}</p>` : ""}${plan.exploratory ? `<p>${escape(plan.exploratory)}</p>` : ""}<p class="small">Only the local starter lesson is available here. Revisit or skip steps you already completed. These suggestions do not book coaching or certify a skill.</p></section>${assignmentSection(assignments, choice, csrf)}<section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? "Review your work" : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card"><p class="eyebrow">WHERE THIS CAN GO</p><h2>Learn together.<br>Contribute something useful.</h2><p>Learning circles, peer contributions and more paths are on the roadmap. This preview begins with your first practical exercise.</p><p class="small">Community and coaching features are not yet available.</p></aside></section><p><a class="button secondary" href="/library">Browse published learning library</a> <a class="button secondary" href="/milestones">Plan goals and milestones</a> <a class="button secondary" href="/career">Explore optional career planning</a> <a class="button secondary" href="/contribute">Draft a private sample contribution</a></p><section class="profile-form"><h2>Adjust your direction</h2><p>Change goals and interests whenever you want. Your saved exercise stays with this preview.</p><form method="post" action="/profile">${hidden(csrf)}${notice(errors)}${profileFields(learner)}<button type="submit">Save my direction</button></form></section><form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete my local preview and all its saved work.</span></label><button class="secondary" type="submit">Delete this preview</button></form>`,
   );
 }
 export function lesson(
