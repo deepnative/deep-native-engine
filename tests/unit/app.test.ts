@@ -277,15 +277,22 @@ it("reports deterministic integration readiness without claiming live effects", 
   expect(res.text).not.toContain("configured");
 });
 it("serves concurrent requests through one test agent without transport failures", async () => {
-  const agent = request.agent(app(db, { origin, secret: "secret" }));
-  const responses = await Promise.all(
-    Array.from({ length: 8 }, () =>
-      agent.get("/readiness").set("Host", host).expect(200),
-    ),
-  );
-  expect(responses).toHaveLength(8);
-  for (const response of responses) {
-    expect(response.text).toContain("DEMO ENVIRONMENT");
+  const server = app(db, { origin, secret: "secret" }).listen(0);
+  try {
+    const agent = request.agent(server);
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        agent.get("/readiness").set("Host", host).expect(200),
+      ),
+    );
+    expect(responses).toHaveLength(8);
+    for (const response of responses) {
+      expect(response.text).toContain("DEMO ENVIRONMENT");
+    }
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
   }
 });
 it("enforces private workspace and cohort decisions on direct API requests", async () => {
