@@ -139,7 +139,7 @@ class RepositoryFixture(unittest.TestCase):
         with patch.object(gate, "run_application"), self.assertRaisesRegex(gate.GateError, "report missing"):
             gate.verify_application(self.root)
         metrics = {k: {"total": 100, "covered": 100, "skipped": 0} for k in ("statements", "branches", "functions", "lines")}
-        report = {"exitStatus": 0, "scope": "initial-learning-v21", "revision": gate.state(self.root),
+        report = {"exitStatus": 0, "scope": "initial-learning-v22", "revision": gate.state(self.root),
                   "unitTests": {"passed": 1, "total": 1}, "integrationTests": {"passed": 1, "total": 1},
                   "unitCoverage": metrics, "journeys": {"passed": 1, "total": 1, "criticalPassed": 1, "criticalTotal": 1}}
         def write_report(*args, **kwargs):

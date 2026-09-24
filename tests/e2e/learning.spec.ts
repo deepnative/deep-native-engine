@@ -882,6 +882,114 @@ test("[L17] cohort membership exposes only its shared content and cannot grant s
   ).toBe("0");
 });
 
+test("[L54] changing learner direction cannot mint staff or another workspace access", async ({
+  browser,
+}) => {
+  const ownerContext = await browser.newContext();
+  try {
+    const ownerPage = await ownerContext.newPage();
+    await begin(ownerPage);
+    const owner = await session(ownerContext);
+    for (const [index, background, goal, nextBackground, nextGoal] of [
+      [1, "explorer", "everyday", "professional", "work"],
+      [2, "professional", "work", "technical", "build"],
+      [3, "technical", "build", "explorer", "everyday"],
+    ] as const) {
+      const context = await browser.newContext();
+      try {
+        const page = await context.newPage();
+        await begin(page, background, goal);
+        const member = await session(context);
+        const csrf = await csrfToken(page);
+        const changed = await page.request.post("/profile", {
+          headers: { Origin: origin },
+          maxRedirects: 0,
+          form: {
+            csrf,
+            background: nextBackground,
+            goal: nextGoal,
+            synthetic: "yes",
+            role: "editor",
+            staff_role: "platform_admin",
+            principal_kind: "staff",
+            workspace_id: owner.id,
+            offer: "Professional",
+          },
+        });
+        expect(changed.status()).toBe(303);
+        expect(changed.headers().location).toBe("/learn");
+        const saved = await pool.query(
+          `SELECT l.background,l.goal,p.kind,
+                  (SELECT count(*) FROM staff_profiles s WHERE s.principal_id=p.id) AS staff_count
+           FROM learners l JOIN principals p ON p.id=l.id WHERE l.id=$1`,
+          [member.id],
+        );
+        expect(saved.rows[0]).toEqual({
+          background: nextBackground,
+          goal: nextGoal,
+          kind: "member",
+          staff_count: "0",
+        });
+        const invalid = await page.request.post("/profile", {
+          headers: { Origin: origin },
+          form: {
+            csrf,
+            background: "platform_admin",
+            goal: nextGoal,
+            synthetic: "yes",
+          },
+        });
+        expect(invalid.status()).toBe(422);
+        expect(
+          (
+            await pool.query("SELECT background FROM learners WHERE id=$1", [
+              member.id,
+            ])
+          ).rows[0].background,
+        ).toBe(nextBackground);
+        const staffPage = await page.request.get("/editor/library");
+        expect(staffPage.status()).toBe(403);
+        expect(await staffPage.text()).not.toContain(
+          "Create a synthetic draft",
+        );
+        expect(
+          (
+            await page.request.get(`/api/workspaces/${owner.id}/private`)
+          ).status(),
+        ).toBe(403);
+        const draftId = `ADV-${String(index).padStart(3, "0")}`;
+        const write = await page.request.post("/editor/library", {
+          headers: { Origin: origin },
+          form: {
+            csrf,
+            id: draftId,
+            version: "1",
+            kind: "lesson",
+            title: "Unauthorized sample",
+            body: "Invented content only.",
+            owner: "Member",
+            sources: "Original sample",
+            rights: "Owned sample",
+          },
+        });
+        expect(write.status()).toBe(422);
+        expect(
+          (
+            await pool.query(
+              "SELECT count(*) FROM content_versions WHERE id=$1",
+              [draftId],
+            )
+          ).rows[0].count,
+        ).toBe("0");
+      } finally {
+        await context.close();
+      }
+    }
+  } finally {
+    await ownerContext.close();
+  }
+});
+
 test("[L18] explicit consent, quarantine and fresh authorization protect private evidence", async ({
   page,
   context,

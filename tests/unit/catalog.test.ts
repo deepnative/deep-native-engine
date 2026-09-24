@@ -112,6 +112,10 @@ it("keeps staff drafts separate from eligible published member search", async ()
   expect(await catalog.preview("other", "SYN-001", 1)).toBeNull();
   query.mockResolvedValueOnce({ rows: [sample] });
   expect(await catalog.staffList("editor")).toEqual([sample]);
+  query.mockResolvedValueOnce({ rows: [{ id: null }] });
+  expect(await catalog.staffList("editor")).toEqual([]);
+  query.mockResolvedValueOnce({ rows: [] });
+  expect(await catalog.staffList("member")).toBeNull();
   query.mockResolvedValueOnce({ rows: [sample] });
   expect(await catalog.published("SYN-001")).toEqual(sample);
   query.mockResolvedValueOnce({ rows: [] });
@@ -134,7 +138,7 @@ it("keeps staff drafts separate from eligible published member search", async ()
   expect(await catalog.search({ goal: "admin" })).toEqual([]);
   expect(await catalog.search({ background: "admin" })).toEqual([]);
   expect(await catalog.search({ domain: "admin" })).toEqual([]);
-  expect(query).toHaveBeenCalledTimes(6);
+  expect(query).toHaveBeenCalledTimes(8);
   query.mockResolvedValueOnce({ rows: [] });
   expect(await catalog.search({})).toEqual([]);
 });
@@ -198,7 +202,7 @@ it("has a safe disabled catalog when the app is not connected to one", async () 
   expect(await disabled.publish("x", "SYN-001", 1)).toBe(false);
   expect(await disabled.retire("x", "SYN-001")).toBe(false);
   expect(await disabled.preview("x", "SYN-001", 1)).toBeNull();
-  expect(await disabled.staffList("x")).toEqual([]);
+  expect(await disabled.staffList("x")).toBeNull();
   expect(await disabled.published("SYN-001")).toBeNull();
   expect(await disabled.search({})).toEqual([]);
   expect(

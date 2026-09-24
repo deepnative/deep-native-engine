@@ -81,6 +81,23 @@ const contentDraft: DraftContent = {
   rubric: "Check source and uncertainty.",
   rubricVersion: 1,
 };
+it("distinguishes an empty authorized staff worklist from member and revoked access", async () => {
+  const learner = await member();
+  const catalog = catalogStore(pool);
+  const editorToken = randomBytes(32).toString("hex");
+  const editorId = await authorizationStore(pool).provisionStaff(
+    editorToken,
+    "editor",
+    new Date(Date.now() + 86_400_000),
+  );
+  expect(await catalog.staffList(learner.token)).toBeNull();
+  expect(await catalog.staffList(editorToken)).toEqual([]);
+  await pool.query(
+    "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE id=$1",
+    [editorId],
+  );
+  expect(await catalog.staffList(editorToken)).toBeNull();
+});
 it("keeps local circle membership separate from cohort grants and removes it with the member", async () => {
   const owner = await member();
   const outsider = await member();
@@ -536,7 +553,7 @@ it("imports the six-lesson content pack as hidden drafts that cannot self-certif
   expect(await seedDraftPack(pool)).toBe(0);
   expect(await catalog.search({})).toEqual([]);
   expect(
-    (await catalog.staffList(editorToken)).map((item) => item.id),
+    (await catalog.staffList(editorToken))!.map((item) => item.id),
   ).toContain("FND-006");
   expect(await catalog.preview("unrelated", "FND-001", 1)).toBeNull();
   expect(await catalog.preview(editorToken, "FND-001", 1)).toMatchObject({
