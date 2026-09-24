@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v21",
+  "version": "initial-learning-v22",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership and operator-only aggregate preview metrics; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -479,6 +479,15 @@
       "steps": "Use Tab and Enter to reach labelled onboarding, lesson, error recovery and local-circle actions; reload saved exercise and membership",
       "expected": "Keyboard focus is visible and reachable, the field error names and focuses its control, corrected completion and circle membership survive reload, and leave is keyboard operable",
       "issues": [109, 129],
+      "critical": true
+    },
+    {
+      "id": "L54",
+      "actor": "General, non-IT professional and IT learners",
+      "preconditions": "Three independent member sessions and another private workspace in the local preview",
+      "steps": "Change valid background and goal with forged staff, owner and offer fields; reject a staff-like background; request the staff worklist, another workspace and a staff draft write",
+      "expected": "Learning direction alone changes; every principal remains a member without a staff profile, staff page and private workspace deny access, and no staff draft is created",
+      "issues": [42, 20, 24],
       "critical": true
     }
   ],

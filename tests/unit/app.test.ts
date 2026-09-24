@@ -341,7 +341,7 @@ function catalogMock() {
     publish: vi.fn<CatalogStore["publish"]>().mockResolvedValue(false),
     retire: vi.fn<CatalogStore["retire"]>().mockResolvedValue(false),
     preview: vi.fn<CatalogStore["preview"]>().mockResolvedValue(null),
-    staffList: vi.fn<CatalogStore["staffList"]>().mockResolvedValue([]),
+    staffList: vi.fn<CatalogStore["staffList"]>().mockResolvedValue(null),
     published: vi.fn<CatalogStore["published"]>().mockResolvedValue(null),
     search: vi.fn<CatalogStore["search"]>().mockResolvedValue([]),
   };
@@ -695,6 +695,15 @@ it("supports the local editor/reviewer workflow without bypassing rejected trans
   await post("/editor/library/SYN-001/retire").expect(409);
   catalog.retire.mockResolvedValueOnce(true);
   await post("/editor/library/SYN-001/retire").expect(303);
+});
+it("does not expose the staff workflow page to a member", async () => {
+  const catalog = catalogMock();
+  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
+  const denied = await agent
+    .get("/editor/library")
+    .set("Host", host)
+    .expect(403);
+  expect(denied.text).not.toContain("Create a synthetic draft");
 });
 it("onboards only valid profiles and ignores caller-controlled ownership", async () => {
   const { agent, csrf } = await client();

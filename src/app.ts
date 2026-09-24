@@ -700,12 +700,19 @@ export function app(
     );
   });
   app.get("/editor/library", async (_req, res) => {
-    res.send(
-      staffLibraryPage(
-        await catalog.staffList(res.locals.token as string),
-        res.locals.csrf as string,
-      ),
-    );
+    const items = await catalog.staffList(res.locals.token as string);
+    if (items === null) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Staff workflow unavailable",
+            "A current editor or reviewer identity is required.",
+          ),
+        );
+      return;
+    }
+    res.send(staffLibraryPage(items, res.locals.csrf as string));
   });
   app.get("/editor/library/:id/:version", async (req, res) => {
     const item = await catalog.preview(

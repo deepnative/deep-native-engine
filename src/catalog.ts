@@ -54,7 +54,7 @@ export interface CatalogStore {
     id: string,
     version: number,
   ): Promise<ContentVersion | null>;
-  staffList(token: string): Promise<ContentVersion[]>;
+  staffList(token: string): Promise<ContentVersion[] | null>;
   published(id: string): Promise<ContentVersion | null>;
   search(filters: {
     q?: string;
@@ -78,7 +78,7 @@ export function disabledCatalogStore(): CatalogStore {
     publish: async () => false,
     retire: async () => false,
     preview: async () => null,
-    staffList: async () => [],
+    staffList: async () => null,
     published: async () => null,
     search: async () => [],
     assess: async () => null,
@@ -219,13 +219,20 @@ export function catalogStore(pool: Pool): CatalogStore {
       return result.rows[0] ?? null;
     },
     async staffList(token) {
-      const result = await pool.query<ContentVersion>(
-        `SELECT ${columns} FROM content_versions
-         WHERE (${role("editor")} OR ${role("reviewer")})
-         ORDER BY id,version DESC LIMIT 100`,
+      const result = await pool.query<ContentVersion & { id: string | null }>(
+        `WITH authorized AS (
+           SELECT 1 WHERE (${role("editor")} OR ${role("reviewer")})
+         )
+         SELECT item.* FROM authorized
+         LEFT JOIN LATERAL (
+           SELECT ${columns} FROM content_versions
+           ORDER BY id,version DESC LIMIT 100
+         ) item ON TRUE`,
         [hash(token)],
       );
-      return result.rows;
+      if (!result.rows[0]) return null;
+      if (result.rows[0].id === null) return [];
+      return result.rows as ContentVersion[];
     },
     async published(id) {
       const result = await pool.query<ContentVersion>(
