@@ -166,7 +166,7 @@ it("does not let the proposed full-MVP denominator or critical set shrink silent
     mapped.fullMvp
       .flatMap((family) => family.cases)
       .reduce((count, item) => count + item.requiredChecks.length, 0),
-  ).toBe(202);
+  ).toBe(206);
   for (const [id, minimum] of [
     ["F-ROADMAP-03-C", 2],
     ["F-ECO-06-C", 2],
@@ -194,7 +194,7 @@ it("does not let the proposed full-MVP denominator or critical set shrink silent
   delete untracked.fullMvp[0].cases[0].requiredChecks;
   expect(() => assertJourneys(untracked, browser())).toThrow(/Incomplete/);
 });
-it("keeps the roadmap's competence and operator-export obligations independently mandatory", () => {
+it("keeps source-derived competence, export and moderation obligations independently mandatory", () => {
   const cases = proposal.fullMvp.flatMap((family) => family.cases);
   const obligations = [
     {
@@ -223,7 +223,34 @@ it("keeps the roadmap's competence and operator-export obligations independently
       action: /operator.*outside its permitted member or record scope/i,
       expected: /denied.*no unauthorized records/i,
     },
+    {
+      id: "F-ECO-04-B",
+      action:
+        /authorized moderator.*reported circle scope.*act on the reported post.*reason.*unrelated private assignments/i,
+      expected:
+        /only the reported scope.*affected.*record identifies.*moderator and reason.*unrelated private work cannot be opened or disclosed/i,
+    },
+    {
+      id: "F-ECO-04-B",
+      action: /moderation action as an outsider/i,
+      expected: /denied.*no moderation effect.*no private disclosure/i,
+    },
+    {
+      id: "F-ECO-04-B",
+      action:
+        /moderation action as a peer member without moderator authorization/i,
+      expected: /denied.*no moderation effect.*no private disclosure/i,
+    },
+    {
+      id: "F-ECO-04-B",
+      action:
+        /revoke the moderator.*authorization.*retry the moderation action/i,
+      expected: /denied.*no moderation effect.*no private disclosure/i,
+    },
   ];
+  expect(
+    cases.find((item) => item.id === "F-ECO-04-B").requiredChecks,
+  ).toHaveLength(6);
   for (const obligation of obligations) {
     const item = cases.find((test) => test.id === obligation.id);
     expect(item.critical).toBe(true);
