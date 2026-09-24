@@ -25,15 +25,6 @@ const report = {
   commands: [],
   exitStatus: 1,
 };
-mkdirSync("artifacts", { recursive: true });
-for (const item of [
-  "coverage",
-  "unit-results.json",
-  "integration-results.json",
-  "e2e-results.json",
-  "application-verification.json",
-])
-  rmSync(`artifacts/${item}`, { recursive: true, force: true });
 const git = (...args) => {
   const result = spawnSync("git", args, { encoding: "utf8" });
   requireGate(result.status === 0, "Cannot identify revision");
@@ -43,7 +34,11 @@ let admin;
 let created = false;
 let name;
 let privateStorageRoot;
+// Only code-owned stage names cross the console/report failure boundary.
+// Database, parser and filesystem errors can contain credentials or member text.
+let stage = "verification artifacts";
 function run(command, args, env = process.env) {
+  stage = [command, ...args].join(" ");
   const start = new Date().toISOString();
   const result = spawnSync(command, args, { stdio: "inherit", env });
   report.commands.push({
@@ -65,6 +60,16 @@ function source(dir) {
   );
 }
 try {
+  mkdirSync("artifacts", { recursive: true });
+  for (const item of [
+    "coverage",
+    "unit-results.json",
+    "integration-results.json",
+    "e2e-results.json",
+    "application-verification.json",
+  ])
+    rmSync(`artifacts/${item}`, { recursive: true, force: true });
+  stage = "revision identification";
   report.revision = {
     commit: git("rev-parse", "HEAD"),
     tree: git("rev-parse", "HEAD^{tree}"),
@@ -74,7 +79,9 @@ try {
   run("npm", ["run", "lint"]);
   run("npm", ["run", "typecheck"]);
   run("npm", ["run", "test:unit"]);
+  stage = "unit test evidence";
   report.unitTests = assertUnitResults(read("unit-results.json"));
+  stage = "unit coverage evidence";
   const files = source("src");
   requireGate(
     files.every((f) => f.endsWith(".ts")),
@@ -87,6 +94,7 @@ try {
   );
   run("node", ["scripts/gate-probes.mjs"]);
   run("npm", ["run", "build"]);
+  stage = "test database configuration";
   const url = new URL(
     process.env.DNE_DATABASE_URL ??
       "postgresql://dne:local-preview-only@127.0.0.1:54329/dne_dev",
@@ -98,45 +106,74 @@ try {
       !url.hash,
     "Verification requires a loopback database without URL overrides",
   );
+  stage = "test database setup";
   admin = new Pool({
     connectionString: url.toString(),
     connectionTimeoutMillis: 3000,
+  });
+  admin.on("error", () => {
+    report.databaseError = "Test database connection interrupted.";
+    report.exitStatus = 1;
+    console.error(report.databaseError);
   });
   name = `dne_test_${randomBytes(16).toString("hex")}`;
   await admin.query(`CREATE DATABASE "${name}"`);
   created = true;
   url.pathname = `/${name}`;
   const env = { ...process.env, DNE_TEST_DATABASE_URL: url.toString() };
+  stage = "private test storage setup";
   privateStorageRoot = mkdtempSync(
     path.join(tmpdir(), "dne-private-evidence-"),
   );
   env.DNE_TEST_PRIVATE_STORAGE_ROOT = privateStorageRoot;
   run("npm", ["run", "test:integration"], env);
+  stage = "integration test evidence";
   report.integrationTests = assertUnitResults(read("integration-results.json"));
   run("npm", ["run", "test:e2e"], env);
+  stage = "browser journey evidence";
   report.journeys = assertJourneys(
     JSON.parse(readFileSync("tests/e2e/scenarios.json", "utf8")),
     read("e2e-results.json"),
   );
   run("npm", ["audit", "--omit=dev", "--audit-level=high"]);
-  report.exitStatus = 0;
-} catch (error) {
-  report.error = error.message;
-  console.error("Application verification FAIL:", error.message);
+  report.exitStatus = report.databaseError ? 1 : 0;
+} catch {
+  report.error = `Verification failed during ${stage}.`;
+  console.error("Application verification FAIL:", report.error);
 } finally {
+  const cleanup = async (action, message) => {
+    try {
+      await action();
+    } catch {
+      report.exitStatus = 1;
+      (report.cleanupErrors ??= []).push(message);
+      console.error(message);
+    }
+  };
+  if (created)
+    await cleanup(
+      () => admin.query(`DROP DATABASE "${name}" WITH (FORCE)`),
+      "Test database cleanup failed.",
+    );
+  if (admin)
+    await cleanup(
+      () => admin.end(),
+      "Test database connection cleanup failed.",
+    );
+  if (privateStorageRoot)
+    await cleanup(
+      () => rmSync(privateStorageRoot, { recursive: true, force: true }),
+      "Private test storage cleanup failed.",
+    );
+  report.finishedAt = new Date().toISOString();
   try {
-    if (created) await admin.query(`DROP DATABASE "${name}" WITH (FORCE)`);
+    writeFileSync(
+      "artifacts/application-verification.json",
+      JSON.stringify(report, null, 2) + "\n",
+    );
   } catch {
     report.exitStatus = 1;
-    report.cleanupError = "Test database cleanup failed";
+    console.error("Application verification report could not be written.");
   }
-  if (admin) await admin.end();
-  if (privateStorageRoot)
-    rmSync(privateStorageRoot, { recursive: true, force: true });
-  report.finishedAt = new Date().toISOString();
-  writeFileSync(
-    "artifacts/application-verification.json",
-    JSON.stringify(report, null, 2) + "\n",
-  );
   process.exitCode = report.exitStatus;
 }
