@@ -23,6 +23,7 @@ import { testPool } from "../support/database.ts";
 import { trackStore } from "../../src/track-readiness.ts";
 import { proposalStore } from "../../src/proposals.ts";
 import { circleStore } from "../../src/circles.ts";
+import { metricsStore } from "../../src/metrics.ts";
 import {
   catalogStore,
   seedDraftPack,
@@ -1047,6 +1048,58 @@ async function staff(role: StaffRole) {
     ),
   };
 }
+
+it("counts retained preview learning and circle events once without granting metric access to members", async () => {
+  const first = await member(),
+    second = await member(),
+    third = await member();
+  await pool.query(
+    "UPDATE learners SET background='professional',goal='work' WHERE id=$1",
+    [second.learner.id],
+  );
+  await pool.query(
+    "UPDATE learners SET background='technical',goal='build' WHERE id=$1",
+    [third.learner.id],
+  );
+  const operator = await staff("operator"),
+    reviewer = await staff("reviewer");
+  const metrics = metricsStore(pool);
+  expect(await metrics.snapshot(first.token)).toBeNull();
+  expect(await metrics.snapshot(reviewer.token)).toBeNull();
+  expect(await metrics.snapshot("f".repeat(64))).toBeNull();
+  await pool.query(
+    `INSERT INTO content_versions(id,version,kind,origin,title,body,owner,sources,rights)
+     VALUES('SYN-990',1,'lesson','curated','Invented lesson','Sample only','Test','Test','Owned')`,
+  );
+  await pool.query(
+    `INSERT INTO lesson_activity(member_id,content_id,content_version,started_at,self_assessed_at)
+     VALUES($1,'SYN-990',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+           ($2,'SYN-990',1,NULL,NULL)`,
+    [first.learner.id, second.learner.id],
+  );
+  await pool.query(
+    `INSERT INTO preview_circle_memberships(circle_id,member_id,left_at)
+     VALUES('everyday-ai',$1,CURRENT_TIMESTAMP),('technical-practice',$1,CURRENT_TIMESTAMP),
+           ('professional-work',$2,NULL)`,
+    [first.learner.id, second.learner.id],
+  );
+  await pool.query(
+    "UPDATE principals SET expires_at=CURRENT_TIMESTAMP WHERE id=$1",
+    [third.learner.id],
+  );
+  expect((await metrics.snapshot(operator.token))?.counts).toEqual({
+    members: 3,
+    activated: 2,
+    selfAssessed: 1,
+    participated: 2,
+    activeCircle: 1,
+  });
+  await pool.query(
+    "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE id=$1",
+    [operator.id],
+  );
+  expect(await metrics.snapshot(operator.token)).toBeNull();
+});
 
 it("keeps evidence private through consent, quarantine and review eligibility", async () => {
   const owner = await member(),
