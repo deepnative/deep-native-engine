@@ -29,6 +29,16 @@ const member = {
   background: "explorer" as const,
   goal: "everyday" as const,
 };
+async function atStage<T>(stage: string, request: PromiseLike<T>): Promise<T> {
+  try {
+    return await request;
+  } catch (error) {
+    throw new Error(
+      `${stage}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+}
 it("keeps member proposals private and moderation unable to publish", async () => {
   const sample: Proposal = {
     id: "sample-id",
@@ -120,22 +130,25 @@ it("keeps member proposals private and moderation unable to publish", async () =
 it("shows honest track states and restricts the expert evidence roster", async () => {
   const tracks = disabledTrackStore();
   const server = app(storage(), { origin, secret: "secret", tracks });
-  const publicView = await request(server)
-    .get("/readiness/tracks")
-    .set("Host", host)
-    .expect(200);
+  const publicView = await atStage(
+    "GET /readiness/tracks public",
+    request(server).get("/readiness/tracks").set("Host", host).expect(200),
+  );
   expect(publicView.text).toContain("in preparation");
   expect(publicView.text).toContain("General learners");
-  await request(server).get("/operator/experts").set("Host", host).expect(403);
+  await atStage(
+    "GET /operator/experts denied",
+    request(server).get("/operator/experts").set("Host", host).expect(403),
+  );
   const allowed = app(storage(), {
     origin,
     secret: "secret",
     tracks: { ...tracks, registry: async () => [] },
   });
-  const roster = await request(allowed)
-    .get("/operator/experts")
-    .set("Host", host)
-    .expect(200);
+  const roster = await atStage(
+    "GET /operator/experts allowed",
+    request(allowed).get("/operator/experts").set("Host", host).expect(200),
+  );
   expect(roster.text).toContain("No expert commitments are recorded");
 });
 it("shows optional offer hypotheses while reporting foundation access as undecided", async () => {
@@ -262,6 +275,18 @@ it("reports deterministic integration readiness without claiming live effects", 
   expect(res.text).toMatch(/<strong>payment<\/strong> · simulated/);
   expect(res.text).toContain("no external side effect occurs");
   expect(res.text).not.toContain("configured");
+});
+it("serves concurrent requests through one test agent without transport failures", async () => {
+  const agent = request.agent(app(db, { origin, secret: "secret" }));
+  const responses = await Promise.all(
+    Array.from({ length: 8 }, () =>
+      agent.get("/readiness").set("Host", host).expect(200),
+    ),
+  );
+  expect(responses).toHaveLength(8);
+  for (const response of responses) {
+    expect(response.text).toContain("DEMO ENVIRONMENT");
+  }
 });
 it("enforces private workspace and cohort decisions on direct API requests", async () => {
   const authorization: AuthorizationStore = {
@@ -793,34 +818,46 @@ it("gates review, short-lived download and deletion through evidence decisions",
   await remove().expect(204);
 });
 it("rejects unrecognized Host and cross-origin, missing-origin or invalid-CSRF writes", async () => {
-  await request(app(db, { origin, secret: "s" }))
-    .get("/")
-    .set("Host", "attacker.invalid")
-    .expect(403);
-  const { agent, csrf } = await client();
+  await atStage(
+    "GET / unrecognized Host",
+    request(app(db, { origin, secret: "s" }))
+      .get("/")
+      .set("Host", "attacker.invalid")
+      .expect(403),
+  );
+  const { agent, csrf } = await atStage("GET / session setup", client());
   for (const from of ["http://attacker.invalid", "null", ""]) {
-    await agent
+    await atStage(
+      `POST /start Origin ${JSON.stringify(from)}`,
+      agent
+        .post("/start")
+        .set("Host", host)
+        .set("Origin", from)
+        .type("form")
+        .send({ csrf })
+        .expect(403),
+    );
+  }
+  await atStage(
+    "POST /start invalid CSRF",
+    agent
       .post("/start")
       .set("Host", host)
-      .set("Origin", from)
+      .set("Origin", origin)
       .type("form")
-      .send({ csrf })
-      .expect(403);
-  }
-  await agent
-    .post("/start")
-    .set("Host", host)
-    .set("Origin", origin)
-    .type("form")
-    .send({ csrf: "0".repeat(64) })
-    .expect(403);
-  await agent
-    .post("/start")
-    .set("Host", host)
-    .set("Origin", origin)
-    .set("Content-Type", "text/plain")
-    .send("bad")
-    .expect(403);
+      .send({ csrf: "0".repeat(64) })
+      .expect(403),
+  );
+  await atStage(
+    "POST /start unsupported content type",
+    agent
+      .post("/start")
+      .set("Host", host)
+      .set("Origin", origin)
+      .set("Content-Type", "text/plain")
+      .send("bad")
+      .expect(403),
+  );
   expect(db.create).not.toHaveBeenCalled();
 });
 it("reports unknown pages and storage failures without leaking secrets or claiming no commit", async () => {
