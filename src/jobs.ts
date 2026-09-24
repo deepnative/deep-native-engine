@@ -291,16 +291,27 @@ export async function runAdapterJob(
     };
   }
 
+  let completed: AdapterJob;
   try {
-    return {
-      job: await jobs.succeed(claimed.id, claimed.attemptToken),
-      result,
-      executed: true,
-    };
+    completed = await jobs.succeed(claimed.id, claimed.attemptToken);
   } catch {
-    const confirmed = await jobs.find(claimed.id);
-    if (confirmed?.status === "succeeded")
-      return { job: confirmed, result, executed: true };
-    throw new Error("Could not confirm adapter job completion.");
+    const confirmed = await jobs.find(claimed.id).catch(() => undefined);
+    if (
+      confirmed?.status !== "succeeded" ||
+      confirmed.attempts !== claimed.attempts
+    )
+      throw new Error("Could not confirm adapter job completion.");
+    completed = confirmed;
   }
+  // Claims monotonically increment attempts; a terminal success cannot be claimed
+  // again. Status alone could attribute a replacement worker's success to us.
+  return {
+    job: completed,
+    result:
+      completed.status === "succeeded" &&
+      completed.attempts === claimed.attempts
+        ? result
+        : null,
+    executed: true,
+  };
 }

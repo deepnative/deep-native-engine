@@ -2435,3 +2435,140 @@ it("keeps terminal states when a late worker reports out of order", async () => 
     await jobs.succeed(failed.id, failedAttempt!.attemptToken),
   ).toMatchObject({ status: "exhausted" });
 });
+
+it.each(["running", "succeeded", "exhausted", "lost-acknowledgement"])(
+  "fences a delayed provider result after PostgreSQL lease takeover: %s",
+  async (replacement) => {
+    const jobs = jobStore(pool);
+    const newerConnection = testPool();
+    let signalEntered!: () => void;
+    let releaseProvider!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      signalEntered = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseProvider = resolve;
+    });
+    const registry: AdapterRegistry = {
+      mode: "test",
+      adapter(kind) {
+        return {
+          kind,
+          mode: "test",
+          async execute() {
+            signalEntered();
+            await release;
+            return {
+              kind,
+              mode: "test",
+              state: "simulated",
+              reference: "superseded-result",
+              message: "synthetic delayed result",
+            };
+          },
+        };
+      },
+    };
+    const input = { event: "lease-takeover" };
+    const created = await enqueueAdapterJob(
+      jobs,
+      registry,
+      "ai",
+      "summarize",
+      input,
+      "takeover",
+      2,
+    );
+    const oldStore =
+      replacement === "lost-acknowledgement"
+        ? {
+            ...jobs,
+            async succeed(id: string, attemptToken: string) {
+              await jobs.succeed(id, attemptToken);
+              throw new Error("synthetic lost acknowledgement");
+            },
+          }
+        : jobs;
+    // Attach a rejection handler immediately; assert the outcome after both workers finish.
+    const oldRun = runAdapterJob(oldStore, registry, created.id, input).then(
+      (value) => ({ value, error: null }),
+      (error) => ({ value: null, error }),
+    );
+    try {
+      await entered;
+      await pool.query(
+        "UPDATE adapter_jobs SET lease_until=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE id=$1",
+        [created.id],
+      );
+      const newerJobs = jobStore(newerConnection);
+      const newer = await newerJobs.claim(created.id);
+      expect(newer).toMatchObject({ status: "running", attempts: 2 });
+      if (replacement === "exhausted")
+        await newerJobs.fail(
+          created.id,
+          newer!.attemptToken,
+          "provider_timeout",
+        );
+      else if (replacement !== "running")
+        await newerJobs.succeed(created.id, newer!.attemptToken);
+      const winner = await newerJobs.find(created.id);
+      expect(winner).toMatchObject({
+        status:
+          replacement === "lost-acknowledgement" ? "succeeded" : replacement,
+        attempts: 2,
+      });
+      releaseProvider();
+      const outcome = await oldRun;
+      if (replacement === "lost-acknowledgement") {
+        expect(outcome.value).toBeNull();
+        expect(outcome.error).toMatchObject({
+          message: "Could not confirm adapter job completion.",
+        });
+      } else {
+        expect(outcome.error).toBeNull();
+        expect(outcome.value).toEqual({
+          job: winner,
+          result: null,
+          executed: true,
+        });
+      }
+      expect(await newerJobs.find(created.id)).toEqual(winner);
+    } finally {
+      releaseProvider();
+      await oldRun;
+      await newerConnection.end();
+    }
+  },
+);
+
+it("recovers its own PostgreSQL completion after losing the acknowledgement", async () => {
+  const jobs = jobStore(pool);
+  const registry = deterministicRegistry({}, "test");
+  const input = { event: "ack-lost" };
+  const created = await enqueueAdapterJob(
+    jobs,
+    registry,
+    "ai",
+    "summarize",
+    input,
+    "ack-lost",
+  );
+  const result = await runAdapterJob(
+    {
+      ...jobs,
+      async succeed(id, attemptToken) {
+        await jobs.succeed(id, attemptToken);
+        throw new Error("synthetic lost acknowledgement");
+      },
+    },
+    registry,
+    created.id,
+    input,
+  );
+  expect(result).toMatchObject({
+    job: { status: "succeeded", attempts: 1 },
+    executed: true,
+    result: { state: "simulated" },
+  });
+  expect(await jobs.find(created.id)).toEqual(result.job);
+});
