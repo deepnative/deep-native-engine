@@ -39,7 +39,7 @@ APP_FILES = {
     ".env.example", ".nvmrc", "compose.yaml", "eslint.config.mjs", "package.json", "package-lock.json",
     "playwright.config.ts", "tsconfig.json", "tsconfig.build.json", "vitest.config.ts",
     "vitest.integration.config.ts", "scripts/quality-gates.mjs", "scripts/gate-probes.mjs",
-    "scripts/verify-app.mjs", "scripts/verify-full-release.mjs", "tests/e2e/scenarios.json", "src/main.ts", "migrations/001-learning.sql",
+    "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "tests/e2e/scenarios.json", "src/main.ts", "migrations/001-learning.sql",
     "assets/docs/content/circles/preview-circles.json",
 }
 
@@ -340,6 +340,8 @@ def verify_application(root):
     report = json.loads(output.read_text())
     require(report["exitStatus"] == 0 and report["scope"] == "initial-learning-v22", "Application verification failed or wrong scope")
     require(report["revision"] == before and state(root) == before, "Application verification revision changed")
+    require(report.get("commands") and report["commands"][0]["command"] == "node scripts/check-installed-deps.mjs"
+            and report["commands"][0]["exitStatus"] == 0, "Installed dependency prerequisite missing or failed")
     require(report["unitTests"]["passed"] == report["unitTests"]["total"] > 0, "Missing application unit evidence")
     require(report["integrationTests"]["passed"] == report["integrationTests"]["total"] > 0, "Missing application integration evidence")
     for metric in ("statements", "branches", "functions", "lines"):
