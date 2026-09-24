@@ -2236,8 +2236,8 @@
         },
         {
           "id": "F-ECO-04-B",
-          "steps": "Participate and report a problem",
-          "expected": "Authorized moderation receives the report without exposing unrelated work",
+          "steps": "Participate, report a problem, and verify accountable moderation and authorization denials",
+          "expected": "Only an authorized moderator can act within the reported scope with a recorded actor and reason; others are denied without effects or private disclosure",
           "critical": true,
           "requiredChecks": [
             {
@@ -2247,6 +2247,22 @@
             {
               "action": "Report a problem to moderation",
               "expected": "An authorized moderator receives the report without unrelated private work"
+            },
+            {
+              "action": "As an authorized moderator, inspect the reported circle scope, act on the reported post with a reason, and attempt to open unrelated private assignments",
+              "expected": "Only the reported scope is available and affected; the moderation record identifies the acting moderator and reason; unrelated private work cannot be opened or disclosed"
+            },
+            {
+              "action": "Attempt the moderation action as an outsider",
+              "expected": "The action is denied with no moderation effect and no private disclosure"
+            },
+            {
+              "action": "Attempt the moderation action as a peer member without moderator authorization",
+              "expected": "The action is denied with no moderation effect and no private disclosure"
+            },
+            {
+              "action": "Revoke the moderator's authorization and retry the moderation action",
+              "expected": "The action is denied with no moderation effect and no private disclosure"
             }
           ]
         },

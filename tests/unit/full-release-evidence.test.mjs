@@ -185,14 +185,21 @@ it("requires a separate reviewed mapping decision bound to every case and browse
   ])
     expect(() => assertMappingApproval(register, invalid)).toThrow();
 });
-it("rejects the old source-obligation digest and every post-approval check change", () => {
+it("rejects preceding mapping digests and every post-approval check change", () => {
   // The prior published proposal fingerprint cannot approve this correction.
   const oldApproval = {
     ...approval(),
     version: proposal.fullMvpVersion,
     sha256: "14963de159ede2a79d43b963d0d7c974fc124538c7738ea1c36933fb90850631",
   };
-  expect(() => assertMappingApproval(proposal, oldApproval)).toThrow(/digest/);
+  for (const digest of [
+    oldApproval.sha256,
+    "0345855e5b331e2be1a4403a27f6af0128e0a1c3b83f9d50abaaef7bc623be81",
+  ]) {
+    expect(() =>
+      assertMappingApproval(proposal, { ...oldApproval, sha256: digest }),
+    ).toThrow(/digest/);
+  }
   const newApproval = {
     ...oldApproval,
     sha256: releaseMappingDigest(proposal),
@@ -201,6 +208,7 @@ it("rejects the old source-obligation digest and every post-approval check chang
   for (const [id, firstNewCheck] of [
     ["F-ROADMAP-01-B", 2],
     ["F-ROADMAP-09-D", 4],
+    ["F-ECO-04-B", 2],
   ]) {
     const original = proposal.fullMvp
       .flatMap((family) => family.cases)
