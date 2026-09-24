@@ -250,15 +250,21 @@ it("expires Jan 31 and leap-year grants without reviving reserved units", async 
   await expect(
     clocked.reserve(owner, grant, 1, "at-leap-end"),
   ).rejects.toMatchObject({ code: "unavailable" });
-  const race = await Promise.allSettled([
-    clocked.expire(owner, grant, "leap-expire-a"),
-    clocked.expire(owner, grant, "leap-expire-b"),
-  ]);
+  const expiryKeys = ["leap-expire-a", "leap-expire-b"] as const;
+  const race = await Promise.allSettled(
+    expiryKeys.map((key) => clocked.expire(owner, grant, key)),
+  );
   expect(race.filter((item) => item.status === "fulfilled")).toHaveLength(1);
   expect(race.filter((item) => item.status === "rejected")[0]).toMatchObject({
     reason: { code: "already_settled" },
   });
-  expect(await clocked.expire(owner, grant, "leap-expire-a")).toBe(grant);
+  const winner = race.findIndex((item) => item.status === "fulfilled");
+  const winnerKey = expiryKeys[winner]!;
+  const loserKey = expiryKeys[1 - winner]!;
+  expect(await clocked.expire(owner, grant, winnerKey)).toBe(grant);
+  await expect(clocked.expire(owner, grant, loserKey)).rejects.toMatchObject({
+    code: "already_settled",
+  });
   expect(await clocked.release(owner, held, "leap-release")).toBe(held);
   const balance = await pool.query(
     "SELECT available,reserved,consumed,expired FROM synthetic_entitlement_grants WHERE id=$1",
@@ -271,7 +277,7 @@ it("expires Jan 31 and leap-year grants without reviving reserved units", async 
     expired: 3,
   });
   const events = await pool.query(
-    "SELECT operation,quantity FROM synthetic_entitlement_events WHERE grant_id=$1 ORDER BY created_at",
+    "SELECT operation,quantity,idempotency_key FROM synthetic_entitlement_events WHERE grant_id=$1 ORDER BY created_at",
     [grant],
   );
   expect(events.rows.map((item) => item.operation).sort()).toEqual([
@@ -283,6 +289,9 @@ it("expires Jan 31 and leap-year grants without reviving reserved units", async 
   expect(
     events.rows.find((item) => item.operation === "expire")?.quantity,
   ).toBe(2);
+  expect(
+    events.rows.find((item) => item.operation === "expire")?.idempotency_key,
+  ).toBe(winnerKey);
   const feb = `${billingMonth("2026-01-31", 1)}T00:00:00.000Z`;
   expect(feb).toBe("2026-02-28T00:00:00.000Z");
 });
