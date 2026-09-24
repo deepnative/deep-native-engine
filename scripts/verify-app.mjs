@@ -75,6 +75,7 @@ try {
     tree: git("rev-parse", "HEAD^{tree}"),
     dirty: git("status", "--porcelain") !== "",
   };
+  run("node", ["scripts/check-installed-deps.mjs"]);
   run("npm", ["run", "format:check"]);
   run("npm", ["run", "lint"]);
   run("npm", ["run", "typecheck"]);

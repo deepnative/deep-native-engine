@@ -306,7 +306,7 @@ class RepositoryFixture(unittest.TestCase):
 
     def test_removing_application_gate_files_blocks_verification(self):
         files = gate.repository_files(self.root)
-        for name in ("package-lock.json", "scripts/verify-app.mjs", "scripts/verify-full-release.mjs", "vitest.config.ts", "tests/e2e/scenarios.json"):
+        for name in ("package-lock.json", "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "vitest.config.ts", "tests/e2e/scenarios.json"):
             with self.subTest(name=name), self.assertRaisesRegex(gate.GateError, "Required application"):
                 gate.validate_scope(self.root, [f for f in files if f != name])
 
@@ -318,11 +318,16 @@ class RepositoryFixture(unittest.TestCase):
             gate.verify_application(self.root)
         metrics = {k: {"total": 100, "covered": 100, "skipped": 0} for k in ("statements", "branches", "functions", "lines")}
         report = {"exitStatus": 0, "scope": "initial-learning-v22", "revision": gate.state(self.root),
+                  "commands": [{"command": "node scripts/check-installed-deps.mjs", "exitStatus": 0}],
                   "unitTests": {"passed": 1, "total": 1}, "integrationTests": {"passed": 1, "total": 1},
                   "unitCoverage": metrics, "journeys": {"passed": 1, "total": 1, "criticalPassed": 1, "criticalTotal": 1}}
         def write_report(*args, **kwargs):
             output.write_text(json.dumps(report))
         with patch.object(gate, "run_application", side_effect=write_report):
+            report["commands"] = []
+            with self.assertRaisesRegex(gate.GateError, "dependency prerequisite"):
+                gate.verify_application(self.root)
+            report["commands"] = [{"command": "node scripts/check-installed-deps.mjs", "exitStatus": 0}]
             self.assertEqual(gate.verify_application(self.root), report)
             report["revision"]["commit"] = "a" * 40
             with self.assertRaisesRegex(gate.GateError, "revision changed"):

@@ -96,9 +96,34 @@ it("retains a safe failed command and its exit status", async () => {
   const report = await run();
   expect(report.error).toBe("Verification failed during npm run format:check.");
   expect(report.commands).toEqual([
+    expect.objectContaining({
+      command: "node scripts/check-installed-deps.mjs",
+      exitStatus: 0,
+    }),
     expect.objectContaining({ command: "npm run format:check", exitStatus: 7 }),
   ]);
   expect(report.exitStatus).toBe(1);
+});
+it("rejects dependency drift before any application command", async () => {
+  doubles.spawn.mockImplementation((command, args) => ({
+    status:
+      command === "node" && args[0] === "scripts/check-installed-deps.mjs"
+        ? 1
+        : 0,
+    stdout: command === "git" && args[0] !== "status" ? "a".repeat(40) : "",
+  }));
+  const report = await run();
+  expect(report.exitStatus).toBe(1);
+  expect(report.commands).toEqual([
+    expect.objectContaining({
+      command: "node scripts/check-installed-deps.mjs",
+      exitStatus: 1,
+    }),
+  ]);
+  expect(report.unitTests).toBeUndefined();
+  expect(
+    doubles.spawn.mock.calls.filter(([command]) => command === "npm"),
+  ).toEqual([]);
 });
 it("attempts every cleanup and writes a failed report after cleanup errors", async () => {
   doubles.query
