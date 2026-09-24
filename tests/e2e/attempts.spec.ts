@@ -83,6 +83,27 @@ async function chooseAndStart(page: Page, title: string) {
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
   return page.url().split("/").at(-1)!;
 }
+async function rejectAttemptUpdates(id: string) {
+  expect(id).toMatch(/^[0-9a-f-]{36}$/);
+  await pool.query(
+    `CREATE FUNCTION test_reject_attempt_update() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF OLD.id = '${id}'::uuid THEN
+          RAISE EXCEPTION 'synthetic attempt write fault';
+        END IF;
+        RETURN NEW;
+      END $$`,
+  );
+  await pool.query(
+    "CREATE TRIGGER test_reject_attempt_update BEFORE UPDATE ON assignment_attempts FOR EACH ROW EXECUTE FUNCTION test_reject_attempt_update()",
+  );
+}
+async function allowAttemptUpdates() {
+  await pool.query(
+    "DROP TRIGGER IF EXISTS test_reject_attempt_update ON assignment_attempts",
+  );
+  await pool.query("DROP FUNCTION IF EXISTS test_reject_attempt_update()");
+}
 
 test("[L48] general learner saves, submits and deletes only a private synthetic assignment attempt", async ({
   page,
@@ -206,7 +227,9 @@ test("[L50] IT learner's stale tab and unconfirmed submission cannot overwrite s
     .fill("This second tab should not silently overwrite the saved response.");
   await stale.getByLabel("I used only invented or sample information").check();
   await stale.getByRole("button", { name: "Save private draft" }).click();
-  await expect(stale.getByText("Your draft was not saved")).toBeVisible();
+  await expect(
+    stale.getByText("Another tab saved a newer revision", { exact: false }),
+  ).toBeVisible();
   await expect(
     stale.getByText("This second tab should not silently overwrite"),
   ).toBeVisible();
@@ -229,4 +252,138 @@ test("[L50] IT learner's stale tab and unconfirmed submission cannot overwrite s
     page.getByRole("button", { name: "Submit saved version locally" }),
   ).toBeVisible();
   await stale.close();
+});
+
+test("[L51] a general learner can copy a failed save and recover without claiming a write", async ({
+  page,
+}, info) => {
+  const id = info.project.name === "desktop-chromium" ? "SYN-976" : "SYN-977";
+  const title = `Invented recovery exercise ${id}`;
+  const actors = await publishers();
+  await publish(actors, sample(id, 1, title));
+  await onboard(page, "explorer", "everyday");
+  const attemptId = await chooseAndStart(page, title);
+  const unsaved = "I can copy this invented response after a storage fault.";
+  await page.getByLabel("Private sample response").fill(unsaved);
+  await page.getByLabel("I used only invented or sample information").check();
+  await rejectAttemptUpdates(attemptId);
+  try {
+    await page.getByRole("button", { name: "Save private draft" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Save outcome unknown" }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("Response to copy before leaving this page"),
+    ).toHaveValue(unsaved);
+    await expect(
+      page.getByRole("button", { name: "Save private draft" }),
+    ).toHaveCount(0);
+    const unchanged = await pool.query(
+      "SELECT response,revision,saved_at FROM assignment_attempts WHERE id=$1",
+      [attemptId],
+    );
+    expect(unchanged.rows).toMatchObject([
+      { response: "", revision: 1, saved_at: null },
+    ]);
+  } finally {
+    await allowAttemptUpdates();
+  }
+  const copied = await page
+    .getByLabel("Response to copy before leaving this page")
+    .inputValue();
+  await page.getByRole("link", { name: "Reload this attempt" }).click();
+  await page.getByLabel("Private sample response").fill(copied);
+  await page.getByLabel("I used only invented or sample information").check();
+  await page.getByRole("button", { name: "Save private draft" }).click();
+  await expect(page.getByLabel("Private sample response")).toHaveValue(unsaved);
+  const laterText = "A second invented response after my session expired.";
+  await page.getByLabel("Private sample response").fill(laterText);
+  await page.getByLabel("I used only invented or sample information").check();
+  await pool.query(
+    "UPDATE principals SET expires_at=CURRENT_TIMESTAMP WHERE id=(SELECT member_id FROM assignment_attempts WHERE id=$1)",
+    [attemptId],
+  );
+  await page.getByRole("button", { name: "Save private draft" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Session expired" }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Response to copy before leaving this page"),
+  ).toHaveValue(laterText);
+  const saved = await pool.query(
+    "SELECT response,revision FROM assignment_attempts WHERE id=$1",
+    [attemptId],
+  );
+  expect(saved.rows).toMatchObject([{ response: unsaved, revision: 2 }]);
+});
+
+test("[L52] an IT learner checks an uncertain local submission before retrying", async ({
+  page,
+}, info) => {
+  const id = info.project.name === "desktop-chromium" ? "SYN-978" : "SYN-979";
+  const title = `Invented technical recovery ${id}`;
+  const actors = await publishers();
+  await publish(actors, {
+    ...sample(id, 1, title),
+    goals: ["build"],
+    backgrounds: ["technical"],
+  });
+  await onboard(page, "technical", "build");
+  const attemptId = await chooseAndStart(page, title);
+  const response =
+    "A saved synthetic technical response for uncertain submission.";
+  await page.getByLabel("Private sample response").fill(response);
+  await page.getByLabel("I used only invented or sample information").check();
+  await page.getByRole("button", { name: "Save private draft" }).click();
+  await rejectAttemptUpdates(attemptId);
+  try {
+    await page.getByLabel("Submit this saved version locally").check();
+    await page
+      .getByRole("button", { name: "Submit saved version locally" })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Submission outcome unknown" }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("Response to copy before leaving this page"),
+    ).toHaveValue(response);
+    await expect(
+      page.getByRole("button", { name: "Submit saved version locally" }),
+    ).toHaveCount(0);
+    const unchanged = await pool.query(
+      "SELECT count(*)::integer AS n,max(submitted_at) AS submitted_at FROM assignment_attempts WHERE id=$1",
+      [attemptId],
+    );
+    expect(unchanged.rows[0]).toMatchObject({ n: 1, submitted_at: null });
+  } finally {
+    await allowAttemptUpdates();
+  }
+  await page.getByRole("link", { name: "Reload this attempt" }).click();
+  await expect(page.getByText("private draft saved")).toBeVisible();
+  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const revision = await page
+    .locator('input[name="revision"]')
+    .first()
+    .inputValue();
+  await page.getByLabel("Submit this saved version locally").check();
+  await page
+    .getByRole("button", { name: "Submit saved version locally" })
+    .click();
+  await expect(
+    page.getByText(/Assignment version 1 .* submitted locally/),
+  ).toBeVisible();
+  const replay = await page.request.post(
+    `${origin}/assignments/attempts/${attemptId}/submit`,
+    {
+      form: { csrf, revision, confirm: "yes", response_snapshot: response },
+      headers: { Origin: origin },
+      maxRedirects: 0,
+    },
+  );
+  expect(replay.status()).toBe(409);
+  const rows = await pool.query(
+    "SELECT count(*)::integer AS n FROM assignment_attempts WHERE id=$1 AND submitted_at IS NOT NULL",
+    [attemptId],
+  );
+  expect(rows.rows[0].n).toBe(1);
 });

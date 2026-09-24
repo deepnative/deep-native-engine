@@ -26,6 +26,7 @@ import {
   errorPage,
   assignmentAttemptsPage,
   assignmentAttemptPage,
+  assignmentWriteRecoveryPage,
 } from "./views.ts";
 import type { Store, Learner } from "./store.ts";
 import { eligibleAssignments } from "./assignment-choice.ts";
@@ -63,6 +64,13 @@ import { workflowBundle, workflowRegistry } from "./workflow-registry.ts";
 import { disabledCircleStore, type CircleStore } from "./circles.ts";
 import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
+const attemptWritePath =
+  /^\/assignments\/attempts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(save|submit)$/i;
+function attemptedResponse(body: unknown, action: string) {
+  const fields = (body ?? {}) as Fields;
+  const value = action === "save" ? fields.response : fields.response_snapshot;
+  return typeof value === "string" ? value : "";
+}
 export function app(
   store: Store,
   options: {
@@ -135,6 +143,7 @@ export function app(
     const session = token(req.cookies[COOKIE]);
     res.locals.token = session;
     res.locals.csrf = csrf(session, options.secret);
+    const write = attemptWritePath.exec(req.originalUrl.split("?")[0]!);
     if (
       ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) &&
       (req.get("origin") !== options.origin ||
@@ -144,6 +153,19 @@ export function app(
           options.secret,
         ))
     ) {
+      if (req.get("origin") === options.origin && write) {
+        res
+          .status(403)
+          .send(
+            assignmentWriteRecoveryPage(
+              "Form needs a refresh",
+              "This form was not accepted. Copy your response, reopen the attempt and use the refreshed form.",
+              attemptedResponse(req.body, write[2]!),
+              write[1]!,
+            ),
+          );
+        return;
+      }
       res
         .status(403)
         .send(
@@ -371,9 +393,28 @@ export function app(
       "/contribute",
       "/circles",
     ],
-    async (_req, res, next) => {
+    async (req, res, next) => {
       const session = await store.session(res.locals.token as string);
       if (session.kind !== "active") {
+        const write =
+          req.method === "POST"
+            ? attemptWritePath.exec(req.originalUrl.split("?")[0]!)
+            : null;
+        if (write) {
+          res
+            .status(401)
+            .send(
+              assignmentWriteRecoveryPage(
+                session.kind === "expired"
+                  ? "Session expired"
+                  : "Session unavailable",
+                "No write was accepted. Copy your response before starting a fresh preview session; the previous private attempt cannot be reopened from a new session.",
+                attemptedResponse(req.body, write[2]!),
+                write[1]!,
+              ),
+            );
+          return;
+        }
         res.redirect(303, "/");
         return;
       }
@@ -903,13 +944,34 @@ export function app(
     if (
       !(await attempts.save(res.locals.token as string, id, revision, response))
     ) {
+      const latest = await attempts.detail(res.locals.token as string, id);
+      if (!latest) {
+        res
+          .status(409)
+          .send(
+            assignmentWriteRecoveryPage(
+              "Attempt unavailable",
+              "The attempt or session is no longer available. Copy your response before returning to your learning path.",
+              response,
+              id,
+            ),
+          );
+        return;
+      }
+      const reason = latest.submittedAt
+        ? "This attempt was already submitted. Your newer text was not saved."
+        : !latest.currentEligible
+          ? "The assignment or your learning direction changed. Your newer text was not saved."
+          : latest.revision !== revision
+            ? "Another tab saved a newer revision. Your text was not saved."
+            : "The attempt could not be changed. Your text was not saved.";
       res
         .status(409)
         .send(
           assignmentAttemptPage(
-            (await attempts.detail(res.locals.token as string, id)) ?? item,
+            latest,
             res.locals.csrf as string,
-            "Your draft was not saved. The saved revision, assignment or your direction changed.",
+            reason,
             response,
             true,
           ),
@@ -948,14 +1010,49 @@ export function app(
         );
       return;
     }
+    if (!item.savedAt || item.response.trim().length < 20) {
+      res
+        .status(422)
+        .send(
+          assignmentAttemptPage(
+            item,
+            res.locals.csrf as string,
+            "Save at least 20 characters before submitting. Nothing was submitted.",
+          ),
+        );
+      return;
+    }
     if (!(await attempts.submit(res.locals.token as string, id, revision))) {
+      const latest = await attempts.detail(res.locals.token as string, id);
+      if (!latest) {
+        res
+          .status(409)
+          .send(
+            assignmentWriteRecoveryPage(
+              "Attempt unavailable",
+              "The attempt or session is no longer available. Check the current state before trying again.",
+              attemptedResponse(fields, "submit"),
+              id,
+            ),
+          );
+        return;
+      }
+      const reason = latest.submittedAt
+        ? "This saved version was already submitted locally. No second submission was created."
+        : !latest.currentEligible
+          ? "The assignment or your learning direction changed. Nothing was submitted."
+          : latest.revision !== revision
+            ? "Another tab saved a newer revision. Nothing was submitted."
+            : "Save at least 20 characters before submitting. Nothing was submitted.";
       res
         .status(409)
         .send(
           assignmentAttemptPage(
-            (await attempts.detail(res.locals.token as string, id)) ?? item,
+            latest,
             res.locals.csrf as string,
-            "Nothing was submitted. Save at least 20 characters, then check the current version and eligibility.",
+            reason,
+            undefined,
+            true,
           ),
         );
       return;
@@ -1376,9 +1473,28 @@ export function app(
         ),
       ),
   );
-  const failure: ErrorRequestHandler = (error, _req, res, _next) => {
+  const failure: ErrorRequestHandler = (error, req, res, _next) => {
     if ((error as { type?: string }).type === "entity.too.large") {
       res.status(413).json({ error: "invalid_evidence" });
+      return;
+    }
+    const write =
+      req.method === "POST"
+        ? attemptWritePath.exec(req.originalUrl.split("?")[0]!)
+        : null;
+    if (write) {
+      res
+        .status(503)
+        .send(
+          assignmentWriteRecoveryPage(
+            write[2] === "save"
+              ? "Save outcome unknown"
+              : "Submission outcome unknown",
+            "The storage result could not be confirmed. Copy your response, then reload this attempt and check its current state before trying again.",
+            attemptedResponse(req.body, write[2]!),
+            write[1]!,
+          ),
+        );
       return;
     }
     res
