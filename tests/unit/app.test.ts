@@ -189,6 +189,9 @@ function storage() {
     create: vi.fn<Store["create"]>().mockResolvedValue(undefined),
     updateProfile: vi.fn<Store["updateProfile"]>().mockResolvedValue(undefined),
     progress: vi.fn<Store["progress"]>().mockResolvedValue(undefined),
+    lessonActivities: vi.fn<Store["lessonActivities"]>().mockResolvedValue([]),
+    openLesson: vi.fn<Store["openLesson"]>().mockResolvedValue(true),
+    advanceLesson: vi.fn<Store["advanceLesson"]>().mockResolvedValue(true),
     assignmentChoice: vi
       .fn<Store["assignmentChoice"]>()
       .mockResolvedValue(null),
@@ -429,6 +432,94 @@ it("shows only eligible published content to members and escapes draft previews"
   );
   expect(preview.text).toContain("Versioned rubric 1");
   await agent.get("/editor/library/SYN-001/2").set("Host", host).expect(403);
+});
+it("records only exact synthetic lesson openings and rejects invalid, stale or unconfirmed progress", async () => {
+  const catalog = catalogMock();
+  const item = {
+    id: "SYN-105",
+    version: 2,
+    kind: "lesson" as const,
+    origin: "curated" as const,
+    title: "Invented lesson",
+    body: "Sample text",
+    owner: "Editor",
+    sources: "Invented",
+    rights: "Owned",
+    goals: [],
+    backgrounds: [],
+    domains: [],
+    prerequisites: "",
+    rubric: null,
+    rubricVersion: null,
+    state: "published" as const,
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date(),
+    publishedAt: new Date(),
+  };
+  catalog.published.mockResolvedValue(item);
+  const agent = request.agent(app(db, { origin, secret: "secret", catalog }));
+  const welcome = await agent.get("/").set("Host", host).expect(200);
+  const csrf = welcome.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  active();
+  const opened = {
+    contentId: item.id,
+    contentVersion: 2,
+    openedAt: new Date(),
+    startedAt: null,
+    selfAssessedAt: null,
+    available: true,
+  };
+  db.lessonActivities.mockResolvedValue([opened]);
+  const reader = await agent
+    .get("/library/SYN-105")
+    .set("Host", host)
+    .expect(200);
+  expect(db.openLesson).toHaveBeenCalledWith(member.id, item.id, 2);
+  expect(reader.text).toContain("Opened in reader");
+  expect(reader.text).toContain("Start this lesson");
+  db.openLesson.mockResolvedValueOnce(false);
+  await agent.get("/library/SYN-105").set("Host", host).expect(409);
+  db.openLesson.mockRejectedValueOnce(new Error("storage unavailable"));
+  const failedOpen = await agent
+    .get("/library/SYN-105")
+    .set("Host", host)
+    .expect(503);
+  expect(failedOpen.text).toContain("could not confirm");
+  const post = (fields: Record<string, string>) =>
+    agent
+      .post("/library/SYN-105/progress")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  await post({ content_version: "x", intent: "start" }).expect(422);
+  await post({ content_version: "0", intent: "start" }).expect(422);
+  await post({ content_version: "2", intent: "review" }).expect(422);
+  await post({ content_version: "2", intent: "complete" }).expect(422);
+  expect(db.advanceLesson).not.toHaveBeenCalled();
+  await post({ content_version: "2", intent: "start" }).expect(303);
+  expect(db.advanceLesson).toHaveBeenCalledWith(member.id, item.id, 2, "start");
+  await post({
+    content_version: "2",
+    intent: "complete",
+    confirm: "yes",
+  }).expect(303);
+  db.advanceLesson.mockResolvedValueOnce(false);
+  const stale = await post({
+    content_version: "1",
+    intent: "complete",
+    confirm: "yes",
+  }).expect(409);
+  expect(stale.text).toContain("version changed");
+  db.advanceLesson.mockRejectedValueOnce(new Error("storage unavailable"));
+  const failedSave = await post({
+    content_version: "2",
+    intent: "start",
+  }).expect(503);
+  expect(failedSave.text).toContain("could not confirm");
+  catalog.published.mockResolvedValueOnce({ ...item, kind: "assignment" });
+  await agent.get("/library/SYN-105").set("Host", host).expect(200);
+  expect(db.openLesson).toHaveBeenCalledTimes(3);
 });
 it("supports the local editor/reviewer workflow without bypassing rejected transitions", async () => {
   const catalog = catalogMock();

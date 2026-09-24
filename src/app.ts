@@ -485,6 +485,7 @@ export function app(
     res.send(item.download);
   });
   app.get("/library", async (req, res) => {
+    const member = res.locals.learner as Learner;
     const q = typeof req.query.q === "string" ? req.query.q : "";
     const goal =
       typeof req.query.goal === "string" ? req.query.goal : undefined;
@@ -495,15 +496,15 @@ export function app(
     const domain =
       typeof req.query.domain === "string" ? req.query.domain : undefined;
     res.send(
-      libraryPage(await catalog.search({ q, goal, background, domain }), {
-        q,
-        goal,
-        background,
-        domain,
-      }),
+      libraryPage(
+        await catalog.search({ q, goal, background, domain }),
+        { q, goal, background, domain },
+        await store.lessonActivities(member.id),
+      ),
     );
   });
   app.get("/library/:id", async (req, res) => {
+    const member = res.locals.learner as Learner;
     const item = await catalog.published(req.params.id as string);
     if (!item) {
       res
@@ -516,7 +517,72 @@ export function app(
         );
       return;
     }
-    res.send(contentPreview(item, false));
+    if (item.kind === "lesson") {
+      if (!(await store.openLesson(member.id, item.id, item.version))) {
+        res
+          .status(409)
+          .send(
+            errorPage(
+              "Lesson changed",
+              "Return to the library for the current published version.",
+            ),
+          );
+        return;
+      }
+    }
+    const activity =
+      item.kind === "lesson"
+        ? (await store.lessonActivities(member.id)).find(
+            (entry) =>
+              entry.contentId === item.id &&
+              entry.contentVersion === item.version,
+          )
+        : undefined;
+    res.send(contentPreview(item, false, res.locals.csrf as string, activity));
+  });
+  app.post("/library/:id/progress", async (req, res) => {
+    const fields = req.body as Fields;
+    const version = Number(fields.content_version);
+    const action = fields.intent;
+    if (
+      !Number.isSafeInteger(version) ||
+      version < 1 ||
+      (action !== "start" && action !== "complete") ||
+      (action === "complete" && fields.confirm !== "yes")
+    ) {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Invalid lesson action",
+            "Return to the current lesson and choose an available action.",
+          ),
+        );
+      return;
+    }
+    const member = res.locals.learner as Learner;
+    if (
+      !(await store.advanceLesson(
+        member.id,
+        req.params.id as string,
+        version,
+        action,
+      ))
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Lesson action unavailable",
+            "This lesson version changed, is unavailable, or has not been started. Return to the library and check your saved history.",
+          ),
+        );
+      return;
+    }
+    res.redirect(
+      303,
+      `/library/${encodeURIComponent(req.params.id as string)}`,
+    );
   });
   app.get("/editor/library", async (_req, res) => {
     res.send(
