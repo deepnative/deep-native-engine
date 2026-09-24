@@ -192,6 +192,8 @@ it("rejects dependency drift before any application command", async () => {
 it("attempts every cleanup and writes a failed report after cleanup errors", async () => {
   doubles.query
     .mockResolvedValueOnce({})
+    .mockResolvedValueOnce({})
+    .mockRejectedValueOnce(new Error(marker))
     .mockRejectedValueOnce(new Error(marker));
   doubles.end.mockRejectedValueOnce(new Error(marker));
   doubles.remove.mockImplementation((target) => {
@@ -200,16 +202,34 @@ it("attempts every cleanup and writes a failed report after cleanup errors", asy
   const report = await run();
   expect(report.exitStatus).toBe(1);
   expect(report.cleanupErrors).toEqual([
+    "Provisional test database cleanup failed.",
     "Test database cleanup failed.",
     "Test database connection cleanup failed.",
     "Private test storage cleanup failed.",
   ]);
-  expect(doubles.query).toHaveBeenCalledTimes(2);
+  expect(doubles.query).toHaveBeenCalledTimes(4);
   expect(doubles.end).toHaveBeenCalledOnce();
   expect(doubles.remove).toHaveBeenCalledWith("/synthetic/private-evidence", {
     recursive: true,
     force: true,
   });
+});
+it("keeps a failed provisional database setup from passing or leaking", async () => {
+  doubles.query
+    .mockResolvedValueOnce({})
+    .mockRejectedValueOnce(new Error(marker));
+  const report = await run();
+  expect(report.error).toBe(
+    "Verification failed during provisional test database setup.",
+  );
+  expect(report.exitStatus).toBe(1);
+  expect(doubles.query).toHaveBeenCalledTimes(3);
+  expect(
+    doubles.spawn.mock.calls.some(
+      ([command, args]) =>
+        command === "npm" && args[1] === "test:e2e:provisional",
+    ),
+  ).toBe(false);
 });
 it("treats an idle database error as failure without leaking or losing cleanup", async () => {
   doubles.query.mockImplementationOnce(async () => {
@@ -248,7 +268,22 @@ it("still passes a successful run and cleans its isolated resources", async () =
   expect(report.exitStatus).toBe(0);
   expect(report.error).toBeUndefined();
   expect(report.cleanupErrors).toBeUndefined();
-  expect(doubles.query).toHaveBeenCalledTimes(2);
+  expect(doubles.query).toHaveBeenCalledTimes(4);
+  const mainBrowser = doubles.spawn.mock.calls.find(
+    ([command, args]) => command === "npm" && args[1] === "test:e2e",
+  );
+  const provisionalBrowser = doubles.spawn.mock.calls.find(
+    ([command, args]) =>
+      command === "npm" && args[1] === "test:e2e:provisional",
+  );
+  const mainDatabase = new URL(mainBrowser[2].env.DNE_TEST_DATABASE_URL)
+    .pathname;
+  const provisionalDatabase = new URL(
+    provisionalBrowser[2].env.DNE_TEST_DATABASE_URL,
+  ).pathname;
+  expect(mainDatabase).toMatch(/^\/dne_test_[0-9a-f]{32}$/);
+  expect(provisionalDatabase).toMatch(/^\/dne_test_[0-9a-f]{32}$/);
+  expect(provisionalDatabase).not.toBe(mainDatabase);
   expect(doubles.end).toHaveBeenCalledOnce();
   expect(output).not.toHaveBeenCalled();
 });

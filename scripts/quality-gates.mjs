@@ -334,10 +334,17 @@ export function assertFullReleaseJourneys(register, report) {
   };
 }
 
-// This is executable evidence for a bounded part of the proposed register.
+// This is executable evidence for a bounded part of the approved mapping.
 // It cannot approve the denominator or satisfy the full-release gate.
 export function assertProvisionalReleaseJourneys(register, report) {
-  const ids = ["F-ECO-01-A", "F-ECO-01-B", "F-ECO-01-C"];
+  const ids = [
+    "F-ECO-01-A",
+    "F-ECO-01-B",
+    "F-ECO-01-C",
+    "F-ECO-03-A",
+    "F-ECO-03-B",
+    "F-ECO-03-C",
+  ];
   const cases = register.fullMvp.flatMap((family) =>
     family.cases.map((test) => ({
       id: test.id,
