@@ -61,6 +61,115 @@ class RepositoryFixture(unittest.TestCase):
     def test_complete_fixture_validates(self):
         gate.validate(self.root)
 
+    def test_untrusted_exceptions_never_reach_console_or_report(self):
+        marker = "synthetic-private-exception"
+
+        class UnprintableError(Exception):
+            def __str__(self):
+                raise AssertionError("Exception must not be inspected")
+
+        errors = [OSError(marker), ValueError(marker), KeyError(marker),
+                  subprocess.CalledProcessError(7, [marker]), gate.GateError(marker),
+                  RuntimeError(marker), UnprintableError()]
+        for error in errors:
+            with self.subTest(kind=type(error).__name__):
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr), patch.object(gate, "validate", side_effect=error):
+                    self.assertEqual(gate.verify(self.root), 1)
+                text = (self.root / "artifacts/repository-verification.json").read_text()
+                self.assertNotIn(marker, text + stdout.getvalue() + stderr.getvalue())
+                report = json.loads(text)
+                self.assertEqual(report["error"], "Repository verification failed during repository assets.")
+                self.assertEqual(report["exit_status"], 1)
+                self.assertEqual(report["application_status"], "not-verified")
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr), patch.object(gate, "main", side_effect=error):
+                    self.assertEqual(gate.run_cli(), 1)
+                self.assertNotIn(marker, stdout.getvalue() + stderr.getvalue())
+                self.assertIn("Repository command failed", stderr.getvalue())
+
+    def test_untrusted_paths_links_and_metadata_have_safe_diagnostics(self):
+        marker = "synthetic-private-value"
+        readme = self.root / "README.md"
+        original = readme.read_text()
+        plan_path = self.root / gate.CONTEXT / "issues.json"
+        original_plan = plan_path.read_text()
+        unexpected = self.root / f"{marker}.txt"
+        for kind, expected in [("path", "Outside verified"), ("link", "Broken local link"),
+                               ("dependency", "Unknown dependency")]:
+            with self.subTest(kind=kind):
+                unexpected.unlink(missing_ok=True)
+                readme.write_text(original)
+                plan_path.write_text(original_plan)
+                if kind == "path":
+                    unexpected.write_text("synthetic fixture")
+                elif kind == "link":
+                    readme.write_text(original + f"\n[broken]({marker})\n")
+                else:
+                    plan = json.loads(original_plan)
+                    plan["issues"][0]["deps"].append(marker)
+                    plan_path.write_text(json.dumps(plan))
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    self.assertEqual(gate.verify(self.root), 1)
+                text = (self.root / "artifacts/repository-verification.json").read_text()
+                self.assertIn(expected, text)
+                self.assertIn("ref-sha256:", text)
+                self.assertNotIn(marker, text + stdout.getvalue() + stderr.getvalue())
+                unexpected.unlink(missing_ok=True)
+                readme.write_text(original)
+                plan_path.write_text(original_plan)
+
+    def test_source_marker_diagnostic_does_not_expose_private_filename(self):
+        private_name = "synthetic-private-filename"
+        credential = "ghp_" + "D" * 36
+        (self.root / "src" / f"{private_name}.ts").write_text(f"// {credential}\n")
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            self.assertEqual(gate.verify(self.root), 1)
+        text = (self.root / "artifacts/repository-verification.json").read_text()
+        for marker in (private_name, credential):
+            self.assertNotIn(marker, text + stdout.getvalue() + stderr.getvalue())
+        self.assertIn("github-token", text)
+        self.assertIn("ref-sha256:", text)
+
+    def test_cli_unknown_command_does_not_echo_untrusted_argument(self):
+        marker = "synthetic-private-argument"
+        result = subprocess.run([sys.executable, "scripts/repo.py", marker],
+                                cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Unknown command", result.stderr)
+        self.assertNotIn(marker, result.stdout + result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_cli_git_failure_does_not_echo_private_path(self):
+        marker = "synthetic-private-git-path"
+        env = dict(os.environ, GIT_DIR=str(self.root / marker))
+        result = subprocess.run([sys.executable, "scripts/repo.py", "verify"],
+                                cwd=self.root, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        text = (self.root / "artifacts/repository-verification.json").read_text()
+        self.assertNotIn(marker, text + result.stdout + result.stderr)
+        self.assertIn("revision identification", text)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_report_write_failure_is_safe_and_cannot_pass(self):
+        marker = "synthetic-private-filesystem-error"
+        for earlier_failure in (True, False):
+            with self.subTest(earlier_failure=earlier_failure):
+                stdout, stderr = io.StringIO(), io.StringIO()
+                suite = unittest.TestSuite([unittest.FunctionTestCase(lambda: None)])
+                with redirect_stdout(stdout), redirect_stderr(stderr), patch.object(
+                        gate, "validate", side_effect=ValueError(marker) if earlier_failure else None), patch.object(
+                        gate.unittest.defaultTestLoader, "discover", return_value=suite), patch.object(
+                        gate, "verify_application", return_value={"unitCoverage": {}, "journeys": {}}), patch.object(
+                        gate, "scan_artifacts", return_value={"status": "passed"}), patch.object(
+                        Path, "write_text", side_effect=OSError(marker)):
+                    self.assertEqual(gate.verify(self.root), 1)
+                self.assertIn("Repository verification report could not be written.", stderr.getvalue())
+                self.assertNotIn(marker, stdout.getvalue() + stderr.getvalue())
+                self.assertNotIn("PASS", stdout.getvalue())
+
     def test_source_credential_marker_fails_without_echoing_value(self):
         marker = "ghp_" + "A" * 36
         source = self.root / "src/session.ts"
@@ -68,7 +177,7 @@ class RepositoryFixture(unittest.TestCase):
         with self.assertRaises(gate.GateError) as caught:
             gate.validate(self.root)
         self.assertIn("github-token", str(caught.exception))
-        self.assertIn("src/session.ts", str(caught.exception))
+        self.assertIn("ref-sha256:96998a2148aa", str(caught.exception))
         self.assertNotIn(marker, str(caught.exception))
         stdout, stderr = io.StringIO(), io.StringIO()
         with redirect_stdout(stdout), redirect_stderr(stderr):
@@ -84,7 +193,7 @@ class RepositoryFixture(unittest.TestCase):
         with self.assertRaises(gate.GateError) as caught:
             gate.validate(self.root)
         self.assertIn("private-key", str(caught.exception))
-        self.assertIn("src/new-adapter.ts", str(caught.exception))
+        self.assertIn("ref-sha256:", str(caught.exception))
         self.assertNotIn(marker, str(caught.exception))
 
     def test_generated_artifact_marker_blocks_safe_upload(self):
@@ -98,7 +207,7 @@ class RepositoryFixture(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 1)
         self.assertIn("credential candidate", result.stderr)
-        self.assertIn("artifacts/failure-trace.log", result.stderr)
+        self.assertIn("ref-sha256:", result.stderr)
         self.assertNotIn(marker, result.stdout + result.stderr)
 
     def test_artifact_scan_keeps_safe_failure_traces_and_rejects_unsafe_files(self):
@@ -120,7 +229,7 @@ class RepositoryFixture(unittest.TestCase):
         artifact.write_text("safe content\n")
         with self.assertRaises(gate.GateError) as caught:
             gate.scan_artifacts(self.root)
-        self.assertIn("path-sha256", str(caught.exception))
+        self.assertIn("ref-sha256:", str(caught.exception))
         self.assertNotIn(marker, str(caught.exception))
 
     def test_ci_artifact_display_and_upload_require_safe_scan(self):
