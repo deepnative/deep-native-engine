@@ -23,6 +23,14 @@ export interface AssignmentChoice {
   contentId: string;
   contentVersion: number;
 }
+export interface LessonActivity {
+  contentId: string;
+  contentVersion: number;
+  openedAt: Date;
+  startedAt: Date | null;
+  selfAssessedAt: Date | null;
+  available: boolean;
+}
 export interface Milestone extends MilestoneInput {
   id: string;
   version: number;
@@ -40,6 +48,14 @@ export interface Store {
   ): Promise<void>;
   updateProfile(id: string, profile: LearnerProfile): Promise<void>;
   progress(id: string): Promise<Exercise | undefined>;
+  lessonActivities(id: string): Promise<LessonActivity[]>;
+  openLesson(id: string, contentId: string, version: number): Promise<boolean>;
+  advanceLesson(
+    id: string,
+    contentId: string,
+    version: number,
+    action: "start" | "complete",
+  ): Promise<boolean>;
   assignmentChoice(id: string): Promise<AssignmentChoice | null>;
   chooseAssignment(
     id: string,
@@ -83,6 +99,7 @@ export async function migrate(pool: Pool) {
       "010-assignment-choice.sql",
       "011-learning-milestones.sql",
       "012-private-career-planning.sql",
+      "013-lesson-activity.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
@@ -188,6 +205,56 @@ export function store(pool: Pool): Store {
           [id, LESSON.id, LESSON.version],
         )
       ).rows[0];
+    },
+    async lessonActivities(id) {
+      return (
+        await pool.query<LessonActivity>(
+          `SELECT a.content_id AS "contentId",a.content_version AS "contentVersion",
+                  a.opened_at AS "openedAt",a.started_at AS "startedAt",
+                  a.self_assessed_at AS "selfAssessedAt",
+                  EXISTS(SELECT 1 FROM content_versions cv
+                    WHERE cv.id=a.content_id AND cv.version=a.content_version
+                      AND cv.kind='lesson' AND cv.state='published'
+                      AND NOT EXISTS(SELECT 1 FROM content_versions newer
+                        WHERE newer.id=cv.id AND newer.state='published'
+                          AND newer.version>cv.version)) AS available
+           FROM lesson_activity a WHERE a.member_id=$1
+           ORDER BY a.opened_at DESC,a.content_id,a.content_version DESC`,
+          [id],
+        )
+      ).rows;
+    },
+    async openLesson(id, contentId, version) {
+      const result = await pool.query(
+        `INSERT INTO lesson_activity(member_id,content_id,content_version)
+         SELECT l.id,cv.id,cv.version FROM learners l
+         JOIN content_versions cv ON cv.id=$2 AND cv.version=$3
+         WHERE l.id=$1 AND cv.kind='lesson' AND cv.state='published'
+           AND NOT EXISTS(SELECT 1 FROM content_versions newer
+             WHERE newer.id=cv.id AND newer.state='published' AND newer.version>cv.version)
+         ON CONFLICT(member_id,content_id,content_version) DO UPDATE
+           SET opened_at=lesson_activity.opened_at`,
+        [id, contentId, version],
+      );
+      return result.rowCount === 1;
+    },
+    async advanceLesson(id, contentId, version, action) {
+      const result = await pool.query(
+        `UPDATE lesson_activity a SET
+           started_at=CASE WHEN $4='start' THEN COALESCE(a.started_at,CURRENT_TIMESTAMP)
+                           ELSE a.started_at END,
+           self_assessed_at=CASE WHEN $4='complete' THEN COALESCE(a.self_assessed_at,CURRENT_TIMESTAMP)
+                                 ELSE a.self_assessed_at END
+         WHERE a.member_id=$1 AND a.content_id=$2 AND a.content_version=$3
+           AND ($4='start' OR ($4='complete' AND a.started_at IS NOT NULL))
+           AND EXISTS(SELECT 1 FROM content_versions cv
+             WHERE cv.id=a.content_id AND cv.version=a.content_version
+               AND cv.kind='lesson' AND cv.state='published'
+               AND NOT EXISTS(SELECT 1 FROM content_versions newer
+                 WHERE newer.id=cv.id AND newer.state='published' AND newer.version>cv.version))`,
+        [id, contentId, version, action],
+      );
+      return result.rowCount === 1;
     },
     async assignmentChoice(id) {
       return (

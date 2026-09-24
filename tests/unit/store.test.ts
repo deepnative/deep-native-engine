@@ -88,6 +88,40 @@ it("passes untrusted answers as bound parameters and scopes versioned reads and 
   await db.remove("owned");
   expect(p.query.mock.calls[3]![1]).toEqual(["owned"]);
 });
+it("binds member and exact lesson version for observed reading and explicit state changes", async () => {
+  const p = pool(),
+    db = store(p.value);
+  p.query.mockResolvedValueOnce({
+    rows: [{ contentId: "SYN-100", contentVersion: 2, available: false }],
+  });
+  expect(await db.lessonActivities("member-a")).toMatchObject([
+    { contentId: "SYN-100", available: false },
+  ]);
+  expect(p.query.mock.calls[0]![1]).toEqual(["member-a"]);
+  p.query.mockResolvedValueOnce({ rowCount: 1 });
+  expect(await db.openLesson("member-a", "SYN-100", 2)).toBe(true);
+  expect(p.query.mock.calls[1]![1]).toEqual(["member-a", "SYN-100", 2]);
+  p.query.mockResolvedValueOnce({ rowCount: 0 });
+  expect(await db.openLesson("member-a", "SYN-100", 1)).toBe(false);
+  p.query.mockResolvedValueOnce({ rowCount: 1 });
+  expect(await db.advanceLesson("member-a", "SYN-100", 2, "start")).toBe(true);
+  expect(p.query.mock.calls[3]![1]).toEqual([
+    "member-a",
+    "SYN-100",
+    2,
+    "start",
+  ]);
+  p.query.mockResolvedValueOnce({ rowCount: 0 });
+  expect(await db.advanceLesson("member-b", "SYN-100", 2, "complete")).toBe(
+    false,
+  );
+  expect(p.query.mock.calls[4]![1]).toEqual([
+    "member-b",
+    "SYN-100",
+    2,
+    "complete",
+  ]);
+});
 it("saves profile changes by the session-derived learner and preserves the practice goal", async () => {
   const p = pool(),
     db = store(p.value);

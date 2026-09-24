@@ -607,6 +607,105 @@ it("enforces review, rights, retirement and immutable version-pinned simulated a
   ).toBe("0");
   expect(editorId).toEqual(expect.any(String));
 });
+it("preserves private synthetic lesson activity across goal changes, versions and retirement", async () => {
+  const owner = await member(),
+    outsider = await member();
+  const catalog = catalogStore(pool),
+    auth = authorizationStore(pool);
+  const editorToken = randomBytes(32).toString("hex");
+  const reviewerToken = randomBytes(32).toString("hex");
+  await auth.provisionStaff(
+    editorToken,
+    "editor",
+    new Date(Date.now() + 86_400_000),
+  );
+  await auth.provisionStaff(
+    reviewerToken,
+    "reviewer",
+    new Date(Date.now() + 86_400_000),
+  );
+  const draft = {
+    ...contentDraft,
+    id: "SYN-102",
+    kind: "lesson" as const,
+    title: "Invented reading sample",
+    goals: ["everyday", "work"],
+    rubric: null,
+    rubricVersion: null,
+  };
+  const publish = async (version: number) => {
+    expect(await catalog.createDraft(editorToken, { ...draft, version })).toBe(
+      true,
+    );
+    expect(await catalog.submit(editorToken, draft.id, version)).toBe(true);
+    expect(await catalog.approve(reviewerToken, draft.id, version, true)).toBe(
+      true,
+    );
+    expect(await catalog.publish(editorToken, draft.id, version)).toBe(true);
+  };
+  await publish(1);
+  expect(await db.openLesson(owner.learner.id, draft.id, 1)).toBe(true);
+  const opened = (await db.lessonActivities(owner.learner.id))[0]!;
+  expect(opened).toMatchObject({
+    contentId: draft.id,
+    contentVersion: 1,
+    startedAt: null,
+    selfAssessedAt: null,
+    available: true,
+  });
+  expect(await db.lessonActivities(outsider.learner.id)).toEqual([]);
+  expect(
+    await db.advanceLesson(outsider.learner.id, draft.id, 1, "start"),
+  ).toBe(false);
+  expect(
+    await db.advanceLesson(owner.learner.id, draft.id, 1, "complete"),
+  ).toBe(false);
+  expect(await db.advanceLesson(owner.learner.id, draft.id, 1, "start")).toBe(
+    true,
+  );
+  expect(
+    await db.advanceLesson(owner.learner.id, draft.id, 1, "complete"),
+  ).toBe(true);
+  expect(await db.openLesson(owner.learner.id, draft.id, 1)).toBe(true);
+  expect((await db.lessonActivities(owner.learner.id))[0]!.openedAt).toEqual(
+    opened.openedAt,
+  );
+  await pool.query("UPDATE learners SET goal='work' WHERE id=$1", [
+    owner.learner.id,
+  ]);
+  expect(
+    (await db.lessonActivities(owner.learner.id))[0]!.selfAssessedAt,
+  ).toBeInstanceOf(Date);
+  await publish(2);
+  expect((await db.lessonActivities(owner.learner.id))[0]!.available).toBe(
+    false,
+  );
+  expect(await db.openLesson(owner.learner.id, draft.id, 1)).toBe(false);
+  expect(await db.advanceLesson(owner.learner.id, draft.id, 1, "start")).toBe(
+    false,
+  );
+  expect(await db.openLesson(owner.learner.id, draft.id, 2)).toBe(true);
+  expect(
+    (await db.lessonActivities(owner.learner.id)).map(
+      ({ contentVersion }) => contentVersion,
+    ),
+  ).toEqual([2, 1]);
+  expect(await catalog.retire(editorToken, draft.id)).toBe(true);
+  expect(
+    (await db.lessonActivities(owner.learner.id)).every(
+      ({ available }) => !available,
+    ),
+  ).toBe(true);
+  await db.remove(owner.learner.id);
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*) FROM lesson_activity WHERE member_id=$1",
+        [owner.learner.id],
+      )
+    ).rows[0].count,
+  ).toBe("0");
+});
 
 function wrappedPool(wrap: (client: PoolClient) => PoolClient) {
   return {

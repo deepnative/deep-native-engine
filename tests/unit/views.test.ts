@@ -8,6 +8,7 @@ import {
   lesson,
   errorPage,
   contentPreview,
+  libraryPage,
   expertRegistryPage,
   proposalListPage,
   proposalPreviewPage,
@@ -274,6 +275,66 @@ it("renders an accessible plain-text content preview when filters and prerequisi
   expect(html).toContain("<dt>Backgrounds</dt><dd>All</dd>");
   expect(html).toContain("<dt>Prerequisites</dt><dd>None</dd>");
   expect(html).toContain("Suggested experience");
+});
+it("labels exact private lesson activity without turning a page opening into achievement", () => {
+  const item = {
+    id: "SYN-105",
+    version: 2,
+    kind: "lesson" as const,
+    origin: "curated" as const,
+    title: "Invented sample",
+    body: "Read this sample.",
+    owner: "Editor",
+    sources: "Invented",
+    rights: "Owned",
+    goals: [],
+    backgrounds: [],
+    domains: [],
+    prerequisites: "",
+    rubric: null,
+    rubricVersion: null,
+    state: "published" as const,
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date(),
+    publishedAt: new Date(),
+  };
+  const opened = {
+    contentId: item.id,
+    contentVersion: 2,
+    openedAt: new Date(),
+    startedAt: null,
+    selfAssessedAt: null,
+    available: true,
+  };
+  const reader = contentPreview(item, false, "csrf", opened);
+  expect(reader).toContain("Opened in reader · version 2");
+  expect(reader).toContain("Start this lesson");
+  expect(reader).not.toContain("Mark self-assessed complete");
+  expect(
+    contentPreview(item, false, "csrf", { ...opened, startedAt: new Date() }),
+  ).toContain("Mark self-assessed complete");
+  expect(
+    contentPreview(item, false, "csrf", {
+      ...opened,
+      startedAt: new Date(),
+      selfAssessedAt: new Date(),
+    }),
+  ).toContain("Self-assessed complete");
+  expect(contentPreview(item, true, "csrf")).not.toContain(
+    "Your private reading activity",
+  );
+  const history = libraryPage([item], { q: "" }, [
+    opened,
+    { ...opened, contentVersion: 1, available: false, startedAt: new Date() },
+  ]);
+  expect(history).toContain("Current lesson available");
+  expect(history).toContain(
+    "This version is unavailable; your history remains saved",
+  );
+  expect(history).toContain("Started");
+  expect(libraryPage([], { q: "" })).toContain(
+    "No sample lesson has been opened",
+  );
 });
 it("shows only current assignment choices, escapes titles and gives stale-choice recovery", () => {
   const item = {

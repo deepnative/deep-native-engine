@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v15",
+  "version": "initial-learning-v16",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices, private goal milestones, optional private career plans and unsent member-approved drafts, plus read-only synthetic workflow demonstrations; not live commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices, private goal milestones, optional private career plans and unsent member-approved drafts, plus read-only synthetic workflow demonstrations and private versioned synthetic lesson activity; not reviewed foundation content or live commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -371,6 +371,24 @@
       "steps": "Browse all three, search for meeting actions, inspect metadata and copyable text, download the Markdown attachment, and request an unknown bundle",
       "expected": "The demonstration is labelled unreviewed and unverified; the fixed text downloads without execution or connection and an unknown bundle fails closed",
       "issues": [30],
+      "critical": true
+    },
+    {
+      "id": "L42",
+      "actor": "General learner reading a synthetic published lesson",
+      "preconditions": "Invented lesson published through the local synthetic workflow",
+      "steps": "Open readable lesson, use keyboard to start and self-report completion, reload and change goal",
+      "expected": "Exact version records opened, started and self-assessed separately; history persists and never claims formal review",
+      "issues": [102],
+      "critical": true
+    },
+    {
+      "id": "L43",
+      "actor": "Non-IT professional and IT learner with separate sessions",
+      "preconditions": "Published synthetic lesson with a newer version and retirement transition",
+      "steps": "Open lesson in one session, attempt stale and cross-session actions, publish a new version and retire it",
+      "expected": "Another member has no private history, stale versions cannot advance, and prior history remains labelled unavailable",
+      "issues": [102],
       "critical": true
     }
   ],
