@@ -8,6 +8,12 @@ rights: Original invented notes and output; no real meeting or third-party docum
 goals: Make everyday work clearer; practise an accessible noncoding workflow
 backgrounds: Non-IT professional; general learner; IT practitioner if chosen
 prerequisites: FND-002 and FND-003 or equivalent; no coding required
+setup: Read the invented notes, then check every proposed owner and timing against the notes before using the request template
+supported_environment: Plain text manual exercise; no AI provider, calendar or messaging integration verified
+estimated_cost: No service charge in this local preview; any future model cost is unknown
+permissions: No account or external system access; use synthetic notes only
+license: Original synthetic demonstration; reuse terms pending owner decision
+last_verification: 2026-09-23 source and metadata inspection only; no live model run
 reviewed_on: Pending qualified curriculum and workflow review
 next_review: Before publication; proposed monthly and after source/process change
 readiness: Draft demonstration; no message sent or AI provider tested

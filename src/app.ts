@@ -11,6 +11,8 @@ import {
   readinessPage,
   offerHypothesesPage,
   libraryPage,
+  workflowRegistryPage,
+  workflowDetailPage,
   contentPreview,
   staffLibraryPage,
   trackReadinessPage,
@@ -54,6 +56,7 @@ import {
 } from "./catalog.ts";
 import { disabledTrackStore, type TrackStore } from "./track-readiness.ts";
 import { disabledProposalStore, type ProposalStore } from "./proposals.ts";
+import { workflowBundle, workflowRegistry } from "./workflow-registry.ts";
 export function app(
   store: Store,
   options: {
@@ -444,6 +447,42 @@ export function app(
       return;
     }
     res.redirect(303, `/contribute/${req.params.id}`);
+  });
+  app.get("/workflows", async (req, res) => {
+    const q = typeof req.query.q === "string" ? req.query.q : "";
+    res.send(workflowRegistryPage(await workflowRegistry(q), q.slice(0, 100)));
+  });
+  app.get("/workflows/:id", async (req, res) => {
+    const item = await workflowBundle(req.params.id as string);
+    if (!item) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Workflow unavailable",
+            "This demonstration does not exist.",
+          ),
+        );
+      return;
+    }
+    res.send(workflowDetailPage(item));
+  });
+  app.get("/workflows/:id/download", async (req, res) => {
+    const item = await workflowBundle(req.params.id as string);
+    if (!item) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Workflow unavailable",
+            "This demonstration does not exist.",
+          ),
+        );
+      return;
+    }
+    res.type("text/markdown; charset=utf-8");
+    res.attachment(`${item.id}-v${item.version}.md`);
+    res.send(item.download);
   });
   app.get("/library", async (req, res) => {
     const q = typeof req.query.q === "string" ? req.query.q : "";

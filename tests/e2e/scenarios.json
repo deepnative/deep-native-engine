@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v14",
+  "version": "initial-learning-v15",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices, private goal milestones, optional private career plans and unsent member-approved drafts; not live commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices, private goal milestones, optional private career plans and unsent member-approved drafts, plus read-only synthetic workflow demonstrations; not live commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -362,6 +362,15 @@
       "steps": "Save an optional contract plan and renewal draft, attempt cross-member approval and forged CSRF",
       "expected": "Neither another member nor a forged form can read or approve the private draft; no outbound path exists",
       "issues": [107],
+      "critical": true
+    },
+    {
+      "id": "L41",
+      "actor": "General learner exploring a noncoding workflow",
+      "preconditions": "Three fixed, file-backed synthetic workflow drafts; no connected provider or client system",
+      "steps": "Browse all three, search for meeting actions, inspect metadata and copyable text, download the Markdown attachment, and request an unknown bundle",
+      "expected": "The demonstration is labelled unreviewed and unverified; the fixed text downloads without execution or connection and an unknown bundle fails closed",
+      "issues": [30],
       "critical": true
     }
   ],

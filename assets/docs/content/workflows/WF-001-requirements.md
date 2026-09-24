@@ -8,6 +8,12 @@ rights: Original invented brief and output; no third-party template or client ma
 goals: Clarify requirements; practise an AI-assisted drafting workflow
 backgrounds: IT practitioner; non-IT professional; exploratory learner
 prerequisites: FND-002 and FND-003 or equivalent
+setup: Read the invented brief, then use the request template with a human checking each proposed acceptance check
+supported_environment: Plain text manual exercise; no AI provider or client integration verified
+estimated_cost: No service charge in this local preview; any future model cost is unknown
+permissions: No account or external system access; use synthetic text only
+license: Original synthetic demonstration; reuse terms pending owner decision
+last_verification: 2026-09-23 source and metadata inspection only; no live model run
 reviewed_on: Pending qualified curriculum and workflow review
 next_review: Before publication; proposed monthly and after a dependency or policy change
 readiness: Draft demonstration; not run against a live AI provider or tested in a product
