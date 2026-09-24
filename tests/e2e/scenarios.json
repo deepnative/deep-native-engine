@@ -1,5 +1,5 @@
 {
-  "version": "initial-learning-v19",
+  "version": "initial-learning-v20",
   "fullMvpVersion": "full-mvp-v1",
   "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership and operator-only aggregate preview metrics; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
@@ -452,6 +452,24 @@
       "steps": "Save from one tab, attempt stale overwrite and unconfirmed submission from another",
       "expected": "Stale text is retained for recovery but not saved; missing confirmation does not submit",
       "issues": [104],
+      "critical": true
+    },
+    {
+      "id": "L51",
+      "actor": "General learner encountering a failed draft write and expired session",
+      "preconditions": "Published synthetic assignment, private attempt and deterministic PostgreSQL write fault",
+      "steps": "Attempt save during the write fault, copy retained text, reload and save, then expire the session during a later save",
+      "expected": "Unconfirmed save never claims success; text remains copyable, one recovered revision persists, and expiry preserves the later unsaved text without a write",
+      "issues": [126],
+      "critical": true
+    },
+    {
+      "id": "L52",
+      "actor": "IT learner submitting a saved synthetic response",
+      "preconditions": "Published technical assignment, saved version and deterministic PostgreSQL write fault",
+      "steps": "Submit during the write fault, inspect copyable text and actual database state, recover and submit, then replay the old request",
+      "expected": "Unknown submission has no automatic retry; member checks state and submits once; replay cannot create another submission or attempt",
+      "issues": [126],
       "critical": true
     }
   ],

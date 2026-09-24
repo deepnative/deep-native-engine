@@ -1349,7 +1349,10 @@ it("keeps synthetic assignment attempts private through start, validation, confl
     response: "unsaved text after a database failure",
     sample_confirmed: "yes",
   }).expect(503);
-  expect(failedWrite.text).toContain("We could not confirm the result");
+  expect(failedWrite.text).toContain("Save outcome unknown");
+  expect(failedWrite.text).toContain("unsaved text after a database failure");
+  expect(failedWrite.text).toContain("Reload this attempt");
+  expect(failedWrite.text).not.toContain('name="revision"');
   expect(failedWrite.text).not.toContain("private database connection secret");
   await post("/assignments/attempts/invalid/submit", {
     revision: "2",
@@ -1379,4 +1382,162 @@ it("keeps synthetic assignment attempts private through start, validation, confl
   await post(`/assignments/attempts/${id}/delete`, { confirm: "yes" }).expect(
     303,
   );
+});
+
+it("preserves attempted text and separates stale, ineligible, expired and uncertain assignment writes", async () => {
+  const id = "22222222-2222-4222-8222-222222222222";
+  const item = {
+    id,
+    contentId: "SYN-962",
+    contentVersion: 1,
+    title: "Private invented assignment",
+    goalAtStart: "everyday",
+    response: "Previously saved synthetic response.",
+    revision: 2,
+    startedAt: new Date("2026-09-24T00:00:00Z"),
+    savedAt: new Date("2026-09-24T00:01:00Z"),
+    submittedAt: null,
+    currentPublished: true,
+    currentEligible: true,
+  };
+  const db = storage();
+  const attempts = {
+    list: vi.fn().mockResolvedValue([]),
+    detail: vi.fn().mockResolvedValue(item),
+    start: vi.fn().mockResolvedValue(id),
+    save: vi.fn().mockResolvedValue(false),
+    submit: vi.fn().mockResolvedValue(false),
+    remove: vi.fn().mockResolvedValue(false),
+  };
+  const agent = managedAgent(app(db, { origin, secret: "secret", attempts }));
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const post = (action: string, fields: Record<string, string>) =>
+    agent
+      .post(`/assignments/attempts/${id}/${action}`)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  const draft = {
+    revision: "2",
+    response: "A newer <private> response that must remain copyable.",
+    sample_confirmed: "yes",
+  };
+  attempts.detail.mockResolvedValueOnce(item).mockResolvedValueOnce({
+    ...item,
+    revision: 3,
+  });
+  const stale = await post("save", draft).expect(409);
+  expect(stale.text).toContain("Another tab saved a newer revision");
+  expect(stale.text).toContain("A newer &lt;private&gt; response");
+  expect(stale.text).toContain("Unsaved response to copy");
+  expect(stale.text).not.toContain('name="response"');
+  attempts.detail.mockResolvedValueOnce(item).mockResolvedValueOnce({
+    ...item,
+    currentEligible: false,
+  });
+  const ineligible = await post("save", draft).expect(409);
+  expect(ineligible.text).toContain("learning direction changed");
+  expect(ineligible.text).toContain("A newer &lt;private&gt; response");
+  attempts.detail.mockResolvedValueOnce(item).mockResolvedValueOnce({
+    ...item,
+    submittedAt: new Date("2026-09-24T00:02:00Z"),
+  });
+  expect((await post("save", draft).expect(409)).text).toContain(
+    "already submitted",
+  );
+  attempts.detail.mockResolvedValueOnce(item).mockResolvedValueOnce(item);
+  expect((await post("save", draft).expect(409)).text).toContain(
+    "could not be changed",
+  );
+  attempts.detail.mockResolvedValueOnce({ ...item, response: "short" });
+  expect(
+    (
+      await post("submit", {
+        revision: "2",
+        confirm: "yes",
+        response_snapshot: "short",
+      }).expect(422)
+    ).text,
+  ).toContain("Save at least 20 characters");
+  attempts.detail.mockResolvedValue(item);
+  attempts.detail.mockResolvedValueOnce(item).mockResolvedValueOnce({
+    ...item,
+    submittedAt: new Date("2026-09-24T00:02:00Z"),
+  });
+  expect(
+    (
+      await post("submit", {
+        revision: "2",
+        confirm: "yes",
+        response_snapshot: item.response,
+      }).expect(409)
+    ).text,
+  ).toContain("already submitted locally");
+  attempts.detail.mockResolvedValueOnce(item).mockResolvedValueOnce({
+    ...item,
+    currentEligible: false,
+  });
+  expect(
+    (
+      await post("submit", {
+        revision: "2",
+        confirm: "yes",
+        response_snapshot: item.response,
+      }).expect(409)
+    ).text,
+  ).toContain("learning direction changed");
+  attempts.detail.mockResolvedValueOnce(item).mockResolvedValueOnce({
+    ...item,
+    revision: 3,
+  });
+  expect(
+    (
+      await post("submit", {
+        revision: "2",
+        confirm: "yes",
+        response_snapshot: item.response,
+      }).expect(409)
+    ).text,
+  ).toContain("Another tab saved a newer revision");
+  attempts.detail.mockResolvedValueOnce(item).mockResolvedValueOnce(item);
+  expect(
+    (
+      await post("submit", {
+        revision: "2",
+        confirm: "yes",
+        response_snapshot: item.response,
+      }).expect(409)
+    ).text,
+  ).toContain("Save at least 20 characters");
+  attempts.submit.mockRejectedValueOnce(new Error("private storage secret"));
+  const unknownSubmit = await post("submit", {
+    revision: "2",
+    confirm: "yes",
+    response_snapshot: item.response,
+  }).expect(503);
+  expect(unknownSubmit.text).toContain("Submission outcome unknown");
+  expect(unknownSubmit.text).toContain(item.response);
+  expect(unknownSubmit.text).not.toContain("private storage secret");
+  expect(unknownSubmit.text).not.toContain("Submit saved version locally");
+  db.session.mockResolvedValueOnce({ kind: "expired" });
+  const expired = await post("save", draft).expect(401);
+  expect(expired.text).toContain("Session expired");
+  expect(expired.text).toContain("A newer &lt;private&gt; response");
+  db.session.mockResolvedValueOnce({ kind: "new" });
+  const unknownSession = await agent
+    .post(`/assignments/attempts/${id}/submit`)
+    .set("Host", host)
+    .set("Origin", origin)
+    .set("x-csrf-token", csrf)
+    .expect(401);
+  expect(unknownSession.text).toContain("Session unavailable");
+  expect(unknownSession.text).not.toContain("Private invented assignment");
+  const invalidForm = await post("save", { ...draft, csrf: "invalid" }).expect(
+    403,
+  );
+  expect(invalidForm.text).toContain("Form needs a refresh");
+  expect(invalidForm.text).toContain("A newer &lt;private&gt; response");
 });

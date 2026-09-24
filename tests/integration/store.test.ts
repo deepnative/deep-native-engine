@@ -1173,6 +1173,74 @@ it("keeps retired drafts readable but denies writes, and privacy deletion cascad
   ).toBe(0);
 });
 
+it("keeps failed PostgreSQL attempt writes unconfirmed until a checked retry", async () => {
+  const owner = await member(),
+    editor = await staff("editor"),
+    reviewer = await staff("reviewer");
+  const catalog = catalogStore(pool),
+    attempts = attemptStore(pool);
+  const draft = {
+    ...contentDraft,
+    id: "SYN-963",
+    goals: ["everyday"],
+    backgrounds: ["explorer"],
+  };
+  expect(await catalog.createDraft(editor.token, draft)).toBe(true);
+  expect(await catalog.submit(editor.token, draft.id, 1)).toBe(true);
+  expect(await catalog.approve(reviewer.token, draft.id, 1, true)).toBe(true);
+  expect(await catalog.publish(editor.token, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.learner.id, draft.id, 1)).toBe(true);
+  const id = (await attempts.start(owner.token))!;
+  await pool.query(
+    `CREATE FUNCTION test_reject_attempt_update() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF OLD.id = '${id}'::uuid THEN
+          RAISE EXCEPTION 'synthetic attempt write fault';
+        END IF;
+        RETURN NEW;
+      END $$`,
+  );
+  const reject = () =>
+    pool.query(
+      "CREATE TRIGGER test_reject_attempt_update BEFORE UPDATE ON assignment_attempts FOR EACH ROW EXECUTE FUNCTION test_reject_attempt_update()",
+    );
+  const allow = () =>
+    pool.query(
+      "DROP TRIGGER IF EXISTS test_reject_attempt_update ON assignment_attempts",
+    );
+  try {
+    await reject();
+    await expect(
+      attempts.save(owner.token, id, 1, "Synthetic text after a fault."),
+    ).rejects.toThrow("synthetic attempt write fault");
+    expect(await attempts.detail(owner.token, id)).toMatchObject({
+      response: "",
+      revision: 1,
+      savedAt: null,
+    });
+    await allow();
+    expect(
+      await attempts.save(owner.token, id, 1, "Synthetic text after a fault."),
+    ).toBe(true);
+    await reject();
+    await expect(attempts.submit(owner.token, id, 2)).rejects.toThrow(
+      "synthetic attempt write fault",
+    );
+    expect((await attempts.detail(owner.token, id))?.submittedAt).toBeNull();
+    await allow();
+    expect(await attempts.submit(owner.token, id, 2)).toBe(true);
+    expect(await attempts.submit(owner.token, id, 2)).toBe(false);
+    const rows = await pool.query(
+      "SELECT count(*)::integer AS n FROM assignment_attempts WHERE id=$1",
+      [id],
+    );
+    expect(rows.rows[0].n).toBe(1);
+  } finally {
+    await allow();
+    await pool.query("DROP FUNCTION IF EXISTS test_reject_attempt_update()");
+  }
+});
+
 it("counts retained preview learning and circle events once without granting metric access to members", async () => {
   const first = await member(),
     second = await member(),
