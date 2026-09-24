@@ -37,9 +37,9 @@ SETUP_FILES = {
 
 APP_FILES = {
     ".env.example", ".nvmrc", "compose.yaml", "eslint.config.mjs", "package.json", "package-lock.json",
-    "playwright.config.ts", "playwright.provisional.config.ts", "tsconfig.json", "tsconfig.build.json", "vitest.config.ts",
+    "playwright.config.ts", "playwright.provisional.config.ts", "playwright.full.config.ts", "tsconfig.json", "tsconfig.build.json", "vitest.config.ts",
     "vitest.integration.config.ts", "scripts/quality-gates.mjs", "scripts/gate-probes.mjs",
-    "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "tests/e2e/scenarios.json", "src/main.ts", "migrations/001-learning.sql",
+    "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "scripts/full-release-evidence.mjs", "tests/e2e/scenarios.json", "tests/e2e/full-mvp-approval.json", "src/main.ts", "migrations/001-learning.sql",
     "assets/docs/content/circles/preview-circles.json",
 }
 
