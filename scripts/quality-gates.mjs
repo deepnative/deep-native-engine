@@ -266,28 +266,7 @@ export function assertJourneys(register, report) {
   };
 }
 
-// Run this gate on the full release browser report when the full MVP exists.
-// The local-slice gate keeps its own denominator and reports these rows as
-// outstanding; passing the local slice never promotes a release journey.
-export function assertFullReleaseJourneys(register, report) {
-  const release = assertJourneys(
-    {
-      ...register,
-      scope: "full-MVP",
-      slice: register.fullMvp.flatMap((scenario) =>
-        scenario.cases.map((test) => ({
-          id: test.id,
-          actor: scenario.actor,
-          preconditions: scenario.preconditions,
-          steps: test.steps,
-          expected: test.expected,
-          issues: scenario.issues,
-          critical: test.critical,
-        })),
-      ),
-    },
-    report,
-  );
+function assertRequiredCheckEvidence(register, report) {
   const requiredById = new Map(
     register.fullMvp.flatMap((family) =>
       family.cases.map((test) => [
@@ -318,6 +297,31 @@ export function assertFullReleaseJourneys(register, report) {
     for (const child of suite.suites ?? []) checkEvidence(child);
   }
   report.suites.forEach(checkEvidence);
+}
+
+// Run this gate on the full release browser report when the full MVP exists.
+// The local-slice gate keeps its own denominator and reports these rows as
+// outstanding; passing the local slice never promotes a release journey.
+export function assertFullReleaseJourneys(register, report) {
+  const release = assertJourneys(
+    {
+      ...register,
+      scope: "full-MVP",
+      slice: register.fullMvp.flatMap((scenario) =>
+        scenario.cases.map((test) => ({
+          id: test.id,
+          actor: scenario.actor,
+          preconditions: scenario.preconditions,
+          steps: test.steps,
+          expected: test.expected,
+          issues: scenario.issues,
+          critical: test.critical,
+        })),
+      ),
+    },
+    report,
+  );
+  assertRequiredCheckEvidence(register, report);
   return {
     register: register.fullMvpVersion,
     scope: release.scope,
@@ -357,6 +361,7 @@ export function assertProvisionalReleaseJourneys(register, report) {
     },
     report,
   );
+  assertRequiredCheckEvidence(register, report);
   return {
     register: register.fullMvpVersion,
     scope: result.scope,

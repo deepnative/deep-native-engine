@@ -357,13 +357,28 @@ it("requires every mandatory subcase on each browser under the same ID", () => {
 });
 it("reports only fully passing provisional ECO-01 browser evidence without approving release", () => {
   const ids = ["F-ECO-01-A", "F-ECO-01-B", "F-ECO-01-C"];
+  const cases = proposal.fullMvp.flatMap((family) => family.cases);
   const report = {
     errors: [],
     suites: [
       {
         specs: ids.map((id) => ({
           title: `[${id}] proposed journey`,
-          tests: proposal.projects.map(execution),
+          tests: proposal.projects.map((projectName) => ({
+            ...execution(projectName),
+            results: [
+              {
+                status: "passed",
+                retry: 0,
+                annotations: cases
+                  .find((item) => item.id === id)
+                  .requiredChecks.map((check, index) => ({
+                    type: "required-check",
+                    description: requiredCheckToken(id, index + 1, check),
+                  })),
+              },
+            ],
+          })),
         })),
       },
     ],
@@ -376,6 +391,34 @@ it("reports only fully passing provisional ECO-01 browser evidence without appro
     criticalTotal: 3,
     executions: 3 * proposal.projects.length,
   });
+  for (const [browserIndex, browserName] of proposal.projects.entries()) {
+    for (const [name, corrupt] of [
+      ["missing", (annotations) => annotations.pop()],
+      ["all missing", (annotations) => annotations.splice(0)],
+      ["stale", (annotations) => (annotations[0].description = "stale")],
+      ["duplicate", (annotations) => (annotations[1] = { ...annotations[0] })],
+    ]) {
+      const changed = copy(report);
+      corrupt(
+        changed.suites[0].specs[0].tests[browserIndex].results[0].annotations,
+      );
+      expect(
+        () => assertProvisionalReleaseJourneys(proposal, changed),
+        `${name} marker on ${browserName}`,
+      ).toThrow(
+        new RegExp(`Incomplete required subcases.*F-ECO-01-A.*${browserName}`),
+      );
+    }
+    const singleCheckMissing = copy(report);
+    singleCheckMissing.suites[0].specs[1].tests[
+      browserIndex
+    ].results[0].annotations = [];
+    expect(() =>
+      assertProvisionalReleaseJourneys(proposal, singleCheckMissing),
+    ).toThrow(
+      new RegExp(`Incomplete required subcases.*F-ECO-01-B.*${browserName}`),
+    );
+  }
   const missing = copy(report);
   missing.suites[0].specs.pop();
   expect(() => assertProvisionalReleaseJourneys(proposal, missing)).toThrow();
@@ -385,6 +428,23 @@ it("reports only fully passing provisional ECO-01 browser evidence without appro
   const unmapped = copy(report);
   unmapped.suites[0].specs[0].title = "[F-ECO-02-A] wrong journey";
   expect(() => assertProvisionalReleaseJourneys(proposal, unmapped)).toThrow();
+  const duplicatedExecution = copy(report);
+  duplicatedExecution.suites[0].specs[0].tests.push(
+    copy(duplicatedExecution.suites[0].specs[0].tests[0]),
+  );
+  expect(() =>
+    assertProvisionalReleaseJourneys(proposal, duplicatedExecution),
+  ).toThrow(/Duplicate scenario\/browser execution/);
+  const skipped = copy(report);
+  skipped.suites[0].specs[0].tests[0].results[0].status = "skipped";
+  expect(() => assertProvisionalReleaseJourneys(proposal, skipped)).toThrow(
+    /Failed, skipped, missing or retried/,
+  );
+  const failed = copy(report);
+  failed.suites[0].specs[0].tests[0].status = "unexpected";
+  expect(() => assertProvisionalReleaseJourneys(proposal, failed)).toThrow(
+    /Failed, skipped, missing or retried/,
+  );
 });
 it.each([
   "missing",
