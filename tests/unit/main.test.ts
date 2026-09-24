@@ -31,12 +31,15 @@ it.each([false, true])(
       return process;
     }) as typeof process.once);
     vi.spyOn(console, "info").mockImplementation(() => {});
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     await import("../../src/main.ts");
     callbacks.SIGTERM!();
     callbacks.SIGINT!();
     await Promise.resolve();
     expect(close).toHaveBeenCalledOnce();
     expect(process.exitCode ?? 0).toBe(failure ? 1 : 0);
+    expect(error.mock.calls).toEqual(
+      failure ? [["Preview shutdown failed."]] : [],
+    );
   },
 );
