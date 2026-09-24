@@ -15,6 +15,8 @@ Prepared 2026-09-23 for [QA-002 #17](https://github.com/deepnative/deep-native-e
 
 Every family retains its source requirement text, actor, preconditions, end-to-end steps, expected result, issue links, risk, criticality and `outstanding` state. Each child case has a reserved browser ID plus its own action and observable result. Browser tests must use exactly `[F-…]` in their title. These are proposed acceptance scenarios; reserved IDs are not tests and do not count as passing. The local slice's passing IDs remain separate. The gate's full-MVP report names every uncovered ID, the 100-case denominator and the critical-case count.
 
+Each of the 100 cases now also names its mandatory `requiredChecks`: a concrete action and observable expected result for each required subcase. The audit found **197 required checks**, with 77 cases needing more than one and 23 requiring one. These checks are obligations *inside* the existing case IDs; they do not add 97 passing IDs or change the 100-case/94-critical denominator. The check array is part of the mapping approval digest, so a later edit invalidates approval until reviewed again.
+
 The issue links in each family identify the implementation acceptance areas it exercises. Specific case actions and results are the concrete checks to use when those issues are delivered. Issue text and the immutable source archive remain authoritative for obligations that are not yet implemented; mapping overlap never deletes a case. The following relationships explain intentional cross-source overlap:
 
 | Original concern | Expanded/recovery concern | Separate evidence required |
@@ -60,7 +62,43 @@ I compared all 27 family requirement strings with their [roadmap source](context
 | ECO-07 | A optional offer/capacity; B explicit versioned acceptance; C cancellation/export/background change. |
 | ECO-08 | A separate outcome measures; B demo/self-report labels; C unauthorized drill-down. |
 
+The table covers all 27 families and all 100 IDs. For completeness, this is the check-count audit by case letter; the register itself records the action and observable assertion for each of the 197 checks.
+
+| Family | Required checks by case ID suffix |
+| --- | --- |
+| ROADMAP-01 | A:2, B:2, C:3, D:2 |
+| ROADMAP-02 | A:3, B:1, C:3, D:1 |
+| ROADMAP-03 | A:2, B:2, C:2, D:2 |
+| ROADMAP-04 | A:2, B:2, C:2, D:7 |
+| ROADMAP-05 | A:3, B:3, C:2, D:3 |
+| ROADMAP-06 | A:2, B:2, C:2, D:2 |
+| ROADMAP-07 | A:2, B:1, C:2, D:3 |
+| ROADMAP-08 | A:3, B:2, C:2, D:1 |
+| ROADMAP-09 | A:1, B:2, C:3, D:4 |
+| BUILD-01 | A:1, B:1, C:1, D:1 |
+| BUILD-02 | A:2, B:1, C:2, D:3 |
+| BUILD-03 | A:1, B:1, C:1, D:2 |
+| BUILD-04 | A:2, B:2, C:2, D:2 |
+| BUILD-05 | A:1, B:1, C:2, D:1 |
+| BUILD-06 | A:1, B:1, C:2, D:2 |
+| BUILD-07 | A:2, B:2, C:2, D:1 |
+| BUILD-08 | A:2, B:1, C:2, D:2 |
+| BUILD-09 | A:2, B:1, C:2, D:2 |
+| BUILD-10 | A:2, B:2, C:2, D:2 |
+| ECO-01 | A:2, B:1, C:2 |
+| ECO-02 | A:2, B:2, C:2 |
+| ECO-03 | A:2, B:2, C:2 |
+| ECO-04 | A:2, B:2, C:2 |
+| ECO-05 | A:2, B:3, C:2 |
+| ECO-06 | A:2, B:2, C:2 |
+| ECO-07 | A:2, B:2, C:3 |
+| ECO-08 | A:3, B:2, C:1 |
+
+The formerly ambiguous alternatives are now explicit conjunctions. `F-ROADMAP-03-C` requires a tested cancellation policy **and** a tested no-show policy; `F-ROADMAP-03-D` separately tests provider failure. `F-ECO-06-C` requires both an unavailable-provider response and a budget-stop response. `F-ECO-07-C` requires cancellation rights, authorized export, **and** background-change isolation. A policy-dependent result such as restored *or* forfeited credit remains conditional on the declared policy, but both triggering paths and the corresponding dated outcome must be asserted. Other compound IDs explicitly separate payment event order, refund decisions, timeout and malformed output, owner and outsider reads, retired and unverified templates, consent and rejection, mobile and keyboard access, and empty and error recovery.
+
 The source-to-case comparison found no missing family, duplicate case ID, or justified change to the proposed denominator. The six noncritical IDs are ECO-02-A–C and ECO-03-A–C; all other 94 remain critical. ECO-04's source names QA-004 as well as CTP-005/020/021, so its register issue links now include #18. Overlap between ROADMAP and BUILD cases remains separately countable as described above. The gate protects this **proposal** from silent ID removal, substitution, or criticality downgrade; a deliberate scope change needs a new version and reviewed gate update. Independent approval of the mapping is still pending, and full-MVP browser coverage remains **0/100**. This audit neither runs those journeys nor certifies release readiness.
+
+The source strings, family IDs, case IDs, source links, issue links and critical flags are unchanged by this subcase audit. This is a correction to proposed case semantics within `full-mvp-v1`, before approval. A separate technical reviewer must compare the 197 checks to all three sources and the browser evidence rule, record findings and a decision on #94, and only then may a reviewed change move the approval file out of `pending`. The author’s review of this correction does not supply that separate decision.
 
 ## Execution and failure rules
 
@@ -75,6 +113,8 @@ The command accepts no caller-supplied browser report. It clears prior full-rele
 The approval file is **pending**. A separate technical mapping reviewer must resolve [the required-case ambiguity in #152](https://github.com/deepnative/deep-native-engine/issues/152), record an explicit approval decision on [#94](https://github.com/deepnative/deep-native-engine/issues/94), and update the tracked file in a reviewed change with `status: approved`, the actual reviewer, the decision comment URL and date, and the SHA-256 digest of `{ version: fullMvpVersion, projects, fullMvp }` using JSON serialization in `releaseMappingDigest`. The reviewer and PR history are the authority for the decision; the digest binds the approved content and browser matrix. A browser result cannot approve its own register. This is technical mapping approval only, not qualified content review, Phase B acceptance, or launch approval.
 
 The command fails closed when the full report is missing, empty, unmapped, incomplete, skipped, failed, retried, duplicated or below coverage. The release target is at least 99% of approved scenario IDs, 100% of critical IDs and 100% pass of executed required tests; the current matrix also requires every registered browser execution, so all 100 IDs must be present. A manually changed `status` cannot substitute for browser evidence. The present `tests/full-e2e/` directory contains only the three proposed ECO-01 cases, so even after mapping approval a release run remains incomplete until every approved case is implemented and exercised. The local/provisional gates retain their separate denominators.
+
+For a full-release ID to pass on one registered browser, its **single first-attempt execution** must complete *every* listed required check. The browser test wraps each check’s action and assertions with `requiredCheck(index, async () => { … })`. That helper records a Playwright step and adds a runtime completion annotation only after the callback succeeds. The release gate compares the exact set of case-ID/index/content-digest annotations on **each** browser execution against the approved register and rejects missing, duplicated or stale checks. A passed marker is a structural completion signal, not proof that an assertion was meaningful: review the actual browser assertions and retained trace against every expected result before mapping approval. Multiple report entries for the same case/browser remain invalid; a future split into separately countable IDs requires a new version, reviewed denominator and updated exact-inventory guard.
 
 Unit probes deliberately corrupt source coverage and browser reports, including missing mapping, skipped/failed/retried tests, wrong browser, duplicate IDs, missing definition, false completion and an incomplete full-release matrix. The current release command fails at its pending mapping decision before creating a test database; it cannot accept the local-slice report as input. The 100-case proposal requires independent scenario review before it becomes an approved release denominator. Later scope changes must update the version, preserve provenance and record why any case is split or superseded. No passing local gate, documentation review or overlap table completes the member-to-reviewer, payment, participation or other full-MVP cases.
 
