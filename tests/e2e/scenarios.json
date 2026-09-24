@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v16",
+  "version": "initial-learning-v17",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices, private goal milestones, optional private career plans and unsent member-approved drafts, plus read-only synthetic workflow demonstrations and private versioned synthetic lesson activity; not reviewed foundation content or live commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, and optional synthetic local circle membership; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -389,6 +389,33 @@
       "steps": "Open lesson in one session, attempt stale and cross-session actions, publish a new version and retire it",
       "expected": "Another member has no private history, stale versions cannot advance, and prior history remains labelled unavailable",
       "issues": [102],
+      "critical": true
+    },
+    {
+      "id": "L44",
+      "actor": "General learner, non-IT professional and IT learner",
+      "preconditions": "Fresh independent local previews and fixed synthetic topic files",
+      "steps": "Choose each goal, inspect matching topic, join and reload own membership",
+      "expected": "Each can opt into a suitable local topic; no purchase, clinic, expert or community posting is implied",
+      "issues": [37],
+      "critical": true
+    },
+    {
+      "id": "L45",
+      "actor": "Five independent learners seeking four local seats",
+      "preconditions": "Separate active local sessions and no cohort content grant",
+      "steps": "Join three members, race two for the final seat, inspect active count and cohort grants",
+      "expected": "Exactly one wins the final seat; four active joins never grant cohort content",
+      "issues": [37],
+      "critical": true
+    },
+    {
+      "id": "L46",
+      "actor": "Member leaving a local circle, then expired or forged sessions",
+      "preconditions": "Active local membership with a valid browser session",
+      "steps": "Leave, try cross-origin rejoin, expire session and replay unknown credential",
+      "expected": "Own status is removed, cross-origin write is rejected and expired or forged sessions cannot reach circles",
+      "issues": [37],
       "critical": true
     }
   ],

@@ -40,6 +40,7 @@ APP_FILES = {
     "playwright.config.ts", "tsconfig.json", "tsconfig.build.json", "vitest.config.ts",
     "vitest.integration.config.ts", "scripts/quality-gates.mjs", "scripts/gate-probes.mjs",
     "scripts/verify-app.mjs", "scripts/verify-full-release.mjs", "tests/e2e/scenarios.json", "src/main.ts", "migrations/001-learning.sql",
+    "assets/docs/content/circles/preview-circles.json",
 }
 
 
@@ -236,6 +237,16 @@ def validate(root):
         validate_capacity_workbook(root)
     validate_planning(root)
     validate_agents_skills(root)
+    circles = json.loads((root / "assets/docs/content/circles/preview-circles.json").read_text())
+    require(isinstance(circles, list) and len(circles) == 3, "Local circle topic inventory changed")
+    require({item["id"] for item in circles} == {"everyday-ai", "professional-work", "technical-practice"},
+            "Local circle topic IDs changed")
+    require({item["goal"] for item in circles} == {"everyday", "work", "build"},
+            "Local circle goals changed")
+    require(all(isinstance(item["title"], str) and item["title"] and
+                isinstance(item["description"], str) and len(item["description"]) > 25 and
+                type(item["capacity"]) is int and item["capacity"] == 4 for item in circles),
+            "Invalid local circle metadata or capacity")
     register = json.loads((root / "tests/e2e/scenarios.json").read_text())
     baseline = {f"ROADMAP-{n:02d}" for n in range(1, 10)} | {f"BUILD-{n:02d}" for n in range(1, 11)} | {f"ECO-{n:02d}" for n in range(1, 9)}
     require(baseline <= {row["id"] for row in register["fullMvp"]}, "Full-MVP journey inventory was reduced")
@@ -258,7 +269,7 @@ def verify_application(root):
     run_application(root)
     require(output.is_file(), "Application verification report missing")
     report = json.loads(output.read_text())
-    require(report["exitStatus"] == 0 and report["scope"] == "initial-learning-v16", "Application verification failed or wrong scope")
+    require(report["exitStatus"] == 0 and report["scope"] == "initial-learning-v17", "Application verification failed or wrong scope")
     require(report["revision"] == before and state(root) == before, "Application verification revision changed")
     require(report["unitTests"]["passed"] == report["unitTests"]["total"] > 0, "Missing application unit evidence")
     require(report["integrationTests"]["passed"] == report["integrationTests"]["total"] > 0, "Missing application integration evidence")
@@ -273,7 +284,7 @@ def verify_application(root):
 
 
 def verify(root):
-    report = {"scope": "repository-and-initial-learning-v16", "application_status": "not-verified",
+    report = {"scope": "repository-and-initial-learning-v17", "application_status": "not-verified",
               "application_unit_coverage": None, "application_e2e_journey_coverage": None,
               "timestamp_utc": datetime.now(timezone.utc).isoformat(),
               "python": platform.python_version(), "platform": platform.platform(),

@@ -8,6 +8,7 @@ import { catalogStore, seedDraftPack } from "./catalog.ts";
 import { trackStore } from "./track-readiness.ts";
 import { proposalStore } from "./proposals.ts";
 import { careerStore } from "./career.ts";
+import { circleStore } from "./circles.ts";
 export async function start(env: NodeJS.ProcessEnv) {
   const settings = config(env);
   const pool = new Pool({
@@ -29,6 +30,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       tracks: trackStore(pool),
       proposals: proposalStore(pool),
       career: careerStore(pool),
+      circles: circleStore(pool),
       evidence: evidenceStore(
         pool,
         fileObjectStorage(settings.privateStorageRoot),

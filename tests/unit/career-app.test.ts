@@ -1,5 +1,6 @@
-import { it, expect, vi } from "vitest";
+import { afterEach, it, expect, vi } from "vitest";
 import request from "supertest";
+import type { Server } from "node:http";
 import { app } from "../../src/app.ts";
 import { disabledCareerStore, type CareerStore } from "../../src/career.ts";
 import type { Store } from "../../src/store.ts";
@@ -21,6 +22,14 @@ const draft = {
   body: "An invented proposal with enough useful detail to review.",
   sample_only: "yes",
 };
+let server: Server | undefined;
+afterEach(async () => {
+  if (server)
+    await new Promise<void>((resolve, reject) =>
+      server!.close((error) => (error ? reject(error) : resolve())),
+    );
+  server = undefined;
+});
 
 it("requires current member, deliberate opt-in, valid private content and versioned draft approval", async () => {
   let active = false;
@@ -52,7 +61,8 @@ it("requires current member, deliberate opt-in, valid private content and versio
     revokeDraft: vi.fn<CareerStore["revokeDraft"]>().mockResolvedValue(false),
     deleteDraft: vi.fn<CareerStore["deleteDraft"]>().mockResolvedValue(false),
   };
-  const agent = request.agent(app(db, { origin, secret: "secret", career }));
+  server = app(db, { origin, secret: "secret", career }).listen(0);
+  const agent = request.agent(server);
   const welcome = await agent.get("/").set("Host", host).expect(200);
   const csrf = welcome.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   await agent.get("/career").set("Host", host).expect(303);

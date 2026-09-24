@@ -1,0 +1,23 @@
+[
+  {
+    "id": "everyday-ai",
+    "title": "Everyday AI practice",
+    "goal": "everyday",
+    "description": "Compare invented everyday tasks and learn to check AI suggestions without coding.",
+    "capacity": 4
+  },
+  {
+    "id": "professional-work",
+    "title": "Clearer professional work",
+    "goal": "work",
+    "description": "Practice turning synthetic notes and plans into useful next steps across professions.",
+    "capacity": 4
+  },
+  {
+    "id": "technical-practice",
+    "title": "Technical AI practice",
+    "goal": "build",
+    "description": "Review invented requirements and test ideas; coding is optional.",
+    "capacity": 4
+  }
+]
