@@ -24,8 +24,12 @@ Tooling tests do not claim application coverage or live-provider behavior. Exact
 
 To identify a referenced input locally, compute the documented digest from the repository-relative POSIX filename, link target or planning ID being inspected; do not publish private values in a CI log to resolve a reference. Unexpected failures identify the verification stage; inspect the relevant local configuration or synthetic fixture without adding raw exception logging.
 
+## Verification environment correction
+
+The first clean-commit gate passed, but its pre-push repeat stopped on the existing welcome/style HTTP test with `socket hang up` (310/311 unit tests). Inspection found local Supertest 7.2.2 installed despite the committed manifest/lock requiring 7.3.0; `npm ls supertest --depth=0` reported the installation invalid. `npm ci` restored 7.3.0 and a subsequent `npm ls` confirmed it. The precise transport cause is not claimed from this correlation. Acceptance requires fresh full gates after this environment correction, not a retry of the unchanged environment. [QA-003 #140](https://github.com/deepnative/deep-native-engine/issues/140) tracks a prerequisite to reject stale installed dependencies before tests. No dependency manifest or application assertion was changed to resolve this failure.
+
 ## Remaining scope
 
 Unittest failure traces and inherited npm/test-process output are separate emitters and are not filtered by this repair. Compressed artifacts, hosted/provider logs, backups, analytics and prompts also remain outside it. The source/artifact scans and the wider #42 matrix remain required; full-MVP and release acceptance are outstanding. There is no deployment, provider integration or schema migration. Rollback is a scoped revert followed by the complete gate.
 
-Next bounded candidate: #42 M18 negative probes for inherited test/subprocess console output, since that output can precede the generated-artifact scan. Recommend GPT-6 Astra/xhigh, with Astra/high for separate design/review when requested or required. This is a recommendation, not a claim.
+Next bounded candidate: [QA-003 #140](https://github.com/deepnative/deep-native-engine/issues/140), preventing the observed stale-installation gap before another verification run. Recommend GPT-6 Sol/high, with Astra/high for separate review when requested or required. No owner decision or competing claim is required; this recommendation does not claim the work. M18 inherited-output probes remain on #42 afterward.
