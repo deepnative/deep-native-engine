@@ -15,7 +15,10 @@ import {
   moderationPage,
   milestonesPage,
   careerPage,
+  assignmentAttemptsPage,
+  assignmentAttemptPage,
 } from "../../src/views.ts";
+import type { AssignmentAttempt } from "../../src/attempts.ts";
 import type { Milestone } from "../../src/store.ts";
 import type { CareerSnapshot } from "../../src/career.ts";
 import type { ExpertRecord } from "../../src/track-readiness.ts";
@@ -464,5 +467,74 @@ it("shows optional profile choices and retains the exercise context after a goal
   expect(previous).toContain("Plan a small community event");
   expect(previous).toContain(
     "saved practice remains tied to your earlier goal",
+  );
+});
+
+it("renders private attempt states without treating a local submission as reviewed work", () => {
+  const item: AssignmentAttempt = {
+    id: "11111111-1111-4111-8111-111111111111",
+    contentId: "SYN-960",
+    contentVersion: 1,
+    title: "Invented <private> assignment",
+    goalAtStart: "everyday",
+    response: "Safe <sample> text",
+    revision: 1,
+    startedAt: new Date("2026-09-24T00:00:00Z"),
+    savedAt: null,
+    submittedAt: null,
+    currentPublished: true,
+    currentEligible: true,
+  };
+  expect(assignmentAttemptsPage([])).toContain(
+    "No private assignment attempts yet",
+  );
+  expect(assignmentAttemptsPage([item])).toContain("started only");
+  expect(assignmentAttemptsPage([item])).toContain(
+    "Invented &lt;private&gt; assignment",
+  );
+  expect(assignmentAttemptPage(item, "csrf")).toContain("Save private draft");
+  expect(assignmentAttemptPage(item, "csrf")).not.toContain(
+    "Submit saved version locally",
+  );
+  const saved = { ...item, savedAt: new Date("2026-09-24T00:01:00Z") };
+  expect(assignmentAttemptsPage([saved])).toContain("private draft saved");
+  expect(assignmentAttemptPage(saved, "csrf")).toContain(
+    "Submit saved version locally",
+  );
+  expect(
+    assignmentAttemptPage(saved, "csrf", "Invalid <draft>", "Unsaved <text>"),
+  ).toContain("Unsaved &lt;text&gt;");
+  const conflict = assignmentAttemptPage(
+    saved,
+    "csrf",
+    "Changed",
+    "Unsaved text",
+    true,
+  );
+  expect(conflict).toContain("Copy your unsaved text");
+  expect(conflict).not.toContain("Save private draft");
+  const unavailable = {
+    ...saved,
+    currentPublished: false,
+    currentEligible: false,
+  };
+  expect(assignmentAttemptsPage([unavailable])).toContain(
+    "no longer available for editing",
+  );
+  expect(assignmentAttemptPage(unavailable, "csrf")).toContain(
+    "cannot be edited",
+  );
+  expect(assignmentAttemptPage(unavailable, "csrf")).not.toContain(
+    "Save private draft",
+  );
+  const submitted = { ...saved, submittedAt: new Date("2026-09-24T00:02:00Z") };
+  expect(assignmentAttemptsPage([submitted])).toContain(
+    "submitted locally · awaiting future review path",
+  );
+  expect(assignmentAttemptPage(submitted, "csrf")).toContain(
+    "submitted locally",
+  );
+  expect(assignmentAttemptPage(submitted, "csrf")).not.toContain(
+    "Save private draft",
   );
 });

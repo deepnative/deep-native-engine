@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v18",
+  "version": "initial-learning-v19",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership and operator-only aggregate preview metrics; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership and operator-only aggregate preview metrics; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -425,6 +425,33 @@
       "steps": "Inspect aggregate metrics, join a local circle and attempt member access",
       "expected": "Operator sees defined synthetic counts; learner receives 403 and no member identifiers",
       "issues": [41],
+      "critical": true
+    },
+    {
+      "id": "L48",
+      "actor": "General learner and unrelated member",
+      "preconditions": "Published synthetic noncoding assignment and two private sessions",
+      "steps": "Start, save, reload, deny another member, explicitly submit and delete a versioned attempt",
+      "expected": "Only the owner sees the pinned saved response; submission is local and unreviewed; deletion removes it",
+      "issues": [104],
+      "critical": true
+    },
+    {
+      "id": "L49",
+      "actor": "Non-IT professional",
+      "preconditions": "Published goal-specific synthetic assignment",
+      "steps": "Save an attempt, change goal, publish a newer version, start the new version and retire it",
+      "expected": "Old draft remains readable but cannot be edited or silently migrated; newer version creates a separate attempt",
+      "issues": [104],
+      "critical": true
+    },
+    {
+      "id": "L50",
+      "actor": "IT learner with two tabs",
+      "preconditions": "Published synthetic technical assignment",
+      "steps": "Save from one tab, attempt stale overwrite and unconfirmed submission from another",
+      "expected": "Stale text is retained for recovery but not saved; missing confirmation does not submit",
+      "issues": [104],
       "critical": true
     }
   ],

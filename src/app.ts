@@ -24,6 +24,8 @@ import {
   milestonesPage,
   careerPage,
   errorPage,
+  assignmentAttemptsPage,
+  assignmentAttemptPage,
 } from "./views.ts";
 import type { Store, Learner } from "./store.ts";
 import { eligibleAssignments } from "./assignment-choice.ts";
@@ -59,6 +61,7 @@ import { disabledTrackStore, type TrackStore } from "./track-readiness.ts";
 import { disabledProposalStore, type ProposalStore } from "./proposals.ts";
 import { workflowBundle, workflowRegistry } from "./workflow-registry.ts";
 import { disabledCircleStore, type CircleStore } from "./circles.ts";
+import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
 export function app(
   store: Store,
@@ -75,6 +78,7 @@ export function app(
     career?: CareerStore;
     circles?: CircleStore;
     metrics?: MetricsStore;
+    attempts?: AttemptStore;
   },
 ) {
   const app = express();
@@ -88,6 +92,7 @@ export function app(
   const career = options.career ?? disabledCareerStore();
   const circles = options.circles ?? disabledCircleStore();
   const metrics = options.metrics ?? disabledMetricsStore();
+  const attempts = options.attempts ?? disabledAttemptStore();
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -811,6 +816,170 @@ export function app(
       return;
     }
     res.redirect(303, "/learn");
+  });
+  app.get("/assignments/attempts", async (_req, res) => {
+    res.send(
+      assignmentAttemptsPage(await attempts.list(res.locals.token as string)),
+    );
+  });
+  app.post("/assignments/attempts/start", async (_req, res) => {
+    const id = await attempts.start(res.locals.token as string);
+    if (!id) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Attempt unavailable",
+            "Choose an eligible, current published sample from your learning path.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, `/assignments/attempts/${id}`);
+  });
+  const attemptId = (value: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    );
+  const attemptRevision = (value: unknown) => {
+    const revision =
+      typeof value === "string" && /^\d+$/.test(value) ? Number(value) : 0;
+    return Number.isSafeInteger(revision) && revision > 0 ? revision : null;
+  };
+  app.get("/assignments/attempts/:id", async (req, res) => {
+    const id = req.params.id as string;
+    const item = attemptId(id)
+      ? await attempts.detail(res.locals.token as string, id)
+      : null;
+    if (!item) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Attempt unavailable",
+            "Open one of your own saved attempts.",
+          ),
+        );
+      return;
+    }
+    res.send(assignmentAttemptPage(item, res.locals.csrf as string));
+  });
+  app.post("/assignments/attempts/:id/save", async (req, res) => {
+    const id = req.params.id as string;
+    const fields = req.body as Fields;
+    const response = typeof fields.response === "string" ? fields.response : "";
+    const revision = attemptRevision(fields.revision);
+    const item = attemptId(id)
+      ? await attempts.detail(res.locals.token as string, id)
+      : null;
+    if (!item) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Attempt unchanged",
+            "Open one of your own saved attempts.",
+          ),
+        );
+      return;
+    }
+    if (
+      revision === null ||
+      response.length > 4000 ||
+      fields.sample_confirmed !== "yes"
+    ) {
+      res
+        .status(422)
+        .send(
+          assignmentAttemptPage(
+            item,
+            res.locals.csrf as string,
+            "Use a valid revision, at most 4,000 characters, and confirm sample information. Nothing was saved.",
+            response,
+          ),
+        );
+      return;
+    }
+    if (
+      !(await attempts.save(res.locals.token as string, id, revision, response))
+    ) {
+      res
+        .status(409)
+        .send(
+          assignmentAttemptPage(
+            (await attempts.detail(res.locals.token as string, id)) ?? item,
+            res.locals.csrf as string,
+            "Your draft was not saved. The saved revision, assignment or your direction changed.",
+            response,
+            true,
+          ),
+        );
+      return;
+    }
+    res.redirect(303, `/assignments/attempts/${id}`);
+  });
+  app.post("/assignments/attempts/:id/submit", async (req, res) => {
+    const id = req.params.id as string;
+    const fields = req.body as Fields;
+    const revision = attemptRevision(fields.revision);
+    const item = attemptId(id)
+      ? await attempts.detail(res.locals.token as string, id)
+      : null;
+    if (!item) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Attempt unchanged",
+            "Open one of your own saved attempts.",
+          ),
+        );
+      return;
+    }
+    if (revision === null || fields.confirm !== "yes") {
+      res
+        .status(422)
+        .send(
+          assignmentAttemptPage(
+            item,
+            res.locals.csrf as string,
+            "Confirm the current saved version before submitting. Nothing was submitted.",
+          ),
+        );
+      return;
+    }
+    if (!(await attempts.submit(res.locals.token as string, id, revision))) {
+      res
+        .status(409)
+        .send(
+          assignmentAttemptPage(
+            (await attempts.detail(res.locals.token as string, id)) ?? item,
+            res.locals.csrf as string,
+            "Nothing was submitted. Save at least 20 characters, then check the current version and eligibility.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, `/assignments/attempts/${id}`);
+  });
+  app.post("/assignments/attempts/:id/delete", async (req, res) => {
+    const id = req.params.id as string;
+    if (
+      !attemptId(id) ||
+      (req.body as Fields).confirm !== "yes" ||
+      !(await attempts.remove(res.locals.token as string, id))
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Attempt unchanged",
+            "Confirm deletion of one of your own attempts.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/assignments/attempts");
   });
   app.get("/milestones", async (_req, res) => {
     const member = res.locals.learner as Learner;

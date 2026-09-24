@@ -1245,3 +1245,138 @@ it("keeps private milestones local, validates edits and refuses stale or foreign
   expect(db.deleteMilestone).toHaveBeenLastCalledWith(member.id, id, 2);
   await post("/milestones", { ...input, csrf: "invalid" }).expect(403);
 });
+
+it("keeps synthetic assignment attempts private through start, validation, conflicts, submission and deletion", async () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const item = {
+    id,
+    contentId: "SYN-960",
+    contentVersion: 1,
+    title: "Invented assignment",
+    goalAtStart: "everyday",
+    response: "Saved invented response for the assignment.",
+    revision: 2,
+    startedAt: new Date("2026-09-24T00:00:00Z"),
+    savedAt: new Date("2026-09-24T00:01:00Z"),
+    submittedAt: null,
+    currentPublished: true,
+    currentEligible: true,
+  };
+  const db = storage();
+  const attempts = {
+    list: vi.fn().mockResolvedValue([]),
+    detail: vi.fn().mockResolvedValue(null),
+    start: vi.fn().mockResolvedValue(null),
+    save: vi.fn().mockResolvedValue(false),
+    submit: vi.fn().mockResolvedValue(false),
+    remove: vi.fn().mockResolvedValue(false),
+  };
+  const agent = managedAgent(app(db, { origin, secret: "secret", attempts }));
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const post = (path: string, fields: Record<string, unknown>) =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  await post("/assignments/select", { content_version: "1" }).expect(409);
+  await agent.get("/assignments/attempts").set("Host", host).expect(200);
+  attempts.list.mockResolvedValue([item]);
+  expect(
+    (await agent.get("/assignments/attempts").set("Host", host).expect(200))
+      .text,
+  ).toContain("Invented assignment");
+  await post("/assignments/attempts/start", {}).expect(409);
+  attempts.start.mockResolvedValue(id);
+  await post("/assignments/attempts/start", {}).expect(303);
+  await agent
+    .get("/assignments/attempts/invalid")
+    .set("Host", host)
+    .expect(404);
+  await agent.get(`/assignments/attempts/${id}`).set("Host", host).expect(404);
+  attempts.detail.mockResolvedValue(item);
+  await agent.get(`/assignments/attempts/${id}`).set("Host", host).expect(200);
+  await post("/assignments/attempts/invalid/save", {
+    revision: "2",
+    response: "draft",
+    sample_confirmed: "yes",
+  }).expect(409);
+  await post(`/assignments/attempts/${id}/save`, {
+    revision: "no",
+    response: "draft",
+    sample_confirmed: "yes",
+  }).expect(422);
+  await post(`/assignments/attempts/${id}/save`, {
+    revision: "999999999999999999999",
+    response: "draft",
+    sample_confirmed: "yes",
+  }).expect(422);
+  await post(`/assignments/attempts/${id}/save`, {
+    revision: "2",
+    response: "x".repeat(4001),
+    sample_confirmed: "yes",
+  }).expect(422);
+  await post(`/assignments/attempts/${id}/save`, {
+    revision: "2",
+    response: "draft",
+  }).expect(422);
+  attempts.save.mockResolvedValueOnce(true);
+  await post(`/assignments/attempts/${id}/save`, {
+    revision: "2",
+    sample_confirmed: "yes",
+  }).expect(303);
+  attempts.detail.mockResolvedValueOnce(item).mockResolvedValueOnce(null);
+  const conflict = await post(`/assignments/attempts/${id}/save`, {
+    revision: "2",
+    response: "unsaved private text",
+    sample_confirmed: "yes",
+  }).expect(409);
+  expect(conflict.text).toContain("unsaved private text");
+  attempts.save.mockResolvedValue(true);
+  await post(`/assignments/attempts/${id}/save`, {
+    revision: "2",
+    response: "draft",
+    sample_confirmed: "yes",
+  }).expect(303);
+  attempts.save.mockRejectedValueOnce(
+    new Error("private database connection secret"),
+  );
+  const failedWrite = await post(`/assignments/attempts/${id}/save`, {
+    revision: "2",
+    response: "unsaved text after a database failure",
+    sample_confirmed: "yes",
+  }).expect(503);
+  expect(failedWrite.text).toContain("We could not confirm the result");
+  expect(failedWrite.text).not.toContain("private database connection secret");
+  await post("/assignments/attempts/invalid/submit", {
+    revision: "2",
+    confirm: "yes",
+  }).expect(409);
+  await post(`/assignments/attempts/${id}/submit`, { revision: "2" }).expect(
+    422,
+  );
+  attempts.detail.mockResolvedValueOnce(item).mockResolvedValueOnce(null);
+  await post(`/assignments/attempts/${id}/submit`, {
+    revision: "2",
+    confirm: "yes",
+  }).expect(409);
+  attempts.submit.mockResolvedValue(true);
+  await post(`/assignments/attempts/${id}/submit`, {
+    revision: "2",
+    confirm: "yes",
+  }).expect(303);
+  await post("/assignments/attempts/invalid/delete", { confirm: "yes" }).expect(
+    409,
+  );
+  await post(`/assignments/attempts/${id}/delete`, {}).expect(409);
+  await post(`/assignments/attempts/${id}/delete`, { confirm: "yes" }).expect(
+    409,
+  );
+  attempts.remove.mockResolvedValue(true);
+  await post(`/assignments/attempts/${id}/delete`, { confirm: "yes" }).expect(
+    303,
+  );
+});
