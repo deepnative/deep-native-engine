@@ -43,6 +43,15 @@ APP_FILES = {
     "assets/docs/content/circles/preview-circles.json",
 }
 
+# Bounded, high-confidence source scan. These signatures are intentionally
+# narrower than a production secret-scanning service and never print matches.
+SECRET_MARKERS = {
+    "github-token": re.compile(rb"(?<![A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{70,})(?![A-Za-z0-9_])"),
+    "openai-key": re.compile(rb"(?<![A-Za-z0-9_-])sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{32,}(?![A-Za-z0-9_-])"),
+    "aws-access-key": re.compile(rb"(?<![A-Z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Z0-9])"),
+    "private-key": re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----"),
+}
+
 
 class GateError(Exception):
     """A reviewable gate failure, not a successful empty result."""
@@ -85,6 +94,24 @@ def validate_scope(root, files):
         require(allowed, f"Outside verified repository/application scope: {name}. Extend the reviewed gate before adding a new executable source type.")
         require((root / p).is_file() and not (root / p).is_symlink(), f"Missing file or unsupported symlink: {name}")
         require((root / p).resolve().is_relative_to(root.resolve()), f"Path escapes repository: {name}")
+
+
+def validate_secret_markers(root, files):
+    """Reject recognizable credential bytes in every nonignored repository file."""
+    for name in files:
+        content = (root / name).read_bytes()
+        for rule, pattern in SECRET_MARKERS.items():
+            match = pattern.search(content)
+            if match:
+                line = content.count(b"\n", 0, match.start()) + 1
+                encoded_name = os.fsencode(name)
+                location = (f"path-sha256:{hashlib.sha256(encoded_name).hexdigest()[:12]}"
+                            if any(p.search(encoded_name) for p in SECRET_MARKERS.values()) else name)
+                raise GateError(
+                    f"High-confidence credential candidate at {location}:{line} ({rule}); "
+                    "value suppressed. Remove it from source and rotate it if real."
+                )
+    return len(files)
 
 
 def validate_archive(root):
@@ -232,6 +259,7 @@ def validate_links(root, files):
 def validate(root):
     files = repository_files(root)
     validate_scope(root, files)
+    scanned = validate_secret_markers(root, files)
     validate_archive(root)
     if PLAN_WORKBOOK.as_posix() in files:
         validate_capacity_workbook(root)
@@ -251,6 +279,8 @@ def validate(root):
     baseline = {f"ROADMAP-{n:02d}" for n in range(1, 10)} | {f"BUILD-{n:02d}" for n in range(1, 11)} | {f"ECO-{n:02d}" for n in range(1, 9)}
     require(baseline <= {row["id"] for row in register["fullMvp"]}, "Full-MVP journey inventory was reduced")
     validate_links(root, files)
+    return {"status": "passed", "files_scanned": scanned,
+            "rules": sorted(SECRET_MARKERS)}
 
 
 def state(root):
@@ -291,7 +321,7 @@ def verify(root):
               "command": f"{sys.executable} scripts/repo.py verify", "exit_status": 1}
     try:
         report.update(state(root))
-        validate(root)
+        report["secret_scan"] = validate(root)
         suite = unittest.defaultTestLoader.discover(str(root / "tests/repository"), pattern="test_*.py")
         require(suite.countTestCases() > 0, "No repository tests collected")
         result = unittest.TextTestRunner(verbosity=2).run(suite)
