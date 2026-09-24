@@ -34,6 +34,8 @@ const git = (...args) => {
 let admin;
 let created = false;
 let name;
+let provisionalCreated = false;
+let provisionalName;
 let privateStorageRoot;
 // Only code-owned stage names cross the console/report failure boundary.
 // Database, parser and filesystem errors can contain credentials or member text.
@@ -146,7 +148,16 @@ try {
     JSON.parse(readFileSync("tests/e2e/scenarios.json", "utf8")),
     read("e2e-results.json"),
   );
-  run("npm", ["run", "test:e2e:provisional"], env);
+  stage = "provisional test database setup";
+  provisionalName = `dne_test_${randomBytes(16).toString("hex")}`;
+  await admin.query(`CREATE DATABASE "${provisionalName}"`);
+  provisionalCreated = true;
+  const provisionalUrl = new URL(url);
+  provisionalUrl.pathname = `/${provisionalName}`;
+  run("npm", ["run", "test:e2e:provisional"], {
+    ...env,
+    DNE_TEST_DATABASE_URL: provisionalUrl.toString(),
+  });
   stage = "provisional full-MVP browser evidence";
   report.provisionalFullMvpEvidence = assertProvisionalReleaseJourneys(
     JSON.parse(readFileSync("tests/e2e/scenarios.json", "utf8")),
@@ -167,6 +178,11 @@ try {
       console.error(message);
     }
   };
+  if (provisionalCreated)
+    await cleanup(
+      () => admin.query(`DROP DATABASE "${provisionalName}" WITH (FORCE)`),
+      "Provisional test database cleanup failed.",
+    );
   if (created)
     await cleanup(
       () => admin.query(`DROP DATABASE "${name}" WITH (FORCE)`),
