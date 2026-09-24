@@ -5,6 +5,7 @@ import io
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -209,6 +210,127 @@ class RepositoryFixture(unittest.TestCase):
         self.assertIn("credential candidate", result.stderr)
         self.assertIn("ref-sha256:", result.stderr)
         self.assertNotIn(marker, result.stdout + result.stderr)
+
+    def test_compressed_trace_marker_blocks_artifact_publication(self):
+        marker = "ghp_" + "Z" * 36
+        private_entry = "synthetic-private-member-note.txt"
+        artifact = self.root / "artifacts/browser-results/trace.zip"
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(artifact, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(private_entry, f"Synthetic private note: {marker}\n")
+        result = subprocess.run(
+            [sys.executable, "scripts/repo.py", "scan-artifacts"],
+            cwd=self.root, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("credential candidate", result.stderr)
+        self.assertIn("ref-sha256:", result.stderr)
+        self.assertNotIn(marker, result.stdout + result.stderr)
+        self.assertNotIn(private_entry, result.stdout + result.stderr)
+        workflow = (self.root / ".github/workflows/repository-checks.yml").read_text()
+        self.assertIn("steps.artifact_scan.outcome == 'success'", workflow)
+
+    def test_zip_scan_accepts_safe_trace_and_catches_boundary_spanning_marker(self):
+        artifact = self.root / "artifacts/browser-results/trace.zip"
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(artifact, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("trace.events", "Synthetic browser actions only.")
+        result = gate.scan_artifacts(self.root)
+        self.assertEqual(result["files_scanned"], 1)
+        self.assertEqual(result["archive_entries_scanned"], 1)
+        marker = "ghp_" + "Y" * 36
+        with zipfile.ZipFile(artifact, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("trace.events", b"A" * (64 * 1024 - 2) + b" " + marker.encode())
+        with self.assertRaises(gate.GateError) as caught:
+            gate.scan_artifacts(self.root)
+        self.assertIn("credential candidate", str(caught.exception))
+        self.assertNotIn(marker, str(caught.exception))
+
+    def test_zip_scan_denies_unsafe_entries_and_nested_archives(self):
+        artifact = self.root / "artifacts/browser-results/trace.zip"
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        link = zipfile.ZipInfo("private-link")
+        link.create_system = 3
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        for name, payload, expected in [
+            ("../synthetic-private-path.txt", b"safe", "Unsafe ZIP entry path"),
+            ("C:/synthetic-private-path.txt", b"safe", "Unsafe ZIP entry path"),
+            (link, b"target", "Unsafe ZIP entry type"),
+            ("nested.zip", b"safe", "Nested archive is unsupported"),
+            ("hidden.txt", b"PK\x03\x04nested", "Nested archive is unsupported"),
+            ("hidden.txt", b"\x1f\x8bnested", "Nested archive is unsupported"),
+        ]:
+            with self.subTest(expected=expected, name=str(name)):
+                with zipfile.ZipFile(artifact, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr(name, payload)
+                with self.assertRaises(gate.GateError) as caught:
+                    gate.scan_artifacts(self.root)
+                self.assertIn(expected, str(caught.exception))
+                self.assertNotIn("synthetic-private-path", str(caught.exception))
+
+    def test_zip_scan_denies_malformed_encrypted_and_corrupt_traces(self):
+        artifact = self.root / "artifacts/browser-results/trace.zip"
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_bytes(b"not a ZIP archive")
+        with self.assertRaisesRegex(gate.GateError, "Unreadable ZIP artifact"):
+            gate.scan_artifacts(self.root)
+        with zipfile.ZipFile(artifact, "w", compression=zipfile.ZIP_STORED) as archive:
+            archive.writestr("trace.events", b"ordinary synthetic trace")
+        original = artifact.read_bytes()
+        encrypted = bytearray(original)
+        local = encrypted.index(b"PK\x03\x04")
+        central = encrypted.index(b"PK\x01\x02")
+        encrypted[local + 6] |= 1
+        encrypted[central + 8] |= 1
+        artifact.write_bytes(encrypted)
+        with self.assertRaisesRegex(gate.GateError, "Encrypted ZIP entry"):
+            gate.scan_artifacts(self.root)
+        corrupt = original.replace(b"ordinary synthetic trace", b"ordinary synthetic tracE", 1)
+        artifact.write_bytes(corrupt)
+        with self.assertRaisesRegex(gate.GateError, "Unreadable ZIP artifact"):
+            gate.scan_artifacts(self.root)
+
+    def test_zip_scan_denies_unsupported_archive_formats(self):
+        artifact = self.root / "artifacts/browser-results/trace.zip"
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(artifact, "w", compression=zipfile.ZIP_BZIP2) as archive:
+            archive.writestr("trace.events", b"ordinary synthetic trace")
+        with self.assertRaisesRegex(gate.GateError, "Unsupported ZIP compression"):
+            gate.scan_artifacts(self.root)
+        artifact.unlink()
+        nested = self.root / "artifacts/browser-results/trace.gz"
+        nested.write_bytes(b"\x1f\x8bsynthetic compressed payload")
+        with self.assertRaisesRegex(gate.GateError, "Unsupported compressed artifact"):
+            gate.scan_artifacts(self.root)
+        nested.unlink()
+        disguised = self.root / "artifacts/browser-results/trace.log"
+        disguised.write_bytes(b"\x1f\x8bsynthetic compressed payload")
+        with self.assertRaisesRegex(gate.GateError, "Unsupported compressed artifact"):
+            gate.scan_artifacts(self.root)
+        marker = "ghp_" + "Q" * 36
+        with zipfile.ZipFile(disguised, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("hidden.events", marker)
+        with self.assertRaises(gate.GateError) as caught:
+            gate.scan_artifacts(self.root)
+        self.assertIn("credential candidate", str(caught.exception))
+        self.assertNotIn(marker, str(caught.exception))
+
+    def test_zip_scan_enforces_member_total_and_entry_count_limits(self):
+        artifact = self.root / "artifacts/browser-results/trace.zip"
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(artifact, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("trace-one.events", b"12345")
+            archive.writestr("trace-two.events", b"12345")
+        for limit, value, expected in [
+            ("MAX_ZIP_MEMBER_BYTES", 4, "ZIP entry exceeds size limit"),
+            ("MAX_ZIP_TOTAL_BYTES", 9, "ZIP artifact exceeds expanded size limit"),
+            ("MAX_ZIP_MEMBERS", 1, "ZIP central directory exceeds supported bounds"),
+            ("MAX_ZIP_CENTRAL_BYTES", 1, "ZIP central directory exceeds supported bounds"),
+            ("MAX_ARTIFACT_BYTES", 1, "Verification artifact exceeds size limit"),
+        ]:
+            with self.subTest(limit=limit), patch.object(gate, limit, value):
+                with self.assertRaisesRegex(gate.GateError, expected):
+                    gate.scan_artifacts(self.root)
 
     def test_artifact_scan_keeps_safe_failure_traces_and_rejects_unsafe_files(self):
         with self.assertRaisesRegex(gate.GateError, "artifacts missing"):

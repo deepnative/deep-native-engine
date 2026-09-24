@@ -1,0 +1,15 @@
+# CTP-023: bounded ZIP artifact credential scan
+
+24 September 2026. [Issue #172](https://github.com/deepnative/deep-native-engine/issues/172) is a synthetic QA-004 M18 child of [#42](https://github.com/deepnative/deep-native-engine/issues/42). Owner: @tomqwu; worker: Codex root. This is a verification-artifact boundary, not full security or release approval.
+
+## Failure and result
+
+Before this change, a disposable deflated trace ZIP containing a synthetic GitHub-token-shaped marker passed the real `python3 scripts/repo.py scan-artifacts` command. The gate read compressed bytes but did not inspect the entry's plaintext. The repository test first reproduced that false pass. The scanner now reads each supported ZIP entry in bounded chunks without extracting it, applies the same high-confidence GitHub/OpenAI/AWS/private-key signatures to entry names and decompressed bytes, and returns a nonzero status with only an opaque reference and rule on a match. CI runs this command before showing reports or uploading `artifacts/`; a scan failure skips both steps.
+
+The scanner accepts stored and deflated ZIP members. It recognizes ZIP by extension, signature or a valid ZIP container even under a different extension. It rejects unsafe or duplicate member paths, special-file entries, encryption, unsupported compression, nested archive names or signatures, truncated or corrupt data, and known unsupported compressed top-level formats. Before Python loads the ZIP directory, the scanner checks its end record: one disk, at most 2,048 entries and at most 2 MiB of central-directory metadata. Other limits are 128 MiB per artifact file, 32 MiB decompressed per member and 128 MiB decompressed per ZIP. Both advertised and actually read sizes are checked; ZIP CRC errors fail. No member is extracted, logged, or persisted by the scanner.
+
+## Behavioral evidence and limits
+
+[Repository tests](../../tests/repository/test_repo.py) invoke the actual scanner CLI on a compressed synthetic marker and check safe nonzero output and CI's success-only upload condition. Other tests exercise a marker spanning scan chunks, a safe trace, unsafe paths and symlinks, nested archives, malformed/encrypted/corrupt ZIPs, unsupported formats, and each resource limit. The local generated trace sample contained 24 ZIPs, at most 67 entries and about 2.2 MiB decompressed per archive; it passed the updated scan. Exact-commit local gate, pre-push and PR/main CI evidence are recorded on #172 after delivery.
+
+This controls only the existing high-confidence signatures in generated artifacts the repository gate sees. It does not identify arbitrary member-private text, prove that a host/provider/analytics/prompt/backup system is free of secrets, scan ignored local files, or make produced traces safe for unrestricted publication. The full QA-004 M18 matrix and launch decisions remain on #42. A revert requires the complete gate and restores the compressed-content blind spot; no schema or member data changes are involved.
