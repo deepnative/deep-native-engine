@@ -456,3 +456,65 @@ it("reports an unconfirmed completion without rewriting it as provider failure",
   ).rejects.toThrow("Could not confirm");
   expect(jobs.fail).not.toHaveBeenCalled();
 });
+
+it.each(["running", "failed", "exhausted", "succeeded"] as const)(
+  "suppresses a late provider result when the replacement attempt is %s",
+  async (status) => {
+    const current = publicJob({ status, attempts: 2 });
+    const jobs = runStore({ succeed: vi.fn().mockResolvedValue(current) });
+    const result = await runAdapterJob(
+      jobs,
+      registry(vi.fn().mockResolvedValue({ reference: "superseded-result" })),
+      baseRow.id,
+      { lesson: 1 },
+    );
+    expect(result).toEqual({ job: current, result: null, executed: true });
+    expect(jobs.fail).not.toHaveBeenCalled();
+  },
+);
+
+it("does not attach a stale result to another attempt's recovered success", async () => {
+  const jobs = runStore({
+    find: vi
+      .fn()
+      .mockResolvedValueOnce(publicJob())
+      .mockResolvedValueOnce(publicJob({ status: "succeeded", attempts: 2 })),
+    succeed: vi.fn().mockRejectedValue(new Error("lost acknowledgement")),
+  });
+  await expect(
+    runAdapterJob(
+      jobs,
+      registry(vi.fn().mockResolvedValue({ reference: "superseded-result" })),
+      baseRow.id,
+      { lesson: 1 },
+    ),
+  ).rejects.toThrow("Could not confirm adapter job completion.");
+  expect(jobs.fail).not.toHaveBeenCalled();
+});
+
+it.each(["missing", "unavailable"])(
+  "keeps completion unconfirmed when reconciliation is %s",
+  async (proof) => {
+    const find = vi.fn().mockResolvedValueOnce(publicJob());
+    if (proof === "missing") find.mockResolvedValueOnce(undefined);
+    else
+      find.mockRejectedValueOnce(
+        new Error("synthetic-private-database-detail"),
+      );
+    const jobs = runStore({
+      find,
+      succeed: vi.fn().mockRejectedValue(new Error("lost acknowledgement")),
+    });
+    await expect(
+      runAdapterJob(
+        jobs,
+        registry(
+          vi.fn().mockResolvedValue({ reference: "unconfirmed-result" }),
+        ),
+        baseRow.id,
+        { lesson: 1 },
+      ),
+    ).rejects.toThrow("Could not confirm adapter job completion.");
+    expect(jobs.fail).not.toHaveBeenCalled();
+  },
+);
