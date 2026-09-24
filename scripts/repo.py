@@ -6,6 +6,8 @@ import json
 import os
 import platform
 import re
+import stat
+import struct
 import subprocess
 import sys
 import tomllib
@@ -52,6 +54,15 @@ SECRET_MARKERS = {
     "aws-access-key": re.compile(rb"(?<![A-Z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Z0-9])"),
     "private-key": re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----"),
 }
+MAX_ARTIFACT_BYTES = 128 * 1024 * 1024
+MAX_ZIP_MEMBERS = 2048
+MAX_ZIP_CENTRAL_BYTES = 2 * 1024 * 1024
+MAX_ZIP_MEMBER_BYTES = 32 * 1024 * 1024
+MAX_ZIP_TOTAL_BYTES = 128 * 1024 * 1024
+ZIP_SIGNATURES = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+UNSUPPORTED_ARCHIVE_SIGNATURES = (b"\x1f\x8b", b"BZh", b"\xfd7zXZ\x00",
+                                  b"7z\xbc\xaf\x27\x1c", b"Rar!\x1a\x07")
+NESTED_ARCHIVE_SUFFIXES = (".zip", ".tar", ".tgz", ".gz", ".bz2", ".xz", ".7z", ".rar")
 
 
 class GateError(Exception):
@@ -129,6 +140,87 @@ def validate_secret_markers(root, files):
     return len(files)
 
 
+def scan_zip_artifact(path, name):
+    """Inspect one ZIP without extraction or disclosing untrusted archive metadata."""
+    members_scanned = 0
+    total_bytes = 0
+    seen = set()
+    try:
+        # ZipFile parses the central directory on open, so cap it first.
+        with path.open("rb") as source:
+            source.seek(-min(path.stat().st_size, 22 + 65535), os.SEEK_END)
+            trailer = source.read()
+        end = trailer.rfind(b"PK\x05\x06")
+        require(end >= 0 and len(trailer) - end >= 22,
+                f"Unreadable ZIP artifact at {diagnostic_ref(name)}")
+        _, disk, start_disk, disk_entries, entries, central_size, _, comment_size = struct.unpack_from(
+            "<4s4H2LH", trailer, end)
+        require(disk == 0 and start_disk == 0 and disk_entries == entries
+                and entries <= MAX_ZIP_MEMBERS and central_size <= MAX_ZIP_CENTRAL_BYTES
+                and len(trailer) - end - 22 == comment_size,
+                f"ZIP central directory exceeds supported bounds at {diagnostic_ref(name)}")
+        with zipfile.ZipFile(path) as archive:
+            members = archive.infolist()
+            require(len(members) <= MAX_ZIP_MEMBERS,
+                    f"ZIP artifact exceeds entry limit at {diagnostic_ref(name)}")
+            for member in members:
+                member_ref = diagnostic_ref(name + ":" + member.filename)
+                parts = member.filename.rstrip("/").split("/")
+                unsafe_name = (not member.filename or member.filename.startswith(("/", "\\"))
+                               or "\\" in member.filename or "\x00" in member.filename
+                               or any(part in ("", ".", "..") for part in parts)
+                               or (parts and re.match(r"^[A-Za-z]:", parts[0]))
+                               or member.filename in seen)
+                require(not unsafe_name, f"Unsafe ZIP entry path at {member_ref}")
+                seen.add(member.filename)
+                mode = member.external_attr >> 16
+                require(stat.S_IFMT(mode) in (0, stat.S_IFREG, stat.S_IFDIR),
+                        f"Unsafe ZIP entry type at {member_ref}")
+                require(not member.flag_bits & 1, f"Encrypted ZIP entry at {member_ref}")
+                require(member.compress_type in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED),
+                        f"Unsupported ZIP compression at {member_ref}")
+                encoded_name = os.fsencode(member.filename)
+                for rule, pattern in SECRET_MARKERS.items():
+                    require(not pattern.search(encoded_name),
+                            f"High-confidence credential candidate at {member_ref} ({rule}); value suppressed.")
+                if member.is_dir():
+                    require(member.file_size == 0, f"Unsafe ZIP directory at {member_ref}")
+                    continue
+                require(not member.filename.lower().endswith(NESTED_ARCHIVE_SUFFIXES),
+                        f"Nested archive is unsupported at {member_ref}")
+                require(member.file_size <= MAX_ZIP_MEMBER_BYTES,
+                        f"ZIP entry exceeds size limit at {member_ref}")
+                total_bytes += member.file_size
+                require(total_bytes <= MAX_ZIP_TOTAL_BYTES,
+                        f"ZIP artifact exceeds expanded size limit at {diagnostic_ref(name)}")
+                observed = 0
+                tail = b""
+                with archive.open(member) as source:
+                    while chunk := source.read(64 * 1024):
+                        observed += len(chunk)
+                        require(observed <= MAX_ZIP_MEMBER_BYTES,
+                                f"ZIP entry exceeds size limit at {member_ref}")
+                        require(total_bytes - member.file_size + observed <= MAX_ZIP_TOTAL_BYTES,
+                                f"ZIP artifact exceeds expanded size limit at {diagnostic_ref(name)}")
+                        if observed == len(chunk):
+                            require(not chunk.startswith(ZIP_SIGNATURES)
+                                    and not chunk.startswith(UNSUPPORTED_ARCHIVE_SIGNATURES)
+                                    and chunk[257:262] != b"ustar",
+                                    f"Nested archive is unsupported at {member_ref}")
+                        window = tail + chunk
+                        for rule, pattern in SECRET_MARKERS.items():
+                            require(not pattern.search(window),
+                                    f"High-confidence credential candidate at {member_ref} ({rule}); value suppressed.")
+                        tail = window[-256:]
+                require(observed == member.file_size, f"ZIP entry size mismatch at {member_ref}")
+                members_scanned += 1
+    except GateError:
+        raise
+    except Exception:
+        raise GateError(f"Unreadable ZIP artifact at {diagnostic_ref(name)}") from None
+    return members_scanned
+
+
 def scan_artifacts(root):
     """Fail closed before generated reports or traces can be displayed or uploaded."""
     directory = root / "artifacts"
@@ -141,7 +233,11 @@ def scan_artifacts(root):
         require(candidate.is_file(), "Verification artifact type is unsafe")
         files.append(candidate.relative_to(root).as_posix())
     require(files, "Verification artifacts missing")
+    archive_entries = 0
     for name in files:
+        path = root / name
+        require(path.stat().st_size <= MAX_ARTIFACT_BYTES,
+                f"Verification artifact exceeds size limit at {diagnostic_ref(name)}")
         encoded_name = os.fsencode(name)
         for rule, pattern in SECRET_MARKERS.items():
             if pattern.search(encoded_name):
@@ -149,8 +245,18 @@ def scan_artifacts(root):
                     f"High-confidence credential candidate in artifact {diagnostic_ref(name)} "
                     f"({rule}); value suppressed."
                 )
+        with path.open("rb") as source:
+            prefix = source.read(262)
+        suffix = path.suffix.lower()
+        require(suffix not in NESTED_ARCHIVE_SUFFIXES or suffix == ".zip",
+                f"Unsupported compressed artifact at {diagnostic_ref(name)}")
+        require(not prefix.startswith(UNSUPPORTED_ARCHIVE_SIGNATURES)
+                and prefix[257:262] != b"ustar",
+                f"Unsupported compressed artifact at {diagnostic_ref(name)}")
+        if suffix == ".zip" or prefix.startswith(ZIP_SIGNATURES) or zipfile.is_zipfile(path):
+            archive_entries += scan_zip_artifact(path, name)
     return {"status": "passed", "files_scanned": validate_secret_markers(root, files),
-            "rules": sorted(SECRET_MARKERS)}
+            "archive_entries_scanned": archive_entries, "rules": sorted(SECRET_MARKERS)}
 
 
 def validate_archive(root):
