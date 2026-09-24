@@ -41,7 +41,15 @@ let stage = "verification artifacts";
 function run(command, args, env = process.env) {
   stage = [command, ...args].join(" ");
   const start = new Date().toISOString();
-  const result = spawnSync(command, args, { stdio: "inherit", env });
+  console.log(`Verification step: ${stage}`);
+  // Child output may contain synthetic member data or provider errors. Keep it
+  // out of the parent console, including on a failed command or buffer limit.
+  const result = spawnSync(command, args, {
+    stdio: ["ignore", "pipe", "pipe"],
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+    env,
+  });
   report.commands.push({
     command: [command, ...args].join(" "),
     start,

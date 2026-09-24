@@ -506,6 +506,69 @@ class RepositoryFixture(unittest.TestCase):
                         gate.unittest.defaultTestLoader, "discover", return_value=suite):
                     self.assertEqual(gate.verify(self.root), 1)
 
+    def test_repository_test_output_stays_private_on_pass_and_failure(self):
+        marker = "synthetic-private-repository-test-output"
+
+        def passing_test():
+            print(marker)
+
+        def failing_test():
+            print(marker)
+            raise AssertionError(marker)
+
+        for test, expected_status in ((passing_test, 0), (failing_test, 1)):
+            with self.subTest(test=test.__name__):
+                suite = unittest.TestSuite([unittest.FunctionTestCase(test)])
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr), patch.object(
+                        gate.unittest.defaultTestLoader, "discover", return_value=suite), patch.object(
+                        gate, "verify_application", return_value={"unitCoverage": {}, "journeys": {}}), patch.object(
+                        gate, "scan_artifacts", return_value={"status": "passed"}):
+                    self.assertEqual(gate.verify(self.root), expected_status)
+                report = (self.root / "artifacts/repository-verification.json").read_text()
+                self.assertNotIn(marker, report + stdout.getvalue() + stderr.getvalue())
+                self.assertIn("Repository tests:", stdout.getvalue())
+                if expected_status:
+                    self.assertIn("Repository tests failed", report)
+
+    def test_application_launcher_does_not_inherit_child_output(self):
+        marker = "synthetic-private-application-child-output"
+        bin_dir = self.root / "fake-bin"
+        bin_dir.mkdir()
+        npm = bin_dir / "npm"
+        npm.write_text(f"#!/bin/sh\nprintf '{marker}\\n'\nprintf '{marker}\\n' >&2\nexit 7\n")
+        npm.chmod(0o755)
+        env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ["PATH"])
+        probe = subprocess.run(
+            [sys.executable, "-c", "from pathlib import Path; import subprocess; "
+             "from scripts.repo import run_application; "
+             "\ntry: run_application(Path.cwd())\nexcept subprocess.CalledProcessError: print('failed')"],
+            cwd=self.root, env=env, capture_output=True, text=True,
+        )
+        self.assertEqual(probe.returncode, 0)
+        self.assertIn("failed", probe.stdout)
+        self.assertNotIn(marker, probe.stdout + probe.stderr)
+
+    def test_repository_output_boundary_contains_native_child_and_restores_console(self):
+        marker = "synthetic-private-native-child-output"
+        with tempfile.TemporaryFile(mode="w+") as captured:
+            stdout_fd, stderr_fd = os.dup(1), os.dup(2)
+            try:
+                os.dup2(captured.fileno(), 1)
+                os.dup2(captured.fileno(), 2)
+                with gate.private_test_output():
+                    subprocess.run([sys.executable, "-c", f"print('{marker}')"], check=True)
+                os.write(1, b"console-restored\n")
+            finally:
+                os.dup2(stdout_fd, 1)
+                os.dup2(stderr_fd, 2)
+                os.close(stdout_fd)
+                os.close(stderr_fd)
+            captured.seek(0)
+            result = captured.read()
+        self.assertNotIn(marker, result)
+        self.assertIn("console-restored", result)
+
 
 if __name__ == "__main__":
     unittest.main()

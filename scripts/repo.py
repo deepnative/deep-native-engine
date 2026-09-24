@@ -11,6 +11,7 @@ import sys
 import tomllib
 import unittest
 import zipfile
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from xml.etree import ElementTree
 from datetime import datetime, timezone
 from pathlib import Path
@@ -329,7 +330,33 @@ def state(root):
 
 
 def run_application(root):
-    subprocess.run(["npm", "run", "verify:app"], cwd=root, check=True)
+    # The application runner publishes fixed stage diagnostics and a report.
+    # Its child output must not bypass this repository-level console boundary.
+    subprocess.run(["npm", "run", "verify:app"], cwd=root, check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+@contextmanager
+def private_test_output():
+    """Contain Python and inherited native child output during test discovery/run."""
+    with open(os.devnull, "w") as sink:
+        stdout_fd, stderr_fd = os.dup(1), os.dup(2)
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os.dup2(sink.fileno(), 1)
+            os.dup2(sink.fileno(), 2)
+            with redirect_stdout(sink), redirect_stderr(sink):
+                yield sink
+        finally:
+            try:
+                sys.stdout.flush()
+                sys.stderr.flush()
+            finally:
+                os.dup2(stdout_fd, 1)
+                os.dup2(stderr_fd, 2)
+                os.close(stdout_fd)
+                os.close(stderr_fd)
 
 
 def verify_application(root):
@@ -367,11 +394,15 @@ def verify(root):
         stage = "repository assets"
         report["secret_scan"] = validate(root)
         stage = "repository tests"
-        suite = unittest.defaultTestLoader.discover(str(root / "tests/repository"), pattern="test_*.py")
-        require(suite.countTestCases() > 0, "No repository tests collected")
-        result = unittest.TextTestRunner(verbosity=2).run(suite)
+        with private_test_output() as sink:
+            suite = unittest.defaultTestLoader.discover(str(root / "tests/repository"), pattern="test_*.py")
+            require(suite.countTestCases() > 0, "No repository tests collected")
+            result = unittest.TextTestRunner(stream=sink, verbosity=0).run(suite)
         report.update(tests_run=result.testsRun, skipped=len(result.skipped), failures=len(result.failures),
                       errors=len(result.errors), expected_failures=len(result.expectedFailures))
+        print(f"Repository tests: {result.testsRun} run, {len(result.failures)} failures, "
+              f"{len(result.errors)} errors, {len(result.skipped)} skipped, "
+              f"{len(result.expectedFailures)} expected failures.")
         require(result.wasSuccessful() and not result.skipped and not result.expectedFailures,
                 "Repository tests failed, were skipped, or had expected failures")
         stage = "application verification"
