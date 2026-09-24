@@ -114,6 +114,30 @@ def validate_secret_markers(root, files):
     return len(files)
 
 
+def scan_artifacts(root):
+    """Fail closed before generated reports or traces can be displayed or uploaded."""
+    directory = root / "artifacts"
+    require(directory.is_dir() and not directory.is_symlink(), "Verification artifacts missing or unsafe")
+    files = []
+    for candidate in directory.rglob("*"):
+        require(not candidate.is_symlink(), "Verification artifact symlink is unsafe")
+        if candidate.is_dir():
+            continue
+        require(candidate.is_file(), "Verification artifact type is unsafe")
+        files.append(candidate.relative_to(root).as_posix())
+    require(files, "Verification artifacts missing")
+    for name in files:
+        encoded_name = os.fsencode(name)
+        for rule, pattern in SECRET_MARKERS.items():
+            if pattern.search(encoded_name):
+                raise GateError(
+                    f"High-confidence credential candidate in artifact path-sha256:"
+                    f"{hashlib.sha256(encoded_name).hexdigest()[:12]} ({rule}); value suppressed."
+                )
+    return {"status": "passed", "files_scanned": validate_secret_markers(root, files),
+            "rules": sorted(SECRET_MARKERS)}
+
+
 def validate_archive(root):
     archive = root / ARCHIVE
     require(archive.is_dir() and not archive.is_symlink(), "Missing or symlinked source archive")
@@ -330,6 +354,7 @@ def verify(root):
         require(result.wasSuccessful() and not result.skipped and not result.expectedFailures,
                 "Repository tests failed, were skipped, or had expected failures")
         app = verify_application(root)
+        report["artifact_scan"] = scan_artifacts(root)
         report.update(application_status="verified-local-slice", application_unit_coverage=app["unitCoverage"],
                       application_e2e_journey_coverage=app["journeys"])
         report["exit_status"] = 0
@@ -389,7 +414,7 @@ def pre_push(root, lines):
 
 
 def main():
-    require(len(sys.argv) == 2, "Usage: python3 scripts/repo.py bootstrap|verify|pre-push")
+    require(len(sys.argv) == 2, "Usage: python3 scripts/repo.py bootstrap|verify|pre-push|scan-artifacts")
     command = sys.argv[1]
     if command == "bootstrap":
         bootstrap(ROOT)
@@ -398,6 +423,10 @@ def main():
         return verify(ROOT)
     if command == "pre-push":
         return pre_push(ROOT, sys.stdin.read())
+    if command == "scan-artifacts":
+        result = scan_artifacts(ROOT)
+        print(f"Artifact scan passed: {result['files_scanned']} files.")
+        return 0
     raise GateError(f"Unknown command: {command}")
 
 

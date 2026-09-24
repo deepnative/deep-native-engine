@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -85,6 +86,48 @@ class RepositoryFixture(unittest.TestCase):
         self.assertIn("private-key", str(caught.exception))
         self.assertIn("src/new-adapter.ts", str(caught.exception))
         self.assertNotIn(marker, str(caught.exception))
+
+    def test_generated_artifact_marker_blocks_safe_upload(self):
+        marker = "ghp_" + "B" * 36
+        artifact = self.root / "artifacts/failure-trace.log"
+        artifact.parent.mkdir(exist_ok=True)
+        artifact.write_text(f"Provider failed: {marker}\n")
+        result = subprocess.run(
+            [sys.executable, "scripts/repo.py", "scan-artifacts"],
+            cwd=self.root, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("credential candidate", result.stderr)
+        self.assertIn("artifacts/failure-trace.log", result.stderr)
+        self.assertNotIn(marker, result.stdout + result.stderr)
+
+    def test_artifact_scan_keeps_safe_failure_traces_and_rejects_unsafe_files(self):
+        with self.assertRaisesRegex(gate.GateError, "artifacts missing"):
+            gate.scan_artifacts(self.root)
+        artifact = self.root / "artifacts/failure-trace.log"
+        artifact.parent.mkdir(exist_ok=True)
+        artifact.write_text("Synthetic assertion failed; no private value.\n")
+        self.assertEqual(gate.scan_artifacts(self.root)["files_scanned"], 1)
+        artifact.unlink()
+        artifact.symlink_to(self.root / "src/session.ts")
+        with self.assertRaisesRegex(gate.GateError, "symlink is unsafe"):
+            gate.scan_artifacts(self.root)
+
+    def test_artifact_filename_marker_is_not_disclosed(self):
+        marker = "ghp_" + "C" * 36
+        artifact = self.root / "artifacts" / f"{marker}.log"
+        artifact.parent.mkdir(exist_ok=True)
+        artifact.write_text("safe content\n")
+        with self.assertRaises(gate.GateError) as caught:
+            gate.scan_artifacts(self.root)
+        self.assertIn("path-sha256", str(caught.exception))
+        self.assertNotIn(marker, str(caught.exception))
+
+    def test_ci_artifact_display_and_upload_require_safe_scan(self):
+        workflow = (self.root / ".github/workflows/repository-checks.yml").read_text()
+        self.assertLess(workflow.index("id: artifact_scan"), workflow.index("name: Show verification evidence"))
+        self.assertLess(workflow.index("id: artifact_scan"), workflow.index("name: Preserve verification reports"))
+        self.assertEqual(workflow.count("steps.artifact_scan.outcome == 'success'"), 2)
 
     def test_local_circle_capacity_change_requires_reviewed_gate_update(self):
         path = self.root / "assets/docs/content/circles/preview-circles.json"
