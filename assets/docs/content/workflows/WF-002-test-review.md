@@ -8,6 +8,12 @@ rights: Original invented test set and comments; no third-party tests or product
 goals: Improve a technical workflow; check generated test suggestions
 backgrounds: IT practitioner; non-IT professional or general learner choosing QA practice
 prerequisites: FND-003 and basic reading of the ASN-001 brief; no code required
+setup: Read the invented sign-up brief and candidate cases, then compare each claim with the brief before using the request template
+supported_environment: Plain text manual exercise; no test runner, AI provider or client integration verified
+estimated_cost: No service charge in this local preview; any future model cost is unknown
+permissions: No account or external system access; use synthetic test cases only
+license: Original synthetic demonstration; reuse terms pending owner decision
+last_verification: 2026-09-23 source and metadata inspection only; no live test run
 reviewed_on: Pending qualified QA and curriculum review
 next_review: Before publication; proposed monthly and after requirement/tool change
 readiness: Draft demonstration; no test was executed or provider compatibility verified

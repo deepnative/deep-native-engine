@@ -25,6 +25,7 @@ import { COACHING_OFFERS } from "./offers.ts";
 import type { ContentVersion } from "./catalog.ts";
 import type { ExpertRecord, TrackSnapshot } from "./track-readiness.ts";
 import type { Proposal } from "./proposals.ts";
+import type { WorkflowBundle } from "./workflow-registry.ts";
 import { learningPlan } from "./learning-plan.ts";
 import type { SubmissionError, SubmissionField } from "./validation.ts";
 export function escape(value: string) {
@@ -37,7 +38,7 @@ export function escape(value: string) {
   );
 }
 export function page(title: string, body: string) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a><header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a><span class="preview-tag">LOCAL LEARNING PREVIEW</span></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><span>Local preview · Use sample information only. No AI provider, payment or formal assessment is connected. <a href="/readiness">Integration readiness</a>.</span></footer></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a><header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a><span class="preview-tag">LOCAL LEARNING PREVIEW</span></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><span>Local preview · Use sample information only. No AI provider, payment or formal assessment is connected. <a href="/workflows">Workflow demonstrations</a> · <a href="/readiness">Integration readiness</a>.</span></footer></body></html>`;
 }
 export function notice(errors: string[]) {
   return errors.length
@@ -303,6 +304,18 @@ export function errorPage(title: string, message: string) {
   return page(
     title,
     `<section class="error-page"><p class="eyebrow">A SMALL PAUSE</p><h1>${escape(title)}</h1><p class="lead">${escape(message)}</p><a class="button" href="/learn">Return to your learning path</a></section>`,
+  );
+}
+export function workflowRegistryPage(items: WorkflowBundle[], q: string) {
+  return page(
+    "Synthetic workflow demonstrations",
+    `<section class="lesson-heading"><p class="eyebrow">LOCAL DRAFT PREVIEW · NOT REVIEWED FOR PUBLICATION</p><h1>Workflow demonstrations</h1><p class="lead">Explore three invented, text-only examples. No workflow runs here or connects to an AI provider or client system. Qualified review, reuse terms and live compatibility remain pending.</p><form method="get" action="/workflows"><label for="workflow-q">Search by title, goal or background</label><input id="workflow-q" name="q" value="${escape(q)}" maxlength="100"><button type="submit">Search</button></form></section><section aria-label="Synthetic workflows"><ul>${items.map((item) => `<li><a href="/workflows/${escape(item.id)}">${escape(item.title)}</a> · draft version ${item.version}<p>${escape(item.goal)} · ${escape(item.backgrounds)}</p></li>`).join("")}</ul>${items.length ? "" : "<p>No demonstration matches this search.</p>"}</section><p><a href="/learn">Return to learning</a></p>`,
+  );
+}
+export function workflowDetailPage(item: WorkflowBundle) {
+  return page(
+    item.title,
+    `<nav class="breadcrumb"><a href="/workflows">← Workflow demonstrations</a></nav><article class="reading"><p class="eyebrow">SYNTHETIC DRAFT · VERSION ${item.version} · REVIEW PENDING</p><h1>${escape(item.title)}</h1><p class="lead">This file is for manual study only. Downloading it does not run a workflow, call an AI provider, or connect to any client system.</p><dl><dt>Goal</dt><dd>${escape(item.goal)}</dd><dt>Backgrounds</dt><dd>${escape(item.backgrounds)}</dd><dt>Prerequisites</dt><dd>${escape(item.prerequisites)}</dd><dt>Setup</dt><dd>${escape(item.setup)}</dd><dt>Supported environment</dt><dd>${escape(item.supportedEnvironment)}</dd><dt>Estimated cost</dt><dd>${escape(item.estimatedCost)}</dd><dt>Permissions</dt><dd>${escape(item.permissions)}</dd><dt>License</dt><dd>${escape(item.license)}</dd><dt>Owner</dt><dd>${escape(item.owner)}</dd><dt>Last verification</dt><dd>${escape(item.lastVerification)}</dd><dt>Next review</dt><dd>${escape(item.nextReview)}</dd><dt>Readiness</dt><dd>${escape(item.readiness)}</dd><dt>Limitations</dt><dd>${escape(item.limitations)}</dd></dl><p><a class="button" href="/workflows/${escape(item.id)}/download">Download Markdown text</a></p><label for="workflow-copy">Select and copy the synthetic workflow text</label><textarea id="workflow-copy" readonly rows="16">${escape(item.body)}</textarea><p class="small">You can suggest an original improvement as a <a href="/contribute">private sample proposal</a>. It will not be published or executed from this preview.</p></article>`,
   );
 }
 export function libraryPage(
