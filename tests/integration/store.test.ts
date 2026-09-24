@@ -1489,6 +1489,91 @@ it("rechecks authorization and quarantine for every short-lived evidence downloa
   ).resolves.toEqual({ kind: "denied" });
 });
 
+it("keeps issued evidence links bound to one record and current workspace grants", async () => {
+  const first = await member(),
+    second = await member(),
+    admin = await staff("platform_admin"),
+    reviewer = await staff("reviewer"),
+    access = authorizationStore(pool),
+    evidence = evidenceStore(
+      pool,
+      fileObjectStorage(privateStorageRoot),
+      "integration-secret",
+    );
+  async function cleanSubmission(token: string, text: string) {
+    const uploaded = await evidence.upload(token, {
+      name: "private.txt",
+      mediaType: "text/plain",
+      data: Buffer.from(text),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    });
+    if (uploaded.kind !== "created") throw new Error("evidence not created");
+    expect(await evidence.transitionQuarantine(uploaded.id, "clean")).toBe(
+      true,
+    );
+    expect(await evidence.submitForReview(token, uploaded.id)).toBe(true);
+    return uploaded.id;
+  }
+  const firstId = await cleanSubmission(
+    first.token,
+    "First invented private note",
+  );
+  const secondId = await cleanSubmission(
+    second.token,
+    "Second invented private note",
+  );
+  const firstGrant = await access.grantAssignment(
+    admin.id,
+    reviewer.id,
+    first.learner.id,
+    "reviewer",
+    "first review",
+    new Date(Date.now() + 60_000),
+  );
+  const secondGrant = await access.grantAssignment(
+    admin.id,
+    reviewer.id,
+    second.learner.id,
+    "reviewer",
+    "second review",
+    new Date(Date.now() + 60_000),
+  );
+  const firstLink = await evidence.issueDownload(reviewer.token, firstId);
+  const secondLink = await evidence.issueDownload(reviewer.token, secondId);
+  if (firstLink.kind !== "issued" || secondLink.kind !== "issued")
+    throw new Error("expected scoped evidence links");
+  await expect(
+    evidence.download(reviewer.token, secondId, firstLink.capability),
+  ).resolves.toEqual({ kind: "denied" });
+  await expect(
+    evidence.download(reviewer.token, firstId, secondLink.capability),
+  ).resolves.toEqual({ kind: "denied" });
+  expect(await access.revokeAssignment(admin.id, firstGrant)).toBe(true);
+  await expect(
+    evidence.download(reviewer.token, firstId, firstLink.capability),
+  ).resolves.toEqual({ kind: "denied" });
+  await expect(
+    evidence.download(reviewer.token, secondId, secondLink.capability),
+  ).resolves.toMatchObject({ kind: "allowed", name: "private.txt" });
+  await pool.query(
+    "UPDATE assignment_grants SET expires_at=CURRENT_TIMESTAMP WHERE id=$1",
+    [secondGrant],
+  );
+  await expect(
+    evidence.download(reviewer.token, secondId, secondLink.capability),
+  ).resolves.toEqual({ kind: "denied" });
+  const ownerLink = await evidence.issueDownload(first.token, firstId);
+  if (ownerLink.kind !== "issued") throw new Error("owner link not issued");
+  expect(await evidence.remove(first.token, firstId)).toBe(true);
+  await expect(
+    evidence.download(first.token, firstId, ownerLink.capability),
+  ).resolves.toEqual({ kind: "denied" });
+});
+
 it("deletes stored evidence, review state and derived objects through explicit hooks", async () => {
   const owner = await member(),
     other = await member(),
