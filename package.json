@@ -17,6 +17,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:provisional": "playwright test --config playwright.provisional.config.ts",
+    "test:e2e:full": "playwright test --config playwright.full.config.ts",
     "verify:app": "node scripts/verify-app.mjs",
     "verify:full-e2e": "node scripts/verify-full-release.mjs"
   },
