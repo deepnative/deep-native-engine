@@ -1365,7 +1365,7 @@
       "steps": "Join, participate, report, leave and replay access",
       "expected": "Private evidence never leaks; moderator is authorized and revoked membership cannot read",
       "risk": "community privacy; revocation",
-      "issues": [24, 37, 40],
+      "issues": [24, 37, 40, 18],
       "critical": true,
       "cases": [
         {

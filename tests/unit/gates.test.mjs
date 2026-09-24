@@ -1,4 +1,5 @@
 import { it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   assertCoverage,
   assertJourneys,
@@ -6,6 +7,9 @@ import {
   assertUnitResults,
 } from "../../scripts/quality-gates.mjs";
 const copy = (v) => JSON.parse(JSON.stringify(v));
+const proposal = JSON.parse(
+  readFileSync(new URL("../e2e/scenarios.json", import.meta.url), "utf8"),
+);
 const counts = { total: 100, covered: 100, skipped: 0 };
 const metrics = () =>
   Object.fromEntries(
@@ -141,6 +145,31 @@ it("requires every scenario on every supported browser and keeps full-MVP work o
     criticalTotal: 1,
     uncovered: ["F-OUTSTANDING-A"],
   });
+});
+it("does not let the proposed full-MVP denominator or critical set shrink silently", () => {
+  const mapped = {
+    ...register,
+    fullMvpVersion: proposal.fullMvpVersion,
+    fullMvp: proposal.fullMvp,
+  };
+  expect(assertJourneys(mapped, browser()).fullMvp).toMatchObject({
+    families: 27,
+    total: 100,
+    criticalTotal: 94,
+  });
+  const removed = copy(mapped);
+  removed.fullMvp[0].cases.pop();
+  expect(() => assertJourneys(removed, browser())).toThrow(/proposed full-MVP/);
+  const replaced = copy(mapped);
+  replaced.fullMvp[0].cases[0].id = "F-ROADMAP-01-Z";
+  expect(() => assertJourneys(replaced, browser())).toThrow(
+    /proposed full-MVP/,
+  );
+  const downgraded = copy(mapped);
+  downgraded.fullMvp.find((s) => s.id === "ECO-04").cases[0].critical = false;
+  expect(() => assertJourneys(downgraded, browser())).toThrow(
+    /proposed full-MVP/,
+  );
 });
 it("can gate the full-release denominator only when every reserved browser journey passes", () => {
   const release = browser();

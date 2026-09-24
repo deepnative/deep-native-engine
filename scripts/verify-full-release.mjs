@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { assertFullReleaseJourneys } from "./quality-gates.mjs";
+import { assertFullReleaseJourneys, requireGate } from "./quality-gates.mjs";
 
 const input = process.argv[2] ?? "artifacts/e2e-full-results.json";
 const output = "artifacts/full-release-verification.json";
@@ -7,6 +7,10 @@ mkdirSync("artifacts", { recursive: true });
 let result;
 try {
   const register = JSON.parse(readFileSync("tests/e2e/scenarios.json", "utf8"));
+  requireGate(
+    register.fullMvpVersion === "full-mvp-v1",
+    "Full-MVP proposal version changed without gate review",
+  );
   const browser = JSON.parse(readFileSync(input, "utf8"));
   result = { exitStatus: 0, ...assertFullReleaseJourneys(register, browser) };
   console.log(

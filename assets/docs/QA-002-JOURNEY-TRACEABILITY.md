@@ -26,6 +26,42 @@ The issue links in each family identify the implementation acceptance areas it e
 | ROADMAP-06 content versions | BUILD-07 retired template, ECO-05 contribution | Rubric pinning, template support and reviewed member publication are different lifecycles. |
 | ROADMAP-09 reconciliation/deletion | BUILD-08 privacy, BUILD-09 commercial truth, ECO-08 separate metrics | Billing exceptions, data deletion and honest metrics require separate evidence. |
 
+## Proposed mapping audit, 24 September 2026
+
+I compared all 27 family requirement strings with their [roadmap source](context/source-2026-09-15/outputs/contractor-platform/03-roadmap-and-backlog.md), [build-prompt source](context/source-2026-09-15/outputs/contractor-platform/02-codex-build-prompt.md), and [ecosystem source](context/ECOSYSTEM-JOURNEYS.md). All 27 retain the source wording. I then checked each of the 100 child IDs and its action/result against its family, including the separate IT, non-IT professional, and general learner paths. The following is the review record; A–D or A–C refer to the `F-<family>-<letter>` IDs in the register.
+
+| Family | Proposed case split checked against source |
+| --- | --- |
+| ROADMAP-01 | A pilot allowance; B foundation/assignment; C private review; D revision/export. |
+| ROADMAP-02 | A cross-member denial; B assigned review; C revoked download; D editor isolation. |
+| ROADMAP-03 | A last slot; B last unit; C cancellation/no-show; D provider failure and staff time. |
+| ROADMAP-04 | A pilot; B explicit continuation; C direct annual/renewal; D payment and refund exception. Nonconversion is separately explicit in BUILD-04-B. |
+| ROADMAP-05 | A opt-out/provider mode; B limits; C timeout/retry; D sparse evidence/source/budget. |
+| ROADMAP-06 | A pinned rubric; B new version; C retired template; D document instruction isolation. |
+| ROADMAP-07 | A continued monthly allowance; B clinic; C funded support; D goal/renewal/contract claims. |
+| ROADMAP-08 | A cyber/product/project foundation; B uncovered specialty; C sale readiness; D project assignment. |
+| ROADMAP-09 | A booking exception; B early release/refund; C reconciliation; D export/deletion. |
+| BUILD-01 | A cyber branch; B noncoding business analysis; C unavailable tailored review; D demo expert. |
+| BUILD-02 | A evidence revisions; B pinned authorized feedback; C outsider denial; D revoked reviewer link. |
+| BUILD-03 | A last slot race; B last credit race; C replacement credit; D attempt history. |
+| BUILD-04 | A pilot continuation; B no conversion/no further charge; C late agreement; D direct annual/renewal. |
+| BUILD-05 | A duplicate event; B out-of-order event; C refund/early release; D missing-event reconciliation. |
+| BUILD-06 | A grounded feedback; B sparse evidence; C injection isolation; D timeout/malformed output. |
+| BUILD-07 | A rubric pinning; B retired template; C workflow bytes/version; D sample tests. |
+| BUILD-08 | A owner export; B sharing revocation; C source/derived deletion; D retention exceptions. |
+| BUILD-09 | A demo/seed metrics; B unpublished offer; C uncovered capacity; D agreement snapshot. |
+| BUILD-10 | A mobile/keyboard; B validation/empty state; C loading/error recovery; D persisted flow. |
+| ECO-01 | A exploratory registration; B noncoding foundation; C private progress. This is the general learner path. |
+| ECO-02 | A IT assignment; B non-IT professional assignment; C access/readiness comparison. |
+| ECO-03 | A goal change/evidence; B return/resume; C empty/error recovery. |
+| ECO-04 | A bounded circle/private work; B reporting/moderation; C leave/revocation. |
+| ECO-05 | A attributed proposal; B authorized approval/rejection; C sharing revocation. |
+| ECO-06 | A general/professional study choice; B grounded opted-in help; C disabled provider/budget. |
+| ECO-07 | A optional offer/capacity; B explicit versioned acceptance; C cancellation/export/background change. |
+| ECO-08 | A separate outcome measures; B demo/self-report labels; C unauthorized drill-down. |
+
+The source-to-case comparison found no missing family, duplicate case ID, or justified change to the proposed denominator. The six noncritical IDs are ECO-02-A–C and ECO-03-A–C; all other 94 remain critical. ECO-04's source names QA-004 as well as CTP-005/020/021, so its register issue links now include #18. Overlap between ROADMAP and BUILD cases remains separately countable as described above. The gate protects this **proposal** from silent ID removal, substitution, or criticality downgrade; a deliberate scope change needs a new version and reviewed gate update. Independent approval of the mapping is still pending, and full-MVP browser coverage remains **0/100**. This audit neither runs those journeys nor certifies release readiness.
+
 ## Execution and failure rules
 
 The existing `make verify` checks the **approved local-slice** browser matrix and reports full-MVP coverage as **0/100 outstanding**. It does not silently promote a local test to full-release evidence. `scripts/quality-gates.mjs` validates each family/case definition, unique reserved IDs and the exact passing browser/project matrix. A full-release report must contain the real browser scenarios on every registered browser and pass `assertFullReleaseJourneys`. The future release gate can be invoked with:
