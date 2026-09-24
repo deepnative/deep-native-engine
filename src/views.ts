@@ -27,6 +27,7 @@ import type { ContentVersion } from "./catalog.ts";
 import type { ExpertRecord, TrackSnapshot } from "./track-readiness.ts";
 import type { Proposal } from "./proposals.ts";
 import type { WorkflowBundle } from "./workflow-registry.ts";
+import type { CircleListing } from "./circles.ts";
 import { learningPlan } from "./learning-plan.ts";
 import type { SubmissionError, SubmissionField } from "./validation.ts";
 export function escape(value: string) {
@@ -39,7 +40,7 @@ export function escape(value: string) {
   );
 }
 export function page(title: string, body: string) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a><header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a><span class="preview-tag">LOCAL LEARNING PREVIEW</span></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><span>Local preview · Use sample information only. No AI provider, payment or formal assessment is connected. <a href="/workflows">Workflow demonstrations</a> · <a href="/readiness">Integration readiness</a>.</span></footer></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a><header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a><span class="preview-tag">LOCAL LEARNING PREVIEW</span></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><span>Local preview · Use sample information only. No AI provider, payment or formal assessment is connected. <a href="/circles">Local circles</a> · <a href="/workflows">Workflow demonstrations</a> · <a href="/readiness">Integration readiness</a>.</span></footer></body></html>`;
 }
 export function notice(errors: string[]) {
   return errors.length
@@ -305,6 +306,16 @@ export function errorPage(title: string, message: string) {
   return page(
     title,
     `<section class="error-page"><p class="eyebrow">A SMALL PAUSE</p><h1>${escape(title)}</h1><p class="lead">${escape(message)}</p><a class="button" href="/learn">Return to your learning path</a></section>`,
+  );
+}
+export function circlesPage(
+  items: CircleListing[],
+  goal: keyof typeof GOALS,
+  csrf: string,
+) {
+  return page(
+    "Local learning circles",
+    `<section class="lesson-heading"><p class="eyebrow">PRIVATE LOCAL PREVIEW · NO LIVE COMMUNITY</p><h1>Explore learning circles</h1><p class="lead">Join a small, invented topic space to try the membership controls. No discussion, clinic, expert, recording or shared member evidence is enabled. Your name and private learning work are not shown to other members.</p><p>Joining is optional and grants no paid service or staff role. You can leave at any time; only your own membership state and aggregate seats appear here.</p></section><section aria-label="Available circles"><ul>${items.map((item) => `<li><h2>${escape(item.title)}</h2><p>${escape(item.description)}</p><p>${item.goal === goal ? "Matches your current goal" : "Open to explore"} · ${escape(GOALS[item.goal])} · ${item.seatsRemaining} of ${item.capacity} seats available</p>${item.joined ? `<p role="status">You joined this local circle.</p><form method="post" action="/circles/${escape(item.id)}/leave">${hidden(csrf)}<button class="secondary" type="submit">Leave ${escape(item.title)}</button></form>` : item.seatsRemaining > 0 ? `<form method="post" action="/circles/${escape(item.id)}/join">${hidden(csrf)}<button type="submit">Join ${escape(item.title)}</button></form>` : '<p role="status">This local circle is full.</p>'}</li>`).join("")}</ul></section><p><a href="/learn">Return to your learning path</a></p>`,
   );
 }
 export function workflowRegistryPage(items: WorkflowBundle[], q: string) {

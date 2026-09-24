@@ -1,5 +1,6 @@
-import { beforeEach, it, expect, vi } from "vitest";
+import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import request from "supertest";
+import type { Server } from "node:http";
 import { app } from "../../src/app.ts";
 import type { Store } from "../../src/store.ts";
 import {
@@ -22,6 +23,7 @@ import {
   type ProposalStore,
   type Proposal,
 } from "../../src/proposals.ts";
+import { CIRCLES, type CircleStore } from "../../src/circles.ts";
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
 const member = {
@@ -29,6 +31,24 @@ const member = {
   background: "explorer" as const,
   goal: "everyday" as const,
 };
+const managedServers: Server[] = [];
+function managedAgent(application: ReturnType<typeof app>) {
+  const server = application.listen(0);
+  managedServers.push(server);
+  return request.agent(server);
+}
+afterEach(async () => {
+  await Promise.all(
+    managedServers
+      .splice(0)
+      .map(
+        (server) =>
+          new Promise<void>((resolve, reject) =>
+            server.close((error) => (error ? reject(error) : resolve())),
+          ),
+      ),
+  );
+});
 async function atStage<T>(stage: string, request: PromiseLike<T>): Promise<T> {
   try {
     return await request;
@@ -61,7 +81,7 @@ it("keeps member proposals private and moderation unable to publish", async () =
       .mockResolvedValue(null),
     moderate: vi.fn<ProposalStore["moderate"]>().mockResolvedValue(false),
   };
-  const agent = request.agent(
+  const agent = managedAgent(
     app(storage(), { origin, secret: "secret", proposals }),
   );
   const home = await agent.get("/").set("Host", host).expect(200);
@@ -82,7 +102,7 @@ it("keeps member proposals private and moderation unable to publish", async () =
   proposals.moderate.mockResolvedValue(true);
   await post("/moderate/proposals/sample-id/reject", {}).expect(303);
 
-  const memberAgent = request.agent(
+  const memberAgent = managedAgent(
     app(db, { origin, secret: "secret", proposals }),
   );
   const entry = await memberAgent.get("/").set("Host", host).expect(200);
@@ -231,6 +251,47 @@ let db: ReturnType<typeof storage>;
 beforeEach(() => {
   db = storage();
 });
+it("renders only local circle state and handles join, full, denied, and leave outcomes", async () => {
+  const circles = {
+    list: vi.fn<CircleStore["list"]>().mockResolvedValue([
+      { ...CIRCLES[0]!, joined: true, seatsRemaining: 3 },
+      { ...CIRCLES[1]!, joined: false, seatsRemaining: 4 },
+      { ...CIRCLES[2]!, joined: false, seatsRemaining: 0 },
+    ]),
+    join: vi.fn<CircleStore["join"]>().mockResolvedValue("joined"),
+    leave: vi.fn<CircleStore["leave"]>().mockResolvedValue(true),
+  };
+  const agent = managedAgent(app(db, { origin, secret: "secret", circles }));
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  await agent.get("/circles").set("Host", host).expect(303);
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const page = await agent.get("/circles").set("Host", host).expect(200);
+  expect(page.text).toContain("NO LIVE COMMUNITY");
+  expect(page.text).toContain("Matches your current goal");
+  expect(page.text).toContain("You joined this local circle");
+  expect(page.text).toContain("This local circle is full");
+  expect(page.text).not.toContain("member-id");
+  const post = (path: string, valid = true) =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", valid ? origin : "https://wrong.example")
+      .type("form")
+      .send({ csrf });
+  await post("/circles/professional-work/join", false).expect(403);
+  expect(circles.join).not.toHaveBeenCalled();
+  await post("/circles/professional-work/join").expect(303);
+  circles.join.mockResolvedValueOnce("full");
+  await post("/circles/professional-work/join").expect(409);
+  circles.join.mockResolvedValueOnce("denied");
+  await post("/circles/unknown/join").expect(404);
+  await post("/circles/everyday-ai/leave").expect(303);
+  circles.leave.mockResolvedValueOnce(false);
+  await post("/circles/everyday-ai/leave").expect(409);
+  circles.list.mockResolvedValueOnce(null);
+  await agent.get("/circles").set("Host", host).expect(403);
+});
 function catalogMock() {
   return {
     ...disabledCatalogStore(),
@@ -246,7 +307,7 @@ function catalogMock() {
   };
 }
 async function client(evidence?: EvidenceStore) {
-  const agent = request.agent(app(db, { origin, secret: "secret", evidence }));
+  const agent = managedAgent(app(db, { origin, secret: "secret", evidence }));
   const response = await agent.get("/").set("Host", host).expect(200);
   const csrf = response.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   return { agent, csrf };
@@ -321,7 +382,7 @@ it("enforces private workspace and cohort decisions on direct API requests", asy
         body: "Shared guide",
       }),
   };
-  const agent = request.agent(
+  const agent = managedAgent(
     app(db, { origin, secret: "secret", authorization }),
   );
   await agent.get("/").set("Host", host).expect(200);
@@ -383,7 +444,7 @@ it("shows only eligible published content to members and escapes draft previews"
     reviewedAt: new Date("2026-09-23"),
     publishedAt: new Date("2026-09-23"),
   };
-  const agent = request.agent(app(db, { origin, secret: "secret", catalog }));
+  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
   await agent.get("/").set("Host", host).expect(200);
   await agent.get("/library").set("Host", host).expect(303);
   active();
@@ -457,7 +518,7 @@ it("records only exact synthetic lesson openings and rejects invalid, stale or u
     publishedAt: new Date(),
   };
   catalog.published.mockResolvedValue(item);
-  const agent = request.agent(app(db, { origin, secret: "secret", catalog }));
+  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
   const welcome = await agent.get("/").set("Host", host).expect(200);
   const csrf = welcome.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   active();
@@ -523,7 +584,7 @@ it("records only exact synthetic lesson openings and rejects invalid, stale or u
 });
 it("supports the local editor/reviewer workflow without bypassing rejected transitions", async () => {
   const catalog = catalogMock();
-  const agent = request.agent(app(db, { origin, secret: "secret", catalog }));
+  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   catalog.staffList.mockResolvedValueOnce([
@@ -1019,7 +1080,7 @@ it("selects only an eligible published assignment for the active member and reje
   };
   const catalog = catalogMock();
   catalog.search.mockResolvedValue([item]);
-  const agent = request.agent(app(db, { origin, secret: "secret", catalog }));
+  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
   const entry = await agent.get("/").set("Host", host).expect(200);
   const csrf = entry.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   const post = (values: Record<string, string>) =>

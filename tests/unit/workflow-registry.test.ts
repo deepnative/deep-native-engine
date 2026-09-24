@@ -1,11 +1,20 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import request from "supertest";
+import type { Server } from "node:http";
 import { app } from "../../src/app.ts";
 import {
   workflowBundle,
   workflowRegistry,
 } from "../../src/workflow-registry.ts";
 import type { Store } from "../../src/store.ts";
+let server: Server | undefined;
+afterEach(async () => {
+  if (server)
+    await new Promise<void>((resolve, reject) =>
+      server!.close((error) => (error ? reject(error) : resolve())),
+    );
+  server = undefined;
+});
 
 it("loads only the three fixed synthetic Markdown bundles and filters their metadata", async () => {
   const all = await workflowRegistry();
@@ -30,12 +39,12 @@ it("serves read-only demonstration pages and inert Markdown attachments", async 
   const store = {
     session: vi.fn<Store["session"]>().mockResolvedValue({ kind: "new" }),
   } as unknown as Store;
-  const server = app(store, {
+  server = app(store, {
     origin: "http://127.0.0.1:3000",
     secret: "secret",
-  });
-  const get = (path: string) =>
-    request(server).get(path).set("Host", "127.0.0.1:3000");
+  }).listen(0);
+  const agent = request.agent(server);
+  const get = (path: string) => agent.get(path).set("Host", "127.0.0.1:3000");
   const list = await get("/workflows").expect(200);
   expect(list.text).toContain("WF-003");
   expect(list.text).toContain("NOT REVIEWED FOR PUBLICATION");

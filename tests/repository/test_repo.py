@@ -60,6 +60,14 @@ class RepositoryFixture(unittest.TestCase):
     def test_complete_fixture_validates(self):
         gate.validate(self.root)
 
+    def test_local_circle_capacity_change_requires_reviewed_gate_update(self):
+        path = self.root / "assets/docs/content/circles/preview-circles.json"
+        circles = json.loads(path.read_text())
+        circles[0]["capacity"] = 16
+        path.write_text(json.dumps(circles))
+        with self.assertRaisesRegex(gate.GateError, "Invalid local circle metadata or capacity"):
+            gate.validate(self.root)
+
     def test_fixture_commits_do_not_start_background_maintenance(self):
         trace = self.root / "artifacts/git-trace.jsonl"
         trace.parent.mkdir(exist_ok=True)
@@ -131,7 +139,7 @@ class RepositoryFixture(unittest.TestCase):
         with patch.object(gate, "run_application"), self.assertRaisesRegex(gate.GateError, "report missing"):
             gate.verify_application(self.root)
         metrics = {k: {"total": 100, "covered": 100, "skipped": 0} for k in ("statements", "branches", "functions", "lines")}
-        report = {"exitStatus": 0, "scope": "initial-learning-v16", "revision": gate.state(self.root),
+        report = {"exitStatus": 0, "scope": "initial-learning-v17", "revision": gate.state(self.root),
                   "unitTests": {"passed": 1, "total": 1}, "integrationTests": {"passed": 1, "total": 1},
                   "unitCoverage": metrics, "journeys": {"passed": 1, "total": 1, "criticalPassed": 1, "criticalTotal": 1}}
         def write_report(*args, **kwargs):

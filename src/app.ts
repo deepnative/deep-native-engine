@@ -13,6 +13,7 @@ import {
   libraryPage,
   workflowRegistryPage,
   workflowDetailPage,
+  circlesPage,
   contentPreview,
   staffLibraryPage,
   trackReadinessPage,
@@ -57,6 +58,7 @@ import {
 import { disabledTrackStore, type TrackStore } from "./track-readiness.ts";
 import { disabledProposalStore, type ProposalStore } from "./proposals.ts";
 import { workflowBundle, workflowRegistry } from "./workflow-registry.ts";
+import { disabledCircleStore, type CircleStore } from "./circles.ts";
 export function app(
   store: Store,
   options: {
@@ -70,6 +72,7 @@ export function app(
     tracks?: TrackStore;
     proposals?: ProposalStore;
     career?: CareerStore;
+    circles?: CircleStore;
   },
 ) {
   const app = express();
@@ -81,6 +84,7 @@ export function app(
   const tracks = options.tracks ?? disabledTrackStore();
   const proposals = options.proposals ?? disabledProposalStore();
   const career = options.career ?? disabledCareerStore();
+  const circles = options.circles ?? disabledCircleStore();
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -349,6 +353,7 @@ export function app(
       "/milestones",
       "/career",
       "/contribute",
+      "/circles",
     ],
     async (_req, res, next) => {
       const session = await store.session(res.locals.token as string);
@@ -360,6 +365,59 @@ export function app(
       next();
     },
   );
+  app.get("/circles", async (_req, res) => {
+    const items = await circles.list(res.locals.token as string);
+    if (!items) {
+      res
+        .status(403)
+        .send(errorPage("Circles unavailable", "Refresh your session."));
+      return;
+    }
+    res.send(
+      circlesPage(
+        items,
+        (res.locals.learner as Learner).goal,
+        res.locals.csrf as string,
+      ),
+    );
+  });
+  app.post("/circles/:id/join", async (req, res) => {
+    const result = await circles.join(
+      res.locals.token as string,
+      req.params.id as string,
+    );
+    if (result !== "joined") {
+      res
+        .status(result === "full" ? 409 : 404)
+        .send(
+          errorPage(
+            result === "full" ? "Circle is full" : "Circle unavailable",
+            "Your membership was not changed. Return to the circle list for current availability.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/circles");
+  });
+  app.post("/circles/:id/leave", async (req, res) => {
+    if (
+      !(await circles.leave(
+        res.locals.token as string,
+        req.params.id as string,
+      ))
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Membership unchanged",
+            "You may already have left this circle. Refresh the list to check.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/circles");
+  });
   app.get("/contribute", async (_req, res) =>
     res.send(
       proposalListPage(

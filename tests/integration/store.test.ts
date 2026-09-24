@@ -22,6 +22,7 @@ import {
 import { testPool } from "../support/database.ts";
 import { trackStore } from "../../src/track-readiness.ts";
 import { proposalStore } from "../../src/proposals.ts";
+import { circleStore } from "../../src/circles.ts";
 import {
   catalogStore,
   seedDraftPack,
@@ -78,6 +79,84 @@ const contentDraft: DraftContent = {
   rubric: "Check source and uncertainty.",
   rubricVersion: 1,
 };
+it("keeps local circle membership separate from cohort grants and removes it with the member", async () => {
+  const owner = await member();
+  const outsider = await member();
+  const circles = circleStore(pool);
+  await pool.query("INSERT INTO cohorts(id) VALUES('everyday-ai')");
+  await pool.query(
+    "INSERT INTO cohort_content(cohort_id,content_id,body) VALUES('everyday-ai','sample','Shared cohort secret')",
+  );
+  expect(await circles.join(owner.token, "everyday-ai")).toBe("joined");
+  expect(await circles.join(owner.token, "everyday-ai")).toBe("joined");
+  expect((await circles.list(owner.token))?.[0]).toMatchObject({
+    joined: true,
+    seatsRemaining: 3,
+  });
+  expect((await circles.list(outsider.token))?.[0]).toMatchObject({
+    joined: false,
+    seatsRemaining: 3,
+  });
+  expect(
+    await authorizationStore(pool).readCohort(
+      owner.token,
+      "everyday-ai",
+      "sample",
+    ),
+  ).toEqual({ kind: "denied" });
+  expect((await pool.query("SELECT * FROM cohort_memberships")).rowCount).toBe(
+    0,
+  );
+  expect(await circles.leave(outsider.token, "everyday-ai")).toBe(false);
+  expect(await circles.leave(owner.token, "everyday-ai")).toBe(true);
+  expect(await circles.leave(owner.token, "everyday-ai")).toBe(false);
+  expect(await circles.join(owner.token, "everyday-ai")).toBe("joined");
+  expect((await circles.list(owner.token))?.[0]?.seatsRemaining).toBe(3);
+  await pool.query(
+    "UPDATE principals SET expires_at=CURRENT_TIMESTAMP WHERE id=$1",
+    [owner.learner.id],
+  );
+  expect(await circles.list(owner.token)).toBeNull();
+  expect((await circles.list(outsider.token))?.[0]?.seatsRemaining).toBe(4);
+  expect(await circles.join(owner.token, "professional-work")).toBe("denied");
+  expect(await circles.leave(owner.token, "everyday-ai")).toBe(false);
+  expect(await circles.join("0".repeat(64), "everyday-ai")).toBe("denied");
+  await db.remove(owner.learner.id);
+  expect(
+    (
+      await pool.query(
+        "SELECT * FROM preview_circle_memberships WHERE member_id=$1",
+        [owner.learner.id],
+      )
+    ).rowCount,
+  ).toBe(0);
+});
+
+it("serializes the last local circle seat across concurrent members", async () => {
+  const circles = circleStore(pool);
+  const members = await Promise.all(Array.from({ length: 5 }, () => member()));
+  for (const entry of members.slice(0, 3)) {
+    expect(await circles.join(entry.token, "technical-practice")).toBe(
+      "joined",
+    );
+  }
+  expect(
+    (
+      await Promise.all(
+        members
+          .slice(3)
+          .map((entry) => circles.join(entry.token, "technical-practice")),
+      )
+    ).sort(),
+  ).toEqual(["full", "joined"]);
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*)::integer AS n FROM preview_circle_memberships WHERE circle_id='technical-practice' AND left_at IS NULL",
+      )
+    ).rows[0]?.n,
+  ).toBe(4);
+});
 it("keeps optional career plans and draft approvals private, versioned and removable", async () => {
   const owner = await member();
   const outsider = await member();
