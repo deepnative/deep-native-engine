@@ -15,7 +15,7 @@ Prepared 2026-09-23 for [QA-002 #17](https://github.com/deepnative/deep-native-e
 
 Every family retains its source requirement text, actor, preconditions, end-to-end steps, expected result, issue links, risk, criticality and `outstanding` state. Each child case has a reserved browser ID plus its own action and observable result. Browser tests must use exactly `[F-…]` in their title. These are proposed acceptance scenarios; reserved IDs are not tests and do not count as passing. The local slice's passing IDs remain separate. The gate's full-MVP report names every uncovered ID, the 100-case denominator and the critical-case count.
 
-Each of the 100 cases now also names its mandatory `requiredChecks`: a concrete action and observable expected result for each required subcase. The audit found **197 required checks**, with 77 cases needing more than one and 23 requiring one. These checks are obligations *inside* the existing case IDs; they do not add 97 passing IDs or change the 100-case/94-critical denominator. The check array is part of the mapping approval digest, so a later edit invalidates approval until reviewed again.
+Each of the 100 cases now also names its mandatory `requiredChecks`: a concrete action and observable expected result for each required subcase. After the #155 source-obligation correction, the proposal has **202 required checks**, with 77 cases needing more than one and 23 requiring one. These checks are obligations *inside* the existing case IDs; they do not add passing IDs or change the 100-case/94-critical denominator. The check array is part of the mapping approval digest, so a later edit invalidates approval until reviewed again.
 
 The issue links in each family identify the implementation acceptance areas it exercises. Specific case actions and results are the concrete checks to use when those issues are delivered. Issue text and the immutable source archive remain authoritative for obligations that are not yet implemented; mapping overlap never deletes a case. The following relationships explain intentional cross-source overlap:
 
@@ -34,7 +34,7 @@ I compared all 27 family requirement strings with their [roadmap source](context
 
 | Family | Proposed case split checked against source |
 | --- | --- |
-| ROADMAP-01 | A pilot allowance; B foundation/assignment; C private review; D revision/export. |
+| ROADMAP-01 | A pilot allowance; B foundation/assignment and publication without competence; C private assigned review; D revision/export. |
 | ROADMAP-02 | A cross-member denial; B assigned review; C revoked download; D editor isolation. |
 | ROADMAP-03 | A last slot; B last unit; C cancellation/no-show; D provider failure and staff time. |
 | ROADMAP-04 | A pilot; B explicit continuation; C direct annual/renewal; D payment and refund exception. Nonconversion is separately explicit in BUILD-04-B. |
@@ -42,7 +42,7 @@ I compared all 27 family requirement strings with their [roadmap source](context
 | ROADMAP-06 | A pinned rubric; B new version; C retired template; D document instruction isolation. |
 | ROADMAP-07 | A continued monthly allowance; B clinic; C funded support; D goal/renewal/contract claims. |
 | ROADMAP-08 | A cyber/product/project foundation; B uncovered specialty; C sale readiness; D project assignment. |
-| ROADMAP-09 | A booking exception; B early release/refund; C reconciliation; D export/deletion. |
+| ROADMAP-09 | A booking exception; B early release/refund; C reconciliation; D owner and authorized-operator export with denial paths, deletion and retention. |
 | BUILD-01 | A cyber branch; B noncoding business analysis; C unavailable tailored review; D demo expert. |
 | BUILD-02 | A evidence revisions; B pinned authorized feedback; C outsider denial; D revoked reviewer link. |
 | BUILD-03 | A last slot race; B last credit race; C replacement credit; D attempt history. |
@@ -62,11 +62,11 @@ I compared all 27 family requirement strings with their [roadmap source](context
 | ECO-07 | A optional offer/capacity; B explicit versioned acceptance; C cancellation/export/background change. |
 | ECO-08 | A separate outcome measures; B demo/self-report labels; C unauthorized drill-down. |
 
-The table covers all 27 families and all 100 IDs. For completeness, this is the check-count audit by case letter; the register itself records the action and observable assertion for each of the 197 checks.
+The table covers all 27 families and all 100 IDs. For completeness, this is the check-count audit by case letter; the register itself records the action and observable assertion for each of the 202 checks.
 
 | Family | Required checks by case ID suffix |
 | --- | --- |
-| ROADMAP-01 | A:2, B:2, C:3, D:2 |
+| ROADMAP-01 | A:2, B:3, C:3, D:2 |
 | ROADMAP-02 | A:3, B:1, C:3, D:1 |
 | ROADMAP-03 | A:2, B:2, C:2, D:2 |
 | ROADMAP-04 | A:2, B:2, C:2, D:7 |
@@ -74,7 +74,7 @@ The table covers all 27 families and all 100 IDs. For completeness, this is the 
 | ROADMAP-06 | A:2, B:2, C:2, D:2 |
 | ROADMAP-07 | A:2, B:1, C:2, D:3 |
 | ROADMAP-08 | A:3, B:2, C:2, D:1 |
-| ROADMAP-09 | A:1, B:2, C:3, D:4 |
+| ROADMAP-09 | A:1, B:2, C:3, D:8 |
 | BUILD-01 | A:1, B:1, C:1, D:1 |
 | BUILD-02 | A:2, B:1, C:2, D:3 |
 | BUILD-03 | A:1, B:1, C:1, D:2 |
@@ -94,11 +94,11 @@ The table covers all 27 families and all 100 IDs. For completeness, this is the 
 | ECO-07 | A:2, B:2, C:3 |
 | ECO-08 | A:3, B:2, C:1 |
 
-The formerly ambiguous alternatives are now explicit conjunctions. `F-ROADMAP-03-C` requires a tested cancellation policy **and** a tested no-show policy; `F-ROADMAP-03-D` separately tests provider failure. `F-ECO-06-C` requires both an unavailable-provider response and a budget-stop response. `F-ECO-07-C` requires cancellation rights, authorized export, **and** background-change isolation. A policy-dependent result such as restored *or* forfeited credit remains conditional on the declared policy, but both triggering paths and the corresponding dated outcome must be asserted. Other compound IDs explicitly separate payment event order, refund decisions, timeout and malformed output, owner and outsider reads, retired and unverified templates, consent and rejection, mobile and keyboard access, and empty and error recovery.
+The formerly ambiguous alternatives are now explicit conjunctions. `F-ROADMAP-01-B` requires published eligible content to leave assessed competence and completed human review unset when there is no assessment; `F-ROADMAP-01-C` separately requires legitimate assigned-review behavior. `F-ROADMAP-09-D` requires owner export, member-authorized operator export, absent/expired/out-of-scope operator denials, and deletion/retention. `F-ROADMAP-03-C` requires a tested cancellation policy **and** a tested no-show policy; `F-ROADMAP-03-D` separately tests provider failure. `F-ECO-06-C` requires both an unavailable-provider response and a budget-stop response. `F-ECO-07-C` requires cancellation rights, authorized export, **and** background-change isolation. A policy-dependent result such as restored *or* forfeited credit remains conditional on the declared policy, but both triggering paths and the corresponding dated outcome must be asserted. Other compound IDs explicitly separate payment event order, refund decisions, timeout and malformed output, owner and outsider reads, retired and unverified templates, consent and rejection, mobile and keyboard access, and empty and error recovery.
 
 The source-to-case comparison found no missing family, duplicate case ID, or justified change to the proposed denominator. The six noncritical IDs are ECO-02-A–C and ECO-03-A–C; all other 94 remain critical. ECO-04's source names QA-004 as well as CTP-005/020/021, so its register issue links now include #18. Overlap between ROADMAP and BUILD cases remains separately countable as described above. The gate protects this **proposal** from silent ID removal, substitution, or criticality downgrade; a deliberate scope change needs a new version and reviewed gate update. Independent approval of the mapping is still pending, and full-MVP browser coverage remains **0/100**. This audit neither runs those journeys nor certifies release readiness.
 
-The source strings, family IDs, case IDs, source links, issue links and critical flags are unchanged by this subcase audit. This is a correction to proposed case semantics within `full-mvp-v1`, before approval. A separate technical reviewer must compare the 197 checks to all three sources and the browser evidence rule, record findings and a decision on #94, and only then may a reviewed change move the approval file out of `pending`. The author’s review of this correction does not supply that separate decision.
+The source strings, family IDs, case IDs, source links, issue links and critical flags are unchanged by this subcase audit. This is a correction to proposed case semantics within `full-mvp-v1`, before approval. Its SHA-256 mapping digest is `0345855e5b331e2be1a4403a27f6af0128e0a1c3b83f9d50abaaef7bc623be81`; this is a fingerprint of the proposal, **not** an approval. The preceding proposal digest `14963de159ede2a79d43b963d0d7c974fc124538c7738ea1c36933fb90850631` no longer identifies this mapping. A separate technical reviewer must compare the revised 202 checks to all three sources and the browser evidence rule, record findings and a decision on #94, and only then may a reviewed change move the approval file out of `pending`. The author’s review of this correction does not supply that separate decision.
 
 ## Execution and failure rules
 
@@ -110,7 +110,7 @@ npm run verify:full-e2e
 
 The command accepts no caller-supplied browser report. It clears prior full-release artifacts, requires a clean Git revision and the tracked `tests/e2e/full-mvp-approval.json` decision, creates an isolated loopback PostgreSQL database and private storage, builds the app, and runs the complete `playwright.full.config.ts` suite itself. The Playwright metadata carries a freshly generated run ID and the tested commit/tree. The runner checks that the revision stayed clean and unchanged, the report came from this run on the registered browser matrix with no retries, and every browser execution has a retained trace archive. The report and trace hashes, run identity, exact revision, runtime and PostgreSQL version are recorded in `artifacts/full-release-verification.json`; database and storage cleanup are required for a pass. Missing approval, a changed mapping, stale or dirty source, absent/mismatched evidence, failed tests or cleanup fail the command.
 
-The approval file is **pending**. A separate technical mapping reviewer must resolve [the required-case ambiguity in #152](https://github.com/deepnative/deep-native-engine/issues/152), record an explicit approval decision on [#94](https://github.com/deepnative/deep-native-engine/issues/94), and update the tracked file in a reviewed change with `status: approved`, the actual reviewer, the decision comment URL and date, and the SHA-256 digest of `{ version: fullMvpVersion, projects, fullMvp }` using JSON serialization in `releaseMappingDigest`. The reviewer and PR history are the authority for the decision; the digest binds the approved content and browser matrix. A browser result cannot approve its own register. This is technical mapping approval only, not qualified content review, Phase B acceptance, or launch approval.
+The approval file is **pending**. After the [#155 findings](https://github.com/deepnative/deep-native-engine/issues/155), a new separate technical mapping reviewer must compare the corrected source obligations and browser evidence rule to all three sources, record findings and a decision on [#94](https://github.com/deepnative/deep-native-engine/issues/94), and only then may a reviewed change move the tracked file to `status: approved` with the actual reviewer, decision comment URL and date, and SHA-256 digest of `{ version: fullMvpVersion, projects, fullMvp }` using JSON serialization in `releaseMappingDigest`. The reviewer and PR history are the authority for the decision; the digest binds the approved content and browser matrix. A browser result cannot approve its own register. This is technical mapping approval only, not qualified content review, Phase B acceptance, or launch approval.
 
 The command fails closed when the full report is missing, empty, unmapped, incomplete, skipped, failed, retried, duplicated or below coverage. The release target is at least 99% of approved scenario IDs, 100% of critical IDs and 100% pass of executed required tests; the current matrix also requires every registered browser execution, so all 100 IDs must be present. A manually changed `status` cannot substitute for browser evidence. The present `tests/full-e2e/` directory contains only the three proposed ECO-01 cases, so even after mapping approval a release run remains incomplete until every approved case is implemented and exercised. The local/provisional gates retain their separate denominators.
 

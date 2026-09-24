@@ -524,8 +524,8 @@
         },
         {
           "id": "F-ROADMAP-01-B",
-          "steps": "Onboard across the common foundation and choose an eligible assignment",
-          "expected": "The assignment and rubric fit the member goal and actual prerequisites",
+          "steps": "Onboard across the common foundation, choose an eligible assignment and publish eligible content without assessment",
+          "expected": "The assignment and rubric fit the member goal and actual prerequisites; publication alone does not mark assessed competence or completed human review",
           "critical": true,
           "requiredChecks": [
             {
@@ -535,6 +535,10 @@
             {
               "action": "Choose an eligible assignment",
               "expected": "The selected assignment and rubric match the member goal and real prerequisites"
+            },
+            {
+              "action": "Publish eligible foundation content for a member who has no completed assessment, then inspect that member’s progress and assessment record",
+              "expected": "The content becomes available, but the member gains neither assessed competence nor a completed human-review result from publication alone"
             }
           ]
         },
@@ -1232,8 +1236,8 @@
         },
         {
           "id": "F-ROADMAP-09-D",
-          "steps": "Export member data and complete deletion with retention exceptions",
-          "expected": "Only authorized records export, active/derived data is removed and retained categories are disclosed",
+          "steps": "Export member data as its owner and as an operator within recorded member authorization, reject unauthorized operator export, and complete deletion with retention exceptions",
+          "expected": "Only owner-permitted and member-authorized operator records export; absent, expired and out-of-scope operator authority is denied; active/derived data is removed and retained categories are disclosed",
           "critical": true,
           "requiredChecks": [
             {
@@ -1251,6 +1255,22 @@
             {
               "action": "Inspect separately retained records",
               "expected": "Billing and backup retention exceptions and expiry are disclosed"
+            },
+            {
+              "action": "As an authorized operator, export a member’s permitted records under that member’s recorded, current export authorization",
+              "expected": "Only records within that member’s authorization export; another member’s records and records outside its scope are excluded"
+            },
+            {
+              "action": "As an operator, request the member’s export without recorded member authorization",
+              "expected": "The export is denied and no member records are disclosed"
+            },
+            {
+              "action": "As an operator, request the member’s export after its recorded authorization expires",
+              "expected": "The export is denied and no member records are disclosed"
+            },
+            {
+              "action": "As an operator with current authorization, request records outside its permitted member or record scope",
+              "expected": "The out-of-scope export is denied and no unauthorized records are disclosed"
             }
           ]
         }
