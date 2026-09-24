@@ -212,12 +212,12 @@ it("shows honest track states and restricts the expert evidence roster", async (
   expect(roster.text).toContain("No expert commitments are recorded");
 });
 it("shows optional offer hypotheses while reporting foundation access as undecided", async () => {
-  const server = app(storage(), { origin, secret: "secret" });
-  const catalog = await request(server)
+  const agent = managedAgent(app(storage(), { origin, secret: "secret" }));
+  const catalog = await agent
     .get("/api/offer-hypotheses")
     .set("Host", host)
     .expect(200);
-  const planning = await request(server)
+  const planning = await agent
     .get("/readiness/offers")
     .set("Host", host)
     .expect(200);
@@ -241,7 +241,7 @@ it("shows optional offer hypotheses while reporting foundation access as undecid
       (offer.priceCents / 100).toLocaleString("en-CA"),
     );
   }
-  await request(server).get("/checkout/pilot").set("Host", host).expect(404);
+  await agent.get("/checkout/pilot").set("Host", host).expect(404);
 });
 function storage() {
   return {
