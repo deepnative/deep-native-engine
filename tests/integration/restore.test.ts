@@ -17,24 +17,13 @@ import { Pool } from "pg";
 import { migrate, store, type Learner } from "../../src/store.ts";
 import { authorizationStore } from "../../src/authorization.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
+import { postgresArchiveTools } from "../support/postgres-archive-tools.ts";
 
-function postgres(
-  tool: "pg_dump" | "pg_restore",
-  args: string[],
-  input?: Buffer,
+function checked(
+  result: ReturnType<ReturnType<typeof postgresArchiveTools>["execute"]>,
 ) {
-  return spawnSync(
-    "docker",
-    ["compose", "exec", "-T", "postgres", tool, ...args],
-    {
-      input,
-      maxBuffer: 32 * 1024 * 1024,
-      timeout: 30_000,
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
-}
-function checked(result: ReturnType<typeof postgres>) {
+  if ((result.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT")
+    throw new Error("PostgreSQL 18 restore client unavailable.");
   if (result.status !== 0 || result.stderr.length !== 0)
     throw new Error(
       "Synthetic PostgreSQL restore tool failed; raw diagnostics suppressed.",
@@ -102,6 +91,7 @@ it("restores only a synthetic snapshot into a new database and preserves private
     throw new Error(
       "Restore rehearsal requires the repository loopback Compose test fixture.",
     );
+  const { mode: toolMode, execute: postgres } = postgresArchiveTools(url);
   const admin = new Pool({ connectionString: url.toString() });
   const owned: string[] = [];
   const pools: Pool[] = [];
@@ -332,6 +322,7 @@ it("restores only a synthetic snapshot into a new database and preserves private
       node: process.version,
       dumpVersion,
       restoreVersion,
+      toolMode,
       fixture: {
         members: members.length,
         tables: expectedTables.length,
