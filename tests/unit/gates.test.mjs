@@ -382,9 +382,10 @@ it("requires every mandatory subcase on each browser under the same ID", () => {
     /Incomplete required subcases.*mobile/,
   );
 });
-it("requires ROADMAP-02-A/D, ECO-01 to ECO-04 and ECO-06-A provisional browser evidence without approving release", () => {
+it("requires ROADMAP-02-A/B/D, ECO-01 to ECO-04 and ECO-06-A provisional browser evidence without approving release", () => {
   const ids = [
     "F-ROADMAP-02-A",
+    "F-ROADMAP-02-B",
     "F-ROADMAP-02-D",
     "F-ECO-01-A",
     "F-ECO-01-B",
@@ -426,11 +427,11 @@ it("requires ROADMAP-02-A/D, ECO-01 to ECO-04 and ECO-06-A provisional browser e
   };
   expect(assertProvisionalReleaseJourneys(proposal, report)).toMatchObject({
     approved: false,
-    passed: 13,
-    total: 13,
-    criticalPassed: 7,
-    criticalTotal: 7,
-    executions: 13 * proposal.projects.length,
+    passed: 14,
+    total: 14,
+    criticalPassed: 8,
+    criticalTotal: 8,
+    executions: 14 * proposal.projects.length,
   });
   for (const [browserIndex, browserName] of proposal.projects.entries()) {
     for (const [name, corrupt] of [
@@ -460,11 +461,22 @@ it("requires ROADMAP-02-A/D, ECO-01 to ECO-04 and ECO-06-A provisional browser e
       assertProvisionalReleaseJourneys(proposal, singleCheckMissing),
     ).toThrow(
       new RegExp(
+        `Incomplete required subcases.*F-ROADMAP-02-B.*${browserName}`,
+      ),
+    );
+    const editorMissing = copy(report);
+    editorMissing.suites[0].specs[2].tests[
+      browserIndex
+    ].results[0].annotations = [];
+    expect(() =>
+      assertProvisionalReleaseJourneys(proposal, editorMissing),
+    ).toThrow(
+      new RegExp(
         `Incomplete required subcases.*F-ROADMAP-02-D.*${browserName}`,
       ),
     );
     const foundationMissing = copy(report);
-    foundationMissing.suites[0].specs[3].tests[
+    foundationMissing.suites[0].specs[4].tests[
       browserIndex
     ].results[0].annotations = [];
     expect(() =>
@@ -473,7 +485,7 @@ it("requires ROADMAP-02-A/D, ECO-01 to ECO-04 and ECO-06-A provisional browser e
       new RegExp(`Incomplete required subcases.*F-ECO-01-B.*${browserName}`),
     );
     const crossAudienceMissing = copy(report);
-    crossAudienceMissing.suites[0].specs[6].tests[
+    crossAudienceMissing.suites[0].specs[7].tests[
       browserIndex
     ].results[0].annotations.pop();
     expect(() =>
@@ -482,7 +494,7 @@ it("requires ROADMAP-02-A/D, ECO-01 to ECO-04 and ECO-06-A provisional browser e
       new RegExp(`Incomplete required subcases.*F-ECO-02-B.*${browserName}`),
     );
     const recoveryMissing = copy(report);
-    recoveryMissing.suites[0].specs[10].tests[
+    recoveryMissing.suites[0].specs[11].tests[
       browserIndex
     ].results[0].annotations.pop();
     expect(() =>
@@ -491,7 +503,7 @@ it("requires ROADMAP-02-A/D, ECO-01 to ECO-04 and ECO-06-A provisional browser e
       new RegExp(`Incomplete required subcases.*F-ECO-03-C.*${browserName}`),
     );
     const privacyMissing = copy(report);
-    privacyMissing.suites[0].specs[11].tests[
+    privacyMissing.suites[0].specs[12].tests[
       browserIndex
     ].results[0].annotations.pop();
     expect(() =>
@@ -500,7 +512,7 @@ it("requires ROADMAP-02-A/D, ECO-01 to ECO-04 and ECO-06-A provisional browser e
       new RegExp(`Incomplete required subcases.*F-ECO-04-A.*${browserName}`),
     );
     const noncareerMissing = copy(report);
-    noncareerMissing.suites[0].specs[12].tests[
+    noncareerMissing.suites[0].specs[13].tests[
       browserIndex
     ].results[0].annotations.pop();
     expect(() =>
