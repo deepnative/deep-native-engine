@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v24",
+  "version": "initial-learning-v25",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, plus ephemeral source-grounded local study reflection; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, and saved private exact-version sample practice; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -515,6 +515,15 @@
       "steps": "Submit two proposals in different creation/submission order, inspect scoped moderator worklist age and ordering, deny member/reviewer, then revoke the moderator and attempt a stale action and read",
       "expected": "Only a current authorized moderator or platform admin sees bounded oldest-submitted-first items with timestamps and nonnegative elapsed age; unauthorized/revoked reads and actions reveal or change nothing; no response promise or publish path appears",
       "issues": [192, 39],
+      "critical": true
+    },
+    {
+      "id": "L58",
+      "actor": "General, non-IT professional and IT learners",
+      "preconditions": "Current published eligible synthetic lesson; local desktop or mobile preview",
+      "steps": "Open each goal-specific practice prompt, acknowledge sample-only data, save a private response, reload, inspect history and retire the source",
+      "expected": "A single member-owned exact-version response and non-evaluative source comparison persist; retirement blocks new feedback while private history remains labelled unavailable",
+      "issues": [198, 34],
       "critical": true
     }
   ],

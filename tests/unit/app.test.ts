@@ -25,6 +25,7 @@ import {
 } from "../../src/proposals.ts";
 import { CIRCLES, type CircleStore } from "../../src/circles.ts";
 import { type MetricsStore } from "../../src/metrics.ts";
+import { type PracticeStore } from "../../src/practice.ts";
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
 const member = {
@@ -619,6 +620,92 @@ it("records only exact synthetic lesson openings and rejects invalid, stale or u
   catalog.published.mockResolvedValueOnce({ ...item, kind: "assignment" });
   await agent.get("/library/SYN-105").set("Host", host).expect(200);
   expect(db.openLesson).toHaveBeenCalledTimes(3);
+});
+it("saves only acknowledged current-version private sample practice and recovers from stale writes", async () => {
+  const source = {
+    id: "SYN-131",
+    version: 2,
+    title: "Invented lesson",
+    body: "Compare <invented> details with the source.",
+    goal: "everyday" as const,
+    response: null as string | null,
+  };
+  const practice = {
+    current: vi.fn<PracticeStore["current"]>().mockResolvedValue(source),
+    history: vi.fn<PracticeStore["history"]>().mockResolvedValue([]),
+    save: vi.fn<PracticeStore["save"]>().mockResolvedValue("saved"),
+  };
+  const agent = managedAgent(app(db, { origin, secret: "secret", practice }));
+  await agent.get("/practice").set("Host", host).expect(303);
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  active();
+  const page = await agent
+    .get("/library/SYN-131/practice")
+    .set("Host", host)
+    .expect(200);
+  expect(page.text).toContain("SIMULATED · UNREVIEWED · SAMPLE ONLY");
+  expect(page.text).toContain("SYN-131 · version 2");
+  expect(page.text).toContain("&lt;invented&gt;");
+  expect(page.text).not.toContain("<invented>");
+  const post = (fields: Record<string, string>) =>
+    agent
+      .post("/library/SYN-131/practice")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  const valid = {
+    content_version: "2",
+    response: "<script>invented</script> check source",
+    synthetic: "yes",
+  };
+  await post({ ...valid, csrf: "invalid" }).expect(403);
+  await post({ ...valid, content_version: "x" }).expect(409);
+  await post({ ...valid, content_version: "1" }).expect(409);
+  await post({ ...valid, response: " " }).expect(422);
+  await post({ ...valid, response: "x".repeat(1001) }).expect(422);
+  await post({ ...valid, response: `sample${" ".repeat(1000)}` }).expect(422);
+  await post({ ...valid, synthetic: "" }).expect(422);
+  expect(practice.save).not.toHaveBeenCalled();
+  await post(valid).expect(303);
+  expect(practice.save).toHaveBeenCalledWith(
+    expect.any(String),
+    "SYN-131",
+    2,
+    valid.response,
+  );
+  source.response = valid.response;
+  const saved = await agent
+    .get("/library/SYN-131/practice")
+    .set("Host", host)
+    .expect(200);
+  expect(saved.text).toContain("&lt;script&gt;invented&lt;/script&gt;");
+  expect(saved.text).toContain("insufficient evidence");
+  expect(saved.text).not.toContain("<script>");
+  practice.history.mockResolvedValue([
+    {
+      id: source.id,
+      version: 2,
+      title: source.title,
+      response: valid.response,
+      savedAt: new Date(),
+      available: false,
+    },
+  ]);
+  const history = await agent.get("/practice").set("Host", host).expect(200);
+  expect(history.text).toContain("Source unavailable; saved private note only");
+  expect(history.text).toContain("&lt;script&gt;invented&lt;/script&gt;");
+  practice.save.mockResolvedValueOnce("replayed");
+  await post(valid).expect(303);
+  practice.save.mockResolvedValueOnce("conflict");
+  await post(valid).expect(409);
+  practice.save.mockResolvedValueOnce("unavailable");
+  await post(valid).expect(409);
+  practice.current.mockResolvedValueOnce(null);
+  await agent.get("/library/SYN-131/practice").set("Host", host).expect(404);
+  practice.current.mockResolvedValueOnce(null);
+  await post(valid).expect(409);
 });
 it("offers ephemeral source-grounded study reflection only for the current published lesson", async () => {
   const catalog = catalogMock();
