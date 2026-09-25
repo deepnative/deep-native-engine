@@ -70,7 +70,7 @@ function requireQuantity(value: number) {
 }
 
 interface EventInput {
-  operation: "grant" | "reserve" | "consume" | "release" | "expire";
+  operation: "grant" | "reserve" | "consume" | "release" | "expire" | "adjust";
   memberId: string;
   grantId?: string;
   reservationId?: string;
@@ -114,6 +114,13 @@ export interface SyntheticLedger {
     key: string,
   ): Promise<string>;
   expire(memberId: string, grantId: string, key: string): Promise<string>;
+  // Synthetic writeoff only: quantity is removed from available, never added.
+  adjust(
+    memberId: string,
+    grantId: string,
+    quantity: number,
+    key: string,
+  ): Promise<string>;
 }
 
 export function syntheticLedger(
@@ -329,6 +336,43 @@ export function syntheticLedger(
     },
     release(memberId, reservationId, key) {
       return settle("release", memberId, reservationId, key);
+    },
+    async adjust(memberId, grantId, quantity, key) {
+      requireId(memberId);
+      requireId(grantId);
+      requireQuantity(quantity);
+      return apply(
+        key,
+        { operation: "adjust", memberId, grantId, quantity },
+        async (client) => {
+          const grant = (
+            await client.query<{
+              available: number;
+              expires_at: Date;
+              expired_at: Date | null;
+            }>(
+              `SELECT available,expires_at,expired_at FROM synthetic_entitlement_grants
+           WHERE id=$1 AND member_id=$2 FOR UPDATE`,
+              [grantId, memberId],
+            )
+          ).rows[0];
+          if (!grant || grant.expired_at !== null || now() >= grant.expires_at)
+            throw new LedgerFailure("unavailable");
+          if (grant.available < quantity)
+            throw new LedgerFailure("insufficient");
+          await client.query(
+            `UPDATE synthetic_entitlement_grants SET available=available-$2,
+           adjusted=adjusted+$2 WHERE id=$1`,
+            [grantId, quantity],
+          );
+          return {
+            resultId: grantId,
+            grantId,
+            reservationId: null,
+            quantity,
+          };
+        },
+      );
     },
     async expire(memberId, grantId, key) {
       requireId(memberId);

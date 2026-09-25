@@ -71,9 +71,18 @@ it("migrates legacy synthetic availability to an audited expired balance once", 
     );
     await client.query(migration);
     await client.query(migration);
+    const adjustment = await readFile(
+      new URL(
+        "../../migrations/018-synthetic-entitlement-adjustment.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    await client.query(adjustment);
+    await client.query(adjustment);
     const balance = (
       await client.query(
-        "SELECT available,reserved,consumed,expired,expired_at FROM synthetic_entitlement_grants WHERE id=$1",
+        "SELECT available,reserved,consumed,expired,adjusted,expired_at FROM synthetic_entitlement_grants WHERE id=$1",
         [grant],
       )
     ).rows[0];
@@ -82,6 +91,7 @@ it("migrates legacy synthetic availability to an audited expired balance once", 
       reserved: 1,
       consumed: 0,
       expired: 1,
+      adjusted: 0,
     });
     expect(balance.expired_at).toBeInstanceOf(Date);
     const events = (
