@@ -1128,6 +1128,39 @@ test("[L19] only submitted evidence reaches the reviewer and revocation stops do
       headers: { Origin: origin, "X-CSRF-Token": csrf },
     });
     expect(submitted.status()).toBe(204);
+    const second = await uploadEvidence(page, csrf, {
+      name: "other-submitted.txt",
+      data: Buffer.from("Different synthetic submission in the same workspace"),
+    });
+    expect(second.status()).toBe(201);
+    const { id: secondId } = (await second.json()) as { id: string };
+    expect(await evidence.transitionQuarantine(secondId, "clean")).toBe(true);
+    expect(
+      (
+        await page.request.post(`/api/evidence/${secondId}/review`, {
+          headers: { Origin: origin, "X-CSRF-Token": csrf },
+        })
+      ).status(),
+    ).toBe(204);
+    const noExactGrant = await reviewerPage.request.post(
+      `/api/evidence/${secondId}/download-link`,
+      { headers: { Origin: origin, "X-CSRF-Token": reviewerFormCsrf } },
+    );
+    expect(noExactGrant.status()).toBe(403);
+    const submissionId = (
+      await pool.query<{ id: string }>(
+        "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+        [id],
+      )
+    ).rows[0]!.id;
+    const exactGrant = await access.grantEvidenceReview(
+      admin.id,
+      reviewer.id,
+      grant,
+      submissionId,
+      "synthetic exact browser review",
+      new Date(Date.now() + 60_000),
+    );
     const issued = await reviewerPage.request.post(
       `/api/evidence/${id}/download-link`,
       { headers: { Origin: origin, "X-CSRF-Token": reviewerFormCsrf } },
@@ -1139,6 +1172,17 @@ test("[L19] only submitted evidence reaches the reviewer and revocation stops do
     expect(await downloaded.body()).toEqual(
       Buffer.from("%PDF-synthetic-review"),
     );
+    expect(await access.revokeEvidenceReview(admin.id, exactGrant)).toBe(true);
+    expect((await reviewerPage.request.get(link)).status()).toBe(403);
+    await access.grantEvidenceReview(
+      admin.id,
+      reviewer.id,
+      grant,
+      submissionId,
+      "replacement synthetic browser review",
+      new Date(Date.now() + 60_000),
+    );
+    expect((await reviewerPage.request.get(link)).status()).toBe(200);
     expect(await access.revokeAssignment(admin.id, grant)).toBe(true);
     expect((await reviewerPage.request.get(link)).status()).toBe(403);
   } finally {

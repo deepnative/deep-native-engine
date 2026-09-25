@@ -49,6 +49,15 @@ export interface AuthorizationStore {
     expiresAt: Date,
   ): Promise<string>;
   revokeAssignment(adminId: string, grantId: string): Promise<boolean>;
+  grantEvidenceReview(
+    adminId: string,
+    reviewerId: string,
+    assignmentId: string,
+    submissionId: string,
+    purpose: string,
+    expiresAt: Date,
+  ): Promise<string>;
+  revokeEvidenceReview(adminId: string, grantId: string): Promise<boolean>;
   grantSupport(
     adminId: string,
     staffId: string,
@@ -112,6 +121,8 @@ export function disabledAuthorizationStore(): AuthorizationStore {
     provisionStaff: unavailable,
     grantAssignment: unavailable,
     revokeAssignment: async () => false,
+    grantEvidenceReview: unavailable,
+    revokeEvidenceReview: async () => false,
     grantSupport: unavailable,
     revokeSupport: async () => false,
     readWorkspace: denied,
@@ -170,7 +181,10 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
   }
 
   async function revoke(
-    table: "assignment_grants" | "support_access_grants",
+    table:
+      | "assignment_grants"
+      | "support_access_grants"
+      | "reviewer_evidence_grants",
     adminId: string,
     grantId: string,
   ) {
@@ -224,6 +238,68 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
     },
     revokeAssignment(adminId, grantId) {
       return revoke("assignment_grants", adminId, grantId);
+    },
+    async grantEvidenceReview(
+      adminId,
+      reviewerId,
+      assignmentId,
+      submissionId,
+      purpose,
+      expiresAt,
+    ) {
+      if (
+        !uuidPattern.test(adminId) ||
+        !uuidPattern.test(reviewerId) ||
+        !uuidPattern.test(assignmentId) ||
+        !uuidPattern.test(submissionId) ||
+        !validDate(expiresAt)
+      )
+        throw new Error("Privileged grant denied.");
+      const row = (
+        await pool.query<{ id: string }>(
+          `INSERT INTO reviewer_evidence_grants(
+             id,reviewer_id,assignment_id,submission_id,purpose,expires_at,granted_by
+           )
+           SELECT $1,$2,g.id,s.id,$5,$6,$7
+           FROM evidence_review_submissions s
+           JOIN evidence_objects e ON e.id=s.evidence_id
+           JOIN assignment_grants g ON g.id=$3 AND g.staff_id=$2
+             AND g.staff_role='reviewer' AND g.workspace_id=e.workspace_id
+           WHERE s.id=$4 AND s.status IN ('queued','reviewed')
+             AND s.submitted_by=e.owner_principal_id
+             AND e.quarantine_state='clean' AND e.private_review_allowed
+             AND $6>CURRENT_TIMESTAMP
+             AND g.revoked_at IS NULL AND g.starts_at<=CURRENT_TIMESTAMP
+             AND g.expires_at>CURRENT_TIMESTAMP
+             AND EXISTS(
+               SELECT 1 FROM principals p JOIN staff_profiles profile
+                 ON profile.principal_id=p.id
+               WHERE p.id=$7 AND p.kind='staff' AND profile.role='platform_admin'
+                 AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
+             )
+             AND EXISTS(
+               SELECT 1 FROM principals p JOIN staff_profiles profile
+                 ON profile.principal_id=p.id
+               WHERE p.id=$2 AND p.kind='staff' AND profile.role='reviewer'
+                 AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
+             )
+           RETURNING id`,
+          [
+            randomUUID(),
+            reviewerId,
+            assignmentId,
+            submissionId,
+            normalizedPurpose(purpose),
+            expiresAt,
+            adminId,
+          ],
+        )
+      ).rows[0];
+      if (!row) throw new Error("Privileged grant denied.");
+      return row.id;
+    },
+    revokeEvidenceReview(adminId, grantId) {
+      return revoke("reviewer_evidence_grants", adminId, grantId);
     },
     grantSupport(adminId, staffId, workspaceId, role, purpose, expiresAt) {
       return grant(

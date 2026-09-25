@@ -1707,6 +1707,20 @@ it("rechecks authorization and quarantine for every short-lived evidence downloa
     new Date(Date.now() + 60_000),
   );
   expect(await evidence.submitForReview(owner.token, created.id)).toBe(true);
+  const submittedId = (
+    await pool.query<{ id: string }>(
+      "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+      [created.id],
+    )
+  ).rows[0]!.id;
+  await access.grantEvidenceReview(
+    admin.id,
+    reviewer.id,
+    reviewerGrant,
+    submittedId,
+    "review synthetic evidence",
+    new Date(Date.now() + 60_000),
+  );
   const reviewerLink = await evidence.issueDownload(reviewer.token, created.id);
   expect(reviewerLink.kind).toBe("issued");
   if (reviewerLink.kind !== "issued") throw new Error("link not issued");
@@ -1746,6 +1760,7 @@ it("keeps issued evidence links bound to one record and current workspace grants
     unassigned = await member(),
     admin = await staff("platform_admin"),
     reviewer = await staff("reviewer"),
+    editor = await staff("editor"),
     access = authorizationStore(pool),
     evidence = evidenceStore(
       pool,
@@ -1804,6 +1819,74 @@ it("keeps issued evidence links bound to one record and current workspace grants
     "second review",
     new Date(Date.now() + 60_000),
   );
+  async function grantExact(evidenceId: string) {
+    const submissionId = (
+      await pool.query<{ id: string }>(
+        "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+        [evidenceId],
+      )
+    ).rows[0]!.id;
+    return access.grantEvidenceReview(
+      admin.id,
+      reviewer.id,
+      evidenceId === secondId ? secondGrant : firstGrant,
+      submissionId,
+      "exact synthetic evidence review",
+      new Date(Date.now() + 60_000),
+    );
+  }
+  const unassignedSubmission = (
+    await pool.query<{ id: string }>(
+      "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+      [unassignedId],
+    )
+  ).rows[0]!.id;
+  await expect(
+    access.grantEvidenceReview(
+      admin.id,
+      reviewer.id,
+      firstGrant,
+      unassignedSubmission,
+      "wrong workspace",
+      new Date(Date.now() + 60_000),
+    ),
+  ).rejects.toThrow("denied");
+  const firstSubmission = (
+    await pool.query<{ id: string }>(
+      "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+      [firstId],
+    )
+  ).rows[0]!.id;
+  await expect(
+    access.grantEvidenceReview(
+      first.learner.id,
+      reviewer.id,
+      firstGrant,
+      firstSubmission,
+      "member self grant",
+      new Date(Date.now() + 60_000),
+    ),
+  ).rejects.toThrow("denied");
+  await expect(
+    access.grantEvidenceReview(
+      admin.id,
+      editor.id,
+      firstGrant,
+      firstSubmission,
+      "editor grant",
+      new Date(Date.now() + 60_000),
+    ),
+  ).rejects.toThrow("denied");
+  await expect(
+    access.grantEvidenceReview(
+      admin.id,
+      reviewer.id,
+      firstGrant,
+      firstSubmission,
+      "expired grant",
+      new Date(Date.now() - 1000),
+    ),
+  ).rejects.toThrow("denied");
   const ownerDraftLink = await evidence.issueDownload(first.token, draftId);
   if (ownerDraftLink.kind !== "issued")
     throw new Error("owner link not issued");
@@ -1822,11 +1905,27 @@ it("keeps issued evidence links bound to one record and current workspace grants
     evidence.issueDownload(reviewer.token, unassignedId),
   ).resolves.toEqual({ kind: "denied" });
   expect(await evidence.submitForReview(first.token, draftId)).toBe(true);
+  await expect(
+    evidence.issueDownload(reviewer.token, draftId),
+  ).resolves.toEqual({
+    kind: "denied",
+  });
+  const draftGrant = await grantExact(draftId);
   const draftLink = await evidence.issueDownload(reviewer.token, draftId);
   if (draftLink.kind !== "issued") throw new Error("reviewer link not issued");
   await expect(
     evidence.download(reviewer.token, draftId, draftLink.capability),
   ).resolves.toMatchObject({ kind: "allowed" });
+  expect(await access.revokeEvidenceReview(admin.id, draftGrant)).toBe(true);
+  await expect(
+    evidence.issueDownload(reviewer.token, draftId),
+  ).resolves.toEqual({
+    kind: "denied",
+  });
+  await expect(
+    evidence.download(reviewer.token, draftId, draftLink.capability),
+  ).resolves.toEqual({ kind: "denied" });
+  await grantExact(draftId);
   await pool.query(
     "UPDATE evidence_review_submissions SET status='withdrawn' WHERE evidence_id=$1",
     [draftId],
@@ -1839,6 +1938,8 @@ it("keeps issued evidence links bound to one record and current workspace grants
   await expect(
     evidence.download(reviewer.token, draftId, draftLink.capability),
   ).resolves.toEqual({ kind: "denied" });
+  await grantExact(firstId);
+  await grantExact(secondId);
   const firstLink = await evidence.issueDownload(reviewer.token, firstId);
   const secondLink = await evidence.issueDownload(reviewer.token, secondId);
   if (firstLink.kind !== "issued" || secondLink.kind !== "issued")
@@ -1850,6 +1951,17 @@ it("keeps issued evidence links bound to one record and current workspace grants
     evidence.download(reviewer.token, firstId, secondLink.capability),
   ).resolves.toEqual({ kind: "denied" });
   expect(await access.revokeAssignment(admin.id, firstGrant)).toBe(true);
+  await expect(
+    evidence.download(reviewer.token, firstId, firstLink.capability),
+  ).resolves.toEqual({ kind: "denied" });
+  await access.grantAssignment(
+    admin.id,
+    reviewer.id,
+    first.learner.id,
+    "reviewer",
+    "replacement workspace assignment",
+    new Date(Date.now() + 60_000),
+  );
   await expect(
     evidence.download(reviewer.token, firstId, firstLink.capability),
   ).resolves.toEqual({ kind: "denied" });
@@ -1874,6 +1986,9 @@ it("keeps issued evidence links bound to one record and current workspace grants
 it("deletes stored evidence, review state and derived objects through explicit hooks", async () => {
   const owner = await member(),
     other = await member(),
+    admin = await staff("platform_admin"),
+    reviewer = await staff("reviewer"),
+    access = authorizationStore(pool),
     evidence = evidenceStore(
       pool,
       fileObjectStorage(privateStorageRoot),
@@ -1896,6 +2011,28 @@ it("deletes stored evidence, review state and derived objects through explicit h
     };
   const first = await upload("first.txt");
   await evidence.submitForReview(owner.token, first);
+  const assignmentId = await access.grantAssignment(
+    admin.id,
+    reviewer.id,
+    owner.learner.id,
+    "reviewer",
+    "synthetic deletion check",
+    new Date(Date.now() + 60_000),
+  );
+  const submissionId = (
+    await pool.query<{ id: string }>(
+      "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+      [first],
+    )
+  ).rows[0]!.id;
+  await access.grantEvidenceReview(
+    admin.id,
+    reviewer.id,
+    assignmentId,
+    submissionId,
+    "synthetic deletion check",
+    new Date(Date.now() + 60_000),
+  );
   await evidence.addDerivative(first, "thumbnail", Buffer.from("thumbnail"));
   await expect(evidence.remove(other.token, first)).resolves.toBe(false);
   await expect(evidence.remove(owner.token, first)).resolves.toBe(true);
@@ -1905,6 +2042,10 @@ it("deletes stored evidence, review state and derived objects through explicit h
   expect(
     (await pool.query("SELECT count(*) FROM evidence_review_submissions"))
       .rows[0].count,
+  ).toBe("0");
+  expect(
+    (await pool.query("SELECT count(*) FROM reviewer_evidence_grants")).rows[0]
+      .count,
   ).toBe("0");
   expect((await readdir(privateStorageRoot)).length).toBe(0);
   await upload("second.txt");

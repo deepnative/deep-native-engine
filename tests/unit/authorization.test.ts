@@ -12,6 +12,7 @@ const admin = "00000000-0000-4000-8000-000000000001";
 const staff = "00000000-0000-4000-8000-000000000002";
 const workspace = "00000000-0000-4000-8000-000000000003";
 const grant = "00000000-0000-4000-8000-000000000004";
+const submission = "00000000-0000-4000-8000-000000000005";
 const future = new Date("2099-01-01T00:00:00Z");
 
 function database(...rows: unknown[]) {
@@ -55,6 +56,19 @@ it("uses a fail-closed authorization store when privileged access is unconfigure
     ),
   ).rejects.toThrow("not configured");
   await expect(disabled.revokeAssignment(admin, grant)).resolves.toBe(false);
+  await expect(
+    disabled.grantEvidenceReview(
+      admin,
+      staff,
+      grant,
+      submission,
+      "review",
+      future,
+    ),
+  ).rejects.toThrow("not configured");
+  await expect(disabled.revokeEvidenceReview(admin, grant)).resolves.toBe(
+    false,
+  );
   await expect(disabled.revokeSupport(admin, grant)).resolves.toBe(false);
 });
 
@@ -131,6 +145,75 @@ it("creates assignment and support grants only through an active administrator",
   expect(db.query.mock.calls[1]![0]).toContain("support_access_grants");
 });
 
+it("creates an exact reviewer evidence grant for a submitted object", async () => {
+  const db = database({ id: grant });
+  await expect(
+    db.access.grantEvidenceReview(
+      admin,
+      staff,
+      grant,
+      submission,
+      " private review ",
+      future,
+    ),
+  ).resolves.toBe(grant);
+  expect(db.query.mock.calls[0]![0]).toContain("reviewer_evidence_grants");
+  expect(db.query.mock.calls[0]![1]).toEqual([
+    expect.any(String),
+    staff,
+    grant,
+    submission,
+    "private review",
+    future,
+    admin,
+  ]);
+  await expect(
+    database(undefined).access.grantEvidenceReview(
+      admin,
+      staff,
+      grant,
+      submission,
+      "review",
+      future,
+    ),
+  ).rejects.toThrow("denied");
+});
+
+it.each([
+  ["bad", staff, grant, submission, future],
+  [admin, "bad", grant, submission, future],
+  [admin, staff, "bad", submission, future],
+  [admin, staff, grant, "bad", future],
+  [admin, staff, grant, submission, new Date("invalid")],
+])(
+  "rejects malformed exact reviewer grants",
+  async (actor, reviewer, assignment, item, expiry) => {
+    await expect(
+      authorizationStore({} as Pool).grantEvidenceReview(
+        actor as string,
+        reviewer as string,
+        assignment as string,
+        item as string,
+        "review",
+        expiry as Date,
+      ),
+    ).rejects.toThrow("denied");
+  },
+);
+
+it("rejects unsafe exact reviewer grant purpose", async () => {
+  await expect(
+    authorizationStore({} as Pool).grantEvidenceReview(
+      admin,
+      staff,
+      grant,
+      submission,
+      " ",
+      future,
+    ),
+  ).rejects.toThrow("Access purpose");
+});
+
 it.each([
   ["bad", staff, workspace, future],
   [admin, "bad", workspace, future],
@@ -182,14 +265,21 @@ it("fails closed when the administrator, target, workspace or expiry is not elig
 });
 
 it("revokes each grant type only for valid identifiers and an active administrator", async () => {
-  const db = database({ id: grant }, undefined);
+  const db = database({ id: grant }, undefined, { id: grant });
   await expect(db.access.revokeAssignment(admin, grant)).resolves.toBe(true);
   await expect(db.access.revokeSupport(admin, grant)).resolves.toBe(false);
+  await expect(db.access.revokeEvidenceReview(admin, grant)).resolves.toBe(
+    true,
+  );
   expect(db.query.mock.calls[0]![0]).toContain("assignment_grants");
   expect(db.query.mock.calls[1]![0]).toContain("support_access_grants");
+  expect(db.query.mock.calls[2]![0]).toContain("reviewer_evidence_grants");
   await expect(db.access.revokeAssignment("bad", grant)).resolves.toBe(false);
   await expect(db.access.revokeSupport(admin, "bad")).resolves.toBe(false);
-  expect(db.query).toHaveBeenCalledTimes(2);
+  await expect(db.access.revokeEvidenceReview("bad", grant)).resolves.toBe(
+    false,
+  );
+  expect(db.query).toHaveBeenCalledTimes(3);
 });
 
 it("returns authorized private records with their server-derived access path", async () => {
