@@ -359,6 +359,7 @@ export function assertProvisionalReleaseJourneys(register, report) {
     "F-ROADMAP-08-B",
     "F-ROADMAP-08-A",
     "F-BUILD-10-B",
+    "F-BUILD-10-A",
   ];
   const cases = register.fullMvp.flatMap((family) =>
     family.cases.map((test) => ({
