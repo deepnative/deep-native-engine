@@ -27,6 +27,7 @@ import { CIRCLES, type CircleStore } from "../../src/circles.ts";
 import { type MetricsStore } from "../../src/metrics.ts";
 import { type PracticeStore } from "../../src/practice.ts";
 import { type MemberExportStore } from "../../src/member-export.ts";
+import { disabledAttemptStore } from "../../src/attempts.ts";
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
 const member = {
@@ -364,6 +365,40 @@ async function client(evidence?: EvidenceStore) {
 function active() {
   db.session.mockResolvedValue({ kind: "active", learner: member });
 }
+it("serves a member-owned activity view only through the active session", async () => {
+  const attempts = {
+    ...disabledAttemptStore(),
+    list: vi.fn().mockResolvedValue([]),
+  };
+  const agent = managedAgent(app(db, { origin, secret: "secret", attempts }));
+  await agent.get("/progress").set("Host", host).expect(303);
+  expect(db.progress).not.toHaveBeenCalled();
+  expect(db.lessonActivities).not.toHaveBeenCalled();
+  expect(attempts.list).not.toHaveBeenCalled();
+  active();
+  db.lessonActivities.mockResolvedValue([
+    {
+      contentId: "SYN-982",
+      contentVersion: 1,
+      title: "Private invented reading",
+      openedAt: new Date("2026-09-25T12:00:00Z"),
+      startedAt: null,
+      selfAssessedAt: null,
+      available: true,
+    },
+  ]);
+  const response = await agent
+    .get("/progress?member_id=other")
+    .set("Host", host)
+    .expect(200);
+  expect(response.text).toContain("Private invented reading");
+  expect(response.text).toContain("Opened in reader");
+  expect(db.progress).toHaveBeenCalledWith(member.id);
+  expect(db.lessonActivities).toHaveBeenCalledWith(member.id);
+  expect(attempts.list).toHaveBeenCalledWith(
+    expect.stringMatching(/^[a-f0-9]{64}$/),
+  );
+});
 it("serves only a bounded private evidence export and explains safe failures", async () => {
   const files = evidenceStorage();
   const { agent } = await client(files);

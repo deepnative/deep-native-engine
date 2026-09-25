@@ -7,6 +7,7 @@ import { profile, submission, type Fields } from "./validation.ts";
 import {
   welcome,
   dashboard,
+  privateProgressPage,
   evidencePage,
   lesson,
   readinessPage,
@@ -34,6 +35,7 @@ import {
 } from "./views.ts";
 import type { Store, Learner } from "./store.ts";
 import { eligibleAssignments } from "./assignment-choice.ts";
+import { activityItems } from "./progress.ts";
 import { parseMilestone, validMilestoneId } from "./milestones.ts";
 import {
   disabledCareerStore,
@@ -463,6 +465,7 @@ export function app(
   app.use(
     [
       "/learn",
+      "/progress",
       "/lesson",
       "/exercise",
       "/profile",
@@ -1270,6 +1273,17 @@ export function app(
         eligibleAssignments(published, member, progress),
         choice,
       ),
+    );
+  });
+  app.get("/progress", async (_req, res) => {
+    const member = res.locals.learner as Learner;
+    const [exercise, lessons, memberAttempts] = await Promise.all([
+      store.progress(member.id),
+      store.lessonActivities(member.id),
+      attempts.list(res.locals.token as string),
+    ]);
+    res.send(
+      privateProgressPage(activityItems(exercise, lessons, memberAttempts)),
     );
   });
   app.post("/assignments/select", async (req, res) => {

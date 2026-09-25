@@ -26,6 +26,7 @@ export interface AssignmentChoice {
 export interface LessonActivity {
   contentId: string;
   contentVersion: number;
+  title?: string;
   openedAt: Date;
   startedAt: Date | null;
   selfAssessedAt: Date | null;
@@ -220,6 +221,7 @@ export function store(pool: Pool): Store {
       return (
         await pool.query<LessonActivity>(
           `SELECT a.content_id AS "contentId",a.content_version AS "contentVersion",
+                  cv.title,
                   a.opened_at AS "openedAt",a.started_at AS "startedAt",
                   a.self_assessed_at AS "selfAssessedAt",
                   EXISTS(SELECT 1 FROM content_versions cv
@@ -228,7 +230,9 @@ export function store(pool: Pool): Store {
                       AND NOT EXISTS(SELECT 1 FROM content_versions newer
                         WHERE newer.id=cv.id AND newer.state='published'
                           AND newer.version>cv.version)) AS available
-           FROM lesson_activity a WHERE a.member_id=$1
+           FROM lesson_activity a
+           LEFT JOIN content_versions cv ON cv.id=a.content_id AND cv.version=a.content_version
+           WHERE a.member_id=$1
            ORDER BY a.opened_at DESC,a.content_id,a.content_version DESC`,
           [id],
         )
