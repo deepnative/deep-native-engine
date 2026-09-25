@@ -207,14 +207,14 @@ it.each([
 it("records only an allowlisted failure and preserves a terminal late-worker result", async () => {
   const failed = {
     ...baseRow,
-    status: "failed" as const,
+    status: "needs_reconciliation" as const,
     attempt_count: 1,
     safe_error: "provider_timeout" as const,
   };
   const db = database(failed, undefined, { ...failed, status: "succeeded" });
   expect(
     await db.store.fail(baseRow.id, "attempt-1", "provider_timeout"),
-  ).toMatchObject({ status: "failed", retryable: true });
+  ).toMatchObject({ status: "needs_reconciliation", retryable: false });
   expect(db.query.mock.calls[0]![1]).toEqual([
     baseRow.id,
     "attempt-1",
@@ -458,7 +458,16 @@ it("accepts a simulated demo result only for a demo job in the current registry"
 });
 
 it("keeps raw adapter errors out of the job persistence boundary", async () => {
-  const jobs = runStore();
+  const jobs = runStore({
+    fail: vi.fn().mockResolvedValue(
+      publicJob({
+        status: "needs_reconciliation",
+        attempts: 1,
+        safeError: "provider_outcome_unknown",
+        retryable: false,
+      }),
+    ),
+  });
   const result = await runAdapterJob(
     jobs,
     registry(
@@ -470,11 +479,33 @@ it("keeps raw adapter errors out of the job persistence boundary", async () => {
   expect(result).toMatchObject({
     executed: true,
     result: null,
-    job: { status: "failed" },
+    job: { status: "needs_reconciliation", retryable: false },
   });
   expect(jobs.fail).toHaveBeenCalledWith(
     baseRow.id,
     "00000000-0000-4000-8000-000000000002",
+    "provider_outcome_unknown",
+  );
+});
+
+it("retains retryable failure for a non-AI adapter throw", async () => {
+  const jobs = runStore({
+    find: vi.fn().mockResolvedValue(publicJob({ adapter: "email" })),
+    claim: vi.fn().mockResolvedValue({
+      ...publicJob({ adapter: "email", status: "running", attempts: 1 }),
+      status: "running",
+      attemptToken: "attempt-1",
+    }),
+  });
+  await runAdapterJob(
+    jobs,
+    registry(vi.fn().mockRejectedValue(new Error("synthetic error"))),
+    baseRow.id,
+    { lesson: 1 },
+  );
+  expect(jobs.fail).toHaveBeenCalledWith(
+    baseRow.id,
+    "attempt-1",
     "provider_unavailable",
   );
 });
