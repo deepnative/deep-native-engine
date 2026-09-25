@@ -529,6 +529,42 @@ export function app(
       `/api/evidence/${encodeURIComponent(req.params.evidenceId as string)}/download?capability=${encodeURIComponent(result.capability)}`,
     );
   });
+  app.post("/evidence/:evidenceId/queue", async (req, res) => {
+    if ((req.body as Fields).acknowledge !== "yes") {
+      res
+        .status(422)
+        .send(
+          evidencePage(
+            await evidence.owned(res.locals.token as string),
+            res.locals.csrf as string,
+            [
+              "Acknowledge that no qualified reviewer or response time is available in this preview.",
+            ],
+          ),
+        );
+      return;
+    }
+    if (
+      !(await evidence.submitForReview(
+        res.locals.token as string,
+        req.params.evidenceId as string,
+      ))
+    ) {
+      res
+        .status(409)
+        .send(
+          evidencePage(
+            await evidence.owned(res.locals.token as string),
+            res.locals.csrf as string,
+            [
+              "This sample is not eligible for the local review queue. Refresh and check its current safety, consent and submission state.",
+            ],
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/evidence");
+  });
   app.post("/evidence/:evidenceId/revoke-private-review", async (req, res) => {
     if ((req.body as Fields).confirm !== "yes") {
       res

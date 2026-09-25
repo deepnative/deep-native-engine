@@ -1611,6 +1611,10 @@ it("keeps evidence private through consent, quarantine and review eligibility", 
     false,
   );
   expect(await evidence.submitForReview(owner.token, created.id)).toBe(true);
+  expect(await evidence.submitForReview(outsider.token, created.id)).toBe(
+    false,
+  );
+  expect(await evidence.submitForReview(owner.token, created.id)).toBe(false);
   await expect(
     evidence.destinationAllowed(created.id, "private-review"),
   ).resolves.toBe(true);
@@ -1685,6 +1689,9 @@ it("lets only the member revoke private-review consent while retaining private e
   expect(await evidence.owned(outsider.token)).toEqual([]);
   expect(await evidence.transitionQuarantine(created.id, "clean")).toBe(true);
   expect(await evidence.submitForReview(owner.token, created.id)).toBe(true);
+  expect(await evidence.submitForReview(reviewer.token, created.id)).toBe(
+    false,
+  );
   expect(await evidence.owned(owner.token)).toMatchObject([
     { id: created.id, quarantineState: "clean", submissionStatus: "queued" },
   ]);
@@ -1730,6 +1737,7 @@ it("lets only the member revoke private-review consent while retaining private e
   expect(await evidence.revokePrivateReview(owner.token, created.id)).toBe(
     true,
   );
+  expect(await evidence.submitForReview(owner.token, created.id)).toBe(false);
   expect(await evidence.owned(owner.token)).toMatchObject([
     {
       id: created.id,

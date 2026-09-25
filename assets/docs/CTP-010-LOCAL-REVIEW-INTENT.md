@@ -1,0 +1,9 @@
+# Local private-review intent
+
+An active member may mark one owned, clean, explicitly consented invented evidence object for possible private review from `/evidence`. The checkbox states that no qualified reviewer is assigned and no response time is promised. The `POST /evidence/:id/queue` form is CSRF-protected and calls the existing `submitForReview` transaction, which checks current member ownership, quarantine, consent and uniqueness in PostgreSQL. A stale, duplicate or unauthorized request returns the same generic ineligible state and does not create another submission.
+
+The page reads current owner-filtered metadata after a write. `queued` means a local submission record exists; it is not a booking, grant, human review, quality judgment or notification. Revoking private-review consent changes a queued submission to `withdrawn`, blocks another queue attempt and prevents current reviewer access, while preserving the owner's private download. Deletion removes the configured evidence and cascades its submission. No assignment attempt is promoted or copied into evidence storage, and #125's retention and consent decision remains open.
+
+L60 runs the owner and unrelated-member browser flow on desktop/mobile Chromium. Unit route tests exercise missing acknowledgement, CSRF and stale/allowed responses; PostgreSQL integration covers owner, unrelated member, staff, duplicate and withdrawn states. The local `initial-learning-v28` gate remains separate from the 100-case full-MVP register. This synthetic preview has no live scanner, qualified staffing, formal assessment, hosted retention, funded review or commercial launch.
+
+Rollback removes only the new page form and server route. Existing `evidence_review_submissions` rows and consent revocations must be preserved under the current privacy rules; rollback must not reactivate withdrawn consent or expose queue records to another principal.
