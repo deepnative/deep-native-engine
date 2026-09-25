@@ -63,6 +63,7 @@ export interface EvidenceStore {
     result: QuarantineResult,
   ): Promise<boolean>;
   submitForReview(token: string, evidenceId: string): Promise<boolean>;
+  revokePrivateReview(token: string, evidenceId: string): Promise<boolean>;
   destinationAllowed(
     evidenceId: string,
     destination: Destination,
@@ -159,6 +160,7 @@ export function disabledEvidenceStore(): EvidenceStore {
     upload: denied,
     transitionQuarantine: async () => false,
     submitForReview: async () => false,
+    revokePrivateReview: async () => false,
     destinationAllowed: async () => false,
     issueDownload: denied,
     download: denied,
@@ -395,6 +397,35 @@ export function evidenceStore(
                AND e.quarantine_state='clean' AND e.private_review_allowed
              ON CONFLICT(evidence_id) DO NOTHING RETURNING id`,
             [hash(token), evidenceId, randomUUID()],
+          )
+        ).rows[0],
+      );
+    },
+    async revokePrivateReview(token, evidenceId) {
+      if (!tokenPattern.test(token) || !uuidPattern.test(evidenceId))
+        return false;
+      return Boolean(
+        (
+          await pool.query(
+            `WITH revoked AS (
+               UPDATE evidence_objects e
+               SET private_review_allowed=false,
+                   private_review_revoked_at=CURRENT_TIMESTAMP
+               FROM principals p
+               WHERE e.id=$2 AND p.id=e.owner_principal_id
+                 AND p.token_hash=$1 AND p.kind='member'
+                 AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
+                 AND e.private_review_allowed AND e.quarantine_state<>'deleting'
+               RETURNING e.id
+             ), withdrawn AS (
+               UPDATE evidence_review_submissions s SET status='withdrawn'
+               WHERE s.evidence_id IN (SELECT id FROM revoked)
+                 AND s.status='queued'
+               RETURNING s.id
+             )
+             SELECT revoked.id,(SELECT COUNT(*) FROM withdrawn) AS withdrawn_count
+             FROM revoked`,
+            [hash(token), evidenceId],
           )
         ).rows[0],
       );

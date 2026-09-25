@@ -1649,6 +1649,152 @@ it("keeps evidence private through consent, quarantine and review eligibility", 
   expect((await readdir(privateStorageRoot)).length).toBe(2);
 });
 
+it("lets only the member revoke private-review consent while retaining private evidence", async () => {
+  const owner = await member();
+  const outsider = await member();
+  const admin = await staff("platform_admin");
+  const reviewer = await staff("reviewer");
+  const auth = authorizationStore(pool);
+  const evidence = evidenceStore(
+    pool,
+    fileObjectStorage(privateStorageRoot),
+    "integration-secret",
+  );
+  const created = await evidence.upload(owner.token, {
+    name: "invented-review.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented private review evidence"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: true,
+    },
+  });
+  if (created.kind !== "created") throw new Error("evidence not created");
+  expect(await evidence.transitionQuarantine(created.id, "clean")).toBe(true);
+  expect(await evidence.submitForReview(owner.token, created.id)).toBe(true);
+  const submission = await pool.query<{ id: string }>(
+    "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+    [created.id],
+  );
+  const expires = new Date(Date.now() + 60_000);
+  const assignmentId = await auth.grantAssignment(
+    admin.id,
+    reviewer.id,
+    owner.learner.id,
+    "reviewer",
+    "synthetic private review",
+    expires,
+  );
+  await auth.grantEvidenceReview(
+    admin.id,
+    reviewer.id,
+    assignmentId,
+    submission.rows[0]!.id,
+    "synthetic exact object",
+    expires,
+  );
+  const reviewerLink = await evidence.issueDownload(reviewer.token, created.id);
+  expect(reviewerLink.kind).toBe("issued");
+  if (reviewerLink.kind !== "issued") throw new Error("link not issued");
+  expect(
+    (await evidence.download(reviewer.token, created.id, reviewerLink.capability))
+      .kind,
+  ).toBe("allowed");
+  expect(await evidence.revokePrivateReview(outsider.token, created.id)).toBe(
+    false,
+  );
+  expect(await evidence.revokePrivateReview(reviewer.token, created.id)).toBe(
+    false,
+  );
+  expect(await evidence.revokePrivateReview(owner.token, created.id)).toBe(true);
+  expect(await evidence.revokePrivateReview(owner.token, created.id)).toBe(false);
+  const row = await pool.query<{
+    private_review_allowed: boolean;
+    private_review_revoked_at: Date;
+    community_publication_allowed: boolean;
+    status: string;
+  }>(
+    `SELECT e.private_review_allowed,e.private_review_revoked_at,
+            e.community_publication_allowed,s.status
+     FROM evidence_objects e JOIN evidence_review_submissions s
+       ON s.evidence_id=e.id WHERE e.id=$1`,
+    [created.id],
+  );
+  expect(row.rows[0]).toMatchObject({
+    private_review_allowed: false,
+    community_publication_allowed: true,
+    status: "withdrawn",
+  });
+  expect(row.rows[0]!.private_review_revoked_at).toBeInstanceOf(Date);
+  await expect(
+    evidence.destinationAllowed(created.id, "private-review"),
+  ).resolves.toBe(false);
+  await expect(
+    evidence.destinationAllowed(created.id, "community-publication"),
+  ).resolves.toBe(true);
+  await expect(
+    evidence.issueDownload(reviewer.token, created.id),
+  ).resolves.toEqual({ kind: "denied" });
+  await expect(
+    evidence.download(reviewer.token, created.id, reviewerLink.capability),
+  ).resolves.toEqual({ kind: "denied" });
+  await expect(
+    auth.grantEvidenceReview(
+      admin.id,
+      reviewer.id,
+      assignmentId,
+      submission.rows[0]!.id,
+      "replay after member revocation",
+      expires,
+    ),
+  ).rejects.toThrow("Privileged grant denied");
+  const ownerLink = await evidence.issueDownload(owner.token, created.id);
+  expect(ownerLink.kind).toBe("issued");
+  if (ownerLink.kind !== "issued") throw new Error("owner link not issued");
+  expect(
+    (await evidence.download(owner.token, created.id, ownerLink.capability))
+      .kind,
+  ).toBe("allowed");
+
+  const privateOnly = await evidence.upload(owner.token, {
+    name: "invented-private-only.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented retained private bytes"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+  });
+  if (privateOnly.kind !== "created") throw new Error("evidence not created");
+  expect(await evidence.transitionQuarantine(privateOnly.id, "clean")).toBe(
+    true,
+  );
+  expect(await evidence.revokePrivateReview(owner.token, privateOnly.id)).toBe(
+    true,
+  );
+  const privateRow = await pool.query<{
+    private_review_allowed: boolean;
+    community_publication_allowed: boolean;
+    learning_circle_id: string | null;
+  }>(
+    `SELECT private_review_allowed,community_publication_allowed,learning_circle_id
+     FROM evidence_objects WHERE id=$1`,
+    [privateOnly.id],
+  );
+  expect(privateRow.rows).toEqual([
+    {
+      private_review_allowed: false,
+      community_publication_allowed: false,
+      learning_circle_id: null,
+    },
+  ]);
+  expect((await evidence.issueDownload(owner.token, privateOnly.id)).kind).toBe(
+    "issued",
+  );
+});
+
 it("rechecks authorization and quarantine for every short-lived evidence download", async () => {
   let now = 1_800_000_000_000;
   const owner = await member(),

@@ -176,6 +176,9 @@ it("fails closed when evidence storage is not configured", async () => {
   await expect(disabled.submitForReview(token, evidenceId)).resolves.toBe(
     false,
   );
+  await expect(disabled.revokePrivateReview(token, evidenceId)).resolves.toBe(
+    false,
+  );
   await expect(
     disabled.destinationAllowed(evidenceId, "private-review"),
   ).resolves.toBe(false);
@@ -322,6 +325,22 @@ it("queues only clean, consented evidence owned by an active member", async () =
   await expect(evidence.submitForReview(token, "bad")).resolves.toBe(false);
   await expect(evidence.submitForReview(token, evidenceId)).resolves.toBe(true);
   await expect(evidence.submitForReview(token, evidenceId)).resolves.toBe(
+    false,
+  );
+});
+
+it("rejects invalid revocation identities and reports only a changed private-review scope", async () => {
+  const db = database({ id: evidenceId }, undefined),
+    evidence = evidenceStore(db.pool, objectStorage(), "secret");
+  await expect(evidence.revokePrivateReview("bad", evidenceId)).resolves.toBe(
+    false,
+  );
+  await expect(evidence.revokePrivateReview(token, "bad")).resolves.toBe(false);
+  expect(db.query).not.toHaveBeenCalled();
+  await expect(evidence.revokePrivateReview(token, evidenceId)).resolves.toBe(
+    true,
+  );
+  await expect(evidence.revokePrivateReview(token, evidenceId)).resolves.toBe(
     false,
   );
 });
