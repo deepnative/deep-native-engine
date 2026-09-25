@@ -1,5 +1,12 @@
 import type { Pool } from "pg";
-import { DOMAINS, GOALS, type Domain, type Goal } from "./content.ts";
+import {
+  DOMAINS,
+  GOALS,
+  IT_ROLES,
+  type Domain,
+  type Goal,
+  type ItRole,
+} from "./content.ts";
 import { hash } from "./store.ts";
 
 export type TrackState =
@@ -25,6 +32,7 @@ export interface ExpertRecord {
 }
 export interface TrackSnapshot {
   foundation: Array<{ goal: Goal; state: TrackState }>;
+  itSpecialties: Array<{ role: ItRole; state: TrackState }>;
   specialties: Array<{
     domain: Domain;
     serviceType: ExpertRecord["serviceType"];
@@ -92,6 +100,10 @@ export function disabledTrackStore(): TrackStore {
         goal: goal as Goal,
         state: "in preparation",
       })),
+      itSpecialties: Object.keys(IT_ROLES).map((role) => ({
+        role: role as ItRole,
+        state: "in preparation",
+      })),
       specialties: Object.keys(DOMAINS).flatMap((domain) =>
         serviceTypes.map((serviceType) => ({
           domain: domain as Domain,
@@ -152,7 +164,13 @@ export function trackStore(pool: Pool): TrackStore {
           ),
         })),
       );
-      return { foundation, specialties };
+      // No IT-role-specific qualified content and capacity registry exists yet.
+      // Published synthetic exercises cannot establish a specialist service.
+      const itSpecialties = Object.keys(IT_ROLES).map((role) => ({
+        role: role as ItRole,
+        state: "in preparation" as TrackState,
+      }));
+      return { foundation, itSpecialties, specialties };
     },
     async registry(token) {
       const result = await pool.query<ExpertRecord & { allowed: boolean }>(
