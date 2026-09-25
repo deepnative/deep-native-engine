@@ -620,6 +620,113 @@ it("records only exact synthetic lesson openings and rejects invalid, stale or u
   await agent.get("/library/SYN-105").set("Host", host).expect(200);
   expect(db.openLesson).toHaveBeenCalledTimes(3);
 });
+it("offers ephemeral source-grounded study reflection only for the current published lesson", async () => {
+  const catalog = catalogMock();
+  const item: ContentVersion = {
+    id: "SYN-106",
+    version: 2,
+    kind: "lesson",
+    origin: "curated",
+    title: "Invented learning sample",
+    body: "Use invented facts. Check each suggestion against the original.",
+    owner: "Test editor",
+    sources: "Original invented text",
+    rights: "Owned sample",
+    goals: ["everyday", "work", "build"],
+    backgrounds: ["explorer", "professional", "technical"],
+    domains: [],
+    prerequisites: "None",
+    rubric: null,
+    rubricVersion: null,
+    state: "published",
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date(),
+    publishedAt: new Date(),
+  };
+  catalog.published.mockResolvedValue(item);
+  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
+  await agent.get("/library/SYN-106/study").set("Host", host).expect(303);
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  active();
+  const reader = await agent
+    .get("/library/SYN-106")
+    .set("Host", host)
+    .expect(200);
+  expect(reader.text).toContain('href="/library/SYN-106/study"');
+  for (const goal of ["everyday", "work", "build"] as const) {
+    db.session.mockResolvedValue({
+      kind: "active",
+      learner: { ...member, goal },
+    });
+    const study = await agent
+      .get("/library/SYN-106/study")
+      .set("Host", host)
+      .expect(200);
+    expect(study.text).toContain("SYN-106 · version 2");
+    expect(study.text).toMatch(/locally simulated/i);
+    expect(study.text).toContain("Use invented facts");
+  }
+  const post = (fields: Record<string, string>) =>
+    agent
+      .post("/library/SYN-106/study")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  await post({
+    content_version: "1",
+    reflection: "My note",
+    synthetic: "yes",
+  }).expect(409);
+  await post({
+    content_version: "x",
+    reflection: "My note",
+    synthetic: "yes",
+  }).expect(422);
+  await post({
+    content_version: "2",
+    reflection: " ",
+    synthetic: "yes",
+  }).expect(422);
+  await post({
+    content_version: "2",
+    reflection: "x".repeat(1001),
+    synthetic: "yes",
+  }).expect(422);
+  await post({ content_version: "2", reflection: "My note" }).expect(422);
+  const response = await post({
+    content_version: "2",
+    reflection: "<script>alert(1)</script> I would check the facts.",
+    synthetic: "yes",
+  }).expect(200);
+  expect(response.text).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+  expect(response.text).not.toContain("<script>");
+  expect(response.text).toContain("Use invented facts");
+  expect(response.text).toContain("not a competence assessment");
+  catalog.published.mockResolvedValueOnce(null);
+  await post({
+    content_version: "2",
+    reflection: "My note",
+    synthetic: "yes",
+  }).expect(409);
+  catalog.published.mockResolvedValueOnce({ ...item, kind: "assignment" });
+  await agent.get("/library/SYN-106/study").set("Host", host).expect(404);
+  catalog.published.mockResolvedValueOnce({
+    ...item,
+    requiresQualifiedSignoff: true,
+  });
+  await agent.get("/library/SYN-106/study").set("Host", host).expect(404);
+  catalog.published.mockResolvedValueOnce({
+    ...item,
+    requiresQualifiedSignoff: true,
+  });
+  await post({
+    content_version: "2",
+    reflection: "Sample note",
+    synthetic: "yes",
+  }).expect(409);
+});
 it("supports the local editor/reviewer workflow without bypassing rejected transitions", async () => {
   const catalog = catalogMock();
   const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));

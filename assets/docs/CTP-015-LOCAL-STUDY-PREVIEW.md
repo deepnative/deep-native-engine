@@ -1,0 +1,9 @@
+# CTP-015 child: local study reflection preview
+
+Issue [#182](https://github.com/deepnative/deep-native-engine/issues/182) adds a deterministic study exercise to the existing authenticated library. It is a synthetic Phase B preview, not the AI assistance, reviewed six-lesson foundation, formal assessment, or budgeted optional service in parent [#34](https://github.com/deepnative/deep-native-engine/issues/34).
+
+The learner opens a currently published synthetic lesson and follows its study link. The page shows the source ID, exact version and original lesson text. A general, non-IT professional or IT goal changes the prompt's context without changing admission or access. A short sample reflection is sent only to the local application in a CSRF-protected POST. The response echoes those words as escaped text beside the exact-version source and asks the learner what still requires verification. It does not score, generate an answer, infer competence, or mark lesson progress. A fresh GET clears the reflection. No database row, job, external provider call, paid allowance or generic log receives the reflection. The learner is told to use invented information only.
+
+The POST re-reads the currently published lesson and compares its version with the form's version. Missing, retired, nonlesson, unqualified-signoff-required or replaced content cannot produce feedback. Invalid or oversized input returns a recovery page without storing the submitted text. Existing authentication, origin, CSRF and no-store response controls apply. There is no migration. Rollback is reverting the route/link/view; no new data requires removal.
+
+The full AI gateway, consent, provider configuration, cost/offer limits, human mock quota, session reload and qualified source approval remain open under #31, #34, #93 and #97. The local journey additions L55–L56 do not reduce the 100 proposed full-MVP subcases; ECO-06 remains unaccepted for full release.

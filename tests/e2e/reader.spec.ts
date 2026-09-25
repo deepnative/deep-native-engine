@@ -55,8 +55,10 @@ async function syntheticLesson(id: string) {
     rubric: null,
     rubricVersion: null,
   };
-  const publish = async (version: number) => {
-    expect(await catalog.createDraft(editor, { ...draft, version })).toBe(true);
+  const publish = async (version: number, body = draft.body) => {
+    expect(await catalog.createDraft(editor, { ...draft, version, body })).toBe(
+      true,
+    );
     expect(await catalog.submit(editor, id, version)).toBe(true);
     expect(await catalog.approve(reviewer, id, version, true)).toBe(true);
     expect(await catalog.publish(editor, id, version)).toBe(true);
@@ -180,4 +182,106 @@ test("[L43] professional and IT sessions keep versioned activity private through
   } finally {
     await other.close();
   }
+});
+
+test("[L55] all learner backgrounds can compare a synthetic reflection with its exact lesson source", async ({
+  page,
+}, info) => {
+  const id = info.project.name === "desktop-chromium" ? "SYN-915" : "SYN-916";
+  await syntheticLesson(id);
+  await onboard(page, "explorer", "everyday");
+  for (const [background, goal] of [
+    ["explorer", "everyday"],
+    ["professional", "work"],
+    ["technical", "build"],
+  ] as const) {
+    await page.goto("/learn");
+    await page.getByLabel("Your starting point").selectOption(background);
+    await page.getByLabel("What would you like to do?").selectOption(goal);
+    await page.getByRole("button", { name: "Save my direction" }).click();
+    await page.goto(`/library/${id}`);
+    await page
+      .getByRole("link", { name: "Try a locally simulated study reflection" })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Study reflection" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: `Source: ${id} · version 1` }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Use only invented details.", { exact: false }),
+    ).toBeVisible();
+    await page
+      .getByLabel("Your short reflection")
+      .fill(`For ${goal}, I would check the original sample.`);
+    await page
+      .getByLabel("I used only invented or sample information.")
+      .check();
+    await page.getByRole("button", { name: "Compare with source" }).click();
+    await expect(
+      page.getByRole("heading", {
+        name: "Compare your reflection with the source",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(`For ${goal}, I would check the original sample.`, {
+        exact: false,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("not a competence assessment", { exact: false }),
+    ).toBeVisible();
+    await page.goto(`/library/${id}/study`);
+    await expect(
+      page.getByRole("heading", {
+        name: "Compare your reflection with the source",
+      }),
+    ).not.toBeVisible();
+  }
+});
+
+test("[L56] stale, retired and invalid study submissions never reuse a different lesson version", async ({
+  page,
+}, info) => {
+  const id = info.project.name === "desktop-chromium" ? "SYN-917" : "SYN-918";
+  const { catalog, editor, publish } = await syntheticLesson(id);
+  await onboard(page, "professional", "work");
+  await page.goto(`/library/${id}/study`);
+  const csrf = await page.locator('input[name="csrf"]').inputValue();
+  const post = (contentVersion: string, reflection: string, token = csrf) =>
+    page.request.post(`/library/${id}/study`, {
+      headers: { Origin: origin },
+      form: {
+        csrf: token,
+        content_version: contentVersion,
+        reflection,
+        synthetic: "yes",
+      },
+    });
+  expect((await post("1", "Sample reflection", "wrong")).status()).toBe(403);
+  expect((await post("1", " ")).status()).toBe(422);
+  expect((await post("invalid", "Sample reflection")).status()).toBe(422);
+  await publish(
+    2,
+    "This replacement sample asks learners to verify a different claim.",
+  );
+  const stale = await post("1", "Sample reflection");
+  expect(stale.status()).toBe(409);
+  expect(await stale.text()).toContain("Study source changed");
+  await page.goto(`/library/${id}/study`);
+  await expect(
+    page.getByRole("heading", { name: `Source: ${id} · version 2` }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "This replacement sample asks learners to verify a different claim.",
+    ),
+  ).toBeVisible();
+  expect(await catalog.retire(editor, id)).toBe(true);
+  await page.goto(`/library/${id}/study`);
+  await expect(
+    page.getByRole("heading", { name: "Study source unavailable" }),
+  ).toBeVisible();
+  expect((await post("2", "Sample reflection")).status()).toBe(409);
 });
