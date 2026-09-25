@@ -57,6 +57,9 @@ test("[L59] a member manages invented private evidence with honest safety and co
     await expect(
       page.getByRole("button", { name: `Download ${name}` }),
     ).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Download my evidence JSON" }),
+    ).toBeVisible();
     const row = (
       await pool.query<{ id: string }>(
         "SELECT id FROM evidence_objects WHERE original_name=$1",
@@ -65,8 +68,23 @@ test("[L59] a member manages invented private evidence with honest safety and co
     ).rows[0];
     expect(row).toBeDefined();
     const id = row!.id;
+    const pendingExport = await page.request.get("/api/evidence/export");
+    expect(pendingExport.status()).toBe(200);
+    expect(pendingExport.headers()["cache-control"]).toBe("no-store");
+    expect(pendingExport.headers()["content-disposition"]).toContain(
+      "deep-native-evidence.json",
+    );
+    expect(await pendingExport.json()).toMatchObject({
+      version: "local-evidence-v1",
+      items: [{ id, quarantineState: "pending", sourceBase64: null }],
+    });
     await otherPage.goto("/evidence");
     await expect(otherPage.getByText(name)).toHaveCount(0);
+    expect(
+      await (await otherPage.request.get("/api/evidence/export")).json(),
+    ).toMatchObject({
+      items: [],
+    });
     const otherCsrf = await otherPage
       .locator('input[name="csrf"]')
       .first()
@@ -110,6 +128,25 @@ test("[L59] a member manages invented private evidence with honest safety and co
         )
       ).rows[0]?.private_review_allowed,
     ).toBe(false);
+    const exported = await (
+      await page.request.get("/api/evidence/export")
+    ).json();
+    expect(exported.items).toMatchObject([
+      {
+        id,
+        privateReviewAllowed: false,
+        quarantineState: "clean",
+        sourceBase64: Buffer.from("Invented private response").toString(
+          "base64",
+        ),
+      },
+    ]);
+    expect(JSON.stringify(exported)).not.toContain("storageKey");
+    expect(
+      JSON.stringify(
+        await (await otherPage.request.get("/api/evidence/export")).json(),
+      ),
+    ).not.toContain(name);
     await page
       .getByLabel(`Delete ${name} and its configured active derivatives`)
       .check();
@@ -119,6 +156,9 @@ test("[L59] a member manages invented private evidence with honest safety and co
       (await pool.query("SELECT id FROM evidence_objects WHERE id=$1", [id]))
         .rows,
     ).toEqual([]);
+    expect(
+      await (await page.request.get("/api/evidence/export")).json(),
+    ).toMatchObject({ items: [] });
   } finally {
     await outsider.close();
   }

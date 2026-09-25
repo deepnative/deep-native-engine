@@ -276,6 +276,32 @@ export function app(
     }
     res.json(access);
   });
+  app.get("/api/evidence/export", async (_req, res) => {
+    const result = await evidence.exportOwned(res.locals.token as string);
+    if (result.kind === "denied") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    if (result.kind === "limit") {
+      res.status(413).json({
+        error: "export_limit",
+        message:
+          "This preview export is limited to 20 samples and 4 MiB of clean source data. Download or delete samples individually, then retry.",
+      });
+      return;
+    }
+    if (result.kind === "unavailable") {
+      res.status(503).json({ error: "export_unavailable" });
+      return;
+    }
+    res
+      .type("application/json")
+      .set(
+        "Content-Disposition",
+        'attachment; filename="deep-native-evidence.json"',
+      )
+      .json(result);
+  });
   app.post("/api/evidence", async (req, res) => {
     const scopes = (req.get("x-evidence-scopes") ?? "")
       .split(",")
