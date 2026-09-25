@@ -167,6 +167,7 @@ it("stores opaque objects privately and removes them idempotently", async () => 
 
 it("fails closed when evidence storage is not configured", async () => {
   const disabled = disabledEvidenceStore();
+  await expect(disabled.owned(token)).resolves.toEqual([]);
   await expect(disabled.upload(token, base)).resolves.toEqual({
     kind: "denied",
   });
@@ -193,6 +194,31 @@ it("fails closed when evidence storage is not configured", async () => {
   ).rejects.toThrow("not configured");
   await expect(disabled.remove(token, evidenceId)).resolves.toBe(false);
   await expect(disabled.removeWorkspace(token)).resolves.toBeUndefined();
+});
+
+it("lists only valid member-owned evidence metadata", async () => {
+  const db = database([
+    {
+      id: evidenceId,
+      name: "invented.txt",
+      mediaType: "text/plain",
+      quarantineState: "pending",
+      privateReviewAllowed: true,
+      privateReviewRevokedAt: null,
+      submissionStatus: null,
+      createdAt: new Date(),
+    },
+  ]);
+  const store = evidenceStore(db.pool, objectStorage(), "secret");
+  await expect(store.owned("bad")).resolves.toEqual([]);
+  expect(db.query).not.toHaveBeenCalled();
+  await expect(store.owned(token)).resolves.toMatchObject([
+    { id: evidenceId, name: "invented.txt" },
+  ]);
+  expect(db.query).toHaveBeenCalledWith(
+    expect.stringContaining("p.kind='member'"),
+    [expect.stringMatching(/^[a-f0-9]{64}$/)],
+  );
 });
 
 it("writes valid uploads without persisting raw content", async () => {

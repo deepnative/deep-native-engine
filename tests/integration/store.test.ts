@@ -1570,6 +1570,16 @@ it("keeps evidence private through consent, quarantine and review eligibility", 
   });
   expect(created).toMatchObject({ kind: "created", state: "pending" });
   if (created.kind !== "created") throw new Error("evidence not created");
+  expect(await evidence.owned(owner.token)).toMatchObject([
+    {
+      id: created.id,
+      name: "sample.txt",
+      quarantineState: "pending",
+      privateReviewAllowed: true,
+    },
+  ]);
+  expect(await evidence.owned(outsider.token)).toEqual([]);
+  expect(await evidence.owned("invalid")).toEqual([]);
   const row = (
     await pool.query(
       `SELECT original_name,media_type,byte_size,sha256,storage_key,
@@ -1671,8 +1681,13 @@ it("lets only the member revoke private-review consent while retaining private e
     },
   });
   if (created.kind !== "created") throw new Error("evidence not created");
+  expect(await evidence.owned(reviewer.token)).toEqual([]);
+  expect(await evidence.owned(outsider.token)).toEqual([]);
   expect(await evidence.transitionQuarantine(created.id, "clean")).toBe(true);
   expect(await evidence.submitForReview(owner.token, created.id)).toBe(true);
+  expect(await evidence.owned(owner.token)).toMatchObject([
+    { id: created.id, quarantineState: "clean", submissionStatus: "queued" },
+  ]);
   const submission = await pool.query<{ id: string }>(
     "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
     [created.id],
@@ -1715,6 +1730,13 @@ it("lets only the member revoke private-review consent while retaining private e
   expect(await evidence.revokePrivateReview(owner.token, created.id)).toBe(
     true,
   );
+  expect(await evidence.owned(owner.token)).toMatchObject([
+    {
+      id: created.id,
+      privateReviewAllowed: false,
+      submissionStatus: "withdrawn",
+    },
+  ]);
   expect(await evidence.revokePrivateReview(owner.token, created.id)).toBe(
     false,
   );

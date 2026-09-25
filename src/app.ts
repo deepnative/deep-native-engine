@@ -7,6 +7,7 @@ import { profile, submission, type Fields } from "./validation.ts";
 import {
   welcome,
   dashboard,
+  evidencePage,
   lesson,
   readinessPage,
   offerHypothesesPage,
@@ -413,6 +414,7 @@ export function app(
       "/milestones",
       "/career",
       "/contribute",
+      "/evidence",
       "/circles",
     ],
     async (req, res, next) => {
@@ -444,6 +446,136 @@ export function app(
       next();
     },
   );
+  app.get("/evidence", async (_req, res) => {
+    res.send(
+      evidencePage(
+        await evidence.owned(res.locals.token as string),
+        res.locals.csrf as string,
+      ),
+    );
+  });
+  app.post("/evidence", async (req, res) => {
+    const fields = req.body as Fields;
+    const name = typeof fields.name === "string" ? fields.name : "";
+    const sample = typeof fields.sample === "string" ? fields.sample : "";
+    const invalid =
+      !name.trim() ||
+      name.length > 200 ||
+      !sample.trim() ||
+      sample.length > 4000 ||
+      fields.rights_confirmed !== "yes" ||
+      fields.private_review_consent !== "yes";
+    if (invalid) {
+      res
+        .status(422)
+        .send(
+          evidencePage(
+            await evidence.owned(res.locals.token as string),
+            res.locals.csrf as string,
+            [
+              "Enter a title and invented text, then confirm your rights and private-review consent.",
+            ],
+            { name, sample },
+          ),
+        );
+      return;
+    }
+    const result = await evidence.upload(res.locals.token as string, {
+      name,
+      mediaType: "text/plain",
+      data: Buffer.from(sample),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    });
+    if (result.kind === "denied") {
+      res
+        .status(403)
+        .send(errorPage("Evidence unavailable", "Refresh your session."));
+      return;
+    }
+    if (result.kind === "invalid") {
+      res
+        .status(422)
+        .send(
+          evidencePage(
+            await evidence.owned(res.locals.token as string),
+            res.locals.csrf as string,
+            [
+              "This text sample could not be saved. Check its title and contents.",
+            ],
+            { name, sample },
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/evidence");
+  });
+  app.post("/evidence/:evidenceId/download", async (req, res) => {
+    const result = await evidence.issueDownload(
+      res.locals.token as string,
+      req.params.evidenceId as string,
+    );
+    if (result.kind === "denied") {
+      res
+        .status(403)
+        .send(errorPage("Download unavailable", "This sample is unavailable."));
+      return;
+    }
+    res.redirect(
+      303,
+      `/api/evidence/${encodeURIComponent(req.params.evidenceId as string)}/download?capability=${encodeURIComponent(result.capability)}`,
+    );
+  });
+  app.post("/evidence/:evidenceId/revoke-private-review", async (req, res) => {
+    if ((req.body as Fields).confirm !== "yes") {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Confirmation needed",
+            "Confirm the consent change, then retry.",
+          ),
+        );
+      return;
+    }
+    if (
+      !(await evidence.revokePrivateReview(
+        res.locals.token as string,
+        req.params.evidenceId as string,
+      ))
+    ) {
+      res
+        .status(403)
+        .send(errorPage("Evidence unavailable", "This sample is unavailable."));
+      return;
+    }
+    res.redirect(303, "/evidence");
+  });
+  app.post("/evidence/:evidenceId/delete", async (req, res) => {
+    if ((req.body as Fields).confirm !== "yes") {
+      res
+        .status(422)
+        .send(
+          errorPage("Confirmation needed", "Confirm deletion, then retry."),
+        );
+      return;
+    }
+    if (
+      !(await evidence.remove(
+        res.locals.token as string,
+        req.params.evidenceId as string,
+      ))
+    ) {
+      res
+        .status(403)
+        .send(errorPage("Evidence unavailable", "This sample is unavailable."));
+      return;
+    }
+    res.redirect(303, "/evidence");
+  });
   app.get("/circles", async (_req, res) => {
     const items = await circles.list(res.locals.token as string);
     if (!items) {
