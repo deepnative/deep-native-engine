@@ -382,7 +382,7 @@ it("requires every mandatory subcase on each browser under the same ID", () => {
     /Incomplete required subcases.*mobile/,
   );
 });
-it("requires complete ECO-01 and ECO-03 provisional browser evidence without approving release", () => {
+it("requires complete ECO-01, ECO-03 and ECO-04-A provisional browser evidence without approving release", () => {
   const ids = [
     "F-ECO-01-A",
     "F-ECO-01-B",
@@ -390,6 +390,7 @@ it("requires complete ECO-01 and ECO-03 provisional browser evidence without app
     "F-ECO-03-A",
     "F-ECO-03-B",
     "F-ECO-03-C",
+    "F-ECO-04-A",
   ];
   const cases = proposal.fullMvp.flatMap((family) => family.cases);
   const report = {
@@ -419,11 +420,11 @@ it("requires complete ECO-01 and ECO-03 provisional browser evidence without app
   };
   expect(assertProvisionalReleaseJourneys(proposal, report)).toMatchObject({
     approved: false,
-    passed: 6,
-    total: 6,
-    criticalPassed: 3,
-    criticalTotal: 3,
-    executions: 6 * proposal.projects.length,
+    passed: 7,
+    total: 7,
+    criticalPassed: 4,
+    criticalTotal: 4,
+    executions: 7 * proposal.projects.length,
   });
   for (const [browserIndex, browserName] of proposal.projects.entries()) {
     for (const [name, corrupt] of [
@@ -460,6 +461,15 @@ it("requires complete ECO-01 and ECO-03 provisional browser evidence without app
       assertProvisionalReleaseJourneys(proposal, recoveryMissing),
     ).toThrow(
       new RegExp(`Incomplete required subcases.*F-ECO-03-C.*${browserName}`),
+    );
+    const privacyMissing = copy(report);
+    privacyMissing.suites[0].specs[6].tests[
+      browserIndex
+    ].results[0].annotations.pop();
+    expect(() =>
+      assertProvisionalReleaseJourneys(proposal, privacyMissing),
+    ).toThrow(
+      new RegExp(`Incomplete required subcases.*F-ECO-04-A.*${browserName}`),
     );
   }
   const missing = copy(report);
