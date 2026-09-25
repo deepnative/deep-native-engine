@@ -6,6 +6,7 @@ import { testPool } from "../support/database.ts";
 
 const pool = testPool();
 const origin = "http://127.0.0.1:4317";
+test.use({ trace: "on" });
 test.afterAll(async () => pool.end());
 
 async function onboard(page: Page) {
@@ -64,7 +65,7 @@ async function publishSamples(lessonId: string, assignmentId: string) {
     );
     expect(await catalog.publish(editor, item.id, item.version)).toBe(true);
   }
-  return { catalog, editor };
+  return { catalog, editor, reviewer };
 }
 
 test("[L62] member sees only their exact-version activity with truthful progress and historical states", async ({
@@ -148,7 +149,10 @@ test("[L62] member sees only their exact-version activity with truthful progress
   });
   await expect(starter).toContainText("Self-reported complete");
   const reading = page.getByRole("listitem").filter({
-    has: page.getByRole("heading", { name: "Invented cross-content reading" }),
+    has: page.getByRole("heading", {
+      name: "Invented cross-content reading",
+      exact: true,
+    }),
   });
   await expect(reading).toContainText("sample lesson · version 1 · Started");
   await expect(reading).not.toContainText("Self-reported complete");
@@ -176,6 +180,54 @@ test("[L62] member sees only their exact-version activity with truthful progress
     attempts: "1",
   });
 
+  const replacement: DraftContent = {
+    id: lessonId,
+    version: 2,
+    kind: "lesson",
+    origin: "curated",
+    owner: "Synthetic test editor",
+    sources: "Original invented teaching sample, revised",
+    rights: "Owned local test text",
+    goals: ["everyday"],
+    backgrounds: ["explorer"],
+    domains: [],
+    prerequisites: "None",
+    minimumExperience: "new",
+    title: "Invented cross-content reading, version two",
+    body: "Use a revised invented situation and check its source.",
+    rubric: null,
+    rubricVersion: null,
+  };
+  expect(await actors.catalog.createDraft(actors.editor, replacement)).toBe(
+    true,
+  );
+  expect(await actors.catalog.submit(actors.editor, lessonId, 2)).toBe(true);
+  expect(await actors.catalog.approve(actors.reviewer, lessonId, 2, true)).toBe(
+    true,
+  );
+  expect(await actors.catalog.publish(actors.editor, lessonId, 2)).toBe(true);
+  await page.goto("/progress");
+  await expect(reading).toContainText("version 1");
+  await expect(reading).toContainText("Historical version unavailable");
+  await expect(reading.getByRole("link")).toHaveCount(0);
+  await page.goto(`/library/${lessonId}`);
+  await expect(
+    page.getByRole("heading", {
+      name: "Invented cross-content reading, version two",
+    }),
+  ).toBeVisible();
+  await page.goto("/progress");
+  const replacementReading = page.getByRole("listitem").filter({
+    has: page.getByRole("heading", {
+      name: "Invented cross-content reading, version two",
+    }),
+  });
+  await expect(replacementReading).toContainText(
+    "version 2 · Opened in reader",
+  );
+  await expect(replacementReading).toContainText("Current published sample");
+  await expect(page.locator("main ol > li")).toHaveCount(4);
+
   await page.goto("/learn");
   await page.getByLabel("What would you like to do?").selectOption("work");
   await page.getByRole("button", { name: "Save my direction" }).click();
@@ -185,6 +237,10 @@ test("[L62] member sees only their exact-version activity with truthful progress
   await expect(reading).toContainText("version 1");
   await expect(reading).toContainText("Historical version unavailable");
   await expect(reading.getByRole("link")).toHaveCount(0);
+  await expect(replacementReading).toContainText(
+    "Historical version unavailable",
+  );
+  await expect(replacementReading.getByRole("link")).toHaveCount(0);
   await expect(assignment).toContainText(
     "Not eligible for your current direction; history retained",
   );
