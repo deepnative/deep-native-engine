@@ -339,6 +339,7 @@ export function assertFullReleaseJourneys(register, report) {
 export function assertProvisionalReleaseJourneys(register, report) {
   const ids = [
     "F-ROADMAP-02-A",
+    "F-ROADMAP-02-D",
     "F-ECO-01-A",
     "F-ECO-01-B",
     "F-ECO-01-C",
