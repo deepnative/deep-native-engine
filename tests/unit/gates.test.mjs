@@ -382,8 +382,9 @@ it("requires every mandatory subcase on each browser under the same ID", () => {
     /Incomplete required subcases.*mobile/,
   );
 });
-it("requires complete ECO-01 to ECO-04 provisional browser evidence without approving release", () => {
+it("requires ROADMAP-02-A and ECO-01 to ECO-04 provisional browser evidence without approving release", () => {
   const ids = [
+    "F-ROADMAP-02-A",
     "F-ECO-01-A",
     "F-ECO-01-B",
     "F-ECO-01-C",
@@ -423,11 +424,11 @@ it("requires complete ECO-01 to ECO-04 provisional browser evidence without appr
   };
   expect(assertProvisionalReleaseJourneys(proposal, report)).toMatchObject({
     approved: false,
-    passed: 10,
-    total: 10,
-    criticalPassed: 4,
-    criticalTotal: 4,
-    executions: 10 * proposal.projects.length,
+    passed: 11,
+    total: 11,
+    criticalPassed: 5,
+    criticalTotal: 5,
+    executions: 11 * proposal.projects.length,
   });
   for (const [browserIndex, browserName] of proposal.projects.entries()) {
     for (const [name, corrupt] of [
@@ -444,11 +445,13 @@ it("requires complete ECO-01 to ECO-04 provisional browser evidence without appr
         () => assertProvisionalReleaseJourneys(proposal, changed),
         `${name} marker on ${browserName}`,
       ).toThrow(
-        new RegExp(`Incomplete required subcases.*F-ECO-01-A.*${browserName}`),
+        new RegExp(
+          `Incomplete required subcases.*F-ROADMAP-02-A.*${browserName}`,
+        ),
       );
     }
     const singleCheckMissing = copy(report);
-    singleCheckMissing.suites[0].specs[1].tests[
+    singleCheckMissing.suites[0].specs[2].tests[
       browserIndex
     ].results[0].annotations = [];
     expect(() =>
@@ -457,7 +460,7 @@ it("requires complete ECO-01 to ECO-04 provisional browser evidence without appr
       new RegExp(`Incomplete required subcases.*F-ECO-01-B.*${browserName}`),
     );
     const crossAudienceMissing = copy(report);
-    crossAudienceMissing.suites[0].specs[4].tests[
+    crossAudienceMissing.suites[0].specs[5].tests[
       browserIndex
     ].results[0].annotations.pop();
     expect(() =>
@@ -466,7 +469,7 @@ it("requires complete ECO-01 to ECO-04 provisional browser evidence without appr
       new RegExp(`Incomplete required subcases.*F-ECO-02-B.*${browserName}`),
     );
     const recoveryMissing = copy(report);
-    recoveryMissing.suites[0].specs[8].tests[
+    recoveryMissing.suites[0].specs[9].tests[
       browserIndex
     ].results[0].annotations.pop();
     expect(() =>
@@ -475,7 +478,7 @@ it("requires complete ECO-01 to ECO-04 provisional browser evidence without appr
       new RegExp(`Incomplete required subcases.*F-ECO-03-C.*${browserName}`),
     );
     const privacyMissing = copy(report);
-    privacyMissing.suites[0].specs[9].tests[
+    privacyMissing.suites[0].specs[10].tests[
       browserIndex
     ].results[0].annotations.pop();
     expect(() =>
