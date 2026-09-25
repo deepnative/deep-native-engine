@@ -1,4 +1,7 @@
 import { EventEmitter } from "node:events";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeEach, it, expect, vi } from "vitest";
 const doubles = vi.hoisted(() => ({
   end: vi.fn(),
@@ -30,7 +33,7 @@ vi.mock("../../src/catalog.ts", () => ({
   catalogStore: vi.fn(),
   seedDraftPack: doubles.seed,
 }));
-import { start } from "../../src/runtime.ts";
+import { evidenceCapabilityClock, start } from "../../src/runtime.ts";
 const env = {
   DNE_DATABASE_URL:
     "postgresql://localhost/dne_test_0123456789abcdef0123456789abcdef",
@@ -42,6 +45,31 @@ beforeEach(() => {
   doubles.end.mockResolvedValue(undefined);
   doubles.migrate.mockResolvedValue(undefined);
   doubles.seed.mockResolvedValue(12);
+});
+it("controls only test evidence capabilities with a validated private clock file", () => {
+  const root = mkdtempSync(join(tmpdir(), "dne-test-clock-"));
+  const file = join(root, ".test-evidence-clock");
+  try {
+    const clock = evidenceCapabilityClock("test", root, "1");
+    expect(Math.abs(clock() - Date.now())).toBeLessThan(1000);
+    writeFileSync(file, "1800000000000");
+    expect(clock()).toBe(1800000000000);
+    expect(evidenceCapabilityClock("demo", root, "1")()).not.toBe(
+      1800000000000,
+    );
+    expect(evidenceCapabilityClock("test", root, undefined)()).not.toBe(
+      1800000000000,
+    );
+    writeFileSync(file, "Infinity");
+    expect(clock).toThrow("Invalid test evidence clock.");
+    writeFileSync(file, "999999999999999999999");
+    expect(clock).toThrow("Invalid test evidence clock.");
+    rmSync(file);
+    mkdirSync(file);
+    expect(clock).toThrow();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 function server(error?: Error) {
   const emitter = new EventEmitter();
