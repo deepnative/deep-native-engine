@@ -17,7 +17,7 @@ function database(
   rows: Record<string, unknown> = {},
   now = () => new Date("2026-01-31T00:00:00.000Z"),
 ) {
-  const query = vi.fn(async (sql: string) => {
+  const query = vi.fn(async (sql: string, _params?: unknown[]) => {
     if (sql.includes("SELECT request_fingerprint"))
       return { rows: rows.event ? [rows.event] : [] };
     if (sql.includes("SELECT 1 FROM learners"))
@@ -92,6 +92,10 @@ it("rejects malformed synthetic requests before any database connection", async 
     () => db.ledger.release("bad", reservation, "a"),
     () => db.ledger.expire("bad", grant, "a"),
     () => db.ledger.expire(member, "bad", "a"),
+    () => db.ledger.adjust("bad", grant, 1, "a"),
+    () => db.ledger.adjust(member, "bad", 1, "a"),
+    () => db.ledger.adjust(member, grant, 0, "a"),
+    () => db.ledger.adjust(member, grant, 1.5, "a"),
     () =>
       db.ledger.grant(member, "coach_minutes", 1, "a", {
         ...window,
@@ -295,6 +299,41 @@ it("expires a late release while a late consume still settles reserved units", a
       String(sql).includes("consumed=consumed+$2"),
     ),
   ).toBe(true);
+});
+
+it("writes off only available units before expiry through an event", async () => {
+  const db = database();
+  expect(await db.ledger.adjust(member, grant, 2, "adjust-once")).toBe(grant);
+  expect(
+    db.query.mock.calls.some(([sql]) =>
+      String(sql).includes("adjusted=adjusted+$2"),
+    ),
+  ).toBe(true);
+  expect(
+    db.query.mock.calls.some(
+      ([sql, params]) =>
+        String(sql).includes("INSERT INTO synthetic_entitlement_events") &&
+        Array.isArray(params) &&
+        params.includes("adjust"),
+    ),
+  ).toBe(true);
+  const missing = database({ grant: false });
+  await expect(
+    missing.ledger.adjust(member, grant, 1, "missing-adjust"),
+  ).rejects.toMatchObject({ code: "unavailable" });
+  const short = database({ available: 1 });
+  await expect(
+    short.ledger.adjust(member, grant, 2, "short-adjust"),
+  ).rejects.toMatchObject({ code: "insufficient" });
+  const end = new Date("2026-01-31T00:00:00.000Z");
+  const expired = database({ expiresAt: end }, () => end);
+  await expect(
+    expired.ledger.adjust(member, grant, 1, "late-adjust"),
+  ).rejects.toMatchObject({ code: "unavailable" });
+  const stamped = database({ expiredAt: end });
+  await expect(
+    stamped.ledger.adjust(member, grant, 1, "swept-adjust"),
+  ).rejects.toMatchObject({ code: "unavailable" });
 });
 
 it("hides database failures, releases connections, and tolerates failed rollback", async () => {

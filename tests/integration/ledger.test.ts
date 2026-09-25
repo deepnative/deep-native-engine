@@ -140,6 +140,264 @@ it("records separate immutable events without minting service units from learner
   ).toBe(0);
 });
 
+it("writes off only unused synthetic grant units without changing held or consumed history", async () => {
+  const owner = await member("explorer");
+  const other = await member("professional");
+  const grant = await ledger.grant(
+    owner,
+    "coach_minutes",
+    3,
+    "writeoff-grant",
+    window,
+  );
+  const review = await ledger.grant(
+    owner,
+    "review_minutes",
+    2,
+    "writeoff-review",
+    window,
+  );
+  const held = await ledger.reserve(owner, grant, 1, "writeoff-hold");
+  await expect(
+    ledger.adjust(other, grant, 1, "writeoff-other"),
+  ).rejects.toMatchObject({ code: "unavailable" });
+  expect(await ledger.adjust(owner, grant, 1, "writeoff-once")).toBe(grant);
+  expect(await ledger.adjust(owner, grant, 1, "writeoff-once")).toBe(grant);
+  await expect(
+    ledger.adjust(owner, grant, 2, "writeoff-once"),
+  ).rejects.toMatchObject({ code: "idempotency_conflict" });
+  await expect(
+    ledger.adjust(owner, grant, 2, "writeoff-too-many"),
+  ).rejects.toMatchObject({ code: "insufficient" });
+  expect(
+    (
+      await pool.query(
+        "SELECT available,reserved,consumed,expired,adjusted FROM synthetic_entitlement_grants WHERE id=$1",
+        [grant],
+      )
+    ).rows[0],
+  ).toEqual({
+    available: 1,
+    reserved: 1,
+    consumed: 0,
+    expired: 0,
+    adjusted: 1,
+  });
+  expect(
+    (
+      await pool.query(
+        "SELECT available,reserved,consumed,expired,adjusted FROM synthetic_entitlement_grants WHERE id=$1",
+        [review],
+      )
+    ).rows[0],
+  ).toEqual({
+    available: 2,
+    reserved: 0,
+    consumed: 0,
+    expired: 0,
+    adjusted: 0,
+  });
+  expect(await ledger.consume(owner, held, "writeoff-consume")).toBe(held);
+  expect(
+    (
+      await pool.query(
+        "SELECT available,reserved,consumed,expired,adjusted FROM synthetic_entitlement_grants WHERE id=$1",
+        [grant],
+      )
+    ).rows[0],
+  ).toEqual({
+    available: 1,
+    reserved: 0,
+    consumed: 1,
+    expired: 0,
+    adjusted: 1,
+  });
+  expect(
+    (
+      await pool.query(
+        "SELECT operation,quantity,reservation_id FROM synthetic_entitlement_events WHERE idempotency_key='writeoff-once'",
+      )
+    ).rows[0],
+  ).toEqual({ operation: "adjust", quantity: 1, reservation_id: null });
+  await expect(
+    pool.query(
+      "UPDATE synthetic_entitlement_grants SET adjusted=adjusted+1 WHERE id=$1",
+      [grant],
+    ),
+  ).rejects.toThrow();
+});
+
+it("serializes a final synthetic unit between reservation and writeoff", async () => {
+  const owner = await member("technical");
+  const grant = await ledger.grant(
+    owner,
+    "coach_minutes",
+    1,
+    "race-adjust-grant",
+    window,
+  );
+  const blocker = await pool.connect();
+  let transactionOpen = false;
+  let attempts: [Promise<string>, Promise<string>] | undefined;
+  let results: PromiseSettledResult<string>[];
+  try {
+    await blocker.query("BEGIN");
+    transactionOpen = true;
+    await blocker.query(
+      "UPDATE synthetic_entitlement_grants SET available=available WHERE id=$1",
+      [grant],
+    );
+    const blockerPid = (
+      await blocker.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+    ).rows[0]!.pid;
+    attempts = [
+      ledger.reserve(owner, grant, 1, "race-adjust-reserve"),
+      ledger.adjust(owner, grant, 1, "race-adjust-writeoff"),
+    ];
+    let blocked = false;
+    for (let check = 0; check < 100; check += 1) {
+      const count = (
+        await pool.query<{ count: string }>(
+          `SELECT count(*) FROM pg_stat_activity
+           WHERE datname=current_database()
+             AND $1::integer=ANY(pg_blocking_pids(pid))`,
+          [blockerPid],
+        )
+      ).rows[0]!.count;
+      if (Number(count) >= 1) {
+        blocked = true;
+        break;
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+    expect(blocked).toBe(true);
+    await blocker.query("COMMIT");
+    transactionOpen = false;
+    results = await Promise.allSettled(attempts);
+  } finally {
+    if (transactionOpen) await blocker.query("ROLLBACK");
+    if (attempts) await Promise.allSettled(attempts);
+    blocker.release();
+  }
+  expect(
+    results.filter((result) => result.status === "fulfilled"),
+  ).toHaveLength(1);
+  expect(
+    results.filter((result) => result.status === "rejected")[0],
+  ).toMatchObject({ reason: { code: "insufficient" } });
+  const balance = (
+    await pool.query(
+      "SELECT available,reserved,consumed,expired,adjusted FROM synthetic_entitlement_grants WHERE id=$1",
+      [grant],
+    )
+  ).rows[0];
+  expect(balance).toEqual(
+    results[0]?.status === "fulfilled"
+      ? { available: 0, reserved: 1, consumed: 0, expired: 0, adjusted: 0 }
+      : { available: 0, reserved: 0, consumed: 0, expired: 0, adjusted: 1 },
+  );
+  expect(
+    (
+      await pool.query(
+        "SELECT operation FROM synthetic_entitlement_events WHERE grant_id=$1 AND operation IN ('reserve','adjust')",
+        [grant],
+      )
+    ).rows,
+  ).toHaveLength(1);
+});
+
+it("keeps written-off units separate from expired availability", async () => {
+  const owner = await member("professional");
+  const end = new Date("2026-02-01T00:00:00.000Z");
+  let current = new Date("2026-01-31T23:59:59.999Z");
+  const clocked = syntheticLedger(pool, () => current);
+  const grant = await clocked.grant(
+    owner,
+    "review_minutes",
+    3,
+    "adjust-expiry-grant",
+    {
+      startsAt: "2026-01-01T00:00:00.000Z",
+      expiresAt: end.toISOString(),
+    },
+  );
+  expect(await clocked.adjust(owner, grant, 1, "adjust-before-expiry")).toBe(
+    grant,
+  );
+  current = end;
+  await expect(
+    clocked.adjust(owner, grant, 1, "adjust-at-expiry"),
+  ).rejects.toMatchObject({ code: "unavailable" });
+  expect(await clocked.expire(owner, grant, "expire-after-adjust")).toBe(grant);
+  expect(
+    (
+      await pool.query(
+        "SELECT available,reserved,consumed,expired,adjusted FROM synthetic_entitlement_grants WHERE id=$1",
+        [grant],
+      )
+    ).rows[0],
+  ).toEqual({
+    available: 0,
+    reserved: 0,
+    consumed: 0,
+    expired: 2,
+    adjusted: 1,
+  });
+  expect(
+    (
+      await pool.query(
+        "SELECT operation,quantity FROM synthetic_entitlement_events WHERE grant_id=$1 AND operation IN ('adjust','expire') ORDER BY created_at",
+        [grant],
+      )
+    ).rows,
+  ).toEqual([
+    { operation: "adjust", quantity: 1 },
+    { operation: "expire", quantity: 2 },
+  ]);
+});
+
+it("rolls back a failed writeoff event without changing balances", async () => {
+  const owner = await member("explorer");
+  const grant = await ledger.grant(
+    owner,
+    "study_requests",
+    1,
+    "failed-adjust-grant",
+    window,
+  );
+  await pool.query(`CREATE FUNCTION reject_test_adjust_event() RETURNS trigger AS $$
+    BEGIN IF NEW.operation='adjust' THEN RAISE EXCEPTION 'synthetic event rejected'; END IF;
+    RETURN NEW; END; $$ LANGUAGE plpgsql`);
+  await pool.query(`CREATE TRIGGER reject_test_adjust_event BEFORE INSERT
+    ON synthetic_entitlement_events FOR EACH ROW EXECUTE FUNCTION reject_test_adjust_event()`);
+  try {
+    await expect(
+      ledger.adjust(owner, grant, 1, "failed-adjust"),
+    ).rejects.toMatchObject({ code: "unavailable" });
+  } finally {
+    await pool.query(
+      "DROP TRIGGER reject_test_adjust_event ON synthetic_entitlement_events",
+    );
+    await pool.query("DROP FUNCTION reject_test_adjust_event()");
+  }
+  expect(
+    (
+      await pool.query(
+        "SELECT available,adjusted FROM synthetic_entitlement_grants WHERE id=$1",
+        [grant],
+      )
+    ).rows[0],
+  ).toEqual({ available: 1, adjusted: 0 });
+  expect(
+    (
+      await pool.query(
+        "SELECT 1 FROM synthetic_entitlement_events WHERE idempotency_key='failed-adjust'",
+      )
+    ).rowCount,
+  ).toBe(0);
+  expect(await ledger.adjust(owner, grant, 1, "failed-adjust")).toBe(grant);
+});
+
 it("serializes two last-unit reservations and makes release available once", async () => {
   const owner = await member("explorer");
   const grant = await ledger.grant(
