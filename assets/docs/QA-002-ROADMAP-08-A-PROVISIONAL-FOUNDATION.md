@@ -1,0 +1,7 @@
+# Provisional F-ROADMAP-08-A shared foundation access
+
+The desktop/mobile browser case enters the real local preview three times with distinct synthetic member sessions, selecting cybersecurity, product ownership and project management as optional IT specialties. Each member starts a goal-fitting plan, opens the same common foundation lesson and completes its sample exercise. PostgreSQL confirms the separately owned member profile, selected specialty and saved lesson/version completion. No contract, client or employer field, paid grant or Professional purchase is needed. The current readiness page still marks each specialist service as in preparation and offers no purchase or booking control. The three required-check markers are emitted only after those observable UI and database assertions pass.
+
+This establishes access to the **local starter lesson**, not qualified approval of the six-lesson foundation pack, a specialist review, paid entitlement or a deliverable expert service. The test uses the existing local application and disposable PostgreSQL with no live provider or customer data.
+
+This case is provisional (`approved:false`). With this addition the provisional tranche requires 19/19 distinct IDs, 13/13 critical IDs and 38 first-attempt desktop/mobile browser executions. The separately approved full-MVP register remains 100 cases/94 critical with accepted coverage 0/100. QA-002 #94 remains open for all release evidence and substantive review.
