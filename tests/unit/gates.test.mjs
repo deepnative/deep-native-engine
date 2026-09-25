@@ -382,7 +382,7 @@ it("requires every mandatory subcase on each browser under the same ID", () => {
     /Incomplete required subcases.*mobile/,
   );
 });
-it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUILD-02-A/C/D/08-A/B/C/10-A/B provisional browser evidence without approving release", () => {
+it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUILD-01-A/B/02-A/C/D/08-A/B/C/10-A/B provisional browser evidence without approving release", () => {
   const ids = [
     "F-ROADMAP-02-A",
     "F-ROADMAP-02-B",
@@ -410,6 +410,8 @@ it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUIL
     "F-BUILD-02-C",
     "F-BUILD-02-D",
     "F-BUILD-02-A",
+    "F-BUILD-01-A",
+    "F-BUILD-01-B",
   ];
   const cases = proposal.fullMvp.flatMap((family) => family.cases);
   const report = {
@@ -439,11 +441,11 @@ it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUIL
   };
   expect(assertProvisionalReleaseJourneys(proposal, report)).toMatchObject({
     approved: false,
-    passed: 26,
-    total: 26,
-    criticalPassed: 20,
-    criticalTotal: 20,
-    executions: 26 * proposal.projects.length,
+    passed: 28,
+    total: 28,
+    criticalPassed: 22,
+    criticalTotal: 22,
+    executions: 28 * proposal.projects.length,
   });
   for (const [browserIndex, browserName] of proposal.projects.entries()) {
     for (const [name, corrupt] of [
@@ -502,6 +504,8 @@ it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUIL
       [23, "F-BUILD-02-C"],
       [24, "F-BUILD-02-D"],
       [25, "F-BUILD-02-A"],
+      [26, "F-BUILD-01-A"],
+      [27, "F-BUILD-01-B"],
     ]) {
       const incomplete = copy(report);
       incomplete.suites[0].specs[index].tests[
