@@ -123,3 +123,104 @@ test("[L59] a member manages invented private evidence with honest safety and co
     await outsider.close();
   }
 });
+
+test("[L60] only a clean consented owner sample enters the local review queue once", async ({
+  page,
+  browser,
+}) => {
+  const outsider = await browser.newContext({ baseURL: origin });
+  const otherPage = await outsider.newPage();
+  const name = `review-intent-${randomBytes(8).toString("hex")}.txt`;
+  try {
+    await onboard(page);
+    await onboard(otherPage);
+    await page.goto("/evidence");
+    await page.getByLabel("Sample title").fill(name);
+    await page
+      .getByLabel("Invented text sample")
+      .fill("Invented private sample for local preview");
+    await page.getByLabel("I created this invented sample").check();
+    await page.getByLabel("I explicitly allow this sample").check();
+    await page
+      .getByRole("button", { name: "Save private text sample" })
+      .click();
+    const id = (
+      await pool.query<{ id: string }>(
+        "SELECT id FROM evidence_objects WHERE original_name=$1",
+        [name],
+      )
+    ).rows[0]!.id;
+    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    await expect(
+      page.getByRole("button", {
+        name: "Queue for local review consideration",
+      }),
+    ).toHaveCount(0);
+    const post = (token: string) =>
+      page.request.post(`/evidence/${id}/queue`, {
+        headers: { Origin: origin },
+        form: { csrf: token, acknowledge: "yes" },
+      });
+    expect((await post(csrf)).status()).toBe(409);
+    expect((await post("forged")).status()).toBe(403);
+    const evidence = evidenceStore(
+      pool,
+      fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!),
+      "browser-secret",
+    );
+    expect(await evidence.transitionQuarantine(id, "clean")).toBe(true);
+    await page.reload();
+    await expect(
+      page.getByText("No qualified reviewer is assigned", { exact: false }),
+    ).toBeVisible();
+    await otherPage.goto("/evidence");
+    const otherCsrf = await otherPage
+      .locator('input[name="csrf"]')
+      .first()
+      .inputValue();
+    const otherAttempt = await otherPage.request.post(`/evidence/${id}/queue`, {
+      headers: { Origin: origin },
+      form: { csrf: otherCsrf, acknowledge: "yes" },
+    });
+    expect(otherAttempt.status()).toBe(409);
+    await page
+      .getByLabel("No qualified reviewer is assigned", { exact: false })
+      .check();
+    await page
+      .getByRole("button", { name: "Queue for local review consideration" })
+      .click();
+    await expect(
+      page.getByText("Submitted locally; no qualified review is connected"),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: "Queue for local review consideration",
+      }),
+    ).toHaveCount(0);
+    expect(
+      (
+        await pool.query(
+          "SELECT status FROM evidence_review_submissions WHERE evidence_id=$1",
+          [id],
+        )
+      ).rows,
+    ).toMatchObject([{ status: "queued" }]);
+    expect((await post(csrf)).status()).toBe(409);
+    await page.getByLabel(`Stop private-review access to ${name}`).check();
+    await page.getByRole("button", { name: "Revoke review consent" }).click();
+    await expect(
+      page.getByText("Review submission withdrawn", { exact: false }),
+    ).toBeVisible();
+    expect(
+      (
+        await pool.query(
+          "SELECT status FROM evidence_review_submissions WHERE evidence_id=$1",
+          [id],
+        )
+      ).rows,
+    ).toMatchObject([{ status: "withdrawn" }]);
+    expect((await post(csrf)).status()).toBe(409);
+  } finally {
+    await outsider.close();
+  }
+});

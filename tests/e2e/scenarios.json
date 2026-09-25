@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v27",
+  "version": "initial-learning-v28",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, member-managed invented text evidence, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, member-managed invented text evidence and local review intent, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -533,6 +533,15 @@
       "steps": "Add an invented text sample with explicit rights and private-review consent; inspect pending and clean states; download, revoke consent and delete; attempt cross-member and forged-CSRF writes",
       "expected": "Only the owner sees metadata and manages the sample; pending evidence cannot download; clean evidence downloads; revocation removes review access without blocking owner download; confirmed deletion removes private bytes and metadata; denied writes change nothing",
       "issues": [226, 42],
+      "critical": true
+    },
+    {
+      "id": "L60",
+      "actor": "Member and unrelated member",
+      "preconditions": "Owned invented evidence with explicit private-review consent; no qualified reviewer or live scanner",
+      "steps": "Try to queue pending evidence, mark it clean in the synthetic test, acknowledge the local-only queue, queue once, repeat and forge/cross-member requests, then revoke consent",
+      "expected": "Only the current clean, consented owner can create one queued local submission; no reviewer or response is promised; stale, duplicate and unauthorized writes fail closed; revocation withdraws the queue and prevents requeue",
+      "issues": [228, 38, 42],
       "critical": true
     }
   ],

@@ -1283,6 +1283,85 @@ it("shows a member-owned evidence manager with a usable empty state", async () =
     expect.stringMatching(/^[a-f0-9]{64}$/),
   );
 });
+it("offers a local review queue only for clean, consented, unsubmitted owner evidence", async () => {
+  const files = evidenceStorage();
+  const { agent } = await client(files);
+  active();
+  const candidate = "11111111-1111-4111-8111-111111111111";
+  files.owned.mockResolvedValue([
+    {
+      id: candidate,
+      name: "clean.txt",
+      mediaType: "text/plain",
+      quarantineState: "clean",
+      privateReviewAllowed: true,
+      privateReviewRevokedAt: null,
+      submissionStatus: null,
+      createdAt: new Date(),
+    },
+    {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "pending.txt",
+      mediaType: "text/plain",
+      quarantineState: "pending",
+      privateReviewAllowed: true,
+      privateReviewRevokedAt: null,
+      submissionStatus: null,
+      createdAt: new Date(),
+    },
+    {
+      id: "33333333-3333-4333-8333-333333333333",
+      name: "revoked.txt",
+      mediaType: "text/plain",
+      quarantineState: "clean",
+      privateReviewAllowed: false,
+      privateReviewRevokedAt: new Date(),
+      submissionStatus: null,
+      createdAt: new Date(),
+    },
+    {
+      id: "44444444-4444-4444-8444-444444444444",
+      name: "queued.txt",
+      mediaType: "text/plain",
+      quarantineState: "clean",
+      privateReviewAllowed: true,
+      privateReviewRevokedAt: null,
+      submissionStatus: "queued",
+      createdAt: new Date(),
+    },
+  ]);
+  const response = await agent.get("/evidence").set("Host", host).expect(200);
+  expect(response.text).toContain(`action="/evidence/${candidate}/queue"`);
+  expect(response.text.match(/\/queue"/g)).toHaveLength(1);
+  expect(response.text).toContain("No qualified reviewer is assigned");
+});
+it("requires acknowledgement and current owner eligibility before queuing local evidence", async () => {
+  const files = evidenceStorage();
+  const { agent, csrf } = await client(files);
+  active();
+  const id = "11111111-1111-4111-8111-111111111111";
+  const post = (value: string | undefined, token = csrf) =>
+    agent
+      .post(`/evidence/${id}/queue`)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf: token, ...(value ? { acknowledge: value } : {}) });
+  await post("yes", "wrong").expect(403);
+  await post(undefined)
+    .expect(422)
+    .expect(/Acknowledge that no qualified reviewer/);
+  expect(files.submitForReview).not.toHaveBeenCalled();
+  await post("yes")
+    .expect(409)
+    .expect(/not eligible for the local review queue/);
+  files.submitForReview.mockResolvedValueOnce(true);
+  await post("yes").expect(303).expect("Location", "/evidence");
+  expect(files.submitForReview).toHaveBeenCalledWith(
+    expect.stringMatching(/^[a-f0-9]{64}$/),
+    id,
+  );
+});
 it("keeps evidence form writes owner-scoped, confirmed and truthful", async () => {
   const files = evidenceStorage();
   const { agent, csrf } = await client(files);
