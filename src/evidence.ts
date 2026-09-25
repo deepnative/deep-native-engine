@@ -248,8 +248,23 @@ export function evidenceStore(
            OR (i.kind='staff' AND e.private_review_allowed
              AND (i.role<>'reviewer' OR EXISTS(
                SELECT 1 FROM evidence_review_submissions submission
+               JOIN reviewer_evidence_grants exact_grant
+                 ON exact_grant.submission_id=submission.id
+               JOIN assignment_grants bound_assignment
+                 ON bound_assignment.id=exact_grant.assignment_id
                WHERE submission.evidence_id=e.id
                  AND submission.status IN ('queued','reviewed')
+                 AND submission.submitted_by=e.owner_principal_id
+                 AND exact_grant.reviewer_id=i.id
+                 AND exact_grant.revoked_at IS NULL
+                 AND exact_grant.starts_at<=CURRENT_TIMESTAMP
+                 AND exact_grant.expires_at>CURRENT_TIMESTAMP
+                 AND bound_assignment.staff_id=i.id
+                 AND bound_assignment.staff_role='reviewer'
+                 AND bound_assignment.workspace_id=e.workspace_id
+                 AND bound_assignment.revoked_at IS NULL
+                 AND bound_assignment.starts_at<=CURRENT_TIMESTAMP
+                 AND bound_assignment.expires_at>CURRENT_TIMESTAMP
              )) AND EXISTS(
              SELECT 1 FROM assignment_grants g
              WHERE g.staff_id=i.id AND g.staff_role=i.role

@@ -179,6 +179,20 @@ it("restores only a synthetic snapshot into a new database and preserves private
       throw new Error("Synthetic restore evidence setup failed.");
     expect(await evidence.transitionQuarantine(item.id, "clean")).toBe(true);
     expect(await evidence.submitForReview(owner.token, item.id)).toBe(true);
+    const submissionId = (
+      await source.pool.query<{ id: string }>(
+        "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+        [item.id],
+      )
+    ).rows[0]!.id;
+    await access.grantEvidenceReview(
+      adminId,
+      reviewerId,
+      grant,
+      submissionId,
+      "synthetic restore review",
+      expiry,
+    );
     await evidence.addDerivative(
       item.id,
       "text-extract",
