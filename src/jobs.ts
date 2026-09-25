@@ -9,9 +9,17 @@ import {
 } from "./adapters.ts";
 
 export type JobStatus =
-  "pending" | "running" | "succeeded" | "failed" | "exhausted";
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "exhausted"
+  | "needs_reconciliation";
 export type SafeJobError =
-  "provider_unavailable" | "provider_timeout" | "invalid_provider_response";
+  | "provider_unavailable"
+  | "provider_timeout"
+  | "invalid_provider_response"
+  | "provider_outcome_unknown";
 
 export interface AdapterJob {
   id: string;
@@ -180,20 +188,31 @@ export function jobStore(pool: Pool): JobStore {
                  updated_at=CURRENT_TIMESTAMP
              WHERE id=$1 AND attempt_count>=max_attempts
                AND (status IN ('pending','failed')
-                    OR (status='running' AND lease_until<=CURRENT_TIMESTAMP))
+                    OR (adapter<>'ai' AND status='running' AND lease_until<=CURRENT_TIMESTAMP))
            )
            UPDATE adapter_jobs
-           SET status='running',attempt_count=attempt_count+1,
-               attempt_token=$2,lease_until=CURRENT_TIMESTAMP+INTERVAL '5 minutes',
-               safe_error=NULL,updated_at=CURRENT_TIMESTAMP
-           WHERE id=$1 AND attempt_count<max_attempts
-             AND (status IN ('pending','failed')
-                  OR (status='running' AND lease_until<=CURRENT_TIMESTAMP))
+           SET status=CASE WHEN adapter='ai' AND status='running'
+                           THEN 'needs_reconciliation' ELSE 'running' END,
+               attempt_count=CASE WHEN adapter='ai' AND status='running'
+                                  THEN attempt_count ELSE attempt_count+1 END,
+               attempt_token=CASE WHEN adapter='ai' AND status='running'
+                                  THEN NULL ELSE $2::uuid END,
+               lease_until=CASE WHEN adapter='ai' AND status='running'
+                                THEN NULL ELSE CURRENT_TIMESTAMP+INTERVAL '5 minutes' END,
+               safe_error=CASE WHEN adapter='ai' AND status='running'
+                               THEN 'provider_outcome_unknown' ELSE NULL END,
+               updated_at=CURRENT_TIMESTAMP
+           WHERE id=$1
+             AND ((status IN ('pending','failed') AND attempt_count<max_attempts)
+                  OR (status='running' AND lease_until<=CURRENT_TIMESTAMP
+                      AND (adapter='ai' OR attempt_count<max_attempts)))
            RETURNING *`,
           [id, randomUUID()],
         )
       ).rows[0];
-      return row && attempt(row);
+      return row && row.status !== "needs_reconciliation"
+        ? attempt(row)
+        : undefined;
     },
     async fail(id, attemptToken, safeError) {
       if (
@@ -201,13 +220,16 @@ export function jobStore(pool: Pool): JobStore {
           "provider_unavailable",
           "provider_timeout",
           "invalid_provider_response",
+          "provider_outcome_unknown",
         ].includes(safeError)
       )
         throw new Error("Adapter failure code must be allowlisted.");
       const row = (
         await pool.query<JobRow>(
           `UPDATE adapter_jobs
-           SET status=CASE WHEN attempt_count>=max_attempts
+           SET status=CASE WHEN adapter='ai' AND $3 IN ('provider_timeout','provider_outcome_unknown')
+                           THEN 'needs_reconciliation'
+                           WHEN attempt_count>=max_attempts
                            THEN 'exhausted' ELSE 'failed' END,
                safe_error=$3,attempt_token=NULL,lease_until=NULL,
                updated_at=CURRENT_TIMESTAMP
@@ -285,7 +307,9 @@ export async function runAdapterJob(
       job: await jobs.fail(
         claimed.id,
         claimed.attemptToken,
-        "provider_unavailable",
+        claimed.adapter === "ai"
+          ? "provider_outcome_unknown"
+          : "provider_unavailable",
       ),
       result: null,
       executed: true,

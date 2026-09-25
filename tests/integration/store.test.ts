@@ -2341,6 +2341,208 @@ it("persists retries across connections and stops invoking at exhaustion", async
   ).not.toContain("private-secret");
 });
 
+it("holds an ambiguous AI outcome without replaying the same request or storing raw errors", async () => {
+  const marker = "synthetic-private-provider-text";
+  let executions = 0;
+  const registry: AdapterRegistry = {
+    mode: "test",
+    adapter(kind) {
+      return {
+        kind,
+        mode: "test",
+        async execute() {
+          executions += 1;
+          throw new Error(marker);
+        },
+      };
+    },
+  };
+  const jobs = jobStore(pool);
+  const input = { scenario: "ambiguous-outcome" };
+  const created = await enqueueAdapterJob(
+    jobs,
+    registry,
+    "ai",
+    "summarize",
+    input,
+    "ambiguous-ai",
+    3,
+  );
+  const first = await runAdapterJob(jobs, registry, created.id, input);
+  expect(first).toMatchObject({
+    executed: true,
+    result: null,
+    job: {
+      status: "needs_reconciliation",
+      attempts: 1,
+      safeError: "provider_outcome_unknown",
+      retryable: false,
+    },
+  });
+  const replay = await enqueueAdapterJob(
+    jobs,
+    registry,
+    "ai",
+    "summarize",
+    input,
+    "ambiguous-ai",
+    3,
+  );
+  expect(replay).toEqual(first.job);
+  expect(await runAdapterJob(jobs, registry, created.id, input)).toMatchObject({
+    executed: false,
+    result: null,
+    job: replay,
+  });
+  expect(executions).toBe(1);
+  await expect(
+    enqueueAdapterJob(
+      jobs,
+      registry,
+      "ai",
+      "summarize",
+      { scenario: "different" },
+      "ambiguous-ai",
+      3,
+    ),
+  ).rejects.toThrow("another request");
+  expect(
+    JSON.stringify((await pool.query("SELECT * FROM adapter_jobs")).rows),
+  ).not.toContain(marker);
+});
+
+it("holds explicit AI timeout even at the attempt limit", async () => {
+  const jobs = jobStore(pool);
+  const registry = deterministicRegistry({}, "test");
+  const created = await enqueueAdapterJob(
+    jobs,
+    registry,
+    "ai",
+    "summarize",
+    { scenario: "timeout" },
+    "timeout-ai",
+    1,
+  );
+  const claim = await jobs.claim(created.id);
+  expect(claim).toBeDefined();
+  expect(
+    await jobs.fail(created.id, claim!.attemptToken, "provider_timeout"),
+  ).toMatchObject({
+    status: "needs_reconciliation",
+    attempts: 1,
+    safeError: "provider_timeout",
+    retryable: false,
+  });
+  expect(await jobs.claim(created.id)).toBeUndefined();
+});
+
+it("keeps non-AI rows valid while rejecting a non-AI reconciliation state", async () => {
+  const jobs = jobStore(pool);
+  const created = await enqueueAdapterJob(
+    jobs,
+    deterministicRegistry({}, "test"),
+    "analytics",
+    "record",
+    { scenario: "migration-boundary" },
+    "migration-boundary",
+  );
+  await expect(
+    pool.query(
+      "UPDATE adapter_jobs SET status='needs_reconciliation',safe_error='provider_outcome_unknown' WHERE id=$1",
+      [created.id],
+    ),
+  ).rejects.toMatchObject({ code: "23514" });
+  expect(await jobs.find(created.id)).toMatchObject({
+    status: "pending",
+    safeError: null,
+  });
+  expect(
+    (
+      await pool.query(
+        "SELECT COUNT(*)::integer AS count FROM schema_migrations WHERE version=19",
+      )
+    ).rows[0],
+  ).toMatchObject({ count: 1 });
+});
+
+it("holds an expired AI lease against concurrent claimers and its delayed worker", async () => {
+  const jobs = jobStore(pool);
+  const otherConnection = testPool();
+  let releaseProvider!: () => void;
+  let oldRun: Promise<Awaited<ReturnType<typeof runAdapterJob>>> | undefined;
+  try {
+    let signalEntered!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      signalEntered = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseProvider = resolve;
+    });
+    const registry: AdapterRegistry = {
+      mode: "test",
+      adapter(kind) {
+        return {
+          kind,
+          mode: "test",
+          async execute() {
+            signalEntered();
+            await release;
+            return {
+              kind,
+              mode: "test",
+              state: "simulated",
+              reference: "late_ai_result",
+              message: "synthetic late AI result",
+            };
+          },
+        };
+      },
+    };
+    const input = { scenario: "expired-lease" };
+    const created = await enqueueAdapterJob(
+      jobs,
+      registry,
+      "ai",
+      "summarize",
+      input,
+      "expired-ai",
+      3,
+    );
+    oldRun = runAdapterJob(jobs, registry, created.id, input);
+    await entered;
+    await pool.query(
+      "UPDATE adapter_jobs SET lease_until=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE id=$1",
+      [created.id],
+    );
+    const [first, second] = await Promise.all([
+      jobs.claim(created.id),
+      jobStore(otherConnection).claim(created.id),
+    ]);
+    expect(first).toBeUndefined();
+    expect(second).toBeUndefined();
+    const held = await jobs.find(created.id);
+    expect(held).toMatchObject({
+      status: "needs_reconciliation",
+      attempts: 1,
+      safeError: "provider_outcome_unknown",
+      retryable: false,
+    });
+    releaseProvider();
+    expect(await oldRun).toEqual({ job: held, result: null, executed: true });
+    const row = (
+      await pool.query(
+        "SELECT attempt_token, lease_until FROM adapter_jobs WHERE id=$1",
+        [created.id],
+      )
+    ).rows[0];
+    expect(row).toMatchObject({ attempt_token: null, lease_until: null });
+  } finally {
+    releaseProvider?.();
+    await oldRun?.catch(() => undefined);
+    await otherConnection.end();
+  }
+});
+
 it("persists only an allowlisted invalid-result code through bounded PostgreSQL retries", async () => {
   const marker = "synthetic-private-provider-text";
   let executions = 0;
@@ -2569,7 +2771,7 @@ it("keeps terminal states when a late worker reports out of order", async () => 
 });
 
 it.each(["running", "succeeded", "exhausted", "lost-acknowledgement"])(
-  "fences a delayed provider result after PostgreSQL lease takeover: %s",
+  "fences a delayed non-AI provider result after PostgreSQL lease takeover: %s",
   async (replacement) => {
     const jobs = jobStore(pool);
     const newerConnection = testPool();
@@ -2605,8 +2807,8 @@ it.each(["running", "succeeded", "exhausted", "lost-acknowledgement"])(
     const created = await enqueueAdapterJob(
       jobs,
       registry,
-      "ai",
-      "summarize",
+      "storage",
+      "put",
       input,
       "takeover",
       2,
