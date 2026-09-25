@@ -1,5 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { authorizationStore } from "../../src/authorization.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { testPool } from "../support/database.ts";
 import { requiredCheck } from "../support/required-check.ts";
@@ -138,5 +139,108 @@ test("[F-ROADMAP-02-A] guessed workspace, evidence and staff APIs reveal no othe
     });
   } finally {
     await outsider.close();
+  }
+});
+
+test("[F-ROADMAP-02-D] editor publication role cannot read private member work", async ({
+  page,
+  context,
+  browser,
+}) => {
+  const privateDraft =
+    "Invented member-only draft; an editor has no permission to inspect it.";
+  const privateBytes = Buffer.from(
+    "Invented member-only evidence for the editor isolation check.",
+  );
+  await onboard(page, "explorer");
+  const ownerId = await memberId(context);
+  await page.getByRole("link", { name: "Open lesson" }).click();
+  await page.getByLabel("Your instruction to AI").fill(privateDraft);
+  await page.getByRole("button", { name: "Save draft" }).click();
+  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const uploaded = await page.request.post("/api/evidence", {
+    headers: {
+      Origin: origin,
+      "X-CSRF-Token": csrf,
+      "Content-Type": "text/plain",
+      "X-Evidence-Name": "invented-editor-private.txt",
+      "X-Evidence-Rights": "confirmed",
+      "X-Evidence-Scopes": "private-review",
+    },
+    data: privateBytes,
+  });
+  expect(uploaded.status()).toBe(201);
+  const { id: evidenceId } = (await uploaded.json()) as { id: string };
+  const evidence = evidenceStore(
+    pool,
+    fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!),
+    "test-only-scanner-secret",
+  );
+  expect(await evidence.transitionQuarantine(evidenceId, "clean")).toBe(true);
+  const ownerLink = await page.request.post(
+    `/api/evidence/${evidenceId}/download-link`,
+    { headers: { Origin: origin, "X-CSRF-Token": csrf } },
+  );
+  expect(ownerLink.status()).toBe(200);
+  const { href } = (await ownerLink.json()) as { href: string };
+  expect((await page.request.get(href)).status()).toBe(200);
+
+  const editorToken = randomBytes(32).toString("hex");
+  const editorId = await authorizationStore(pool).provisionStaff(
+    editorToken,
+    "editor",
+    new Date(Date.now() + 86_400_000),
+  );
+  const editor = await browser.newContext({ baseURL: origin });
+  try {
+    await editor.addCookies([
+      {
+        name: "dne_preview",
+        value: editorToken,
+        url: origin,
+        httpOnly: true,
+        sameSite: "Strict",
+      },
+    ]);
+    const editorPage = await editor.newPage();
+    await editorPage.goto("/");
+    await requiredCheck(1, async () => {
+      const role = await pool.query<{ role: string }>(
+        "SELECT role FROM staff_profiles WHERE principal_id=$1",
+        [editorId],
+      );
+      expect(role.rows).toEqual([{ role: "editor" }]);
+      const workspace = await editorPage.request.get(
+        `/api/workspaces/${ownerId}/private`,
+      );
+      expect(workspace.status()).toBe(403);
+      expect(await workspace.json()).toEqual({ error: "forbidden" });
+      expect((await workspace.text()).includes(privateDraft)).toBe(false);
+
+      const editorCsrf = await editorPage
+        .locator('input[name="csrf"]')
+        .first()
+        .inputValue();
+      const noLink = await editorPage.request.post(
+        `/api/evidence/${evidenceId}/download-link`,
+        { headers: { Origin: origin, "X-CSRF-Token": editorCsrf } },
+      );
+      expect(noLink.status()).toBe(403);
+      expect(await noLink.json()).toEqual({ error: "forbidden" });
+      const stolenLink = await editorPage.request.get(href);
+      expect(stolenLink.status()).toBe(403);
+      expect(await stolenLink.json()).toEqual({ error: "forbidden" });
+      expect((await stolenLink.text()).includes(privateBytes.toString())).toBe(
+        false,
+      );
+      expect((await page.request.get(href)).status()).toBe(200);
+      const saved = await page.request.get(
+        `/api/workspaces/${ownerId}/private`,
+      );
+      expect(saved.status()).toBe(200);
+      expect((await saved.json()).records[0].instruction).toBe(privateDraft);
+    });
+  } finally {
+    await editor.close();
   }
 });
