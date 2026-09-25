@@ -75,6 +75,8 @@ function database(...results: unknown[]) {
 
 it("accepts allowlisted text, PDF and PNG evidence with explicit rights and scope", () => {
   expect(validUpload(base)).toBe(true);
+  expect(validUpload({ ...base, revisesId: evidenceId })).toBe(true);
+  expect(validUpload({ ...base, revisesId: "not-a-uuid" })).toBe(false);
   expect(
     validUpload({
       ...base,
@@ -123,6 +125,40 @@ it.each([
   [{ ...base, data: Buffer.from([0]) }, "binary text"],
   [{ ...base, name: "../sample.txt" }, "path"],
   [{ ...base, name: "bad<script>.txt" }, "name"],
+  [
+    {
+      ...base,
+      revisesId: evidenceId,
+      name: "sample.pdf",
+      mediaType: "application/pdf",
+      data: Buffer.from("%PDF-synthetic"),
+    },
+    "revision type",
+  ],
+  [
+    {
+      ...base,
+      revisesId: evidenceId,
+      consent: { ...base.consent, privateReview: false },
+    },
+    "revision review consent",
+  ],
+  [
+    {
+      ...base,
+      revisesId: evidenceId,
+      consent: { ...base.consent, communityPublication: true },
+    },
+    "revision publication",
+  ],
+  [
+    {
+      ...base,
+      revisesId: evidenceId,
+      consent: { ...base.consent, learningCircleId: "group-a" },
+    },
+    "revision circle",
+  ],
   [{ ...base, consent: { ...base.consent, rightsConfirmed: false } }, "rights"],
   [
     {
@@ -366,6 +402,48 @@ it("writes valid uploads without persisting raw content", async () => {
     true,
     false,
     null,
+    null,
+    1,
+  ]);
+});
+
+it("allows only an eligible parent to produce a separately numbered revision", async () => {
+  const owner = { principal_id: evidenceId, workspace_id: evidenceId };
+  const denied = database(owner);
+  const deniedObjects = objectStorage();
+  await expect(
+    evidenceStore(denied.pool, deniedObjects, "secret").upload(token, {
+      ...base,
+      revisesId: evidenceId,
+    }),
+  ).resolves.toEqual({ kind: "denied" });
+  expect(deniedObjects.put).not.toHaveBeenCalled();
+  const allowed = database(owner, { revision_number: 1 });
+  const allowedObjects = objectStorage();
+  await expect(
+    evidenceStore(allowed.pool, allowedObjects, "secret").upload(token, {
+      ...base,
+      revisesId: evidenceId,
+    }),
+  ).resolves.toMatchObject({ kind: "created", state: "pending" });
+  expect(allowedObjects.put).toHaveBeenCalledOnce();
+  const insert = allowed.query.mock.calls.find(([statement]) =>
+    String(statement).includes("INSERT INTO evidence_objects"),
+  );
+  expect((insert as unknown[] | undefined)?.[1]).toEqual([
+    expect.any(String),
+    evidenceId,
+    evidenceId,
+    base.name,
+    base.mediaType,
+    base.data.length,
+    expect.stringMatching(/^[a-f0-9]{64}$/),
+    expect.any(String),
+    true,
+    false,
+    null,
+    evidenceId,
+    2,
   ]);
 });
 

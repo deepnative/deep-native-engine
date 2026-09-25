@@ -9,6 +9,7 @@ import {
   dashboard,
   privateProgressPage,
   evidencePage,
+  evidenceRevisionPage,
   lesson,
   readinessPage,
   offerHypothesesPage,
@@ -569,6 +570,100 @@ export function app(
               "This text sample could not be saved. Check its title and contents.",
             ],
             { name, sample },
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/evidence");
+  });
+  const revisionParent = async (token: string, id: string) =>
+    (await evidence.owned(token)).find(
+      (item) =>
+        item.id === id &&
+        item.mediaType === "text/plain" &&
+        item.quarantineState === "clean" &&
+        item.privateReviewAllowed &&
+        (item.submissionStatus === "queued" ||
+          item.submissionStatus === "reviewed") &&
+        !item.hasRevision &&
+        item.revisionNumber < 20,
+    );
+  app.get("/evidence/:evidenceId/revise", async (req, res) => {
+    const parent = await revisionParent(
+      res.locals.token as string,
+      req.params.evidenceId as string,
+    );
+    if (!parent) {
+      res
+        .status(403)
+        .send(
+          errorPage("Revision unavailable", "This sample cannot be revised."),
+        );
+      return;
+    }
+    res.send(evidenceRevisionPage(parent, res.locals.csrf as string));
+  });
+  app.post("/evidence/:evidenceId/revise", async (req, res) => {
+    const fields = req.body as Fields;
+    const name = typeof fields.name === "string" ? fields.name : "";
+    const sample = typeof fields.sample === "string" ? fields.sample : "";
+    const attempted = { name, sample };
+    const parent = await revisionParent(
+      res.locals.token as string,
+      req.params.evidenceId as string,
+    );
+    if (!parent) {
+      res
+        .status(403)
+        .send(
+          errorPage("Revision unavailable", "This sample cannot be revised."),
+        );
+      return;
+    }
+    if (
+      !name.trim() ||
+      name.length > 200 ||
+      !sample.trim() ||
+      sample.length > 4000 ||
+      fields.rights_confirmed !== "yes" ||
+      fields.private_review_consent !== "yes"
+    ) {
+      res
+        .status(422)
+        .send(
+          evidenceRevisionPage(
+            parent,
+            res.locals.csrf as string,
+            [
+              "Enter invented text and confirm fresh rights and review consent. Nothing was saved.",
+            ],
+            attempted,
+          ),
+        );
+      return;
+    }
+    const result = await evidence.upload(res.locals.token as string, {
+      name,
+      mediaType: "text/plain",
+      data: Buffer.from(sample),
+      revisesId: parent.id,
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    });
+    if (result.kind !== "created") {
+      res
+        .status(result.kind === "invalid" ? 422 : 409)
+        .send(
+          evidenceRevisionPage(
+            parent,
+            res.locals.csrf as string,
+            [
+              "Revision not saved. The original or its eligibility may have changed; refresh your evidence before retrying.",
+            ],
+            attempted,
           ),
         );
       return;

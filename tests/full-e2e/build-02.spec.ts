@@ -79,6 +79,252 @@ async function submittedEvidence(page: Page, context: BrowserContext) {
   };
 }
 
+test("[F-BUILD-02-A] member keeps original and revised evidence separately private", async ({
+  page,
+  context,
+  browser,
+}) => {
+  const outsider = await browser.newContext({ baseURL: origin });
+  const reviewer = await browser.newContext({ baseURL: origin });
+  const originalBytes = `Invented original member sample ${randomBytes(8).toString("hex")}.`;
+  const revisedBytes = `Invented revised member sample ${randomBytes(8).toString("hex")}.`;
+  try {
+    await onboard(page);
+    const ownerId = await memberId(context);
+    const outsiderPage = await outsider.newPage();
+    await onboard(outsiderPage);
+    expect(await memberId(outsider)).not.toBe(ownerId);
+    let originalId = "";
+    await requiredCheck(1, async () => {
+      await page.goto("/evidence");
+      await page.getByLabel("Sample title").fill("original-build02.txt");
+      await page.getByLabel("Invented text sample").fill(originalBytes);
+      await page
+        .getByLabel(
+          "I created this invented sample and have the right to store it.",
+        )
+        .check();
+      await page
+        .getByLabel(
+          "I explicitly allow this sample to be considered for private review",
+          { exact: false },
+        )
+        .check();
+      await page
+        .getByRole("button", { name: "Save private text sample" })
+        .click();
+      const original = await pool.query<{ id: string; storage_key: string }>(
+        `SELECT id,storage_key FROM evidence_objects
+         WHERE owner_principal_id=$1 AND original_name='original-build02.txt'`,
+        [ownerId],
+      );
+      expect(original.rowCount).toBe(1);
+      originalId = original.rows[0]!.id;
+      const storage = fileObjectStorage(
+        process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!,
+      );
+      expect(await storage.get(original.rows[0]!.storage_key)).toEqual(
+        Buffer.from(originalBytes),
+      );
+      const evidence = evidenceStore(pool, storage, "test-only-scanner-secret");
+      expect(await evidence.transitionQuarantine(originalId, "clean")).toBe(
+        true,
+      );
+      await page.reload();
+      await page
+        .getByLabel("No qualified reviewer is assigned", { exact: false })
+        .check();
+      await page
+        .getByRole("button", { name: "Queue for local review consideration" })
+        .click();
+      await expect(
+        page.getByText("Submitted locally", { exact: false }),
+      ).toBeVisible();
+      const outsiderCsrf = await outsiderPage
+        .locator('input[name="csrf"]')
+        .first()
+        .inputValue();
+      const denied = await outsiderPage.request.post(
+        `/api/evidence/${originalId}/download-link`,
+        { headers: { Origin: origin, "X-CSRF-Token": outsiderCsrf } },
+      );
+      expect(denied.status()).toBe(403);
+      expect((await denied.text()).includes(originalBytes)).toBe(false);
+    });
+
+    await requiredCheck(2, async () => {
+      await page
+        .getByRole("link", {
+          name: "Create a new private revision of original-build02.txt",
+        })
+        .click();
+      await expect(
+        page.getByRole("heading", { name: "New private evidence revision" }),
+      ).toBeVisible();
+      await page.getByLabel("Revised sample title").fill("revised-build02.txt");
+      await page
+        .getByRole("textbox", { name: "New invented text", exact: true })
+        .fill(revisedBytes);
+      await page
+        .getByLabel(
+          "I created this new invented text and have the right to store it.",
+        )
+        .check();
+      await page
+        .getByLabel(
+          "I separately allow this revision to be considered for private review",
+          {
+            exact: false,
+          },
+        )
+        .check();
+      await page
+        .getByRole("button", { name: "Save new private revision" })
+        .click();
+      await expect(page).toHaveURL(/\/evidence$/);
+      const rows = await pool.query<{
+        id: string;
+        revision_parent_id: string | null;
+        revision_number: number;
+        quarantine_state: string;
+        storage_key: string;
+      }>(
+        `SELECT id,revision_parent_id,revision_number,quarantine_state,storage_key
+         FROM evidence_objects WHERE owner_principal_id=$1 ORDER BY revision_number`,
+        [ownerId],
+      );
+      expect(rows.rows).toHaveLength(2);
+      expect(rows.rows[0]).toMatchObject({
+        id: originalId,
+        revision_parent_id: null,
+        revision_number: 1,
+        quarantine_state: "clean",
+      });
+      expect(rows.rows[1]).toMatchObject({
+        revision_parent_id: originalId,
+        revision_number: 2,
+        quarantine_state: "pending",
+      });
+      const revisedId = rows.rows[1]!.id;
+      const storage = fileObjectStorage(
+        process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!,
+      );
+      expect(await storage.get(rows.rows[0]!.storage_key)).toEqual(
+        Buffer.from(originalBytes),
+      );
+      expect(await storage.get(rows.rows[1]!.storage_key)).toEqual(
+        Buffer.from(revisedBytes),
+      );
+      await expect(
+        page.getByText(`Private evidence version 2 · revises ${originalId}`, {
+          exact: false,
+        }),
+      ).toBeVisible();
+      const evidence = evidenceStore(pool, storage, "test-only-scanner-secret");
+      expect(
+        await evidence.submitForReview(
+          (await context.cookies()).find(
+            (cookie) => cookie.name === "dne_preview",
+          )!.value,
+          revisedId,
+        ),
+      ).toBe(false);
+      expect(await evidence.transitionQuarantine(revisedId, "clean")).toBe(
+        true,
+      );
+      await page.reload();
+      await page
+        .getByRole("listitem")
+        .filter({ hasText: "revised-build02.txt" })
+        .getByLabel("No qualified reviewer is assigned", { exact: false })
+        .check();
+      await page
+        .getByRole("listitem")
+        .filter({ hasText: "revised-build02.txt" })
+        .getByRole("button", { name: "Queue for local review consideration" })
+        .click();
+      const submissions = await pool.query<{ evidence_id: string; id: string }>(
+        `SELECT evidence_id,id FROM evidence_review_submissions
+         WHERE evidence_id IN ($1,$2) ORDER BY evidence_id`,
+        [originalId, revisedId],
+      );
+      expect(submissions.rowCount).toBe(2);
+      const originalSubmission = submissions.rows.find(
+        (row) => row.evidence_id === originalId,
+      );
+      expect(originalSubmission).toBeDefined();
+
+      const auth = authorizationStore(pool);
+      const expires = new Date(Date.now() + 86_400_000);
+      const adminId = await auth.provisionStaff(
+        randomBytes(32).toString("hex"),
+        "platform_admin",
+        expires,
+      );
+      const reviewerToken = randomBytes(32).toString("hex");
+      const reviewerId = await auth.provisionStaff(
+        reviewerToken,
+        "reviewer",
+        expires,
+      );
+      const assignmentId = await auth.grantAssignment(
+        adminId,
+        reviewerId,
+        ownerId,
+        "reviewer",
+        "original synthetic submission only",
+        expires,
+      );
+      await auth.grantEvidenceReview(
+        adminId,
+        reviewerId,
+        assignmentId,
+        originalSubmission!.id,
+        "original synthetic submission only",
+        expires,
+      );
+      await reviewer.addCookies([
+        {
+          name: "dne_preview",
+          value: reviewerToken,
+          url: origin,
+          httpOnly: true,
+          sameSite: "Strict",
+        },
+      ]);
+      const reviewerPage = await reviewer.newPage();
+      await reviewerPage.goto("/");
+      const reviewerCsrf = await reviewerPage
+        .locator('input[name="csrf"]')
+        .first()
+        .inputValue();
+      const linkFor = (id: string) =>
+        reviewerPage.request.post(`/api/evidence/${id}/download-link`, {
+          headers: { Origin: origin, "X-CSRF-Token": reviewerCsrf },
+        });
+      expect((await linkFor(originalId)).status()).toBe(200);
+      const noRevisionLink = await linkFor(revisedId);
+      expect(noRevisionLink.status()).toBe(403);
+      expect((await noRevisionLink.text()).includes(revisedBytes)).toBe(false);
+      const outsiderCsrf = await outsiderPage
+        .locator('input[name="csrf"]')
+        .first()
+        .inputValue();
+      const outsiderRevision = await outsiderPage.request.post(
+        `/api/evidence/${revisedId}/download-link`,
+        { headers: { Origin: origin, "X-CSRF-Token": outsiderCsrf } },
+      );
+      expect(outsiderRevision.status()).toBe(403);
+      expect((await outsiderRevision.text()).includes(revisedBytes)).toBe(
+        false,
+      );
+    });
+  } finally {
+    await outsider.close();
+    await reviewer.close();
+  }
+});
+
 test("[F-BUILD-02-C] another member and an unassigned coach cannot read submitted evidence", async ({
   page,
   context,

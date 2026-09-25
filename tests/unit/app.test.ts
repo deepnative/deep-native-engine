@@ -1417,6 +1417,9 @@ it("offers a local review queue only for clean, consented, unsubmitted owner evi
       privateReviewRevokedAt: null,
       submissionStatus: null,
       createdAt: new Date(),
+      revisionParentId: null,
+      revisionNumber: 1,
+      hasRevision: false,
     },
     {
       id: "22222222-2222-4222-8222-222222222222",
@@ -1427,6 +1430,9 @@ it("offers a local review queue only for clean, consented, unsubmitted owner evi
       privateReviewRevokedAt: null,
       submissionStatus: null,
       createdAt: new Date(),
+      revisionParentId: null,
+      revisionNumber: 1,
+      hasRevision: false,
     },
     {
       id: "33333333-3333-4333-8333-333333333333",
@@ -1437,6 +1443,9 @@ it("offers a local review queue only for clean, consented, unsubmitted owner evi
       privateReviewRevokedAt: new Date(),
       submissionStatus: null,
       createdAt: new Date(),
+      revisionParentId: null,
+      revisionNumber: 1,
+      hasRevision: false,
     },
     {
       id: "44444444-4444-4444-8444-444444444444",
@@ -1447,6 +1456,9 @@ it("offers a local review queue only for clean, consented, unsubmitted owner evi
       privateReviewRevokedAt: null,
       submissionStatus: "queued",
       createdAt: new Date(),
+      revisionParentId: null,
+      revisionNumber: 1,
+      hasRevision: false,
     },
   ]);
   const response = await agent.get("/evidence").set("Host", host).expect(200);
@@ -1481,6 +1493,90 @@ it("requires acknowledgement and current owner eligibility before queuing local 
     id,
   );
 });
+it("keeps a failed private evidence revision editable and never copies consent or reviewer access", async () => {
+  const files = evidenceStorage();
+  const { agent, csrf } = await client(files);
+  active();
+  const id = "11111111-1111-4111-8111-111111111111";
+  const parent = {
+    id,
+    name: "original.txt",
+    mediaType: "text/plain" as const,
+    quarantineState: "clean" as const,
+    privateReviewAllowed: true,
+    privateReviewRevokedAt: null,
+    submissionStatus: "queued" as const,
+    createdAt: new Date(),
+    revisionParentId: null,
+    revisionNumber: 1,
+    hasRevision: false,
+  };
+  files.owned.mockResolvedValue([parent]);
+  const path = `/evidence/${id}/revise`;
+  await agent
+    .get(path)
+    .set("Host", host)
+    .expect(200)
+    .expect(/version 1/);
+  files.owned.mockResolvedValue([{ ...parent, submissionStatus: "reviewed" }]);
+  await agent.get(path).set("Host", host).expect(200);
+  files.owned.mockResolvedValue([parent]);
+  const post = (fields: Record<string, string>) =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  const fields = {
+    name: "revision.txt",
+    sample: "Invented <private> revision",
+    rights_confirmed: "yes",
+    private_review_consent: "yes",
+  };
+  await post({ rights_confirmed: "yes", private_review_consent: "yes" })
+    .expect(422)
+    .expect(/Enter invented text and confirm fresh rights/);
+  await post({ ...fields, private_review_consent: "" })
+    .expect(422)
+    .expect(/Invented &lt;private&gt; revision/);
+  expect(files.upload).not.toHaveBeenCalled();
+  files.upload.mockResolvedValueOnce({ kind: "denied" });
+  await post(fields)
+    .expect(409)
+    .expect(/Invented &lt;private&gt; revision/);
+  files.upload.mockResolvedValueOnce({ kind: "invalid" });
+  await post(fields).expect(422);
+  files.upload.mockResolvedValueOnce({ kind: "created", id, state: "pending" });
+  await post(fields).expect(303).expect("Location", "/evidence");
+  expect(files.upload).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({
+      revisesId: id,
+      name: "revision.txt",
+      data: Buffer.from(fields.sample),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    }),
+  );
+  files.owned.mockResolvedValue([
+    {
+      ...parent,
+      id: "22222222-2222-4222-8222-222222222222",
+      revisionParentId: id,
+      revisionNumber: 2,
+      submissionStatus: null,
+    },
+  ]);
+  const history = await agent.get("/evidence").set("Host", host).expect(200);
+  expect(history.text).toContain(`version 2 · revises ${id}`);
+  files.owned.mockResolvedValue([]);
+  await agent.get(path).set("Host", host).expect(403);
+  await post(fields).expect(403);
+});
 it("keeps evidence form writes owner-scoped, confirmed and truthful", async () => {
   const files = evidenceStorage();
   const { agent, csrf } = await client(files);
@@ -1496,6 +1592,9 @@ it("keeps evidence form writes owner-scoped, confirmed and truthful", async () =
       privateReviewRevokedAt: null,
       submissionStatus: "queued",
       createdAt: new Date(),
+      revisionParentId: null,
+      revisionNumber: 1,
+      hasRevision: false,
     },
     {
       id: "22222222-2222-4222-8222-222222222222",
@@ -1506,6 +1605,9 @@ it("keeps evidence form writes owner-scoped, confirmed and truthful", async () =
       privateReviewRevokedAt: new Date(),
       submissionStatus: "withdrawn",
       createdAt: new Date(),
+      revisionParentId: null,
+      revisionNumber: 1,
+      hasRevision: false,
     },
     {
       id: "33333333-3333-4333-8333-333333333333",
@@ -1516,6 +1618,9 @@ it("keeps evidence form writes owner-scoped, confirmed and truthful", async () =
       privateReviewRevokedAt: null,
       submissionStatus: null,
       createdAt: new Date(),
+      revisionParentId: null,
+      revisionNumber: 1,
+      hasRevision: false,
     },
     {
       id: "44444444-4444-4444-8444-444444444444",
@@ -1526,6 +1631,9 @@ it("keeps evidence form writes owner-scoped, confirmed and truthful", async () =
       privateReviewRevokedAt: null,
       submissionStatus: "reviewed",
       createdAt: new Date(),
+      revisionParentId: null,
+      revisionNumber: 1,
+      hasRevision: false,
     },
   ]);
   const page = await agent.get("/evidence").set("Host", host).expect(200);
