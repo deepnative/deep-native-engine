@@ -2,7 +2,11 @@ import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { randomBytes } from "node:crypto";
 import { migrate, store } from "../../src/store.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
-import { billingMonth } from "../../src/offers.ts";
+import {
+  COACHING_OFFERS,
+  billingMonth,
+  plannedPeriods,
+} from "../../src/offers.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
@@ -397,6 +401,135 @@ it("rolls back a failed writeoff event without changing balances", async () => {
   ).toBe(0);
   expect(await ledger.adjust(owner, grant, 1, "failed-adjust")).toBe(grant);
 });
+
+it.each([
+  ["2026-01-31", "2026-02-28", "2027-01-31"],
+  ["2028-01-31", "2028-02-29", "2029-01-31"],
+] as const)(
+  "reconciles a manually seeded pilot plus continuation year from %s without a second annual bundle",
+  async (activationDate, firstEnd, yearEnd) => {
+    const owner = await member("professional");
+    const pilot = COACHING_OFFERS.find((offer) => offer.id === "pilot")!;
+    const continuation = COACHING_OFFERS.find(
+      (offer) => offer.id === "continuation",
+    )!;
+    expect(pilot.state).toBe("hypothesis");
+    expect(continuation.livePurchasable).toBe(false);
+    expect(pilot.priceCents + continuation.priceCents).toBe(1_200_000);
+    expect(pilot.internalOnboardingReserve).toEqual({
+      coachMinutes: 60,
+      supportMinutes: 30,
+    });
+    const periods = [
+      ...plannedPeriods("pilot", activationDate),
+      ...plannedPeriods("continuation", activationDate),
+    ];
+    expect(periods).toHaveLength(12);
+    const fields = [
+      ["coach_minutes", "coachMinutes"],
+      ["review_minutes", "reviewMinutes"],
+      ["support_minutes", "supportMinutes"],
+    ] as const;
+    const clocked = syntheticLedger(
+      pool,
+      () => new Date(`${activationDate}T00:00:00.000Z`),
+    );
+    let currentGrant = "";
+    let futureGrant = "";
+    let firstKey = "";
+    for (const [index, period] of periods.entries()) {
+      expect(period).toMatchObject({
+        startsOn: billingMonth(activationDate, index),
+        endsOn: billingMonth(activationDate, index + 1),
+        state: "planned-only",
+      });
+      const window = {
+        startsAt: `${period.startsOn}T00:00:00.000Z`,
+        expiresAt: `${period.endsOn}T00:00:00.000Z`,
+      };
+      for (const [category, field] of fields) {
+        const quantity = period.monthly[field];
+        const key = `fixture-${owner}-${activationDate}-${index}-${category}`;
+        const grant = await clocked.grant(
+          owner,
+          category,
+          quantity,
+          key,
+          window,
+        );
+        expect(
+          await clocked.grant(owner, category, quantity, key, window),
+        ).toBe(grant);
+        if (index === 0 && category === "coach_minutes") {
+          currentGrant = grant;
+          firstKey = key;
+        }
+        if (index === 1 && category === "coach_minutes") futureGrant = grant;
+      }
+    }
+    await expect(
+      clocked.grant(owner, "coach_minutes", 61, firstKey, {
+        startsAt: `${periods[0]!.startsOn}T00:00:00.000Z`,
+        expiresAt: `${periods[0]!.endsOn}T00:00:00.000Z`,
+      }),
+    ).rejects.toMatchObject({ code: "idempotency_conflict" });
+    await expect(
+      clocked.reserve(owner, futureGrant, 1, `early-${activationDate}`),
+    ).rejects.toMatchObject({ code: "unavailable" });
+    expect(
+      await clocked.reserve(
+        owner,
+        currentGrant,
+        1,
+        `current-${activationDate}`,
+      ),
+    ).toMatch(/^[0-9a-f-]{36}$/);
+    const totals = await pool.query<{
+      category: string;
+      months: number;
+      minutes: number;
+    }>(
+      `SELECT category,count(*)::integer AS months,sum(quantity)::integer AS minutes
+       FROM synthetic_entitlement_grants WHERE member_id=$1
+       GROUP BY category ORDER BY category`,
+      [owner],
+    );
+    expect(totals.rows).toEqual([
+      { category: "coach_minutes", months: 12, minutes: 720 },
+      { category: "review_minutes", months: 12, minutes: 420 },
+      { category: "support_minutes", months: 12, minutes: 420 },
+    ]);
+    const records = await pool.query<{
+      category: string;
+      starts_at: Date;
+      expires_at: Date;
+    }>(
+      `SELECT category,starts_at,expires_at FROM synthetic_entitlement_grants
+       WHERE member_id=$1 ORDER BY starts_at,category`,
+      [owner],
+    );
+    expect(records.rows).toHaveLength(36);
+    for (const [index, row] of records.rows.entries()) {
+      const period = periods[Math.floor(index / 3)]!;
+      expect(row.starts_at.toISOString()).toBe(
+        `${period.startsOn}T00:00:00.000Z`,
+      );
+      expect(row.expires_at.toISOString()).toBe(
+        `${period.endsOn}T00:00:00.000Z`,
+      );
+    }
+    expect(
+      (
+        await pool.query(
+          "SELECT count(*)::integer AS count FROM synthetic_entitlement_events WHERE member_id=$1 AND operation='grant'",
+          [owner],
+        )
+      ).rows[0].count,
+    ).toBe(36);
+    expect(periods[0]!.endsOn).toBe(firstEnd);
+    expect(periods.at(-1)!.endsOn).toBe(yearEnd);
+  },
+);
 
 it("serializes two last-unit reservations and makes release available once", async () => {
   const owner = await member("explorer");
