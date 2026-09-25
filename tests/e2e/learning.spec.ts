@@ -1060,7 +1060,7 @@ test("[L18] explicit consent, quarantine and fresh authorization protect private
   expect((await session(context)).id).toBeTruthy();
 });
 
-test("[L19] reviewer downloads stop immediately after grant revocation and scopes stay separate", async ({
+test("[L19] only submitted evidence reaches the reviewer and revocation stops downloads", async ({
   page,
   context,
   browser,
@@ -1108,12 +1108,37 @@ test("[L19] reviewer downloads stop immediately after grant revocation and scope
     await useToken(reviewerPage.context(), reviewer.token);
     await reviewerPage.goto("/");
     const reviewerFormCsrf = await csrfToken(reviewerPage);
+    const ownerLink = await page.request.post(
+      `/api/evidence/${id}/download-link`,
+      { headers: { Origin: origin, "X-CSRF-Token": csrf } },
+    );
+    expect(ownerLink.status()).toBe(200);
+    const preSubmission = await reviewerPage.request.post(
+      `/api/evidence/${id}/download-link`,
+      { headers: { Origin: origin, "X-CSRF-Token": reviewerFormCsrf } },
+    );
+    expect(preSubmission.status()).toBe(403);
+    expect(await preSubmission.json()).toEqual({ error: "forbidden" });
+    const guessedLink = await reviewerPage.request.get(
+      (await ownerLink.json()).href as string,
+    );
+    expect(guessedLink.status()).toBe(403);
+    expect(await guessedLink.json()).toEqual({ error: "forbidden" });
+    const submitted = await page.request.post(`/api/evidence/${id}/review`, {
+      headers: { Origin: origin, "X-CSRF-Token": csrf },
+    });
+    expect(submitted.status()).toBe(204);
     const issued = await reviewerPage.request.post(
       `/api/evidence/${id}/download-link`,
       { headers: { Origin: origin, "X-CSRF-Token": reviewerFormCsrf } },
     );
     expect(issued.status()).toBe(200);
     const link = (await issued.json()).href as string;
+    const downloaded = await reviewerPage.request.get(link);
+    expect(downloaded.status()).toBe(200);
+    expect(await downloaded.body()).toEqual(
+      Buffer.from("%PDF-synthetic-review"),
+    );
     expect(await access.revokeAssignment(admin.id, grant)).toBe(true);
     expect((await reviewerPage.request.get(link)).status()).toBe(403);
   } finally {

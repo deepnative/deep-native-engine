@@ -245,7 +245,12 @@ export function evidenceStore(
          FROM evidence_objects e CROSS JOIN identity i
          WHERE e.id=$2 AND e.quarantine_state='clean' AND (
            (i.kind='member' AND i.id=e.owner_principal_id)
-           OR (i.kind='staff' AND e.private_review_allowed AND EXISTS(
+           OR (i.kind='staff' AND e.private_review_allowed
+             AND (i.role<>'reviewer' OR EXISTS(
+               SELECT 1 FROM evidence_review_submissions submission
+               WHERE submission.evidence_id=e.id
+                 AND submission.status IN ('queued','reviewed')
+             )) AND EXISTS(
              SELECT 1 FROM assignment_grants g
              WHERE g.staff_id=i.id AND g.staff_role=i.role
                AND g.workspace_id=e.workspace_id AND g.revoked_at IS NULL

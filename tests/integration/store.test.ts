@@ -1706,6 +1706,7 @@ it("rechecks authorization and quarantine for every short-lived evidence downloa
     "review synthetic evidence",
     new Date(Date.now() + 60_000),
   );
+  expect(await evidence.submitForReview(owner.token, created.id)).toBe(true);
   const reviewerLink = await evidence.issueDownload(reviewer.token, created.id);
   expect(reviewerLink.kind).toBe("issued");
   if (reviewerLink.kind !== "issued") throw new Error("link not issued");
@@ -1742,6 +1743,7 @@ it("rechecks authorization and quarantine for every short-lived evidence downloa
 it("keeps issued evidence links bound to one record and current workspace grants", async () => {
   const first = await member(),
     second = await member(),
+    unassigned = await member(),
     admin = await staff("platform_admin"),
     reviewer = await staff("reviewer"),
     access = authorizationStore(pool),
@@ -1750,7 +1752,7 @@ it("keeps issued evidence links bound to one record and current workspace grants
       fileObjectStorage(privateStorageRoot),
       "integration-secret",
     );
-  async function cleanSubmission(token: string, text: string) {
+  async function cleanSubmission(token: string, text: string, submit = true) {
     const uploaded = await evidence.upload(token, {
       name: "private.txt",
       mediaType: "text/plain",
@@ -1765,7 +1767,8 @@ it("keeps issued evidence links bound to one record and current workspace grants
     expect(await evidence.transitionQuarantine(uploaded.id, "clean")).toBe(
       true,
     );
-    expect(await evidence.submitForReview(token, uploaded.id)).toBe(true);
+    if (submit)
+      expect(await evidence.submitForReview(token, uploaded.id)).toBe(true);
     return uploaded.id;
   }
   const firstId = await cleanSubmission(
@@ -1775,6 +1778,15 @@ it("keeps issued evidence links bound to one record and current workspace grants
   const secondId = await cleanSubmission(
     second.token,
     "Second invented private note",
+  );
+  const draftId = await cleanSubmission(
+    first.token,
+    "Unsubmitted invented private note",
+    false,
+  );
+  const unassignedId = await cleanSubmission(
+    unassigned.token,
+    "Third member private note",
   );
   const firstGrant = await access.grantAssignment(
     admin.id,
@@ -1792,6 +1804,41 @@ it("keeps issued evidence links bound to one record and current workspace grants
     "second review",
     new Date(Date.now() + 60_000),
   );
+  const ownerDraftLink = await evidence.issueDownload(first.token, draftId);
+  if (ownerDraftLink.kind !== "issued")
+    throw new Error("owner link not issued");
+  await expect(
+    evidence.download(first.token, draftId, ownerDraftLink.capability),
+  ).resolves.toMatchObject({ kind: "allowed" });
+  await expect(
+    evidence.issueDownload(reviewer.token, draftId),
+  ).resolves.toEqual({
+    kind: "denied",
+  });
+  await expect(
+    evidence.download(reviewer.token, draftId, ownerDraftLink.capability),
+  ).resolves.toEqual({ kind: "denied" });
+  await expect(
+    evidence.issueDownload(reviewer.token, unassignedId),
+  ).resolves.toEqual({ kind: "denied" });
+  expect(await evidence.submitForReview(first.token, draftId)).toBe(true);
+  const draftLink = await evidence.issueDownload(reviewer.token, draftId);
+  if (draftLink.kind !== "issued") throw new Error("reviewer link not issued");
+  await expect(
+    evidence.download(reviewer.token, draftId, draftLink.capability),
+  ).resolves.toMatchObject({ kind: "allowed" });
+  await pool.query(
+    "UPDATE evidence_review_submissions SET status='withdrawn' WHERE evidence_id=$1",
+    [draftId],
+  );
+  await expect(
+    evidence.issueDownload(reviewer.token, draftId),
+  ).resolves.toEqual({
+    kind: "denied",
+  });
+  await expect(
+    evidence.download(reviewer.token, draftId, draftLink.capability),
+  ).resolves.toEqual({ kind: "denied" });
   const firstLink = await evidence.issueDownload(reviewer.token, firstId);
   const secondLink = await evidence.issueDownload(reviewer.token, secondId);
   if (firstLink.kind !== "issued" || secondLink.kind !== "issued")
