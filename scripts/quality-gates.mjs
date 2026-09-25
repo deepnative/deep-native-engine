@@ -353,6 +353,7 @@ export function assertProvisionalReleaseJourneys(register, report) {
     "F-ECO-04-A",
     "F-ECO-06-A",
     "F-BUILD-08-B",
+    "F-ROADMAP-01-B",
   ];
   const cases = register.fullMvp.flatMap((family) =>
     family.cases.map((test) => ({
