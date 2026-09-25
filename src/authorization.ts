@@ -338,7 +338,7 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
                SELECT 'assignment',NULL::uuid,g.purpose
                FROM identity i JOIN assignment_grants g
                  ON g.staff_id=i.id AND g.staff_role=i.role
-               WHERE i.kind='staff' AND g.workspace_id=$2
+               WHERE i.kind='staff' AND i.role='coach' AND g.workspace_id=$2
                  AND g.revoked_at IS NULL AND g.starts_at<=CURRENT_TIMESTAMP
                  AND g.expires_at>CURRENT_TIMESTAMP
                UNION ALL

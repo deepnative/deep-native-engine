@@ -472,7 +472,7 @@ def verify_application(root):
     run_application(root)
     require(output.is_file(), "Application verification report missing")
     report = json.loads(output.read_text())
-    require(report["exitStatus"] == 0 and report["scope"] == "initial-learning-v25", "Application verification failed or wrong scope")
+    require(report["exitStatus"] == 0 and report["scope"] == "initial-learning-v26", "Application verification failed or wrong scope")
     require(report["revision"] == before and state(root) == before, "Application verification revision changed")
     require(report.get("commands") and report["commands"][0]["command"] == "node scripts/check-installed-deps.mjs"
             and report["commands"][0]["exitStatus"] == 0, "Installed dependency prerequisite missing or failed")
@@ -489,7 +489,7 @@ def verify_application(root):
 
 
 def verify(root):
-    report = {"scope": "repository-and-initial-learning-v25", "application_status": "not-verified",
+    report = {"scope": "repository-and-initial-learning-v26", "application_status": "not-verified",
               "application_unit_coverage": None, "application_e2e_journey_coverage": None,
               "timestamp_utc": datetime.now(timezone.utc).isoformat(),
               "python": platform.python_version(), "platform": platform.platform(),

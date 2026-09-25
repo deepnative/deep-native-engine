@@ -2317,24 +2317,34 @@ it("enforces assignment roles, expiry and revocation without role self-escalatio
   ).resolves.toMatchObject({ kind: "allowed", via: "assignment" });
   await expect(
     access.readWorkspace(reviewer.token, owner.learner.id),
-  ).resolves.toMatchObject({ kind: "allowed", via: "assignment" });
+  ).resolves.toEqual({ kind: "denied" });
+  await expect(
+    access.readWorkspace(
+      reviewer.token,
+      owner.learner.id,
+      "review assigned lesson",
+    ),
+  ).resolves.toEqual({ kind: "denied" });
   await pool.query(
     `UPDATE assignment_grants
      SET starts_at=CURRENT_TIMESTAMP+INTERVAL '1 hour',
          expires_at=CURRENT_TIMESTAMP+INTERVAL '2 hours'
-     WHERE staff_id=$1`,
-    [reviewer.id],
+     WHERE id=$1`,
+    [coachGrant],
   );
   await expect(
-    access.readWorkspace(reviewer.token, owner.learner.id),
+    access.readWorkspace(coach.token, owner.learner.id),
   ).resolves.toEqual({ kind: "denied" });
   await pool.query(
     `UPDATE assignment_grants
      SET starts_at=CURRENT_TIMESTAMP-INTERVAL '1 hour',
          expires_at=CURRENT_TIMESTAMP+INTERVAL '1 hour'
-     WHERE staff_id=$1`,
-    [reviewer.id],
+     WHERE id=$1`,
+    [coachGrant],
   );
+  await expect(
+    access.readWorkspace(coach.token, owner.learner.id),
+  ).resolves.toMatchObject({ kind: "allowed", via: "assignment" });
   for (const denied of [
     editor.token,
     moderator.token,
