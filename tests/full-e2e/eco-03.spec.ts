@@ -211,6 +211,8 @@ test("[F-ECO-03-A] changed goal preserves the owner's private versioned evidence
 
 test("[F-ECO-03-B] returning member resumes old work and sees only new-goal choices", async ({
   page,
+  context,
+  browser,
 }, info) => {
   const desktop = info.project.name === "desktop-chromium";
   const oldId = desktop ? "ECB-311" : "ECB-312";
@@ -225,42 +227,75 @@ test("[F-ECO-03-B] returning member resumes old work and sees only new-goal choi
   const oldAttempt = await chooseAndStart(page, oldTitle);
   await saveDraft(page, response);
   await changeGoal(page, "everyday");
+  const previewCookie = (await context.cookies()).find(
+    (cookie) => cookie.name === "dne_preview",
+  );
+  expect(previewCookie).toBeDefined();
+  expect(previewCookie!.expires).toBeGreaterThan(Date.now() / 1000);
+  let returningContext: BrowserContext | undefined;
+  let returningPage: Page | undefined;
+  try {
+    await requiredCheck(1, async () => {
+      // A new browser context represents a later return with only the existing,
+      // unexpired member session. No elapsed clock time is simulated.
+      await context.close();
+      returningContext = await browser.newContext({ baseURL: origin });
+      await returningContext.addCookies([previewCookie!]);
+      returningPage = await returningContext.newPage();
+      await returningPage.goto("/assignments/attempts");
+      await expect(
+        returningPage.getByRole("link", { name: oldTitle }),
+      ).toBeVisible();
+      await returningPage.getByRole("link", { name: oldTitle }).click();
+      await expect(returningPage).toHaveURL(
+        new RegExp(`/assignments/attempts/${oldAttempt}$`),
+      );
+      await expect(returningPage.getByText(response)).toBeVisible();
+      await expect(
+        returningPage.getByText("Assignment version 1", { exact: false }),
+      ).toBeVisible();
+      await expect(
+        returningPage.getByText("cannot be edited", { exact: false }),
+      ).toBeVisible();
 
-  await requiredCheck(1, async () => {
-    await page.reload();
-    await page.goto("/assignments/attempts");
-    await expect(page.getByRole("link", { name: oldTitle })).toBeVisible();
-    await page.getByRole("link", { name: oldTitle }).click();
-    await expect(page.getByText(response)).toBeVisible();
-    await expect(
-      page.getByText("Assignment version 1", { exact: false }),
-    ).toBeVisible();
-    await expect(
-      page.getByText("cannot be edited", { exact: false }),
-    ).toBeVisible();
-  });
-
-  await requiredCheck(2, async () => {
-    await page.goto("/learn");
-    const choices = page.getByRole("region", {
-      name: "Choose a practice assignment",
+      const outsider = await browser.newContext({ baseURL: origin });
+      try {
+        const outsiderPage = await outsider.newPage();
+        await onboard(outsiderPage, "everyday");
+        await outsiderPage.goto(`/assignments/attempts/${oldAttempt}`);
+        await expect(
+          outsiderPage.getByRole("heading", { name: "Attempt unavailable" }),
+        ).toBeVisible();
+        await expect(outsiderPage.getByText(response)).toHaveCount(0);
+      } finally {
+        await outsider.close();
+      }
     });
-    await expect(
-      choices.getByRole("button", { name: `Choose ${oldTitle}` }),
-    ).toHaveCount(0);
-    await expect(
-      choices.getByRole("button", { name: `Choose ${newTitle}` }),
-    ).toBeVisible();
-    const newAttempt = await chooseAndStart(page, newTitle);
-    expect(newAttempt).not.toBe(oldAttempt);
-    const retained = await pool.query(
-      "SELECT content_id,content_version,response FROM assignment_attempts WHERE id=$1",
-      [oldAttempt],
-    );
-    expect(retained.rows).toMatchObject([
-      { content_id: oldId, content_version: 1, response },
-    ]);
-  });
+
+    await requiredCheck(2, async () => {
+      await returningPage!.goto("/learn");
+      const choices = returningPage!.getByRole("region", {
+        name: "Choose a practice assignment",
+      });
+      await expect(
+        choices.getByRole("button", { name: `Choose ${oldTitle}` }),
+      ).toHaveCount(0);
+      await expect(
+        choices.getByRole("button", { name: `Choose ${newTitle}` }),
+      ).toBeVisible();
+      const newAttempt = await chooseAndStart(returningPage!, newTitle);
+      expect(newAttempt).not.toBe(oldAttempt);
+      const retained = await pool.query(
+        "SELECT content_id,content_version,response FROM assignment_attempts WHERE id=$1",
+        [oldAttempt],
+      );
+      expect(retained.rows).toMatchObject([
+        { content_id: oldId, content_version: 1, response },
+      ]);
+    });
+  } finally {
+    await returningContext?.close();
+  }
 });
 
 test("[F-ECO-03-C] empty new-goal path and failed save give an honest recovery", async ({
