@@ -271,6 +271,9 @@ function evidenceStorage() {
   return {
     ...disabledEvidenceStore(),
     owned: vi.fn<EvidenceStore["owned"]>().mockResolvedValue([]),
+    exportOwned: vi
+      .fn<EvidenceStore["exportOwned"]>()
+      .mockResolvedValue({ kind: "denied" }),
     upload: vi.fn<EvidenceStore["upload"]>().mockResolvedValue({
       kind: "denied",
     }),
@@ -360,6 +363,40 @@ async function client(evidence?: EvidenceStore) {
 function active() {
   db.session.mockResolvedValue({ kind: "active", learner: member });
 }
+it("serves only a bounded private evidence export and explains safe failures", async () => {
+  const files = evidenceStorage();
+  const { agent } = await client(files);
+  await agent.get("/api/evidence/export").set("Host", host).expect(403);
+  files.exportOwned.mockResolvedValueOnce({ kind: "limit" });
+  const limited = await agent
+    .get("/api/evidence/export")
+    .set("Host", host)
+    .expect(413);
+  expect(limited.body.message).toContain("20 samples and 4 MiB");
+  files.exportOwned.mockResolvedValueOnce({ kind: "unavailable" });
+  await agent
+    .get("/api/evidence/export")
+    .set("Host", host)
+    .expect(503, { error: "export_unavailable" });
+  files.exportOwned.mockResolvedValueOnce({
+    kind: "ready",
+    version: "local-evidence-v1",
+    items: [],
+  });
+  const ready = await agent
+    .get("/api/evidence/export")
+    .set("Host", host)
+    .expect(200);
+  expect(ready.body).toEqual({
+    kind: "ready",
+    version: "local-evidence-v1",
+    items: [],
+  });
+  expect(ready.headers["cache-control"]).toBe("no-store");
+  expect(ready.headers["content-disposition"]).toContain(
+    "deep-native-evidence.json",
+  );
+});
 it("serves the local welcome, stylesheet and safe security headers", async () => {
   const { agent } = await client();
   const res = await agent

@@ -1662,6 +1662,70 @@ it("keeps evidence private through consent, quarantine and review eligibility", 
   ).toBe("1");
   expect((await readdir(privateStorageRoot)).length).toBe(2);
 });
+it("exports only current owner evidence and withholds unsafe or deleted source bytes", async () => {
+  const owner = await member();
+  const outsider = await member();
+  const evidence = evidenceStore(
+    pool,
+    fileObjectStorage(privateStorageRoot),
+    "integration-secret",
+  );
+  const consent = {
+    rightsConfirmed: true,
+    privateReview: true,
+    communityPublication: false,
+  };
+  const clean = await evidence.upload(owner.token, {
+    name: "export-clean.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Owned invented export data"),
+    consent,
+  });
+  const unsafe = await evidence.upload(owner.token, {
+    name: "export-unsafe.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Unsafe invented export data"),
+    consent,
+  });
+  expect(clean.kind).toBe("created");
+  expect(unsafe.kind).toBe("created");
+  if (clean.kind !== "created" || unsafe.kind !== "created") return;
+  expect(await evidence.transitionQuarantine(clean.id, "clean")).toBe(true);
+  expect(await evidence.transitionQuarantine(unsafe.id, "rejected")).toBe(true);
+  expect(await evidence.exportOwned(outsider.token)).toEqual({
+    kind: "ready",
+    version: "local-evidence-v1",
+    items: [],
+  });
+  const first = await evidence.exportOwned(owner.token);
+  expect(first.kind).toBe("ready");
+  if (first.kind !== "ready") return;
+  expect(first.items.find((item) => item.id === clean.id)).toMatchObject({
+    quarantineState: "clean",
+    sourceBase64: Buffer.from("Owned invented export data").toString("base64"),
+  });
+  expect(first.items.find((item) => item.id === unsafe.id)).toMatchObject({
+    quarantineState: "rejected",
+    sourceBase64: null,
+  });
+  expect(JSON.stringify(first)).not.toContain("storageKey");
+  expect(await evidence.revokePrivateReview(owner.token, clean.id)).toBe(true);
+  const revoked = await evidence.exportOwned(owner.token);
+  expect(revoked.kind).toBe("ready");
+  if (revoked.kind !== "ready") return;
+  expect(revoked.items.find((item) => item.id === clean.id)).toMatchObject({
+    privateReviewAllowed: false,
+  });
+  expect(await evidence.remove(owner.token, clean.id)).toBe(true);
+  expect(await evidence.exportOwned(owner.token)).toMatchObject({
+    items: [{ id: unsafe.id, sourceBase64: null }],
+  });
+  await pool.query(
+    "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE token_hash=$1",
+    [hash(owner.token)],
+  );
+  expect(await evidence.exportOwned(owner.token)).toEqual({ kind: "denied" });
+});
 
 it("lets only the member revoke private-review consent while retaining private evidence", async () => {
   const owner = await member();

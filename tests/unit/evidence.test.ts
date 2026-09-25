@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import type { Pool } from "pg";
 import {
   MAX_EVIDENCE_BYTES,
@@ -168,6 +169,9 @@ it("stores opaque objects privately and removes them idempotently", async () => 
 it("fails closed when evidence storage is not configured", async () => {
   const disabled = disabledEvidenceStore();
   await expect(disabled.owned(token)).resolves.toEqual([]);
+  await expect(disabled.exportOwned(token)).resolves.toEqual({
+    kind: "denied",
+  });
   await expect(disabled.upload(token, base)).resolves.toEqual({
     kind: "denied",
   });
@@ -219,6 +223,118 @@ it("lists only valid member-owned evidence metadata", async () => {
     expect.stringContaining("p.kind='member'"),
     [expect.stringMatching(/^[a-f0-9]{64}$/)],
   );
+});
+it("exports bounded owned clean bytes and only metadata for unsafe samples", async () => {
+  const data = Buffer.from("Synthetic evidence");
+  const row = {
+    id: evidenceId,
+    name: "sample.txt",
+    mediaType: "text/plain",
+    quarantineState: "clean",
+    privateReviewAllowed: false,
+    privateReviewRevokedAt: new Date("2026-09-25"),
+    createdAt: new Date("2026-09-24"),
+    byteSize: data.length,
+    sha256: createHash("sha256").update(data).digest("hex"),
+    storageKey,
+  };
+  const db = database({ id: evidenceId }, [
+    row,
+    {
+      ...row,
+      id: "33333333-3333-4333-8333-333333333333",
+      quarantineState: "pending",
+    },
+  ]);
+  const objects = objectStorage();
+  const result = await evidenceStore(db.pool, objects, "secret").exportOwned(
+    token,
+  );
+  expect(result).toMatchObject({
+    kind: "ready",
+    version: "local-evidence-v1",
+    items: [
+      { id: evidenceId, sourceBase64: data.toString("base64") },
+      { quarantineState: "pending", sourceBase64: null },
+    ],
+  });
+  expect(JSON.stringify(result)).not.toContain(storageKey);
+  expect(objects.get).toHaveBeenCalledTimes(1);
+  expect(db.query).toHaveBeenCalledWith("COMMIT");
+  expect(db.client.release).toHaveBeenCalledTimes(1);
+});
+it("denies invalid or expired export identities and fails closed at count and byte limits", async () => {
+  const invalid = database();
+  await expect(
+    evidenceStore(invalid.pool, objectStorage(), "secret").exportOwned("bad"),
+  ).resolves.toEqual({ kind: "denied" });
+  expect(invalid.connect).not.toHaveBeenCalled();
+  const expired = database();
+  await expect(
+    evidenceStore(expired.pool, objectStorage(), "secret").exportOwned(token),
+  ).resolves.toEqual({ kind: "denied" });
+  expect(expired.query).toHaveBeenCalledWith("ROLLBACK");
+  const row = {
+    id: evidenceId,
+    name: "sample.txt",
+    mediaType: "text/plain",
+    quarantineState: "clean",
+    privateReviewAllowed: true,
+    privateReviewRevokedAt: null,
+    createdAt: new Date(),
+    byteSize: 1,
+    sha256: "a".repeat(64),
+    storageKey,
+  };
+  const many = database(
+    { id: evidenceId },
+    Array.from({ length: 21 }, () => row),
+  );
+  await expect(
+    evidenceStore(many.pool, objectStorage(), "secret").exportOwned(token),
+  ).resolves.toEqual({ kind: "limit" });
+  const large = database({ id: evidenceId }, [
+    { ...row, byteSize: 5 * 1024 * 1024 },
+  ]);
+  await expect(
+    evidenceStore(large.pool, objectStorage(), "secret").exportOwned(token),
+  ).resolves.toEqual({ kind: "limit" });
+});
+it("withholds the entire export if a source is corrupt or storage fails", async () => {
+  const row = {
+    id: evidenceId,
+    name: "sample.txt",
+    mediaType: "text/plain",
+    quarantineState: "clean",
+    privateReviewAllowed: true,
+    privateReviewRevokedAt: null,
+    createdAt: new Date(),
+    byteSize: 1,
+    sha256: "a".repeat(64),
+    storageKey,
+  };
+  const corrupt = database({ id: evidenceId }, [row]);
+  await expect(
+    evidenceStore(corrupt.pool, objectStorage(), "secret").exportOwned(token),
+  ).resolves.toEqual({ kind: "unavailable" });
+  expect(corrupt.query).toHaveBeenCalledWith("ROLLBACK");
+  const missing = database({ id: evidenceId }, [row]);
+  const objects = objectStorage();
+  objects.get.mockRejectedValueOnce(new Error("private storage detail"));
+  await expect(
+    evidenceStore(missing.pool, objects, "secret").exportOwned(token),
+  ).resolves.toEqual({ kind: "unavailable" });
+  expect(missing.query).toHaveBeenCalledWith("ROLLBACK");
+  const broken = database();
+  broken.failOn(
+    /SELECT id FROM principals/,
+    new Error("private database detail"),
+  );
+  broken.failOn(/^ROLLBACK$/, new Error("private rollback detail"));
+  await expect(
+    evidenceStore(broken.pool, objectStorage(), "secret").exportOwned(token),
+  ).resolves.toEqual({ kind: "unavailable" });
+  expect(broken.query).toHaveBeenCalledWith("ROLLBACK");
 });
 
 it("writes valid uploads without persisting raw content", async () => {

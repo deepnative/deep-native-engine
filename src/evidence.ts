@@ -11,6 +11,8 @@ import type { Pool, PoolClient } from "pg";
 import { hash } from "./store.ts";
 
 export const MAX_EVIDENCE_BYTES = 1024 * 1024;
+export const MAX_EXPORT_ITEMS = 20;
+export const MAX_EXPORT_BYTES = 4 * MAX_EVIDENCE_BYTES;
 export const EVIDENCE_TYPES = [
   "text/plain",
   "image/png",
@@ -61,9 +63,23 @@ export interface OwnedEvidence {
   submissionStatus: "queued" | "reviewed" | "withdrawn" | null;
   createdAt: Date;
 }
+export interface ExportedEvidence {
+  id: string;
+  name: string;
+  mediaType: EvidenceType;
+  quarantineState: OwnedEvidence["quarantineState"];
+  privateReviewAllowed: boolean;
+  privateReviewRevokedAt: Date | null;
+  createdAt: Date;
+  sourceBase64: string | null;
+}
+export type EvidenceExport =
+  | { kind: "denied" | "limit" | "unavailable" }
+  | { kind: "ready"; version: "local-evidence-v1"; items: ExportedEvidence[] };
 
 export interface EvidenceStore {
   owned(token: string): Promise<OwnedEvidence[]>;
+  exportOwned(token: string): Promise<EvidenceExport>;
   upload(
     token: string,
     input: EvidenceUpload,
@@ -170,6 +186,7 @@ export function disabledEvidenceStore(): EvidenceStore {
   };
   return {
     owned: async () => [],
+    exportOwned: denied,
     upload: denied,
     transitionQuarantine: async () => false,
     submitForReview: async () => false,
@@ -321,6 +338,88 @@ export function evidenceStore(
           [hash(token)],
         )
       ).rows;
+    },
+    async exportOwned(token) {
+      if (!tokenPattern.test(token)) return { kind: "denied" };
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const owner = await client.query<{ id: string }>(
+          `SELECT id FROM principals WHERE token_hash=$1 AND kind='member'
+           AND revoked_at IS NULL AND expires_at>CURRENT_TIMESTAMP FOR SHARE`,
+          [hash(token)],
+        );
+        if (!owner.rows[0]) {
+          await client.query("ROLLBACK");
+          return { kind: "denied" };
+        }
+        const rows = await client.query<{
+          id: string;
+          name: string;
+          mediaType: EvidenceType;
+          quarantineState: OwnedEvidence["quarantineState"];
+          privateReviewAllowed: boolean;
+          privateReviewRevokedAt: Date | null;
+          createdAt: Date;
+          byteSize: number;
+          sha256: string;
+          storageKey: string;
+        }>(
+          `SELECT e.id,e.original_name AS name,e.media_type AS "mediaType",
+                  e.quarantine_state AS "quarantineState",
+                  e.private_review_allowed AS "privateReviewAllowed",
+                  e.private_review_revoked_at AS "privateReviewRevokedAt",
+                  e.created_at AS "createdAt",e.byte_size AS "byteSize",
+                  e.sha256,e.storage_key AS "storageKey"
+           FROM evidence_objects e WHERE e.owner_principal_id=$1
+             AND e.quarantine_state<>'deleting'
+           ORDER BY e.created_at,e.id LIMIT $2 FOR SHARE OF e`,
+          [owner.rows[0].id, MAX_EXPORT_ITEMS + 1],
+        );
+        const clean = rows.rows.filter(
+          (row) => row.quarantineState === "clean",
+        );
+        if (
+          rows.rows.length > MAX_EXPORT_ITEMS ||
+          clean.reduce((bytes, row) => bytes + row.byteSize, 0) >
+            MAX_EXPORT_BYTES
+        ) {
+          await client.query("ROLLBACK");
+          return { kind: "limit" };
+        }
+        const items: ExportedEvidence[] = [];
+        for (const row of rows.rows) {
+          let sourceBase64: string | null = null;
+          if (row.quarantineState === "clean") {
+            const data = await objects.get(row.storageKey);
+            if (
+              data.length !== row.byteSize ||
+              createHash("sha256").update(data).digest("hex") !== row.sha256
+            ) {
+              await client.query("ROLLBACK");
+              return { kind: "unavailable" };
+            }
+            sourceBase64 = data.toString("base64");
+          }
+          items.push({
+            id: row.id,
+            name: row.name,
+            mediaType: row.mediaType,
+            quarantineState: row.quarantineState,
+            privateReviewAllowed: row.privateReviewAllowed,
+            privateReviewRevokedAt: row.privateReviewRevokedAt,
+            createdAt: row.createdAt,
+            sourceBase64,
+          });
+        }
+        await client.query("COMMIT");
+        return { kind: "ready", version: "local-evidence-v1", items };
+      } catch {
+        await client.query("ROLLBACK").catch(() => undefined);
+        return { kind: "unavailable" };
+      } finally {
+        client.release();
+      }
     },
     async upload(token, input) {
       if (!tokenPattern.test(token)) return { kind: "denied" };
