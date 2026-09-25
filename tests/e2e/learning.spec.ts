@@ -717,7 +717,7 @@ test("[L16] staff assignments expire or revoke and purpose-bound support reads a
     "coach assigned lesson",
     future,
   );
-  const reviewerGrant = await access.grantAssignment(
+  await access.grantAssignment(
     admin.id,
     reviewer.id,
     owner.id,
@@ -735,38 +735,71 @@ test("[L16] staff assignments expire or revoke and purpose-bound support reads a
   );
   for (const [credential, status] of [
     [coach.token, 200],
-    [reviewer.token, 200],
+    [reviewer.token, 403],
     [editor.token, 403],
   ] as const) {
     const staffContext = await browser.newContext();
     try {
       await useToken(staffContext, credential);
-      expect(
-        (
-          await staffContext.request.get(`/api/workspaces/${owner.id}/private`)
-        ).status(),
-      ).toBe(status);
+      const response = await staffContext.request.get(
+        `/api/workspaces/${owner.id}/private`,
+      );
+      expect(response.status()).toBe(status);
+      if (status === 403) {
+        expect(await response.json()).toEqual({ error: "forbidden" });
+        expect((await response.text()).includes(instruction)).toBe(false);
+      }
     } finally {
       await staffContext.close();
     }
+  }
+  const reviewerContext = await browser.newContext();
+  try {
+    await useToken(reviewerContext, reviewer.token);
+    const denied = await reviewerContext.request.get(
+      `/api/workspaces/${owner.id}/private?workspace_id=${owner.id}&purpose=review%20assigned%20lesson`,
+    );
+    expect(denied.status()).toBe(403);
+    expect(await denied.json()).toEqual({ error: "forbidden" });
+    expect((await denied.text()).includes(instruction)).toBe(false);
+  } finally {
+    await reviewerContext.close();
   }
   await pool.query(
     `UPDATE assignment_grants
      SET starts_at=CURRENT_TIMESTAMP-INTERVAL '2 hours',
          expires_at=CURRENT_TIMESTAMP-INTERVAL '1 hour'
      WHERE id=$1`,
-    [reviewerGrant],
+    [coachGrant],
   );
-  const expiredReviewer = await browser.newContext();
+  const expiredCoach = await browser.newContext();
   try {
-    await useToken(expiredReviewer, reviewer.token);
+    await useToken(expiredCoach, coach.token);
     expect(
       (
-        await expiredReviewer.request.get(`/api/workspaces/${owner.id}/private`)
+        await expiredCoach.request.get(`/api/workspaces/${owner.id}/private`)
       ).status(),
     ).toBe(403);
   } finally {
-    await expiredReviewer.close();
+    await expiredCoach.close();
+  }
+  await pool.query(
+    `UPDATE assignment_grants
+     SET starts_at=CURRENT_TIMESTAMP-INTERVAL '1 hour',
+         expires_at=CURRENT_TIMESTAMP+INTERVAL '1 hour'
+     WHERE id=$1`,
+    [coachGrant],
+  );
+  const currentCoach = await browser.newContext();
+  try {
+    await useToken(currentCoach, coach.token);
+    expect(
+      (
+        await currentCoach.request.get(`/api/workspaces/${owner.id}/private`)
+      ).status(),
+    ).toBe(200);
+  } finally {
+    await currentCoach.close();
   }
   expect(await access.revokeAssignment(admin.id, coachGrant)).toBe(true);
   const revokedCoach = await browser.newContext();

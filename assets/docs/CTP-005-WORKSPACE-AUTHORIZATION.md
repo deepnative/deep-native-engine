@@ -9,7 +9,7 @@ Issue [#24](https://github.com/deepnative/deep-native-engine/issues/24) makes th
 | Owning member | Read owned records | Read explicitly permitted cohort items | Principal and membership active |
 | Other member | Denied | Only their own explicit membership | Background and goal have no privilege effect |
 | Coach | Read assigned workspace | Denied by staff identity | Matching coach grant, purpose, start, expiry and no revocation |
-| Reviewer | Read assigned workspace | Denied by staff identity | Matching reviewer grant, purpose, start, expiry and no revocation |
+| Reviewer | Denied for raw exercise drafts | Denied by staff identity | An assignment alone never shares draft responses; separately submitted evidence needs the exact active grant described in [CTP-010](CTP-010-EXACT-EVIDENCE-GRANTS.md) |
 | Editor or moderator | Denied | Denied by staff identity | Role alone never grants member data |
 | Operator or platform administrator | Denied by role alone | Denied by staff identity | Exact-purpose support grant is active; every successful read is audited |
 
@@ -19,7 +19,9 @@ Only a current platform administrator can create or revoke assignment/support gr
 
 Migration `003-workspace-authorization.sql` adds global principals, member-owned workspaces, typed staff profiles, assignment grants, support-access grants, support-read audit rows, cohorts and explicit membership/content relationships. The application authorization interface only appends audit rows; database operators retain ordinary maintenance authority over the table. Exercises carry both learner and workspace IDs under a composite foreign key, so the database rejects cross-workspace record joins even if application code is wrong.
 
-`GET /api/workspaces/:workspaceId/private` returns content only after the server hashes the cookie credential and resolves ownership, an active assignment, or an exact-purpose support grant. A denied response is always `403 {"error":"forbidden"}` and does not reveal whether the workspace exists. `GET /api/cohorts/:cohortId/content/:contentId` requires an active member principal and an exact readable membership/content pair. API responses and routine errors exclude credentials, token hashes, internal grant IDs and private data from denied requests.
+`GET /api/workspaces/:workspaceId/private` returns content only after the server hashes the cookie credential and resolves ownership, an active coach assignment, or an exact-purpose support grant. A denied response is always `403 {"error":"forbidden"}` and does not reveal whether the workspace exists. `GET /api/cohorts/:cohortId/content/:contentId` requires an active member principal and an exact readable membership/content pair. API responses and routine errors exclude credentials, token hashes, internal grant IDs and private data from denied requests.
+
+The original synthetic CTP-005 slice permitted a reviewer assignment to read this raw workspace route. [#217](https://github.com/deepnative/deep-native-engine/issues/217) supersedes that permission: the route now accepts coach assignments only, because these exercises have no reviewer submission consent or version-bound grant. Reviewer access to an exact, owner-submitted evidence object is a separate path; no formal assessment or assignment-response access is inferred.
 
 ## Expiry, revocation and audit
 

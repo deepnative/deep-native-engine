@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v25",
+  "version": "initial-learning-v26",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, and saved private exact-version sample practice; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -143,9 +143,9 @@
       "id": "L16",
       "actor": "Assigned staff and purpose-bound support operator",
       "preconditions": "Synthetic coach, reviewer, editor and operator identities with bounded grants",
-      "steps": "Read assigned work, revoke coach access, attempt editor access, and use exact-purpose support access",
-      "expected": "Active assignments work; revocation and editor denial apply immediately; support needs its exact purpose and produces an audit record",
-      "issues": [24],
+      "steps": "Read coach-assigned work, deny raw reviewer and editor workspace reads, expire and revoke coach access, and use exact-purpose support access",
+      "expected": "Current coach access works; reviewer and editor roles cannot read raw member drafts; coach expiry and revocation deny immediately; support needs its exact purpose and produces an audit record",
+      "issues": [24, 42, 217],
       "critical": true
     },
     {
