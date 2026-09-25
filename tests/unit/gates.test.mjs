@@ -382,11 +382,14 @@ it("requires every mandatory subcase on each browser under the same ID", () => {
     /Incomplete required subcases.*mobile/,
   );
 });
-it("requires complete ECO-01, ECO-03 and ECO-04-A provisional browser evidence without approving release", () => {
+it("requires complete ECO-01 to ECO-04 provisional browser evidence without approving release", () => {
   const ids = [
     "F-ECO-01-A",
     "F-ECO-01-B",
     "F-ECO-01-C",
+    "F-ECO-02-A",
+    "F-ECO-02-B",
+    "F-ECO-02-C",
     "F-ECO-03-A",
     "F-ECO-03-B",
     "F-ECO-03-C",
@@ -420,11 +423,11 @@ it("requires complete ECO-01, ECO-03 and ECO-04-A provisional browser evidence w
   };
   expect(assertProvisionalReleaseJourneys(proposal, report)).toMatchObject({
     approved: false,
-    passed: 7,
-    total: 7,
+    passed: 10,
+    total: 10,
     criticalPassed: 4,
     criticalTotal: 4,
-    executions: 7 * proposal.projects.length,
+    executions: 10 * proposal.projects.length,
   });
   for (const [browserIndex, browserName] of proposal.projects.entries()) {
     for (const [name, corrupt] of [
@@ -453,8 +456,17 @@ it("requires complete ECO-01, ECO-03 and ECO-04-A provisional browser evidence w
     ).toThrow(
       new RegExp(`Incomplete required subcases.*F-ECO-01-B.*${browserName}`),
     );
+    const crossAudienceMissing = copy(report);
+    crossAudienceMissing.suites[0].specs[4].tests[
+      browserIndex
+    ].results[0].annotations.pop();
+    expect(() =>
+      assertProvisionalReleaseJourneys(proposal, crossAudienceMissing),
+    ).toThrow(
+      new RegExp(`Incomplete required subcases.*F-ECO-02-B.*${browserName}`),
+    );
     const recoveryMissing = copy(report);
-    recoveryMissing.suites[0].specs[5].tests[
+    recoveryMissing.suites[0].specs[8].tests[
       browserIndex
     ].results[0].annotations.pop();
     expect(() =>
@@ -463,7 +475,7 @@ it("requires complete ECO-01, ECO-03 and ECO-04-A provisional browser evidence w
       new RegExp(`Incomplete required subcases.*F-ECO-03-C.*${browserName}`),
     );
     const privacyMissing = copy(report);
-    privacyMissing.suites[0].specs[6].tests[
+    privacyMissing.suites[0].specs[9].tests[
       browserIndex
     ].results[0].annotations.pop();
     expect(() =>
@@ -479,7 +491,7 @@ it("requires complete ECO-01, ECO-03 and ECO-04-A provisional browser evidence w
   retried.suites[0].specs[0].tests[0].results[0].retry = 1;
   expect(() => assertProvisionalReleaseJourneys(proposal, retried)).toThrow();
   const unmapped = copy(report);
-  unmapped.suites[0].specs[0].title = "[F-ECO-02-A] wrong journey";
+  unmapped.suites[0].specs[0].title = "[F-ECO-05-A] wrong journey";
   expect(() => assertProvisionalReleaseJourneys(proposal, unmapped)).toThrow();
   const duplicatedExecution = copy(report);
   duplicatedExecution.suites[0].specs[0].tests.push(

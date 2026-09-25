@@ -214,7 +214,10 @@ test("[L27] general learner sees preparation while operator alone sees pending e
     await expect(
       page.getByRole("heading", { name: "Learning track readiness" }),
     ).toBeVisible();
-    await expect(page.getByText("in preparation")).toHaveCount(15);
+    await expect(
+      page.getByRole("heading", { name: "IT specialty services" }),
+    ).toBeVisible();
+    await expect(page.getByText("in preparation")).toHaveCount(25);
     await expect(page.getByText("General learners may use")).toBeVisible();
     await expect(page.getByRole("button", { name: /book|buy/i })).toHaveCount(
       0,

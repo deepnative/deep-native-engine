@@ -72,6 +72,11 @@ it("separates retired, unprepared, limited and available specialist coverage", (
 it("defaults every track to preparation and denies private roster access", async () => {
   const disabled = disabledTrackStore();
   expect((await disabled.snapshot()).foundation).toHaveLength(3);
+  expect((await disabled.snapshot()).itSpecialties).toHaveLength(10);
+  expect((await disabled.snapshot()).itSpecialties).toContainEqual({
+    role: "security",
+    state: "in preparation",
+  });
   expect((await disabled.snapshot()).specialties).toHaveLength(12);
   expect(await disabled.registry("unknown")).toBeNull();
 });
@@ -105,6 +110,10 @@ it("derives foundation and specialist states from published qualified content an
     state: "available",
   });
   expect(result.specialties[2]?.state).toBe("in preparation");
+  expect(result.itSpecialties).toContainEqual({
+    role: "software",
+    state: "in preparation",
+  });
   expect(query.mock.calls[0]?.[0]).toContain("requires_qualified_signoff=true");
 });
 it("never implies released foundation content from an incomplete six-lesson set", async () => {
