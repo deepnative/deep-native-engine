@@ -1,0 +1,16 @@
+# Local member deletion inventory (#242)
+
+Scope: the synthetic local preview at migration 023. This inventory maps logical PostgreSQL rows and private object files, not physical WAL pages, hosted replicas, provider copies or backups. `/delete` first calls `evidence.removeWorkspace(token)`, which marks the workspace and evidence deleting, removes source/derivative object keys and deletes evidence rows; it then deletes the member principal through `store.remove(id)`. A failed object removal must prevent a successful account-deleted response so the operation can be reconciled and retried.
+
+| Ownership path | Current local records | Expected deletion mechanism |
+| --- | --- | --- |
+| Member identity | `principals`, `learners`, `workspaces` | Delete member principal; both dependents cascade. |
+| Learning | `exercises`, `lesson_activity`, `learner_assignment_choices`, `assignment_attempts`, `learning_milestones`, `private_practice`, `content_assessments` | Member/owner foreign keys cascade. |
+| Private participation | `member_proposals`, `career_preferences`, `career_entries`, `career_drafts`, `preview_circle_memberships`, `cohort_memberships` | Member foreign keys cascade; career entries/drafts follow preference. |
+| Synthetic allowances | `synthetic_entitlement_grants`, `synthetic_entitlement_reservations`, `synthetic_entitlement_events` | Member/grant foreign keys cascade; event mutation trigger permits member removal. These are test-only records, not a billing-retention decision. |
+| Staff access to this member | `assignment_grants`, `support_access_grants`, `authorization_audit`, `reviewer_evidence_grants` | Workspace/submission foreign keys cascade. Staff principal and profile remain. |
+| Private evidence | `evidence_objects`, `evidence_review_submissions`, `evidence_derivatives`; source and derivative object keys | Workspace removal explicitly removes object bytes before principal cascade; evidence rows and grants cascade. A failure must remain visible for retry. |
+
+`adapter_jobs` has no member foreign key or reliable owner key. Current jobs are synthetic adapter operations, and there is no safe member-specific delete or export query for that table. The audit must report this attribution gap rather than claiming that the table is reconciled. `content_versions`, `cohort_content`, `cohorts`, `expert_registry` and `schema_migrations` are catalog/operator/shared records and do not cascade with a member. Audit/financial/legal records in a future hosted system need a separate approved retention schedule.
+
+`tests/integration/member-deletion.test.ts` populates each applicable ownership path for one member and an unrelated member, invokes the real `/delete` route, and checks every tracked row, source/derivative key, session and stale owner/reviewer link. A third member submits a forged target ID to show that the route deletes only the authenticated caller. A second test fails object removal after one key and then fails the database delete; both requests return a generic failure and remain retryable, while the third request completes. The repository gate runs this probe with the rest of the real PostgreSQL and browser suite on the exact commit. Passing local row checks do not establish hosted erasure or a legal right-to-delete response.
