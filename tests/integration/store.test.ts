@@ -1698,8 +1698,13 @@ it("lets only the member revoke private-review consent while retaining private e
   expect(reviewerLink.kind).toBe("issued");
   if (reviewerLink.kind !== "issued") throw new Error("link not issued");
   expect(
-    (await evidence.download(reviewer.token, created.id, reviewerLink.capability))
-      .kind,
+    (
+      await evidence.download(
+        reviewer.token,
+        created.id,
+        reviewerLink.capability,
+      )
+    ).kind,
   ).toBe("allowed");
   expect(await evidence.revokePrivateReview(outsider.token, created.id)).toBe(
     false,
@@ -1707,8 +1712,12 @@ it("lets only the member revoke private-review consent while retaining private e
   expect(await evidence.revokePrivateReview(reviewer.token, created.id)).toBe(
     false,
   );
-  expect(await evidence.revokePrivateReview(owner.token, created.id)).toBe(true);
-  expect(await evidence.revokePrivateReview(owner.token, created.id)).toBe(false);
+  expect(await evidence.revokePrivateReview(owner.token, created.id)).toBe(
+    true,
+  );
+  expect(await evidence.revokePrivateReview(owner.token, created.id)).toBe(
+    false,
+  );
   const row = await pool.query<{
     private_review_allowed: boolean;
     private_review_revoked_at: Date;
