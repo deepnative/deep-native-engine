@@ -15,6 +15,7 @@ import {
   workflowDetailPage,
   circlesPage,
   contentPreview,
+  studyReflectionPage,
   staffLibraryPage,
   trackReadinessPage,
   expertRegistryPage,
@@ -654,6 +655,89 @@ export function app(
           )
         : undefined;
     res.send(contentPreview(item, false, res.locals.csrf as string, activity));
+  });
+  app.get("/library/:id/study", async (req, res) => {
+    const item = await catalog.published(req.params.id as string);
+    if (
+      !item ||
+      item.kind !== "lesson" ||
+      item.state !== "published" ||
+      item.requiresQualifiedSignoff
+    ) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Study source unavailable",
+            "Return to the learning library for a current published sample lesson.",
+          ),
+        );
+      return;
+    }
+    const member = res.locals.learner as Learner;
+    res.send(studyReflectionPage(item, member.goal, res.locals.csrf as string));
+  });
+  app.post("/library/:id/study", async (req, res) => {
+    const fields = req.body as Fields;
+    const version = Number(fields.content_version);
+    if (!Number.isSafeInteger(version) || version < 1) {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Invalid study reflection",
+            "Return to the current lesson and reopen the study reflection form.",
+          ),
+        );
+      return;
+    }
+    const item = await catalog.published(req.params.id as string);
+    if (
+      !item ||
+      item.kind !== "lesson" ||
+      item.state !== "published" ||
+      item.requiresQualifiedSignoff ||
+      item.version !== version
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Study source changed",
+            "This lesson version is unavailable. Return to the learning library and open the current published version.",
+          ),
+        );
+      return;
+    }
+    const member = res.locals.learner as Learner;
+    const reflection = fields.reflection;
+    if (
+      typeof reflection !== "string" ||
+      reflection.trim().length === 0 ||
+      reflection.length > 1000 ||
+      fields.synthetic !== "yes"
+    ) {
+      res
+        .status(422)
+        .send(
+          studyReflectionPage(
+            item,
+            member.goal,
+            res.locals.csrf as string,
+            null,
+            "Write a reflection of at most 1,000 characters using only invented or sample information, then confirm the sample-information checkbox.",
+          ),
+        );
+      return;
+    }
+    res.send(
+      studyReflectionPage(
+        item,
+        member.goal,
+        res.locals.csrf as string,
+        reflection.trim(),
+      ),
+    );
   });
   app.post("/library/:id/progress", async (req, res) => {
     const fields = req.body as Fields;

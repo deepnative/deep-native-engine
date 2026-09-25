@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v22",
+  "version": "initial-learning-v23",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, plus ephemeral source-grounded local study reflection; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -488,6 +488,24 @@
       "steps": "Change valid background and goal with forged staff, owner and offer fields; reject a staff-like background; request the staff worklist, another workspace and a staff draft write",
       "expected": "Learning direction alone changes; every principal remains a member without a staff profile, staff page and private workspace deny access, and no staff draft is created",
       "issues": [42, 20, 24],
+      "critical": true
+    },
+    {
+      "id": "L55",
+      "actor": "General, non-IT professional and IT learners",
+      "preconditions": "A currently published synthetic lesson; desktop or mobile local preview",
+      "steps": "Choose each goal/background, open the exact-version study reflection, compare a sample note with the published source and return to the page",
+      "expected": "All three paths get source-cited, non-evaluative locally simulated feedback; the note is not persisted across a fresh GET or sent to a provider",
+      "issues": [182, 34],
+      "critical": true
+    },
+    {
+      "id": "L56",
+      "actor": "Learner with a stale or invalid local study form",
+      "preconditions": "A synthetic lesson is published, then replaced or retired",
+      "steps": "Submit forged CSRF, invalid or empty reflection, stale source version and retired source",
+      "expected": "Invalid inputs and stale/retired versions fail clearly; no feedback uses an unavailable or different source version",
+      "issues": [182, 34],
       "critical": true
     }
   ],
