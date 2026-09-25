@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
@@ -33,6 +33,105 @@ async function memberId(context: BrowserContext) {
   expect(result.rowCount).toBe(1);
   return result.rows[0]!.id;
 }
+
+test("[F-BUILD-08-A] owner export excludes another member's private records", async ({
+  page,
+  context,
+  browser,
+}) => {
+  const outsider = await browser.newContext({ baseURL: origin });
+  const anonymous = await browser.newContext({ baseURL: origin });
+  try {
+    const outsiderPage = await outsider.newPage();
+    await onboard(page);
+    await onboard(outsiderPage);
+    const ownerId = await memberId(context);
+    const outsiderId = await memberId(outsider);
+    expect(outsiderId).not.toBe(ownerId);
+    const ownerTitle = `Invented private owner milestone ${randomBytes(4).toString("hex")}`;
+    const outsiderTitle = `Invented private outsider milestone ${randomBytes(4).toString("hex")}`;
+    for (const [memberId, title] of [
+      [ownerId, ownerTitle],
+      [outsiderId, outsiderTitle],
+    ]) {
+      await pool.query(
+        `INSERT INTO learning_milestones(id,member_id,goal_title,milestone_title,next_action)
+         VALUES($1,$2,'Invented goal',$3,'Check my next step')`,
+        [randomUUID(), memberId, title],
+      );
+    }
+    const linkName = "Download my structured preview records";
+    const ownerLink = page.getByRole("link", { name: linkName });
+
+    await requiredCheck(1, async () => {
+      await expect(ownerLink).toHaveAttribute("href", "/api/member/export");
+      const [download] = await Promise.all([
+        page.waitForEvent("download"),
+        ownerLink.click(),
+      ]);
+      expect(download.suggestedFilename()).toBe(
+        "deep-native-member-records.json",
+      );
+      const downloadPath = await download.path();
+      expect(downloadPath).not.toBeNull();
+      const payload = JSON.parse(await readFile(downloadPath!, "utf8")) as {
+        version: string;
+        profile: { id: string };
+        records: { milestones: { milestoneTitle: string }[] };
+      };
+      expect(payload.version).toBe("local-member-records-v1");
+      expect(payload.profile.id).toBe(ownerId);
+      expect(payload.records.milestones).toMatchObject([
+        { milestoneTitle: ownerTitle },
+      ]);
+      expect(JSON.stringify(payload)).not.toContain(outsiderTitle);
+      expect(JSON.stringify(payload)).not.toContain(outsiderId);
+      const response = await page.request.get("/api/member/export");
+      expect(response.status()).toBe(200);
+      expect(response.headers()["content-disposition"]).toContain(
+        "deep-native-member-records.json",
+      );
+      expect(response.headers()["cache-control"]).toBe("no-store");
+    });
+
+    await requiredCheck(2, async () => {
+      const outsiderLink = outsiderPage.getByRole("link", { name: linkName });
+      await expect(outsiderLink).toHaveAttribute("href", "/api/member/export");
+      const [download] = await Promise.all([
+        outsiderPage.waitForEvent("download"),
+        outsiderLink.click(),
+      ]);
+      const downloadPath = await download.path();
+      expect(downloadPath).not.toBeNull();
+      const payload = JSON.parse(await readFile(downloadPath!, "utf8")) as {
+        profile: { id: string };
+        records: { milestones: { milestoneTitle: string }[] };
+      };
+      expect(payload.profile.id).toBe(outsiderId);
+      expect(payload.records.milestones).toMatchObject([
+        { milestoneTitle: outsiderTitle },
+      ]);
+      expect(JSON.stringify(payload)).not.toContain(ownerTitle);
+      expect(JSON.stringify(payload)).not.toContain(ownerId);
+      const forged = await outsiderPage.request.get(
+        `/api/member/export?member_id=${ownerId}`,
+      );
+      expect(forged.status()).toBe(200);
+      const forgedPayload = await forged.json();
+      expect(forgedPayload).toMatchObject({
+        profile: { id: outsiderId },
+        records: { milestones: [{ milestoneTitle: outsiderTitle }] },
+      });
+      expect(JSON.stringify(forgedPayload)).not.toContain(ownerTitle);
+      const denied = await anonymous.request.get("/api/member/export");
+      expect(denied.status()).toBe(403);
+      expect(await denied.json()).toEqual({ error: "forbidden" });
+    });
+  } finally {
+    await outsider.close();
+    await anonymous.close();
+  }
+});
 
 test("[F-BUILD-08-B] member revocation stops current reviewer links while retaining private evidence", async ({
   page,
