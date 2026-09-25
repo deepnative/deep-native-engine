@@ -37,6 +37,7 @@ export interface TrackSnapshot {
     domain: Domain;
     serviceType: ExpertRecord["serviceType"];
     state: TrackState;
+    gaps: string[];
   }>;
 }
 export interface TrackStore {
@@ -93,6 +94,27 @@ export function specialtyState(
   );
   return minutes >= 60 ? "available" : "limited coverage";
 }
+export function specialtyGaps(
+  contentReady: boolean,
+  records: ExpertRecord[],
+  serviceType: ExpertRecord["serviceType"],
+  now: Date,
+): string[] {
+  const gaps: string[] = [];
+  if (!contentReady) gaps.push("Reviewed content not verified");
+  if (
+    serviceType === "formal-review" &&
+    !records.some((record) => expertEligible(record, now))
+  )
+    gaps.push("Qualified reviewer coverage not verified");
+  if (
+    !["available", "limited coverage"].includes(
+      specialtyState(true, records, now),
+    )
+  )
+    gaps.push("Deliverable service capacity not verified");
+  return gaps;
+}
 export function disabledTrackStore(): TrackStore {
   return {
     snapshot: async () => ({
@@ -109,6 +131,7 @@ export function disabledTrackStore(): TrackStore {
           domain: domain as Domain,
           serviceType,
           state: "in preparation" as TrackState,
+          gaps: specialtyGaps(false, [], serviceType, new Date()),
         })),
       ),
     }),
@@ -149,20 +172,21 @@ export function trackStore(pool: Pool): TrackStore {
           : ("in preparation" as TrackState),
       }));
       const specialties = Object.keys(DOMAINS).flatMap((domain) =>
-        serviceTypes.map((serviceType) => ({
-          domain: domain as Domain,
-          serviceType,
-          state: specialtyState(
-            lessons.rows.some((lesson) =>
-              lesson.domains.includes(domain as Domain),
-            ),
-            experts.rows.filter(
-              (expert) =>
-                expert.domain === domain && expert.serviceType === serviceType,
-            ),
-            now,
-          ),
-        })),
+        serviceTypes.map((serviceType) => {
+          const contentReady = lessons.rows.some((lesson) =>
+            lesson.domains.includes(domain as Domain),
+          );
+          const records = experts.rows.filter(
+            (expert) =>
+              expert.domain === domain && expert.serviceType === serviceType,
+          );
+          return {
+            domain: domain as Domain,
+            serviceType,
+            state: specialtyState(contentReady, records, now),
+            gaps: specialtyGaps(contentReady, records, serviceType, now),
+          };
+        }),
       );
       // No IT-role-specific qualified content and capacity registry exists yet.
       // Published synthetic exercises cannot establish a specialist service.
