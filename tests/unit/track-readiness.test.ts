@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import {
   disabledTrackStore,
   expertEligible,
+  specialtyGaps,
   specialtyState,
   trackStore,
   type ExpertRecord,
@@ -69,6 +70,33 @@ it("separates retired, unprepared, limited and available specialist coverage", (
   ).toBe("limited coverage");
   expect(specialtyState(true, [evidence, backup], now)).toBe("available");
 });
+it("reports independent public evidence gaps without roster identities", () => {
+  expect(specialtyGaps(false, [], "formal-review", now)).toEqual([
+    "Reviewed content not verified",
+    "Qualified reviewer coverage not verified",
+    "Deliverable service capacity not verified",
+  ]);
+  expect(
+    specialtyGaps(
+      true,
+      [{ ...evidence, verifiedBy: null }],
+      "formal-review",
+      now,
+    ),
+  ).toEqual([
+    "Qualified reviewer coverage not verified",
+    "Deliverable service capacity not verified",
+  ]);
+  expect(specialtyGaps(true, [evidence], "formal-review", now)).toEqual([
+    "Deliverable service capacity not verified",
+  ]);
+  expect(specialtyGaps(true, [evidence, backup], "formal-review", now)).toEqual(
+    [],
+  );
+  expect(specialtyGaps(true, [], "coaching", now)).toEqual([
+    "Deliverable service capacity not verified",
+  ]);
+});
 it("defaults every track to preparation and denies private roster access", async () => {
   const disabled = disabledTrackStore();
   expect((await disabled.snapshot()).foundation).toHaveLength(3);
@@ -103,11 +131,13 @@ it("derives foundation and specialist states from published qualified content an
     domain: "education",
     serviceType: "coaching",
     state: "in preparation",
+    gaps: ["Deliverable service capacity not verified"],
   });
   expect(result.specialties[1]).toEqual({
     domain: "education",
     serviceType: "formal-review",
     state: "available",
+    gaps: [],
   });
   expect(result.specialties[2]?.state).toBe("in preparation");
   expect(result.itSpecialties).toContainEqual({
