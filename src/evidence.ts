@@ -35,6 +35,7 @@ export interface EvidenceUpload {
   mediaType: string;
   consent: EvidenceConsent;
   data: Buffer;
+  revisesId?: string;
 }
 
 export interface ObjectStorage {
@@ -62,6 +63,9 @@ export interface OwnedEvidence {
   privateReviewRevokedAt: Date | null;
   submissionStatus: "queued" | "reviewed" | "withdrawn" | null;
   createdAt: Date;
+  revisionParentId: string | null;
+  revisionNumber: number;
+  hasRevision: boolean;
 }
 export interface ExportedEvidence {
   id: string;
@@ -71,6 +75,8 @@ export interface ExportedEvidence {
   privateReviewAllowed: boolean;
   privateReviewRevokedAt: Date | null;
   createdAt: Date;
+  revisionParentId: string | null;
+  revisionNumber: number;
   sourceBase64: string | null;
 }
 export type EvidenceExport =
@@ -149,6 +155,12 @@ export function validUpload(input: EvidenceUpload) {
     validSignature(mediaType, input.data) &&
     input.name === basename(input.name) &&
     namePattern.test(input.name) &&
+    (input.revisesId === undefined || uuidPattern.test(input.revisesId)) &&
+    (input.revisesId === undefined ||
+      (mediaType === "text/plain" &&
+        input.consent.privateReview &&
+        !input.consent.communityPublication &&
+        circle === undefined)) &&
     input.consent.rightsConfirmed &&
     (input.consent.privateReview ||
       input.consent.communityPublication ||
@@ -328,7 +340,11 @@ export function evidenceStore(
                   e.quarantine_state AS "quarantineState",
                   e.private_review_allowed AS "privateReviewAllowed",
                   e.private_review_revoked_at AS "privateReviewRevokedAt",
-                  s.status AS "submissionStatus",e.created_at AS "createdAt"
+                  s.status AS "submissionStatus",e.created_at AS "createdAt",
+                  e.revision_parent_id AS "revisionParentId",
+                  e.revision_number AS "revisionNumber",
+                  EXISTS(SELECT 1 FROM evidence_objects child
+                    WHERE child.revision_parent_id=e.id) AS "hasRevision"
            FROM evidence_objects e
            JOIN principals p ON p.id=e.owner_principal_id
            LEFT JOIN evidence_review_submissions s ON s.evidence_id=e.id
@@ -361,6 +377,8 @@ export function evidenceStore(
           privateReviewAllowed: boolean;
           privateReviewRevokedAt: Date | null;
           createdAt: Date;
+          revisionParentId: string | null;
+          revisionNumber: number;
           byteSize: number;
           sha256: string;
           storageKey: string;
@@ -369,7 +387,9 @@ export function evidenceStore(
                   e.quarantine_state AS "quarantineState",
                   e.private_review_allowed AS "privateReviewAllowed",
                   e.private_review_revoked_at AS "privateReviewRevokedAt",
-                  e.created_at AS "createdAt",e.byte_size AS "byteSize",
+                  e.created_at AS "createdAt",
+                  e.revision_parent_id AS "revisionParentId",
+                  e.revision_number AS "revisionNumber",e.byte_size AS "byteSize",
                   e.sha256,e.storage_key AS "storageKey"
            FROM evidence_objects e WHERE e.owner_principal_id=$1
              AND e.quarantine_state<>'deleting'
@@ -409,6 +429,8 @@ export function evidenceStore(
             privateReviewAllowed: row.privateReviewAllowed,
             privateReviewRevokedAt: row.privateReviewRevokedAt,
             createdAt: row.createdAt,
+            revisionParentId: row.revisionParentId,
+            revisionNumber: row.revisionNumber,
             sourceBase64,
           });
         }
@@ -454,14 +476,38 @@ export function evidenceStore(
           await client.query("ROLLBACK");
           return { kind: "denied" };
         }
+        let revisionNumber = 1;
+        if (input.revisesId) {
+          const parent = (
+            await client.query<{ revision_number: number }>(
+              `SELECT e.revision_number FROM evidence_objects e
+               JOIN evidence_review_submissions s ON s.evidence_id=e.id
+               WHERE e.id=$1 AND e.owner_principal_id=$2
+                 AND e.workspace_id=$3 AND e.quarantine_state='clean'
+                 AND e.private_review_allowed
+                 AND s.status IN ('queued','reviewed')
+                 AND e.revision_number<20
+                 AND NOT EXISTS(SELECT 1 FROM evidence_objects child
+                   WHERE child.revision_parent_id=e.id)
+               FOR UPDATE OF e`,
+              [input.revisesId, owner.principal_id, owner.workspace_id],
+            )
+          ).rows[0];
+          if (!parent) {
+            await client.query("ROLLBACK");
+            return { kind: "denied" };
+          }
+          revisionNumber = parent.revision_number + 1;
+        }
         await objects.put(storageKey, input.data);
         objectWritten = true;
         await client.query(
           `INSERT INTO evidence_objects(
              id,workspace_id,owner_principal_id,original_name,media_type,
              byte_size,sha256,storage_key,private_review_allowed,
-             community_publication_allowed,learning_circle_id,rights_attested_at
-           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,CURRENT_TIMESTAMP)`,
+             community_publication_allowed,learning_circle_id,rights_attested_at,
+             revision_parent_id,revision_number
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,CURRENT_TIMESTAMP,$12,$13)`,
           [
             id,
             owner.workspace_id,
@@ -474,6 +520,8 @@ export function evidenceStore(
             input.consent.privateReview,
             input.consent.communityPublication,
             circle,
+            input.revisesId ?? null,
+            revisionNumber,
           ],
         );
         commitAttempted = true;
