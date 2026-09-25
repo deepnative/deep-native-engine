@@ -236,11 +236,22 @@ test("[F-BUILD-08-B] member revocation stops current reviewer links while retain
       );
       expect(wrongOwner.status()).toBe(403);
       expect((await reviewerPage.request.get(href)).status()).toBe(200);
-      const revoked = await page.request.post(
-        `/api/evidence/${id}/revoke-private-review`,
-        { headers: { Origin: origin, "X-CSRF-Token": csrf } },
-      );
-      expect(revoked.status()).toBe(204);
+      await page.goto("/evidence");
+      const sample = page.getByRole("listitem").filter({
+        has: page.getByRole("heading", { name: "invented-revocable.txt" }),
+      });
+      await expect(sample).toContainText("Private-review consent active");
+      await sample
+        .getByLabel("Stop private-review access to invented-revocable.txt")
+        .check();
+      await sample
+        .getByRole("button", { name: "Revoke review consent" })
+        .click();
+      await expect(page).toHaveURL(/\/evidence$/);
+      await expect(sample).toContainText("Private-review consent revoked");
+      await expect(
+        sample.getByRole("button", { name: "Revoke review consent" }),
+      ).toHaveCount(0);
       const row = await pool.query<{
         private_review_allowed: boolean;
         private_review_revoked_at: Date;
@@ -268,9 +279,13 @@ test("[F-BUILD-08-B] member revocation stops current reviewer links while retain
       );
       expect(newLink.status()).toBe(403);
       expect(await newLink.json()).toEqual({ error: "forbidden" });
+      const currentCsrf = await page
+        .locator('input[name="csrf"]')
+        .first()
+        .inputValue();
       const ownerLink = await page.request.post(
         `/api/evidence/${id}/download-link`,
-        { headers: { Origin: origin, "X-CSRF-Token": csrf } },
+        { headers: { Origin: origin, "X-CSRF-Token": currentCsrf } },
       );
       expect(ownerLink.status()).toBe(200);
       const own = await page.request.get(
@@ -293,6 +308,7 @@ test("[F-BUILD-08-C] owner deletion removes configured synthetic source and deri
   const derivative = Buffer.from(
     "Synthetic text extraction of invented material.",
   );
+  const sampleName = `invented-delete-${randomBytes(4).toString("hex")}.txt`;
   try {
     await onboard(page);
     await onboard(otherPage);
@@ -306,7 +322,7 @@ test("[F-BUILD-08-C] owner deletion removes configured synthetic source and deri
         Origin: origin,
         "X-CSRF-Token": csrf,
         "Content-Type": "text/plain",
-        "X-Evidence-Name": `invented-delete-${randomBytes(4).toString("hex")}.txt`,
+        "X-Evidence-Name": sampleName,
         "X-Evidence-Rights": "confirmed",
         "X-Evidence-Scopes": "private-review",
       },
@@ -366,10 +382,19 @@ test("[F-BUILD-08-C] owner deletion removes configured synthetic source and deri
     expect(await readFile(path(derivativeRow.storage_key))).toEqual(derivative);
 
     await requiredCheck(1, async () => {
-      const deleted = await page.request.delete(`/api/evidence/${id}`, {
-        headers: { Origin: origin, "X-CSRF-Token": csrf },
+      await page.goto("/evidence");
+      const sample = page.getByRole("listitem").filter({
+        has: page.getByRole("heading", { name: sampleName }),
       });
-      expect(deleted.status()).toBe(204);
+      await expect(sample).toContainText("Safety check passed");
+      await sample
+        .getByLabel(
+          `Delete ${sampleName} and its configured active derivatives`,
+        )
+        .check();
+      await sample.getByRole("button", { name: "Delete sample" }).click();
+      await expect(page).toHaveURL(/\/evidence$/);
+      await expect(sample).toHaveCount(0);
       expect(
         (await pool.query("SELECT id FROM evidence_objects WHERE id=$1", [id]))
           .rows,
