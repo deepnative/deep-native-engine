@@ -69,6 +69,12 @@ import { disabledCircleStore, type CircleStore } from "./circles.ts";
 import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
 import { disabledPracticeStore, type PracticeStore } from "./practice.ts";
+import {
+  disabledMemberExportStore,
+  MAX_MEMBER_EXPORT_BYTES,
+  MAX_MEMBER_EXPORT_RECORDS,
+  type MemberExportStore,
+} from "./member-export.ts";
 const attemptWritePath =
   /^\/assignments\/attempts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(save|submit)$/i;
 function attemptedResponse(body: unknown, action: string) {
@@ -93,6 +99,7 @@ export function app(
     metrics?: MetricsStore;
     attempts?: AttemptStore;
     practice?: PracticeStore;
+    memberExport?: MemberExportStore;
   },
 ) {
   const app = express();
@@ -108,6 +115,7 @@ export function app(
   const metrics = options.metrics ?? disabledMetricsStore();
   const attempts = options.attempts ?? disabledAttemptStore();
   const practice = options.practice ?? disabledPracticeStore();
+  const memberExport = options.memberExport ?? disabledMemberExportStore();
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -301,6 +309,31 @@ export function app(
         'attachment; filename="deep-native-evidence.json"',
       )
       .json(result);
+  });
+  app.get("/api/member/export", async (_req, res) => {
+    const result = await memberExport.exportOwned(res.locals.token as string);
+    if (result.kind === "denied") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    if (result.kind === "limit") {
+      res.status(413).json({
+        error: "export_limit",
+        message: `This preview export is limited to ${MAX_MEMBER_EXPORT_RECORDS} records and ${MAX_MEMBER_EXPORT_BYTES / 1024} KiB. Remove unneeded preview records, then retry.`,
+      });
+      return;
+    }
+    if (result.kind === "unavailable") {
+      res.status(503).json({ error: "export_unavailable" });
+      return;
+    }
+    res
+      .type("application/json")
+      .set(
+        "Content-Disposition",
+        'attachment; filename="deep-native-member-records.json"',
+      )
+      .json(result.payload);
   });
   app.post("/api/evidence", async (req, res) => {
     const scopes = (req.get("x-evidence-scopes") ?? "")
