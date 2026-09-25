@@ -51,7 +51,19 @@ type EvidenceMetadata = {
   storage_key: string;
 };
 
+export interface OwnedEvidence {
+  id: string;
+  name: string;
+  mediaType: EvidenceType;
+  quarantineState: "pending" | "clean" | "rejected" | "infected";
+  privateReviewAllowed: boolean;
+  privateReviewRevokedAt: Date | null;
+  submissionStatus: "queued" | "reviewed" | "withdrawn" | null;
+  createdAt: Date;
+}
+
 export interface EvidenceStore {
+  owned(token: string): Promise<OwnedEvidence[]>;
   upload(
     token: string,
     input: EvidenceUpload,
@@ -157,6 +169,7 @@ export function disabledEvidenceStore(): EvidenceStore {
     throw new Error("Private evidence storage is not configured.");
   };
   return {
+    owned: async () => [],
     upload: denied,
     transitionQuarantine: async () => false,
     submitForReview: async () => false,
@@ -290,6 +303,25 @@ export function evidenceStore(
   }
 
   return {
+    async owned(token) {
+      if (!tokenPattern.test(token)) return [];
+      return (
+        await pool.query<OwnedEvidence>(
+          `SELECT e.id,e.original_name AS name,e.media_type AS "mediaType",
+                  e.quarantine_state AS "quarantineState",
+                  e.private_review_allowed AS "privateReviewAllowed",
+                  e.private_review_revoked_at AS "privateReviewRevokedAt",
+                  s.status AS "submissionStatus",e.created_at AS "createdAt"
+           FROM evidence_objects e
+           JOIN principals p ON p.id=e.owner_principal_id
+           LEFT JOIN evidence_review_submissions s ON s.evidence_id=e.id
+           WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
+             AND p.expires_at>CURRENT_TIMESTAMP AND e.quarantine_state<>'deleting'
+           ORDER BY e.created_at DESC,e.id`,
+          [hash(token)],
+        )
+      ).rows;
+    },
     async upload(token, input) {
       if (!tokenPattern.test(token)) return { kind: "denied" };
       if (!validUpload(input)) return { kind: "invalid" };

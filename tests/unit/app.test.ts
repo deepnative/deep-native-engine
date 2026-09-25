@@ -270,6 +270,7 @@ function storage() {
 function evidenceStorage() {
   return {
     ...disabledEvidenceStore(),
+    owned: vi.fn<EvidenceStore["owned"]>().mockResolvedValue([]),
     upload: vi.fn<EvidenceStore["upload"]>().mockResolvedValue({
       kind: "denied",
     }),
@@ -1270,6 +1271,149 @@ it("lets a member revoke private-review evidence access through a CSRF-guarded r
     expect.stringMatching(/^[a-f0-9]{64}$/),
     id,
   );
+});
+it("shows a member-owned evidence manager with a usable empty state", async () => {
+  const files = evidenceStorage();
+  const { agent } = await client(files);
+  active();
+  const response = await agent.get("/evidence").set("Host", host).expect(200);
+  expect(response.text).toContain("Your private evidence");
+  expect(response.text).toContain("No sample evidence saved yet");
+  expect(files.owned).toHaveBeenCalledWith(
+    expect.stringMatching(/^[a-f0-9]{64}$/),
+  );
+});
+it("keeps evidence form writes owner-scoped, confirmed and truthful", async () => {
+  const files = evidenceStorage();
+  const { agent, csrf } = await client(files);
+  active();
+  const id = "11111111-1111-4111-8111-111111111111";
+  files.owned.mockResolvedValue([
+    {
+      id,
+      name: "<script>private</script>",
+      mediaType: "text/plain",
+      quarantineState: "pending",
+      privateReviewAllowed: true,
+      privateReviewRevokedAt: null,
+      submissionStatus: "queued",
+      createdAt: new Date(),
+    },
+    {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "clean",
+      mediaType: "text/plain",
+      quarantineState: "clean",
+      privateReviewAllowed: false,
+      privateReviewRevokedAt: new Date(),
+      submissionStatus: "withdrawn",
+      createdAt: new Date(),
+    },
+    {
+      id: "33333333-3333-4333-8333-333333333333",
+      name: "rejected",
+      mediaType: "text/plain",
+      quarantineState: "rejected",
+      privateReviewAllowed: true,
+      privateReviewRevokedAt: null,
+      submissionStatus: null,
+      createdAt: new Date(),
+    },
+    {
+      id: "44444444-4444-4444-8444-444444444444",
+      name: "blocked",
+      mediaType: "text/plain",
+      quarantineState: "infected",
+      privateReviewAllowed: true,
+      privateReviewRevokedAt: null,
+      submissionStatus: "reviewed",
+      createdAt: new Date(),
+    },
+  ]);
+  const page = await agent.get("/evidence").set("Host", host).expect(200);
+  expect(page.text).not.toContain("<script>private</script>");
+  expect(page.text).toContain("&lt;script&gt;private&lt;/script&gt;");
+  for (const marker of [
+    "Pending safety check",
+    "Safety check passed",
+    "Rejected by safety check",
+    "Blocked by safety check",
+    "Review submission withdrawn",
+    "Submitted locally",
+    "Not submitted for review",
+    "Synthetic review state recorded",
+  ])
+    expect(page.text).toContain(marker);
+  const post = (path: string, fields: Record<string, string> = {}) =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  await post("/evidence", {
+    name: "<b>title</b>",
+    sample: "<script>sample</script>",
+  })
+    .expect(422)
+    .expect(/&lt;script&gt;sample&lt;\/script&gt;/);
+  expect(files.upload).not.toHaveBeenCalled();
+  const form = {
+    name: "invented.txt",
+    sample: "Invented text",
+    rights_confirmed: "yes",
+    private_review_consent: "yes",
+  };
+  files.upload
+    .mockResolvedValueOnce({ kind: "invalid" })
+    .mockResolvedValueOnce({ kind: "denied" })
+    .mockResolvedValueOnce({ kind: "created", id, state: "pending" });
+  await post("/evidence", form).expect(422);
+  await post("/evidence", form).expect(403);
+  await post("/evidence", form).expect(303).expect("Location", "/evidence");
+  expect(files.upload).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({
+      name: "invented.txt",
+      mediaType: "text/plain",
+      data: Buffer.from("Invented text"),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    }),
+  );
+  await post(`/evidence/${id}/revoke-private-review`).expect(422);
+  await post(`/evidence/${id}/delete`).expect(422);
+  expect(files.revokePrivateReview).not.toHaveBeenCalled();
+  expect(files.remove).not.toHaveBeenCalled();
+  await post(`/evidence/${id}/revoke-private-review`, {
+    confirm: "yes",
+  }).expect(403);
+  files.revokePrivateReview.mockResolvedValueOnce(true);
+  await post(`/evidence/${id}/revoke-private-review`, {
+    confirm: "yes",
+  }).expect(303);
+  await post(`/evidence/${id}/delete`, { confirm: "yes" }).expect(403);
+  files.remove.mockResolvedValueOnce(true);
+  await post(`/evidence/${id}/delete`, { confirm: "yes" }).expect(303);
+  await post(`/evidence/${id}/download`).expect(403);
+  files.issueDownload.mockResolvedValueOnce({
+    kind: "issued",
+    capability: "token",
+    expiresAt: new Date(),
+  });
+  await post(`/evidence/${id}/download`)
+    .expect(303)
+    .expect("Location", `/api/evidence/${id}/download?capability=token`);
+  await agent
+    .post(`/evidence/${id}/delete`)
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf: "bad", confirm: "yes" })
+    .expect(403);
 });
 it("rejects unrecognized Host and cross-origin, missing-origin or invalid-CSRF writes", async () => {
   await atStage(
