@@ -316,6 +316,21 @@ export function app(
     }
     res.status(204).end();
   });
+  app.post(
+    "/api/evidence/:evidenceId/revoke-private-review",
+    async (req, res) => {
+      if (
+        !(await evidence.revokePrivateReview(
+          res.locals.token as string,
+          req.params.evidenceId as string,
+        ))
+      ) {
+        res.status(403).json({ error: "forbidden" });
+        return;
+      }
+      res.status(204).end();
+    },
+  );
   app.post("/api/evidence/:evidenceId/download-link", async (req, res) => {
     const result = await evidence.issueDownload(
       res.locals.token as string,

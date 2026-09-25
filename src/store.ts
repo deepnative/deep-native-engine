@@ -109,6 +109,7 @@ export async function migrate(pool: Pool) {
       "020-ai-job-provenance.sql",
       "021-private-practice.sql",
       "022-exact-evidence-review-grants.sql",
+      "023-private-review-revocation.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

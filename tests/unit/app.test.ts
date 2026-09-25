@@ -276,6 +276,9 @@ function evidenceStorage() {
     submitForReview: vi
       .fn<EvidenceStore["submitForReview"]>()
       .mockResolvedValue(false),
+    revokePrivateReview: vi
+      .fn<EvidenceStore["revokePrivateReview"]>()
+      .mockResolvedValue(false),
     issueDownload: vi.fn<EvidenceStore["issueDownload"]>().mockResolvedValue({
       kind: "denied",
     }),
@@ -1243,6 +1246,30 @@ it("gates review, short-lived download and deletion through evidence decisions",
       .set("X-CSRF-Token", csrf);
   await remove().expect(403, { error: "forbidden" });
   await remove().expect(204);
+});
+it("lets a member revoke private-review evidence access through a CSRF-guarded request", async () => {
+  const files = evidenceStorage();
+  const { agent, csrf } = await client(files);
+  const id = "11111111-1111-4111-8111-111111111111";
+  const revoke = () =>
+    agent
+      .post(`/api/evidence/${id}/revoke-private-review`)
+      .set("Host", host)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", csrf);
+  await agent
+    .post(`/api/evidence/${id}/revoke-private-review`)
+    .set("Host", host)
+    .set("Origin", origin)
+    .expect(403);
+  expect(files.revokePrivateReview).not.toHaveBeenCalled();
+  await revoke().expect(403, { error: "forbidden" });
+  files.revokePrivateReview.mockResolvedValueOnce(true);
+  await revoke().expect(204);
+  expect(files.revokePrivateReview).toHaveBeenCalledWith(
+    expect.stringMatching(/^[a-f0-9]{64}$/),
+    id,
+  );
 });
 it("rejects unrecognized Host and cross-origin, missing-origin or invalid-CSRF writes", async () => {
   await atStage(
