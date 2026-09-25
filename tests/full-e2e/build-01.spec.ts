@@ -1,5 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { authorizationStore } from "../../src/authorization.ts";
 import { testPool } from "../support/database.ts";
 import { requiredCheck } from "../support/required-check.ts";
 
@@ -163,4 +164,75 @@ test("[F-BUILD-01-B] business-analysis learner completes a noncoding local exerc
       page.getByRole("button", { name: /book|buy|purchase/i }),
     ).toHaveCount(0);
   });
+});
+
+test("[F-BUILD-01-D] demo reviewer roster entry does not change live service readiness", async ({
+  page,
+  context,
+}) => {
+  const recordId = randomUUID();
+  try {
+    await requiredCheck(1, async () => {
+      const staffId = await authorizationStore(pool).provisionStaff(
+        randomBytes(32).toString("hex"),
+        "reviewer",
+        new Date(Date.now() + 86_400_000),
+      );
+      await pool.query(
+        `INSERT INTO expert_registry(
+           id,staff_id,staff_role,domain,service_type,starts_at,ends_at,
+           loaded_cost_cents,capacity_minutes,committed_minutes,
+           qualification_ref,agreement_ref,conflict_review_ref
+         ) VALUES($1,$2,'reviewer','education','formal-review',
+           CURRENT_TIMESTAMP-INTERVAL '1 day',CURRENT_TIMESTAMP+INTERVAL '1 day',
+           10000,90,0,'invented demo qualification','','')`,
+        [recordId, staffId],
+      );
+      const record = await pool.query<{
+        verified_by: string | null;
+        verified_at: Date | null;
+        backup_staff_id: string | null;
+        capacity_minutes: number;
+      }>(
+        `SELECT verified_by,verified_at,backup_staff_id,capacity_minutes
+         FROM expert_registry WHERE id=$1`,
+        [recordId],
+      );
+      expect(record.rows).toEqual([
+        {
+          verified_by: null,
+          verified_at: null,
+          backup_staff_id: null,
+          capacity_minutes: 90,
+        },
+      ]);
+
+      await onboard(page, "analysis");
+      const owner = await member(context);
+      await page.goto("/readiness/tracks");
+      const service = page
+        .getByRole("listitem")
+        .filter({ hasText: "Education · formal-review" });
+      await expect(service).toContainText("in preparation");
+      await expect(service).toContainText(
+        "Qualified reviewer coverage not verified",
+      );
+      await expect(service).toContainText(
+        "Deliverable service capacity not verified",
+      );
+      await expect(page.getByText("invented demo qualification")).toHaveCount(
+        0,
+      );
+      await expect(
+        page.getByRole("button", { name: /book|buy|purchase/i }),
+      ).toHaveCount(0);
+      const paid = await pool.query(
+        "SELECT id FROM synthetic_entitlement_grants WHERE member_id=$1",
+        [owner.id],
+      );
+      expect(paid.rowCount).toBe(0);
+    });
+  } finally {
+    await pool.query("DELETE FROM expert_registry WHERE id=$1", [recordId]);
+  }
 });
