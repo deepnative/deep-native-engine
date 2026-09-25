@@ -26,6 +26,7 @@ export default defineConfig({
       DNE_DATABASE_URL: process.env.DNE_TEST_DATABASE_URL!,
       DNE_PORT: "4317",
       DNE_APP_MODE: "test",
+      DNE_TEST_EVIDENCE_CLOCK: "1",
       DNE_PRIVATE_STORAGE_ROOT: process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!,
     },
   },

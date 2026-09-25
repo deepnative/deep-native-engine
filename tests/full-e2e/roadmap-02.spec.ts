@@ -1,4 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
+import { rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
@@ -404,5 +406,156 @@ test("[F-ROADMAP-02-B] assigned reviewer reads only one exact submitted evidence
   } finally {
     await reviewer.close();
     await otherReviewer.close();
+  }
+});
+
+test("[F-ROADMAP-02-C] revoked reviewer grant and expired signed link deny private bytes", async ({
+  page,
+  context,
+  browser,
+}) => {
+  const clockFile = join(
+    process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!,
+    ".test-evidence-clock",
+  );
+  const now = Date.now();
+  const privateBytes = Buffer.from(
+    "Invented private submission for reviewer revocation and expiry.",
+  );
+  const reviewer = await browser.newContext({ baseURL: origin });
+  try {
+    await onboard(page, "professional");
+    const ownerId = await memberId(context);
+    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const uploaded = await page.request.post("/api/evidence", {
+      headers: {
+        Origin: origin,
+        "X-CSRF-Token": csrf,
+        "Content-Type": "text/plain",
+        "X-Evidence-Name": "invented-revocation.txt",
+        "X-Evidence-Rights": "confirmed",
+        "X-Evidence-Scopes": "private-review",
+      },
+      data: privateBytes,
+    });
+    expect(uploaded.status()).toBe(201);
+    const { id: evidenceId } = (await uploaded.json()) as { id: string };
+    const evidence = evidenceStore(
+      pool,
+      fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!),
+      "test-only-scanner-secret",
+    );
+    expect(await evidence.transitionQuarantine(evidenceId, "clean")).toBe(true);
+    const submitted = await page.request.post(
+      `/api/evidence/${evidenceId}/review`,
+      { headers: { Origin: origin, "X-CSRF-Token": csrf } },
+    );
+    expect(submitted.status()).toBe(204);
+    const submission = await pool.query<{ id: string }>(
+      "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+      [evidenceId],
+    );
+    expect(submission.rowCount).toBe(1);
+
+    const auth = authorizationStore(pool);
+    const expires = new Date(now + 86_400_000);
+    const adminId = await auth.provisionStaff(
+      randomBytes(32).toString("hex"),
+      "platform_admin",
+      expires,
+    );
+    const reviewerToken = randomBytes(32).toString("hex");
+    const reviewerId = await auth.provisionStaff(
+      reviewerToken,
+      "reviewer",
+      expires,
+    );
+    const assignmentId = await auth.grantAssignment(
+      adminId,
+      reviewerId,
+      ownerId,
+      "reviewer",
+      "exact synthetic browser submission",
+      expires,
+    );
+    const grant = await auth.grantEvidenceReview(
+      adminId,
+      reviewerId,
+      assignmentId,
+      submission.rows[0]!.id,
+      "exact synthetic browser submission",
+      expires,
+    );
+    await reviewer.addCookies([
+      {
+        name: "dne_preview",
+        value: reviewerToken,
+        url: origin,
+        httpOnly: true,
+        sameSite: "Strict",
+      },
+    ]);
+    const reviewerPage = await reviewer.newPage();
+    await reviewerPage.goto("/");
+    const reviewerCsrf = await reviewerPage
+      .locator('input[name="csrf"]')
+      .first()
+      .inputValue();
+    const linkFor = () =>
+      reviewerPage.request.post(`/api/evidence/${evidenceId}/download-link`, {
+        headers: { Origin: origin, "X-CSRF-Token": reviewerCsrf },
+      });
+    writeFileSync(clockFile, String(now));
+    const issued = await linkFor();
+    expect(issued.status()).toBe(200);
+    const { href, expiresAt } = (await issued.json()) as {
+      href: string;
+      expiresAt: string;
+    };
+    expect(expiresAt).toBe(new Date(now + 300_000).toISOString());
+    expect(await (await reviewerPage.request.get(href)).body()).toEqual(
+      privateBytes,
+    );
+
+    await requiredCheck(1, async () => {
+      expect(await auth.revokeEvidenceReview(adminId, grant)).toBe(true);
+      const denied = await linkFor();
+      expect(denied.status()).toBe(403);
+      expect(await denied.json()).toEqual({ error: "forbidden" });
+      expect((await denied.text()).includes(privateBytes.toString())).toBe(
+        false,
+      );
+    });
+    await requiredCheck(2, async () => {
+      const old = await reviewerPage.request.get(href);
+      expect(old.status()).toBe(403);
+      expect(await old.json()).toEqual({ error: "forbidden" });
+      expect((await old.text()).includes(privateBytes.toString())).toBe(false);
+    });
+
+    await auth.grantEvidenceReview(
+      adminId,
+      reviewerId,
+      assignmentId,
+      submission.rows[0]!.id,
+      "exact synthetic browser submission after revocation",
+      expires,
+    );
+    writeFileSync(clockFile, String(now + 300_000 - 1));
+    const beforeExpiry = await reviewerPage.request.get(href);
+    expect(beforeExpiry.status()).toBe(200);
+    expect(await beforeExpiry.body()).toEqual(privateBytes);
+    await requiredCheck(3, async () => {
+      writeFileSync(clockFile, String(now + 300_000 + 1));
+      const expired = await reviewerPage.request.get(href);
+      expect(expired.status()).toBe(403);
+      expect(await expired.json()).toEqual({ error: "forbidden" });
+      expect((await expired.text()).includes(privateBytes.toString())).toBe(
+        false,
+      );
+    });
+  } finally {
+    rmSync(clockFile, { force: true });
+    await reviewer.close();
   }
 });
