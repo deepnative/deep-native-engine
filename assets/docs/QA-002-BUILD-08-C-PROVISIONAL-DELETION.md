@@ -1,0 +1,7 @@
+# Provisional F-BUILD-08-C deletion evidence
+
+F-BUILD-08-C remains a proposed full-MVP browser subcase. The separate provisional gate (`approved:false`) runs its two required checks once on desktop and once on mobile Chromium, against the real local server, disposable PostgreSQL database and disposable private object directory. The test uploads invented text, marks it clean through the synthetic test scanner boundary, registers a synthetic `text-extract` derivative, and reads both files before deletion. It then denies another member and a forged-CSRF deletion, sends the owner's authenticated deletion request, and verifies the source and derivative files and database rows are absent. A previously issued owner download link also fails after deletion.
+
+This proves configured active storage cleanup in the local preview. The derivative is a synthetic text extraction, not output from a live AI provider. The test does not prove erasure from hosted backups, external indexes, model/provider copies, legal-hold stores or every production replica. These remain under CTP-021 #40, CTP-023 #42, CTP-025 #45 and QA-002 #94. The approved full-MVP numerator remains 0/100, with the 100-case and 94-critical denominator unchanged.
+
+No schema or runtime behavior changes are needed for this bounded verification. Removing the test or its provisional gate mapping would remove evidence only; it would not change source deletion. Keep the deletion implementation and privacy policy independent of this provisional test.
