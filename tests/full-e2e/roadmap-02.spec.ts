@@ -244,3 +244,165 @@ test("[F-ROADMAP-02-D] editor publication role cannot read private member work",
     await editor.close();
   }
 });
+
+test("[F-ROADMAP-02-B] assigned reviewer reads only one exact submitted evidence object", async ({
+  page,
+  context,
+  browser,
+}) => {
+  await onboard(page, "professional");
+  const ownerId = await memberId(context);
+  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const evidence = evidenceStore(
+    pool,
+    fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!),
+    "test-only-scanner-secret",
+  );
+  async function upload(name: string, data: Buffer, submit: boolean) {
+    const response = await page.request.post("/api/evidence", {
+      headers: {
+        Origin: origin,
+        "X-CSRF-Token": csrf,
+        "Content-Type": "text/plain",
+        "X-Evidence-Name": name,
+        "X-Evidence-Rights": "confirmed",
+        "X-Evidence-Scopes": "private-review",
+      },
+      data,
+    });
+    expect(response.status()).toBe(201);
+    const { id } = (await response.json()) as { id: string };
+    expect(await evidence.transitionQuarantine(id, "clean")).toBe(true);
+    if (submit) {
+      const submitted = await page.request.post(`/api/evidence/${id}/review`, {
+        headers: { Origin: origin, "X-CSRF-Token": csrf },
+      });
+      expect(submitted.status()).toBe(204);
+    }
+    return id;
+  }
+
+  const allowedBytes = Buffer.from("Invented submitted version A for review.");
+  const otherBytes = Buffer.from("Invented submitted version B; no grant.");
+  const draftBytes = Buffer.from("Invented clean draft; never submitted.");
+  const allowedId = await upload("invented-version-a.txt", allowedBytes, true);
+  const otherId = await upload("invented-version-b.txt", otherBytes, true);
+  const draftId = await upload("invented-draft.txt", draftBytes, false);
+  const submission = await pool.query<{ id: string }>(
+    "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+    [allowedId],
+  );
+  expect(submission.rowCount).toBe(1);
+
+  const auth = authorizationStore(pool);
+  const adminToken = randomBytes(32).toString("hex");
+  const reviewerToken = randomBytes(32).toString("hex");
+  const otherReviewerToken = randomBytes(32).toString("hex");
+  const expires = new Date(Date.now() + 86_400_000);
+  const adminId = await auth.provisionStaff(
+    adminToken,
+    "platform_admin",
+    expires,
+  );
+  const reviewerId = await auth.provisionStaff(
+    reviewerToken,
+    "reviewer",
+    expires,
+  );
+  await auth.provisionStaff(otherReviewerToken, "reviewer", expires);
+  const assignmentId = await auth.grantAssignment(
+    adminId,
+    reviewerId,
+    ownerId,
+    "reviewer",
+    "exact synthetic browser submission",
+    expires,
+  );
+
+  const reviewer = await browser.newContext({ baseURL: origin });
+  const otherReviewer = await browser.newContext({ baseURL: origin });
+  try {
+    for (const [staffContext, token] of [
+      [reviewer, reviewerToken],
+      [otherReviewer, otherReviewerToken],
+    ] as const) {
+      await staffContext.addCookies([
+        {
+          name: "dne_preview",
+          value: token,
+          url: origin,
+          httpOnly: true,
+          sameSite: "Strict",
+        },
+      ]);
+    }
+    const reviewerPage = await reviewer.newPage();
+    const unrelatedPage = await otherReviewer.newPage();
+    await reviewerPage.goto("/");
+    await unrelatedPage.goto("/");
+    const reviewerCsrf = await reviewerPage
+      .locator('input[name="csrf"]')
+      .first()
+      .inputValue();
+    const unrelatedCsrf = await unrelatedPage
+      .locator('input[name="csrf"]')
+      .first()
+      .inputValue();
+    const linkFor = (staffPage: Page, id: string, staffCsrf: string) =>
+      staffPage.request.post(`/api/evidence/${id}/download-link`, {
+        headers: { Origin: origin, "X-CSRF-Token": staffCsrf },
+      });
+
+    await requiredCheck(1, async () => {
+      expect(
+        (await linkFor(reviewerPage, allowedId, reviewerCsrf)).status(),
+      ).toBe(403);
+      const exactGrant = await auth.grantEvidenceReview(
+        adminId,
+        reviewerId,
+        assignmentId,
+        submission.rows[0]!.id,
+        "exact synthetic browser submission",
+        expires,
+      );
+      expect(exactGrant).toBeTruthy();
+      const allowedLink = await linkFor(reviewerPage, allowedId, reviewerCsrf);
+      expect(allowedLink.status()).toBe(200);
+      const { href } = (await allowedLink.json()) as { href: string };
+      const downloaded = await reviewerPage.request.get(href);
+      expect(downloaded.status()).toBe(200);
+      expect(await downloaded.body()).toEqual(allowedBytes);
+
+      for (const deniedId of [otherId, draftId]) {
+        const denied = await linkFor(reviewerPage, deniedId, reviewerCsrf);
+        expect(denied.status()).toBe(403);
+        expect(await denied.json()).toEqual({ error: "forbidden" });
+      }
+      const unrelated = await linkFor(unrelatedPage, allowedId, unrelatedCsrf);
+      expect(unrelated.status()).toBe(403);
+      expect(await unrelated.json()).toEqual({ error: "forbidden" });
+      const stolen = await unrelatedPage.request.get(href);
+      expect(stolen.status()).toBe(403);
+      expect(await stolen.json()).toEqual({ error: "forbidden" });
+      expect((await stolen.text()).includes(allowedBytes.toString())).toBe(
+        false,
+      );
+      const rawDraft = await reviewerPage.request.get(
+        `/api/workspaces/${ownerId}/private`,
+      );
+      expect(rawDraft.status()).toBe(403);
+      expect((await rawDraft.text()).includes(draftBytes.toString())).toBe(
+        false,
+      );
+      const ownerLink = await linkFor(page, otherId, csrf);
+      expect(ownerLink.status()).toBe(200);
+      const ownerDownload = await page.request.get(
+        ((await ownerLink.json()) as { href: string }).href,
+      );
+      expect(await ownerDownload.body()).toEqual(otherBytes);
+    });
+  } finally {
+    await reviewer.close();
+    await otherReviewer.close();
+  }
+});
