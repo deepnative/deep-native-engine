@@ -177,12 +177,74 @@ it("escapes private proposal text and never renders a publish action", () => {
       "csrf",
     ),
   ).toContain("The proposal text has been removed");
-  expect(moderationPage([], "csrf")).toContain("No submitted proposals");
-  expect(moderationPage([{ ...item, state: "submitted" }], "csrf")).toContain(
-    "Quarantine for review",
-  );
   expect(
-    moderationPage([{ ...item, state: "quarantined" }], "csrf"),
+    moderationPage([], "csrf", new Date("2026-09-25T12:00:00Z")),
+  ).toContain("No submitted proposals");
+  expect(
+    moderationPage(
+      [
+        {
+          ...item,
+          state: "submitted",
+          submittedAt: new Date("2026-09-25T11:00:00Z"),
+        },
+      ],
+      "csrf",
+      new Date("2026-09-25T12:00:00Z"),
+    ),
+  ).toContain("Quarantine for review");
+  const worklist = moderationPage(
+    [
+      {
+        ...item,
+        state: "submitted",
+        submittedAt: new Date("2026-09-25T11:00:00Z"),
+      },
+    ],
+    "csrf",
+    new Date("2026-09-25T12:00:00Z"),
+  );
+  expect(worklist).toContain('datetime="2026-09-25T11:00:00.000Z"');
+  expect(worklist).toContain("60 minutes");
+  expect(worklist).toContain("as of page load");
+  expect(worklist).toContain("no response-time promise");
+  expect(worklist).not.toContain("expert availability");
+  expect(
+    moderationPage(
+      [
+        {
+          ...item,
+          state: "submitted",
+          submittedAt: new Date("2026-09-25T13:00:00Z"),
+        },
+      ],
+      "csrf",
+      new Date("2026-09-25T12:00:00Z"),
+    ),
+  ).toContain("0 minutes");
+  expect(
+    moderationPage(
+      Array.from({ length: 100 }, () => ({
+        ...item,
+        state: "submitted",
+        submittedAt: new Date("2026-09-25T11:00:00Z"),
+      })),
+      "csrf",
+      new Date("2026-09-25T12:00:00Z"),
+    ),
+  ).toContain("More proposals may be waiting");
+  expect(
+    moderationPage(
+      [
+        {
+          ...item,
+          state: "quarantined",
+          submittedAt: new Date("2026-09-25T11:00:00Z"),
+        },
+      ],
+      "csrf",
+      new Date("2026-09-25T12:00:00Z"),
+    ),
   ).not.toContain("Quarantine for review");
 });
 it("shows a private plan for known time and time zone without a paid action", () => {

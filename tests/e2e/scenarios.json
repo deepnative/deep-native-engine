@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v23",
+  "version": "initial-learning-v24",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, plus ephemeral source-grounded local study reflection; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, plus ephemeral source-grounded local study reflection; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -506,6 +506,15 @@
       "steps": "Submit forged CSRF, invalid or empty reflection, stale source version and retired source",
       "expected": "Invalid inputs and stale/retired versions fail clearly; no feedback uses an unavailable or different source version",
       "issues": [182, 34],
+      "critical": true
+    },
+    {
+      "id": "L57",
+      "actor": "Member, reviewer and moderator",
+      "preconditions": "Private synthetic proposals and local preview; no publication or live moderation staffing",
+      "steps": "Submit two proposals in different creation/submission order, inspect scoped moderator worklist age and ordering, deny member/reviewer, then revoke the moderator and attempt a stale action and read",
+      "expected": "Only a current authorized moderator or platform admin sees bounded oldest-submitted-first items with timestamps and nonnegative elapsed age; unauthorized/revoked reads and actions reveal or change nothing; no response promise or publish path appears",
+      "issues": [192, 39],
       "critical": true
     }
   ],

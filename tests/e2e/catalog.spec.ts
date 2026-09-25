@@ -2,6 +2,7 @@ import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
+import { proposalStore } from "../../src/proposals.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
@@ -62,10 +63,15 @@ test("[L28] consented sample stays private, quarantines and redacts after withdr
     await expect(
       moderatorPage.getByRole("button", { name: /publish|approve/i }),
     ).toHaveCount(0);
-    await moderatorPage
+    const ownQueueItem = moderatorPage
+      .locator("main li")
+      .filter({ hasText: title });
+    await ownQueueItem
       .getByRole("button", { name: "Quarantine for review" })
       .click();
-    await expect(moderatorPage.getByText("quarantined")).toBeVisible();
+    await expect(
+      moderatorPage.locator("main li").filter({ hasText: title }),
+    ).toContainText("quarantined");
     const denied = await page.request.post(`/contribute/${id}/withdraw`, {
       headers: { origin },
       form: { csrf: "wrong", confirm: "yes" },
@@ -81,9 +87,6 @@ test("[L28] consented sample stays private, quarantines and redacts after withdr
     ).toBeVisible();
     await moderatorPage.reload();
     await expect(moderatorPage.getByText(title)).toHaveCount(0);
-    await expect(
-      moderatorPage.getByText("No submitted proposals await moderation"),
-    ).toBeVisible();
     const record = (
       await pool.query(
         "SELECT title,body,sources,state FROM member_proposals WHERE id=$1",
@@ -100,6 +103,92 @@ test("[L28] consented sample stays private, quarantines and redacts after withdr
     await expect(page.getByText("No published content matches")).toBeVisible();
   } finally {
     await other.close();
+    await moderatorContext.close();
+    await reviewerContext.close();
+  }
+});
+test("[L57] private moderation worklist orders by submission and loses revoked access", async ({
+  browser,
+  page,
+}, testInfo) => {
+  await onboard(page);
+  const cookie = (await page.context().cookies()).find(
+    (item) => item.name === "dne_preview",
+  )!;
+  const proposals = proposalStore(pool);
+  const olderTitle = `Earlier submitted sample ${testInfo.project.name}`;
+  const laterTitle = `Later submitted sample ${testInfo.project.name}`;
+  const sample = {
+    body: "Invented worklist example",
+    sources: "Original invented sample",
+  };
+  const later = (await proposals.createDraft(
+    cookie.value,
+    { ...sample, title: laterTitle },
+    true,
+  ))!;
+  const older = (await proposals.createDraft(
+    cookie.value,
+    { ...sample, title: olderTitle },
+    true,
+  ))!;
+  expect(await proposals.submit(cookie.value, older, true)).toBe(true);
+  expect(await proposals.submit(cookie.value, later, true)).toBe(true);
+  await pool.query(
+    `UPDATE member_proposals SET submitted_at=CASE WHEN id=$1 THEN CURRENT_TIMESTAMP-INTERVAL '2 hours' ELSE CURRENT_TIMESTAMP-INTERVAL '1 hour' END WHERE id IN ($1,$2)`,
+    [older, later],
+  );
+  const moderator = await staff("moderator");
+  const reviewer = await staff("reviewer");
+  const moderatorContext = await browser.newContext({ baseURL: origin });
+  const reviewerContext = await browser.newContext({ baseURL: origin });
+  try {
+    await page.goto("/moderate/proposals");
+    await expect(
+      page.getByRole("heading", { name: "Moderation unavailable" }),
+    ).toBeVisible();
+    await useToken(reviewerContext, reviewer.token);
+    const reviewerPage = await reviewerContext.newPage();
+    await reviewerPage.goto("/moderate/proposals");
+    await expect(
+      reviewerPage.getByRole("heading", { name: "Moderation unavailable" }),
+    ).toBeVisible();
+
+    await useToken(moderatorContext, moderator.token);
+    const worklist = await moderatorContext.newPage();
+    await worklist.goto("/moderate/proposals");
+    await expect(worklist.getByText(olderTitle)).toBeVisible();
+    await expect(worklist.getByText(laterTitle)).toBeVisible();
+    const entries = await worklist.locator("main li").allTextContents();
+    expect(
+      entries.findIndex((entry) => entry.includes(olderTitle)),
+    ).toBeLessThan(entries.findIndex((entry) => entry.includes(laterTitle)));
+    for (const title of [olderTitle, laterTitle]) {
+      const item = worklist.locator("main li").filter({ hasText: title });
+      await expect(item.locator("time")).toHaveCount(1);
+      await expect(item.getByText(/Elapsed: [0-9]+ minutes/)).toBeVisible();
+    }
+    await expect(worklist.getByText("no response-time promise")).toBeVisible();
+    await pool.query(
+      "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE id=$1",
+      [moderator.id],
+    );
+    await worklist
+      .locator("main li")
+      .filter({ hasText: olderTitle })
+      .getByRole("button", { name: "Reject and redact" })
+      .click();
+    await expect(
+      worklist.getByRole("heading", { name: "Proposal unchanged" }),
+    ).toBeVisible();
+    await worklist.goto("/moderate/proposals");
+    await expect(
+      worklist.getByRole("heading", { name: "Moderation unavailable" }),
+    ).toBeVisible();
+    expect(await proposals.preview(cookie.value, older)).toMatchObject({
+      state: "submitted",
+    });
+  } finally {
     await moderatorContext.close();
     await reviewerContext.close();
   }

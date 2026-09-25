@@ -468,6 +468,125 @@ it("keeps consented member samples private through moderation, withdrawal and de
     ).rows[0],
   ).toEqual({ n: 0 });
 });
+it("orders synthetic moderation by submission time and revokes queue access", async () => {
+  const proposals = proposalStore(pool);
+  const learner = await member();
+  const moderatorToken = randomBytes(32).toString("hex");
+  const reviewerToken = randomBytes(32).toString("hex");
+  const editorToken = randomBytes(32).toString("hex");
+  const adminToken = randomBytes(32).toString("hex");
+  const moderatorId = await authorizationStore(pool).provisionStaff(
+    moderatorToken,
+    "moderator",
+    new Date(Date.now() + 86_400_000),
+  );
+  await authorizationStore(pool).provisionStaff(
+    reviewerToken,
+    "reviewer",
+    new Date(Date.now() + 86_400_000),
+  );
+  await authorizationStore(pool).provisionStaff(
+    editorToken,
+    "editor",
+    new Date(Date.now() + 86_400_000),
+  );
+  await authorizationStore(pool).provisionStaff(
+    adminToken,
+    "platform_admin",
+    new Date(Date.now() + 86_400_000),
+  );
+  const sample = {
+    title: "Invented queue work",
+    body: "Only made-up details",
+    sources: "Original sample",
+  };
+  const firstDraft = (await proposals.createDraft(
+    learner.token,
+    sample,
+    true,
+  ))!;
+  const secondDraft = (await proposals.createDraft(
+    learner.token,
+    sample,
+    true,
+  ))!;
+  expect(await proposals.submit(learner.token, secondDraft, true)).toBe(true);
+  expect(await proposals.submit(learner.token, firstDraft, true)).toBe(true);
+  await pool.query(
+    `UPDATE member_proposals SET created_at=CASE WHEN id=$1 THEN '2026-09-20T00:00:00Z'::timestamptz ELSE '2026-09-21T00:00:00Z'::timestamptz END,
+       submitted_at=CASE WHEN id=$1 THEN '2026-09-24T00:00:00Z'::timestamptz ELSE '2026-09-23T00:00:00Z'::timestamptz END
+     WHERE id IN ($1,$2)`,
+    [firstDraft, secondDraft],
+  );
+  expect(await proposals.moderationQueue(learner.token)).toBeNull();
+  expect(await proposals.moderationQueue(reviewerToken)).toBeNull();
+  expect(await proposals.moderationQueue(editorToken)).toBeNull();
+  expect(
+    await proposals.moderationQueue(randomBytes(32).toString("hex")),
+  ).toBeNull();
+  expect(
+    (await proposals.moderationQueue(moderatorToken))?.map((item) => item.id),
+  ).toEqual([secondDraft, firstDraft]);
+  expect(
+    (await proposals.moderationQueue(adminToken))?.map((item) => item.id),
+  ).toEqual([secondDraft, firstDraft]);
+  await pool.query(
+    "UPDATE member_proposals SET submitted_at='2026-09-23T00:00:00Z'::timestamptz WHERE id=$1",
+    [firstDraft],
+  );
+  expect(
+    (await proposals.moderationQueue(moderatorToken))?.map((item) => item.id),
+  ).toEqual([firstDraft, secondDraft].sort());
+  expect(await proposals.withdraw(learner.token, secondDraft)).toBe(true);
+  expect(
+    (await proposals.moderationQueue(moderatorToken))?.map((item) => item.id),
+  ).toEqual([firstDraft]);
+  const racing = (await proposals.createDraft(learner.token, sample, true))!;
+  expect(await proposals.submit(learner.token, racing, true)).toBe(true);
+  const settled = await Promise.all([
+    proposals.withdraw(learner.token, racing),
+    proposals.moderate(moderatorToken, racing, "reject"),
+  ]);
+  expect(settled.filter(Boolean)).toHaveLength(1);
+  expect(await proposals.preview(learner.token, racing)).toMatchObject({
+    title: null,
+    body: null,
+    sources: null,
+  });
+  expect(
+    (await proposals.moderationQueue(moderatorToken))?.map((item) => item.id),
+  ).not.toContain(racing);
+  await pool.query(
+    "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE id=$1",
+    [moderatorId],
+  );
+  expect(await proposals.moderationQueue(moderatorToken)).toBeNull();
+  expect(await proposals.moderate(moderatorToken, firstDraft, "reject")).toBe(
+    false,
+  );
+});
+it("caps the private moderation queue at the oldest 100 stable ties", async () => {
+  const learner = await member();
+  const moderatorToken = randomBytes(32).toString("hex");
+  await authorizationStore(pool).provisionStaff(
+    moderatorToken,
+    "moderator",
+    new Date(Date.now() + 86_400_000),
+  );
+  const ids = Array.from({ length: 101 }, () => randomUUID());
+  await pool.query(
+    `INSERT INTO member_proposals(id,member_id,title,body,sources,state,
+       sample_attested_at,rights_attested_at,submitted_at)
+     SELECT id,$1,'Invented capped item','Synthetic text','Original sample',
+       'submitted',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,
+       '2026-09-24T00:00:00Z'::timestamptz
+     FROM unnest($2::uuid[]) AS source(id)`,
+    [learner.learner.id, ids],
+  );
+  const queue = await proposalStore(pool).moderationQueue(moderatorToken);
+  expect(queue).toHaveLength(100);
+  expect(queue?.map((item) => item.id)).toEqual(ids.sort().slice(0, 100));
+});
 it("keeps the expert roster private and all live track states unprepared without qualified evidence", async () => {
   const tracks = trackStore(pool);
   const operatorToken = randomBytes(32).toString("hex");
