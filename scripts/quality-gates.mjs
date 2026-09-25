@@ -349,6 +349,7 @@ export function assertProvisionalReleaseJourneys(register, report) {
     "F-ECO-03-B",
     "F-ECO-03-C",
     "F-ECO-04-A",
+    "F-ECO-06-A",
   ];
   const cases = register.fullMvp.flatMap((family) =>
     family.cases.map((test) => ({
