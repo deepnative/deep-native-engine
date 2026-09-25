@@ -29,6 +29,7 @@ import type { Proposal } from "./proposals.ts";
 import type { WorkflowBundle } from "./workflow-registry.ts";
 import type { CircleListing } from "./circles.ts";
 import type { AssignmentAttempt } from "./attempts.ts";
+import type { PracticeHistory, PracticeSource } from "./practice.ts";
 import { learningPlan } from "./learning-plan.ts";
 import type { SubmissionError, SubmissionField } from "./validation.ts";
 export function escape(value: string) {
@@ -405,7 +406,7 @@ export function contentPreview(
   const base = `/editor/library/${encodeURIComponent(item.id)}/${item.version}`;
   const learning =
     !staff && item.kind === "lesson"
-      ? `<section aria-labelledby="reader-progress-title"><h2 id="reader-progress-title">Your private reading activity</h2><p role="status">${activity ? escape(lessonActivityStatus(activity)) : "Opening not confirmed"} · version ${item.version}</p><p>Opening this text does not prove it was read or understood. No qualified reviewer has assessed this lesson.</p><p><a href="/library/${encodeURIComponent(item.id)}/study">Try a locally simulated study reflection</a></p>${activity && !activity.startedAt ? `<form method="post" action="/library/${encodeURIComponent(item.id)}/progress">${hidden(csrf)}<input type="hidden" name="content_version" value="${item.version}"><button type="submit" name="intent" value="start">Start this lesson</button></form>` : ""}${activity?.startedAt && !activity.selfAssessedAt ? `<form method="post" action="/library/${encodeURIComponent(item.id)}/progress">${hidden(csrf)}<input type="hidden" name="content_version" value="${item.version}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I have finished reading this sample lesson; this is my own report.</span></label><button type="submit" name="intent" value="complete">Mark self-assessed complete</button></form>` : ""}</section>`
+      ? `<section aria-labelledby="reader-progress-title"><h2 id="reader-progress-title">Your private reading activity</h2><p role="status">${activity ? escape(lessonActivityStatus(activity)) : "Opening not confirmed"} · version ${item.version}</p><p>Opening this text does not prove it was read or understood. No qualified reviewer has assessed this lesson.</p><p><a href="/library/${encodeURIComponent(item.id)}/study">Try a locally simulated study reflection</a> · <a href="/library/${encodeURIComponent(item.id)}/practice">Open private sample practice</a></p>${activity && !activity.startedAt ? `<form method="post" action="/library/${encodeURIComponent(item.id)}/progress">${hidden(csrf)}<input type="hidden" name="content_version" value="${item.version}"><button type="submit" name="intent" value="start">Start this lesson</button></form>` : ""}${activity?.startedAt && !activity.selfAssessedAt ? `<form method="post" action="/library/${encodeURIComponent(item.id)}/progress">${hidden(csrf)}<input type="hidden" name="content_version" value="${item.version}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I have finished reading this sample lesson; this is my own report.</span></label><button type="submit" name="intent" value="complete">Mark self-assessed complete</button></form>` : ""}</section>`
       : "";
   return page(
     item.title,
@@ -423,6 +424,31 @@ export function studyReflectionPage(
   return page(
     `Study reflection · ${item.title}`,
     `<nav class="breadcrumb"><a href="/library/${encodeURIComponent(item.id)}">← Current lesson</a></nav><section class="reading"><p class="eyebrow">LOCAL STUDY PREVIEW · LOCALLY SIMULATED</p><h1>Study reflection</h1><p>This published sample is synthetic and has not received qualified foundation sign-off. No live AI provider, paid allowance or formal reviewer is connected. Use invented information only.</p><p>Your current goal: ${escape(GOALS[goal])}. No career path is required.</p><h2>Source: ${escape(source)}</h2><pre class="content-text">${escape(item.body)}</pre><p>Which idea from this source could help with your goal, and what would you check before using it?</p>${error ? notice([error]) : ""}${feedback !== null ? `<section aria-labelledby="study-feedback-title"><h2 id="study-feedback-title">Compare your reflection with the source</h2><p>Your words: ${escape(feedback)}</p><p>Return to ${escape(source)} above. Does your example rely on a fact the source did not supply? What would a person need to verify?</p><p>This deterministic prompt is not a competence assessment, generated answer or formal review. Your reflection was not saved or sent to an AI provider; opening this page again will clear it.</p></section>` : ""}<form method="post" action="/library/${encodeURIComponent(item.id)}/study">${hidden(csrf)}<input type="hidden" name="content_version" value="${item.version}"><label for="reflection">Your short reflection (sample information only)</label><textarea id="reflection" name="reflection" maxlength="1000" required></textarea><label class="check"><input type="checkbox" name="synthetic" value="yes" required><span>I used only invented or sample information.</span></label><button type="submit">Compare with source</button></form><p>Your reflection is processed only for this response. It is not saved as lesson progress. <a href="/library">Return to the learning library</a>.</p></section>`,
+  );
+}
+export function privatePracticePage(
+  source: PracticeSource,
+  csrf: string,
+  error: string | null = null,
+  attempted = "",
+) {
+  const prompt = {
+    everyday:
+      "Where might this source help in an everyday situation, and what detail would you verify first?",
+    work: "Where might this source help in professional work, and what detail would you verify first?",
+    build:
+      "How might you apply this source in a small build, and what detail would you verify first?",
+  }[source.goal];
+  const response = source.response;
+  return page(
+    `Private sample practice · ${source.title}`,
+    `<nav class="breadcrumb"><a href="/library/${encodeURIComponent(source.id)}">← Current lesson</a> · <a href="/practice">Private practice history</a></nav><section class="reading"><p class="eyebrow">LOCAL PRACTICE · SIMULATED · UNREVIEWED · SAMPLE ONLY</p><h1>Private sample practice</h1><p>Published synthetic lesson ${escape(source.id)} · version ${source.version}. No live AI provider or formal reviewer is connected.</p><p>Use invented or sample information only. This note is saved privately with this exact lesson version until you delete your account. It is not the separate, unsaved study reflection.</p><h2>Permitted source</h2><pre class="content-text">${escape(source.body)}</pre><h2>Practice prompt</h2><p>${escape(prompt)}</p>${error ? notice([error]) : ""}${response !== null ? `<section aria-labelledby="practice-feedback-title"><h2 id="practice-feedback-title">Your saved sample and source comparison</h2><p>Your words: ${escape(response)}</p><p>Compare those words with ${escape(source.id)} · version ${source.version} above. Which part is supported by the source, and which detail still needs checking?</p><p>This deterministic prompt is not an evaluation. There is insufficient evidence here to judge competence or provide formal assessment.</p><p>This version accepts one note. Reloading shows the saved note; a different response cannot overwrite it.</p></section>` : `<form method="post" action="/library/${encodeURIComponent(source.id)}/practice">${hidden(csrf)}<input type="hidden" name="content_version" value="${source.version}"><label for="practice-response">Your sample response (up to 1,000 characters)</label><textarea id="practice-response" name="response" maxlength="1000" required>${escape(attempted)}</textarea><label class="check"><input type="checkbox" name="synthetic" value="yes" required><span>I used only invented or sample information and want to save this private note.</span></label><button type="submit">Save private practice</button></form>`}<p><a href="/library">Return to the learning library</a></p></section>`,
+  );
+}
+export function privatePracticeHistoryPage(history: PracticeHistory[]) {
+  return page(
+    "Private practice history",
+    `<section class="reading"><h1>Private practice history</h1><p>These sample responses are visible only in your signed-in account and are removed with your account. A source that has changed remains tied to its original version; no new feedback is generated for an unavailable version.</p>${history.length ? `<ul>${history.map((entry) => `<li><strong>${escape(entry.title)}</strong> · ${escape(entry.id)} · version ${entry.version} · ${entry.available ? `<a href="/library/${encodeURIComponent(entry.id)}/practice">Current source and saved comparison</a>` : "Source unavailable; saved private note only"}<p>Your saved words: ${escape(entry.response)}</p></li>`).join("")}</ul>` : "<p>No private practice is saved yet.</p>"}<p><a href="/library">Learning library</a></p></section>`,
   );
 }
 export function staffLibraryPage(items: ContentVersion[], csrf: string) {

@@ -26,6 +26,7 @@ import { proposalStore } from "../../src/proposals.ts";
 import { circleStore } from "../../src/circles.ts";
 import { metricsStore } from "../../src/metrics.ts";
 import { attemptStore } from "../../src/attempts.ts";
+import { practiceStore } from "../../src/practice.ts";
 import {
   catalogStore,
   seedDraftPack,
@@ -86,6 +87,114 @@ const contentDraft: DraftContent = {
   rubric: "Check source and uncertainty.",
   rubricVersion: 1,
 };
+it("keeps a sample practice note private and pinned through replay, replacement, retirement and account deletion", async () => {
+  const auth = authorizationStore(pool);
+  const catalog = catalogStore(pool);
+  const practice = practiceStore(pool);
+  const editor = randomBytes(32).toString("hex");
+  const reviewer = randomBytes(32).toString("hex");
+  await auth.provisionStaff(
+    editor,
+    "editor",
+    new Date(Date.now() + 86_400_000),
+  );
+  await auth.provisionStaff(
+    reviewer,
+    "reviewer",
+    new Date(Date.now() + 86_400_000),
+  );
+  const lesson: DraftContent = {
+    ...contentDraft,
+    id: "SYN-130",
+    kind: "lesson",
+    title: "Invented source",
+    body: "Verify an invented claim against the original sample.",
+    goals: ["everyday"],
+    backgrounds: ["explorer"],
+    rubric: null,
+    rubricVersion: null,
+  };
+  const publish = async (version: number) => {
+    expect(await catalog.createDraft(editor, { ...lesson, version })).toBe(
+      true,
+    );
+    expect(await catalog.submit(editor, lesson.id, version)).toBe(true);
+    expect(await catalog.approve(reviewer, lesson.id, version, true)).toBe(
+      true,
+    );
+    expect(await catalog.publish(editor, lesson.id, version)).toBe(true);
+  };
+  await publish(1);
+  const first = await member();
+  const second = await member();
+  expect(await practice.current(first.token, lesson.id)).toMatchObject({
+    version: 1,
+    response: null,
+    goal: "everyday",
+  });
+  expect(await practice.current("invalid", lesson.id)).toBeNull();
+  expect(await practice.save(first.token, lesson.id, 2, "sample")).toBe(
+    "unavailable",
+  );
+  const outcomes = await Promise.all([
+    practice.save(first.token, lesson.id, 1, "first invented response"),
+    practice.save(first.token, lesson.id, 1, "second invented response"),
+  ]);
+  expect(outcomes).toContain("saved");
+  expect(outcomes).toContain("conflict");
+  const saved = (await practice.current(first.token, lesson.id))!.response!;
+  expect(await practice.save(first.token, lesson.id, 1, saved)).toBe(
+    "replayed",
+  );
+  expect(
+    await practice.save(first.token, lesson.id, 1, "late stale reply"),
+  ).toBe("conflict");
+  expect(
+    (await practice.history(first.token)).map((entry) => entry.response),
+  ).toEqual([saved]);
+  expect(await practice.history(second.token)).toEqual([]);
+  expect(
+    (await practice.current(second.token, lesson.id))!.response,
+  ).toBeNull();
+  await db.updateProfile(first.learner.id, {
+    background: "professional",
+    goal: "work",
+    backgroundTags: [],
+    domainTags: [],
+    itRoles: [],
+    experience: "new",
+    exploratory: false,
+    timezone: "America/Toronto",
+    weeklyMinutes: 30,
+  });
+  expect(await practice.current(first.token, lesson.id)).toBeNull();
+  expect((await practice.history(first.token))[0]).toMatchObject({
+    available: false,
+    version: 1,
+  });
+  expect(await practice.save(first.token, lesson.id, 1, "changed goal")).toBe(
+    "unavailable",
+  );
+  await publish(2);
+  expect((await practice.history(first.token))[0]).toMatchObject({
+    available: false,
+    version: 1,
+  });
+  expect(await practice.save(first.token, lesson.id, 1, "old version")).toBe(
+    "unavailable",
+  );
+  expect(await catalog.retire(editor, lesson.id)).toBe(true);
+  expect(await practice.current(second.token, lesson.id)).toBeNull();
+  expect((await practice.history(first.token))[0]).toMatchObject({
+    available: false,
+    version: 1,
+  });
+  await db.remove(first.learner.id);
+  expect(
+    (await pool.query("SELECT count(*)::int AS count FROM private_practice"))
+      .rows[0].count,
+  ).toBe(0);
+});
 it("distinguishes an empty authorized staff worklist from member and revoked access", async () => {
   const learner = await member();
   const catalog = catalogStore(pool);

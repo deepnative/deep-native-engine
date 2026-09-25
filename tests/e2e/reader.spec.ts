@@ -285,3 +285,70 @@ test("[L56] stale, retired and invalid study submissions never reuse a different
   ).toBeVisible();
   expect((await post("2", "Sample reflection")).status()).toBe(409);
 });
+
+test("[L58] cross-audience private practice persists one exact sample version and becomes unavailable after retirement", async ({
+  page,
+}, info) => {
+  const id = info.project.name === "desktop-chromium" ? "SYN-919" : "SYN-920";
+  const { catalog, editor } = await syntheticLesson(id);
+  await onboard(page, "explorer", "everyday");
+  for (const [background, goal, prompt] of [
+    ["explorer", "everyday", "everyday situation"],
+    ["professional", "work", "professional work"],
+    ["technical", "build", "small build"],
+  ] as const) {
+    await page.goto("/learn");
+    await page.getByLabel("Your starting point").selectOption(background);
+    await page.getByLabel("What would you like to do?").selectOption(goal);
+    await page.getByRole("button", { name: "Save my direction" }).click();
+    await page.goto(`/library/${id}/practice`);
+    await expect(
+      page.getByRole("heading", { name: "Private sample practice" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(`${id} · version 1`, { exact: false }),
+    ).toBeVisible();
+    await expect(page.getByText(prompt, { exact: false })).toBeVisible();
+    await expect(
+      page.getByText("SIMULATED · UNREVIEWED · SAMPLE ONLY", { exact: false }),
+    ).toBeVisible();
+  }
+  await page
+    .getByLabel("Your sample response")
+    .fill("<invented> I would verify the original sample.");
+  await page
+    .getByLabel(
+      "I used only invented or sample information and want to save this private note.",
+    )
+    .check();
+  await page.getByRole("button", { name: "Save private practice" }).click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Your saved sample and source comparison",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("insufficient evidence", { exact: false }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByText("<invented> I would verify the original sample.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await page.goto("/practice");
+  await expect(
+    page.getByText("<invented> I would verify the original sample.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  expect(await catalog.retire(editor, id)).toBe(true);
+  await page.goto(`/library/${id}/practice`);
+  await expect(
+    page.getByRole("heading", { name: "Practice source unavailable" }),
+  ).toBeVisible();
+  await page.goto("/practice");
+  await expect(
+    page.getByText("Source unavailable; saved private note only"),
+  ).toBeVisible();
+});

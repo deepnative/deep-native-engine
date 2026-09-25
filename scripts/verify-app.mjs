@@ -20,7 +20,7 @@ import {
 } from "./quality-gates.mjs";
 const root = process.cwd();
 const report = {
-  scope: "initial-learning-v24",
+  scope: "initial-learning-v25",
   startedAt: new Date().toISOString(),
   node: process.version,
   commands: [],

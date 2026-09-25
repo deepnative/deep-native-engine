@@ -16,6 +16,8 @@ import {
   circlesPage,
   contentPreview,
   studyReflectionPage,
+  privatePracticePage,
+  privatePracticeHistoryPage,
   staffLibraryPage,
   trackReadinessPage,
   expertRegistryPage,
@@ -65,6 +67,7 @@ import { workflowBundle, workflowRegistry } from "./workflow-registry.ts";
 import { disabledCircleStore, type CircleStore } from "./circles.ts";
 import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
+import { disabledPracticeStore, type PracticeStore } from "./practice.ts";
 const attemptWritePath =
   /^\/assignments\/attempts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(save|submit)$/i;
 function attemptedResponse(body: unknown, action: string) {
@@ -88,6 +91,7 @@ export function app(
     circles?: CircleStore;
     metrics?: MetricsStore;
     attempts?: AttemptStore;
+    practice?: PracticeStore;
   },
 ) {
   const app = express();
@@ -102,6 +106,7 @@ export function app(
   const circles = options.circles ?? disabledCircleStore();
   const metrics = options.metrics ?? disabledMetricsStore();
   const attempts = options.attempts ?? disabledAttemptStore();
+  const practice = options.practice ?? disabledPracticeStore();
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -388,6 +393,7 @@ export function app(
       "/profile",
       "/delete",
       "/library",
+      "/practice",
       "/assignments",
       "/milestones",
       "/career",
@@ -655,6 +661,109 @@ export function app(
           )
         : undefined;
     res.send(contentPreview(item, false, res.locals.csrf as string, activity));
+  });
+  app.get("/practice", async (_req, res) => {
+    res.send(
+      privatePracticeHistoryPage(
+        await practice.history(res.locals.token as string),
+      ),
+    );
+  });
+  app.get("/library/:id/practice", async (req, res) => {
+    const source = await practice.current(
+      res.locals.token as string,
+      req.params.id as string,
+    );
+    if (!source) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Practice source unavailable",
+            "This lesson is not currently eligible for your goal. Your saved notes, if any, remain in private practice history.",
+          ),
+        );
+      return;
+    }
+    res.send(privatePracticePage(source, res.locals.csrf as string));
+  });
+  app.post("/library/:id/practice", async (req, res) => {
+    const fields = req.body as Fields;
+    const source = await practice.current(
+      res.locals.token as string,
+      req.params.id as string,
+    );
+    if (!source) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Practice source unavailable",
+            "Return to your private practice history. This lesson is not currently eligible for a new note or feedback.",
+          ),
+        );
+      return;
+    }
+    const version = Number(fields.content_version);
+    if (!Number.isSafeInteger(version) || version !== source.version) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Practice source changed",
+            "Reopen the current lesson before saving a note. Your earlier version was not overwritten.",
+          ),
+        );
+      return;
+    }
+    const response = fields.response;
+    if (
+      typeof response !== "string" ||
+      response.trim().length === 0 ||
+      response.length > 1000 ||
+      fields.synthetic !== "yes"
+    ) {
+      res
+        .status(422)
+        .send(
+          privatePracticePage(
+            source,
+            res.locals.csrf as string,
+            "Write 1 to 1,000 characters using only invented or sample information, then confirm the saving checkbox.",
+            typeof response === "string" ? response.slice(0, 1000) : "",
+          ),
+        );
+      return;
+    }
+    const result = await practice.save(
+      res.locals.token as string,
+      source.id,
+      version,
+      response.trim(),
+    );
+    if (result === "unavailable") {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Practice source changed",
+            "The source changed before your note was saved. Return to private practice history or reopen the current lesson.",
+          ),
+        );
+      return;
+    }
+    if (result === "conflict") {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "A note already exists",
+            "This lesson version accepts one private note. Return to the practice page to see the saved response; it was not overwritten.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, `/library/${encodeURIComponent(source.id)}/practice`);
   });
   app.get("/library/:id/study", async (req, res) => {
     const item = await catalog.published(req.params.id as string);
