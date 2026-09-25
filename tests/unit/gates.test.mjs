@@ -382,7 +382,7 @@ it("requires every mandatory subcase on each browser under the same ID", () => {
     /Incomplete required subcases.*mobile/,
   );
 });
-it("requires ROADMAP-01-B/02-A/B/D/08-B, ECO-01 to ECO-04, ECO-06-A and BUILD-08-B/C provisional browser evidence without approving release", () => {
+it("requires ROADMAP-01-B/02-A/B/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUILD-08-B/C provisional browser evidence without approving release", () => {
   const ids = [
     "F-ROADMAP-02-A",
     "F-ROADMAP-02-B",
@@ -402,6 +402,7 @@ it("requires ROADMAP-01-B/02-A/B/D/08-B, ECO-01 to ECO-04, ECO-06-A and BUILD-08
     "F-ROADMAP-01-B",
     "F-BUILD-08-C",
     "F-ROADMAP-08-B",
+    "F-ROADMAP-08-A",
   ];
   const cases = proposal.fullMvp.flatMap((family) => family.cases);
   const report = {
@@ -431,11 +432,11 @@ it("requires ROADMAP-01-B/02-A/B/D/08-B, ECO-01 to ECO-04, ECO-06-A and BUILD-08
   };
   expect(assertProvisionalReleaseJourneys(proposal, report)).toMatchObject({
     approved: false,
-    passed: 18,
-    total: 18,
-    criticalPassed: 12,
-    criticalTotal: 12,
-    executions: 18 * proposal.projects.length,
+    passed: 19,
+    total: 19,
+    criticalPassed: 13,
+    criticalTotal: 13,
+    executions: 19 * proposal.projects.length,
   });
   for (const [browserIndex, browserName] of proposal.projects.entries()) {
     for (const [name, corrupt] of [
@@ -552,6 +553,17 @@ it("requires ROADMAP-01-B/02-A/B/D/08-B, ECO-01 to ECO-04, ECO-06-A and BUILD-08
       assertProvisionalReleaseJourneys(proposal, derivativeMissing),
     ).toThrow(
       new RegExp(`Incomplete required subcases.*F-BUILD-08-C.*${browserName}`),
+    );
+    const specialtyMissing = copy(report);
+    specialtyMissing.suites[0].specs[18].tests[
+      browserIndex
+    ].results[0].annotations.pop();
+    expect(() =>
+      assertProvisionalReleaseJourneys(proposal, specialtyMissing),
+    ).toThrow(
+      new RegExp(
+        `Incomplete required subcases.*F-ROADMAP-08-A.*${browserName}`,
+      ),
     );
   }
   const missing = copy(report);

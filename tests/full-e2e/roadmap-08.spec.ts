@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
 import { testPool } from "../support/database.ts";
@@ -6,6 +6,128 @@ import { requiredCheck } from "../support/required-check.ts";
 
 const pool = testPool();
 test.afterAll(async () => pool.end());
+
+test("[F-ROADMAP-08-A] three IT specialties enter common foundation without specialist or paid admission", async ({
+  page,
+  context,
+}) => {
+  const specialties = [
+    { label: "Cybersecurity", role: "security", goal: "build" },
+    {
+      label: "Product ownership and management",
+      role: "product",
+      goal: "work",
+    },
+    {
+      label: "Project, program and delivery management",
+      role: "delivery",
+      goal: "work",
+    },
+  ] as const;
+  const learnerIds: string[] = [];
+  for (const [index, specialty] of specialties.entries()) {
+    await requiredCheck(index + 1, async () => {
+      await context.clearCookies();
+      await page.goto("/");
+      await page.getByLabel("Your starting point").selectOption("technical");
+      await page
+        .getByLabel("What would you like to do?")
+        .selectOption(specialty.goal);
+      await page
+        .getByRole("group", { name: "IT specialties (optional)" })
+        .getByLabel(specialty.label)
+        .check();
+      await expect(page.getByLabel(/contract|client|employer/i)).toHaveCount(0);
+      await page.getByLabel("I'll use invented or sample information").check();
+      await page
+        .getByRole("button", { name: "Start my learning path" })
+        .click();
+      await expect(page).toHaveURL(/\/learn$/);
+      await expect(
+        page.getByRole("region", { name: "Your starter plan" }),
+      ).toBeVisible();
+
+      const cookie = (await context.cookies()).find(
+        (item) => item.name === "dne_preview",
+      );
+      expect(cookie).toBeDefined();
+      const tokenHash = createHash("sha256")
+        .update(cookie!.value)
+        .digest("hex");
+      const learner = await pool.query<{
+        id: string;
+        background: string;
+        goal: string;
+        it_roles: string[];
+        kind: string;
+      }>(
+        `SELECT l.id,l.background,l.goal,l.it_roles,p.kind
+         FROM learners l JOIN principals p ON p.id=l.id
+         WHERE l.token_hash=$1`,
+        [tokenHash],
+      );
+      expect(learner.rowCount).toBe(1);
+      const row = learner.rows[0]!;
+      expect(learnerIds).not.toContain(row.id);
+      learnerIds.push(row.id);
+      expect(row).toMatchObject({
+        background: "technical",
+        goal: specialty.goal,
+        it_roles: [specialty.role],
+        kind: "member",
+      });
+      const paid = await pool.query(
+        "SELECT id FROM synthetic_entitlement_grants WHERE member_id=$1",
+        [row.id],
+      );
+      expect(paid.rowCount).toBe(0);
+      await expect(
+        page.getByRole("button", { name: /buy|purchase|accept offer/i }),
+      ).toHaveCount(0);
+
+      await page.getByRole("link", { name: "Open lesson" }).click();
+      await expect(
+        page.getByRole("heading", { name: "Give AI a clear starting point" }),
+      ).toBeVisible();
+      await page
+        .getByLabel("Your instruction to AI")
+        .fill(
+          `Using invented ${specialty.role} details, draft a short practical plan.`,
+        );
+      await page
+        .getByLabel("How will you check the result?")
+        .fill(
+          "Compare the result with the invented brief and verify each step.",
+        );
+      await page.getByLabel("I checked the context").check();
+      await page.getByRole("button", { name: "Complete exercise" }).click();
+      await expect(
+        page.getByText("Exercise completed", { exact: true }),
+      ).toBeVisible();
+      const exercise = await pool.query<{
+        lesson_id: string;
+        lesson_version: number;
+        completed_at: Date | null;
+      }>(
+        "SELECT lesson_id,lesson_version,completed_at FROM exercises WHERE learner_id=$1",
+        [row.id],
+      );
+      expect(exercise.rows).toMatchObject([
+        { lesson_id: "clear-instructions", lesson_version: 1 },
+      ]);
+      expect(exercise.rows[0]!.completed_at).not.toBeNull();
+      await page.goto("/readiness/tracks");
+      const readiness = page
+        .getByRole("listitem")
+        .filter({ hasText: specialty.label });
+      await expect(readiness).toContainText("in preparation");
+      await expect(
+        page.getByRole("button", { name: /book|buy|purchase/i }),
+      ).toHaveCount(0);
+    });
+  }
+  expect(learnerIds).toHaveLength(3);
+});
 
 test("[F-ROADMAP-08-B] uncovered reviewer and exhausted service capacity are disclosed", async ({
   page,
