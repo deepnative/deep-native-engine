@@ -124,7 +124,7 @@ export function proposalStore(pool: Pool): ProposalStore {
          ) access LEFT JOIN LATERAL (
            SELECT ${columns} FROM member_proposals mp
            WHERE access.allowed AND mp.state IN ('submitted','quarantined')
-           ORDER BY mp.created_at LIMIT 100
+           ORDER BY mp.submitted_at,mp.id LIMIT 100
          ) items ON true`,
         [hash(token)],
       );

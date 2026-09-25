@@ -214,7 +214,7 @@ export function app(
         );
       return;
     }
-    res.send(moderationPage(queue, res.locals.csrf as string));
+    res.send(moderationPage(queue, res.locals.csrf as string, new Date()));
   });
   app.post("/moderate/proposals/:id/:action", async (req, res) => {
     const action = req.params.action;
