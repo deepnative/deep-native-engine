@@ -352,6 +352,7 @@ export function assertProvisionalReleaseJourneys(register, report) {
     "F-ECO-03-C",
     "F-ECO-04-A",
     "F-ECO-06-A",
+    "F-BUILD-08-A",
     "F-BUILD-08-B",
     "F-ROADMAP-01-B",
     "F-BUILD-08-C",

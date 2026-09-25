@@ -382,7 +382,7 @@ it("requires every mandatory subcase on each browser under the same ID", () => {
     /Incomplete required subcases.*mobile/,
   );
 });
-it("requires ROADMAP-01-B/02-A/B/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUILD-08-B/C provisional browser evidence without approving release", () => {
+it("requires ROADMAP-01-B/02-A/B/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUILD-08-A/B/C provisional browser evidence without approving release", () => {
   const ids = [
     "F-ROADMAP-02-A",
     "F-ROADMAP-02-B",
@@ -398,6 +398,7 @@ it("requires ROADMAP-01-B/02-A/B/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUILD-
     "F-ECO-03-C",
     "F-ECO-04-A",
     "F-ECO-06-A",
+    "F-BUILD-08-A",
     "F-BUILD-08-B",
     "F-ROADMAP-01-B",
     "F-BUILD-08-C",
@@ -432,11 +433,11 @@ it("requires ROADMAP-01-B/02-A/B/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUILD-
   };
   expect(assertProvisionalReleaseJourneys(proposal, report)).toMatchObject({
     approved: false,
-    passed: 19,
-    total: 19,
-    criticalPassed: 13,
-    criticalTotal: 13,
-    executions: 19 * proposal.projects.length,
+    passed: 20,
+    total: 20,
+    criticalPassed: 14,
+    criticalTotal: 14,
+    executions: 20 * proposal.projects.length,
   });
   for (const [browserIndex, browserName] of proposal.projects.entries()) {
     for (const [name, corrupt] of [
@@ -525,8 +526,17 @@ it("requires ROADMAP-01-B/02-A/B/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUILD-
     ).toThrow(
       new RegExp(`Incomplete required subcases.*F-ECO-06-A.*${browserName}`),
     );
+    const exportMissing = copy(report);
+    exportMissing.suites[0].specs[14].tests[
+      browserIndex
+    ].results[0].annotations.pop();
+    expect(() =>
+      assertProvisionalReleaseJourneys(proposal, exportMissing),
+    ).toThrow(
+      new RegExp(`Incomplete required subcases.*F-BUILD-08-A.*${browserName}`),
+    );
     const revocationMissing = copy(report);
-    revocationMissing.suites[0].specs[14].tests[
+    revocationMissing.suites[0].specs[15].tests[
       browserIndex
     ].results[0].annotations.pop();
     expect(() =>
@@ -535,7 +545,7 @@ it("requires ROADMAP-01-B/02-A/B/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUILD-
       new RegExp(`Incomplete required subcases.*F-BUILD-08-B.*${browserName}`),
     );
     const assessmentMissing = copy(report);
-    assessmentMissing.suites[0].specs[15].tests[
+    assessmentMissing.suites[0].specs[16].tests[
       browserIndex
     ].results[0].annotations.pop();
     expect(() =>
@@ -546,7 +556,7 @@ it("requires ROADMAP-01-B/02-A/B/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUILD-
       ),
     );
     const derivativeMissing = copy(report);
-    derivativeMissing.suites[0].specs[16].tests[
+    derivativeMissing.suites[0].specs[17].tests[
       browserIndex
     ].results[0].annotations.pop();
     expect(() =>
@@ -555,7 +565,7 @@ it("requires ROADMAP-01-B/02-A/B/D/08-A/B, ECO-01 to ECO-04, ECO-06-A and BUILD-
       new RegExp(`Incomplete required subcases.*F-BUILD-08-C.*${browserName}`),
     );
     const specialtyMissing = copy(report);
-    specialtyMissing.suites[0].specs[18].tests[
+    specialtyMissing.suites[0].specs[19].tests[
       browserIndex
     ].results[0].annotations.pop();
     expect(() =>
