@@ -698,11 +698,38 @@ it("supports the local editor/reviewer workflow without bypassing rejected trans
 });
 it("does not expose the staff workflow page to a member", async () => {
   const catalog = catalogMock();
-  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
-  const denied = await agent
-    .get("/editor/library")
-    .set("Host", host)
-    .expect(403);
+  const server = app(db, { origin, secret: "secret", catalog }).listen(0);
+  managedServers.push(server);
+  let receivedRequests = 0;
+  server.on("request", () => {
+    receivedRequests += 1;
+  });
+  const agent = request.agent(server);
+  let denied;
+  try {
+    denied = await agent.get("/editor/library").set("Host", host);
+  } catch (error) {
+    throw new Error(
+      `GET /editor/library member denial: ${JSON.stringify({
+        receivedRequests,
+        staffListCalls: catalog.staffList.mock.calls.length,
+        error: String(error),
+      })}`,
+      { cause: error },
+    );
+  }
+  expect(
+    denied.status,
+    JSON.stringify({
+      receivedRequests,
+      staffListCalls: catalog.staffList.mock.calls.length,
+      status: denied.status,
+      contentType: denied.headers["content-type"],
+      connection: denied.headers.connection,
+      bodyPrefix: denied.text?.slice(0, 80),
+    }),
+  ).toBe(403);
+  expect(receivedRequests).toBe(1);
   expect(denied.text).not.toContain("Create a synthetic draft");
 });
 it("onboards only valid profiles and ignores caller-controlled ownership", async () => {
