@@ -382,7 +382,7 @@ it("requires every mandatory subcase on each browser under the same ID", () => {
     /Incomplete required subcases.*mobile/,
   );
 });
-it("requires ROADMAP-02-A/B/D, ECO-01 to ECO-04, ECO-06-A and BUILD-08-B provisional browser evidence without approving release", () => {
+it("requires ROADMAP-01-B/02-A/B/D, ECO-01 to ECO-04, ECO-06-A and BUILD-08-B provisional browser evidence without approving release", () => {
   const ids = [
     "F-ROADMAP-02-A",
     "F-ROADMAP-02-B",
@@ -399,6 +399,7 @@ it("requires ROADMAP-02-A/B/D, ECO-01 to ECO-04, ECO-06-A and BUILD-08-B provisi
     "F-ECO-04-A",
     "F-ECO-06-A",
     "F-BUILD-08-B",
+    "F-ROADMAP-01-B",
   ];
   const cases = proposal.fullMvp.flatMap((family) => family.cases);
   const report = {
@@ -428,11 +429,11 @@ it("requires ROADMAP-02-A/B/D, ECO-01 to ECO-04, ECO-06-A and BUILD-08-B provisi
   };
   expect(assertProvisionalReleaseJourneys(proposal, report)).toMatchObject({
     approved: false,
-    passed: 15,
-    total: 15,
-    criticalPassed: 9,
-    criticalTotal: 9,
-    executions: 15 * proposal.projects.length,
+    passed: 16,
+    total: 16,
+    criticalPassed: 10,
+    criticalTotal: 10,
+    executions: 16 * proposal.projects.length,
   });
   for (const [browserIndex, browserName] of proposal.projects.entries()) {
     for (const [name, corrupt] of [
@@ -529,6 +530,17 @@ it("requires ROADMAP-02-A/B/D, ECO-01 to ECO-04, ECO-06-A and BUILD-08-B provisi
       assertProvisionalReleaseJourneys(proposal, revocationMissing),
     ).toThrow(
       new RegExp(`Incomplete required subcases.*F-BUILD-08-B.*${browserName}`),
+    );
+    const assessmentMissing = copy(report);
+    assessmentMissing.suites[0].specs[15].tests[
+      browserIndex
+    ].results[0].annotations.pop();
+    expect(() =>
+      assertProvisionalReleaseJourneys(proposal, assessmentMissing),
+    ).toThrow(
+      new RegExp(
+        `Incomplete required subcases.*F-ROADMAP-01-B.*${browserName}`,
+      ),
     );
   }
   const missing = copy(report);
