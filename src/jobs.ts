@@ -21,6 +21,11 @@ export type SafeJobError =
   | "invalid_provider_response"
   | "provider_outcome_unknown";
 
+export interface AiJobProvenance {
+  promptTemplateVersion: string;
+  modelContractVersion: string;
+}
+
 export interface AdapterJob {
   id: string;
   adapter: AdapterKind;
@@ -32,6 +37,9 @@ export interface AdapterJob {
   maxAttempts: number;
   safeError: SafeJobError | null;
   retryable: boolean;
+  promptTemplateVersion: string | null;
+  modelContractVersion: string | null;
+  providerOperationReference: string | null;
 }
 
 export interface AdapterAttempt extends AdapterJob {
@@ -51,6 +59,9 @@ interface JobRow {
   max_attempts: number;
   safe_error: SafeJobError | null;
   attempt_token: string | null;
+  prompt_template_version: string | null;
+  model_contract_version: string | null;
+  provider_operation_reference: string | null;
 }
 
 function job(row: JobRow): AdapterJob {
@@ -64,6 +75,9 @@ function job(row: JobRow): AdapterJob {
     attempts: row.attempt_count,
     maxAttempts: row.max_attempts,
     safeError: row.safe_error,
+    promptTemplateVersion: row.prompt_template_version,
+    modelContractVersion: row.model_contract_version,
+    providerOperationReference: row.provider_operation_reference,
     retryable:
       (row.status === "failed" || row.status === "pending") &&
       row.attempt_count < row.max_attempts,
@@ -83,6 +97,13 @@ function validateText(value: string, label: string, maximum: number) {
   return normalized;
 }
 
+const versionToken = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+const operationReference = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+function validVersion(value: unknown): value is string {
+  return typeof value === "string" && versionToken.test(value);
+}
+
 export function requestFingerprint(input: unknown) {
   return createHash("sha256")
     .update(JSON.stringify(input) ?? "undefined")
@@ -97,6 +118,7 @@ export interface JobStore {
     idempotencyKey: string,
     fingerprint: string,
     maxAttempts?: number,
+    provenance?: AiJobProvenance,
   ): Promise<AdapterJob>;
   find(id: string): Promise<AdapterJob | undefined>;
   claim(id: string): Promise<AdapterAttempt | undefined>;
@@ -105,7 +127,11 @@ export interface JobStore {
     attemptToken: string,
     safeError: SafeJobError,
   ): Promise<AdapterJob>;
-  succeed(id: string, attemptToken: string): Promise<AdapterJob>;
+  succeed(
+    id: string,
+    attemptToken: string,
+    providerOperationReference?: string,
+  ): Promise<AdapterJob>;
 }
 
 export function jobStore(pool: Pool): JobStore {
@@ -125,6 +151,7 @@ export function jobStore(pool: Pool): JobStore {
       idempotencyKey,
       fingerprint,
       maxAttempts = 3,
+      provenance,
     ) {
       const normalizedOperation = validateText(operation, "Job operation", 80);
       const normalizedKey = validateText(
@@ -136,10 +163,22 @@ export function jobStore(pool: Pool): JobStore {
         throw new Error("Job request fingerprint must be a SHA-256 digest.");
       if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5)
         throw new Error("Job max attempts must be an integer from 1 to 5.");
+      if (adapter === "ai") {
+        if (!provenance || typeof provenance !== "object")
+          throw new Error("AI job provenance is required.");
+        if (
+          !validVersion(provenance.promptTemplateVersion) ||
+          !validVersion(provenance.modelContractVersion)
+        )
+          throw new Error("AI job version identifiers must be safe tokens.");
+      } else if (provenance) {
+        throw new Error("Job provenance is for AI jobs only.");
+      }
       const inserted = await pool.query<JobRow>(
         `INSERT INTO adapter_jobs(
-           id,adapter,mode,operation,idempotency_key,request_fingerprint,max_attempts
-         ) VALUES($1,$2,$3,$4,$5,$6,$7)
+           id,adapter,mode,operation,idempotency_key,request_fingerprint,max_attempts,
+           prompt_template_version,model_contract_version
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
          ON CONFLICT(idempotency_key) DO NOTHING
          RETURNING *`,
         [
@@ -150,6 +189,8 @@ export function jobStore(pool: Pool): JobStore {
           normalizedKey,
           fingerprint,
           maxAttempts,
+          provenance?.promptTemplateVersion ?? null,
+          provenance?.modelContractVersion ?? null,
         ],
       );
       const row =
@@ -166,7 +207,11 @@ export function jobStore(pool: Pool): JobStore {
         row.mode !== mode ||
         row.operation !== normalizedOperation ||
         row.request_fingerprint !== fingerprint ||
-        row.max_attempts !== maxAttempts
+        row.max_attempts !== maxAttempts ||
+        row.prompt_template_version !==
+          (provenance?.promptTemplateVersion ?? null) ||
+        row.model_contract_version !==
+          (provenance?.modelContractVersion ?? null)
       )
         throw new Error(
           "Job idempotency key was already used for another request.",
@@ -240,15 +285,21 @@ export function jobStore(pool: Pool): JobStore {
       ).rows[0];
       return row ? job(row) : current(id);
     },
-    async succeed(id, attemptToken) {
+    async succeed(id, attemptToken, reference) {
+      if (
+        reference !== undefined &&
+        (typeof reference !== "string" || !operationReference.test(reference))
+      )
+        throw new Error("Provider operation reference must be a safe token.");
       const row = (
         await pool.query<JobRow>(
           `UPDATE adapter_jobs
            SET status='succeeded',safe_error=NULL,attempt_token=NULL,
+               provider_operation_reference=CASE WHEN adapter='ai' THEN $3::text ELSE NULL END,
                lease_until=NULL,updated_at=CURRENT_TIMESTAMP
            WHERE id=$1 AND status='running' AND attempt_token=$2
            RETURNING *`,
-          [id, attemptToken],
+          [id, attemptToken, reference ?? null],
         )
       ).rows[0];
       return row ? job(row) : current(id);
@@ -264,6 +315,7 @@ export function enqueueAdapterJob(
   input: unknown,
   idempotencyKey: string,
   maxAttempts = 3,
+  provenance?: AiJobProvenance,
 ) {
   registry.adapter(kind, registry.mode);
   return jobs.enqueue(
@@ -273,6 +325,7 @@ export function enqueueAdapterJob(
     idempotencyKey,
     requestFingerprint(input),
     maxAttempts,
+    provenance,
   );
 }
 
@@ -332,7 +385,11 @@ export async function runAdapterJob(
 
   let completed: AdapterJob;
   try {
-    completed = await jobs.succeed(claimed.id, claimed.attemptToken);
+    completed = await jobs.succeed(
+      claimed.id,
+      claimed.attemptToken,
+      result.reference,
+    );
   } catch {
     const confirmed = await jobs.find(claimed.id).catch(() => undefined);
     if (

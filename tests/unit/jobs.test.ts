@@ -13,6 +13,10 @@ import {
 } from "../../src/jobs.ts";
 
 const fingerprint = requestFingerprint({ lesson: 1 });
+const aiProvenance = {
+  promptTemplateVersion: "study-reflection-v1",
+  modelContractVersion: "synthetic-model-v1",
+};
 const baseRow = {
   id: "00000000-0000-4000-8000-000000000001",
   adapter: "ai" as const,
@@ -25,6 +29,9 @@ const baseRow = {
   max_attempts: 3,
   safe_error: null,
   attempt_token: null,
+  prompt_template_version: aiProvenance.promptTemplateVersion,
+  model_contract_version: aiProvenance.modelContractVersion,
+  provider_operation_reference: null,
 };
 
 function database(...rows: unknown[]) {
@@ -46,6 +53,9 @@ function publicJob(overrides: Partial<AdapterJob> = {}): AdapterJob {
     maxAttempts: 3,
     safeError: null,
     retryable: true,
+    promptTemplateVersion: aiProvenance.promptTemplateVersion,
+    modelContractVersion: aiProvenance.modelContractVersion,
+    providerOperationReference: null,
     ...overrides,
   };
 }
@@ -95,12 +105,23 @@ it("fingerprints equal inputs deterministically and distinguishes changed inputs
 it("enqueues an idempotent bounded job using normalized parameter values", async () => {
   const db = database(baseRow);
   await expect(
-    db.store.enqueue("ai", "test", " summarize ", " lesson-1 ", fingerprint),
+    db.store.enqueue(
+      "ai",
+      "test",
+      " summarize ",
+      " lesson-1 ",
+      fingerprint,
+      3,
+      aiProvenance,
+    ),
   ).resolves.toMatchObject({
     status: "pending",
     retryable: true,
     attempts: 0,
     maxAttempts: 3,
+    promptTemplateVersion: aiProvenance.promptTemplateVersion,
+    modelContractVersion: aiProvenance.modelContractVersion,
+    providerOperationReference: null,
   });
   expect(db.query.mock.calls[0]![1]).toEqual([
     expect.any(String),
@@ -110,7 +131,120 @@ it("enqueues an idempotent bounded job using normalized parameter values", async
     "lesson-1",
     fingerprint,
     3,
+    aiProvenance.promptTemplateVersion,
+    aiProvenance.modelContractVersion,
   ]);
+});
+
+it("rejects missing or unsafe AI provenance and rejects it for non-AI jobs", async () => {
+  const db = database();
+  await expect(
+    db.store.enqueue("ai", "test", "summarize", "missing", fingerprint),
+  ).rejects.toThrow("AI job provenance");
+  await expect(
+    db.store.enqueue(
+      "ai",
+      "test",
+      "summarize",
+      "malformed",
+      fingerprint,
+      3,
+      "not-an-object" as never,
+    ),
+  ).rejects.toThrow("AI job provenance");
+  for (const provenance of [
+    { ...aiProvenance, promptTemplateVersion: " private text" },
+    { ...aiProvenance, modelContractVersion: "x".repeat(65) },
+    { ...aiProvenance, promptTemplateVersion: "" },
+  ])
+    await expect(
+      db.store.enqueue(
+        "ai",
+        "test",
+        "summarize",
+        "invalid",
+        fingerprint,
+        3,
+        provenance,
+      ),
+    ).rejects.toThrow("version");
+  await expect(
+    db.store.enqueue(
+      "email",
+      "test",
+      "send",
+      "unexpected",
+      fingerprint,
+      3,
+      aiProvenance,
+    ),
+  ).rejects.toThrow("AI jobs only");
+  expect(db.query).not.toHaveBeenCalled();
+});
+
+it("keeps non-AI enqueues free of AI provenance", async () => {
+  const db = database({
+    ...baseRow,
+    adapter: "email",
+    operation: "send",
+    idempotency_key: "email-1",
+    prompt_template_version: null,
+    model_contract_version: null,
+  });
+  expect(
+    await db.store.enqueue("email", "test", "send", "email-1", fingerprint),
+  ).toMatchObject({
+    adapter: "email",
+    promptTemplateVersion: null,
+    modelContractVersion: null,
+  });
+  expect(db.query.mock.calls[0]![1].slice(-2)).toEqual([null, null]);
+});
+
+it("does not silently version a legacy AI job on idempotent replay", async () => {
+  const db = database(undefined, {
+    ...baseRow,
+    prompt_template_version: null,
+    model_contract_version: null,
+  });
+  await expect(
+    db.store.enqueue(
+      "ai",
+      "test",
+      "summarize",
+      "lesson-1",
+      fingerprint,
+      3,
+      aiProvenance,
+    ),
+  ).rejects.toThrow("another request");
+});
+
+it("records only a safe opaque reference on successful AI completion", async () => {
+  const db = database({
+    ...baseRow,
+    status: "succeeded",
+    attempt_count: 1,
+    prompt_template_version: aiProvenance.promptTemplateVersion,
+    model_contract_version: aiProvenance.modelContractVersion,
+    provider_operation_reference: "test_result",
+  });
+  expect(
+    await db.store.succeed(baseRow.id, "attempt-1", "test_result"),
+  ).toMatchObject({
+    status: "succeeded",
+    providerOperationReference: "test_result",
+  });
+  expect(db.query.mock.calls[0]![1]).toEqual([
+    baseRow.id,
+    "attempt-1",
+    "test_result",
+  ]);
+  for (const reference of ["unsafe private text", "x".repeat(129)])
+    await expect(
+      db.store.succeed(baseRow.id, "attempt-2", reference),
+    ).rejects.toThrow("reference");
+  expect(db.query).toHaveBeenCalledTimes(1);
 });
 
 it.each([
@@ -122,7 +256,15 @@ it.each([
 ])("rejects idempotency-key reuse with changed %s", async (_label, change) => {
   const db = database(undefined, { ...baseRow, ...change });
   await expect(
-    db.store.enqueue("ai", "test", "summarize", "lesson-1", fingerprint),
+    db.store.enqueue(
+      "ai",
+      "test",
+      "summarize",
+      "lesson-1",
+      fingerprint,
+      3,
+      aiProvenance,
+    ),
   ).rejects.toThrow("another request");
 });
 
@@ -134,6 +276,8 @@ it("reports an enqueue that unexpectedly returns no row", async () => {
       "summarize",
       "lesson-1",
       fingerprint,
+      3,
+      aiProvenance,
     ),
   ).rejects.toThrow("could not be enqueued");
 });
@@ -165,7 +309,12 @@ it.each([
 it("finds jobs, maps retryability and returns undefined for unknown IDs", async () => {
   const db = database(
     { ...baseRow, status: "failed", attempt_count: 1 },
-    { ...baseRow, status: "succeeded", attempt_count: 1 },
+    {
+      ...baseRow,
+      status: "succeeded",
+      attempt_count: 1,
+      provider_operation_reference: "test_result",
+    },
     undefined,
   );
   expect(await db.store.find(baseRow.id)).toMatchObject({
@@ -246,11 +395,15 @@ it("succeeds only the active attempt and preserves exhaustion against a late suc
     undefined,
     { ...baseRow, status: "exhausted", attempt_count: 3 },
   );
-  expect(await db.store.succeed(baseRow.id, "attempt-1")).toMatchObject({
+  expect(
+    await db.store.succeed(baseRow.id, "attempt-1", "test_result"),
+  ).toMatchObject({
     status: "succeeded",
     safeError: null,
   });
-  expect(await db.store.succeed(baseRow.id, "late-attempt")).toMatchObject({
+  expect(
+    await db.store.succeed(baseRow.id, "late-attempt", "test_result"),
+  ).toMatchObject({
     status: "exhausted",
     retryable: false,
   });
@@ -277,6 +430,7 @@ it("enqueues only through an approved registry and binds the input fingerprint",
     { lesson: 1 },
     "lesson-1",
     4,
+    aiProvenance,
   );
   expect(adapters.adapter).toHaveBeenCalledWith("ai", "test");
   expect(jobs.enqueue).toHaveBeenCalledWith(
@@ -286,6 +440,7 @@ it("enqueues only through an approved registry and binds the input fingerprint",
     "lesson-1",
     fingerprint,
     4,
+    aiProvenance,
   );
 
   const disabled = registry();
@@ -318,6 +473,7 @@ it("runs a persisted approved attempt to deterministic success", async () => {
   expect(jobs.succeed).toHaveBeenCalledWith(
     baseRow.id,
     "00000000-0000-4000-8000-000000000002",
+    "test_result",
   );
 });
 
