@@ -33,6 +33,10 @@ import {
 } from "../../src/catalog.ts";
 const pool = testPool(),
   db = store(pool);
+const aiProvenance = {
+  promptTemplateVersion: "study-reflection-v1",
+  modelContractVersion: "synthetic-model-v1",
+};
 let privateStorageRoot = "";
 const input = {
   instruction: "Use the provided sample to make a plan.",
@@ -2162,6 +2166,11 @@ it("makes job enqueue idempotent across connections and rejects changed requests
     input,
     "welcome-email",
   );
+  expect(created).toMatchObject({
+    promptTemplateVersion: null,
+    modelContractVersion: null,
+    providerOperationReference: null,
+  });
   const reopened = testPool();
   try {
     const duplicate = await enqueueAdapterJob(
@@ -2191,6 +2200,131 @@ it("makes job enqueue idempotent across connections and rejects changed requests
   }
 });
 
+it("binds synthetic AI versions to one job and stores only the validated operation reference", async () => {
+  const jobs = jobStore(pool);
+  const registry = deterministicRegistry({}, "test");
+  const input = { inventedScenario: "synthetic-ai-provenance" };
+  const [first, duplicate] = await Promise.all([
+    enqueueAdapterJob(
+      jobs,
+      registry,
+      "ai",
+      "summarize",
+      input,
+      "versioned-ai",
+      3,
+      aiProvenance,
+    ),
+    enqueueAdapterJob(
+      jobStore(pool),
+      registry,
+      "ai",
+      "summarize",
+      input,
+      "versioned-ai",
+      3,
+      aiProvenance,
+    ),
+  ]);
+  expect(duplicate).toEqual(first);
+  expect(first).toMatchObject({
+    promptTemplateVersion: aiProvenance.promptTemplateVersion,
+    modelContractVersion: aiProvenance.modelContractVersion,
+    providerOperationReference: null,
+  });
+  for (const changed of [
+    { ...aiProvenance, promptTemplateVersion: "study-reflection-v2" },
+    { ...aiProvenance, modelContractVersion: "synthetic-model-v2" },
+  ])
+    await expect(
+      enqueueAdapterJob(
+        jobs,
+        registry,
+        "ai",
+        "summarize",
+        input,
+        "versioned-ai",
+        3,
+        changed,
+      ),
+    ).rejects.toThrow("another request");
+  const outcome = await runAdapterJob(jobs, registry, first.id, input);
+  expect(outcome).toMatchObject({
+    executed: true,
+    job: {
+      status: "succeeded",
+      promptTemplateVersion: aiProvenance.promptTemplateVersion,
+      modelContractVersion: aiProvenance.modelContractVersion,
+      providerOperationReference: outcome.result?.reference,
+    },
+  });
+  expect(outcome.job.providerOperationReference).toMatch(/^test_[a-f0-9]{24}$/);
+  expect(
+    await jobs.succeed(first.id, randomUUID(), "another-safe-ref"),
+  ).toEqual(outcome.job);
+  expect(await jobs.find(first.id)).toEqual(outcome.job);
+  expect(
+    JSON.stringify((await pool.query("SELECT * FROM adapter_jobs")).rows),
+  ).not.toContain(input.inventedScenario);
+});
+
+it("accepts legacy unversioned AI rows without inventing provenance", async () => {
+  const id = randomUUID();
+  await pool.query(
+    `INSERT INTO adapter_jobs(
+       id,adapter,mode,operation,idempotency_key,request_fingerprint,
+       status,attempt_count,max_attempts
+     ) VALUES($1,'ai','test','summarize','legacy-ai',$2,'succeeded',1,3)`,
+    [id, "a".repeat(64)],
+  );
+  await migrate(pool);
+  expect(await jobStore(pool).find(id)).toMatchObject({
+    status: "succeeded",
+    promptTemplateVersion: null,
+    modelContractVersion: null,
+    providerOperationReference: null,
+  });
+  expect(
+    (
+      await pool.query(
+        "SELECT COUNT(*)::integer AS count FROM schema_migrations WHERE version=20",
+      )
+    ).rows[0],
+  ).toMatchObject({ count: 1 });
+});
+
+it("rejects unsafe AI operation references before completing a claimed attempt", async () => {
+  const jobs = jobStore(pool);
+  const created = await enqueueAdapterJob(
+    jobs,
+    deterministicRegistry({}, "test"),
+    "ai",
+    "summarize",
+    { scenario: "unsafe-reference" },
+    "unsafe-reference",
+    3,
+    aiProvenance,
+  );
+  const claimed = await jobs.claim(created.id);
+  expect(claimed).toBeDefined();
+  await expect(
+    jobs.succeed(created.id, claimed!.attemptToken, "raw private text"),
+  ).rejects.toThrow("safe token");
+  await expect(
+    jobs.succeed(created.id, claimed!.attemptToken),
+  ).rejects.toMatchObject({ code: "23514" });
+  expect(await jobs.find(created.id)).toMatchObject({
+    status: "running",
+    providerOperationReference: null,
+  });
+  expect(
+    await jobs.succeed(created.id, claimed!.attemptToken, "test_valid-ref"),
+  ).toMatchObject({
+    status: "succeeded",
+    providerOperationReference: "test_valid-ref",
+  });
+});
+
 it("finds the committed winner after a simultaneous first enqueue conflict", async () => {
   const fingerprint = "a".repeat(64),
     winnerId = randomUUID(),
@@ -2209,9 +2343,15 @@ it("finds the committed winner after a simultaneous first enqueue conflict", asy
       ).rows[0]!.pid;
     await blocker.query(
       `INSERT INTO adapter_jobs(
-         id,adapter,mode,operation,idempotency_key,request_fingerprint,max_attempts
-       ) VALUES($1,'ai','test','summarize','simultaneous-first',$2,3)`,
-      [winnerId, fingerprint],
+         id,adapter,mode,operation,idempotency_key,request_fingerprint,max_attempts,
+         prompt_template_version,model_contract_version
+       ) VALUES($1,'ai','test','summarize','simultaneous-first',$2,3,$3,$4)`,
+      [
+        winnerId,
+        fingerprint,
+        aiProvenance.promptTemplateVersion,
+        aiProvenance.modelContractVersion,
+      ],
     );
     competing = jobStore(contender as unknown as typeof pool).enqueue(
       "ai",
@@ -2219,6 +2359,8 @@ it("finds the committed winner after a simultaneous first enqueue conflict", asy
       "summarize",
       "simultaneous-first",
       fingerprint,
+      3,
+      aiProvenance,
     );
     let observedBlockedInsert = false;
     for (let check = 0; check < 100; check += 1) {
@@ -2367,6 +2509,7 @@ it("holds an ambiguous AI outcome without replaying the same request or storing 
     input,
     "ambiguous-ai",
     3,
+    aiProvenance,
   );
   const first = await runAdapterJob(jobs, registry, created.id, input);
   expect(first).toMatchObject({
@@ -2377,6 +2520,7 @@ it("holds an ambiguous AI outcome without replaying the same request or storing 
       attempts: 1,
       safeError: "provider_outcome_unknown",
       retryable: false,
+      providerOperationReference: null,
     },
   });
   const replay = await enqueueAdapterJob(
@@ -2387,6 +2531,7 @@ it("holds an ambiguous AI outcome without replaying the same request or storing 
     input,
     "ambiguous-ai",
     3,
+    aiProvenance,
   );
   expect(replay).toEqual(first.job);
   expect(await runAdapterJob(jobs, registry, created.id, input)).toMatchObject({
@@ -2404,6 +2549,7 @@ it("holds an ambiguous AI outcome without replaying the same request or storing 
       { scenario: "different" },
       "ambiguous-ai",
       3,
+      aiProvenance,
     ),
   ).rejects.toThrow("another request");
   expect(
@@ -2422,6 +2568,7 @@ it("holds explicit AI timeout even at the attempt limit", async () => {
     { scenario: "timeout" },
     "timeout-ai",
     1,
+    aiProvenance,
   );
   const claim = await jobs.claim(created.id);
   expect(claim).toBeDefined();
@@ -2507,6 +2654,7 @@ it("holds an expired AI lease against concurrent claimers and its delayed worker
       input,
       "expired-ai",
       3,
+      aiProvenance,
     );
     oldRun = runAdapterJob(jobs, registry, created.id, input);
     await entered;
@@ -2526,6 +2674,7 @@ it("holds an expired AI lease against concurrent claimers and its delayed worker
       attempts: 1,
       safeError: "provider_outcome_unknown",
       retryable: false,
+      providerOperationReference: null,
     });
     releaseProvider();
     expect(await oldRun).toEqual({ job: held, result: null, executed: true });
@@ -2576,6 +2725,7 @@ it("persists only an allowlisted invalid-result code through bounded PostgreSQL 
     input,
     "invalid-result",
     2,
+    aiProvenance,
   );
   for (const [attempt, status] of [
     [1, "failed"],
@@ -2652,6 +2802,7 @@ it("recovers from an invalid result on the next attempt without returning extra 
     input,
     "recover-invalid-result",
     2,
+    aiProvenance,
   );
   expect(await runAdapterJob(jobs, registry, created.id, input)).toMatchObject({
     result: null,
@@ -2886,12 +3037,14 @@ it("recovers its own PostgreSQL completion after losing the acknowledgement", as
     "summarize",
     input,
     "ack-lost",
+    3,
+    aiProvenance,
   );
   const result = await runAdapterJob(
     {
       ...jobs,
-      async succeed(id, attemptToken) {
-        await jobs.succeed(id, attemptToken);
+      async succeed(id, attemptToken, reference) {
+        await jobs.succeed(id, attemptToken, reference);
         throw new Error("synthetic lost acknowledgement");
       },
     },
