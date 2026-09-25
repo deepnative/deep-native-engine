@@ -12,6 +12,7 @@ import { circleStore } from "./circles.ts";
 import { metricsStore } from "./metrics.ts";
 import { attemptStore } from "./attempts.ts";
 import { practiceStore } from "./practice.ts";
+import { memberExportStore } from "./member-export.ts";
 export async function start(env: NodeJS.ProcessEnv) {
   const settings = config(env);
   const pool = new Pool({
@@ -37,6 +38,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       metrics: metricsStore(pool),
       attempts: attemptStore(pool),
       practice: practiceStore(pool),
+      memberExport: memberExportStore(pool),
       evidence: evidenceStore(
         pool,
         fileObjectStorage(settings.privateStorageRoot),

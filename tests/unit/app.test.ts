@@ -26,6 +26,7 @@ import {
 import { CIRCLES, type CircleStore } from "../../src/circles.ts";
 import { type MetricsStore } from "../../src/metrics.ts";
 import { type PracticeStore } from "../../src/practice.ts";
+import { type MemberExportStore } from "../../src/member-export.ts";
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
 const member = {
@@ -395,6 +396,52 @@ it("serves only a bounded private evidence export and explains safe failures", a
   expect(ready.headers["cache-control"]).toBe("no-store");
   expect(ready.headers["content-disposition"]).toContain(
     "deep-native-evidence.json",
+  );
+});
+it("serves only a bounded owner structured export and explains safe failures", async () => {
+  const memberExport = {
+    exportOwned: vi
+      .fn<MemberExportStore["exportOwned"]>()
+      .mockResolvedValueOnce({ kind: "denied" })
+      .mockResolvedValueOnce({ kind: "limit" })
+      .mockResolvedValueOnce({ kind: "unavailable" })
+      .mockResolvedValueOnce({
+        kind: "ready",
+        payload: {
+          kind: "ready",
+          version: "local-member-records-v1",
+          profile: { id: "owned" },
+          records: { milestones: [] },
+        },
+      }),
+  };
+  const agent = managedAgent(
+    app(storage(), { origin, secret: "secret", memberExport }),
+  );
+  await agent
+    .get("/api/member/export")
+    .set("Host", host)
+    .expect(403, { error: "forbidden" });
+  const limited = await agent
+    .get("/api/member/export")
+    .set("Host", host)
+    .expect(413);
+  expect(limited.body.message).toContain("100 records and 256 KiB");
+  await agent
+    .get("/api/member/export")
+    .set("Host", host)
+    .expect(503, { error: "export_unavailable" });
+  const ready = await agent
+    .get("/api/member/export")
+    .set("Host", host)
+    .expect(200);
+  expect(ready.body).toMatchObject({
+    version: "local-member-records-v1",
+    profile: { id: "owned" },
+  });
+  expect(ready.headers["cache-control"]).toBe("no-store");
+  expect(ready.headers["content-disposition"]).toContain(
+    "deep-native-member-records.json",
   );
 });
 it("serves the local welcome, stylesheet and safe security headers", async () => {
