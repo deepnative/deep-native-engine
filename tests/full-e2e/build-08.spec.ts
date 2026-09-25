@@ -1,4 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
@@ -179,5 +181,120 @@ test("[F-BUILD-08-B] member revocation stops current reviewer links while retain
     });
   } finally {
     await reviewer.close();
+  }
+});
+
+test("[F-BUILD-08-C] owner deletion removes configured synthetic source and derivative", async ({
+  page,
+  browser,
+}) => {
+  const outsider = await browser.newContext({ baseURL: origin });
+  const otherPage = await outsider.newPage();
+  const source = Buffer.from("Invented source material for deletion proof.");
+  const derivative = Buffer.from(
+    "Synthetic text extraction of invented material.",
+  );
+  try {
+    await onboard(page);
+    await onboard(otherPage);
+    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const otherCsrf = await otherPage
+      .locator('input[name="csrf"]')
+      .first()
+      .inputValue();
+    const uploaded = await page.request.post("/api/evidence", {
+      headers: {
+        Origin: origin,
+        "X-CSRF-Token": csrf,
+        "Content-Type": "text/plain",
+        "X-Evidence-Name": `invented-delete-${randomBytes(4).toString("hex")}.txt`,
+        "X-Evidence-Rights": "confirmed",
+        "X-Evidence-Scopes": "private-review",
+      },
+      data: source,
+    });
+    expect(uploaded.status()).toBe(201);
+    const { id } = (await uploaded.json()) as { id: string };
+    const evidence = evidenceStore(
+      pool,
+      fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!),
+      "test-only-scanner-secret",
+    );
+    expect(await evidence.transitionQuarantine(id, "clean")).toBe(true);
+    const derivativeId = await evidence.addDerivative(
+      id,
+      "text-extract",
+      derivative,
+    );
+    const sourceRow = (
+      await pool.query<{ storage_key: string }>(
+        "SELECT storage_key FROM evidence_objects WHERE id=$1",
+        [id],
+      )
+    ).rows[0]!;
+    const derivativeRow = (
+      await pool.query<{ storage_key: string }>(
+        "SELECT storage_key FROM evidence_derivatives WHERE id=$1",
+        [derivativeId],
+      )
+    ).rows[0]!;
+    const path = (key: string) =>
+      join(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!, key);
+    expect(await readFile(path(sourceRow.storage_key))).toEqual(source);
+    expect(await readFile(path(derivativeRow.storage_key))).toEqual(derivative);
+    const issued = await page.request.post(
+      `/api/evidence/${id}/download-link`,
+      { headers: { Origin: origin, "X-CSRF-Token": csrf } },
+    );
+    expect(issued.status()).toBe(200);
+    const { href } = (await issued.json()) as { href: string };
+    expect(await (await page.request.get(href)).body()).toEqual(source);
+    expect(
+      (
+        await otherPage.request.delete(`/api/evidence/${id}`, {
+          headers: { Origin: origin, "X-CSRF-Token": otherCsrf },
+        })
+      ).status(),
+    ).toBe(403);
+    expect(
+      (
+        await page.request.delete(`/api/evidence/${id}`, {
+          headers: { Origin: origin, "X-CSRF-Token": "forged" },
+        })
+      ).status(),
+    ).toBe(403);
+    expect(await readFile(path(sourceRow.storage_key))).toEqual(source);
+    expect(await readFile(path(derivativeRow.storage_key))).toEqual(derivative);
+
+    await requiredCheck(1, async () => {
+      const deleted = await page.request.delete(`/api/evidence/${id}`, {
+        headers: { Origin: origin, "X-CSRF-Token": csrf },
+      });
+      expect(deleted.status()).toBe(204);
+      expect(
+        (await pool.query("SELECT id FROM evidence_objects WHERE id=$1", [id]))
+          .rows,
+      ).toEqual([]);
+      await expect(readFile(path(sourceRow.storage_key))).rejects.toMatchObject(
+        { code: "ENOENT" },
+      );
+      const replay = await page.request.get(href);
+      expect(replay.status()).toBe(403);
+      expect((await replay.text()).includes(source.toString())).toBe(false);
+    });
+    await requiredCheck(2, async () => {
+      expect(
+        (
+          await pool.query("SELECT id FROM evidence_derivatives WHERE id=$1", [
+            derivativeId,
+          ])
+        ).rows,
+      ).toEqual([]);
+      await expect(
+        readFile(path(derivativeRow.storage_key)),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+    });
+  } finally {
+    await outsider.close();
   }
 });
