@@ -17,6 +17,7 @@ import {
   careerPage,
   assignmentAttemptsPage,
   assignmentAttemptPage,
+  evidencePage,
 } from "../../src/views.ts";
 import type { AssignmentAttempt } from "../../src/attempts.ts";
 import type { Milestone } from "../../src/store.ts";
@@ -33,6 +34,49 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("does not call a surviving second evidence version an original", () => {
+  const parentId = "11111111-1111-4111-8111-111111111111";
+  const revised = {
+    id: "22222222-2222-4222-8222-222222222222",
+    name: "revised.txt",
+    mediaType: "text/plain" as const,
+    quarantineState: "pending" as const,
+    privateReviewAllowed: true,
+    privateReviewRevokedAt: null,
+    submissionStatus: null,
+    createdAt: new Date(),
+    revisionParentId: parentId,
+    revisionParentStatus: "current" as const,
+    revisionNumber: 2,
+    hasRevision: false,
+  };
+  const active = evidencePage([revised], "csrf");
+  expect(active).toContain(`version 2 · revises ${parentId}`);
+  expect(active).not.toContain("prior version deleted");
+  const deleted = evidencePage(
+    [{ ...revised, revisionParentStatus: "deleted" }],
+    "csrf",
+  );
+  expect(deleted).toContain(
+    `version 2 · prior version deleted · revises ${parentId}`,
+  );
+  expect(deleted).not.toContain("version 2 · original");
+  const pending = evidencePage(
+    [{ ...revised, revisionParentStatus: "deleting" }],
+    "csrf",
+  );
+  expect(pending).toContain(
+    `version 2 · prior version deletion pending · revises ${parentId}`,
+  );
+  expect(pending).not.toContain("prior version deleted");
+  const legacy = evidencePage(
+    [{ ...revised, revisionParentId: null, revisionParentStatus: "deleted" }],
+    "csrf",
+  );
+  expect(legacy).toContain(
+    "version 2 · prior version deleted · parent ID unavailable",
+  );
+});
 it("keeps optional planning gated and renders escaped, unsent per-version drafts", () => {
   const off = careerPage({ enabled: false, entries: [], drafts: [] }, "csrf");
   expect(off).toContain("records are off");

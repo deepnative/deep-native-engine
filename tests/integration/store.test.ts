@@ -1736,6 +1736,12 @@ it("keeps private evidence revisions immutable, owner-bound and linear under con
       quarantine_state: "pending",
     },
   ]);
+  await expect(
+    pool.query(
+      "UPDATE evidence_objects SET revision_parent_id=NULL WHERE id=$1",
+      [revised.id],
+    ),
+  ).rejects.toThrow(/Evidence revision lineage is immutable/);
   expect(
     await readFile(join(privateStorageRoot, rows.rows[0]!.storage_key)),
   ).toEqual(originalBytes);
@@ -1751,10 +1757,69 @@ it("keeps private evidence revisions immutable, owner-bound and linear under con
       hasRevision: true,
     },
   ]);
+  const outsiderEvidence = await files.upload(outsider.token, {
+    name: "outsider.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Unrelated invented sample"),
+    consent,
+  });
+  expect(outsiderEvidence.kind).toBe("created");
+  if (outsiderEvidence.kind !== "created")
+    throw new Error("Unrelated evidence not created");
+  await expect(
+    pool.query(
+      `INSERT INTO evidence_objects(
+         id,workspace_id,owner_principal_id,original_name,media_type,
+         byte_size,sha256,storage_key,private_review_allowed,
+         community_publication_allowed,rights_attested_at,
+         revision_parent_id,revision_number)
+       SELECT $1,e.workspace_id,e.owner_principal_id,'forged.txt',e.media_type,
+              e.byte_size,e.sha256,$2,true,false,CURRENT_TIMESTAMP,$3,2
+       FROM evidence_objects e WHERE e.id=$4`,
+      [randomUUID(), randomUUID(), original.id, outsiderEvidence.id],
+    ),
+  ).rejects.toThrow(/Invalid evidence revision parent/);
+  await files.addDerivative(
+    original.id,
+    "text-extract",
+    Buffer.from("Invented source derivative"),
+  );
+  const derivativeKey = (
+    await pool.query<{ storage_key: string }>(
+      "SELECT storage_key FROM evidence_derivatives WHERE evidence_id=$1",
+      [original.id],
+    )
+  ).rows[0]!.storage_key;
   expect(await files.remove(owner.token, original.id)).toBe(true);
   expect(await files.owned(owner.token)).toMatchObject([
-    { id: revised.id, revisionParentId: null, revisionNumber: 2 },
+    {
+      id: revised.id,
+      revisionParentId: original.id,
+      revisionParentStatus: "deleted",
+      revisionNumber: 2,
+    },
   ]);
+  expect(
+    (
+      await pool.query("SELECT id FROM evidence_objects WHERE id=$1", [
+        original.id,
+      ])
+    ).rows,
+  ).toEqual([]);
+  expect(
+    (
+      await pool.query(
+        "SELECT id FROM evidence_derivatives WHERE evidence_id=$1",
+        [original.id],
+      )
+    ).rows,
+  ).toEqual([]);
+  await expect(
+    readFile(join(privateStorageRoot, derivativeKey)),
+  ).rejects.toThrow();
+  await expect(
+    readFile(join(privateStorageRoot, rows.rows[0]!.storage_key)),
+  ).rejects.toThrow();
   expect(
     await readFile(join(privateStorageRoot, rows.rows[1]!.storage_key)),
   ).toEqual(
@@ -1764,6 +1829,247 @@ it("keeps private evidence revisions immutable, owner-bound and linear under con
         : "Invented revision B",
     ),
   );
+  expect(await files.transitionQuarantine(revised.id, "clean")).toBe(true);
+  expect(await files.exportOwned(owner.token)).toMatchObject({
+    kind: "ready",
+    items: [
+      {
+        id: revised.id,
+        revisionParentId: original.id,
+        revisionParentStatus: "deleted",
+        revisionNumber: 2,
+        sourceBase64: Buffer.from(
+          attempted[0].kind === "created"
+            ? "Invented revision A"
+            : "Invented revision B",
+        ).toString("base64"),
+      },
+    ],
+  });
+  expect(await files.issueDownload(outsider.token, revised.id)).toEqual({
+    kind: "denied",
+  });
+  await files.removeWorkspace(owner.token);
+  expect(
+    (
+      await pool.query("SELECT id FROM evidence_objects WHERE id=$1", [
+        revised.id,
+      ])
+    ).rows,
+  ).toEqual([]);
+  await expect(
+    readFile(join(privateStorageRoot, rows.rows[1]!.storage_key)),
+  ).rejects.toThrow();
+  expect(await files.owned(outsider.token)).toMatchObject([
+    { id: outsiderEvidence.id, revisionParentId: null, revisionNumber: 1 },
+  ]);
+});
+it("serializes revision-first and deletion-first overlap without inventing revisions", async () => {
+  const owner = await member();
+  const objects = fileObjectStorage(privateStorageRoot);
+  const files = evidenceStore(pool, objects, "integration-secret");
+  const consent = {
+    rightsConfirmed: true,
+    privateReview: true,
+    communityPublication: false,
+  };
+  const original = await files.upload(owner.token, {
+    name: "race-original.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented race original"),
+    consent,
+  });
+  if (original.kind !== "created") throw new Error("Original not created");
+  expect(await files.transitionQuarantine(original.id, "clean")).toBe(true);
+  expect(await files.submitForReview(owner.token, original.id)).toBe(true);
+
+  let signalPut!: () => void;
+  let releasePut!: () => void;
+  const putEntered = new Promise<void>((resolve) => (signalPut = resolve));
+  const putBarrier = new Promise<void>((resolve) => (releasePut = resolve));
+  const revisionFirst = evidenceStore(
+    pool,
+    {
+      ...objects,
+      async put(key, data) {
+        signalPut();
+        await putBarrier;
+        await objects.put(key, data);
+      },
+    },
+    "integration-secret",
+  );
+  const revisionPromise = revisionFirst.upload(owner.token, {
+    name: "race-revision.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented race revision"),
+    consent,
+    revisesId: original.id,
+  });
+  await putEntered; // upload already holds the parent's row lock
+  const removePromise = files.remove(owner.token, original.id);
+  releasePut();
+  const revision = await revisionPromise;
+  expect(revision.kind).toBe("created");
+  expect(await removePromise).toBe(true);
+  expect(
+    (
+      await pool.query("SELECT id FROM evidence_objects WHERE id=$1", [
+        original.id,
+      ])
+    ).rows,
+  ).toEqual([]);
+  const remaining = await files.owned(owner.token);
+  if (revision.kind !== "created") throw new Error("Revision not created");
+  expect(remaining).toMatchObject([
+    {
+      id: revision.id,
+      revisionParentId: original.id,
+      revisionParentStatus: "deleted",
+      revisionNumber: 2,
+    },
+  ]);
+
+  const second = await files.upload(owner.token, {
+    name: "delete-first.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented delete-first parent"),
+    consent,
+  });
+  if (second.kind !== "created") throw new Error("Second parent not created");
+  expect(await files.transitionQuarantine(second.id, "clean")).toBe(true);
+  expect(await files.submitForReview(owner.token, second.id)).toBe(true);
+  let signalRemove!: () => void;
+  let releaseRemove!: () => void;
+  const removeEntered = new Promise<void>(
+    (resolve) => (signalRemove = resolve),
+  );
+  const removeBarrier = new Promise<void>(
+    (resolve) => (releaseRemove = resolve),
+  );
+  const deletionFirst = evidenceStore(
+    pool,
+    {
+      ...objects,
+      async remove(key) {
+        signalRemove();
+        await removeBarrier;
+        await objects.remove(key);
+      },
+    },
+    "integration-secret",
+  );
+  const secondRemove = deletionFirst.remove(owner.token, second.id);
+  await removeEntered; // state is committed as deleting before object removal
+  try {
+    expect(
+      await files.upload(owner.token, {
+        name: "denied-revision.txt",
+        mediaType: "text/plain",
+        data: Buffer.from("Invented denied revision"),
+        consent,
+        revisesId: second.id,
+      }),
+    ).toEqual({ kind: "denied" });
+  } finally {
+    releaseRemove();
+  }
+  expect(await secondRemove).toBe(true);
+  expect(
+    (
+      await pool.query(
+        "SELECT id FROM evidence_objects WHERE revision_parent_id=$1",
+        [second.id],
+      )
+    ).rows,
+  ).toEqual([]);
+});
+it("reports parent deletion as pending after storage failure, then deleted after retry", async () => {
+  const owner = await member();
+  const objects = fileObjectStorage(privateStorageRoot);
+  const files = evidenceStore(pool, objects, "integration-secret");
+  const consent = {
+    rightsConfirmed: true,
+    privateReview: true,
+    communityPublication: false,
+  };
+  const parent = await files.upload(owner.token, {
+    name: "retry-parent.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented parent"),
+    consent,
+  });
+  if (parent.kind !== "created") throw new Error("Parent not created");
+  expect(await files.transitionQuarantine(parent.id, "clean")).toBe(true);
+  expect(await files.submitForReview(owner.token, parent.id)).toBe(true);
+  const child = await files.upload(owner.token, {
+    name: "retry-child.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented child"),
+    consent,
+    revisesId: parent.id,
+  });
+  if (child.kind !== "created") throw new Error("Child not created");
+  const parentKey = (
+    await pool.query<{ storage_key: string }>(
+      "SELECT storage_key FROM evidence_objects WHERE id=$1",
+      [parent.id],
+    )
+  ).rows[0]!.storage_key;
+  let fail = true;
+  const failing = evidenceStore(
+    pool,
+    {
+      ...objects,
+      async remove(key) {
+        if (key === parentKey && fail) {
+          fail = false;
+          throw new Error("Synthetic storage failure");
+        }
+        await objects.remove(key);
+      },
+    },
+    "integration-secret",
+  );
+  await expect(failing.remove(owner.token, parent.id)).rejects.toThrow(
+    "Synthetic storage failure",
+  );
+  expect(
+    (
+      await pool.query<{ quarantine_state: string }>(
+        "SELECT quarantine_state FROM evidence_objects WHERE id=$1",
+        [parent.id],
+      )
+    ).rows[0]!.quarantine_state,
+  ).toBe("deleting");
+  expect(await objects.get(parentKey)).toEqual(Buffer.from("Invented parent"));
+  expect(await files.owned(owner.token)).toMatchObject([
+    {
+      id: child.id,
+      revisionParentId: parent.id,
+      revisionParentStatus: "deleting",
+    },
+  ]);
+  expect(await files.exportOwned(owner.token)).toMatchObject({
+    kind: "ready",
+    items: [{ id: child.id, revisionParentStatus: "deleting" }],
+  });
+  expect(await files.remove(owner.token, parent.id)).toBe(true);
+  expect(
+    (
+      await pool.query("SELECT id FROM evidence_objects WHERE id=$1", [
+        parent.id,
+      ])
+    ).rows,
+  ).toEqual([]);
+  await expect(objects.get(parentKey)).rejects.toThrow();
+  expect(await files.owned(owner.token)).toMatchObject([
+    { id: child.id, revisionParentStatus: "deleted" },
+  ]);
+  expect(await files.exportOwned(owner.token)).toMatchObject({
+    kind: "ready",
+    items: [{ id: child.id, revisionParentStatus: "deleted" }],
+  });
 });
 it("exports only current owner evidence and withholds unsafe or deleted source bytes", async () => {
   const owner = await member();

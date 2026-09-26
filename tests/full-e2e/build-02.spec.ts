@@ -345,6 +345,65 @@ test("[F-BUILD-02-A] member keeps original and revised evidence separately priva
       expect((await outsiderRevision.text()).includes(revisedBytes)).toBe(
         false,
       );
+
+      await page
+        .getByRole("listitem")
+        .filter({ hasText: "original-build02.txt" })
+        .getByLabel(
+          "Delete original-build02.txt and its configured active derivatives",
+        )
+        .check();
+      await page
+        .getByRole("listitem")
+        .filter({ hasText: "original-build02.txt" })
+        .getByRole("button", { name: "Delete sample" })
+        .click();
+      await expect(page.getByText("original-build02.txt")).toHaveCount(0);
+      await expect(
+        page.getByText(
+          `Private evidence version 2 · prior version deleted · revises ${originalId}`,
+          { exact: false },
+        ),
+      ).toBeVisible();
+      expect(
+        (
+          await pool.query("SELECT id FROM evidence_objects WHERE id=$1", [
+            originalId,
+          ])
+        ).rows,
+      ).toEqual([]);
+      expect(
+        (
+          await pool.query<{ revision_parent_id: string }>(
+            "SELECT revision_parent_id FROM evidence_objects WHERE id=$1",
+            [revisedId],
+          )
+        ).rows[0]!.revision_parent_id,
+      ).toBe(originalId);
+      await expect(storage.get(rows.rows[0]!.storage_key)).rejects.toThrow();
+      expect(await storage.get(rows.rows[1]!.storage_key)).toEqual(
+        Buffer.from(revisedBytes),
+      );
+      const ownerExport = await (
+        await page.request.get("/api/evidence/export")
+      ).json();
+      expect(ownerExport.items).toMatchObject([
+        {
+          id: revisedId,
+          revisionParentId: originalId,
+          revisionParentStatus: "deleted",
+          revisionNumber: 2,
+        },
+      ]);
+      expect(JSON.stringify(ownerExport)).not.toContain(originalBytes);
+      expect((await linkFor(originalId)).status()).toBe(403);
+      expect((await reviewerPage.request.get(href)).status()).toBe(403);
+      expect((await linkFor(revisedId)).status()).toBe(403);
+      expect(
+        await (await outsiderPage.request.get("/api/evidence/export")).json(),
+      ).toMatchObject({
+        items: [],
+      });
     });
   } finally {
     await outsider.close();

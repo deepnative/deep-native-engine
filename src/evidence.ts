@@ -64,6 +64,7 @@ export interface OwnedEvidence {
   submissionStatus: "queued" | "reviewed" | "withdrawn" | null;
   createdAt: Date;
   revisionParentId: string | null;
+  revisionParentStatus: "none" | "current" | "deleting" | "deleted";
   revisionNumber: number;
   hasRevision: boolean;
 }
@@ -76,6 +77,7 @@ export interface ExportedEvidence {
   privateReviewRevokedAt: Date | null;
   createdAt: Date;
   revisionParentId: string | null;
+  revisionParentStatus: OwnedEvidence["revisionParentStatus"];
   revisionNumber: number;
   sourceBase64: string | null;
 }
@@ -342,11 +344,16 @@ export function evidenceStore(
                   e.private_review_revoked_at AS "privateReviewRevokedAt",
                   s.status AS "submissionStatus",e.created_at AS "createdAt",
                   e.revision_parent_id AS "revisionParentId",
+                  CASE WHEN e.revision_number=1 THEN 'none'
+                    WHEN parent.id IS NULL THEN 'deleted'
+                    WHEN parent.quarantine_state='deleting' THEN 'deleting'
+                    ELSE 'current' END AS "revisionParentStatus",
                   e.revision_number AS "revisionNumber",
                   EXISTS(SELECT 1 FROM evidence_objects child
                     WHERE child.revision_parent_id=e.id) AS "hasRevision"
            FROM evidence_objects e
            JOIN principals p ON p.id=e.owner_principal_id
+           LEFT JOIN evidence_objects parent ON parent.id=e.revision_parent_id
            LEFT JOIN evidence_review_submissions s ON s.evidence_id=e.id
            WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
              AND p.expires_at>CURRENT_TIMESTAMP AND e.quarantine_state<>'deleting'
@@ -378,6 +385,7 @@ export function evidenceStore(
           privateReviewRevokedAt: Date | null;
           createdAt: Date;
           revisionParentId: string | null;
+          revisionParentStatus: OwnedEvidence["revisionParentStatus"];
           revisionNumber: number;
           byteSize: number;
           sha256: string;
@@ -389,9 +397,15 @@ export function evidenceStore(
                   e.private_review_revoked_at AS "privateReviewRevokedAt",
                   e.created_at AS "createdAt",
                   e.revision_parent_id AS "revisionParentId",
+                  CASE WHEN e.revision_number=1 THEN 'none'
+                    WHEN parent.id IS NULL THEN 'deleted'
+                    WHEN parent.quarantine_state='deleting' THEN 'deleting'
+                    ELSE 'current' END AS "revisionParentStatus",
                   e.revision_number AS "revisionNumber",e.byte_size AS "byteSize",
                   e.sha256,e.storage_key AS "storageKey"
-           FROM evidence_objects e WHERE e.owner_principal_id=$1
+           FROM evidence_objects e
+           LEFT JOIN evidence_objects parent ON parent.id=e.revision_parent_id
+           WHERE e.owner_principal_id=$1
              AND e.quarantine_state<>'deleting'
            ORDER BY e.created_at,e.id LIMIT $2 FOR SHARE OF e`,
           [owner.rows[0].id, MAX_EXPORT_ITEMS + 1],
@@ -430,6 +444,7 @@ export function evidenceStore(
             privateReviewRevokedAt: row.privateReviewRevokedAt,
             createdAt: row.createdAt,
             revisionParentId: row.revisionParentId,
+            revisionParentStatus: row.revisionParentStatus,
             revisionNumber: row.revisionNumber,
             sourceBase64,
           });
