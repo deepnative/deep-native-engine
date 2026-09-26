@@ -17,6 +17,7 @@ const root = process.cwd(),
   sandbox = realpathSync(mkdtempSync(path.join(tmpdir(), "dne-gate-probes-")));
 const evidence = {
   unimportedSourceRejected: false,
+  unimportedPublicSourceRejected: false,
   brokenCsrfRejected: false,
   brokenBillingAnniversaryRejected: false,
 };
@@ -29,6 +30,8 @@ try {
     "migrations",
     "assets/docs/content",
     "tests/unit",
+    "tests/e2e",
+    "tests/support",
     "vitest.config.ts",
     "package.json",
   ]) {
@@ -84,6 +87,49 @@ try {
   );
   evidence.unimportedSourceRejected = true;
   rmSync(probe);
+  const publicProbe = path.join(sandbox, "public/unimported-probe.js");
+  writeFileSync(
+    publicProbe,
+    'export function untestedBrowserPath(value) { return value ? "pending" : "idle"; }\n',
+  );
+  result = spawnSync(
+    process.execPath,
+    [path.join(root, "node_modules/vitest/vitest.mjs"), "run", "--coverage"],
+    { cwd: sandbox, encoding: "utf8" },
+  );
+  writeFileSync(
+    "artifacts/probes/unimported-public.log",
+    result.stdout + result.stderr,
+  );
+  requireGate(
+    result.status !== 0 && result.status !== null,
+    "Unimported-public-source probe did not fail",
+  );
+  requireGate(
+    existsSync(path.join(sandbox, "artifacts/coverage/coverage-summary.json")),
+    "Unimported-public-source probe produced no coverage report",
+  );
+  const publicCoverage = JSON.parse(
+    readFileSync(
+      path.join(sandbox, "artifacts/coverage/coverage-summary.json"),
+      "utf8",
+    ),
+  );
+  const publicUnitReport = JSON.parse(
+    readFileSync(path.join(sandbox, "artifacts/unit-results.json"), "utf8"),
+  );
+  requireGate(
+    publicCoverage[publicProbe]?.functions.covered === 0 &&
+      publicCoverage[publicProbe]?.functions.total > 0 &&
+      publicUnitReport.numFailedTests === 0 &&
+      publicUnitReport.numPassedTests === publicUnitReport.numTotalTests &&
+      (result.stdout + result.stderr).includes(
+        "threshold (99%) for public/unimported-probe.js",
+      ),
+    "Public probe source absent from coverage",
+  );
+  evidence.unimportedPublicSourceRejected = true;
+  rmSync(publicProbe);
   const target = path.join(sandbox, "src/session.ts"),
     original = readFileSync(target, "utf8");
   const mutant = original.replace(
@@ -167,7 +213,7 @@ try {
     JSON.stringify(evidence, null, 2) + "\n",
   );
   console.info(
-    "Negative probes passed: unimported source, broken CSRF and broken billing anniversary all fail the gate.",
+    "Negative probes passed: unimported application and public source, broken CSRF and broken billing anniversary all fail the gate.",
   );
 } finally {
   rmSync(sandbox, { recursive: true, force: true });

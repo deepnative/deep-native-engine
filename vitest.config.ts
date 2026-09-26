@@ -10,7 +10,7 @@ export default defineConfig({
     fileParallelism: false,
     coverage: {
       provider: "v8",
-      include: ["src/**/*.ts"],
+      include: ["src/**/*.ts", "public/**/*.js"],
       exclude: [],
       reporter: ["text", "json", "json-summary"],
       reportsDirectory: "artifacts/coverage",

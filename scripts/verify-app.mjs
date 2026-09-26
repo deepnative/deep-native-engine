@@ -130,9 +130,12 @@ try {
   stage = "unit test evidence";
   report.unitTests = assertUnitResults(read("unit-results.json"));
   stage = "unit coverage evidence";
-  const files = source("src");
+  const files = [
+    ...source("src"),
+    ...source("public").filter((file) => file.endsWith(".js")),
+  ];
   requireGate(
-    files.every((f) => f.endsWith(".ts")),
+    files.every((f) => f.endsWith(".ts") || f.endsWith(".js")),
     "Unmeasured application source",
   );
   report.unitCoverage = assertCoverage(
