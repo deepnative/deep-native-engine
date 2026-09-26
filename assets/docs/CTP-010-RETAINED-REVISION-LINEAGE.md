@@ -1,0 +1,11 @@
+# Retained private evidence revision lineage
+
+**Decision:** 26 September 2026, [#271](https://github.com/deepnative/deep-native-engine/issues/271). The owner approved retaining a deleted parent's non-content UUID only on its surviving, owner-bound revision. This applies to the local synthetic preview; it does not set hosted retention terms or authorize formal assessment.
+
+An active child is shown as `Private evidence version N · revises <parent UUID>`. If its parent is deleted, the member page shows `Private evidence version N · prior version deleted · revises <parent UUID>`. The owner-only evidence JSON keeps `revisionNumber: N`, `revisionParentId: <parent UUID>` and `revisionParentStatus: deleted`. During deletion, including when storage cleanup fails, both page and export say `deletion pending` / `revisionParentStatus: deleting` until retry succeeds. Deleting a parent removes that parent's database row, source bytes, derivatives and exact reviewer access when cleanup succeeds. It does not submit or grant access to the child. Deleting the workspace removes the child and its retained lineage field too.
+
+Migration 025 removes the foreign key that previously set `revision_parent_id` to null on parent deletion. A database trigger requires a new revision's parent to exist in the same owner/workspace with the immediately preceding version, and rejects later changes to the stored parent ID or version number. The application still checks current clean/submitted/consented eligibility and serializes revision creation with parent deletion.
+
+For a version greater than 1 whose parent ID was already erased by migration 024 before this fix, the former UUID cannot be reconstructed. The page says `prior version deleted · parent ID unavailable`; the export has `revisionParentId: null` and `revisionParentStatus: deleted`. It never calls that surviving version an original. Only the owner can read this metadata or export; unrelated members and reviewers retain no lineage-derived read grant.
+
+The approved full-MVP journey register remains unchanged and unaccepted for release. Browser and PostgreSQL evidence here is synthetic local-preview evidence, not qualified privacy review or deployment approval.

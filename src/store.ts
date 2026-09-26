@@ -112,6 +112,7 @@ export async function migrate(pool: Pool) {
       "022-exact-evidence-review-grants.sql",
       "023-private-review-revocation.sql",
       "024-evidence-revisions.sql",
+      "025-retained-evidence-lineage.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
