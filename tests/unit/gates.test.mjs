@@ -120,6 +120,13 @@ it("uses raw unit counts, rejects low module coverage and missing/unimported sou
   expect(() =>
     assertCoverage(coverage(), ["src/app.ts", "src/unimported.ts"], "/repo"),
   ).toThrow(/every application/);
+  expect(() =>
+    assertCoverage(
+      coverage(),
+      ["src/app.ts", "public/attempt-save.js"],
+      "/repo",
+    ),
+  ).toThrow(/every application/);
   expect(() => assertCoverage(coverage(), [], "/repo")).toThrow();
   const empty = coverage();
   empty.total.functions.total = 0;
