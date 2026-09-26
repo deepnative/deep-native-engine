@@ -37,21 +37,8 @@ export function disabledPracticeStore(): PracticeStore {
 }
 const member = `p.kind='member' AND p.token_hash=$1 AND p.revoked_at IS NULL
   AND p.expires_at>CURRENT_TIMESTAMP`;
-const eligible = `cv.kind='lesson' AND cv.state='published'
-  AND NOT cv.requires_qualified_signoff
-  AND NOT EXISTS (SELECT 1 FROM content_versions newer WHERE newer.id=cv.id
-    AND newer.state='published' AND newer.version>cv.version)
-  AND (cardinality(cv.goals)=0 OR l.goal=ANY(cv.goals))
-  AND (cardinality(cv.backgrounds)=0 OR l.background=ANY(cv.backgrounds)
-    OR cv.backgrounds && l.background_tags)
-  AND (cardinality(cv.domains)=0 OR cv.domains && l.domain_tags)
-  AND array_position(ARRAY['new','some','experienced'],COALESCE(l.experience,'new'))
-    >= array_position(ARRAY['new','some','experienced'],cv.minimum_experience)
-  AND (btrim(cv.prerequisites)='' OR lower(btrim(cv.prerequisites))='none'
-    OR (cv.prerequisites='LOCAL-FIRST-EXERCISE-COMPLETE' AND EXISTS(
-      SELECT 1 FROM exercises e WHERE e.learner_id=l.id AND e.workspace_id=l.id
-        AND e.lesson_id='clear-instructions' AND e.lesson_version=1
-        AND e.completed_at IS NOT NULL)))`;
+const eligible = `cv.kind='lesson' AND
+  member_content_eligible(l.id,cv.id,cv.version)`;
 const from = `FROM principals p JOIN learners l ON l.id=p.id
   JOIN content_versions cv ON ${eligible}`;
 export function practiceStore(pool: Pool): PracticeStore {

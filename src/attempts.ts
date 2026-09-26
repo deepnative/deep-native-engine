@@ -44,19 +44,9 @@ const activeMember = `p.kind='member' AND p.token_hash=$1 AND p.revoked_at IS NU
   AND p.expires_at>CURRENT_TIMESTAMP`;
 const currentPublished = `cv.kind='assignment' AND cv.state='published' AND NOT EXISTS(
   SELECT 1 FROM content_versions newer WHERE newer.id=cv.id
-    AND newer.state='published' AND newer.version>cv.version)`;
+    AND newer.published_at IS NOT NULL AND newer.version>cv.version)`;
 const eligible = `${currentPublished}
-  AND (cardinality(cv.goals)=0 OR l.goal=ANY(cv.goals))
-  AND (cardinality(cv.backgrounds)=0 OR l.background=ANY(cv.backgrounds)
-    OR cv.backgrounds && l.background_tags)
-  AND (cardinality(cv.domains)=0 OR cv.domains && l.domain_tags)
-  AND array_position(ARRAY['new','some','experienced'],COALESCE(l.experience,'new'))
-    >= array_position(ARRAY['new','some','experienced'],cv.minimum_experience)
-  AND (btrim(cv.prerequisites)='' OR lower(btrim(cv.prerequisites))='none'
-    OR (cv.prerequisites='LOCAL-FIRST-EXERCISE-COMPLETE' AND EXISTS(
-      SELECT 1 FROM exercises e WHERE e.learner_id=l.id AND e.workspace_id=l.id
-        AND e.lesson_id='clear-instructions' AND e.lesson_version=1
-        AND e.completed_at IS NOT NULL)))`;
+  AND member_content_eligible(l.id,cv.id,cv.version)`;
 const columns = `a.id,a.content_id AS "contentId",a.content_version AS "contentVersion",
   cv.title,a.goal_at_start AS "goalAtStart",a.response,a.revision,
   a.started_at AS "startedAt",a.saved_at AS "savedAt",a.submitted_at AS "submittedAt",

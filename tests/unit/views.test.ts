@@ -20,6 +20,7 @@ import {
   evidencePage,
 } from "../../src/views.ts";
 import type { AssignmentAttempt } from "../../src/attempts.ts";
+import type { ContentVersion } from "../../src/catalog.ts";
 import type { Milestone } from "../../src/store.ts";
 import type { CareerSnapshot } from "../../src/career.ts";
 import type { ExpertRecord } from "../../src/track-readiness.ts";
@@ -384,6 +385,75 @@ it("renders an accessible plain-text content preview when filters and prerequisi
   expect(html).toContain("<dt>Backgrounds</dt><dd>All</dd>");
   expect(html).toContain("<dt>Prerequisites</dt><dd>None</dd>");
   expect(html).toContain("Suggested experience");
+});
+it("explains versioned synthetic lesson and local exercise requirements to staff", () => {
+  const item: ContentVersion = {
+    id: "SYN-806",
+    version: 1,
+    kind: "assignment",
+    origin: "curated",
+    title: "Invented sample",
+    body: "Check a sample result.",
+    owner: "Editor",
+    sources: "Original synthetic task",
+    rights: "Owned synthetic text",
+    goals: [],
+    backgrounds: [],
+    domains: [],
+    prerequisites: "",
+    structuredPrerequisites: {
+      schemaVersion: 1,
+      all: [
+        {
+          kind: "lesson",
+          id: "SYN-805",
+          version: 2,
+          activity: "self-assessed",
+        },
+        {
+          kind: "exercise",
+          id: "clear-instructions",
+          version: 1,
+          activity: "completed",
+        },
+      ],
+    },
+    minimumExperience: "new",
+    rubric: null,
+    rubricVersion: null,
+    state: "draft",
+    requiresQualifiedSignoff: false,
+    reviewedAt: null,
+    publishedAt: null,
+  };
+  const staff = contentPreview(item, true, "csrf");
+  expect(staff).toContain("Lesson SYN-805 version 2: self-assessed");
+  expect(staff).toContain(
+    "Local exercise clear-instructions version 1: completed",
+  );
+  expect(
+    contentPreview(
+      { ...item, structuredPrerequisites: { schemaVersion: 1, all: [] } },
+      true,
+    ),
+  ).toContain("<dt>Prerequisites</dt><dd>None</dd>");
+  expect(
+    contentPreview(
+      {
+        ...item,
+        structuredPrerequisites: {
+          schemaVersion: 2,
+        } as unknown as ContentVersion["structuredPrerequisites"],
+      },
+      true,
+    ),
+  ).toContain("Prerequisite unavailable");
+  expect(
+    contentPreview(
+      { ...item, structuredPrerequisites: null, prerequisites: "Legacy note" },
+      true,
+    ),
+  ).toContain("Legacy note");
 });
 it("labels exact private lesson activity without turning a page opening into achievement", () => {
   const item = {

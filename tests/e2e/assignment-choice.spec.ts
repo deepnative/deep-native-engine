@@ -183,3 +183,93 @@ test("[L34] technical learner's self-report and retired content cannot bypass el
   });
   expect(response.status()).toBe(409);
 });
+
+test("[L63] a version-pinned lesson unlocks only its owner's synthetic assignment", async ({
+  page,
+  browser,
+}, info) => {
+  const desktop = info.project.name === "desktop-chromium";
+  const lessonId = desktop ? "SYN-950" : "SYN-951";
+  const assignmentId = desktop ? "SYN-952" : "SYN-953";
+  const title = `Invented source-check practice ${assignmentId}`;
+  const { catalog } = await publish({
+    ...sample(lessonId, `Invented source lesson ${lessonId}`),
+    kind: "lesson",
+  });
+  await publish({
+    ...sample(assignmentId, title),
+    prerequisites: "",
+    structuredPrerequisites: {
+      schemaVersion: 1,
+      all: [{ kind: "lesson", id: lessonId, version: 1, activity: "started" }],
+    },
+  });
+  await onboard(page, "explorer", "everyday");
+  const choices = page.getByRole("region", {
+    name: "Choose a practice assignment",
+  });
+  await expect(choices).not.toContainText(title);
+  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const forged = await page.request.post("/assignments/select", {
+    headers: { origin: "http://127.0.0.1:4317" },
+    form: { csrf, content_id: assignmentId, content_version: "1" },
+  });
+  expect(forged.status()).toBe(409);
+
+  await page.goto(`/library/${lessonId}`);
+  await page.getByRole("button", { name: "Start this lesson" }).click();
+  await page.goto("/learn");
+  await expect(choices).toContainText(title);
+  await choices.getByRole("button", { name: `Choose ${title}` }).click();
+  await page.reload();
+  await expect(choices).toContainText("Your chosen sample");
+
+  const outsider = await browser.newContext({
+    baseURL: "http://127.0.0.1:4317",
+  });
+  try {
+    const otherPage = await outsider.newPage();
+    await onboard(otherPage, "professional", "work");
+    await expect(
+      otherPage.getByRole("region", { name: "Choose a practice assignment" }),
+    ).not.toContainText(title);
+    const otherCsrf = await otherPage
+      .locator('input[name="csrf"]')
+      .first()
+      .inputValue();
+    const denied = await otherPage.request.post("/assignments/select", {
+      headers: { origin: "http://127.0.0.1:4317" },
+      form: { csrf: otherCsrf, content_id: assignmentId, content_version: "1" },
+    });
+    expect(denied.status()).toBe(409);
+  } finally {
+    await outsider.close();
+  }
+
+  const auth = authorizationStore(pool);
+  const editor = randomBytes(32).toString("hex");
+  const reviewer = randomBytes(32).toString("hex");
+  await auth.provisionStaff(
+    editor,
+    "editor",
+    new Date(Date.now() + 86_400_000),
+  );
+  await auth.provisionStaff(
+    reviewer,
+    "reviewer",
+    new Date(Date.now() + 86_400_000),
+  );
+  expect(
+    await catalog.createDraft(editor, {
+      ...sample(lessonId, `Updated source lesson ${lessonId}`),
+      kind: "lesson",
+      version: 2,
+    }),
+  ).toBe(true);
+  expect(await catalog.submit(editor, lessonId, 2)).toBe(true);
+  expect(await catalog.approve(reviewer, lessonId, 2, true)).toBe(true);
+  expect(await catalog.publish(editor, lessonId, 2)).toBe(true);
+  await page.reload();
+  await expect(choices).toContainText("no longer available");
+  await expect(choices).not.toContainText(title);
+});

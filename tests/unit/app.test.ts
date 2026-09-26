@@ -985,11 +985,28 @@ it("supports the local editor/reviewer workflow without bypassing rejected trans
   };
   await post("/editor/library").expect(422);
   await post("/editor/library", fields).expect(422);
+  await post("/editor/library", {
+    ...fields,
+    structured_prerequisites: "{broken",
+  }).expect(422);
+  await post("/editor/library", {
+    ...fields,
+    structured_prerequisites: '{"schemaVersion":2,"all":[]}',
+  }).expect(422);
+  expect(catalog.createDraft).toHaveBeenCalledTimes(2);
   catalog.createDraft.mockResolvedValueOnce(true);
-  await post("/editor/library", fields).expect(303);
+  await post("/editor/library", {
+    ...fields,
+    structured_prerequisites: '{"schemaVersion":1,"all":[]}',
+  }).expect(303);
   expect(catalog.createDraft).toHaveBeenCalledWith(
     expect.any(String),
-    expect.objectContaining({ id: "SYN-001", version: 1, origin: "curated" }),
+    expect.objectContaining({
+      id: "SYN-001",
+      version: 1,
+      origin: "curated",
+      structuredPrerequisites: { schemaVersion: 1, all: [] },
+    }),
   );
   for (const action of ["submit", "approve", "publish", "unknown"]) {
     await post(`/editor/library/SYN-001/1/${action}`).expect(409);

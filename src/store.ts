@@ -113,6 +113,7 @@ export async function migrate(pool: Pool) {
       "023-private-review-revocation.sql",
       "024-evidence-revisions.sql",
       "025-retained-evidence-lineage.sql",
+      "026-structured-prerequisites.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
@@ -230,7 +231,7 @@ export function store(pool: Pool): Store {
                     WHERE cv.id=a.content_id AND cv.version=a.content_version
                       AND cv.kind='lesson' AND cv.state='published'
                       AND NOT EXISTS(SELECT 1 FROM content_versions newer
-                        WHERE newer.id=cv.id AND newer.state='published'
+                        WHERE newer.id=cv.id AND newer.published_at IS NOT NULL
                           AND newer.version>cv.version)) AS available
            FROM lesson_activity a
            LEFT JOIN content_versions cv ON cv.id=a.content_id AND cv.version=a.content_version
@@ -246,8 +247,9 @@ export function store(pool: Pool): Store {
          SELECT l.id,cv.id,cv.version FROM learners l
          JOIN content_versions cv ON cv.id=$2 AND cv.version=$3
          WHERE l.id=$1 AND cv.kind='lesson' AND cv.state='published'
+           AND member_content_eligible(l.id,cv.id,cv.version)
            AND NOT EXISTS(SELECT 1 FROM content_versions newer
-             WHERE newer.id=cv.id AND newer.state='published' AND newer.version>cv.version)
+             WHERE newer.id=cv.id AND newer.published_at IS NOT NULL AND newer.version>cv.version)
          ON CONFLICT(member_id,content_id,content_version) DO UPDATE
            SET opened_at=lesson_activity.opened_at`,
         [id, contentId, version],
@@ -266,8 +268,9 @@ export function store(pool: Pool): Store {
            AND EXISTS(SELECT 1 FROM content_versions cv
              WHERE cv.id=a.content_id AND cv.version=a.content_version
                AND cv.kind='lesson' AND cv.state='published'
+               AND member_content_eligible(a.member_id,cv.id,cv.version)
                AND NOT EXISTS(SELECT 1 FROM content_versions newer
-                 WHERE newer.id=cv.id AND newer.state='published' AND newer.version>cv.version))`,
+                 WHERE newer.id=cv.id AND newer.published_at IS NOT NULL AND newer.version>cv.version))`,
         [id, contentId, version, action],
       );
       return result.rowCount === 1;
@@ -289,9 +292,10 @@ export function store(pool: Pool): Store {
          SELECT l.id,cv.id,cv.version FROM learners l
          JOIN content_versions cv ON cv.id=$2 AND cv.version=$3
          WHERE l.id=$1 AND cv.kind='assignment' AND cv.state='published'
+           AND member_content_eligible(l.id,cv.id,cv.version)
            AND NOT EXISTS(
              SELECT 1 FROM content_versions newer WHERE newer.id=cv.id
-               AND newer.state='published' AND newer.version>cv.version
+               AND newer.published_at IS NOT NULL AND newer.version>cv.version
            )
          ON CONFLICT(member_id) DO UPDATE SET
            content_id=EXCLUDED.content_id,content_version=EXCLUDED.content_version,

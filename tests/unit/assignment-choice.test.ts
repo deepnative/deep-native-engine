@@ -133,3 +133,25 @@ it("treats missing optional interests as empty rather than inferring a match", (
     ),
   ).toEqual([]);
 });
+
+it("does not treat a structured lesson-activity prerequisite as free-text None", () => {
+  const lesson = { ...published, id: "SYN-934", kind: "lesson" as const };
+  const assignment = {
+    ...published,
+    id: "SYN-935",
+    structuredPrerequisites: {
+      schemaVersion: 1 as const,
+      all: [
+        {
+          kind: "lesson" as const,
+          id: lesson.id,
+          version: 1,
+          activity: "started" as const,
+        },
+      ],
+    },
+  };
+  expect(eligibleAssignments([lesson, assignment], learner, undefined)).toEqual(
+    [],
+  );
+});

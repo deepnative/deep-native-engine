@@ -36,6 +36,10 @@ import {
 } from "./views.ts";
 import type { Store, Learner } from "./store.ts";
 import { eligibleAssignments } from "./assignment-choice.ts";
+import {
+  validPrerequisiteSpec,
+  type PrerequisiteSpec,
+} from "./prerequisites.ts";
 import { activityItems } from "./progress.ts";
 import { parseMilestone, validMilestoneId } from "./milestones.ts";
 import {
@@ -1270,6 +1274,25 @@ export function app(
     const fields = req.body as Fields;
     const value = (name: string) =>
       typeof fields[name] === "string" ? (fields[name] as string) : "";
+    let structuredPrerequisites: PrerequisiteSpec | undefined;
+    if (value("structured_prerequisites").trim()) {
+      try {
+        const parsed: unknown = JSON.parse(value("structured_prerequisites"));
+        if (!validPrerequisiteSpec(parsed))
+          throw new Error("Invalid prerequisite contract");
+        structuredPrerequisites = parsed;
+      } catch {
+        res
+          .status(422)
+          .send(
+            errorPage(
+              "Draft not saved",
+              "Use valid versioned prerequisite JSON with published synthetic references.",
+            ),
+          );
+        return;
+      }
+    }
     const draft: DraftContent = {
       id: value("id"),
       version: Number(value("version")),
@@ -1284,6 +1307,7 @@ export function app(
       backgrounds: [],
       domains: [],
       prerequisites: value("prerequisites"),
+      structuredPrerequisites,
       minimumExperience: (value("minimum_experience") ||
         "new") as DraftContent["minimumExperience"],
       rubric: null,
@@ -1295,7 +1319,7 @@ export function app(
         .send(
           errorPage(
             "Draft not saved",
-            "Check the fields, next version and editor access.",
+            "Check the fields, prerequisite references, next version and editor access.",
           ),
         );
       return;
@@ -1354,10 +1378,11 @@ export function app(
   });
   app.get("/learn", async (_req, res) => {
     const member = res.locals.learner as Learner;
-    const [progress, published, choice] = await Promise.all([
+    const [progress, published, choice, activity] = await Promise.all([
       store.progress(member.id),
       catalog.search({}),
       store.assignmentChoice(member.id),
+      store.lessonActivities(member.id),
     ]);
     res.send(
       dashboard(
@@ -1365,7 +1390,7 @@ export function app(
         progress,
         res.locals.csrf as string,
         [],
-        eligibleAssignments(published, member, progress),
+        eligibleAssignments(published, member, progress, activity),
         choice,
       ),
     );
@@ -1386,11 +1411,15 @@ export function app(
     const fields = req.body as Fields;
     const id = typeof fields.content_id === "string" ? fields.content_id : "";
     const version = Number(fields.content_version);
-    const progress = await store.progress(member.id);
+    const [progress, activity] = await Promise.all([
+      store.progress(member.id),
+      store.lessonActivities(member.id),
+    ]);
     const options = eligibleAssignments(
       await catalog.search({}),
       member,
       progress,
+      activity,
     );
     if (
       !Number.isSafeInteger(version) ||
@@ -1944,10 +1973,11 @@ export function app(
     const member = res.locals.learner as Learner;
     const input = profile({ ...(req.body as Fields), synthetic: "yes" });
     if (!input) {
-      const [progress, published, choice] = await Promise.all([
+      const [progress, published, choice, activity] = await Promise.all([
         store.progress(member.id),
         catalog.search({}),
         store.assignmentChoice(member.id),
+        store.lessonActivities(member.id),
       ]);
       res
         .status(422)
@@ -1959,7 +1989,7 @@ export function app(
             [
               "Choose valid profile, time zone and weekly time options before saving.",
             ],
-            eligibleAssignments(published, member, progress),
+            eligibleAssignments(published, member, progress, activity),
             choice,
           ),
         );

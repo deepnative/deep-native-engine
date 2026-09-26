@@ -475,12 +475,19 @@ it("stores a private pinned choice only for a currently published assignment and
     contentVersion: 1,
   });
   expect(await db.assignmentChoice(other.learner.id)).toBeNull();
-  const second = { ...draft, version: 2, body: "Revised invented task." };
+  const second = {
+    ...draft,
+    version: 2,
+    body: "Revised invented task.",
+    prerequisites: "LOCAL-FIRST-EXERCISE-COMPLETE",
+  };
   expect(await catalog.createDraft(editorToken, second)).toBe(true);
   expect(await catalog.submit(editorToken, draft.id, 2)).toBe(true);
   expect(await catalog.approve(reviewerToken, draft.id, 2, true)).toBe(true);
   expect(await catalog.publish(editorToken, draft.id, 2)).toBe(true);
   expect(await db.chooseAssignment(first.learner.id, draft.id, 1)).toBe(false);
+  expect(await db.chooseAssignment(first.learner.id, draft.id, 2)).toBe(false);
+  await db.save(first.learner.id, input);
   expect(await db.chooseAssignment(first.learner.id, draft.id, 2)).toBe(true);
   expect(await catalog.retire(editorToken, draft.id)).toBe(true);
   expect(await db.chooseAssignment(first.learner.id, draft.id, 2)).toBe(false);
@@ -490,6 +497,226 @@ it("stores a private pinned choice only for a currently published assignment and
   });
   await db.remove(first.learner.id);
   expect(await db.assignmentChoice(first.learner.id)).toBeNull();
+});
+it("enforces version-pinned synthetic lesson prerequisites for authoring, choice and attempt writes", async () => {
+  const missingSpec = await pool.query<{ shape: boolean; graph: boolean }>(
+    `SELECT valid_prerequisite_spec(NULL::jsonb) AS shape,
+      prerequisite_graph_valid('SYN-811',NULL::jsonb) AS graph`,
+  );
+  expect(missingSpec.rows[0]).toEqual({ shape: false, graph: false });
+  const owner = await member();
+  const outsider = await member();
+  const editor = randomBytes(32).toString("hex");
+  const reviewer = randomBytes(32).toString("hex");
+  const auth = authorizationStore(pool);
+  await auth.provisionStaff(
+    editor,
+    "editor",
+    new Date(Date.now() + 86_400_000),
+  );
+  await auth.provisionStaff(
+    reviewer,
+    "reviewer",
+    new Date(Date.now() + 86_400_000),
+  );
+  const catalog = catalogStore(pool);
+  const lesson = {
+    ...contentDraft,
+    id: "SYN-810",
+    kind: "lesson" as const,
+    rubric: null,
+    rubricVersion: null,
+    goals: [],
+    backgrounds: [],
+    domains: [],
+  };
+  expect(await catalog.createDraft(editor, lesson)).toBe(true);
+  expect(await catalog.submit(editor, lesson.id, 1)).toBe(true);
+  expect(await catalog.approve(reviewer, lesson.id, 1, true)).toBe(true);
+  expect(await catalog.publish(editor, lesson.id, 1)).toBe(true);
+  const assignment = {
+    ...contentDraft,
+    id: "SYN-811",
+    goals: [],
+    backgrounds: [],
+    domains: [],
+    prerequisites: "",
+    structuredPrerequisites: {
+      schemaVersion: 1 as const,
+      all: [
+        {
+          kind: "lesson" as const,
+          id: lesson.id,
+          version: 1,
+          activity: "started" as const,
+        },
+      ],
+    },
+  };
+  expect(
+    await catalog.createDraft(editor, {
+      ...assignment,
+      id: "SYN-812",
+      structuredPrerequisites: {
+        schemaVersion: 1,
+        all: [
+          { kind: "lesson", id: "SYN-999", version: 1, activity: "started" },
+        ],
+      },
+    }),
+  ).toBe(false);
+  expect(
+    await catalog.createDraft(editor, {
+      ...assignment,
+      structuredPrerequisites: {
+        schemaVersion: 1,
+        all: [
+          {
+            kind: "lesson",
+            id: assignment.id,
+            version: 1,
+            activity: "started",
+          },
+        ],
+      },
+    }),
+  ).toBe(false);
+  expect(await catalog.createDraft(editor, assignment)).toBe(true);
+  expect(
+    (await catalog.preview(reviewer, assignment.id, 1))
+      ?.structuredPrerequisites,
+  ).toEqual(assignment.structuredPrerequisites);
+  expect(await catalog.submit(editor, assignment.id, 1)).toBe(true);
+  expect(await catalog.approve(reviewer, assignment.id, 1, true)).toBe(true);
+  expect(await catalog.publish(editor, assignment.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.learner.id, assignment.id, 1)).toBe(
+    false,
+  );
+  expect(await db.openLesson(owner.learner.id, lesson.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.learner.id, assignment.id, 1)).toBe(
+    false,
+  );
+  expect(await db.advanceLesson(owner.learner.id, lesson.id, 1, "start")).toBe(
+    true,
+  );
+  expect(await db.chooseAssignment(owner.learner.id, assignment.id, 1)).toBe(
+    true,
+  );
+  expect(await db.chooseAssignment(outsider.learner.id, assignment.id, 1)).toBe(
+    false,
+  );
+  const attempts = attemptStore(pool);
+  const attemptId = await attempts.start(owner.token);
+  expect(attemptId).not.toBeNull();
+  expect(
+    await attempts.save(
+      owner.token,
+      attemptId!,
+      1,
+      "Invented answer checked against its source.",
+    ),
+  ).toBe(true);
+  const assessedAssignment = {
+    ...assignment,
+    id: "SYN-813",
+    structuredPrerequisites: {
+      schemaVersion: 1 as const,
+      all: [
+        {
+          kind: "lesson" as const,
+          id: lesson.id,
+          version: 1,
+          activity: "self-assessed" as const,
+        },
+      ],
+    },
+  };
+  expect(await catalog.createDraft(editor, assessedAssignment)).toBe(true);
+  expect(await catalog.submit(editor, assessedAssignment.id, 1)).toBe(true);
+  expect(await catalog.approve(reviewer, assessedAssignment.id, 1, true)).toBe(
+    true,
+  );
+  expect(await catalog.publish(editor, assessedAssignment.id, 1)).toBe(true);
+  expect(
+    await db.chooseAssignment(owner.learner.id, assessedAssignment.id, 1),
+  ).toBe(false);
+  expect(
+    await db.advanceLesson(owner.learner.id, lesson.id, 1, "complete"),
+  ).toBe(true);
+  expect(
+    await db.chooseAssignment(owner.learner.id, assessedAssignment.id, 1),
+  ).toBe(true);
+  const lesson2 = { ...lesson, version: 2, body: "Updated invented lesson" };
+  expect(await catalog.createDraft(editor, lesson2)).toBe(true);
+  expect(await catalog.submit(editor, lesson.id, 2)).toBe(true);
+  expect(await catalog.approve(reviewer, lesson.id, 2, true)).toBe(true);
+  expect(await catalog.publish(editor, lesson.id, 2)).toBe(true);
+  expect(await attempts.submit(owner.token, attemptId!, 2)).toBe(false);
+  expect(
+    await attempts.save(owner.token, attemptId!, 2, "Changed invented answer."),
+  ).toBe(false);
+  expect(await db.chooseAssignment(owner.learner.id, assignment.id, 1)).toBe(
+    false,
+  );
+  expect((await attempts.detail(owner.token, attemptId!))?.response).toBe(
+    "Invented answer checked against its source.",
+  );
+  expect(await catalog.retire(editor, lesson.id)).toBe(true);
+  expect(await db.chooseAssignment(owner.learner.id, assignment.id, 1)).toBe(
+    false,
+  );
+  expect(await db.lessonActivities(owner.learner.id)).toMatchObject([
+    { contentId: lesson.id, contentVersion: 1 },
+  ]);
+  expect(await attempts.detail(outsider.token, attemptId!)).toBeNull();
+});
+it("rejects self-references and keeps released lesson references immutable", async () => {
+  const editor = randomBytes(32).toString("hex");
+  const reviewer = randomBytes(32).toString("hex");
+  const auth = authorizationStore(pool);
+  await auth.provisionStaff(
+    editor,
+    "editor",
+    new Date(Date.now() + 86_400_000),
+  );
+  await auth.provisionStaff(
+    reviewer,
+    "reviewer",
+    new Date(Date.now() + 86_400_000),
+  );
+  const catalog = catalogStore(pool);
+  for (const id of ["SYN-820", "SYN-821"]) {
+    const draft = {
+      ...contentDraft,
+      id,
+      kind: "lesson" as const,
+      rubric: null,
+      rubricVersion: null,
+      goals: [],
+      backgrounds: [],
+      domains: [],
+    };
+    expect(await catalog.createDraft(editor, draft)).toBe(true);
+    expect(await catalog.submit(editor, id, 1)).toBe(true);
+    expect(await catalog.approve(reviewer, id, 1, true)).toBe(true);
+    expect(await catalog.publish(editor, id, 1)).toBe(true);
+  }
+  const reference = (id: string) =>
+    JSON.stringify({
+      schemaVersion: 1,
+      all: [{ kind: "lesson", id, version: 1, activity: "started" }],
+    });
+  await expect(
+    pool.query(
+      "UPDATE content_versions SET structured_prerequisites=$1::jsonb WHERE id='SYN-820'",
+      [reference("SYN-821")],
+    ),
+  ).rejects.toThrow("Released content is immutable");
+  const result = await pool.query<{ valid: boolean }>(
+    "SELECT prerequisite_graph_valid('SYN-820',$1::jsonb) AS valid",
+    [reference("SYN-820")],
+  );
+  expect(result.rows[0]).toEqual({ valid: false });
 });
 it("keeps consented member samples private through moderation, withdrawal and deletion", async () => {
   const proposals = proposalStore(pool);

@@ -9,6 +9,10 @@ import {
   type Experience,
 } from "./content.ts";
 import { hash } from "./store.ts";
+import {
+  validPrerequisiteSpec,
+  type PrerequisiteSpec,
+} from "./prerequisites.ts";
 
 export type ContentKind = "lesson" | "assignment" | "workflow" | "community";
 export type ContentOrigin = "curated" | "member-proposal";
@@ -28,6 +32,7 @@ export interface DraftContent {
   backgrounds: string[];
   domains: string[];
   prerequisites: string;
+  structuredPrerequisites?: PrerequisiteSpec | null;
   minimumExperience?: Experience;
   rubric: string | null;
   rubricVersion: number | null;
@@ -115,6 +120,10 @@ export function validDraft(item: DraftContent): boolean {
     validTags(item.backgrounds, BACKGROUNDS) &&
     validTags(item.domains, DOMAINS) &&
     item.prerequisites.length <= 2000 &&
+    (item.structuredPrerequisites === undefined ||
+      item.structuredPrerequisites === null ||
+      (item.prerequisites.trim() === "" &&
+        validPrerequisiteSpec(item.structuredPrerequisites))) &&
     (item.minimumExperience === undefined ||
       Object.hasOwn(EXPERIENCE, item.minimumExperience)) &&
     ((item.rubric === null && item.rubricVersion === null) ||
@@ -126,6 +135,7 @@ export function validDraft(item: DraftContent): boolean {
   );
 }
 const columns = `id,version,kind,origin,title,body,owner,sources,rights,goals,backgrounds,domains,prerequisites,
+  structured_prerequisites AS "structuredPrerequisites",
   minimum_experience AS "minimumExperience",
   rubric,rubric_version AS "rubricVersion",state,requires_qualified_signoff AS "requiresQualifiedSignoff",
   reviewed_at AS "reviewedAt",published_at AS "publishedAt"`;
@@ -140,13 +150,15 @@ export function catalogStore(pool: Pool): CatalogStore {
       if (!validDraft(item)) return false;
       const result = await pool.query(
         `INSERT INTO content_versions(id,version,kind,origin,title,body,owner,sources,rights,
-          goals,backgrounds,domains,prerequisites,minimum_experience,rubric,rubric_version,created_by)
-         SELECT $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,p.id
+          goals,backgrounds,domains,prerequisites,structured_prerequisites,
+          minimum_experience,rubric,rubric_version,created_by)
+         SELECT $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$18::jsonb,$15,$16,$17,p.id
          FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
          WHERE p.token_hash=$1 AND p.kind='staff' AND s.role='editor'
            AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
            AND $3=(SELECT COALESCE(MAX(version),0)+1 FROM content_versions WHERE id=$2)
            AND NOT EXISTS(SELECT 1 FROM content_versions WHERE id=$2 AND state='retired')
+           AND ($18::jsonb IS NULL OR prerequisite_graph_valid($2,$18::jsonb))
          ON CONFLICT DO NOTHING RETURNING id`,
         [
           hash(token),
@@ -166,6 +178,10 @@ export function catalogStore(pool: Pool): CatalogStore {
           item.minimumExperience ?? "new",
           item.rubric,
           item.rubricVersion,
+          item.structuredPrerequisites === undefined ||
+          item.structuredPrerequisites === null
+            ? null
+            : JSON.stringify(item.structuredPrerequisites),
         ],
       );
       return result.rowCount === 1;
@@ -187,6 +203,8 @@ export function catalogStore(pool: Pool): CatalogStore {
          WHERE content_versions.id=$2 AND content_versions.version=$3
            AND content_versions.state='in_review' AND content_versions.created_by IS DISTINCT FROM p.id
            AND NOT content_versions.requires_qualified_signoff
+           AND prerequisite_graph_valid(content_versions.id,
+             effective_prerequisite_spec(content_versions.structured_prerequisites,content_versions.prerequisites))
            AND p.token_hash=$1 AND p.kind='staff' AND s.role='reviewer'
            AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP`,
         [hash(token), id, version],
@@ -197,7 +215,9 @@ export function catalogStore(pool: Pool): CatalogStore {
       const result = await pool.query(
         `UPDATE content_versions SET state='published',published_at=CURRENT_TIMESTAMP
          WHERE id=$2 AND version=$3 AND state='approved' AND reviewed_at IS NOT NULL
-           AND rights_confirmed AND ${role("editor")}`,
+           AND rights_confirmed AND ${role("editor")}
+           AND prerequisite_graph_valid(content_versions.id,
+             effective_prerequisite_spec(content_versions.structured_prerequisites,content_versions.prerequisites))`,
         [hash(token), id, version],
       );
       return result.rowCount === 1;
@@ -236,7 +256,9 @@ export function catalogStore(pool: Pool): CatalogStore {
     },
     async published(id) {
       const result = await pool.query<ContentVersion>(
-        `SELECT ${columns} FROM content_versions WHERE id=$1 AND state='published'
+        `SELECT ${columns} FROM content_versions cv WHERE id=$1 AND state='published'
+         AND NOT EXISTS(SELECT 1 FROM content_versions newer WHERE newer.id=cv.id
+           AND newer.version>cv.version AND newer.published_at IS NOT NULL)
          ORDER BY version DESC LIMIT 1`,
         [id],
       );
@@ -251,7 +273,9 @@ export function catalogStore(pool: Pool): CatalogStore {
         return [];
       const result = await pool.query<ContentVersion>(
         `SELECT ${columns} FROM (
-           SELECT DISTINCT ON (id) * FROM content_versions WHERE state='published'
+           SELECT DISTINCT ON (cv.id) cv.* FROM content_versions cv WHERE cv.state='published'
+             AND NOT EXISTS(SELECT 1 FROM content_versions newer WHERE newer.id=cv.id
+               AND newer.version>cv.version AND newer.published_at IS NOT NULL)
            ORDER BY id,version DESC
          ) current_versions
          WHERE ($1='' OR title ILIKE '%'||$1||'%' OR body ILIKE '%'||$1||'%')

@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v29",
+  "version": "initial-learning-v30",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans, published synthetic assignment choices and private versioned synthetic assignment attempts, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -560,6 +560,15 @@
       "steps": "Save the starter exercise, open and start an exact-version lesson, submit one private assignment, reload and change goal, retire the lesson, then attempt outsider and forged member-ID reads",
       "expected": "The owner alone sees distinct observed, self-reported and submitted states with retained historical versions; an empty member receives a next action and no other member's activity leaks",
       "issues": [243, 117],
+      "critical": true
+    },
+    {
+      "id": "L63",
+      "actor": "Exploratory learner and unrelated professional learner",
+      "preconditions": "Published synthetic lesson and assignment with a version-pinned lesson-start prerequisite",
+      "steps": "Try the assignment before lesson activity and by forged choice, start the exact lesson, choose and reload, then compare another member and publish a replacement lesson version",
+      "expected": "Only the observed owner activity unlocks the assignment; the unrelated member remains denied and superseding the pinned lesson makes the choice honestly unavailable",
+      "issues": [103, 277],
       "critical": true
     }
   ],
