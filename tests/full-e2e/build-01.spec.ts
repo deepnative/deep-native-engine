@@ -166,6 +166,61 @@ test("[F-BUILD-01-B] business-analysis learner completes a noncoding local exerc
   });
 });
 
+test("[F-BUILD-01-C] uncovered tailored-review request is refused without paid access", async ({
+  page,
+  context,
+}) => {
+  await requiredCheck(1, async () => {
+    await onboard(page, "analysis");
+    const owner = await member(context);
+    await page
+      .getByRole("link", { name: "Check tailored-review availability" })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Check tailored-review availability" }),
+    ).toBeVisible();
+    await page.getByLabel("Review domain").selectOption("education");
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (reply) =>
+          reply.url().endsWith("/tailored-review") &&
+          reply.request().method() === "POST",
+      ),
+      page.getByRole("button", { name: "Check tailored review" }).click(),
+    ]);
+    expect(response.status()).toBe(409);
+    await expect(
+      page.getByRole("heading", { name: "Tailored review is unavailable" }),
+    ).toBeVisible();
+    await expect(page.getByRole("status")).toContainText(
+      "No request was accepted or saved",
+    );
+    await expect(page.getByRole("status")).toContainText(
+      "Qualified reviewer coverage not verified",
+    );
+    await expect(page.getByRole("status")).toContainText(
+      "Deliverable service capacity not verified",
+    );
+    await expect(
+      page.getByRole("button", { name: /book|buy|purchase|pay/i }),
+    ).toHaveCount(0);
+    const paid = await pool.query(
+      "SELECT id FROM synthetic_entitlement_grants WHERE member_id=$1",
+      [owner.id],
+    );
+    const events = await pool.query(
+      "SELECT id FROM synthetic_entitlement_events WHERE member_id=$1",
+      [owner.id],
+    );
+    expect(paid.rowCount).toBe(0);
+    expect(events.rowCount).toBe(0);
+    await page
+      .getByRole("link", { name: "Return to your learning path" })
+      .click();
+    await expect(page).toHaveURL(/\/learn$/);
+  });
+});
+
 test("[F-BUILD-01-D] demo reviewer roster entry does not change live service readiness", async ({
   page,
   context,

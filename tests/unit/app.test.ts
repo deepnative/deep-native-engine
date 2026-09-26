@@ -17,7 +17,10 @@ import {
   type CatalogStore,
   type ContentVersion,
 } from "../../src/catalog.ts";
-import { disabledTrackStore } from "../../src/track-readiness.ts";
+import {
+  disabledTrackStore,
+  type TrackStore,
+} from "../../src/track-readiness.ts";
 import {
   disabledProposalStore,
   type ProposalStore,
@@ -365,6 +368,70 @@ async function client(evidence?: EvidenceStore) {
 function active() {
   db.session.mockResolvedValue({ kind: "active", learner: member });
 }
+it("denies a member tailored-review request without accepting a service", async () => {
+  const tracks = {
+    ...disabledTrackStore(),
+    snapshot: vi.fn<TrackStore["snapshot"]>(disabledTrackStore().snapshot),
+  };
+  const agent = managedAgent(app(db, { origin, secret: "secret", tracks }));
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  await agent.get("/tailored-review").set("Host", host).expect(303);
+  await agent
+    .post("/tailored-review")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf, domain: "education" })
+    .expect(303);
+  active();
+  const form = await agent
+    .get("/tailored-review")
+    .set("Host", host)
+    .expect(200);
+  expect(form.text).toContain("Check tailored-review availability");
+  expect(form.text).toContain("NO BOOKINGS");
+  const post = (domain: unknown, formCsrf = csrf) =>
+    agent
+      .post("/tailored-review")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf: formCsrf, domain });
+  await post("education", "invalid").expect(403);
+  await post("not-a-domain").expect(422);
+  expect(tracks.snapshot).not.toHaveBeenCalled();
+  const unavailable = await post("education").expect(409);
+  expect(unavailable.text).toContain("No request was accepted or saved");
+  expect(unavailable.text).toContain(
+    "Qualified reviewer coverage not verified",
+  );
+  expect(unavailable.text).not.toContain("qualification_ref");
+  tracks.snapshot.mockResolvedValueOnce({
+    foundation: [],
+    itSpecialties: [],
+    specialties: [],
+  });
+  await post("education").expect(503);
+  tracks.snapshot.mockResolvedValueOnce({
+    foundation: [],
+    itSpecialties: [],
+    specialties: [
+      {
+        domain: "education",
+        serviceType: "formal-review",
+        state: "available",
+        gaps: ["private roster reference"],
+      },
+    ],
+  });
+  const noOffer = await post("education").expect(409);
+  expect(noOffer.text).toContain("Approved request terms are not available");
+  expect(noOffer.text).not.toContain("private roster reference");
+  tracks.snapshot.mockRejectedValueOnce(new Error("private roster reference"));
+  const failedLookup = await post("education").expect(503);
+  expect(failedLookup.text).not.toContain("private roster reference");
+});
 it("serves a member-owned activity view only through the active session", async () => {
   const attempts = {
     ...disabledAttemptStore(),

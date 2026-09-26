@@ -23,6 +23,8 @@ import {
   privatePracticeHistoryPage,
   staffLibraryPage,
   trackReadinessPage,
+  tailoredReviewRequestPage,
+  tailoredReviewUnavailablePage,
   expertRegistryPage,
   proposalListPage,
   proposalPreviewPage,
@@ -70,6 +72,7 @@ import {
   type DraftContent,
 } from "./catalog.ts";
 import { disabledTrackStore, type TrackStore } from "./track-readiness.ts";
+import { DOMAINS, type Domain } from "./content.ts";
 import { disabledProposalStore, type ProposalStore } from "./proposals.ts";
 import { workflowBundle, workflowRegistry } from "./workflow-registry.ts";
 import { disabledCircleStore, type CircleStore } from "./circles.ts";
@@ -483,6 +486,7 @@ export function app(
       "/contribute",
       "/evidence",
       "/circles",
+      "/tailored-review",
     ],
     async (req, res, next) => {
       const session = await store.session(res.locals.token as string);
@@ -513,6 +517,39 @@ export function app(
       next();
     },
   );
+  app.get("/tailored-review", (_req, res) => {
+    res.send(tailoredReviewRequestPage(res.locals.csrf as string));
+  });
+  app.post("/tailored-review", async (req, res) => {
+    const domain = (req.body as Fields).domain;
+    if (typeof domain !== "string" || !Object.hasOwn(DOMAINS, domain)) {
+      res
+        .status(422)
+        .send(
+          tailoredReviewRequestPage(res.locals.csrf as string, [
+            "Choose a listed domain before checking availability. No request was accepted.",
+          ]),
+        );
+      return;
+    }
+    const service = (await tracks.snapshot()).specialties.find(
+      (item) => item.domain === domain && item.serviceType === "formal-review",
+    );
+    if (!service) {
+      res
+        .status(503)
+        .send(
+          errorPage(
+            "Availability unavailable",
+            "No request was accepted. Please try the local preview later.",
+          ),
+        );
+      return;
+    }
+    res
+      .status(409)
+      .send(tailoredReviewUnavailablePage(service, domain as Domain));
+  });
   app.get("/evidence", async (_req, res) => {
     res.send(
       evidencePage(
