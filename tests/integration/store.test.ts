@@ -2001,6 +2001,225 @@ it("lets only the member revoke private-review consent while retaining private e
   );
 });
 
+it("never leaves a queued review submission after overlapping consent revocation", async () => {
+  const owner = await member();
+  const evidence = evidenceStore(
+    pool,
+    fileObjectStorage(privateStorageRoot),
+    "integration-secret",
+  );
+  const created = await evidence.upload(owner.token, {
+    name: "invented-overlap.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented private review evidence"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+  });
+  if (created.kind !== "created") throw new Error("evidence not created");
+  expect(await evidence.transitionQuarantine(created.id, "clean")).toBe(true);
+
+  const gateKey = randomBytes(4).readUInt32BE(0);
+  const holder = await pool.connect();
+  let queue: Promise<boolean> | undefined;
+  let revoke: Promise<boolean> | undefined;
+  try {
+    await pool.query(`CREATE FUNCTION dne_test_queue_gate() RETURNS trigger
+      LANGUAGE plpgsql AS $$ BEGIN
+        PERFORM pg_advisory_xact_lock(TG_ARGV[0]::bigint);
+        RETURN NEW;
+      END $$`);
+    await pool.query(`CREATE TRIGGER dne_test_queue_gate
+      BEFORE INSERT ON evidence_review_submissions
+      FOR EACH ROW EXECUTE FUNCTION dne_test_queue_gate('${gateKey}')`);
+    await holder.query("SELECT pg_advisory_lock($1::bigint)", [gateKey]);
+    const blocked = async (fragment: string, waitEvent?: string) => {
+      const result = await pool.query<{ blocked: boolean }>(
+        `SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+          WHERE datname=current_database() AND pid<>pg_backend_pid()
+            AND state='active' AND query LIKE $1 AND wait_event_type='Lock'
+            AND ($2::text IS NULL OR wait_event=$2)) AS blocked`,
+        [`%${fragment}%`, waitEvent ?? null],
+      );
+      return result.rows[0]!.blocked;
+    };
+    const waitFor = async (condition: () => Promise<boolean>) => {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (await condition()) return;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      throw new Error("Expected database lock state was not observed");
+    };
+    queue = evidence.submitForReview(owner.token, created.id);
+    await waitFor(() =>
+      blocked("INSERT INTO evidence_review_submissions", "advisory"),
+    );
+    let revokeDone = false;
+    revoke = evidence
+      .revokePrivateReview(owner.token, created.id)
+      .then((value) => {
+        revokeDone = true;
+        return value;
+      });
+    await waitFor(
+      async () => revokeDone || (await blocked("UPDATE evidence_objects e")),
+    );
+    await holder.query("SELECT pg_advisory_unlock($1::bigint)", [gateKey]);
+    expect(await queue).toBe(true);
+    expect(await revoke).toBe(true);
+    const state = await pool.query<{ status: string | null }>(
+      `SELECT s.status FROM evidence_objects e
+       LEFT JOIN evidence_review_submissions s ON s.evidence_id=e.id
+       WHERE e.id=$1 AND e.private_review_allowed=false`,
+      [created.id],
+    );
+    expect(state.rows).toHaveLength(1);
+    expect(state.rows[0]!.status).not.toBe("queued");
+    expect(await evidence.submitForReview(owner.token, created.id)).toBe(false);
+  } finally {
+    await holder.query("SELECT pg_advisory_unlock($1::bigint)", [gateKey]);
+    await Promise.allSettled([queue, revoke].filter(Boolean));
+    await pool.query(
+      "DROP TRIGGER IF EXISTS dne_test_queue_gate ON evidence_review_submissions",
+    );
+    await pool.query("DROP FUNCTION IF EXISTS dne_test_queue_gate()");
+    holder.release();
+  }
+}, 10_000);
+
+it("denies an overlapping queue after revocation owns the evidence row", async () => {
+  const owner = await member();
+  const evidence = evidenceStore(
+    pool,
+    fileObjectStorage(privateStorageRoot),
+    "integration-secret",
+  );
+  const created = await evidence.upload(owner.token, {
+    name: "invented-revoke-first.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented private review evidence"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+  });
+  if (created.kind !== "created") throw new Error("evidence not created");
+  expect(await evidence.transitionQuarantine(created.id, "clean")).toBe(true);
+
+  const gateKey = randomBytes(4).readUInt32BE(0);
+  const holder = await pool.connect();
+  let queue: Promise<boolean> | undefined;
+  let revoke: Promise<boolean> | undefined;
+  try {
+    await pool.query(`CREATE FUNCTION dne_test_revoke_gate() RETURNS trigger
+      LANGUAGE plpgsql AS $$ BEGIN
+        PERFORM pg_advisory_xact_lock(TG_ARGV[0]::bigint);
+        RETURN NEW;
+      END $$`);
+    await pool.query(`CREATE TRIGGER dne_test_revoke_gate
+      BEFORE UPDATE OF private_review_allowed ON evidence_objects
+      FOR EACH ROW EXECUTE FUNCTION dne_test_revoke_gate('${gateKey}')`);
+    await holder.query("SELECT pg_advisory_lock($1::bigint)", [gateKey]);
+    const waitForLock = async (fragment: string, event?: string) => {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const result = await pool.query<{ blocked: boolean }>(
+          `SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+            WHERE datname=current_database() AND pid<>pg_backend_pid()
+              AND state='active' AND query LIKE $1 AND wait_event_type='Lock'
+              AND ($2::text IS NULL OR wait_event=$2)) AS blocked`,
+          [`%${fragment}%`, event ?? null],
+        );
+        if (result.rows[0]!.blocked) return;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      throw new Error("Expected database lock state was not observed");
+    };
+    revoke = evidence.revokePrivateReview(owner.token, created.id);
+    await waitForLock("UPDATE evidence_objects e", "advisory");
+    queue = evidence.submitForReview(owner.token, created.id);
+    await waitForLock("INSERT INTO evidence_review_submissions");
+    await holder.query("SELECT pg_advisory_unlock($1::bigint)", [gateKey]);
+    expect(await revoke).toBe(true);
+    expect(await queue).toBe(false);
+    expect(await evidence.owned(owner.token)).toMatchObject([
+      { id: created.id, privateReviewAllowed: false, submissionStatus: null },
+    ]);
+  } finally {
+    await holder.query("SELECT pg_advisory_unlock($1::bigint)", [gateKey]);
+    await Promise.allSettled([queue, revoke].filter(Boolean));
+    await pool.query(
+      "DROP TRIGGER IF EXISTS dne_test_revoke_gate ON evidence_objects",
+    );
+    await pool.query("DROP FUNCTION IF EXISTS dne_test_revoke_gate()");
+    holder.release();
+  }
+}, 10_000);
+
+it("commits only one concurrent review queue entry and rolls back failed withdrawal", async () => {
+  const owner = await member();
+  const evidence = evidenceStore(
+    pool,
+    fileObjectStorage(privateStorageRoot),
+    "integration-secret",
+  );
+  const created = await evidence.upload(owner.token, {
+    name: "invented-duplicate.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented duplicate review evidence"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+  });
+  if (created.kind !== "created") throw new Error("evidence not created");
+  expect(await evidence.transitionQuarantine(created.id, "clean")).toBe(true);
+  expect(
+    (
+      await Promise.all([
+        evidence.submitForReview(owner.token, created.id),
+        evidence.submitForReview(owner.token, created.id),
+      ])
+    ).sort(),
+  ).toEqual([false, true]);
+  await pool.query(`CREATE FUNCTION dne_test_withdraw_failure() RETURNS trigger
+    LANGUAGE plpgsql AS $$ BEGIN
+      RAISE EXCEPTION 'synthetic withdrawal failure';
+    END $$`);
+  try {
+    await pool.query(`CREATE TRIGGER dne_test_withdraw_failure
+      BEFORE UPDATE ON evidence_review_submissions
+      FOR EACH ROW EXECUTE FUNCTION dne_test_withdraw_failure()`);
+    await expect(
+      evidence.revokePrivateReview(owner.token, created.id),
+    ).rejects.toThrow("synthetic withdrawal failure");
+    const state = await pool.query<{
+      private_review_allowed: boolean;
+      status: string;
+    }>(
+      `SELECT e.private_review_allowed,s.status
+       FROM evidence_objects e JOIN evidence_review_submissions s
+         ON s.evidence_id=e.id WHERE e.id=$1`,
+      [created.id],
+    );
+    expect(state.rows).toEqual([
+      { private_review_allowed: true, status: "queued" },
+    ]);
+  } finally {
+    await pool.query(
+      "DROP TRIGGER IF EXISTS dne_test_withdraw_failure ON evidence_review_submissions",
+    );
+    await pool.query("DROP FUNCTION IF EXISTS dne_test_withdraw_failure()");
+  }
+  expect(await evidence.revokePrivateReview(owner.token, created.id)).toBe(
+    true,
+  );
+  expect(await evidence.submitForReview(owner.token, created.id)).toBe(false);
+});
+
 it("rechecks authorization and quarantine for every short-lived evidence download", async () => {
   let now = 1_800_000_000_000;
   const owner = await member(),
