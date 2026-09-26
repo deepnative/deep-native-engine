@@ -565,6 +565,26 @@ it("rejects invalid revocation identities and reports only a changed private-rev
   );
 });
 
+it.each([false, true])(
+  "does not acknowledge revocation when withdrawing the queue fails (rollback broken: %s)",
+  async (rollbackBroken) => {
+    const db = database({ id: evidenceId });
+    const evidence = evidenceStore(db.pool, objectStorage(), "secret");
+    const failure = new Error("withdrawal failed");
+    db.failOn(/UPDATE evidence_review_submissions/, failure);
+    if (rollbackBroken) db.failOn(/^ROLLBACK$/, new Error("connection lost"));
+    await expect(evidence.revokePrivateReview(token, evidenceId)).rejects.toBe(
+      failure,
+    );
+    expect(db.query).toHaveBeenCalledWith("BEGIN");
+    expect(db.query).toHaveBeenCalledWith("ROLLBACK");
+    expect(db.query).not.toHaveBeenCalledWith("COMMIT");
+    expect(db.client.release).toHaveBeenCalledWith(
+      rollbackBroken ? failure : undefined,
+    );
+  },
+);
+
 it("keeps review, publication and exact-circle consent independent", async () => {
   const db = database(
       { id: evidenceId },
