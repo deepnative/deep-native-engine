@@ -1,9 +1,7 @@
 import type { ContentVersion } from "./catalog.ts";
 import type { Experience } from "./content.ts";
-import type { Exercise, Learner } from "./store.ts";
-
-export const LOCAL_FOUNDATION_PREREQUISITE =
-  "LOCAL-FIRST-EXERCISE-COMPLETE" as const;
+import type { Exercise, Learner, LessonActivity } from "./store.ts";
+import { prerequisitesMet } from "./prerequisites.ts";
 
 const experienceLevel: Record<Experience, number> = {
   new: 0,
@@ -15,6 +13,7 @@ export function eligibleAssignments(
   items: ContentVersion[],
   learner: Learner,
   progress: Exercise | undefined,
+  activity: LessonActivity[] = [],
 ): ContentVersion[] {
   return items.filter((item) => {
     if (item.kind !== "assignment" || item.state !== "published") return false;
@@ -44,12 +43,6 @@ export function eligibleAssignments(
       experienceLevel[item.minimumExperience ?? "new"]
     )
       return false;
-    const prerequisite = item.prerequisites.trim();
-    return (
-      prerequisite === "" ||
-      prerequisite.toLowerCase() === "none" ||
-      (prerequisite === LOCAL_FOUNDATION_PREREQUISITE &&
-        Boolean(progress?.completed_at))
-    );
+    return prerequisitesMet(item, items, progress, activity);
   });
 }

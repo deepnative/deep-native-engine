@@ -35,6 +35,27 @@ beforeEach(() => {
 });
 it("validates versioned metadata and audience tags before creating a draft", async () => {
   expect(validDraft(sample)).toBe(true);
+  const withLessonPrerequisite: DraftContent = {
+    ...sample,
+    prerequisites: "",
+    structuredPrerequisites: {
+      schemaVersion: 1,
+      all: [{ kind: "lesson", id: "SYN-101", version: 1, activity: "started" }],
+    },
+  };
+  expect(validDraft(withLessonPrerequisite)).toBe(true);
+  expect(validDraft({ ...withLessonPrerequisite, prerequisites: "None" })).toBe(
+    false,
+  );
+  expect(
+    validDraft({
+      ...withLessonPrerequisite,
+      structuredPrerequisites: { schemaVersion: 2, all: [] },
+    } as unknown as DraftContent),
+  ).toBe(false);
+  expect(
+    validDraft({ ...withLessonPrerequisite, structuredPrerequisites: null }),
+  ).toBe(true);
   expect(validDraft({ ...sample, minimumExperience: "some" })).toBe(true);
   expect(
     validDraft({
@@ -81,6 +102,10 @@ it("validates versioned metadata and audience tags before creating a draft", asy
   expect(query).not.toHaveBeenCalled();
   expect(await catalog.createDraft("token", sample)).toBe(true);
   expect(query.mock.calls[0]![1]).toContain("SYN-001");
+  expect(await catalog.createDraft("token", withLessonPrerequisite)).toBe(true);
+  expect(query.mock.calls[1]![1][17]).toBe(
+    JSON.stringify(withLessonPrerequisite.structuredPrerequisites),
+  );
   query.mockResolvedValueOnce({ rowCount: 0, rows: [] });
   expect(await catalog.createDraft("token", sample)).toBe(false);
 });
