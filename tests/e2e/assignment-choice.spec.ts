@@ -221,6 +221,7 @@ test("[L63] a version-pinned lesson unlocks only its owner's synthetic assignmen
   await page.goto("/learn");
   await expect(choices).toContainText(title);
   await choices.getByRole("button", { name: `Choose ${title}` }).click();
+  await expect(choices).toContainText("Your chosen sample");
   await page.reload();
   await expect(choices).toContainText("Your chosen sample");
 
