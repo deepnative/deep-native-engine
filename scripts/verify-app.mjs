@@ -40,6 +40,40 @@ let privateStorageRoot;
 // Only code-owned stage names cross the console/report failure boundary.
 // Database, parser and filesystem errors can contain credentials or member text.
 let stage = "verification artifacts";
+const CHILD_OUTPUT_LIMIT = 1024 * 1024;
+function childDiagnostics(result) {
+  // Only fixed classifications and sizes leave this boundary. In particular,
+  // never persist child output, thrown values, or arbitrary error messages.
+  const stdout = result.stdout ?? "";
+  const stderr = result.stderr ?? "";
+  const output = `${stdout}\n${stderr}`;
+  const knownSignals = ["SIGINT", "SIGTERM", "SIGKILL", "SIGABRT"];
+  return {
+    stdin: "ignored",
+    output: "captured-private",
+    maxBufferBytes: CHILD_OUTPUT_LIMIT,
+    stdoutBytes: Buffer.byteLength(stdout),
+    stderrBytes: Buffer.byteLength(stderr),
+    signal: result.signal
+      ? knownSignals.includes(result.signal)
+        ? result.signal
+        : "other"
+      : "none",
+    processError:
+      result.error?.code === "ENOBUFS"
+        ? "output-buffer-limit"
+        : result.error
+          ? "launcher-error"
+          : "none",
+    vitestUnhandledErrors:
+      /Vitest caught \d+ unhandled errors? during the test run\./.test(output),
+    vitestTeardownError:
+      /\bEnvironmentTeardownError\b|\[vitest-pool\]: Timeout terminating/.test(
+        output,
+      ),
+    npmErrorBanner: /(?:^|\n)npm (?:error|ERR!)(?:\s|$)/.test(output),
+  };
+}
 function run(command, args, env = process.env) {
   stage = [command, ...args].join(" ");
   const start = new Date().toISOString();
@@ -49,13 +83,14 @@ function run(command, args, env = process.env) {
   const result = spawnSync(command, args, {
     stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf8",
-    maxBuffer: 1024 * 1024,
+    maxBuffer: CHILD_OUTPUT_LIMIT,
     env,
   });
   report.commands.push({
     command: [command, ...args].join(" "),
     start,
     exitStatus: result.status,
+    child: childDiagnostics(result),
   });
   requireGate(
     result.status === 0,

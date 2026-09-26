@@ -104,6 +104,15 @@ it.each([0, 7])(
     expect(
       doubles.spawn.mock.calls.find(([command]) => command === "npm")?.[2],
     ).not.toHaveProperty("stdio", "inherit");
+    expect(report.commands[0].child).toEqual(
+      expect.objectContaining({
+        stdin: "ignored",
+        output: "captured-private",
+        maxBufferBytes: 1024 * 1024,
+        processError: "none",
+        signal: "none",
+      }),
+    );
   },
 );
 it("fails safely when a child output buffer or launcher fails", async () => {
@@ -129,6 +138,68 @@ it("fails safely when a child output buffer or launcher fails", async () => {
     expect.objectContaining({
       command: "npm run format:check",
       exitStatus: null,
+      child: expect.objectContaining({ processError: "launcher-error" }),
+    }),
+  );
+});
+it("classifies an integration process failure without exposing output", async () => {
+  doubles.spawn.mockImplementation((command, args) => {
+    if (command === "git")
+      return {
+        status: 0,
+        stdout: args[0] !== "status" ? "a".repeat(40) : "",
+      };
+    if (command === "npm" && args[1] === "test:integration")
+      return {
+        status: 1,
+        signal: null,
+        stdout: `Vitest caught 1 unhandled error during the test run.\n${marker}`,
+        stderr: `EnvironmentTeardownError\nnpm error command failed\n${marker}`,
+      };
+    return { status: 0, stdout: "", stderr: "" };
+  });
+  const report = await run();
+  expect(report.exitStatus).toBe(1);
+  expect(report.integrationTests).toBeUndefined();
+  expect(report.commands.at(-1)).toEqual(
+    expect.objectContaining({
+      command: "npm run test:integration",
+      exitStatus: 1,
+      child: expect.objectContaining({
+        processError: "none",
+        signal: "none",
+        vitestUnhandledErrors: true,
+        vitestTeardownError: true,
+        npmErrorBanner: true,
+        stdoutBytes: expect.any(Number),
+        stderrBytes: expect.any(Number),
+      }),
+    }),
+  );
+});
+it("labels buffer overflow and signals without trusting error text", async () => {
+  doubles.spawn.mockImplementation((command, args) => {
+    if (command === "git")
+      return {
+        status: 0,
+        stdout: args[0] !== "status" ? "a".repeat(40) : "",
+      };
+    return args[0] === "run" && args[1] === "format:check"
+      ? {
+          status: null,
+          signal: "SIGTERM",
+          error: Object.assign(new Error(marker), { code: "ENOBUFS" }),
+          stdout: marker,
+          stderr: marker,
+        }
+      : { status: 0, stdout: "", stderr: "" };
+  });
+  const report = await run();
+  expect(report.exitStatus).toBe(1);
+  expect(report.commands.at(-1).child).toEqual(
+    expect.objectContaining({
+      processError: "output-buffer-limit",
+      signal: "SIGTERM",
     }),
   );
 });
