@@ -5,6 +5,12 @@ export default ts.config(
   js.configs.recommended,
   ...ts.configs.recommended,
   {
+    files: ["public/*.js"],
+    languageOptions: {
+      globals: { document: "readonly", window: "readonly" },
+    },
+  },
+  {
     languageOptions: {
       globals: {
         process: "readonly",
