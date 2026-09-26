@@ -229,30 +229,16 @@ test("[F-BUILD-02-A] member keeps original and revised evidence separately priva
           revisedId,
         ),
       ).toBe(false);
-      expect(await evidence.transitionQuarantine(revisedId, "clean")).toBe(
-        true,
+      const originalSubmissionRow = await pool.query<{ id: string }>(
+        "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+        [originalId],
       );
-      await page.reload();
-      await page
-        .getByRole("listitem")
-        .filter({ hasText: "revised-build02.txt" })
-        .getByLabel("No qualified reviewer is assigned", { exact: false })
-        .check();
-      await page
-        .getByRole("listitem")
-        .filter({ hasText: "revised-build02.txt" })
-        .getByRole("button", { name: "Queue for local review consideration" })
-        .click();
-      const submissions = await pool.query<{ evidence_id: string; id: string }>(
-        `SELECT evidence_id,id FROM evidence_review_submissions
-         WHERE evidence_id IN ($1,$2) ORDER BY evidence_id`,
-        [originalId, revisedId],
+      expect(originalSubmissionRow.rowCount).toBe(1);
+      const pendingSubmission = await pool.query(
+        "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+        [revisedId],
       );
-      expect(submissions.rowCount).toBe(2);
-      const originalSubmission = submissions.rows.find(
-        (row) => row.evidence_id === originalId,
-      );
-      expect(originalSubmission).toBeDefined();
+      expect(pendingSubmission.rowCount).toBe(0);
 
       const auth = authorizationStore(pool);
       const expires = new Date(Date.now() + 86_400_000);
@@ -279,7 +265,7 @@ test("[F-BUILD-02-A] member keeps original and revised evidence separately priva
         adminId,
         reviewerId,
         assignmentId,
-        originalSubmission!.id,
+        originalSubmissionRow.rows[0]!.id,
         "original synthetic submission only",
         expires,
       );
@@ -302,6 +288,47 @@ test("[F-BUILD-02-A] member keeps original and revised evidence separately priva
         reviewerPage.request.post(`/api/evidence/${id}/download-link`, {
           headers: { Origin: origin, "X-CSRF-Token": reviewerCsrf },
         });
+      const originalLink = await linkFor(originalId);
+      expect(originalLink.status()).toBe(200);
+      const { href } = (await originalLink.json()) as { href: string };
+      expect(await (await reviewerPage.request.get(href)).body()).toEqual(
+        Buffer.from(originalBytes),
+      );
+      const noPendingLink = await linkFor(revisedId);
+      expect(noPendingLink.status()).toBe(403);
+      expect(await noPendingLink.json()).toEqual({ error: "forbidden" });
+      expect((await noPendingLink.text()).includes(revisedBytes)).toBe(false);
+      const guessedRevision = await reviewerPage.request.get(
+        href.replace(originalId, revisedId),
+      );
+      expect(guessedRevision.status()).toBe(403);
+      expect(await guessedRevision.json()).toEqual({ error: "forbidden" });
+      expect((await guessedRevision.text()).includes(revisedBytes)).toBe(false);
+
+      expect(await evidence.transitionQuarantine(revisedId, "clean")).toBe(
+        true,
+      );
+      await page.reload();
+      await page
+        .getByRole("listitem")
+        .filter({ hasText: "revised-build02.txt" })
+        .getByLabel("No qualified reviewer is assigned", { exact: false })
+        .check();
+      await page
+        .getByRole("listitem")
+        .filter({ hasText: "revised-build02.txt" })
+        .getByRole("button", { name: "Queue for local review consideration" })
+        .click();
+      const submissions = await pool.query<{ evidence_id: string; id: string }>(
+        `SELECT evidence_id,id FROM evidence_review_submissions
+         WHERE evidence_id IN ($1,$2) ORDER BY evidence_id`,
+        [originalId, revisedId],
+      );
+      expect(submissions.rowCount).toBe(2);
+      const originalSubmission = submissions.rows.find(
+        (row) => row.evidence_id === originalId,
+      );
+      expect(originalSubmission?.id).toBe(originalSubmissionRow.rows[0]!.id);
       expect((await linkFor(originalId)).status()).toBe(200);
       const noRevisionLink = await linkFor(revisedId);
       expect(noRevisionLink.status()).toBe(403);
