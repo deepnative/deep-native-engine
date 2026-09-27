@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v30",
+  "version": "initial-learning-v31",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -570,6 +570,15 @@
       "expected": "Only the observed owner activity unlocks the assignment; the unrelated member remains denied and superseding the pinned lesson makes the choice honestly unavailable",
       "issues": [103, 277],
       "critical": true
+    },
+    {
+      "id": "L64",
+      "actor": "Exploratory, professional and technical members; operator, coach and unauthenticated visitor",
+      "preconditions": "Explicit synthetic future slot, separately verified primary and backup registry entries, member timezone; no live roster or offer",
+      "steps": "Visitor is denied; onboard members, view exact UTC and local sample window, try forged booking and coach retirement, retire as operator and reload",
+      "expected": "Only an authenticated member sees a clearly nonbookable demo window backed by current verified coverage; no charge, reservation, staff evidence or qualified-live promise; withdrawal removes the window and learning remains available",
+      "issues": [29, 294, 42],
+      "critical": true
     }
   ],
   "fullMvp": [
@@ -618,7 +627,7 @@
               "expected": "The selected assignment and rubric match the member goal and real prerequisites"
             },
             {
-              "action": "Publish eligible foundation content for a member who has no completed assessment, then inspect that member’s progress and assessment record",
+              "action": "Publish eligible foundation content for a member who has no completed assessment, then inspect that member\u2019s progress and assessment record",
               "expected": "The content becomes available, but the member gains neither assessed competence nor a completed human-review result from publication alone"
             }
           ]
@@ -1115,11 +1124,11 @@
           "requiredChecks": [
             {
               "action": "Advance an explicitly continued member one billing period",
-              "expected": "Only that month’s Professional service allowances become available"
+              "expected": "Only that month\u2019s Professional service allowances become available"
             },
             {
               "action": "Inspect AI grants for the same period",
-              "expected": "Only that month’s AI allowances become available, once"
+              "expected": "Only that month\u2019s AI allowances become available, once"
             }
           ]
         },
@@ -1323,7 +1332,7 @@
           "requiredChecks": [
             {
               "action": "Export a member record as its authorized owner",
-              "expected": "Only that owner’s permitted records export"
+              "expected": "Only that owner\u2019s permitted records export"
             },
             {
               "action": "Attempt the same export as an outsider",
@@ -1338,15 +1347,15 @@
               "expected": "Billing and backup retention exceptions and expiry are disclosed"
             },
             {
-              "action": "As an authorized operator, export a member’s permitted records under that member’s recorded, current export authorization",
-              "expected": "Only records within that member’s authorization export; another member’s records and records outside its scope are excluded"
+              "action": "As an authorized operator, export a member\u2019s permitted records under that member\u2019s recorded, current export authorization",
+              "expected": "Only records within that member\u2019s authorization export; another member\u2019s records and records outside its scope are excluded"
             },
             {
-              "action": "As an operator, request the member’s export without recorded member authorization",
+              "action": "As an operator, request the member\u2019s export without recorded member authorization",
               "expected": "The export is denied and no member records are disclosed"
             },
             {
-              "action": "As an operator, request the member’s export after its recorded authorization expires",
+              "action": "As an operator, request the member\u2019s export after its recorded authorization expires",
               "expected": "The export is denied and no member records are disclosed"
             },
             {
@@ -1847,7 +1856,7 @@
             },
             {
               "action": "Inspect the compatibility label",
-              "expected": "The label accurately describes that version’s tested compatibility"
+              "expected": "The label accurately describes that version\u2019s tested compatibility"
             }
           ]
         },

@@ -31,6 +31,10 @@ import { type MetricsStore } from "../../src/metrics.ts";
 import { type PracticeStore } from "../../src/practice.ts";
 import { type MemberExportStore } from "../../src/member-export.ts";
 import { disabledAttemptStore } from "../../src/attempts.ts";
+import {
+  disabledAvailabilityStore,
+  type AvailabilityStore,
+} from "../../src/availability.ts";
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
 const member = {
@@ -39,6 +43,42 @@ const member = {
   goal: "everyday" as const,
 };
 const managedServers: Server[] = [];
+it("keeps optional slot discovery private and reports read failures without implying a booking", async () => {
+  const availability = {
+    ...disabledAvailabilityStore(),
+    list: vi.fn<AvailabilityStore["list"]>().mockResolvedValue([
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        domain: "education",
+        serviceType: "coaching",
+        startsAt: new Date("2026-11-01T05:30:00.000Z"),
+        endsAt: new Date("2026-11-01T06:30:00.000Z"),
+      },
+    ]),
+  };
+  const db = storage();
+  const agent = managedAgent(
+    app(db, { origin, secret: "secret", availability }),
+  );
+  await agent.get("/availability").set("Host", host).expect(303);
+  expect(availability.list).not.toHaveBeenCalled();
+  db.session.mockResolvedValue({
+    kind: "active",
+    learner: { ...member, timezone: "America/Toronto" },
+  });
+  const shown = await agent.get("/availability").set("Host", host).expect(200);
+  expect(shown.text).toContain("1:30");
+  expect(shown.text).toContain("GMT-04:00");
+  expect(shown.text).toContain("sample window, not bookable");
+  expect(shown.text).not.toContain('name="staff_id"');
+  availability.list.mockRejectedValueOnce(new Error("private database detail"));
+  const failed = await agent.get("/availability").set("Host", host).expect(503);
+  expect(failed.text).toContain("Availability could not be checked");
+  expect(failed.text).not.toContain("private database detail");
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const noZone = await agent.get("/availability").set("Host", host).expect(200);
+  expect(noZone.text).toContain("Choose a valid time zone");
+});
 it("denies an unconfigured operator metrics route and returns only a configured aggregate", async () => {
   const denied = managedAgent(app(storage(), { origin, secret: "secret" }));
   await denied.get("/operator/metrics").set("Host", host).expect(403);

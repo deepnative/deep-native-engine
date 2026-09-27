@@ -15,6 +15,7 @@ import { metricsStore } from "./metrics.ts";
 import { attemptStore } from "./attempts.ts";
 import { practiceStore } from "./practice.ts";
 import { memberExportStore } from "./member-export.ts";
+import { availabilityStore } from "./availability.ts";
 
 export function evidenceCapabilityClock(
   mode: string,
@@ -64,6 +65,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       attempts: attemptStore(pool),
       practice: practiceStore(pool),
       memberExport: memberExportStore(pool),
+      availability: availabilityStore(pool),
       evidence: evidenceStore(
         pool,
         fileObjectStorage(settings.privateStorageRoot),

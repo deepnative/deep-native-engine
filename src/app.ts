@@ -35,6 +35,7 @@ import {
   assignmentAttemptsPage,
   assignmentAttemptPage,
   assignmentWriteRecoveryPage,
+  availabilityPage,
 } from "./views.ts";
 import type { Store, Learner } from "./store.ts";
 import { eligibleAssignments } from "./assignment-choice.ts";
@@ -85,6 +86,10 @@ import {
   MAX_MEMBER_EXPORT_RECORDS,
   type MemberExportStore,
 } from "./member-export.ts";
+import {
+  disabledAvailabilityStore,
+  type AvailabilityStore,
+} from "./availability.ts";
 const attemptWritePath =
   /^\/assignments\/attempts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(save|submit)$/i;
 function attemptedResponse(body: unknown, action: string) {
@@ -110,6 +115,7 @@ export function app(
     attempts?: AttemptStore;
     practice?: PracticeStore;
     memberExport?: MemberExportStore;
+    availability?: AvailabilityStore;
   },
 ) {
   const app = express();
@@ -126,6 +132,7 @@ export function app(
   const attempts = options.attempts ?? disabledAttemptStore();
   const practice = options.practice ?? disabledPracticeStore();
   const memberExport = options.memberExport ?? disabledMemberExportStore();
+  const availability = options.availability ?? disabledAvailabilityStore();
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -487,6 +494,7 @@ export function app(
       "/evidence",
       "/circles",
       "/tailored-review",
+      "/availability",
     ],
     async (req, res, next) => {
       const session = await store.session(res.locals.token as string);
@@ -517,6 +525,27 @@ export function app(
       next();
     },
   );
+  app.get("/availability", async (_req, res) => {
+    const member = res.locals.learner as Learner;
+    try {
+      res.send(
+        availabilityPage(
+          await availability.list(),
+          member.timezone ?? undefined,
+        ),
+      );
+    } catch {
+      res
+        .status(503)
+        .send(
+          availabilityPage(
+            [],
+            member.timezone ?? undefined,
+            "Availability could not be checked. No appointment was reserved.",
+          ),
+        );
+    }
+  });
   app.get("/tailored-review", (_req, res) => {
     res.send(tailoredReviewRequestPage(res.locals.csrf as string));
   });
