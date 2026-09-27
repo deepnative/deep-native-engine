@@ -115,6 +115,7 @@ export async function migrate(pool: Pool) {
       "025-retained-evidence-lineage.sql",
       "026-structured-prerequisites.sql",
       "027-expert-availability.sql",
+      "028-synthetic-slot-holds.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

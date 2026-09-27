@@ -212,7 +212,11 @@ export function syntheticLedger(
             `SELECT r.grant_id,r.quantity,r.state,g.expires_at,g.expired_at
            FROM synthetic_entitlement_reservations r
            JOIN synthetic_entitlement_grants g ON g.id=r.grant_id
-           WHERE r.id=$1 AND g.member_id=$2 FOR UPDATE OF r,g`,
+           WHERE r.id=$1 AND g.member_id=$2
+             AND NOT EXISTS (
+               SELECT 1 FROM synthetic_slot_holds h WHERE h.reservation_id=r.id
+             )
+           FOR UPDATE OF r,g`,
             [reservationId, memberId],
           )
         ).rows[0];

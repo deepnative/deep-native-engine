@@ -70,6 +70,10 @@ export function availabilityStore(pool: Pool): AvailabilityStore {
          JOIN expert_registry e ON e.id=s.expert_registry_id
          JOIN principals primary_staff ON primary_staff.id=e.staff_id
          WHERE s.retired_at IS NULL AND s.starts_at>CURRENT_TIMESTAMP
+           AND NOT EXISTS (
+             SELECT 1 FROM synthetic_slot_holds held
+             WHERE held.slot_id=s.id AND held.state='held'
+           )
            AND primary_staff.kind='staff'
            AND primary_staff.revoked_at IS NULL
            AND primary_staff.expires_at>CURRENT_TIMESTAMP
