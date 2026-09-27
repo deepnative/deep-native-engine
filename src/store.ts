@@ -31,6 +31,7 @@ export interface LessonActivity {
   startedAt: Date | null;
   selfAssessedAt: Date | null;
   available: boolean;
+  reportable?: boolean;
 }
 export interface Milestone extends MilestoneInput {
   id: string;
@@ -118,6 +119,7 @@ export async function migrate(pool: Pool) {
       "028-synthetic-slot-holds.sql",
       "029-private-assignment-submissions.sql",
       "030-member-owned-adapter-jobs.sql",
+      "031-lesson-usefulness.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
@@ -236,7 +238,16 @@ export function store(pool: Pool): Store {
                       AND cv.kind='lesson' AND cv.state='published'
                       AND NOT EXISTS(SELECT 1 FROM content_versions newer
                         WHERE newer.id=cv.id AND newer.published_at IS NOT NULL
-                          AND newer.version>cv.version)) AS available
+                          AND newer.version>cv.version)) AS available,
+                  EXISTS(SELECT 1 FROM content_versions cv
+                    WHERE cv.id=a.content_id AND cv.version=a.content_version
+                      AND cv.kind='lesson' AND cv.origin='curated'
+                      AND cv.state='published' AND NOT cv.requires_qualified_signoff
+                      AND a.self_assessed_at IS NOT NULL
+                      AND member_content_eligible(a.member_id,cv.id,cv.version)
+                      AND NOT EXISTS(SELECT 1 FROM content_versions newer
+                        WHERE newer.id=cv.id AND newer.published_at IS NOT NULL
+                          AND newer.version>cv.version)) AS reportable
            FROM lesson_activity a
            LEFT JOIN content_versions cv ON cv.id=a.content_id AND cv.version=a.content_version
            WHERE a.member_id=$1

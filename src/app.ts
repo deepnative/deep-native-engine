@@ -81,6 +81,11 @@ import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
 import { disabledPracticeStore, type PracticeStore } from "./practice.ts";
 import {
+  disabledUsefulnessStore,
+  type UsefulnessChoice,
+  type UsefulnessStore,
+} from "./usefulness.ts";
+import {
   disabledMemberExportStore,
   MAX_MEMBER_EXPORT_BYTES,
   MAX_MEMBER_EXPORT_RECORDS,
@@ -119,6 +124,7 @@ export function app(
     metrics?: MetricsStore;
     attempts?: AttemptStore;
     practice?: PracticeStore;
+    usefulness?: UsefulnessStore;
     memberExport?: MemberExportStore;
     availability?: AvailabilityStore;
   },
@@ -136,6 +142,7 @@ export function app(
   const metrics = options.metrics ?? disabledMetricsStore();
   const attempts = options.attempts ?? disabledAttemptStore();
   const practice = options.practice ?? disabledPracticeStore();
+  const usefulness = options.usefulness ?? disabledUsefulnessStore();
   const memberExport = options.memberExport ?? disabledMemberExportStore();
   const availability = options.availability ?? disabledAvailabilityStore();
   app.disable("x-powered-by");
@@ -1469,14 +1476,73 @@ export function app(
   });
   app.get("/progress", async (_req, res) => {
     const member = res.locals.learner as Learner;
-    const [exercise, lessons, memberAttempts] = await Promise.all([
+    const [exercise, lessons, memberAttempts, reports] = await Promise.all([
       store.progress(member.id),
       store.lessonActivities(member.id),
       attempts.list(res.locals.token as string),
+      usefulness.list(res.locals.token as string),
     ]);
     res.send(
-      privateProgressPage(activityItems(exercise, lessons, memberAttempts)),
+      privateProgressPage(
+        activityItems(exercise, lessons, memberAttempts),
+        reports,
+        res.locals.csrf as string,
+      ),
     );
+  });
+  app.post("/library/:id/usefulness", async (req, res) => {
+    const fields = req.body as Fields;
+    const contentVersion = Number(fields.content_version);
+    const revision = Number(fields.revision);
+    const action = fields.intent;
+    const choice = fields.choice;
+    if (
+      !Number.isSafeInteger(contentVersion) ||
+      contentVersion < 1 ||
+      !Number.isSafeInteger(revision) ||
+      revision < 0 ||
+      fields.confirm !== "yes" ||
+      (action !== "save" && action !== "withdraw") ||
+      (action === "save" && choice !== "helpful" && choice !== "not_yet") ||
+      (action === "withdraw" && revision < 1)
+    ) {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Usefulness response not saved",
+            "Choose a response and confirm it uses only sample information, or reopen your private activity to withdraw a saved answer.",
+          ),
+        );
+      return;
+    }
+    const saved =
+      action === "save"
+        ? await usefulness.save(
+            res.locals.token as string,
+            req.params.id as string,
+            contentVersion,
+            choice as UsefulnessChoice,
+            revision,
+          )
+        : await usefulness.withdraw(
+            res.locals.token as string,
+            req.params.id as string,
+            contentVersion,
+            revision,
+          );
+    if (!saved) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Usefulness response changed",
+            "Nothing was saved. This lesson or answer may have changed. Reopen your private learning activity to see the current state.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/progress");
   });
   app.post("/assignments/select", async (req, res) => {
     const member = res.locals.learner as Learner;

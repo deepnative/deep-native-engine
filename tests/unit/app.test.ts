@@ -29,6 +29,7 @@ import {
 import { CIRCLES, type CircleStore } from "../../src/circles.ts";
 import { type MetricsStore } from "../../src/metrics.ts";
 import { type PracticeStore } from "../../src/practice.ts";
+import { type UsefulnessStore } from "../../src/usefulness.ts";
 import { type MemberExportStore } from "../../src/member-export.ts";
 import { disabledAttemptStore } from "../../src/attempts.ts";
 import {
@@ -515,6 +516,61 @@ it("serves a member-owned activity view only through the active session", async 
     expect.stringMatching(/^[a-f0-9]{64}$/),
   );
 });
+it("accepts a member's confirmed usefulness choice and fails closed on stale, forged and uncertain writes", async () => {
+  const usefulness = {
+    list: vi.fn<UsefulnessStore["list"]>().mockResolvedValue([]),
+    save: vi.fn<UsefulnessStore["save"]>().mockResolvedValue(true),
+    withdraw: vi.fn<UsefulnessStore["withdraw"]>().mockResolvedValue(true),
+  };
+  const agent = managedAgent(app(db, { origin, secret: "secret", usefulness }));
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  const post = (fields: Record<string, string>, validOrigin = true) =>
+    agent
+      .post("/library/SYN-971/usefulness")
+      .set("Host", host)
+      .set("Origin", validOrigin ? origin : "https://wrong.example")
+      .type("form")
+      .send({ csrf, content_version: "1", revision: "0", ...fields });
+  await post({ intent: "save", choice: "helpful", confirm: "yes" }).expect(303);
+  expect(usefulness.save).not.toHaveBeenCalled();
+  active();
+  await post(
+    { intent: "save", choice: "helpful", confirm: "yes" },
+    false,
+  ).expect(403);
+  expect(usefulness.save).not.toHaveBeenCalled();
+  await post({ intent: "save", choice: "invalid", confirm: "yes" }).expect(422);
+  await post({ intent: "save", choice: "helpful" }).expect(422);
+  await post({ intent: "save", choice: "helpful", confirm: "yes" }).expect(303);
+  expect(usefulness.save).toHaveBeenCalledWith(
+    expect.stringMatching(/^[a-f0-9]{64}$/),
+    "SYN-971",
+    1,
+    "helpful",
+    0,
+  );
+  usefulness.save.mockResolvedValueOnce(false);
+  const stale = await post({
+    intent: "save",
+    choice: "not_yet",
+    confirm: "yes",
+    revision: "1",
+  }).expect(409);
+  expect(stale.text).toContain("Nothing was saved");
+  usefulness.save.mockRejectedValueOnce(new Error("private database text"));
+  const uncertain = await post({
+    intent: "save",
+    choice: "not_yet",
+    confirm: "yes",
+    revision: "1",
+  }).expect(503);
+  expect(uncertain.text).not.toContain("private database text");
+  await post({ intent: "withdraw", confirm: "yes", revision: "1" }).expect(303);
+  usefulness.withdraw.mockResolvedValueOnce(false);
+  await post({ intent: "withdraw", confirm: "yes", revision: "1" }).expect(409);
+  await post({ intent: "withdraw", confirm: "yes", revision: "0" }).expect(422);
+});
 it("serves only a bounded private evidence export and explains safe failures", async () => {
   const files = evidenceStorage();
   const { agent } = await client(files);
@@ -560,7 +616,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v3",
+          version: "local-member-records-v4",
           profile: { id: "owned" },
           records: { milestones: [] },
         },
@@ -587,7 +643,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v3",
+    version: "local-member-records-v4",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
