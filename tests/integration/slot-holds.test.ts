@@ -57,9 +57,9 @@ async function fixture() {
       starts_at,ends_at,loaded_cost_cents,capacity_minutes,backup_staff_id,
       qualification_ref,agreement_ref,conflict_review_ref,verified_by,verified_at)
      VALUES ($1,$2,'coach','education','coaching',$3,$4,12000,60,$5,
-       'synthetic qualification','synthetic agreement','synthetic conflict review',$6,CURRENT_TIMESTAMP),
+       'synthetic qualification','synthetic agreement','synthetic conflict review',$6,$8),
        ($7,$5,'coach','education','coaching',$3,$4,12000,60,$2,
-       'synthetic qualification','synthetic agreement','synthetic conflict review',$6,CURRENT_TIMESTAMP)`,
+       'synthetic qualification','synthetic agreement','synthetic conflict review',$6,$8)`,
     [
       registryId,
       coach.id,
@@ -68,6 +68,7 @@ async function fixture() {
       backup.id,
       admin.id,
       backupId,
+      new Date(clock.getTime() - 60_000),
     ],
   );
   const slotId = await slots.create(
