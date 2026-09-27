@@ -38,7 +38,7 @@ import {
   availabilityPage,
 } from "./views.ts";
 import type { Store, Learner } from "./store.ts";
-import { eligibleAssignments } from "./assignment-choice.ts";
+import { eligibleAssignments, recommendLesson } from "./assignment-choice.ts";
 import {
   validPrerequisiteSpec,
   type PrerequisiteSpec,
@@ -1458,6 +1458,7 @@ export function app(
         [],
         eligibleAssignments(published, member, progress, activity),
         choice,
+        recommendLesson(published, member, progress, activity),
       ),
     );
   });
@@ -2057,6 +2058,7 @@ export function app(
             ],
             eligibleAssignments(published, member, progress, activity),
             choice,
+            recommendLesson(published, member, progress, activity),
           ),
         );
       return;

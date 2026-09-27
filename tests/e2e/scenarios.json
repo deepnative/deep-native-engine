@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v31",
+  "version": "initial-learning-v32",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans and optional eligible current published sample-lesson recommendations, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -578,6 +578,15 @@
       "steps": "Visitor is denied; onboard members, view exact UTC and local sample window, try forged booking and coach retirement, retire as operator and reload",
       "expected": "Only an authenticated member sees a clearly nonbookable demo window backed by current verified coverage; no charge, reservation, staff evidence or qualified-live promise; withdrawal removes the window and learning remains available",
       "issues": [29, 294, 42],
+      "critical": true
+    },
+    {
+      "id": "L65",
+      "actor": "General learner and unrelated member",
+      "preconditions": "Private local preview; current published invented lesson and no qualified foundation approval",
+      "steps": "Onboard, inspect the current next-lesson state, publish a more specific matching sample, open and self-assess it, compare another member, revise goal, publish a replacement and retire the lesson",
+      "expected": "The private plan recommends only an unfinished eligible current sample; member activity and changed goal alter that recommendation without rewriting exact-version history; replacement and retirement recover truthfully without a duration, paid or qualified promise",
+      "issues": [28, 298],
       "critical": true
     }
   ],
