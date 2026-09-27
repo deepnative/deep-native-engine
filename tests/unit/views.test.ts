@@ -18,6 +18,7 @@ import {
   assignmentAttemptsPage,
   assignmentAttemptPage,
   evidencePage,
+  availabilityPage,
 } from "../../src/views.ts";
 import type { AssignmentAttempt } from "../../src/attempts.ts";
 import type { ContentVersion } from "../../src/catalog.ts";
@@ -35,6 +36,31 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("keeps optional availability labelled, escaped and timezone-explicit", () => {
+  const slot = {
+    id: "slot",
+    domain: "<script>",
+    serviceType: "coaching" as const,
+    startsAt: new Date("2026-11-01T05:30:00.000Z"),
+    endsAt: new Date("2026-11-01T06:30:00.000Z"),
+  };
+  const shown = availabilityPage([slot], "America/Toronto");
+  expect(shown).toContain("GMT-04:00");
+  expect(shown).toContain("GMT-05:00");
+  expect(shown).toContain("UTC 2026-11-01T05:30:00.000Z");
+  expect(shown).toContain("&lt;script&gt;");
+  expect(shown).not.toContain("<script>");
+  expect(shown).not.toContain("Book now");
+  expect(availabilityPage([], "America/Toronto")).toContain(
+    "No sample windows can be shown",
+  );
+  expect(availabilityPage([slot], "invalid/zone")).toContain(
+    "Choose a valid time zone",
+  );
+  expect(availabilityPage([slot], undefined, "Private <failure>")).toContain(
+    "Private &lt;failure&gt;",
+  );
+});
 it("does not call a surviving second evidence version an original", () => {
   const parentId = "11111111-1111-4111-8111-111111111111";
   const revised = {
