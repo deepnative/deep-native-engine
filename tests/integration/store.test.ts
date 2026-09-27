@@ -13,7 +13,12 @@ import {
   type AdapterRegistry,
   type AdapterResult,
 } from "../../src/adapters.ts";
-import { enqueueAdapterJob, jobStore, runAdapterJob } from "../../src/jobs.ts";
+import {
+  enqueueAdapterJob,
+  jobStore,
+  requestFingerprint,
+  runAdapterJob,
+} from "../../src/jobs.ts";
 import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
 import {
   evidenceStore,
@@ -1768,7 +1773,7 @@ it("keeps synthetic assignment submissions immutable across private revisions an
   expect(ownedExport).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v2",
+      version: "local-member-records-v3",
       records: {
         assignmentSubmissions: [
           { attemptId: id, sequence: 1, response: firstText },
@@ -4008,6 +4013,173 @@ it("makes job enqueue idempotent across connections and rejects changed requests
   } finally {
     await reopened.end();
   }
+});
+
+it("attributes deterministic adapter jobs only to an active member and keeps idempotent owner isolation", async () => {
+  const owner = await member();
+  const outsider = await member();
+  const reviewer = await staff("reviewer");
+  const jobs = jobStore(pool);
+  const input = { inventedLesson: "SYN-OWNED" };
+  const fingerprint = requestFingerprint(input);
+  const first = await jobs.enqueueForMember(
+    owner.token,
+    "email",
+    "test",
+    "synthetic-notice",
+    "owned-job-1",
+    fingerprint,
+  );
+  expect(first).toMatchObject({ adapter: "email", mode: "test" });
+  expect(
+    await jobs.enqueueForMember(
+      owner.token,
+      "email",
+      "test",
+      "synthetic-notice",
+      "owned-job-1",
+      fingerprint,
+    ),
+  ).toMatchObject({ id: first.id });
+  await expect(
+    jobs.enqueueForMember(
+      outsider.token,
+      "email",
+      "test",
+      "synthetic-notice",
+      "owned-job-1",
+      fingerprint,
+    ),
+  ).rejects.toThrow();
+  await expect(
+    jobs.enqueueForMember(
+      owner.token,
+      "email",
+      "test",
+      "synthetic-notice",
+      "owned-job-1",
+      requestFingerprint({ inventedLesson: "changed" }),
+    ),
+  ).rejects.toThrow("another request");
+  await expect(
+    jobs.enqueue(
+      "email",
+      "test",
+      "synthetic-notice",
+      "owned-job-1",
+      fingerprint,
+    ),
+  ).rejects.toThrow("another request");
+  const system = await jobs.enqueue(
+    "analytics",
+    "test",
+    "record",
+    "system-job",
+    requestFingerprint({ system: true }),
+  );
+  await expect(
+    jobs.enqueueForMember(
+      owner.token,
+      "analytics",
+      "test",
+      "record",
+      "system-job",
+      requestFingerprint({ system: true }),
+    ),
+  ).rejects.toThrow();
+  for (const denied of [reviewer.token, randomBytes(32).toString("hex")])
+    await expect(
+      jobs.enqueueForMember(
+        denied,
+        "email",
+        "test",
+        "synthetic-notice",
+        `denied-${denied.slice(0, 8)}`,
+        fingerprint,
+      ),
+    ).rejects.toThrow("Active member session");
+  await expect(
+    jobs.enqueueForMember(
+      owner.token,
+      "email",
+      "live",
+      "synthetic-notice",
+      "live-member-job",
+      fingerprint,
+    ),
+  ).rejects.toThrow("Live member jobs are not enabled");
+  expect(await memberExportStore(pool).exportOwned(owner.token)).toMatchObject({
+    kind: "ready",
+    payload: {
+      version: "local-member-records-v3",
+      records: { adapterJobs: [{ id: first.id, mode: "test" }] },
+    },
+  });
+  const ownExport = await memberExportStore(pool).exportOwned(owner.token);
+  expect(JSON.stringify(ownExport)).not.toContain("owned-job-1");
+  expect(JSON.stringify(ownExport)).not.toContain(fingerprint);
+  expect(JSON.stringify(ownExport)).not.toContain("synthetic-notice");
+  expect(
+    await memberExportStore(pool).exportOwned(outsider.token),
+  ).toMatchObject({
+    kind: "ready",
+    payload: { records: { adapterJobs: [] } },
+  });
+  await expect(
+    pool.query("UPDATE adapter_jobs SET mode='live' WHERE id=$1", [first.id]),
+  ).rejects.toMatchObject({ code: "23514" });
+  await pool.query(
+    "UPDATE principals SET expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE id=$1",
+    [owner.learner.id],
+  );
+  await expect(
+    jobs.enqueueForMember(
+      owner.token,
+      "email",
+      "test",
+      "synthetic-notice",
+      "owned-job-expired",
+      fingerprint,
+    ),
+  ).rejects.toThrow("Active member session");
+  expect(await memberExportStore(pool).exportOwned(owner.token)).toEqual({
+    kind: "denied",
+  });
+  await pool.query(
+    "UPDATE principals SET expires_at=CURRENT_TIMESTAMP+INTERVAL '1 day' WHERE id=$1",
+    [owner.learner.id],
+  );
+  await pool.query(
+    "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE id=$1",
+    [owner.learner.id],
+  );
+  await expect(
+    jobs.enqueueForMember(
+      owner.token,
+      "email",
+      "test",
+      "synthetic-notice",
+      "owned-job-2",
+      fingerprint,
+    ),
+  ).rejects.toThrow("Active member session");
+  expect(await memberExportStore(pool).exportOwned(owner.token)).toEqual({
+    kind: "denied",
+  });
+  expect(
+    (
+      await pool.query("SELECT member_id FROM adapter_jobs WHERE id=$1", [
+        first.id,
+      ])
+    ).rows[0].member_id,
+  ).toBe(owner.learner.id);
+  expect(
+    (
+      await pool.query("SELECT member_id FROM adapter_jobs WHERE id=$1", [
+        system.id,
+      ])
+    ).rows[0].member_id,
+  ).toBeNull();
 });
 
 it("binds synthetic AI versions to one job and stores only the validated operation reference", async () => {

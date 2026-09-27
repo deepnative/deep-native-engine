@@ -551,7 +551,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v2",
+          version: "local-member-records-v3",
           profile: { id: "owned" },
           records: { milestones: [] },
         },
@@ -578,7 +578,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v2",
+    version: "local-member-records-v3",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");

@@ -80,6 +80,7 @@ function runStore(overrides: Partial<JobStore> = {}): JobStore {
   };
   return {
     enqueue: vi.fn().mockResolvedValue(pending),
+    enqueueForMember: vi.fn().mockResolvedValue(pending),
     find: vi.fn().mockResolvedValue(pending),
     claim: vi.fn().mockResolvedValue(running),
     fail: vi
@@ -134,6 +135,101 @@ it("enqueues an idempotent bounded job using normalized parameter values", async
     aiProvenance.promptTemplateVersion,
     aiProvenance.modelContractVersion,
   ]);
+});
+
+it("refuses a live member-owned adapter job before touching storage", async () => {
+  const db = database();
+  await expect(
+    db.store.enqueueForMember(
+      "synthetic-member-token",
+      "email",
+      "live",
+      "send",
+      "member-live",
+      fingerprint,
+    ),
+  ).rejects.toThrow("Live member jobs are not enabled");
+  expect(db.query).not.toHaveBeenCalled();
+});
+
+it("binds a deterministic member job to the current session and returns only that owner's identical retry", async () => {
+  const owned = {
+    ...baseRow,
+    adapter: "email" as const,
+    operation: "send",
+    idempotency_key: "owned-job",
+    member_id: "00000000-0000-4000-8000-000000000019",
+    prompt_template_version: null,
+    model_contract_version: null,
+  };
+  const created = database(owned);
+  await expect(
+    created.store.enqueueForMember(
+      "active-member-token",
+      "email",
+      "test",
+      "send",
+      "owned-job",
+      fingerprint,
+    ),
+  ).resolves.toMatchObject({ id: owned.id, adapter: "email" });
+  expect(created.query.mock.calls[0]![0]).toContain("p.token_hash=$10");
+  expect(created.query.mock.calls[0]![1]).toHaveLength(10);
+
+  const retry = database(undefined, owned);
+  await expect(
+    retry.store.enqueueForMember(
+      "active-member-token",
+      "email",
+      "test",
+      "send",
+      "owned-job",
+      fingerprint,
+    ),
+  ).resolves.toMatchObject({ id: owned.id });
+  expect(retry.query.mock.calls[1]![0]).toContain("p.token_hash=$2");
+});
+
+it("fails closed for unavailable member sessions and cross-scope idempotency collisions", async () => {
+  const unavailable = database(undefined, undefined);
+  await expect(
+    unavailable.store.enqueueForMember(
+      "expired-or-unknown",
+      "email",
+      "test",
+      "send",
+      "owned-job",
+      fingerprint,
+    ),
+  ).rejects.toThrow("Active member session required");
+  const systemCollision = database(undefined, {
+    ...baseRow,
+    member_id: "00000000-0000-4000-8000-000000000019",
+  });
+  await expect(
+    systemCollision.store.enqueue(
+      "ai",
+      "test",
+      "summarize",
+      "lesson-1",
+      fingerprint,
+      3,
+      aiProvenance,
+    ),
+  ).rejects.toThrow("another request");
+  const malformedOwner = database({ ...baseRow, member_id: null });
+  await expect(
+    malformedOwner.store.enqueueForMember(
+      "active-member-token",
+      "ai",
+      "test",
+      "summarize",
+      "lesson-1",
+      fingerprint,
+      3,
+      aiProvenance,
+    ),
+  ).rejects.toThrow("another request");
 });
 
 it("rejects missing or unsafe AI provenance and rejects it for non-AI jobs", async () => {

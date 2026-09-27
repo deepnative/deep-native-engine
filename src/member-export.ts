@@ -22,6 +22,10 @@ const sections = {
     s.submitted_at AS "submittedAt" FROM assignment_submission_snapshots s
     JOIN assignment_attempts a ON a.id=s.attempt_id
     WHERE a.member_id=$1 ORDER BY a.started_at,s.sequence LIMIT $2`,
+  adapterJobs: `SELECT id,adapter,mode,status,attempt_count AS attempts,
+    max_attempts AS "maxAttempts",safe_error AS "safeError",
+    created_at AS "createdAt",updated_at AS "updatedAt"
+    FROM adapter_jobs WHERE member_id=$1 ORDER BY created_at,id LIMIT $2`,
   milestones: `SELECT id,goal_title AS "goalTitle",milestone_title AS "milestoneTitle",
     evidence_note AS "evidenceNote",next_action AS "nextAction",
     reminder_date AS "reminderDate",reminder_time AS "reminderTime",
@@ -93,7 +97,7 @@ export function memberExportStore(pool: Pool): MemberExportStore {
           }
           const payload = {
             kind: "ready",
-            version: "local-member-records-v2",
+            version: "local-member-records-v3",
             profile: owner.rows[0],
             records,
           };
