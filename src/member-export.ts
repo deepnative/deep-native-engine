@@ -14,9 +14,14 @@ const sections = {
   assignmentChoices: `SELECT content_id AS "contentId",content_version AS "contentVersion",
     chosen_at AS "chosenAt" FROM learner_assignment_choices WHERE member_id=$1 LIMIT $2`,
   assignmentAttempts: `SELECT id,content_id AS "contentId",content_version AS "contentVersion",
-    goal_at_start AS "goalAtStart",response,revision,started_at AS "startedAt",
+    goal_at_start AS "goalAtStart",response,revision,
+    submission_count AS "submissionCount",started_at AS "startedAt",
     saved_at AS "savedAt",submitted_at AS "submittedAt"
     FROM assignment_attempts WHERE member_id=$1 ORDER BY started_at,id LIMIT $2`,
+  assignmentSubmissions: `SELECT s.attempt_id AS "attemptId",s.sequence,s.response,
+    s.submitted_at AS "submittedAt" FROM assignment_submission_snapshots s
+    JOIN assignment_attempts a ON a.id=s.attempt_id
+    WHERE a.member_id=$1 ORDER BY a.started_at,s.sequence LIMIT $2`,
   milestones: `SELECT id,goal_title AS "goalTitle",milestone_title AS "milestoneTitle",
     evidence_note AS "evidenceNote",next_action AS "nextAction",
     reminder_date AS "reminderDate",reminder_time AS "reminderTime",
@@ -88,7 +93,7 @@ export function memberExportStore(pool: Pool): MemberExportStore {
           }
           const payload = {
             kind: "ready",
-            version: "local-member-records-v1",
+            version: "local-member-records-v2",
             profile: owner.rows[0],
             records,
           };

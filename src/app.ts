@@ -91,10 +91,15 @@ import {
   type AvailabilityStore,
 } from "./availability.ts";
 const attemptWritePath =
-  /^\/assignments\/attempts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(save|submit)$/i;
+  /^\/assignments\/attempts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(save|submit|revise)$/i;
 function attemptedResponse(body: unknown, action: string) {
   const fields = (body ?? {}) as Fields;
-  const value = action === "save" ? fields.response : fields.response_snapshot;
+  const value =
+    action === "save"
+      ? fields.response
+      : action === "submit"
+        ? fields.response_snapshot
+        : "";
   return typeof value === "string" ? value : "";
 }
 export function app(
@@ -1706,6 +1711,59 @@ export function app(
     }
     res.redirect(303, `/assignments/attempts/${id}`);
   });
+  app.post("/assignments/attempts/:id/revise", async (req, res) => {
+    const id = req.params.id as string;
+    const item = attemptId(id)
+      ? await attempts.detail(res.locals.token as string, id)
+      : null;
+    if (!item) {
+      res
+        .status(409)
+        .send(errorPage("Attempt unchanged", "Open one of your own attempts."));
+      return;
+    }
+    if ((req.body as Fields).confirm !== "yes") {
+      res
+        .status(422)
+        .send(
+          assignmentAttemptPage(
+            item,
+            res.locals.csrf as string,
+            "Confirm that you want a new private draft. Nothing was changed.",
+          ),
+        );
+      return;
+    }
+    if (!(await attempts.revise(res.locals.token as string, id))) {
+      const latest = await attempts.detail(res.locals.token as string, id);
+      if (!latest) {
+        res
+          .status(409)
+          .send(
+            errorPage("Attempt unavailable", "Open one of your own attempts."),
+          );
+        return;
+      }
+      const reason = !latest.currentEligible
+        ? "This assignment or your direction changed. No revision was started."
+        : (latest.submissionCount ?? 0) >= 10
+          ? "This local preview reached its ten-submission limit. Earlier work remains private and readable."
+          : "This attempt changed in another tab. Reload it before starting another revision.";
+      res
+        .status(409)
+        .send(
+          assignmentAttemptPage(
+            latest,
+            res.locals.csrf as string,
+            reason,
+            undefined,
+            true,
+          ),
+        );
+      return;
+    }
+    res.redirect(303, `/assignments/attempts/${id}`);
+  });
   app.post("/assignments/attempts/:id/delete", async (req, res) => {
     const id = req.params.id as string;
     if (
@@ -2138,7 +2196,9 @@ export function app(
           assignmentWriteRecoveryPage(
             write[2] === "save"
               ? "Save outcome unknown"
-              : "Submission outcome unknown",
+              : write[2] === "submit"
+                ? "Submission outcome unknown"
+                : "Revision outcome unknown",
             "The storage result could not be confirmed. Copy your response, then reload this attempt and check its current state before trying again.",
             attemptedResponse(req.body, write[2]!),
             write[1]!,

@@ -772,4 +772,54 @@ it("renders private attempt states without treating a local submission as review
   expect(assignmentAttemptPage(submitted, "csrf")).not.toContain(
     "Save private draft",
   );
+  const withHistory = {
+    ...submitted,
+    submissionCount: 1,
+    submissions: [
+      {
+        sequence: 1,
+        response: "Invented <first> answer",
+        submittedAt: "2026-09-24T00:02:00Z",
+      },
+    ],
+  };
+  const history = assignmentAttemptPage(withHistory, "csrf");
+  expect(history).toContain("Submission 1");
+  expect(history).toContain("Invented &lt;first&gt; answer");
+  expect(history).not.toContain("Invented <first> answer");
+  expect(history).toContain("Revise privately");
+  expect(assignmentAttemptsPage([withHistory])).toContain(
+    "1 private local submission",
+  );
+  expect(
+    assignmentAttemptsPage([{ ...withHistory, submissionCount: 2 }]),
+  ).toContain("2 private local submissions");
+  const newDraft = {
+    ...withHistory,
+    response: "",
+    savedAt: null,
+    submittedAt: null,
+  };
+  expect(assignmentAttemptsPage([newDraft])).toContain(
+    "private revision started",
+  );
+  expect(assignmentAttemptPage(newDraft, "csrf")).toContain(
+    "Private sample response",
+  );
+  const savedRevision = { ...newDraft, savedAt: new Date() };
+  expect(assignmentAttemptsPage([savedRevision])).toContain(
+    "private revision draft saved",
+  );
+  expect(assignmentAttemptPage(savedRevision, "csrf")).toContain(
+    "private revision draft saved",
+  );
+  const limit = assignmentAttemptPage(
+    { ...withHistory, submissionCount: 10 },
+    "csrf",
+  );
+  expect(limit).toContain("ten-submission local preview limit");
+  expect(limit).not.toContain("Revise privately");
+  expect(
+    assignmentAttemptPage({ ...withHistory, currentEligible: false }, "csrf"),
+  ).not.toContain("Revise privately");
 });

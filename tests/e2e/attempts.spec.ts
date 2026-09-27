@@ -387,3 +387,83 @@ test("[L52] an IT learner checks an uncertain local submission before retrying",
   );
   expect(rows.rows[0].n).toBe(1);
 });
+
+test("[L66] a member privately revises a submitted synthetic assignment without losing prior work", async ({
+  page,
+  browser,
+}, info) => {
+  const id = info.project.name === "desktop-chromium" ? "SYN-994" : "SYN-995";
+  const title = `Invented revisable assignment ${id}`;
+  const actors = await publishers();
+  await publish(actors, sample(id, 1, title));
+  await onboard(page, "explorer", "everyday");
+  const attemptId = await chooseAndStart(page, title);
+  const first =
+    "My first invented answer compares a plan with the sample brief.";
+  await page.getByLabel("Private sample response").fill(first);
+  await page.getByLabel("I used only invented or sample information").check();
+  await page.getByRole("button", { name: "Save private draft" }).click();
+  await page.getByLabel("Submit this saved version locally").check();
+  await page
+    .getByRole("button", { name: "Submit saved version locally" })
+    .click();
+  const history = page.getByRole("region", {
+    name: "Private local submission history",
+  });
+  await expect(history).toContainText("Submission 1");
+  await expect(history).toContainText(first);
+  await page.getByLabel("Start a new private revision").check();
+  await page.getByRole("button", { name: "Revise privately" }).click();
+  await expect(page.getByLabel("Private sample response")).toHaveValue("");
+  await expect(history).toContainText(first);
+  const otherContext = await browser.newContext({ baseURL: origin });
+  try {
+    const other = await otherContext.newPage();
+    await onboard(other, "explorer", "everyday");
+    await other.goto(`/assignments/attempts/${attemptId}`);
+    await expect(
+      other.getByRole("heading", { name: "Attempt unavailable" }),
+    ).toBeVisible();
+    expect(
+      (await (await other.request.get("/api/member/export")).json()).records
+        .assignmentSubmissions,
+    ).toEqual([]);
+  } finally {
+    await otherContext.close();
+  }
+  const second = "My second invented answer corrects the source comparison.";
+  await page.getByLabel("Private sample response").fill(second);
+  await page.getByLabel("I used only invented or sample information").check();
+  await page.getByRole("button", { name: "Save private draft" }).click();
+  await page.getByLabel("Submit this saved version locally").check();
+  await page
+    .getByRole("button", { name: "Submit saved version locally" })
+    .click();
+  await expect(history).toContainText("Submission 1");
+  await expect(history).toContainText("Submission 2");
+  await expect(history).toContainText(first);
+  await expect(history).toContainText(second);
+  const exported = await (await page.request.get("/api/member/export")).json();
+  expect(exported.version).toBe("local-member-records-v2");
+  expect(exported.records.assignmentSubmissions).toMatchObject([
+    { attemptId, sequence: 1, response: first },
+    { attemptId, sequence: 2, response: second },
+  ]);
+  expect(await actors.catalog.retire(actors.editor, id)).toBe(true);
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Revise privately" }),
+  ).toHaveCount(0);
+  await expect(history).toContainText(first);
+  await expect(history).toContainText(second);
+  await page.getByLabel("Delete this private attempt").check();
+  await page.getByRole("button", { name: "Delete attempt" }).click();
+  await expect(
+    page.getByText("No private assignment attempts yet"),
+  ).toBeVisible();
+  const remaining = await pool.query(
+    "SELECT count(*)::integer AS n FROM assignment_submission_snapshots WHERE attempt_id=$1",
+    [attemptId],
+  );
+  expect(remaining.rows[0].n).toBe(0);
+});

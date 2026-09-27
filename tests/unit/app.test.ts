@@ -551,7 +551,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v1",
+          version: "local-member-records-v2",
           profile: { id: "owned" },
           records: { milestones: [] },
         },
@@ -578,7 +578,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v1",
+    version: "local-member-records-v2",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -2108,6 +2108,7 @@ it("keeps synthetic assignment attempts private through start, validation, confl
     start: vi.fn().mockResolvedValue(null),
     save: vi.fn().mockResolvedValue(false),
     submit: vi.fn().mockResolvedValue(false),
+    revise: vi.fn().mockResolvedValue(false),
     remove: vi.fn().mockResolvedValue(false),
   };
   const agent = managedAgent(app(db, { origin, secret: "secret", attempts }));
@@ -2210,6 +2211,88 @@ it("keeps synthetic assignment attempts private through start, validation, confl
     revision: "2",
     confirm: "yes",
   }).expect(303);
+  attempts.detail.mockResolvedValue({
+    ...item,
+    submittedAt: new Date("2026-09-24T00:02:00Z"),
+    submissionCount: 1,
+  });
+  await post("/assignments/attempts/invalid/revise", { confirm: "yes" }).expect(
+    409,
+  );
+  await post(`/assignments/attempts/${id}/revise`, {}).expect(422);
+  await post(`/assignments/attempts/${id}/revise`, {
+    confirm: "yes",
+  }).expect(409);
+  attempts.detail
+    .mockResolvedValueOnce({
+      ...item,
+      submittedAt: new Date("2026-09-24T00:02:00Z"),
+      submissionCount: 1,
+    })
+    .mockResolvedValueOnce(null);
+  expect(
+    (
+      await post(`/assignments/attempts/${id}/revise`, {
+        confirm: "yes",
+      }).expect(409)
+    ).text,
+  ).toContain("Attempt unavailable");
+  attempts.detail.mockResolvedValue({
+    ...item,
+    submittedAt: new Date("2026-09-24T00:02:00Z"),
+  });
+  expect(
+    (
+      await post(`/assignments/attempts/${id}/revise`, {
+        confirm: "yes",
+      }).expect(409)
+    ).text,
+  ).toContain("changed in another tab");
+  attempts.detail.mockResolvedValueOnce(null);
+  await post(`/assignments/attempts/${id}/revise`, { confirm: "yes" }).expect(
+    409,
+  );
+  attempts.detail.mockResolvedValue({
+    ...item,
+    submittedAt: new Date("2026-09-24T00:02:00Z"),
+    submissionCount: 10,
+  });
+  expect(
+    (
+      await post(`/assignments/attempts/${id}/revise`, {
+        confirm: "yes",
+      }).expect(409)
+    ).text,
+  ).toContain("ten-submission limit");
+  attempts.detail.mockResolvedValue({
+    ...item,
+    submittedAt: new Date("2026-09-24T00:02:00Z"),
+    submissionCount: 1,
+    currentEligible: false,
+  });
+  expect(
+    (
+      await post(`/assignments/attempts/${id}/revise`, {
+        confirm: "yes",
+      }).expect(409)
+    ).text,
+  ).toContain("direction changed");
+  attempts.detail.mockResolvedValue({
+    ...item,
+    submittedAt: new Date("2026-09-24T00:02:00Z"),
+    submissionCount: 1,
+  });
+  attempts.revise.mockRejectedValueOnce(new Error("private revision failure"));
+  const uncertainRevision = await post(`/assignments/attempts/${id}/revise`, {
+    confirm: "yes",
+  }).expect(503);
+  expect(uncertainRevision.text).toContain("Revision outcome unknown");
+  expect(uncertainRevision.text).not.toContain("private revision failure");
+  attempts.revise.mockResolvedValue(true);
+  await post(`/assignments/attempts/${id}/revise`, {
+    confirm: "yes",
+  }).expect(303);
+  expect(attempts.revise).toHaveBeenCalledWith(expect.any(String), id);
   await post("/assignments/attempts/invalid/delete", { confirm: "yes" }).expect(
     409,
   );
@@ -2246,6 +2329,7 @@ it("preserves attempted text and separates stale, ineligible, expired and uncert
     start: vi.fn().mockResolvedValue(id),
     save: vi.fn().mockResolvedValue(false),
     submit: vi.fn().mockResolvedValue(false),
+    revise: vi.fn().mockResolvedValue(false),
     remove: vi.fn().mockResolvedValue(false),
   };
   const agent = managedAgent(app(db, { origin, secret: "secret", attempts }));

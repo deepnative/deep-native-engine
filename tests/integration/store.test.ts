@@ -33,6 +33,7 @@ import {
   type DraftContent,
 } from "../../src/catalog.ts";
 import { recommendLesson } from "../../src/assignment-choice.ts";
+import { memberExportStore } from "../../src/member-export.ts";
 const pool = testPool(),
   db = store(pool);
 const aiProvenance = {
@@ -1693,6 +1694,195 @@ it("pins one private assignment attempt, serializes drafts and preserves history
   expect(await attempts.remove(outsider.token, id)).toBe(false);
   expect(await attempts.remove(owner.token, id)).toBe(true);
   expect(await attempts.detail(owner.token, id)).toBeNull();
+});
+
+it("keeps synthetic assignment submissions immutable across private revisions and owner changes", async () => {
+  const owner = await member();
+  const outsider = await member();
+  const editor = await staff("editor");
+  const reviewer = await staff("reviewer");
+  const catalog = catalogStore(pool);
+  const attempts = attemptStore(pool);
+  const draft = {
+    ...contentDraft,
+    id: "SYN-992",
+    goals: ["everyday"],
+    backgrounds: ["explorer"],
+    rubric: "Compare with the invented source.",
+    rubricVersion: 1,
+  };
+  expect(await catalog.createDraft(editor.token, draft)).toBe(true);
+  expect(await catalog.submit(editor.token, draft.id, 1)).toBe(true);
+  expect(await catalog.approve(reviewer.token, draft.id, 1, true)).toBe(true);
+  expect(await catalog.publish(editor.token, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.learner.id, draft.id, 1)).toBe(true);
+  const id = (await attempts.start(owner.token))!;
+  expect(await attempts.revise(owner.token, id)).toBe(false);
+  const firstText =
+    "My first invented response compares its plan with the source.";
+  expect(await attempts.save(owner.token, id, 1, firstText)).toBe(true);
+  expect(await attempts.submit(owner.token, id, 2)).toBe(true);
+  const first = await attempts.detail(owner.token, id);
+  expect(first).toMatchObject({
+    submissionCount: 1,
+    response: firstText,
+    submissions: [{ sequence: 1, response: firstText }],
+  });
+  expect(await attempts.detail(outsider.token, id)).toBeNull();
+  expect(await attempts.detail(reviewer.token, id)).toBeNull();
+  expect(await attempts.revise(outsider.token, id)).toBe(false);
+  expect(
+    (
+      await Promise.all([
+        attempts.revise(owner.token, id),
+        attempts.revise(owner.token, id),
+      ])
+    ).sort(),
+  ).toEqual([false, true]);
+  const draftTwo = await attempts.detail(owner.token, id);
+  expect(draftTwo).toMatchObject({
+    response: "",
+    savedAt: null,
+    submittedAt: null,
+    submissionCount: 1,
+    submissions: [{ sequence: 1, response: firstText }],
+  });
+  expect(await attempts.save(owner.token, id, 2, "Stale write")).toBe(false);
+  const secondText =
+    "My second invented response corrects the earlier source comparison.";
+  expect(
+    await attempts.save(owner.token, id, draftTwo!.revision, secondText),
+  ).toBe(true);
+  expect(await attempts.submit(owner.token, id, draftTwo!.revision + 1)).toBe(
+    true,
+  );
+  const second = await attempts.detail(owner.token, id);
+  expect(
+    second?.submissions?.map((entry) => [entry.sequence, entry.response]),
+  ).toEqual([
+    [1, firstText],
+    [2, secondText],
+  ]);
+  expect(second?.submissionCount).toBe(2);
+  const ownedExport = await memberExportStore(pool).exportOwned(owner.token);
+  expect(ownedExport).toMatchObject({
+    kind: "ready",
+    payload: {
+      version: "local-member-records-v2",
+      records: {
+        assignmentSubmissions: [
+          { attemptId: id, sequence: 1, response: firstText },
+          { attemptId: id, sequence: 2, response: secondText },
+        ],
+      },
+    },
+  });
+  expect(
+    await memberExportStore(pool).exportOwned(outsider.token),
+  ).toMatchObject({
+    kind: "ready",
+    payload: { records: { assignmentSubmissions: [] } },
+  });
+  expect(await attempts.start(owner.token)).toBe(id);
+  await pool.query("UPDATE learners SET goal='work' WHERE id=$1", [
+    owner.learner.id,
+  ]);
+  expect(await attempts.revise(owner.token, id)).toBe(false);
+  expect((await attempts.detail(owner.token, id))?.submissions).toHaveLength(2);
+  await pool.query("UPDATE learners SET goal='everyday' WHERE id=$1", [
+    owner.learner.id,
+  ]);
+  for (let sequence = 3; sequence <= 10; sequence += 1) {
+    expect(await attempts.revise(owner.token, id)).toBe(true);
+    const working = (await attempts.detail(owner.token, id))!;
+    expect(
+      await attempts.save(
+        owner.token,
+        id,
+        working.revision,
+        `Invented response revision ${sequence} remains a private local sample.`,
+      ),
+    ).toBe(true);
+    expect(await attempts.submit(owner.token, id, working.revision + 1)).toBe(
+      true,
+    );
+  }
+  expect(
+    (await attempts.detail(owner.token, id))?.submissions?.map(
+      (entry) => entry.sequence,
+    ),
+  ).toEqual(Array.from({ length: 10 }, (_, index) => index + 1));
+  expect(await attempts.revise(owner.token, id)).toBe(false);
+  expect(await catalog.retire(editor.token, draft.id)).toBe(true);
+  expect(await attempts.revise(owner.token, id)).toBe(false);
+  expect(await attempts.remove(owner.token, id)).toBe(true);
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*)::integer AS n FROM assignment_submission_snapshots WHERE attempt_id=$1",
+        [id],
+      )
+    ).rows[0].n,
+  ).toBe(0);
+});
+
+it("rolls back a failed assignment snapshot and backfills legacy submitted attempts once", async () => {
+  const owner = await member();
+  const editor = await staff("editor");
+  const reviewer = await staff("reviewer");
+  const catalog = catalogStore(pool);
+  const attempts = attemptStore(pool);
+  const draft = { ...contentDraft, id: "SYN-993", goals: ["everyday"] };
+  expect(await catalog.createDraft(editor.token, draft)).toBe(true);
+  expect(await catalog.submit(editor.token, draft.id, 1)).toBe(true);
+  expect(await catalog.approve(reviewer.token, draft.id, 1, true)).toBe(true);
+  expect(await catalog.publish(editor.token, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.learner.id, draft.id, 1)).toBe(true);
+  const id = (await attempts.start(owner.token))!;
+  const response =
+    "This invented response is long enough for a local submission.";
+  expect(await attempts.save(owner.token, id, 1, response)).toBe(true);
+  await pool.query(
+    `CREATE FUNCTION test_reject_snapshot_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'synthetic snapshot write fault'; END $$`,
+  );
+  const allow = () =>
+    pool.query(
+      "DROP TRIGGER IF EXISTS test_reject_snapshot_insert ON assignment_submission_snapshots",
+    );
+  try {
+    await pool.query(
+      "CREATE TRIGGER test_reject_snapshot_insert BEFORE INSERT ON assignment_submission_snapshots FOR EACH ROW EXECUTE FUNCTION test_reject_snapshot_insert()",
+    );
+    await expect(attempts.submit(owner.token, id, 2)).rejects.toThrow(
+      "synthetic snapshot write fault",
+    );
+    expect(await attempts.detail(owner.token, id)).toMatchObject({
+      response,
+      submittedAt: null,
+      submissionCount: 0,
+      submissions: [],
+    });
+    await allow();
+    expect(await attempts.submit(owner.token, id, 2)).toBe(true);
+    await pool.query(
+      "DELETE FROM assignment_submission_snapshots WHERE attempt_id=$1",
+      [id],
+    );
+    await pool.query(
+      "UPDATE assignment_attempts SET submission_count=0 WHERE id=$1",
+      [id],
+    );
+    await migrate(pool);
+    await migrate(pool);
+    expect(await attempts.detail(owner.token, id)).toMatchObject({
+      submissionCount: 1,
+      submissions: [{ sequence: 1, response }],
+    });
+  } finally {
+    await allow();
+    await pool.query("DROP FUNCTION IF EXISTS test_reject_snapshot_insert()");
+  }
 });
 
 it("keeps retired drafts readable but denies writes, and privacy deletion cascades", async () => {
