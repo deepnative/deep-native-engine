@@ -9,6 +9,8 @@ export interface ActivityItem {
   state: string;
   availability: string;
   href: string | null;
+  contentId?: string;
+  reportable?: boolean;
 }
 
 export function activityItems(
@@ -43,6 +45,8 @@ export function activityItems(
       href: lesson.available
         ? `/library/${encodeURIComponent(lesson.contentId)}`
         : null,
+      contentId: lesson.contentId,
+      reportable: lesson.reportable ?? false,
     });
   }
   for (const attempt of attempts) {

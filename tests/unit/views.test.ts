@@ -19,6 +19,7 @@ import {
   assignmentAttemptPage,
   evidencePage,
   availabilityPage,
+  privateProgressPage,
 } from "../../src/views.ts";
 import type { AssignmentAttempt } from "../../src/attempts.ts";
 import type { ContentVersion } from "../../src/catalog.ts";
@@ -36,6 +37,77 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("shows private usefulness choices only for self-assessed exact lesson versions", () => {
+  const sample = {
+    kind: "sample lesson" as const,
+    title: "Invented <reading>",
+    version: 1,
+    state: "Self-reported complete",
+    availability: "Current published sample",
+    href: "/library/SYN-971",
+    contentId: "SYN-971",
+    reportable: true,
+  };
+  const empty = privateProgressPage([sample], [], "csrf");
+  expect(empty).toContain("Save my usefulness answer");
+  expect(empty).toContain("not a skill test");
+  expect(empty).toContain("Invented &lt;reading&gt;");
+  expect(empty).not.toContain("Your current answer");
+  const saved = privateProgressPage(
+    [sample],
+    [
+      {
+        contentId: "SYN-971",
+        contentVersion: 1,
+        choice: "not_yet",
+        revision: 2,
+        reportedAt: new Date("2026-09-27T10:00:00Z"),
+        updatedAt: new Date("2026-09-27T12:00:00Z"),
+      },
+    ],
+    "csrf",
+  );
+  expect(saved).toContain("Not helpful yet");
+  expect(saved).toContain("Correct my usefulness answer");
+  expect(saved).toContain("Withdraw my usefulness answer");
+  expect(saved).toContain('name="revision" value="2"');
+  const historical = privateProgressPage(
+    [{ ...sample, href: null, reportable: false }],
+    [
+      {
+        contentId: "SYN-971",
+        contentVersion: 1,
+        choice: "helpful",
+        revision: 1,
+        reportedAt: new Date("2026-09-27T10:00:00Z"),
+        updatedAt: new Date("2026-09-27T10:00:00Z"),
+      },
+    ],
+    "csrf",
+  );
+  expect(historical).toContain("historical version cannot receive");
+  expect(historical).not.toContain("Correct my usefulness answer");
+  expect(historical).toContain("Withdraw my usefulness answer");
+  const currentHelpful = privateProgressPage(
+    [sample],
+    [
+      {
+        contentId: "SYN-971",
+        contentVersion: 1,
+        choice: "helpful",
+        revision: 1,
+        reportedAt: new Date("2026-09-27T10:00:00Z"),
+        updatedAt: new Date("2026-09-27T10:00:00Z"),
+      },
+    ],
+    "csrf",
+  );
+  expect(currentHelpful).toContain('<option value="helpful" selected>');
+  expect(saved).toContain('<option value="not_yet" selected>');
+  expect(privateProgressPage([{ ...sample, reportable: false }])).not.toContain(
+    "Private lesson usefulness",
+  );
+});
 it("keeps optional availability labelled, escaped and timezone-explicit", () => {
   const slot = {
     id: "slot",

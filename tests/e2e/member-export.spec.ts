@@ -59,7 +59,7 @@ test("[L61] current owner downloads private structured records while another mem
     );
     expect(own.headers()["cache-control"]).toBe("no-store");
     expect(await own.json()).toMatchObject({
-      version: "local-member-records-v3",
+      version: "local-member-records-v4",
       profile: { id: ownerId },
       records: { milestones: [{ milestoneTitle: "Owner-only milestone" }] },
     });
@@ -113,7 +113,7 @@ test("[L67] deterministic member jobs export only to their owner and disappear w
       requestFingerprint({ system: marker }),
     );
     const own = await (await page.request.get("/api/member/export")).json();
-    expect(own.version).toBe("local-member-records-v3");
+    expect(own.version).toBe("local-member-records-v4");
     expect(own.records.adapterJobs).toMatchObject([
       { id: owned.id, adapter: "email", mode: "test", status: "pending" },
     ]);

@@ -129,10 +129,15 @@ async function seedOwned(
   });
   track("exercises", "learner_id", id);
   await pool.query(
-    "INSERT INTO lesson_activity(member_id,content_id,content_version,started_at) VALUES($1,'ZDL-001',1,CURRENT_TIMESTAMP)",
+    "INSERT INTO lesson_activity(member_id,content_id,content_version,started_at,self_assessed_at) VALUES($1,'ZDL-001',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
     [id],
   );
   track("lesson_activity", "member_id", id);
+  await pool.query(
+    "INSERT INTO lesson_usefulness(member_id,content_id,content_version,choice) VALUES($1,'ZDL-001',1,'helpful')",
+    [id],
+  );
+  track("lesson_usefulness", "member_id", id);
   await pool.query(
     "INSERT INTO learner_assignment_choices(member_id,content_id,content_version) VALUES($1,'ZDL-002',1)",
     [id],

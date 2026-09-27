@@ -32,6 +32,7 @@ import type { WorkflowBundle } from "./workflow-registry.ts";
 import type { CircleListing } from "./circles.ts";
 import type { AssignmentAttempt } from "./attempts.ts";
 import type { ActivityItem } from "./progress.ts";
+import type { UsefulnessReport } from "./usefulness.ts";
 import type { PracticeHistory, PracticeSource } from "./practice.ts";
 import type { OwnedEvidence } from "./evidence.ts";
 import { localSlotTime, type AvailableSlot } from "./availability.ts";
@@ -383,7 +384,27 @@ export function welcome(csrf: string, error: string[] = []) {
     `<section class="hero"><div><p class="eyebrow">YOUR NEXT CHAPTER STARTS HERE</p><h1>Find your place<br>in the future of <em>AI.</em></h1><p class="lead">A little curiosity. A useful skill. Something you can put into practice today.</p><div class="pill-row"><span>No coding required</span><span>Learn at your pace</span><span>Built for different starting points</span></div></div><aside class="path-card"><span class="eyebrow">YOUR FIRST SMALL WIN</span><h2>A clearer instruction.<br>A more useful result.</h2><p>Learn how to give AI context, set a useful task and check its answer.</p><div class="path-step"><b>01</b><span>Choose your direction</span></div><div class="path-step"><b>02</b><span>Learn one practical idea</span></div><div class="path-step"><b>03</b><span>Try it. Check it. Keep it.</span></div><p class="small">12 minutes · One guided exercise</p></aside></section><section class="onboard"><div><p class="eyebrow">MAKE THIS YOUR STARTING POINT</p><h2>What brings you here?</h2><p>Choose an example that feels useful to you, whether you are exploring AI, applying it at work or building something new.</p><p class="small">Your work stays on this computer. This browser can access it for up to 30 days; clearing its cookie loses access. Use Delete this preview to remove your saved work.</p></div><form method="post" action="/start">${hidden(csrf)}${notice(error)}${profileFields()}<label class="check"><input type="checkbox" name="synthetic" value="yes" required><span>I'll use invented or sample information in this preview.</span></label><button type="submit">Start my learning path <span aria-hidden="true">↗</span></button></form></section>`,
   );
 }
-export function privateProgressPage(items: ActivityItem[]) {
+function usefulnessAction(
+  item: ActivityItem,
+  reports: UsefulnessReport[],
+  csrf: string,
+) {
+  if (!item.contentId) return "";
+  const report = reports.find(
+    (entry) =>
+      entry.contentId === item.contentId &&
+      entry.contentVersion === item.version,
+  );
+  if (!item.reportable && !report) return "";
+  const action = `/library/${encodeURIComponent(item.contentId)}/usefulness`;
+  const common = `${hidden(csrf)}<input type="hidden" name="content_version" value="${item.version}"><input type="hidden" name="revision" value="${report?.revision ?? 0}">`;
+  return `<section aria-label="Private lesson usefulness"><h3>Was this sample lesson helpful for your next practical step?</h3><p>This is your own report about usefulness, not a skill test or a reviewed outcome. It stays private in this local preview.</p>${report ? `<p role="status">Your current answer: ${report.choice === "helpful" ? "Helpful for my next step" : "Not helpful yet"} · updated ${escape(report.updatedAt.toISOString().slice(0, 16))} UTC.</p>` : ""}${item.reportable ? `<form method="post" action="${action}">${common}<label for="usefulness-${escape(item.contentId)}-${item.version}">Your answer</label><select id="usefulness-${escape(item.contentId)}-${item.version}" name="choice" required><option value="">Choose an answer</option><option value="helpful"${report?.choice === "helpful" ? " selected" : ""}>Helpful for my next step</option><option value="not_yet"${report?.choice === "not_yet" ? " selected" : ""}>Not helpful yet</option></select><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>This is my own response about sample learning, with no private client information.</span></label><button type="submit" name="intent" value="save">${report ? "Correct my usefulness answer" : "Save my usefulness answer"}</button></form>` : "<p>This historical version cannot receive a new or corrected answer.</p>"}${report ? `<form method="post" action="${action}">${common}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Withdraw this private answer</span></label><button class="secondary" type="submit" name="intent" value="withdraw">Withdraw my usefulness answer</button></form>` : ""}</section>`;
+}
+export function privateProgressPage(
+  items: ActivityItem[],
+  reports: UsefulnessReport[] = [],
+  csrf = "",
+) {
   return page(
     "Your private learning activity",
     `<section class="error-page"><p class="eyebrow">PRIVATE LOCAL PREVIEW · SYNTHETIC WORK</p><h1>Your private learning activity</h1><p>Opening a lesson, saving a draft, reporting completion and submitting an assignment are different actions. None is a qualified assessment or proof of skill.</p>${
@@ -391,7 +412,7 @@ export function privateProgressPage(items: ActivityItem[]) {
         ? `<ol>${items
             .map(
               (item) =>
-                `<li><h2>${escape(item.title)}</h2><p>${escape(item.kind)} · version ${item.version} · ${escape(item.state)}</p><p>${escape(item.availability)}</p>${item.href ? `<a href="${escape(item.href)}">Open this private activity</a>` : "<span>No current content link for this version.</span>"}</li>`,
+                `<li><h2>${escape(item.title)}</h2><p>${escape(item.kind)} · version ${item.version} · ${escape(item.state)}</p><p>${escape(item.availability)}</p>${item.href ? `<a href="${escape(item.href)}">Open this private activity</a>` : "<span>No current content link for this version.</span>"}${usefulnessAction(item, reports, csrf)}</li>`,
             )
             .join("")}</ol>`
         : '<p>No learning activity has been saved in this preview yet. <a href="/learn">Open your starter plan</a> to begin with a sample lesson.</p>'
@@ -565,7 +586,7 @@ export function contentPreview(
   const base = `/editor/library/${encodeURIComponent(item.id)}/${item.version}`;
   const learning =
     !staff && item.kind === "lesson"
-      ? `<section aria-labelledby="reader-progress-title"><h2 id="reader-progress-title">Your private reading activity</h2><p role="status">${activity ? escape(lessonActivityStatus(activity)) : "Opening not confirmed"} · version ${item.version}</p><p>Opening this text does not prove it was read or understood. No qualified reviewer has assessed this lesson.</p><p><a href="/library/${encodeURIComponent(item.id)}/study">Try a locally simulated study reflection</a> · <a href="/library/${encodeURIComponent(item.id)}/practice">Open private sample practice</a></p>${activity && !activity.startedAt ? `<form method="post" action="/library/${encodeURIComponent(item.id)}/progress">${hidden(csrf)}<input type="hidden" name="content_version" value="${item.version}"><button type="submit" name="intent" value="start">Start this lesson</button></form>` : ""}${activity?.startedAt && !activity.selfAssessedAt ? `<form method="post" action="/library/${encodeURIComponent(item.id)}/progress">${hidden(csrf)}<input type="hidden" name="content_version" value="${item.version}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I have finished reading this sample lesson; this is my own report.</span></label><button type="submit" name="intent" value="complete">Mark self-assessed complete</button></form>` : ""}</section>`
+      ? `<section aria-labelledby="reader-progress-title"><h2 id="reader-progress-title">Your private reading activity</h2><p role="status">${activity ? escape(lessonActivityStatus(activity)) : "Opening not confirmed"} · version ${item.version}</p><p>Opening this text does not prove it was read or understood. No qualified reviewer has assessed this lesson.</p><p><a href="/library/${encodeURIComponent(item.id)}/study">Try a locally simulated study reflection</a> · <a href="/library/${encodeURIComponent(item.id)}/practice">Open private sample practice</a></p>${activity && !activity.startedAt ? `<form method="post" action="/library/${encodeURIComponent(item.id)}/progress">${hidden(csrf)}<input type="hidden" name="content_version" value="${item.version}"><button type="submit" name="intent" value="start">Start this lesson</button></form>` : ""}${activity?.startedAt && !activity.selfAssessedAt ? `<form method="post" action="/library/${encodeURIComponent(item.id)}/progress">${hidden(csrf)}<input type="hidden" name="content_version" value="${item.version}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I have finished reading this sample lesson; this is my own report.</span></label><button type="submit" name="intent" value="complete">Mark self-assessed complete</button></form>` : ""}${activity?.selfAssessedAt ? '<p><a href="/progress">Report whether this sample helped your next step</a></p>' : ""}</section>`
       : "";
   return page(
     item.title,

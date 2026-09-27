@@ -11,6 +11,9 @@ const sections = {
   lessonActivity: `SELECT content_id AS "contentId",content_version AS "contentVersion",
     opened_at AS "openedAt",started_at AS "startedAt",self_assessed_at AS "selfAssessedAt"
     FROM lesson_activity WHERE member_id=$1 ORDER BY content_id,content_version LIMIT $2`,
+  lessonUsefulness: `SELECT content_id AS "contentId",content_version AS "contentVersion",
+    choice,revision,reported_at AS "reportedAt",updated_at AS "updatedAt"
+    FROM lesson_usefulness WHERE member_id=$1 ORDER BY content_id,content_version LIMIT $2`,
   assignmentChoices: `SELECT content_id AS "contentId",content_version AS "contentVersion",
     chosen_at AS "chosenAt" FROM learner_assignment_choices WHERE member_id=$1 LIMIT $2`,
   assignmentAttempts: `SELECT id,content_id AS "contentId",content_version AS "contentVersion",
@@ -97,7 +100,7 @@ export function memberExportStore(pool: Pool): MemberExportStore {
           }
           const payload = {
             kind: "ready",
-            version: "local-member-records-v3",
+            version: "local-member-records-v4",
             profile: owner.rows[0],
             records,
           };

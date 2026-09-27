@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v35",
+  "version": "initial-learning-v36",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans and optional eligible current published sample-lesson recommendations, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts and immutable local submission revisions, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans and optional eligible current published sample-lesson recommendations, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts and immutable local submission revisions, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity and member-private exact-version usefulness self-reports, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -614,6 +614,15 @@
       "steps": "Inspect a mature first-open cohort and observed submission through the operator aggregate, then attempt member access",
       "expected": "Only the operator sees labelled retained-record submission, matured denominator and bounded cross-content return counts; the member receives 403 and no private ID or response is exposed",
       "issues": [121, 305],
+      "critical": true
+    },
+    {
+      "id": "L69",
+      "actor": "Non-IT professional learner and unrelated member",
+      "preconditions": "Private local preview with a current published invented lesson; no qualified curriculum or live analytics",
+      "steps": "Self-assess the lesson, report usefulness, correct the response, inspect the owner export and unrelated member denial, retire the lesson and withdraw the historical answer",
+      "expected": "Only the owner sees one exact-version self-report; correction is explicit, historical content cannot receive a new report, withdrawal removes the answer and no formal learning outcome or cross-deletion metric is claimed",
+      "issues": [121, 307],
       "critical": true
     }
   ],

@@ -1,11 +1,11 @@
 # Local member deletion inventory (#242)
 
-Scope: the Synthetic local preview through migration 030. This inventory maps logical PostgreSQL rows and private object files, not physical WAL pages, hosted replicas, provider copies or backups. `/delete` first calls `evidence.removeWorkspace(token)`, which marks the workspace and evidence deleting, removes source/derivative object keys and deletes evidence rows; it then deletes the member principal through `store.remove(id)`. A failed object removal must prevent a successful account-deleted response so the operation can be reconciled and retried.
+Scope: the synthetic local preview through migration 031. This inventory maps logical PostgreSQL rows and private object files, not physical WAL pages, hosted replicas, provider copies or backups. `/delete` first calls `evidence.removeWorkspace(token)`, which marks the workspace and evidence deleting, removes source/derivative object keys and deletes evidence rows; it then deletes the member principal through `store.remove(id)`. A failed object removal must prevent a successful account-deleted response so the operation can be reconciled and retried.
 
 | Ownership path | Current local records | Expected deletion mechanism |
 | --- | --- | --- |
 | Member identity | `principals`, `learners`, `workspaces` | Delete member principal; both dependents cascade. |
-| Learning | `exercises`, `lesson_activity`, `learner_assignment_choices`, `assignment_attempts`, `learning_milestones`, `private_practice`, `content_assessments` | Member/owner foreign keys cascade. |
+| Learning | `exercises`, `lesson_activity`, `lesson_usefulness`, `learner_assignment_choices`, `assignment_attempts`, `learning_milestones`, `private_practice`, `content_assessments` | Member/owner foreign keys cascade. |
 | Private participation | `member_proposals`, `career_preferences`, `career_entries`, `career_drafts`, `preview_circle_memberships`, `cohort_memberships` | Member foreign keys cascade; career entries/drafts follow preference. |
 | Synthetic allowances | `synthetic_entitlement_grants`, `synthetic_entitlement_reservations`, `synthetic_entitlement_events` | Member/grant foreign keys cascade; event mutation trigger permits member removal. These are test-only records, not a billing-retention decision. |
 | Deterministic member jobs | `adapter_jobs` rows with an explicit `member_id` | An active member-session enqueue marks only demo/test jobs; the learner foreign key cascades on account deletion. Unowned system/legacy rows remain. |
