@@ -1,5 +1,5 @@
 {
-  "version": "initial-learning-v34",
+  "version": "initial-learning-v35",
   "fullMvpVersion": "full-mvp-v1",
   "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans and optional eligible current published sample-lesson recommendations, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts and immutable local submission revisions, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity",
   "projects": ["desktop-chromium", "mobile-chromium"],
@@ -605,6 +605,15 @@
       "steps": "Create a member-owned synthetic job through the internal boundary, download each member's structured records, delete the owner preview and inspect an unrelated member and unowned system job",
       "expected": "Only the owner export lists safe attributable job metadata; no operation, input or idempotency key leaks; deletion removes that member's job while unrelated and unowned records remain; no provider or live erasure is claimed",
       "issues": [40, 302],
+      "critical": true
+    },
+    {
+      "id": "L68",
+      "actor": "Operator and non-IT professional member",
+      "preconditions": "Synthetic local preview with retained exact-version lesson activity and a private assignment submission",
+      "steps": "Inspect a mature first-open cohort and observed submission through the operator aggregate, then attempt member access",
+      "expected": "Only the operator sees labelled retained-record submission, matured denominator and bounded cross-content return counts; the member receives 403 and no private ID or response is exposed",
+      "issues": [121, 305],
       "critical": true
     }
   ],

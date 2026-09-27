@@ -17,6 +17,9 @@ it("returns only defined synthetic aggregates to an authorized operator", async 
         selfAssessed: 1,
         participated: 2,
         activeCircle: 1,
+        submittedAssignment: 2,
+        returnEligible: 3,
+        crossContentReturned: 1,
       },
     ],
   });
@@ -34,9 +37,15 @@ it("returns only defined synthetic aggregates to an authorized operator", async 
       selfAssessed: 1,
       participated: 2,
       activeCircle: 1,
+      submittedAssignment: 2,
+      returnEligible: 3,
+      crossContentReturned: 1,
     },
   });
   expect(snapshot?.definitions.selfAssessed).toContain("not observed skill");
+  expect(snapshot?.definitions.submittedAssignment).toContain("not reviewed");
+  expect(snapshot?.definitions.crossContentReturned).toContain("7 full days");
+  expect(snapshot?.definitions.returnEligible).toContain("14 full days");
   query.mockResolvedValue({ rows: [] });
   expect(await metrics.snapshot("b".repeat(64))).toBeNull();
 });
