@@ -55,7 +55,16 @@ beforeEach(() => {
     status: 0,
     stdout: command === "git" && args[0] !== "status" ? "a".repeat(40) : "",
   }));
-  doubles.read.mockReturnValue("{}");
+  doubles.read.mockImplementation((path) =>
+    path === "artifacts/integration-unhandled.json"
+      ? JSON.stringify({
+          schema: "integration-unhandled-v1",
+          count: 0,
+          truncated: false,
+          signatures: [],
+        })
+      : "{}",
+  );
   doubles.query.mockResolvedValue({});
   doubles.end.mockResolvedValue(undefined);
   output = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -143,6 +152,24 @@ it("fails safely when a child output buffer or launcher fails", async () => {
   );
 });
 it("classifies an integration process failure without exposing output", async () => {
+  doubles.read.mockImplementation((path) =>
+    path === "artifacts/integration-unhandled.json"
+      ? JSON.stringify({
+          schema: "integration-unhandled-v1",
+          count: 1,
+          truncated: false,
+          signatures: [
+            {
+              kind: "unhandled-rejection",
+              name: "type-error",
+              code: "ECONNRESET",
+              testFile: "store.test.ts",
+              firstFrame: "dependency",
+            },
+          ],
+        })
+      : "{}",
+  );
   doubles.spawn.mockImplementation((command, args) => {
     if (command === "git")
       return {
@@ -171,11 +198,75 @@ it("classifies an integration process failure without exposing output", async ()
         vitestUnhandledErrors: true,
         vitestTeardownError: true,
         npmErrorBanner: true,
+        integrationUnhandled: {
+          count: 1,
+          truncated: false,
+          signatures: [
+            {
+              kind: "unhandled-rejection",
+              name: "type-error",
+              code: "ECONNRESET",
+              testFile: "store.test.ts",
+              firstFrame: "dependency",
+            },
+          ],
+        },
         stdoutBytes: expect.any(Number),
         stderrBytes: expect.any(Number),
       }),
     }),
   );
+});
+it("fails a clean integration child when its diagnostic artifact is missing or untrusted", async () => {
+  doubles.read.mockImplementation((path) =>
+    path === "artifacts/integration-unhandled.json"
+      ? JSON.stringify({
+          schema: "integration-unhandled-v1",
+          count: 1,
+          truncated: false,
+          signatures: [
+            {
+              kind: marker,
+              name: marker,
+              code: marker,
+              testFile: marker,
+              firstFrame: marker,
+            },
+          ],
+        })
+      : "{}",
+  );
+  const report = await run();
+  expect(report.exitStatus).toBe(1);
+  expect(report.error).toBe(
+    "Verification failed during npm run test:integration.",
+  );
+  expect(report.commands.at(-1).child.integrationUnhandled).toBe("unavailable");
+  expect(report.integrationTests).toBeUndefined();
+});
+it("fails when Vitest reports an unhandled error even if its child exit is zero", async () => {
+  doubles.read.mockImplementation((path) =>
+    path === "artifacts/integration-unhandled.json"
+      ? JSON.stringify({
+          schema: "integration-unhandled-v1",
+          count: 1,
+          truncated: false,
+          signatures: [
+            {
+              kind: "unhandled-rejection",
+              name: "error",
+              code: "other",
+              testFile: "other",
+              firstFrame: "other",
+            },
+          ],
+        })
+      : "{}",
+  );
+  const report = await run();
+  expect(report.exitStatus).toBe(1);
+  expect(report.integrationTests).toBeUndefined();
+  expect(report.commands.at(-1).child.integrationUnhandled.count).toBe(1);
 });
 it("labels buffer overflow and signals without trusting error text", async () => {
   doubles.spawn.mockImplementation((command, args) => {
