@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { testPool } from "../support/database.ts";
+import { jobStore, requestFingerprint } from "../../src/jobs.ts";
 
 const pool = testPool();
 test.afterAll(async () => pool.end());
@@ -58,7 +59,7 @@ test("[L61] current owner downloads private structured records while another mem
     );
     expect(own.headers()["cache-control"]).toBe("no-store");
     expect(await own.json()).toMatchObject({
-      version: "local-member-records-v2",
+      version: "local-member-records-v3",
       profile: { id: ownerId },
       records: { milestones: [{ milestoneTitle: "Owner-only milestone" }] },
     });
@@ -72,6 +73,71 @@ test("[L61] current owner downloads private structured records while another mem
     const expired = await page.request.get("/api/member/export");
     expect(expired.status()).toBe(403);
     expect(await expired.json()).toEqual({ error: "forbidden" });
+  } finally {
+    await otherContext.close();
+  }
+});
+
+test("[L67] deterministic member jobs export only to their owner and disappear with the local account", async ({
+  page,
+  context,
+  browser,
+}) => {
+  const otherContext = await browser.newContext({
+    baseURL: "http://127.0.0.1:4317",
+  });
+  try {
+    const other = await otherContext.newPage();
+    await onboard(page);
+    await onboard(other);
+    const ownerId = await memberId(context);
+    const cookie = (await context.cookies()).find(
+      (item) => item.name === "dne_preview",
+    );
+    expect(cookie).toBeDefined();
+    const jobs = jobStore(pool);
+    const marker = randomUUID();
+    const owned = await jobs.enqueueForMember(
+      cookie!.value,
+      "email",
+      "test",
+      "synthetic-notice",
+      `member-${marker}`,
+      requestFingerprint({ invented: marker }),
+    );
+    const system = await jobs.enqueue(
+      "analytics",
+      "test",
+      "record",
+      `system-${marker}`,
+      requestFingerprint({ system: marker }),
+    );
+    const own = await (await page.request.get("/api/member/export")).json();
+    expect(own.version).toBe("local-member-records-v3");
+    expect(own.records.adapterJobs).toMatchObject([
+      { id: owned.id, adapter: "email", mode: "test", status: "pending" },
+    ]);
+    expect(JSON.stringify(own)).not.toContain(`member-${marker}`);
+    const elsewhere = await (
+      await other.request.get("/api/member/export")
+    ).json();
+    expect(elsewhere.records.adapterJobs).toEqual([]);
+    await page.goto("/learn");
+    await page.getByLabel("Delete my local preview").check();
+    await page.getByRole("button", { name: "Delete this preview" }).click();
+    expect(
+      (
+        await pool.query(
+          "SELECT count(*)::integer AS n FROM adapter_jobs WHERE member_id=$1",
+          [ownerId],
+        )
+      ).rows[0].n,
+    ).toBe(0);
+    expect(await jobs.find(system.id)).toMatchObject({ id: system.id });
+    const remaining = await (
+      await other.request.get("/api/member/export")
+    ).json();
+    expect(remaining.profile.id).toBe(await memberId(otherContext));
   } finally {
     await otherContext.close();
   }

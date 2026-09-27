@@ -13,6 +13,7 @@ import {
   type ObjectStorage,
 } from "../../src/evidence.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
+import { jobStore, requestFingerprint } from "../../src/jobs.ts";
 import { migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
 
@@ -112,6 +113,15 @@ async function seedOwned(
     ["workspaces", "owner_principal_id"],
   ])
     track(table!, column!, id);
+  await jobStore(pool).enqueueForMember(
+    owner.token,
+    "email",
+    "test",
+    "synthetic-notice",
+    `${marker}-owned-job`,
+    requestFingerprint({ marker }),
+  );
+  track("adapter_jobs", "member_id", id);
   await db.save(id, {
     instruction: `${marker} instruction`,
     verification: `${marker} check`,
@@ -292,6 +302,13 @@ it("removes every current member-linked local row and object through the real ro
     unrelated = await member();
   const first = await seedOwned(owner, "owner", staff, evidence);
   const second = await seedOwned(unrelated, "other", staff, evidence);
+  const systemJob = await jobStore(pool).enqueue(
+    "analytics",
+    "test",
+    "synthetic-record",
+    "system-job",
+    requestFingerprint({ kind: "system" }),
+  );
   for (const row of tracked)
     expect(await count(row), `${row.table} before deletion`).toBe(1);
   for (const key of [...first.keys, ...second.keys])
@@ -342,6 +359,13 @@ it("removes every current member-linked local row and object through the real ro
     expect(await count(row), `${row.table} owner after deletion`).toBe(0);
   for (const row of tracked.slice(tracked.length / 2))
     expect(await count(row), `${row.table} unrelated after deletion`).toBe(1);
+  expect(
+    (
+      await pool.query("SELECT member_id FROM adapter_jobs WHERE id=$1", [
+        systemJob.id,
+      ])
+    ).rows[0].member_id,
+  ).toBeNull();
   for (const key of first.keys) await expect(files.get(key)).rejects.toThrow();
   for (const key of second.keys)
     expect(await files.get(key)).toBeInstanceOf(Buffer);

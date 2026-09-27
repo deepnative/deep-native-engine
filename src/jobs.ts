@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
+import { hash } from "./store.ts";
 import {
   validateAdapterResult,
   type AdapterKind,
@@ -49,6 +50,7 @@ export interface AdapterAttempt extends AdapterJob {
 
 interface JobRow {
   id: string;
+  member_id?: string | null;
   adapter: AdapterKind;
   mode: ApplicationMode;
   operation: string;
@@ -120,6 +122,16 @@ export interface JobStore {
     maxAttempts?: number,
     provenance?: AiJobProvenance,
   ): Promise<AdapterJob>;
+  enqueueForMember(
+    token: string,
+    adapter: AdapterKind,
+    mode: ApplicationMode,
+    operation: string,
+    idempotencyKey: string,
+    fingerprint: string,
+    maxAttempts?: number,
+    provenance?: AiJobProvenance,
+  ): Promise<AdapterJob>;
   find(id: string): Promise<AdapterJob | undefined>;
   claim(id: string): Promise<AdapterAttempt | undefined>;
   fail(
@@ -143,80 +155,131 @@ export function jobStore(pool: Pool): JobStore {
     return job(row);
   }
 
-  return {
-    async enqueue(
+  async function enqueue(
+    adapter: AdapterKind,
+    mode: ApplicationMode,
+    operation: string,
+    idempotencyKey: string,
+    fingerprint: string,
+    maxAttempts = 3,
+    provenance?: AiJobProvenance,
+    memberToken?: string,
+  ) {
+    if (memberToken !== undefined && mode === "live")
+      throw new Error("Live member jobs are not enabled.");
+    const normalizedOperation = validateText(operation, "Job operation", 80);
+    const normalizedKey = validateText(
+      idempotencyKey,
+      "Job idempotency key",
+      120,
+    );
+    if (!/^[a-f0-9]{64}$/.test(fingerprint))
+      throw new Error("Job request fingerprint must be a SHA-256 digest.");
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5)
+      throw new Error("Job max attempts must be an integer from 1 to 5.");
+    if (adapter === "ai") {
+      if (!provenance || typeof provenance !== "object")
+        throw new Error("AI job provenance is required.");
+      if (
+        !validVersion(provenance.promptTemplateVersion) ||
+        !validVersion(provenance.modelContractVersion)
+      )
+        throw new Error("AI job version identifiers must be safe tokens.");
+    } else if (provenance) {
+      throw new Error("Job provenance is for AI jobs only.");
+    }
+    const member = memberToken !== undefined;
+    const values = [
+      randomUUID(),
       adapter,
       mode,
-      operation,
-      idempotencyKey,
+      normalizedOperation,
+      normalizedKey,
       fingerprint,
-      maxAttempts = 3,
-      provenance,
-    ) {
-      const normalizedOperation = validateText(operation, "Job operation", 80);
-      const normalizedKey = validateText(
-        idempotencyKey,
-        "Job idempotency key",
-        120,
-      );
-      if (!/^[a-f0-9]{64}$/.test(fingerprint))
-        throw new Error("Job request fingerprint must be a SHA-256 digest.");
-      if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5)
-        throw new Error("Job max attempts must be an integer from 1 to 5.");
-      if (adapter === "ai") {
-        if (!provenance || typeof provenance !== "object")
-          throw new Error("AI job provenance is required.");
-        if (
-          !validVersion(provenance.promptTemplateVersion) ||
-          !validVersion(provenance.modelContractVersion)
-        )
-          throw new Error("AI job version identifiers must be safe tokens.");
-      } else if (provenance) {
-        throw new Error("Job provenance is for AI jobs only.");
-      }
-      const inserted = await pool.query<JobRow>(
-        `INSERT INTO adapter_jobs(
+      maxAttempts,
+      provenance?.promptTemplateVersion ?? null,
+      provenance?.modelContractVersion ?? null,
+    ];
+    const inserted = await pool.query<JobRow>(
+      member
+        ? `INSERT INTO adapter_jobs(
+           id,adapter,mode,operation,idempotency_key,request_fingerprint,max_attempts,
+           prompt_template_version,model_contract_version,member_id
+         ) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,l.id
+         FROM principals p JOIN learners l ON l.id=p.id
+         WHERE p.token_hash=$10 AND p.kind='member' AND p.revoked_at IS NULL
+           AND p.expires_at>CURRENT_TIMESTAMP
+         ON CONFLICT(idempotency_key) DO NOTHING
+         RETURNING *`
+        : `INSERT INTO adapter_jobs(
            id,adapter,mode,operation,idempotency_key,request_fingerprint,max_attempts,
            prompt_template_version,model_contract_version
          ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
          ON CONFLICT(idempotency_key) DO NOTHING
          RETURNING *`,
-        [
-          randomUUID(),
-          adapter,
-          mode,
-          normalizedOperation,
-          normalizedKey,
-          fingerprint,
-          maxAttempts,
-          provenance?.promptTemplateVersion ?? null,
-          provenance?.modelContractVersion ?? null,
-        ],
+      member ? [...values, hash(memberToken)] : values,
+    );
+    const row =
+      inserted.rows[0] ??
+      (
+        await pool.query<JobRow>(
+          member
+            ? `SELECT j.* FROM adapter_jobs j
+                 JOIN principals p ON p.id=j.member_id
+                 JOIN learners l ON l.id=p.id
+                 WHERE j.idempotency_key=$1 AND p.token_hash=$2
+                   AND p.kind='member' AND p.revoked_at IS NULL
+                   AND p.expires_at>CURRENT_TIMESTAMP`
+            : "SELECT * FROM adapter_jobs WHERE idempotency_key=$1",
+          member ? [normalizedKey, hash(memberToken)] : [normalizedKey],
+        )
+      ).rows[0];
+    if (!row)
+      throw new Error(
+        member
+          ? "Active member session required or job key unavailable."
+          : "Adapter job could not be enqueued.",
       );
-      const row =
-        inserted.rows[0] ??
-        (
-          await pool.query<JobRow>(
-            "SELECT * FROM adapter_jobs WHERE idempotency_key=$1",
-            [normalizedKey],
-          )
-        ).rows[0];
-      if (!row) throw new Error("Adapter job could not be enqueued.");
-      if (
-        row.adapter !== adapter ||
-        row.mode !== mode ||
-        row.operation !== normalizedOperation ||
-        row.request_fingerprint !== fingerprint ||
-        row.max_attempts !== maxAttempts ||
-        row.prompt_template_version !==
-          (provenance?.promptTemplateVersion ?? null) ||
-        row.model_contract_version !==
-          (provenance?.modelContractVersion ?? null)
-      )
-        throw new Error(
-          "Job idempotency key was already used for another request.",
-        );
-      return job(row);
+    if (
+      (!member && row.member_id != null) ||
+      (member && row.member_id == null) ||
+      row.adapter !== adapter ||
+      row.mode !== mode ||
+      row.operation !== normalizedOperation ||
+      row.request_fingerprint !== fingerprint ||
+      row.max_attempts !== maxAttempts ||
+      row.prompt_template_version !==
+        (provenance?.promptTemplateVersion ?? null) ||
+      row.model_contract_version !== (provenance?.modelContractVersion ?? null)
+    )
+      throw new Error(
+        "Job idempotency key was already used for another request.",
+      );
+    return job(row);
+  }
+
+  return {
+    enqueue,
+    enqueueForMember(
+      token,
+      adapter,
+      mode,
+      operation,
+      idempotencyKey,
+      fingerprint,
+      maxAttempts,
+      provenance,
+    ) {
+      return enqueue(
+        adapter,
+        mode,
+        operation,
+        idempotencyKey,
+        fingerprint,
+        maxAttempts,
+        provenance,
+        token,
+      );
     },
     async find(id) {
       const row = (

@@ -1,5 +1,5 @@
 {
-  "version": "initial-learning-v33",
+  "version": "initial-learning-v34",
   "fullMvpVersion": "full-mvp-v1",
   "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans and optional eligible current published sample-lesson recommendations, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts and immutable local submission revisions, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity",
   "projects": ["desktop-chromium", "mobile-chromium"],
@@ -596,6 +596,15 @@
       "steps": "Submit a saved sample response, explicitly begin and submit a private revision, inspect both snapshots and the owner export, deny another member, retire the assignment and delete the series",
       "expected": "Every locally submitted response remains an immutable owner-only exact-version snapshot with monotonic sequence; a new draft does not rewrite the first, retirement denies another revision, and deletion removes the series without a formal review or paid claim",
       "issues": [38, 300],
+      "critical": true
+    },
+    {
+      "id": "L67",
+      "actor": "General learner and unrelated member",
+      "preconditions": "Private local preview; deterministic demo/test adapter job created through an active member session",
+      "steps": "Create a member-owned synthetic job through the internal boundary, download each member's structured records, delete the owner preview and inspect an unrelated member and unowned system job",
+      "expected": "Only the owner export lists safe attributable job metadata; no operation, input or idempotency key leaks; deletion removes that member's job while unrelated and unowned records remain; no provider or live erasure is claimed",
+      "issues": [40, 302],
       "critical": true
     }
   ],

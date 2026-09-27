@@ -1,0 +1,9 @@
+# Explicit ownership of deterministic local adapter jobs (#302)
+
+Migration 030 adds a nullable `adapter_jobs.member_id` foreign key to the learner. Existing rows stay null: a request fingerprint, operation or idempotency key cannot prove a member owner. Internal `enqueueForMember` accepts an active member session token, inserts the owner in the same SQL statement and confines member-owned jobs to deterministic demo/test mode. A database constraint also rejects a live member-owned row. The existing system enqueue path remains unowned. A global idempotency key cannot be replayed across the system/member boundary or by another member; collisions disclose no other member's job metadata.
+
+The `local-member-records-v3` current-state export includes only explicit owner-job metadata. It omits operation text, idempotency keys, fingerprints, inputs and provider references. Its existing active-session check and row/byte caps apply. Local account deletion cascades the owned rows, while unrelated and unowned rows remain. No member-facing AI request, external provider call, live job erasure or hosted retention policy is created by this slice.
+
+The real-PostgreSQL tests cover active, revoked, expired, unknown and staff sessions, idempotent replay and cross-owner collisions, export isolation, and cascade with unrelated/system preservation. L67 checks owner export and local deletion in desktop/mobile browsers. The exact revision and counts are reported by the shared verification gate at delivery.
+
+Rollback must preserve attribution already recorded: disable new member-owned enqueues first, retain `member_id` and `local-member-records-v3` until a separately reviewed migration/export plan handles existing jobs. Reverting the column would make those jobs unassignable for privacy requests. Legacy unowned jobs and any future live/provider/backup records remain outside the verified local deletion path.
