@@ -92,6 +92,9 @@ it("denies an unconfigured operator metrics route and returns only a configured 
         selfAssessed: "self-report",
         participated: "ever joined",
         activeCircle: "currently joined",
+        submittedAssignment: "observed submission",
+        returnEligible: "matured first-open cohort",
+        crossContentReturned: "bounded observed return",
       },
       counts: {
         members: 3,
@@ -99,6 +102,9 @@ it("denies an unconfigured operator metrics route and returns only a configured 
         selfAssessed: 1,
         participated: 1,
         activeCircle: 0,
+        submittedAssignment: 1,
+        returnEligible: 2,
+        crossContentReturned: 1,
       },
     }),
   };
@@ -115,6 +121,9 @@ it("denies an unconfigured operator metrics route and returns only a configured 
     selfAssessed: 1,
     participated: 1,
     activeCircle: 0,
+    submittedAssignment: 1,
+    returnEligible: 2,
+    crossContentReturned: 1,
   });
   expect(response.body.scope).toBe("synthetic-local-preview");
 });

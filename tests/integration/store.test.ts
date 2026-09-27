@@ -2003,6 +2003,23 @@ it("keeps failed PostgreSQL attempt writes unconfirmed until a checked retry", a
   }
 });
 
+it("reports an undefined return rate with no retained members and no private rows", async () => {
+  const operator = await staff("operator");
+  const snapshot = await metricsStore(pool).snapshot(operator.token);
+  expect(snapshot?.counts).toEqual({
+    members: 0,
+    activated: 0,
+    selfAssessed: 0,
+    participated: 0,
+    activeCircle: 0,
+    submittedAssignment: 0,
+    returnEligible: 0,
+    crossContentReturned: 0,
+  });
+  expect(snapshot?.definitions.crossContentReturned).toContain("undefined");
+  expect(snapshot).not.toHaveProperty("rate");
+});
+
 it("counts retained preview learning and circle events once without granting metric access to members", async () => {
   const first = await member(),
     second = await member(),
@@ -2047,6 +2064,138 @@ it("counts retained preview learning and circle events once without granting met
     selfAssessed: 1,
     participated: 2,
     activeCircle: 1,
+    submittedAssignment: 0,
+    returnEligible: 0,
+    crossContentReturned: 0,
+  });
+  await pool.query(
+    "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE id=$1",
+    [operator.id],
+  );
+  expect(await metrics.snapshot(operator.token)).toBeNull();
+});
+
+it("counts only retained, matured cross-content returns and observed submissions", async () => {
+  const general = await member();
+  const professional = await member();
+  const technical = await member();
+  const sameLesson = await member();
+  const immature = await member();
+  await pool.query(
+    "UPDATE learners SET background='professional',goal='work' WHERE id=$1",
+    [professional.learner.id],
+  );
+  await pool.query(
+    "UPDATE learners SET background='technical',goal='build' WHERE id=$1",
+    [technical.learner.id],
+  );
+  const operator = await staff("operator");
+  const metrics = metricsStore(pool);
+  await pool.query(
+    `INSERT INTO content_versions(id,version,kind,origin,title,body,owner,sources,rights)
+     VALUES('MET-101',1,'lesson','curated','First invented lesson','Sample only','Test','Test','Owned'),
+           ('MET-101',2,'lesson','curated','Replacement invented lesson','Sample only','Test','Test','Owned'),
+           ('MET-102',1,'lesson','curated','Second invented lesson','Sample only','Test','Test','Owned'),
+           ('MET-103',1,'assignment','curated','Invented project','Sample only','Test','Test','Owned')`,
+  );
+  await pool.query(
+    `INSERT INTO lesson_activity(member_id,content_id,content_version,opened_at,started_at)
+     VALUES($1,'MET-101',1,CURRENT_TIMESTAMP-interval '20 days',NULL),
+           ($2,'MET-101',1,CURRENT_TIMESTAMP-interval '20 days',NULL),
+           ($3,'MET-101',1,CURRENT_TIMESTAMP-interval '20 days',NULL),
+           ($4,'MET-101',1,CURRENT_TIMESTAMP-interval '20 days',CURRENT_TIMESTAMP-interval '12 days'),
+           ($5,'MET-101',1,CURRENT_TIMESTAMP-interval '13 days',NULL)`,
+    [
+      general.learner.id,
+      professional.learner.id,
+      technical.learner.id,
+      sameLesson.learner.id,
+      immature.learner.id,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO lesson_activity(member_id,content_id,content_version,opened_at)
+     SELECT member_id,'MET-102',1,opened_at+interval '7 days'
+       FROM lesson_activity WHERE member_id=$1 AND content_id='MET-101'
+     UNION ALL
+     SELECT member_id,'MET-102',1,opened_at+interval '14 days'
+       FROM lesson_activity WHERE member_id=$2 AND content_id='MET-101'
+     UNION ALL
+     SELECT member_id,'MET-102',1,opened_at+interval '8 days'
+       FROM lesson_activity WHERE member_id=$3 AND content_id='MET-101'`,
+    [general.learner.id, professional.learner.id, immature.learner.id],
+  );
+  await pool.query(
+    `INSERT INTO lesson_activity(member_id,content_id,content_version,opened_at)
+     SELECT member_id,'MET-101',2,opened_at+interval '8 days'
+     FROM lesson_activity WHERE member_id=$1 AND content_id='MET-101' AND content_version=1`,
+    [sameLesson.learner.id],
+  );
+  const generalAttempt = randomUUID();
+  const professionalAttempt = randomUUID();
+  const technicalAttempt = randomUUID();
+  const response = "An invented response with enough detail for submission.";
+  await pool.query(
+    `INSERT INTO assignment_attempts
+       (id,member_id,content_id,content_version,goal_at_start,response,saved_at,submitted_at,submission_count)
+     SELECT $1::uuid,member_id,'MET-103',1,'everyday',$4,opened_at+interval '1 day',opened_at+interval '9 days',2
+       FROM lesson_activity WHERE member_id=$5 AND content_id='MET-101'
+     UNION ALL
+     SELECT $2::uuid,member_id,'MET-103',1,'work',$4,opened_at+interval '1 day',
+       opened_at+interval '7 days'-interval '1 microsecond',1
+       FROM lesson_activity WHERE member_id=$6 AND content_id='MET-101'
+     UNION ALL
+     SELECT $3::uuid,member_id,'MET-103',1,'build',$4,opened_at+interval '1 day',opened_at+interval '7 days',1
+       FROM lesson_activity WHERE member_id=$7 AND content_id='MET-101'`,
+    [
+      generalAttempt,
+      professionalAttempt,
+      technicalAttempt,
+      response,
+      general.learner.id,
+      professional.learner.id,
+      technical.learner.id,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO assignment_submission_snapshots(attempt_id,sequence,response,submitted_at)
+     SELECT id,1,response,submitted_at-interval '1 day' FROM assignment_attempts WHERE id=$1
+     UNION ALL
+     SELECT id,2,response,submitted_at FROM assignment_attempts WHERE id=$1
+     UNION ALL
+     SELECT id,1,response,submitted_at FROM assignment_attempts WHERE id IN ($2,$3)`,
+    [generalAttempt, professionalAttempt, technicalAttempt],
+  );
+  await pool.query(
+    "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE id=$1",
+    [technical.learner.id],
+  );
+  const first = await metrics.snapshot(operator.token);
+  expect(first?.counts).toMatchObject({
+    members: 5,
+    submittedAssignment: 3,
+    returnEligible: 4,
+    crossContentReturned: 2,
+  });
+  expect(JSON.stringify(first)).not.toContain(response);
+  expect(JSON.stringify(first)).not.toContain(general.learner.id);
+  expect(await metrics.snapshot(professional.token)).toBeNull();
+  await pool.query("DELETE FROM assignment_attempts WHERE id=$1", [
+    generalAttempt,
+  ]);
+  expect((await metrics.snapshot(operator.token))?.counts).toMatchObject({
+    submittedAssignment: 2,
+    returnEligible: 4,
+    crossContentReturned: 2,
+  });
+  await pool.query("DELETE FROM principals WHERE id=$1", [
+    technical.learner.id,
+  ]);
+  expect((await metrics.snapshot(operator.token))?.counts).toMatchObject({
+    members: 4,
+    submittedAssignment: 1,
+    returnEligible: 3,
+    crossContentReturned: 1,
   });
   await pool.query(
     "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE id=$1",
