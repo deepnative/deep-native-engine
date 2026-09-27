@@ -41,6 +41,81 @@ let privateStorageRoot;
 // Database, parser and filesystem errors can contain credentials or member text.
 let stage = "verification artifacts";
 const CHILD_OUTPUT_LIMIT = 1024 * 1024;
+const signatureValues = {
+  kind: [
+    "unhandled-rejection",
+    "uncaught-exception",
+    "unhandled-error",
+    "other",
+  ],
+  name: [
+    "type-error",
+    "error",
+    "aggregate-error",
+    "database-error",
+    "timeout-error",
+    "environment-teardown-error",
+    "other",
+  ],
+  code: [
+    "ECONNRESET",
+    "ECONNREFUSED",
+    "ETIMEDOUT",
+    "EPIPE",
+    "57P01",
+    "53300",
+    "other",
+  ],
+  testFile: [
+    "availability.test.ts",
+    "ledger-migration.test.ts",
+    "ledger.test.ts",
+    "member-deletion.test.ts",
+    "member-export.test.ts",
+    "restore.test.ts",
+    "slot-holds.test.ts",
+    "store.test.ts",
+    "other",
+  ],
+  firstFrame: [
+    "integration-test",
+    "test-support",
+    "application",
+    "dependency",
+    "node-runtime",
+    "other",
+  ],
+};
+function integrationUnhandled() {
+  try {
+    const value = read("integration-unhandled.json");
+    const expectedTruncated = value.count > 3;
+    if (
+      value.schema !== "integration-unhandled-v1" ||
+      !Number.isInteger(value.count) ||
+      value.count < 0 ||
+      value.count > 99 ||
+      typeof value.truncated !== "boolean" ||
+      !Array.isArray(value.signatures) ||
+      value.signatures.length > 3 ||
+      value.signatures.length !== Math.min(value.count, 3) ||
+      value.truncated !== expectedTruncated
+    )
+      return "unavailable";
+    const signatures = value.signatures.map((candidate) => {
+      const entry = {};
+      for (const [key, allowed] of Object.entries(signatureValues)) {
+        if (!allowed.includes(candidate?.[key])) return null;
+        entry[key] = candidate[key];
+      }
+      return entry;
+    });
+    if (signatures.includes(null)) return "unavailable";
+    return { count: value.count, truncated: value.truncated, signatures };
+  } catch {
+    return "unavailable";
+  }
+}
 function childDiagnostics(result) {
   // Only fixed classifications and sizes leave this boundary. In particular,
   // never persist child output, thrown values, or arbitrary error messages.
@@ -86,12 +161,29 @@ function run(command, args, env = process.env) {
     maxBuffer: CHILD_OUTPUT_LIMIT,
     env,
   });
+  const child = childDiagnostics(result);
+  if (command === "npm" && args[0] === "run" && args[1] === "test:integration")
+    child.integrationUnhandled = integrationUnhandled();
   report.commands.push({
     command: [command, ...args].join(" "),
     start,
     exitStatus: result.status,
-    child: childDiagnostics(result),
+    child,
   });
+  if (
+    command === "npm" &&
+    args[0] === "run" &&
+    args[1] === "test:integration"
+  ) {
+    requireGate(
+      child.integrationUnhandled !== "unavailable",
+      "Integration diagnostic report missing or invalid",
+    );
+    requireGate(
+      child.integrationUnhandled.count === 0 || result.status !== 0,
+      "Integration unhandled errors were reported despite a zero child exit",
+    );
+  }
   requireGate(
     result.status === 0,
     `Verification command failed: ${command} ${args.join(" ")}`,
@@ -111,6 +203,7 @@ try {
     "coverage",
     "unit-results.json",
     "integration-results.json",
+    "integration-unhandled.json",
     "e2e-results.json",
     "e2e-provisional-results.json",
     "application-verification.json",
