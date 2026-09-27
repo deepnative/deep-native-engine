@@ -1,5 +1,8 @@
 import { expect, it } from "vitest";
-import { eligibleAssignments } from "../../src/assignment-choice.ts";
+import {
+  eligibleAssignments,
+  recommendLesson,
+} from "../../src/assignment-choice.ts";
 import type { ContentVersion } from "../../src/catalog.ts";
 import type { Learner, Exercise } from "../../src/store.ts";
 
@@ -154,4 +157,85 @@ it("does not treat a structured lesson-activity prerequisite as free-text None",
   expect(eligibleAssignments([lesson, assignment], learner, undefined)).toEqual(
     [],
   );
+});
+
+it("recommends one unfinished current synthetic lesson and prefers observed starts", () => {
+  const first = { ...published, id: "SYN-936", kind: "lesson" as const };
+  const started = { ...first, id: "SYN-937", title: "Started reading" };
+  const activity = [
+    {
+      contentId: started.id,
+      contentVersion: 1,
+      openedAt: new Date("2026-09-23"),
+      startedAt: new Date("2026-09-23"),
+      selfAssessedAt: null,
+      available: true,
+    },
+  ];
+  expect(
+    recommendLesson([first, started], learner, undefined, activity),
+  ).toEqual(started);
+  expect(recommendLesson([first, started], learner, undefined)).toEqual(first);
+  expect(
+    recommendLesson(
+      [
+        {
+          ...first,
+          goals: ["everyday", "work", "build"],
+          backgrounds: ["explorer", "professional", "technical"],
+        },
+        started,
+      ],
+      learner,
+      undefined,
+    ),
+  ).toEqual(started);
+  expect(
+    recommendLesson(
+      [first, { ...started, domains: ["education"] }],
+      learner,
+      undefined,
+    ),
+  ).toEqual({ ...started, domains: ["education"] });
+  expect(
+    recommendLesson([first, started], learner, undefined, [
+      { ...activity[0]!, selfAssessedAt: new Date("2026-09-24") },
+      {
+        ...activity[0]!,
+        contentId: first.id,
+        selfAssessedAt: new Date("2026-09-24"),
+      },
+    ]),
+  ).toBeNull();
+});
+
+it("does not recommend a mismatched, unsigned, retired or prerequisite-locked lesson", () => {
+  const lesson = { ...published, id: "SYN-938", kind: "lesson" as const };
+  const cases: ContentVersion[] = [
+    { ...lesson, goals: ["build"] },
+    { ...lesson, backgrounds: ["technical"] },
+    { ...lesson, domains: ["finance"] },
+    { ...lesson, minimumExperience: "experienced" },
+    { ...lesson, prerequisites: "LOCAL-FIRST-EXERCISE-COMPLETE" },
+    { ...lesson, prerequisites: "unsupported" },
+    { ...lesson, origin: "member-proposal" },
+    { ...lesson, requiresQualifiedSignoff: true },
+    { ...lesson, state: "retired" },
+  ];
+  for (const candidate of cases)
+    expect(recommendLesson([candidate], learner, undefined)).toBeNull();
+  expect(
+    recommendLesson(
+      [lesson, { ...lesson, version: 2, publishedAt: new Date("2026-09-24") }],
+      learner,
+      undefined,
+    ),
+  ).toEqual({ ...lesson, version: 2, publishedAt: new Date("2026-09-24") });
+  expect(
+    recommendLesson(
+      [{ ...lesson, prerequisites: "LOCAL-FIRST-EXERCISE-COMPLETE" }],
+      learner,
+      completed,
+    ),
+  ).toEqual({ ...lesson, prerequisites: "LOCAL-FIRST-EXERCISE-COMPLETE" });
 });

@@ -32,6 +32,7 @@ import {
   seedDraftPack,
   type DraftContent,
 } from "../../src/catalog.ts";
+import { recommendLesson } from "../../src/assignment-choice.ts";
 const pool = testPool(),
   db = store(pool);
 const aiProvenance = {
@@ -87,6 +88,95 @@ const contentDraft: DraftContent = {
   rubric: "Check source and uncertainty.",
   rubricVersion: 1,
 };
+it("recommends only current eligible published lessons without rewriting private history", async () => {
+  const auth = authorizationStore(pool);
+  const catalog = catalogStore(pool);
+  const editor = randomBytes(32).toString("hex");
+  const reviewer = randomBytes(32).toString("hex");
+  const expiry = new Date(Date.now() + 86_400_000);
+  await auth.provisionStaff(editor, "editor", expiry);
+  await auth.provisionStaff(reviewer, "reviewer", expiry);
+  const lesson: DraftContent = {
+    ...contentDraft,
+    id: "SYN-996",
+    kind: "lesson",
+    title: "Invented next reading",
+    goals: ["everyday"],
+    backgrounds: ["explorer"],
+    rubric: null,
+    rubricVersion: null,
+  };
+  const publish = async (version: number) => {
+    expect(await catalog.createDraft(editor, { ...lesson, version })).toBe(
+      true,
+    );
+    expect(await catalog.submit(editor, lesson.id, version)).toBe(true);
+    expect(await catalog.approve(reviewer, lesson.id, version, true)).toBe(
+      true,
+    );
+    expect(await catalog.publish(editor, lesson.id, version)).toBe(true);
+  };
+  const first = await member();
+  const other = await member();
+  const recommend = async (id: string) => {
+    const session = await db.session(
+      id === first.token ? first.token : other.token,
+    );
+    expect(session.kind).toBe("active");
+    if (session.kind !== "active") throw new Error("Member unavailable");
+    return recommendLesson(
+      await catalog.search({}),
+      session.learner,
+      await db.progress(session.learner.id),
+      await db.lessonActivities(session.learner.id),
+    );
+  };
+  expect(await recommend(first.token)).toBeNull();
+  await publish(1);
+  expect(await recommend(first.token)).toMatchObject({
+    id: lesson.id,
+    version: 1,
+  });
+  await db.updateProfile(first.learner.id, {
+    background: "explorer",
+    goal: "build",
+    backgroundTags: [],
+    domainTags: [],
+    itRoles: [],
+    experience: null,
+    exploratory: false,
+  });
+  expect(await recommend(first.token)).toBeNull();
+  await db.updateProfile(first.learner.id, {
+    background: "explorer",
+    goal: "everyday",
+    backgroundTags: [],
+    domainTags: [],
+    itRoles: [],
+    experience: null,
+    exploratory: false,
+  });
+  expect(await db.openLesson(first.learner.id, lesson.id, 1)).toBe(true);
+  expect(await db.advanceLesson(first.learner.id, lesson.id, 1, "start")).toBe(
+    true,
+  );
+  expect(await recommend(first.token)).toMatchObject({ version: 1 });
+  expect(
+    await db.advanceLesson(first.learner.id, lesson.id, 1, "complete"),
+  ).toBe(true);
+  expect(await recommend(first.token)).toBeNull();
+  expect(await recommend(other.token)).toMatchObject({ version: 1 });
+  await publish(2);
+  expect(await recommend(first.token)).toMatchObject({ version: 2 });
+  expect(
+    (await db.lessonActivities(first.learner.id)).find(
+      (item) => item.contentVersion === 1,
+    )?.selfAssessedAt,
+  ).toBeInstanceOf(Date);
+  expect((await db.lessonActivities(other.learner.id)).length).toBe(0);
+  expect(await catalog.retire(editor, lesson.id)).toBe(true);
+  expect(await recommend(first.token)).toBeNull();
+});
 it("keeps a sample practice note private and pinned through replay, replacement, retirement and account deletion", async () => {
   const auth = authorizationStore(pool);
   const catalog = catalogStore(pool);

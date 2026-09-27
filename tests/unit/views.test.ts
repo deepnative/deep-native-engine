@@ -590,6 +590,39 @@ it("shows only current assignment choices, escapes titles and gives stale-choice
   expect(stale).toContain("no longer available");
   expect(stale).not.toContain(item.title);
 });
+it("shows a labelled optional sample lesson without inventing a duration or assessment", () => {
+  const lesson: ContentVersion = {
+    id: "SYN-996",
+    version: 2,
+    kind: "lesson",
+    origin: "curated",
+    title: "Invented <lesson>",
+    body: "Sample",
+    owner: "Editor",
+    sources: "Original",
+    rights: "Owned",
+    goals: ["everyday"],
+    backgrounds: ["explorer"],
+    domains: [],
+    prerequisites: "None",
+    minimumExperience: "new",
+    rubric: null,
+    rubricVersion: null,
+    state: "published",
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date("2026-09-23"),
+    publishedAt: new Date("2026-09-23"),
+  };
+  const empty = dashboard(learner, undefined, "token");
+  expect(empty).toContain("No additional published sample lesson");
+  const html = dashboard(learner, undefined, "token", [], [], null, lesson);
+  expect(html).toContain("Invented &lt;lesson&gt; · version 2");
+  expect(html).not.toContain("Invented <lesson>");
+  expect(html).toContain('href="/library/SYN-996"');
+  expect(html).toContain(
+    "no scheduled duration or qualified curriculum sign-off",
+  );
+});
 it("renders all accessible entry choices and actionable validation", () => {
   expect(welcome("token")).toContain("Working in another field");
   expect(welcome("token", ["Fix <field>"])).toContain("Fix &lt;field&gt;");
