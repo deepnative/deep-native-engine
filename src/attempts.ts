@@ -13,8 +13,15 @@ export interface AssignmentAttempt {
   startedAt: Date;
   savedAt: Date | null;
   submittedAt: Date | null;
+  submissionCount?: number;
+  submissions?: AssignmentSubmission[];
   currentPublished: boolean;
   currentEligible: boolean;
+}
+export interface AssignmentSubmission {
+  sequence: number;
+  response: string;
+  submittedAt: string;
 }
 export interface AttemptStore {
   list(token: string): Promise<AssignmentAttempt[]>;
@@ -27,6 +34,7 @@ export interface AttemptStore {
     response: string,
   ): Promise<boolean>;
   submit(token: string, id: string, revision: number): Promise<boolean>;
+  revise(token: string, id: string): Promise<boolean>;
   remove(token: string, id: string): Promise<boolean>;
 }
 export function disabledAttemptStore(): AttemptStore {
@@ -36,6 +44,7 @@ export function disabledAttemptStore(): AttemptStore {
     start: async () => null,
     save: async () => false,
     submit: async () => false,
+    revise: async () => false,
     remove: async () => false,
   };
 }
@@ -50,6 +59,7 @@ const eligible = `${currentPublished}
 const columns = `a.id,a.content_id AS "contentId",a.content_version AS "contentVersion",
   cv.title,a.goal_at_start AS "goalAtStart",a.response,a.revision,
   a.started_at AS "startedAt",a.saved_at AS "savedAt",a.submitted_at AS "submittedAt",
+  a.submission_count AS "submissionCount",
   (${currentPublished}) AS "currentPublished",
   COALESCE((ch.content_id=a.content_id AND ch.content_version=a.content_version
     AND ${eligible}),false) AS "currentEligible"`;
@@ -72,7 +82,11 @@ export function attemptStore(pool: Pool): AttemptStore {
       return (
         (
           await pool.query<AssignmentAttempt>(
-            `SELECT ${columns} FROM assignment_attempts a
+            `SELECT ${columns},COALESCE((SELECT jsonb_agg(
+              jsonb_build_object('sequence',s.sequence,'response',s.response,
+                'submittedAt',s.submitted_at) ORDER BY s.sequence)
+              FROM assignment_submission_snapshots s WHERE s.attempt_id=a.id),
+              '[]'::jsonb) AS submissions FROM assignment_attempts a
          JOIN content_versions cv ON cv.id=a.content_id AND cv.version=a.content_version
          JOIN learners l ON l.id=a.member_id JOIN principals p ON p.id=l.id
          LEFT JOIN learner_assignment_choices ch ON ch.member_id=l.id
@@ -112,15 +126,36 @@ export function attemptStore(pool: Pool): AttemptStore {
     },
     async submit(token, id, revision) {
       const result = await pool.query(
-        `UPDATE assignment_attempts a SET submitted_at=CURRENT_TIMESTAMP
+        `WITH submitted AS (
+         UPDATE assignment_attempts a SET submitted_at=CURRENT_TIMESTAMP,
+           submission_count=a.submission_count+1
          FROM principals p JOIN learners l ON l.id=p.id
          JOIN learner_assignment_choices ch ON ch.member_id=l.id
          JOIN content_versions cv ON cv.id=ch.content_id AND cv.version=ch.content_version
          WHERE ${activeMember} AND a.member_id=l.id AND a.id=$2 AND a.revision=$3
            AND a.saved_at IS NOT NULL AND length(btrim(a.response))>=20
-           AND a.submitted_at IS NULL AND a.content_id=cv.id
-           AND a.content_version=cv.version AND ${eligible}`,
+           AND a.submitted_at IS NULL AND a.submission_count<10
+           AND a.content_id=cv.id AND a.content_version=cv.version AND ${eligible}
+         RETURNING a.id,a.submission_count,a.response,a.submitted_at
+         )
+         INSERT INTO assignment_submission_snapshots(attempt_id,sequence,response,submitted_at)
+         SELECT id,submission_count,response,submitted_at FROM submitted
+         RETURNING attempt_id`,
         [hash(token), id, revision],
+      );
+      return result.rowCount === 1;
+    },
+    async revise(token, id) {
+      const result = await pool.query(
+        `UPDATE assignment_attempts a SET response='',saved_at=NULL,
+           submitted_at=NULL,revision=a.revision+1
+         FROM principals p JOIN learners l ON l.id=p.id
+         JOIN learner_assignment_choices ch ON ch.member_id=l.id
+         JOIN content_versions cv ON cv.id=ch.content_id AND cv.version=ch.content_version
+         WHERE ${activeMember} AND a.member_id=l.id AND a.id=$2
+           AND a.submitted_at IS NOT NULL AND a.submission_count BETWEEN 1 AND 9
+           AND a.content_id=cv.id AND a.content_version=cv.version AND ${eligible}`,
+        [hash(token), id],
       );
       return result.rowCount === 1;
     },

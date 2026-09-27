@@ -10,6 +10,7 @@ it("keeps attempts disabled unless a real store is wired", async () => {
   expect(await disabled.start("token")).toBeNull();
   expect(await disabled.save("token", "id", 1, "draft")).toBe(false);
   expect(await disabled.submit("token", "id", 1)).toBe(false);
+  expect(await disabled.revise("token", "id")).toBe(false);
   expect(await disabled.remove("token", "id")).toBe(false);
 });
 
@@ -22,16 +23,20 @@ it("scopes every operation to a hashed session, member and pinned content", asyn
   expect(await attempts.start(credential)).toBeNull();
   expect(await attempts.save(credential, "attempt-id", 1, "draft")).toBe(false);
   expect(await attempts.submit(credential, "attempt-id", 1)).toBe(false);
+  expect(await attempts.revise(credential, "attempt-id")).toBe(false);
   expect(await attempts.remove(credential, "attempt-id")).toBe(false);
   expect(query.mock.calls.map((call) => call[1][0])).toEqual(
-    Array.from({ length: 6 }, () => hash(credential)),
+    Array.from({ length: 7 }, () => hash(credential)),
   );
   expect(query.mock.calls[2]![0]).toContain(
     "ON CONFLICT(member_id,content_id,content_version)",
   );
   expect(query.mock.calls[3]![0]).toContain("a.revision=$3");
   expect(query.mock.calls[4]![0]).toContain("a.saved_at IS NOT NULL");
-  expect(query.mock.calls[5]![0]).toContain("a.id=$2");
+  expect(query.mock.calls[5]![0]).toContain(
+    "a.submission_count BETWEEN 1 AND 9",
+  );
+  expect(query.mock.calls[6]![0]).toContain("a.id=$2");
   query.mockResolvedValueOnce({ rows: [{ id: "owned" }] });
   expect(await attempts.start(credential)).toBe("owned");
   query.mockResolvedValueOnce({ rows: [{ id: "owned", revision: 2 }] });
@@ -44,5 +49,6 @@ it("scopes every operation to a hashed session, member and pinned content", asyn
   query.mockResolvedValue({ rowCount: 1 });
   expect(await attempts.save(credential, "owned", 2, "draft")).toBe(true);
   expect(await attempts.submit(credential, "owned", 2)).toBe(true);
+  expect(await attempts.revise(credential, "owned")).toBe(true);
   expect(await attempts.remove(credential, "owned")).toBe(true);
 });

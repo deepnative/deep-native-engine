@@ -58,7 +58,7 @@ test("[L61] current owner downloads private structured records while another mem
     );
     expect(own.headers()["cache-control"]).toBe("no-store");
     expect(await own.json()).toMatchObject({
-      version: "local-member-records-v1",
+      version: "local-member-records-v2",
       profile: { id: ownerId },
       records: { milestones: [{ milestoneTitle: "Owner-only milestone" }] },
     });
