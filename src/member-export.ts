@@ -47,6 +47,11 @@ const sections = {
   proposals: `SELECT id,title,body,sources,state,created_at AS "createdAt",
     submitted_at AS "submittedAt",withdrawn_at AS "withdrawnAt"
     FROM member_proposals WHERE member_id=$1 ORDER BY created_at,id LIMIT $2`,
+  workflowFeedback: `SELECT workflow_id AS "workflowId",
+    workflow_version AS "workflowVersion",note,revision,
+    created_at AS "createdAt",updated_at AS "updatedAt"
+    FROM workflow_feedback WHERE member_id=$1
+    ORDER BY workflow_id,workflow_version LIMIT $2`,
   privatePractice: `SELECT content_id AS "contentId",content_version AS "contentVersion",
     goal_at_save AS "goalAtSave",response,saved_at AS "savedAt"
     FROM private_practice WHERE member_id=$1 ORDER BY content_id,content_version LIMIT $2`,
@@ -100,7 +105,7 @@ export function memberExportStore(pool: Pool): MemberExportStore {
           }
           const payload = {
             kind: "ready",
-            version: "local-member-records-v4",
+            version: "local-member-records-v5",
             profile: owner.rows[0],
             records,
           };

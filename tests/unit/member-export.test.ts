@@ -55,7 +55,7 @@ it("returns a versioned all-section snapshot after a read-only commit", async ()
   expect(result).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v4",
+      version: "local-member-records-v5",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
     },

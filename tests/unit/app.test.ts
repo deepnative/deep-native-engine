@@ -30,6 +30,7 @@ import { CIRCLES, type CircleStore } from "../../src/circles.ts";
 import { type MetricsStore } from "../../src/metrics.ts";
 import { type PracticeStore } from "../../src/practice.ts";
 import { type UsefulnessStore } from "../../src/usefulness.ts";
+import { type WorkflowFeedbackStore } from "../../src/workflow-feedback.ts";
 import { type MemberExportStore } from "../../src/member-export.ts";
 import { disabledAttemptStore } from "../../src/attempts.ts";
 import {
@@ -44,6 +45,100 @@ const member = {
   goal: "everyday" as const,
 };
 const managedServers: Server[] = [];
+it("keeps workflow feedback owner-only and never claims a failed or stale write", async () => {
+  const feedback = {
+    list: vi.fn<WorkflowFeedbackStore["list"]>().mockResolvedValue([]),
+    save: vi.fn<WorkflowFeedbackStore["save"]>().mockResolvedValue(false),
+    withdraw: vi
+      .fn<WorkflowFeedbackStore["withdraw"]>()
+      .mockResolvedValue(false),
+  };
+  const agent = managedAgent(
+    app(db, { origin, secret: "secret", workflowFeedback: feedback }),
+  );
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  await agent.get("/workflows/WF-001").set("Host", host).expect(200);
+  await agent.get("/workflow-feedback/WF-001").set("Host", host).expect(303);
+  expect(feedback.list).not.toHaveBeenCalled();
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const form = await agent
+    .get("/workflow-feedback/WF-001")
+    .set("Host", host)
+    .expect(200);
+  expect(form.text).toContain("Only you can read");
+  const post = (
+    path: string,
+    fields: Record<string, string>,
+    csrfValue = csrf,
+  ) =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf: csrfValue, ...fields });
+  const save = {
+    workflow_version: "1",
+    revision: "0",
+    note: "Invented private workflow note",
+    confirm: "yes",
+  };
+  await post("/workflow-feedback/WF-001/save", save, "forged").expect(403);
+  await post("/workflow-feedback/WF-001/save", {
+    ...save,
+    note: " ",
+  }).expect(422);
+  await post("/workflow-feedback/WF-001/save", save).expect(409);
+  feedback.save.mockResolvedValueOnce(true);
+  await post("/workflow-feedback/WF-001/save", save).expect(303);
+  expect(feedback.save).toHaveBeenCalledWith(
+    expect.any(String),
+    "WF-001",
+    1,
+    save.note,
+    0,
+  );
+  feedback.list.mockResolvedValueOnce([
+    {
+      workflowId: "WF-001",
+      workflowVersion: 1,
+      note: "<private & invented>",
+      revision: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ]);
+  const saved = await agent
+    .get("/workflow-feedback/WF-001")
+    .set("Host", host)
+    .expect(200);
+  expect(saved.text).toContain("&lt;private &amp; invented&gt;");
+  expect(saved.text).not.toContain("<private & invented>");
+  await post("/workflow-feedback/WF-001/withdraw", {
+    workflow_version: "1",
+    revision: "0",
+    confirm: "yes",
+  }).expect(422);
+  await post("/workflow-feedback/WF-001/withdraw", {
+    workflow_version: "1",
+    revision: "1",
+    confirm: "yes",
+  }).expect(409);
+  feedback.withdraw.mockResolvedValueOnce(true);
+  await post("/workflow-feedback/WF-001/withdraw", {
+    workflow_version: "1",
+    revision: "1",
+    confirm: "yes",
+  }).expect(303);
+  await agent.get("/workflow-feedback/WF-999").set("Host", host).expect(404);
+  feedback.list.mockRejectedValueOnce(new Error("private database detail"));
+  const failed = await agent
+    .get("/workflow-feedback/WF-001")
+    .set("Host", host)
+    .expect(503);
+  expect(failed.text).not.toContain("private database detail");
+});
 it("keeps optional slot discovery private and reports read failures without implying a booking", async () => {
   const availability = {
     ...disabledAvailabilityStore(),
@@ -631,7 +726,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v4",
+          version: "local-member-records-v5",
           profile: { id: "owned" },
           records: { milestones: [] },
         },
@@ -658,7 +753,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v4",
+    version: "local-member-records-v5",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");

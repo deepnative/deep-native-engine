@@ -29,6 +29,7 @@ import { effectivePrerequisiteSpec } from "./prerequisites.ts";
 import type { ExpertRecord, TrackSnapshot } from "./track-readiness.ts";
 import type { Proposal } from "./proposals.ts";
 import type { WorkflowBundle } from "./workflow-registry.ts";
+import type { WorkflowFeedback } from "./workflow-feedback.ts";
 import type { CircleListing } from "./circles.ts";
 import type { AssignmentAttempt } from "./attempts.ts";
 import type { ActivityItem } from "./progress.ts";
@@ -545,7 +546,26 @@ export function workflowRegistryPage(items: WorkflowBundle[], q: string) {
 export function workflowDetailPage(item: WorkflowBundle) {
   return page(
     item.title,
-    `<nav class="breadcrumb"><a href="/workflows">← Workflow demonstrations</a></nav><article class="reading"><p class="eyebrow">SYNTHETIC DRAFT · VERSION ${item.version} · REVIEW PENDING</p><h1>${escape(item.title)}</h1><p class="lead">This file is for manual study only. Downloading it does not run a workflow, call an AI provider, or connect to any client system.</p><dl><dt>Goal</dt><dd>${escape(item.goal)}</dd><dt>Backgrounds</dt><dd>${escape(item.backgrounds)}</dd><dt>Prerequisites</dt><dd>${escape(item.prerequisites)}</dd><dt>Setup</dt><dd>${escape(item.setup)}</dd><dt>Supported environment</dt><dd>${escape(item.supportedEnvironment)}</dd><dt>Estimated cost</dt><dd>${escape(item.estimatedCost)}</dd><dt>Permissions</dt><dd>${escape(item.permissions)}</dd><dt>License</dt><dd>${escape(item.license)}</dd><dt>Owner</dt><dd>${escape(item.owner)}</dd><dt>Last verification</dt><dd>${escape(item.lastVerification)}</dd><dt>Next review</dt><dd>${escape(item.nextReview)}</dd><dt>Readiness</dt><dd>${escape(item.readiness)}</dd><dt>Limitations</dt><dd>${escape(item.limitations)}</dd></dl><p><a class="button" href="/workflows/${escape(item.id)}/download">Download Markdown text</a></p><label for="workflow-copy">Select and copy the synthetic workflow text</label><textarea id="workflow-copy" readonly rows="16">${escape(item.body)}</textarea><p class="small">You can suggest an original improvement as a <a href="/contribute">private sample proposal</a>. It will not be published or executed from this preview.</p></article>`,
+    `<nav class="breadcrumb"><a href="/workflows">← Workflow demonstrations</a></nav><article class="reading"><p class="eyebrow">SYNTHETIC DRAFT · VERSION ${item.version} · REVIEW PENDING</p><h1>${escape(item.title)}</h1><p class="lead">This file is for manual study only. Downloading it does not run a workflow, call an AI provider, or connect to any client system.</p><dl><dt>Goal</dt><dd>${escape(item.goal)}</dd><dt>Backgrounds</dt><dd>${escape(item.backgrounds)}</dd><dt>Prerequisites</dt><dd>${escape(item.prerequisites)}</dd><dt>Setup</dt><dd>${escape(item.setup)}</dd><dt>Supported environment</dt><dd>${escape(item.supportedEnvironment)}</dd><dt>Estimated cost</dt><dd>${escape(item.estimatedCost)}</dd><dt>Permissions</dt><dd>${escape(item.permissions)}</dd><dt>License</dt><dd>${escape(item.license)}</dd><dt>Owner</dt><dd>${escape(item.owner)}</dd><dt>Last verification</dt><dd>${escape(item.lastVerification)}</dd><dt>Next review</dt><dd>${escape(item.nextReview)}</dd><dt>Readiness</dt><dd>${escape(item.readiness)}</dd><dt>Limitations</dt><dd>${escape(item.limitations)}</dd></dl><p><a class="button" href="/workflows/${escape(item.id)}/download">Download Markdown text</a></p><label for="workflow-copy">Select and copy the synthetic workflow text</label><textarea id="workflow-copy" readonly rows="16">${escape(item.body)}</textarea><p><a href="/workflow-feedback/${escape(item.id)}">Save private feedback about this draft</a></p><p class="small">You can suggest an original improvement as a <a href="/contribute">private sample proposal</a>. It will not be published or executed from this preview.</p></article>`,
+  );
+}
+export function workflowFeedbackPage(
+  item: WorkflowBundle | null,
+  reports: WorkflowFeedback[],
+  csrf: string,
+  id: string,
+) {
+  const current = item
+    ? reports.find((report) => report.workflowVersion === item.version)
+    : undefined;
+  const history = reports.filter(
+    (report) => !item || report.workflowVersion !== item.version,
+  );
+  const withdraw = (report: WorkflowFeedback) =>
+    `<form method="post" action="/workflow-feedback/${escape(id)}/withdraw">${hidden(csrf)}<input type="hidden" name="workflow_version" value="${report.workflowVersion}"><input type="hidden" name="revision" value="${report.revision}"><label><input type="checkbox" name="confirm" value="yes" required> Remove my private note for version ${report.workflowVersion}</label><button class="secondary" type="submit">Withdraw version ${report.workflowVersion} feedback</button></form>`;
+  return page(
+    "Private workflow feedback",
+    `<nav class="breadcrumb"><a href="/workflows/${escape(id)}">← Workflow demonstration</a></nav><section class="reading"><p class="eyebrow">PRIVATE LOCAL PREVIEW · SELF-REPORT ONLY</p><h1>Private feedback on ${escape(item?.title ?? id)}</h1><p class="lead">Only you can read this invented-text note. It is tied to one draft version and is not a publication request, qualified review, formal assessment or workflow execution.</p>${item ? `<p>Current synthetic draft version: ${item.version}. No AI provider or client system is connected.</p><form method="post" action="/workflow-feedback/${escape(id)}/save">${hidden(csrf)}<input type="hidden" name="workflow_version" value="${item.version}"><input type="hidden" name="revision" value="${current?.revision ?? 0}"><label for="workflow-note">Your private feedback on version ${item.version}</label><textarea id="workflow-note" name="note" maxlength="1000" required rows="6">${escape(current?.note ?? "")}</textarea><label><input type="checkbox" name="confirm" value="yes" required> I am saving private feedback using only invented text</label><button type="submit">Save private feedback</button></form>${current ? `<p role="status">Your note for version ${item.version} is saved privately. You can correct or withdraw it.</p>${withdraw(current)}` : ""}` : `<p role="status">This workflow draft is unavailable. Your historical note remains private and can be withdrawn; nothing is migrated to a new version.</p>`}${history.length ? `<h2>Historical version notes</h2><ul>${history.map((report) => `<li><p>Version ${report.workflowVersion}: historical draft note; it is not current or reviewed.</p><p>${escape(report.note)}</p>${withdraw(report)}</li>`).join("")}</ul>` : ""}</section>`,
   );
 }
 export function libraryPage(
