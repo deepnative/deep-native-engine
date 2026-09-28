@@ -2,6 +2,7 @@ import express, { type ErrorRequestHandler } from "express";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { COOKIE, COOKIE_OPTIONS, token, csrf, validCsrf } from "./session.ts";
 import { profile, submission, type Fields } from "./validation.ts";
 import {
@@ -37,6 +38,7 @@ import {
   assignmentAttemptPage,
   assignmentWriteRecoveryPage,
   availabilityPage,
+  manualObservationPage,
 } from "./views.ts";
 import type { Store, Learner } from "./store.ts";
 import { eligibleAssignments, recommendLesson } from "./assignment-choice.ts";
@@ -101,6 +103,11 @@ import {
   disabledAvailabilityStore,
   type AvailabilityStore,
 } from "./availability.ts";
+import {
+  disabledManualObservationStore,
+  parseManualObservation,
+  type ManualObservationStore,
+} from "./manual-observations.ts";
 const attemptWritePath =
   /^\/assignments\/attempts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(save|submit|revise)$/i;
 function attemptedResponse(body: unknown, action: string) {
@@ -134,6 +141,7 @@ export function app(
     workflowFeedback?: WorkflowFeedbackStore;
     memberExport?: MemberExportStore;
     availability?: AvailabilityStore;
+    manualObservations?: ManualObservationStore;
   },
 ) {
   const app = express();
@@ -154,6 +162,8 @@ export function app(
     options.workflowFeedback ?? disabledWorkflowFeedbackStore();
   const memberExport = options.memberExport ?? disabledMemberExportStore();
   const availability = options.availability ?? disabledAvailabilityStore();
+  const manualObservations =
+    options.manualObservations ?? disabledManualObservationStore();
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -255,6 +265,87 @@ export function app(
       return;
     }
     res.json(snapshot);
+  });
+  app.get("/operator/test-receipts", async (_req, res) => {
+    if (mode === "live") {
+      res
+        .status(404)
+        .send(errorPage("Unavailable", "This preview is disabled."));
+      return;
+    }
+    const rows = await manualObservations.list(res.locals.token as string);
+    if (!rows) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Register unavailable",
+            "Platform administrator access is required.",
+          ),
+        );
+      return;
+    }
+    res.send(
+      manualObservationPage(rows, res.locals.csrf as string, randomUUID()),
+    );
+  });
+  app.post("/operator/test-receipts", async (req, res) => {
+    if (mode === "live") {
+      res
+        .status(404)
+        .send(errorPage("Unavailable", "This preview is disabled."));
+      return;
+    }
+    const input = parseManualObservation(req.body);
+    if (!input) {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Observation unchanged",
+            "Use invented SYN- evidence, a valid local member ID and positive integer CAD cents, then confirm the test-only action.",
+          ),
+        );
+      return;
+    }
+    const result = await manualObservations.record(
+      res.locals.token as string,
+      input,
+    );
+    if (result.kind === "denied") {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Register unavailable",
+            "Platform administrator access is required.",
+          ),
+        );
+      return;
+    }
+    if (result.kind === "invalid" || result.kind === "member_missing") {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Observation unchanged",
+            "The local member or invented observation details are unavailable.",
+          ),
+        );
+      return;
+    }
+    if (result.kind === "conflict") {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Observation unchanged",
+            "This test request key has already been used for different details.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/operator/test-receipts");
   });
   app.get("/moderate/proposals", async (_req, res) => {
     const queue = await proposals.moderationQueue(res.locals.token as string);

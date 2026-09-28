@@ -121,6 +121,7 @@ export async function migrate(pool: Pool) {
       "030-member-owned-adapter-jobs.sql",
       "031-lesson-usefulness.sql",
       "032-private-workflow-feedback.sql",
+      "033-synthetic-manual-observations.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
