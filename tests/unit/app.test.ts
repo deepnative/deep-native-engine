@@ -493,7 +493,7 @@ it("shows honest track states and restricts the expert evidence roster", async (
   );
   expect(roster.text).toContain("No expert commitments are recorded");
 });
-it("shows optional offer hypotheses while reporting foundation access as undecided", async () => {
+it("shows the approved no-purchase preview while keeping production terms undecided", async () => {
   const agent = managedAgent(app(storage(), { origin, secret: "secret" }));
   const catalog = await agent
     .get("/api/offer-hypotheses")
@@ -504,9 +504,12 @@ it("shows optional offer hypotheses while reporting foundation access as undecid
     .set("Host", host)
     .expect(200);
   expect(catalog.body.foundation).toMatchObject({
+    interimDecision: "approved-no-purchase-private-preview",
     live: "pending-owner-decision",
+    liveActivationEnabled: false,
     priceCents: null,
     participationLimit: null,
+    aiAllowance: null,
   });
   expect(catalog.body.coaching).toHaveLength(6);
   expect(
@@ -515,7 +518,11 @@ it("shows optional offer hypotheses while reporting foundation access as undecid
     ),
   ).toBe(true);
   expect(planning.text).toContain("NO LIVE PURCHASE");
-  expect(planning.text).toContain("pending owner approval");
+  expect(planning.text).toContain(
+    "approved a no-purchase private/local preview",
+  );
+  expect(planning.text).toContain("IT, other professions and general learners");
+  expect(planning.text).toContain("production terms remain undecided");
   expect(planning.text).not.toContain("Buy now");
   for (const offer of catalog.body.coaching) {
     expect(planning.text).toContain(offer.termsVersion);
