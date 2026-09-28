@@ -70,6 +70,8 @@ export function availabilityStore(pool: Pool): AvailabilityStore {
          JOIN expert_registry e ON e.id=s.expert_registry_id
          JOIN principals primary_staff ON primary_staff.id=e.staff_id
          WHERE s.retired_at IS NULL AND s.starts_at>CURRENT_TIMESTAMP
+           AND NOT sample_slot_conflicts(e.staff_id,e.backup_staff_id,
+             s.starts_at,s.ends_at,s.id)
            AND NOT EXISTS (
              SELECT 1 FROM synthetic_slot_holds held
              WHERE held.slot_id=s.id AND held.state='held'
@@ -157,6 +159,8 @@ export function availabilityStore(pool: Pool): AvailabilityStore {
           await client.query("ROLLBACK");
           return null;
         }
+        // All creates take the same sorted principal locks before reading slots,
+        // including when one roster reverses another's primary/backup roles.
         for (const staffId of [
           ...new Set(
             [expert.staff_id, expert.backup_staff_id].filter(
@@ -218,12 +222,8 @@ export function availabilityStore(pool: Pool): AvailabilityStore {
         ).rows[0];
         const overlap = (
           await client.query<{ id: string }>(
-            `SELECT s.id FROM expert_availability_slots s
-             JOIN expert_registry e ON e.id=s.expert_registry_id
-             WHERE e.staff_id=$1 AND s.retired_at IS NULL
-               AND tstzrange(s.starts_at,s.ends_at,'[)') && tstzrange($2::timestamptz,$3::timestamptz,'[)')
-             LIMIT 1`,
-            [expert.staff_id, startsAt, endsAt],
+            `SELECT 1 AS id WHERE sample_slot_conflicts($1,$2,$3,$4,NULL)`,
+            [expert.staff_id, expert.backup_staff_id, startsAt, endsAt],
           )
         ).rows[0];
         if (!eligible || overlap) {

@@ -1,5 +1,5 @@
 {
-  "version": "initial-learning-v42",
+  "version": "initial-learning-v43",
   "fullMvpVersion": "full-mvp-v1",
   "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans and optional eligible current published sample-lesson recommendations, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts and immutable local submission revisions, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations with owner-only exact-version private feedback and private version-pinned improvement proposals, private versioned synthetic lesson activity and member-private exact-version usefulness self-reports with a suppressed operator-only coarse snapshot, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity; platform-admin-only synthetic manual observation register with no paid state or entitlement",
   "projects": ["desktop-chromium", "mobile-chromium"],
@@ -575,9 +575,9 @@
       "id": "L64",
       "actor": "Exploratory, professional and technical members; operator, coach and unauthenticated visitor",
       "preconditions": "Explicit synthetic future slot, separately verified primary and backup registry entries, member timezone; no live roster or offer",
-      "steps": "Visitor is denied; onboard members, view exact UTC and local sample window, try forged booking and coach retirement, retire as operator and reload",
-      "expected": "Only an authenticated member sees a clearly nonbookable demo window backed by current verified coverage; no charge, reservation, staff evidence or qualified-live promise; withdrawal removes the window and learning remains available",
-      "issues": [29, 294, 42],
+      "steps": "Visitor is denied; onboard members, view exact UTC and local sample window, try forged booking and coach retirement, add a retained reciprocal-role conflict and verify exclusion, retire the conflict to recover preview, retire as operator and reload",
+      "expected": "Only an authenticated member sees a clearly nonbookable demo window backed by current verified coverage; no charge, reservation, staff evidence or qualified-live promise; conflicting primary/backup commitments are excluded until retirement resolves them; withdrawal removes the window and learning remains available",
+      "issues": [29, 294, 335, 42],
       "critical": true
     },
     {

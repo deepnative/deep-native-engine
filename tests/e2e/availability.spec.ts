@@ -224,6 +224,37 @@ test("[L64] private sample availability respects verified coverage, time zone an
     await noZonePage.getByRole("link", { name: "profile form" }).click();
     await expect(noZonePage.getByLabel("Time zone (optional)")).toBeVisible();
 
+    // Retained reciprocal rows can predate the cross-role integrity check.
+    // Leave enough minutes so the browser proves overlap exclusion itself.
+    await pool.query(
+      "UPDATE expert_registry SET capacity_minutes=240 WHERE id IN ($1,$2)",
+      [primaryRecordId, backupRecordId],
+    );
+    const conflictingSlotId = randomUUID();
+    await pool.query(
+      `INSERT INTO expert_availability_slots
+       (id,expert_registry_id,starts_at,ends_at,created_by)
+       VALUES($1,$2,$3,$4,$5)`,
+      [conflictingSlotId, backupRecordId, start, end, operatorId],
+    );
+    await page.reload();
+    await expect(
+      page.getByText(start.toISOString(), { exact: false }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByText(fallStart.toISOString(), { exact: false }),
+    ).toBeVisible();
+    await expect(page.getByText("sample window, not bookable")).toHaveCount(1);
+    await expect(
+      page.getByRole("button", { name: /book|buy|reserve/i }),
+    ).toHaveCount(0);
+    expect(await slots.retire(operatorToken, conflictingSlotId)).toBe(true);
+    await page.reload();
+    await expect(
+      page.getByText(start.toISOString(), { exact: false }),
+    ).toBeVisible();
+    await expect(page.getByText("sample window, not bookable")).toHaveCount(2);
+
     expect(await slots.retire(coachToken, slotId!)).toBe(false);
     expect(await slots.retire(operatorToken, slotId!)).toBe(true);
     expect(await slots.retire(operatorToken, fallSlotId!)).toBe(true);
