@@ -18,6 +18,7 @@ import {
   assignmentAttemptsPage,
   assignmentAttemptPage,
   evidencePage,
+  localAiConsentPage,
   availabilityPage,
   privateProgressPage,
   manualObservationPage,
@@ -238,6 +239,55 @@ it("does not call a surviving second evidence version an original", () => {
   expect(legacy).toContain(
     "version 2 · prior version deleted · parent ID unavailable",
   );
+});
+it("describes local AI permission and every job state without leaking sample text", () => {
+  const empty = localAiConsentPage([], "csrf");
+  expect(empty).toContain("No clean current invented text sample is available");
+  const grant = localAiConsentPage(
+    [
+      {
+        evidenceId: "sample-id",
+        name: "Invented <draft>.txt",
+        revisionNumber: 2,
+        receiptId: null,
+        grantedAt: null,
+        withdrawnAt: null,
+        jobs: [],
+      },
+    ],
+    "csrf",
+    ["Sample <unavailable>"],
+  );
+  expect(grant).toContain("Invented &lt;draft&gt;.txt");
+  expect(grant).toContain("Sample &lt;unavailable&gt;");
+  expect(grant).toContain("Grant local simulation permission");
+  expect(grant).not.toContain("Withdraw permission");
+  const active = localAiConsentPage(
+    [
+      {
+        evidenceId: "sample-id",
+        name: "Invented sample.txt",
+        revisionNumber: 2,
+        receiptId: "receipt-id",
+        grantedAt: new Date(),
+        withdrawnAt: null,
+        jobs: [
+          { id: "pending", status: "pending" },
+          { id: "done", status: "succeeded" },
+          { id: "running", status: "running" },
+          { id: "held", status: "needs_reconciliation" },
+          { id: "failed", status: "failed" },
+        ],
+      },
+    ],
+    "csrf",
+  );
+  expect(active).toContain("Queue local simulation");
+  expect(active).toContain("Withdraw permission");
+  expect(active).toContain("Run local simulation");
+  expect(active).toContain("Simulated locally. No provider request");
+  expect(active).toContain("Outcome needs local reconciliation");
+  expect(active).toContain("Local simulation unavailable or failed");
 });
 it("keeps optional planning gated and renders escaped, unsent per-version drafts", () => {
   const off = careerPage({ enabled: false, entries: [], drafts: [] }, "csrf");

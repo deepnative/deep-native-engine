@@ -264,3 +264,189 @@ test("[L60] only a clean consented owner sample enters the local review queue on
     await outsider.close();
   }
 });
+
+test("[L76] exact-source local AI permission is explicit, withdrawable and never inherited", async ({
+  page,
+  browser,
+}) => {
+  const outsider = await browser.newContext({ baseURL: origin });
+  const otherPage = await outsider.newPage();
+  const name = `local-ai-${randomBytes(8).toString("hex")}.txt`;
+  const evidence = evidenceStore(
+    pool,
+    fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!),
+    "browser-secret",
+  );
+  try {
+    await onboard(page);
+    await onboard(otherPage);
+    await page.goto("/evidence");
+    await page.getByLabel("Sample title").fill(name);
+    await page
+      .getByLabel("Invented text sample")
+      .fill("Invented local AI source");
+    await page.getByLabel("I created this invented sample").check();
+    await page.getByLabel("I explicitly allow this sample").check();
+    await page
+      .getByRole("button", { name: "Save private text sample" })
+      .click();
+    const id = (
+      await pool.query<{ id: string }>(
+        "SELECT id FROM evidence_objects WHERE original_name=$1",
+        [name],
+      )
+    ).rows[0]!.id;
+    await page
+      .getByRole("link", {
+        name: "Choose an invented sample for local AI simulation",
+      })
+      .click();
+    await expect(
+      page.getByText("No clean current invented text sample is available"),
+    ).toBeVisible();
+    expect(await evidence.transitionQuarantine(id, "clean")).toBe(true);
+    await page.reload();
+    await expect(page.getByRole("heading", { name })).toBeVisible();
+    await otherPage.goto("/evidence/local-ai");
+    await expect(otherPage.getByRole("heading", { name })).toHaveCount(0);
+    await otherPage.goto("/evidence");
+    const otherCsrf = await otherPage
+      .locator('input[name="csrf"]')
+      .first()
+      .inputValue();
+    expect(
+      (
+        await otherPage.request.post(`/evidence/local-ai/${id}/grant`, {
+          headers: { Origin: origin },
+          form: { csrf: otherCsrf, confirm: "yes" },
+        })
+      ).status(),
+    ).toBe(403);
+    await page
+      .getByLabel("I permit this exact invented sample version")
+      .check();
+    await page
+      .getByRole("button", { name: "Grant local simulation permission" })
+      .click();
+    await expect(
+      page.getByText(
+        "Local simulation permission granted for this exact version.",
+      ),
+    ).toBeVisible();
+    const receipt = (
+      await pool.query<{ id: string }>(
+        "SELECT id FROM local_ai_receipts WHERE evidence_id=$1 AND withdrawn_at IS NULL",
+        [id],
+      )
+    ).rows[0]!.id;
+    await page.getByRole("button", { name: "Queue local simulation" }).click();
+    await expect(
+      page.getByText("Queued only in this local preview"),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Run local simulation" }).click();
+    await expect(
+      page.getByText(
+        "Simulated locally. No provider request or qualified review occurred.",
+      ),
+    ).toBeVisible();
+    await page.reload();
+    await expect(
+      page.getByText(
+        "Simulated locally. No provider request or qualified review occurred.",
+      ),
+    ).toBeVisible();
+    await page.getByLabel(`Withdraw local AI permission for ${name}`).check();
+    await page.getByRole("button", { name: "Withdraw permission" }).click();
+    await expect(
+      page.getByText(
+        "Local simulation permission granted for this exact version.",
+      ),
+    ).toHaveCount(0);
+    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    expect(
+      (
+        await page.request.post(`/evidence/local-ai/${receipt}/queue`, {
+          headers: { Origin: origin },
+          form: { csrf },
+        })
+      ).status(),
+    ).toBe(403);
+    await page
+      .getByLabel("I permit this exact invented sample version")
+      .check();
+    await page
+      .getByRole("button", { name: "Grant local simulation permission" })
+      .click();
+    const replacement = (
+      await pool.query<{ id: string }>(
+        "SELECT id FROM local_ai_receipts WHERE evidence_id=$1 AND withdrawn_at IS NULL",
+        [id],
+      )
+    ).rows[0]!.id;
+    expect(replacement).not.toBe(receipt);
+    await page.getByRole("button", { name: "Queue local simulation" }).click();
+    await page.goto("/evidence");
+    await page
+      .getByLabel("No qualified reviewer is assigned", { exact: false })
+      .check();
+    await page
+      .getByRole("button", { name: "Queue for local review consideration" })
+      .click();
+    await page
+      .getByRole("link", { name: `Create a new private revision of ${name}` })
+      .click();
+    await page.getByLabel("Revised sample title").fill(`${name}-v2`);
+    await page
+      .getByLabel("New invented text", { exact: true })
+      .fill("Invented second local AI source");
+    await page.getByLabel("I created this new invented text").check();
+    await page.getByLabel("I separately allow this revision").check();
+    await page
+      .getByRole("button", { name: "Save new private revision" })
+      .click();
+    const secondId = (
+      await pool.query<{ id: string }>(
+        "SELECT id FROM evidence_objects WHERE original_name=$1",
+        [`${name}-v2`],
+      )
+    ).rows[0]!.id;
+    expect(await evidence.transitionQuarantine(secondId, "clean")).toBe(true);
+    await page.goto("/evidence/local-ai");
+    await expect(
+      page.getByRole("heading", { name: `${name}-v2` }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "Local simulation permission granted for this exact version.",
+      ),
+    ).toHaveCount(0);
+    await page.goto("/evidence");
+    await page
+      .getByLabel(`Delete ${name}-v2 and its configured active derivatives`)
+      .check();
+    await page
+      .locator(`form[action="/evidence/${secondId}/delete"] button`)
+      .click();
+    await page.goto("/evidence/local-ai");
+    await expect(page.getByRole("heading", { name })).toBeVisible();
+    await expect(
+      page.getByText(
+        "Local AI permission withdrawn. Future simulations need a new grant.",
+      ),
+    ).toBeVisible();
+    const afterDeleteCsrf = await page
+      .locator('input[name="csrf"]')
+      .first()
+      .inputValue();
+    expect(
+      (
+        await page.request.post(`/evidence/local-ai/${replacement}/queue`, {
+          headers: { Origin: origin },
+          form: { csrf: afterDeleteCsrf },
+        })
+      ).status(),
+    ).toBe(403);
+  } finally {
+    await outsider.close();
+  }
+});

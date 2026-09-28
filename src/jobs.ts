@@ -28,6 +28,7 @@ export interface AiJobProvenance {
 }
 
 export interface AdapterJob {
+  memberId?: string;
   id: string;
   adapter: AdapterKind;
   mode: ApplicationMode;
@@ -69,6 +70,7 @@ interface JobRow {
 function job(row: JobRow): AdapterJob {
   return {
     id: row.id,
+    ...(row.member_id ? { memberId: row.member_id } : {}),
     adapter: row.adapter,
     mode: row.mode,
     operation: row.operation,
@@ -165,6 +167,10 @@ export function jobStore(pool: Pool): JobStore {
     provenance?: AiJobProvenance,
     memberToken?: string,
   ) {
+    if (memberToken !== undefined && adapter === "ai")
+      throw new Error(
+        "Member AI requires exact-source permission; use another request path.",
+      );
     if (memberToken !== undefined && mode === "live")
       throw new Error("Live member jobs are not enabled.");
     const normalizedOperation = validateText(operation, "Job operation", 80);
@@ -404,6 +410,8 @@ export async function runAdapterJob(
 }> {
   const existing = await jobs.find(id);
   if (!existing) throw new Error("Adapter job not found.");
+  if (existing.adapter === "ai" && existing.memberId)
+    throw new Error("Member AI requires exact-source permission.");
   const adapter = registry.adapter(existing.adapter, existing.mode);
   if (existing.requestFingerprint !== requestFingerprint(input))
     throw new Error("Adapter job input does not match its enqueued request.");

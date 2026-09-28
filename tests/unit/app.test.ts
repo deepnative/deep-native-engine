@@ -14,6 +14,10 @@ import {
   type EvidenceStore,
 } from "../../src/evidence.ts";
 import {
+  disabledLocalAiConsentStore,
+  type LocalAiConsentStore,
+} from "../../src/local-ai-consent.ts";
+import {
   disabledCatalogStore,
   type CatalogStore,
   type ContentVersion,
@@ -671,6 +675,94 @@ function evidenceStorage() {
       .mockResolvedValue(undefined),
   };
 }
+it("requires explicit member confirmation and current local AI permission at every UI step", async () => {
+  const localAiConsent = {
+    ...disabledLocalAiConsentStore(),
+    list: vi.fn<LocalAiConsentStore["list"]>().mockResolvedValue([
+      {
+        evidenceId: "evidence-id",
+        name: "Invented & safe.txt",
+        revisionNumber: 1,
+        receiptId: null,
+        grantedAt: null,
+        withdrawnAt: null,
+        jobs: [],
+      },
+    ]),
+    grant: vi
+      .fn<LocalAiConsentStore["grant"]>()
+      .mockResolvedValue({ kind: "denied" }),
+    withdraw: vi.fn<LocalAiConsentStore["withdraw"]>().mockResolvedValue(false),
+    enqueue: vi
+      .fn<LocalAiConsentStore["enqueue"]>()
+      .mockResolvedValue({ kind: "denied" }),
+    run: vi
+      .fn<LocalAiConsentStore["run"]>()
+      .mockResolvedValue({ kind: "denied" }),
+  };
+  const agent = managedAgent(
+    app(db, { origin, secret: "secret", localAiConsent }),
+  );
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  await agent.get("/evidence/local-ai").set("Host", host).expect(303);
+  active();
+  const local = await agent
+    .get("/evidence/local-ai")
+    .set("Host", host)
+    .expect(200);
+  expect(local.text).toContain("Invented &amp; safe.txt");
+  expect(local.text).toContain("no network request");
+  const post = (path: string, fields: Record<string, string> = {}) =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  await post("/evidence/local-ai/evidence-id/grant").expect(422);
+  expect(localAiConsent.grant).not.toHaveBeenCalled();
+  await post("/evidence/local-ai/evidence-id/grant", { confirm: "yes" }).expect(
+    403,
+  );
+  localAiConsent.grant.mockResolvedValueOnce({
+    kind: "granted",
+    receiptId: "receipt-id",
+  });
+  await post("/evidence/local-ai/evidence-id/grant", { confirm: "yes" }).expect(
+    303,
+  );
+  await post("/evidence/local-ai/receipt-id/withdraw").expect(422);
+  await post("/evidence/local-ai/receipt-id/withdraw", {
+    confirm: "yes",
+  }).expect(403);
+  localAiConsent.withdraw.mockResolvedValueOnce(true);
+  await post("/evidence/local-ai/receipt-id/withdraw", {
+    confirm: "yes",
+  }).expect(303);
+  await post("/evidence/local-ai/receipt-id/queue").expect(403);
+  localAiConsent.enqueue.mockResolvedValueOnce({ kind: "conflict" });
+  await post("/evidence/local-ai/receipt-id/queue").expect(409);
+  localAiConsent.enqueue.mockResolvedValueOnce({
+    kind: "queued",
+    jobId: "job-id",
+  });
+  await post("/evidence/local-ai/receipt-id/queue").expect(303);
+  expect(localAiConsent.enqueue).toHaveBeenLastCalledWith(
+    expect.any(String),
+    "receipt-id",
+    "receipt-id",
+  );
+  await post("/evidence/local-ai/job-id/run").expect(403);
+  localAiConsent.run.mockResolvedValueOnce({ kind: "unavailable" });
+  await post("/evidence/local-ai/job-id/run").expect(409);
+  localAiConsent.run.mockResolvedValueOnce({
+    kind: "completed",
+    jobId: "job-id",
+    status: "succeeded",
+  });
+  await post("/evidence/local-ai/job-id/run").expect(303);
+});
 let db: ReturnType<typeof storage>;
 beforeEach(() => {
   db = storage();
