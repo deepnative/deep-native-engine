@@ -80,14 +80,21 @@ export function memberExportStore(pool: Pool): MemberExportStore {
       try {
         const client = await pool.connect();
         try {
-          await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+          await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+          // Match the runtime's five-second statement bound for lock acquisition,
+          // including callers that supply a pool without runtime configuration.
+          await client.query("SET LOCAL lock_timeout='5s'");
+          // Keep revocation state and the deletion marker stable through COMMIT;
+          // ordinary record changes remain a repeatable snapshot.
           const owner = await client.query<Record<string, unknown>>(
             `SELECT l.id,l.background,l.goal,l.background_tags AS "backgroundTags",
               l.domain_tags AS "domainTags",l.it_roles AS "itRoles",l.experience,
               l.exploratory,l.time_zone AS "timeZone",l.weekly_minutes AS "weeklyMinutes"
               FROM principals p JOIN learners l ON l.id=p.id
+              JOIN workspaces w ON w.owner_principal_id=p.id
               WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
-                AND p.expires_at>CURRENT_TIMESTAMP`,
+                AND p.expires_at>clock_timestamp() AND w.deleting_at IS NULL
+              FOR SHARE OF p,w`,
             [hash(token)],
           );
           if (!owner.rows[0]) return { kind: "denied" };
@@ -115,11 +122,23 @@ export function memberExportStore(pool: Pool): MemberExportStore {
             Buffer.byteLength(JSON.stringify(payload)) > MAX_MEMBER_EXPORT_BYTES
           )
             return { kind: "limit" };
+          // CURRENT_TIMESTAMP is frozen at BEGIN; assembly may outlive a session.
+          const current = await client.query(
+            "SELECT id FROM principals WHERE id=$1 AND expires_at>clock_timestamp()",
+            [memberId],
+          );
+          if (!current.rows[0]) return { kind: "denied" };
           await client.query("COMMIT");
           return { kind: "ready", payload };
         } finally {
-          await client.query("ROLLBACK").catch(() => undefined);
-          client.release();
+          let rollbackError: Error | undefined;
+          try {
+            await client.query("ROLLBACK");
+          } catch {
+            // A failed rollback may leave authorization locks on a live client.
+            rollbackError = new Error("Member export rollback failed");
+          }
+          client.release(rollbackError);
         }
       } catch {
         return { kind: "unavailable" };

@@ -29,7 +29,7 @@ async function memberId(context: BrowserContext) {
   return row.rows[0]!.id;
 }
 
-test("[L61] current owner downloads private structured records while another member and expired session cannot", async ({
+test("[L61] current owner downloads private structured records while unrelated, revoked, deleting and expired access is denied", async ({
   page,
   context,
   browser,
@@ -66,6 +66,32 @@ test("[L61] current owner downloads private structured records while another mem
     const other = await otherPage.request.get("/api/member/export");
     expect(other.status()).toBe(200);
     expect((await other.json()).records.milestones).toEqual([]);
+    await pool.query(
+      "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+      [ownerId],
+    );
+    const revoked = await page.request.get("/api/member/export");
+    expect(revoked.status()).toBe(403);
+    expect(await revoked.json()).toEqual({ error: "forbidden" });
+    await pool.query("UPDATE principals SET revoked_at=NULL WHERE id=$1", [
+      ownerId,
+    ]);
+    await pool.query(
+      "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+      [ownerId],
+    );
+    const deleting = await page.request.get("/api/member/export");
+    expect(deleting.status()).toBe(403);
+    expect(await deleting.json()).toEqual({ error: "forbidden" });
+    await pool.query(
+      "UPDATE workspaces SET deleting_at=NULL WHERE owner_principal_id=$1",
+      [ownerId],
+    );
+    const recovered = await page.request.get("/api/member/export");
+    expect(recovered.status()).toBe(200);
+    expect((await recovered.json()).records.milestones).toMatchObject([
+      { milestoneTitle: "Owner-only milestone" },
+    ]);
     await pool.query(
       "UPDATE principals SET expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE id=$1",
       [ownerId],
