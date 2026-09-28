@@ -122,6 +122,7 @@ export async function migrate(pool: Pool) {
       "031-lesson-usefulness.sql",
       "032-private-workflow-feedback.sql",
       "033-synthetic-manual-observations.sql",
+      "034-workflow-improvement-proposals.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

@@ -468,6 +468,68 @@ it("keeps member proposals private and moderation unable to publish", async () =
   await memberPost(`/contribute/${sample.id}/withdraw`, {
     confirm: "yes",
   }).expect(303);
+  const workflowForm = await memberAgent
+    .get("/contribute?workflow=WF-001")
+    .set("Host", host)
+    .expect(200);
+  expect(workflowForm.text).toContain(
+    "Private improvement for WF-001 version 1",
+  );
+  await memberAgent
+    .get("/contribute?workflow=WF-999")
+    .set("Host", host)
+    .expect(404);
+  await memberPost("/contribute", {
+    title: sample.title!,
+    body: sample.body!,
+    sources: sample.sources!,
+    sample_confirmed: "yes",
+    workflow_id: "WF-001",
+    workflow_version: "1",
+  }).expect(303);
+  expect(proposals.createDraft).toHaveBeenLastCalledWith(
+    expect.any(String),
+    { title: sample.title, body: sample.body, sources: sample.sources },
+    true,
+    { id: "WF-001", version: 1 },
+  );
+  proposals.createDraft.mockResolvedValueOnce(null);
+  await memberPost("/contribute", {
+    title: sample.title!,
+    body: sample.body!,
+    sources: sample.sources!,
+    sample_confirmed: "yes",
+    workflow_id: "WF-001",
+    workflow_version: "1.0",
+  }).expect(422);
+  expect(proposals.createDraft).toHaveBeenLastCalledWith(
+    expect.any(String),
+    expect.any(Object),
+    true,
+    { id: "WF-001", version: Number.NaN },
+  );
+  proposals.preview.mockResolvedValue({
+    ...sample,
+    workflowId: "WF-001",
+    workflowVersion: 1,
+  });
+  await memberAgent
+    .get(`/contribute/${sample.id}`)
+    .set("Host", host)
+    .expect(200)
+    .then((response) =>
+      expect(response.text).toContain("Workflow reference: WF-001 version 1"),
+    );
+  proposals.preview.mockResolvedValue({
+    ...sample,
+    workflowId: "WF-999",
+    workflowVersion: 1,
+  });
+  await memberAgent
+    .get(`/contribute/${sample.id}`)
+    .set("Host", host)
+    .expect(200)
+    .then((response) => expect(response.text).toContain("no longer current"));
 });
 it("shows honest track states and restricts the expert evidence roster", async () => {
   const tracks = disabledTrackStore();

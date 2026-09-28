@@ -1005,22 +1005,48 @@ export function app(
     }
     res.redirect(303, "/circles");
   });
-  app.get("/contribute", async (_req, res) =>
+  app.get("/contribute", async (req, res) => {
+    const workflowId = req.query.workflow;
+    const workflow =
+      typeof workflowId === "string" ? await workflowBundle(workflowId) : null;
+    if (workflowId !== undefined && !workflow) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Workflow unavailable",
+            "Choose a current sample workflow.",
+          ),
+        );
+      return;
+    }
     res.send(
       proposalListPage(
         await proposals.owned(res.locals.token as string),
         res.locals.csrf as string,
+        workflow,
       ),
-    ),
-  );
+    );
+  });
   app.post("/contribute", async (req, res) => {
     const fields = req.body as Fields;
     const value = (name: string) =>
       typeof fields[name] === "string" ? (fields[name] as string) : "";
+    const workflow =
+      Object.hasOwn(fields, "workflow_id") ||
+      Object.hasOwn(fields, "workflow_version")
+        ? {
+            id: value("workflow_id"),
+            version: /^[1-9][0-9]*$/.test(value("workflow_version"))
+              ? Number(value("workflow_version"))
+              : Number.NaN,
+          }
+        : undefined;
     const id = await proposals.createDraft(
       res.locals.token as string,
       { title: value("title"), body: value("body"), sources: value("sources") },
       fields.sample_confirmed === "yes",
+      workflow,
     );
     if (!id) {
       res
@@ -1028,7 +1054,7 @@ export function app(
         .send(
           errorPage(
             "Proposal not saved",
-            "Use sample information and complete every field.",
+            "Use sample information and complete every field. If this was a workflow improvement, reopen its current version before saving.",
           ),
         );
       return;
@@ -1051,7 +1077,16 @@ export function app(
         );
       return;
     }
-    res.send(proposalPreviewPage(proposal, res.locals.csrf as string));
+    const current = proposal.workflowId
+      ? await workflowBundle(proposal.workflowId)
+      : null;
+    res.send(
+      proposalPreviewPage(
+        proposal,
+        res.locals.csrf as string,
+        !proposal.workflowId || current?.version === proposal.workflowVersion,
+      ),
+    );
   });
   app.post("/contribute/:id/submit", async (req, res) => {
     if (

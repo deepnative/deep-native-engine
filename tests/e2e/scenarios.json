@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v39",
+  "version": "initial-learning-v40",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans and optional eligible current published sample-lesson recommendations, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts and immutable local submission revisions, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations with owner-only exact-version private feedback, private versioned synthetic lesson activity and member-private exact-version usefulness self-reports with a suppressed operator-only coarse snapshot, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity; platform-admin-only synthetic manual observation register with no paid state or entitlement",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans and optional eligible current published sample-lesson recommendations, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts and immutable local submission revisions, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations with owner-only exact-version private feedback and private version-pinned improvement proposals, private versioned synthetic lesson activity and member-private exact-version usefulness self-reports with a suppressed operator-only coarse snapshot, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity; platform-admin-only synthetic manual observation register with no paid state or entitlement",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -659,6 +659,15 @@
       "steps": "Reject an incomplete rubric pair, author and publish an invented assignment rubric from the staff form, then publish a revised content/rubric version and inspect both versions and member access",
       "expected": "Invalid draft is not stored; only an editor creates the exact versioned rubric, the member sees the latest published pair, earlier version stays immutable, and no formal assessment or qualified approval is claimed",
       "issues": [97, 323],
+      "critical": true
+    },
+    {
+      "id": "L74",
+      "actor": "General learner, other-profession learner, moderator and reviewer",
+      "preconditions": "Three file-backed synthetic workflow drafts and existing private proposal moderation",
+      "steps": "Choose one workflow, reject a forged version, save a private exact-version improvement, inspect owner export and outsider denial, submit to private moderation, reject replay and reviewer read, then withdraw and inspect redaction",
+      "expected": "Only a current workflow version accepts the private proposal; owner and moderator see the pinned reference at appropriate states, outsiders and reviewer cannot read it, withdrawal removes text/reference and no publication is possible",
+      "issues": [115, 325],
       "critical": true
     }
   ],
