@@ -22,13 +22,24 @@ test("[L24] foundation and coaching hypotheses agree across page and server", as
   ).toBeVisible();
   await expect(page.getByText("NO LIVE PURCHASE")).toBeVisible();
   await expect(
-    page.getByText("pending owner approval", { exact: false }),
+    page.getByText("approved a no-purchase private/local preview", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("production terms remain undecided", { exact: false }),
   ).toBeVisible();
   const response = await page.request.get("/api/offer-hypotheses");
   expect(response.ok()).toBe(true);
   const catalog = await response.json();
+  expect(catalog.foundation.interimDecision).toBe(
+    "approved-no-purchase-private-preview",
+  );
   expect(catalog.foundation.live).toBe("pending-owner-decision");
+  expect(catalog.foundation.liveActivationEnabled).toBe(false);
   expect(catalog.foundation.priceCents).toBeNull();
+  expect(catalog.foundation.participationLimit).toBeNull();
+  expect(catalog.foundation.aiAllowance).toBeNull();
   for (const offer of catalog.coaching) {
     expect(offer.livePurchasable).toBe(false);
     await expect(

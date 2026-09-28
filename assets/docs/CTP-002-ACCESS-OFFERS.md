@@ -1,10 +1,10 @@
 # CTP-002: learning access and optional coaching hypotheses
 
-Date: 2026-09-23. Scope: local synthetic preview and read-only offer planning. Accountable GitHub owner: `netcsc`. Review and owner approval are pending. Source: [current product direction](PRODUCT-DIRECTION.md), [CTP-001 architecture audit](CTP-001-ARCHITECTURE-AUDIT.md), live [CTP-002 #19](https://github.com/deepnative/deep-native-engine/issues/19), and the immutable 15 September 2026 source package.
+Date: 2026-09-23; interim decision recorded 2026-09-26. Scope: local synthetic preview and read-only offer planning. Accountable GitHub owner: `netcsc`. Production terms and qualified review are pending. Source: [current product direction](PRODUCT-DIRECTION.md), [CTP-001 architecture audit](CTP-001-ARCHITECTURE-AUDIT.md), live [CTP-002 #19](https://github.com/deepnative/deep-native-engine/issues/19), [owner decision in #95](https://github.com/deepnative/deep-native-engine/issues/95), and the immutable 15 September 2026 source package.
 
 ## Boundary
 
-The common learning and participation foundation is a product path for IT, other professionals and general learners. A learner's background is descriptive; `professional` is neither a paid plan nor a staff permission. The only implemented access in this slice is the existing loopback preview using sample information. Live foundation admission, services, AI, participation limits and price are **pending owner decision**. No free tier or unbudgeted entitlement is implied.
+The common learning and participation foundation is a product path for IT, other professionals and general learners. A learner's background is descriptive; `professional` is neither a paid plan nor a staff permission. On 26 September 2026, the owner approved an **interim no-purchase private/local preview** using sample information for all three audiences. Live activation and paid allowances remain disabled. Production foundation eligibility, free/paid/subsidized price, participation and AI limits, budget, legal/payment terms and qualified capacity still need separate approval under #95. No permanent free tier or unbudgeted entitlement is implied.
 
 The six coaching rows in [`src/offers.ts`](../../src/offers.ts) are immutable **hypothesis version `2026-09-15-hypothesis-v1`**. All are `livePurchasable: false`. The read-only [`/readiness/offers`](../../src/app.ts) page and `/api/offer-hypotheses` expose the same catalog for planning and QA. They do not implement an acceptance, checkout, credit ledger or live grant. There is no live offer activation path in this slice. Before a future version can be sold, owners must approve the exact terms and version, foundation access rules, capacity, tax/payment behavior and buyer-facing disclosures, then implement and test a separate purchase/grant workflow. A UI label or annual prepayment must never itself issue credits.
 
@@ -27,7 +27,7 @@ All amounts are **integer CAD cents** in code; the table displays CAD. Monthly f
 
 | Decision needed | Current state | Consequence |
 | --- | --- | --- |
-| Who may receive hosted foundation and participation access, with what price/subsidy, usage limits, AI allowance and moderation/support budget? | Pending | No live foundation grant; local sample preview only. |
+| Who may receive hosted foundation and participation access, with what price/subsidy, usage limits, AI allowance and moderation/support budget? | Interim no-purchase private/local sample preview approved 2026-09-26; production terms pending | No live foundation grant or purchase; sample preview only. |
 | Which coaching versions, if any, may be offered; exact service definitions, availability, cancellation/refund terms, payment schedule, taxes and disclosures? | Pending | Every row remains a nonpurchasable hypothesis. |
 | Is there qualified coach/reviewer/support coverage for each promised unit and relevant audience/specialty? | Unconfirmed; see [PLAN-003 capacity operations](PLAN-003-CAPACITY-OPERATIONS.md) | No paid promise or service booking. |
 | How will accepted terms, payment events, monthly credit issuance, failed installments, refunds and late return be persisted and audited? | Future implementation; see CTP-011/CTP-017 and ROADMAP-04 | No sale, charge or credit ledger in this slice. |

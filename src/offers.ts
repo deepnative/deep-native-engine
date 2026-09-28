@@ -2,7 +2,9 @@
 // access, reserves staff time, charges a card, or activates a live offer.
 export const FOUNDATION_ACCESS = Object.freeze({
   preview: "synthetic-local-only",
+  interimDecision: "approved-no-purchase-private-preview",
   live: "pending-owner-decision",
+  liveActivationEnabled: false,
   priceCents: null,
   participationLimit: null,
   aiAllowance: null,

@@ -8,10 +8,12 @@ import {
 } from "../../src/offers.ts";
 
 describe("separate access and coaching hypotheses", () => {
-  it("does not turn the local foundation preview into an approved live tier", () => {
+  it("records the approved no-purchase preview without approving production terms", () => {
     expect(FOUNDATION_ACCESS).toMatchObject({
       preview: "synthetic-local-only",
+      interimDecision: "approved-no-purchase-private-preview",
       live: "pending-owner-decision",
+      liveActivationEnabled: false,
       priceCents: null,
       participationLimit: null,
       aiAllowance: null,
