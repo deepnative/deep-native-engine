@@ -11,6 +11,7 @@ import {
   privateProgressPage,
   evidencePage,
   localAiConsentPage,
+  localAiControlPage,
   evidenceRevisionPage,
   lesson,
   readinessPage,
@@ -74,6 +75,7 @@ import {
   disabledLocalAiConsentStore,
   type LocalAiConsentStore,
 } from "./local-ai-consent.ts";
+import type { LocalAiControlStore } from "./local-ai-control.ts";
 import { FOUNDATION_ACCESS, COACHING_OFFERS } from "./offers.ts";
 import {
   disabledCatalogStore,
@@ -135,6 +137,7 @@ export function app(
     authorization?: AuthorizationStore;
     evidence?: EvidenceStore;
     localAiConsent?: LocalAiConsentStore;
+    localAiControl?: LocalAiControlStore;
     catalog?: CatalogStore;
     tracks?: TrackStore;
     proposals?: ProposalStore;
@@ -157,6 +160,11 @@ export function app(
   const evidence = options.evidence ?? disabledEvidenceStore();
   const localAiConsent =
     options.localAiConsent ?? disabledLocalAiConsentStore();
+  const localAiControl: LocalAiControlStore = options.localAiControl ?? {
+    current: async () => "unavailable",
+    read: async () => null,
+    set: async () => false,
+  };
   const catalog = options.catalog ?? disabledCatalogStore();
   const tracks = options.tracks ?? disabledTrackStore();
   const proposals = options.proposals ?? disabledProposalStore();
@@ -273,6 +281,67 @@ export function app(
       return;
     }
     res.json(snapshot);
+  });
+  app.get("/operator/local-ai", async (_req, res) => {
+    if (mode === "live") {
+      res
+        .status(404)
+        .send(errorPage("Unavailable", "This preview is disabled."));
+      return;
+    }
+    const state = await localAiControl.read(res.locals.token as string);
+    if (!state) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Control unavailable",
+            "Platform administrator access is required.",
+          ),
+        );
+      return;
+    }
+    res.send(localAiControlPage(state.paused, res.locals.csrf as string));
+  });
+  app.post("/operator/local-ai", async (req, res) => {
+    if (mode === "live") {
+      res
+        .status(404)
+        .send(errorPage("Unavailable", "This preview is disabled."));
+      return;
+    }
+    const fields = req.body as Fields;
+    if (
+      (fields.state !== "paused" && fields.state !== "enabled") ||
+      fields.confirm !== "yes"
+    ) {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Control unchanged",
+            "Choose and confirm an explicit local simulation state.",
+          ),
+        );
+      return;
+    }
+    if (
+      !(await localAiControl.set(
+        res.locals.token as string,
+        fields.state === "paused",
+      ))
+    ) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Control unavailable",
+            "Platform administrator access is required.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/operator/local-ai");
   });
   app.get("/operator/test-receipts", async (_req, res) => {
     if (mode === "live") {
@@ -772,6 +841,8 @@ export function app(
       localAiConsentPage(
         await localAiConsent.list(res.locals.token as string),
         res.locals.csrf as string,
+        [],
+        await localAiControl.current(),
       ),
     );
   });
@@ -842,12 +913,15 @@ export function app(
       receiptId,
     );
     if (outcome.kind !== "queued") {
+      const paused = (await localAiControl.current()) === "paused";
       res
         .status(outcome.kind === "conflict" ? 409 : 403)
         .send(
           errorPage(
             "Local simulation unavailable",
-            "Refresh the page and check the exact-source permission.",
+            paused
+              ? "Local simulations are paused. No new local job was queued."
+              : "Refresh the page and check the exact-source permission.",
           ),
         );
       return;
@@ -860,12 +934,15 @@ export function app(
       req.params.jobId as string,
     );
     if (outcome.kind !== "completed") {
+      const paused = (await localAiControl.current()) === "paused";
       res
         .status(outcome.kind === "unavailable" ? 409 : 403)
         .send(
           errorPage(
             "Local simulation unavailable",
-            "Refresh the page. No live AI provider was contacted.",
+            paused
+              ? "Local simulations are paused. This attempt will not retry automatically."
+              : "Refresh the page. No live AI provider was contacted.",
           ),
         );
       return;

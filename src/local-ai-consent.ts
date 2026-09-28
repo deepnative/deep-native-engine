@@ -4,6 +4,7 @@ import { hash } from "./store.ts";
 import { MAX_EVIDENCE_BYTES, type ObjectStorage } from "./evidence.ts";
 import { validateAdapterResult, type AdapterRegistry } from "./adapters.ts";
 import { requestFingerprint } from "./jobs.ts";
+import { localAiEnabled } from "./local-ai-control.ts";
 
 export const LOCAL_AI_PURPOSE = "evidence-summary-local-v1";
 export const LOCAL_AI_STATEMENT_VERSION = "local-simulation-v1";
@@ -139,7 +140,8 @@ export function localAiConsentStore(
     id: string,
     withdrawing = false,
   ) {
-    // Global order: principal SHARE -> workspace SHARE -> source UPDATE ->
+    // Queue/dispatch first lock local control SHARE, then all paths use
+    // principal SHARE -> workspace SHARE -> source UPDATE ->
     // receipt UPDATE -> job UPDATE. UPDATE on the source also fences new revisions
     // (their lineage trigger takes SHARE). Recheck the leaf after any lock wait.
     const principal = (
@@ -370,6 +372,7 @@ export function localAiConsentStore(
       return transaction<
         { kind: "queued"; jobId: string } | { kind: "denied" | "conflict" }
       >({ kind: "denied" }, async (client) => {
+        if (!(await localAiEnabled(client))) return { kind: "denied" };
         const authorization = await receipt(client, token, id);
         if (
           !authorization ||
@@ -418,6 +421,7 @@ export function localAiConsentStore(
       const claim = await transaction<
         { attempt: string } | { status: string } | null
       >(null, async (client) => {
+        if (!(await localAiEnabled(client))) return null;
         const authorized = await authorizedJob(client, token, id);
         if (!authorized) return null;
         const { job } = authorized;
@@ -456,6 +460,9 @@ export function localAiConsentStore(
         jobId?: string;
         status?: string;
       }>({ kind: "unavailable" }, async (client) => {
+        // A pause between claim and execution keeps the durable running attempt
+        // held. Resume must never reset or replay this uncertain attempt.
+        if (!(await localAiEnabled(client))) return { kind: "unavailable" };
         const authorized = await authorizedJob(client, token, id);
         if (
           !authorized ||

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import { testPool } from "../support/database.ts";
 import { migrate, store } from "../../src/store.ts";
 import { jobStore, requestFingerprint } from "../../src/jobs.ts";
@@ -688,4 +688,374 @@ it("dispatch that wins revision creation commits once, then the revision permane
   await evidence.remove(own.token, next.evidenceId);
   expect(await local.run(own.token, own.jobId)).toEqual({ kind: "denied" });
   expect(execute).toHaveBeenCalledTimes(1);
+});
+
+it("persisted pause rejects new queue requests and stale pending dispatch without invoking the adapter", async () => {
+  const own = await queued();
+  await pool.query(
+    "UPDATE local_ai_control SET paused=true WHERE singleton=true",
+  );
+  try {
+    expect(await local.enqueue(own.token, own.receiptId, randomUUID())).toEqual(
+      { kind: "denied" },
+    );
+    expect(await local.run(own.token, own.jobId)).toEqual({ kind: "denied" });
+    expect(execute).not.toHaveBeenCalled();
+    expect(
+      (
+        await pool.query(
+          "SELECT status,attempt_count FROM adapter_jobs WHERE id=$1",
+          [own.jobId],
+        )
+      ).rows[0],
+    ).toEqual({ status: "pending", attempt_count: 0 });
+  } finally {
+    await pool.query(
+      "UPDATE local_ai_control SET paused=false WHERE singleton=true",
+    );
+  }
+});
+
+import { localAiControlStore } from "../../src/local-ai-control.ts";
+import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+const control = localAiControlStore(pool);
+afterEach(async () => {
+  await pool.query(
+    "UPDATE local_ai_control SET paused=false WHERE singleton=true",
+  );
+});
+async function staff(role: StaffRole = "platform_admin") {
+  const token = randomBytes(32).toString("hex");
+  const id = await authorizationStore(pool).provisionStaff(
+    token,
+    role,
+    new Date(Date.now() + 60_000),
+  );
+  return { token, id };
+}
+beforeEach(async () => {
+  await pool.query(
+    "INSERT INTO local_ai_control(singleton,paused) VALUES(true,false) ON CONFLICT(singleton) DO UPDATE SET paused=false",
+  );
+});
+it("only active platform admins can read or change persistent idempotent pause state", async () => {
+  const admin = await staff();
+  expect(await control.current()).toBe("enabled");
+  expect(await control.read(admin.token)).toEqual({ paused: false });
+  for (const identity of [
+    await member(),
+    await staff("reviewer"),
+    await staff("operator"),
+    { token: "unknown" },
+  ]) {
+    expect(await control.read(identity.token)).toBeNull();
+    expect(await control.set(identity.token, true)).toBe(false);
+  }
+  expect(await control.set(admin.token, true)).toBe(true);
+  expect(await control.set(admin.token, true)).toBe(true);
+  await migrate(pool);
+  expect(
+    (await pool.query("SELECT version FROM schema_migrations WHERE version=40"))
+      .rows,
+  ).toEqual([{ version: 40 }]);
+  expect(await localAiControlStore(pool).read(admin.token)).toEqual({
+    paused: true,
+  });
+  expect(await control.current()).toBe("paused");
+  await pool.query(
+    "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+    [admin.id],
+  );
+  expect(await control.set(admin.token, false)).toBe(false);
+  const expired = await staff();
+  await pool.query(
+    "UPDATE principals SET expires_at=clock_timestamp() WHERE id=$1",
+    [expired.id],
+  );
+  expect(await control.set(expired.token, false)).toBe(false);
+});
+it("missing control row denies dispatch, queue and admin changes without touching permission or another job", async () => {
+  const own = await queued();
+  const other = await queued();
+  const admin = await staff();
+  await pool.query("DELETE FROM local_ai_control");
+  await migrate(pool);
+  expect(await control.current()).toBe("unavailable");
+  expect(await control.read(admin.token)).toBeNull();
+  expect(await control.set(admin.token, false)).toBe(false);
+  expect(await local.enqueue(own.token, own.receiptId, randomUUID())).toEqual({
+    kind: "denied",
+  });
+  expect(await local.run(own.token, own.jobId)).toEqual({ kind: "denied" });
+  expect(execute).not.toHaveBeenCalled();
+  expect(
+    (
+      await pool.query(
+        "SELECT status,attempt_count FROM adapter_jobs WHERE id=$1",
+        [other.jobId],
+      )
+    ).rows[0],
+  ).toEqual({ status: "pending", attempt_count: 0 });
+  expect(await local.withdraw(own.token, own.receiptId)).toBe(true);
+});
+it("pause wins the control row before pending dispatch, which makes zero adapter calls", async () => {
+  const own = await queued();
+  const blocker = await pool.connect();
+  try {
+    await blocker.query("BEGIN");
+    const pid = (await blocker.query("SELECT pg_backend_pid() AS pid")).rows[0]
+      .pid as number;
+    await blocker.query(
+      "UPDATE local_ai_control SET paused=true WHERE singleton=true",
+    );
+    const running = local.run(own.token, own.jobId);
+    await waitForDispatchBlock(
+      pid,
+      "SELECT paused FROM local_ai_control%FOR SHARE",
+    );
+    expect(execute).not.toHaveBeenCalled();
+    await blocker.query("COMMIT");
+    expect(await running).toEqual({ kind: "denied" });
+    expect(
+      (
+        await pool.query(
+          "SELECT status,attempt_count FROM adapter_jobs WHERE id=$1",
+          [own.jobId],
+        )
+      ).rows[0],
+    ).toEqual({ status: "pending", attempt_count: 0 });
+  } finally {
+    await blocker.query("ROLLBACK");
+    blocker.release();
+  }
+});
+it("dispatch wins: admin pause blocks until the bounded invocation commits success", async () => {
+  const own = await queued();
+  const admin = await staff();
+  const entered = latch();
+  const finish = latch();
+  execute.mockImplementation(async (...args) => {
+    entered.resolve();
+    await finish.promise;
+    return registry.adapter("ai", "test").execute(...args);
+  });
+  const observed = observedDispatch();
+  const running = observed.service.run(own.token, own.jobId);
+  await entered.promise;
+  const pausing = control.set(admin.token, true);
+  try {
+    await waitForDispatchBlock(
+      observed.backend.pid,
+      "SELECT paused FROM local_ai_control%FOR UPDATE",
+    );
+    expect(await control.current()).toBe("enabled");
+  } finally {
+    finish.resolve();
+  }
+  expect(await running).toMatchObject({
+    kind: "completed",
+    status: "succeeded",
+  });
+  expect(await pausing).toBe(true);
+  expect(await control.current()).toBe("paused");
+  expect(execute).toHaveBeenCalledTimes(1);
+});
+it("pause between durable claim and execution holds the attempt through resume without retry", async () => {
+  const own = await queued();
+  const admin = await staff();
+  let connections = 0;
+  const interrupted = localAiConsentStore(
+    {
+      async connect() {
+        if (++connections === 2)
+          expect(await control.set(admin.token, true)).toBe(true);
+        return pool.connect();
+      },
+    } as unknown as typeof pool,
+    objects,
+    {
+      mode: "test",
+      adapter: () => ({ ...registry.adapter("ai", "test"), execute }),
+    },
+  );
+  expect(await interrupted.run(own.token, own.jobId)).toEqual({
+    kind: "unavailable",
+  });
+  expect(
+    (
+      await pool.query(
+        "SELECT status,attempt_count FROM adapter_jobs WHERE id=$1",
+        [own.jobId],
+      )
+    ).rows[0],
+  ).toEqual({ status: "running", attempt_count: 1 });
+  expect(await control.set(admin.token, false)).toBe(true);
+  expect(await local.run(own.token, own.jobId)).toMatchObject({
+    kind: "unavailable",
+    status: "running",
+  });
+  expect(execute).not.toHaveBeenCalled();
+  await pool.query(
+    "UPDATE adapter_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1",
+    [own.jobId],
+  );
+  expect(await local.run(own.token, own.jobId)).toMatchObject({
+    kind: "unavailable",
+    status: "needs_reconciliation",
+  });
+  expect(execute).not.toHaveBeenCalled();
+});
+it("resume preserves withdrawals and pending work waits for a fresh explicit dispatch", async () => {
+  const own = await queued();
+  const other = await queued();
+  const admin = await staff();
+  expect(await control.set(admin.token, true)).toBe(true);
+  expect(await local.withdraw(own.token, own.receiptId)).toBe(true);
+  expect(await control.set(admin.token, false)).toBe(true);
+  expect(execute).not.toHaveBeenCalled();
+  expect(await local.run(own.token, own.jobId)).toEqual({ kind: "denied" });
+  expect(await local.run(other.token, other.jobId)).toMatchObject({
+    kind: "completed",
+  });
+  expect(execute).toHaveBeenCalledTimes(1);
+});
+
+it("queue waits behind a committed pause and creates no additional job", async () => {
+  const own = await granted();
+  const blocker = await pool.connect();
+  try {
+    await blocker.query("BEGIN");
+    const pid = (await blocker.query("SELECT pg_backend_pid() AS pid")).rows[0]
+      .pid as number;
+    await blocker.query(
+      "UPDATE local_ai_control SET paused=true WHERE singleton=true",
+    );
+    const enqueuing = local.enqueue(own.token, own.receiptId, randomUUID());
+    await waitForDispatchBlock(
+      pid,
+      "SELECT paused FROM local_ai_control%FOR SHARE",
+    );
+    await blocker.query("COMMIT");
+    expect(await enqueuing).toEqual({ kind: "denied" });
+    expect(
+      (await pool.query("SELECT count(*)::int AS n FROM adapter_jobs")).rows[0]
+        .n,
+    ).toBe(0);
+  } finally {
+    await blocker.query("ROLLBACK");
+    blocker.release();
+  }
+});
+
+it("admin role revocation wins a profile lock wait and prevents the pause change", async () => {
+  const admin = await staff();
+  const blocker = await pool.connect();
+  try {
+    await blocker.query("BEGIN");
+    const pid = (await blocker.query("SELECT pg_backend_pid() AS pid")).rows[0]
+      .pid as number;
+    await blocker.query(
+      "UPDATE staff_profiles SET role='operator' WHERE principal_id=$1",
+      [admin.id],
+    );
+    const pausing = control.set(admin.token, true);
+    await waitForDispatchBlock(pid, "SELECT p.id%FOR SHARE OF p,s");
+    await blocker.query("COMMIT");
+    expect(await pausing).toBe(false);
+    expect(await control.current()).toBe("enabled");
+  } finally {
+    await blocker.query("ROLLBACK");
+    blocker.release();
+  }
+});
+
+it("admin expiry after a profile lock wait is rechecked before mutation", async () => {
+  const admin = await staff();
+  await pool.query(
+    "UPDATE principals SET expires_at=clock_timestamp()+interval '1 second' WHERE id=$1",
+    [admin.id],
+  );
+  const blocker = await pool.connect();
+  try {
+    await blocker.query("BEGIN");
+    const pid = (await blocker.query("SELECT pg_backend_pid() AS pid")).rows[0]
+      .pid as number;
+    await blocker.query(
+      "SELECT 1 FROM staff_profiles WHERE principal_id=$1 FOR UPDATE",
+      [admin.id],
+    );
+    const pausing = control.set(admin.token, true);
+    await waitForDispatchBlock(pid, "SELECT p.id%FOR SHARE OF p,s");
+    for (;;) {
+      const expired = (
+        await pool.query(
+          "SELECT expires_at<=clock_timestamp() AS expired FROM principals WHERE id=$1",
+          [admin.id],
+        )
+      ).rows[0].expired;
+      if (expired) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    await blocker.query("COMMIT");
+    expect(await pausing).toBe(false);
+    expect(await control.current()).toBe("enabled");
+  } finally {
+    await blocker.query("ROLLBACK");
+    blocker.release();
+  }
+});
+
+for (const target of ["principal", "profile"] as const) {
+  it(`admin change holds its ${target} authorization lock through commit`, async () => {
+    const admin = await staff();
+    const entered = latch();
+    const finish = latch();
+    let pid = 0;
+    const service = localAiControlStore({
+      async connect() {
+        const client = await pool.connect();
+        pid = (await client.query("SELECT pg_backend_pid() AS pid")).rows[0]
+          .pid as number;
+        return {
+          release: client.release.bind(client),
+          async query(sql: string, args?: unknown[]) {
+            if (sql.startsWith("UPDATE local_ai_control")) {
+              entered.resolve();
+              await finish.promise;
+            }
+            return client.query(sql, args);
+          },
+        };
+      },
+    } as unknown as typeof pool);
+    const pausing = service.set(admin.token, true);
+    await entered.promise;
+    const sql =
+      target === "principal"
+        ? "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1"
+        : "UPDATE staff_profiles SET role='operator' WHERE principal_id=$1";
+    const revoking = pool.query(sql, [admin.id]);
+    try {
+      await waitForDispatchBlock(pid, sql.replace("$1", "%"));
+    } finally {
+      finish.resolve();
+    }
+    expect(await pausing).toBe(true);
+    await revoking;
+    expect(await control.current()).toBe("paused");
+    expect(await control.set(admin.token, false)).toBe(false);
+  });
+}
+
+it("database constraints reject malformed and duplicate switch state", async () => {
+  await expect(
+    pool.query("UPDATE local_ai_control SET paused=NULL"),
+  ).rejects.toMatchObject({ code: "23502" });
+  await expect(
+    pool.query("INSERT INTO local_ai_control VALUES(false,false)"),
+  ).rejects.toMatchObject({ code: "23514" });
+  await expect(
+    pool.query("INSERT INTO local_ai_control VALUES(true,true)"),
+  ).rejects.toMatchObject({ code: "23505" });
+  expect(await control.current()).toBe("enabled");
 });
