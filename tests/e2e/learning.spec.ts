@@ -856,11 +856,40 @@ test("[L16] staff assignments expire or revoke and purpose-bound support reads a
   expect(
     (
       await pool.query(
-        "SELECT count(*) FROM authorization_audit WHERE support_access_id=$1",
+        "SELECT count(*) FROM authorization_audit WHERE grant_type='support' AND grant_id=$1 AND action='workspace_read'",
         [supportGrant],
       )
     ).rows[0].count,
   ).toBe("1");
+  const coachEvents = (
+    await pool.query(
+      "SELECT action,actor_id,staff_id FROM authorization_audit WHERE grant_id=$1 ORDER BY id",
+      [coachGrant],
+    )
+  ).rows;
+  expect(coachEvents).toEqual([
+    { action: "grant_created", actor_id: admin.id, staff_id: coach.id },
+    { action: "workspace_read", actor_id: coach.id, staff_id: coach.id },
+    { action: "workspace_read", actor_id: coach.id, staff_id: coach.id },
+    { action: "grant_revoked", actor_id: admin.id, staff_id: coach.id },
+  ]);
+  const audit = JSON.stringify(
+    (
+      await pool.query(
+        "SELECT * FROM authorization_audit WHERE workspace_id=$1",
+        [owner.id],
+      )
+    ).rows,
+  );
+  for (const privateValue of [
+    instruction,
+    verification,
+    "resolve browser case",
+    "coach assigned lesson",
+    operator.token,
+    coach.token,
+  ])
+    expect(audit).not.toContain(privateValue);
 });
 
 test("[L17] cohort membership exposes only its shared content and cannot grant staff privilege", async ({

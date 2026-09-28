@@ -1545,6 +1545,92 @@ it("backfills and safely reruns authorization migration over populated learning 
     await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
   }
 });
+it("staff audit sanitizes and preserves historical support reads on repeated migration", async () => {
+  const schema = `migration_${randomBytes(8).toString("hex")}`;
+  const client = await pool.connect();
+  try {
+    await client.query(`CREATE SCHEMA "${schema}"`);
+    await client.query(`SET search_path TO "${schema}"`);
+    const initial = await readFile(
+      new URL("../../migrations/001-learning.sql", import.meta.url),
+      "utf8",
+    );
+    const authorization = await readFile(
+      new URL(
+        "../../migrations/003-workspace-authorization.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const auditMigration = await readFile(
+      new URL(
+        "../../migrations/035-staff-authorization-audit.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const ownerId = randomUUID(),
+      targetId = randomUUID(),
+      grantId = randomUUID();
+    await client.query(initial);
+    await client.query(
+      `INSERT INTO learners(id,token_hash,background,goal,expires_at)
+      VALUES($1,$2,'explorer','everyday',CURRENT_TIMESTAMP+INTERVAL '1 day')`,
+      [ownerId, hash(randomBytes(32).toString("hex"))],
+    );
+    await client.query(authorization);
+    await client.query(
+      `INSERT INTO principals(id,token_hash,kind,expires_at)
+      VALUES($1,$2,'staff',CURRENT_TIMESTAMP+INTERVAL '1 day')`,
+      [targetId, hash(randomBytes(32).toString("hex"))],
+    );
+    await client.query(
+      "INSERT INTO staff_profiles(principal_id,role) VALUES($1,'operator')",
+      [targetId],
+    );
+    await client.query(
+      `INSERT INTO support_access_grants(id,staff_id,staff_role,workspace_id,purpose,expires_at,granted_by)
+      VALUES($1,$2,'operator',$3,'Synthetic legacy private purpose',CURRENT_TIMESTAMP+INTERVAL '1 hour',$2)`,
+      [grantId, targetId, ownerId],
+    );
+    const previous = (
+      await client.query(
+        `INSERT INTO authorization_audit(staff_id,workspace_id,support_access_id,action,purpose)
+      VALUES($1,$2,$3,'support_content_read','Synthetic legacy private purpose') RETURNING id,occurred_at`,
+        [targetId, ownerId, grantId],
+      )
+    ).rows[0];
+    await client.query(auditMigration);
+    await client.query(auditMigration);
+    expect(
+      (await client.query("SELECT * FROM authorization_audit")).rows,
+    ).toEqual([
+      {
+        id: previous.id,
+        occurred_at: previous.occurred_at,
+        actor_id: targetId,
+        staff_id: targetId,
+        workspace_id: ownerId,
+        grant_type: "support",
+        grant_id: grantId,
+        action: "support_content_read",
+      },
+    ]);
+    await expect(
+      client.query("DELETE FROM authorization_audit"),
+    ).rejects.toThrow("immutable");
+    await client.query("DELETE FROM principals WHERE id=$1", [ownerId]);
+    expect(
+      (await client.query("SELECT * FROM authorization_audit")).rows,
+    ).toEqual([]);
+  } finally {
+    await client.query("ROLLBACK");
+    await client.query("RESET search_path");
+    client.release();
+    await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+  }
+});
+
 it("persists drafts and completions across independent database connections and migrations", async () => {
   const { learner, token } = await member();
   await db.save(learner.id, { ...input, complete: false });
@@ -1696,6 +1782,115 @@ async function staff(role: StaffRole) {
       role,
       new Date(Date.now() + 86_400_000),
     ),
+  };
+}
+
+type AuditGrantType = "assignment" | "support" | "evidence_review";
+async function staffAuditFixture(type: AuditGrantType) {
+  const owner = await member(),
+    other = await member(),
+    admin = await staff("platform_admin"),
+    target = await staff(
+      type === "assignment"
+        ? "coach"
+        : type === "support"
+          ? "operator"
+          : "reviewer",
+    ),
+    access = authorizationStore(pool),
+    purpose = "Synthetic private audit test purpose",
+    future = new Date(Date.now() + 60_000);
+  let assignmentId = "",
+    submissionId = "";
+  if (type === "evidence_review") {
+    assignmentId = await access.grantAssignment(
+      admin.id,
+      target.id,
+      owner.learner.id,
+      "reviewer",
+      purpose,
+      future,
+    );
+    const evidence = evidenceStore(
+      pool,
+      fileObjectStorage(privateStorageRoot),
+      "integration-secret",
+    );
+    const uploaded = await evidence.upload(owner.token, {
+      name: "synthetic-audit.txt",
+      mediaType: "text/plain",
+      data: Buffer.from("Synthetic evidence bytes excluded from audit"),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    });
+    if (uploaded.kind !== "created") throw new Error("evidence not created");
+    expect(await evidence.transitionQuarantine(uploaded.id, "clean")).toBe(
+      true,
+    );
+    expect(await evidence.submitForReview(owner.token, uploaded.id)).toBe(true);
+    submissionId = (
+      await pool.query<{ id: string }>(
+        "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+        [uploaded.id],
+      )
+    ).rows[0]!.id;
+  }
+  return {
+    owner,
+    other,
+    admin,
+    target,
+    access,
+    purpose,
+    table:
+      type === "assignment"
+        ? "assignment_grants"
+        : type === "support"
+          ? "support_access_grants"
+          : "reviewer_evidence_grants",
+    create(actor = admin.id, expires = future) {
+      if (type === "assignment")
+        return access.grantAssignment(
+          actor,
+          target.id,
+          owner.learner.id,
+          "coach",
+          purpose,
+          expires,
+        );
+      if (type === "support")
+        return access.grantSupport(
+          actor,
+          target.id,
+          owner.learner.id,
+          "operator",
+          purpose,
+          expires,
+        );
+      return access.grantEvidenceReview(
+        actor,
+        target.id,
+        assignmentId,
+        submissionId,
+        purpose,
+        expires,
+      );
+    },
+    revoke(actor: string, id: string, scoped = access) {
+      if (type === "assignment") return scoped.revokeAssignment(actor, id);
+      if (type === "support") return scoped.revokeSupport(actor, id);
+      return scoped.revokeEvidenceReview(actor, id);
+    },
+    read(scoped = access) {
+      return scoped.readWorkspace(
+        target.token,
+        owner.learner.id,
+        type === "support" ? purpose : undefined,
+      );
+    },
   };
 }
 
@@ -4022,6 +4217,385 @@ it("enforces assignment roles, expiry and revocation without role self-escalatio
   ).toBe("0");
 });
 
+it.each(["assignment", "support", "evidence_review"] as const)(
+  "staff audit records successful %s grants and revokes once without inventing denied or repeat successes",
+  async (type) => {
+    const fixture = await staffAuditFixture(type);
+    const before = (
+      await pool.query("SELECT count(*) FROM authorization_audit")
+    ).rows[0].count;
+    await expect(fixture.create(fixture.owner.learner.id)).rejects.toThrow(
+      "denied",
+    );
+    await expect(fixture.create(fixture.target.id)).rejects.toThrow("denied");
+    await expect(
+      fixture.create(fixture.admin.id, new Date(Date.now() - 1000)),
+    ).rejects.toThrow("denied");
+    expect(
+      (await pool.query("SELECT count(*) FROM authorization_audit")).rows[0]
+        .count,
+    ).toBe(before);
+    const grantId = await fixture.create();
+    expect(await fixture.revoke(fixture.owner.learner.id, grantId)).toBe(false);
+    expect(
+      (
+        await Promise.all([
+          fixture.revoke(fixture.admin.id, grantId),
+          fixture.revoke(fixture.admin.id, grantId),
+        ])
+      ).sort(),
+    ).toEqual([false, true]);
+    expect(await fixture.revoke(fixture.admin.id, grantId)).toBe(false);
+    const events = (
+      await pool.query(
+        "SELECT * FROM authorization_audit WHERE grant_id=$1 ORDER BY id",
+        [grantId],
+      )
+    ).rows;
+    expect(events.map((event) => event.action)).toEqual([
+      "grant_created",
+      "grant_revoked",
+    ]);
+    for (const event of events) {
+      expect(event).toEqual({
+        id: expect.any(String),
+        actor_id: fixture.admin.id,
+        staff_id: fixture.target.id,
+        workspace_id: fixture.owner.learner.id,
+        grant_type: type,
+        grant_id: grantId,
+        action: expect.stringMatching(/^grant_(created|revoked)$/),
+        occurred_at: expect.any(Date),
+      });
+    }
+  },
+);
+
+it("staff audit records each successful coach read before returning private work", async () => {
+  const owner = await member(),
+    admin = await staff("platform_admin"),
+    coach = await staff("coach"),
+    access = authorizationStore(pool);
+  await db.save(owner.learner.id, input);
+  const grantId = await access.grantAssignment(
+    admin.id,
+    coach.id,
+    owner.learner.id,
+    "coach",
+    "private synthetic coaching purpose",
+    new Date(Date.now() + 60_000),
+  );
+  for (let read = 0; read < 2; read++)
+    expect(
+      await access.readWorkspace(coach.token, owner.learner.id),
+    ).toMatchObject({
+      kind: "allowed",
+      records: [{ instruction: input.instruction }],
+    });
+  const events = (
+    await pool.query(
+      "SELECT * FROM authorization_audit WHERE workspace_id=$1 AND action='workspace_read' ORDER BY id",
+      [owner.learner.id],
+    )
+  ).rows;
+  expect(events).toHaveLength(2);
+  for (const event of events)
+    expect(event).toMatchObject({
+      actor_id: coach.id,
+      staff_id: coach.id,
+      grant_type: "assignment",
+      grant_id: grantId,
+    });
+});
+
+it("staff audit never copies a support purpose or private content into events", async () => {
+  const owner = await member(),
+    admin = await staff("platform_admin"),
+    operator = await staff("operator"),
+    access = authorizationStore(pool),
+    purpose = "Synthetic private case narrative excluded from audit";
+  await db.save(owner.learner.id, input);
+  await access.grantSupport(
+    admin.id,
+    operator.id,
+    owner.learner.id,
+    "operator",
+    purpose,
+    new Date(Date.now() + 60_000),
+  );
+  expect(
+    await access.readWorkspace(operator.token, owner.learner.id, purpose),
+  ).toMatchObject({ kind: "allowed" });
+  const serialized = JSON.stringify(
+    (await pool.query("SELECT * FROM authorization_audit")).rows,
+  );
+  for (const value of [
+    purpose,
+    input.instruction,
+    input.verification,
+    operator.token,
+    hash(operator.token),
+    owner.token,
+    hash(owner.token),
+  ])
+    expect(serialized).not.toContain(value);
+});
+
+it.each(["assignment", "support"] as const)(
+  "staff audit records one %s read with multiple eligible grants and private records",
+  async (type) => {
+    const fixture = await staffAuditFixture(type);
+    const grants = [await fixture.create(), await fixture.create()];
+    await db.save(fixture.owner.learner.id, input);
+    await pool.query(
+      `INSERT INTO exercises(learner_id,workspace_id,lesson_id,lesson_version,instruction,verification)
+      VALUES($1,$1,'another-synthetic-lesson',1,'Second private draft','Second verification')`,
+      [fixture.owner.learner.id],
+    );
+    const read = await fixture.read();
+    expect(read).toMatchObject({ kind: "allowed" });
+    if (read.kind !== "allowed") throw new Error("staff read denied");
+    expect(read.records).toHaveLength(2);
+    const events = (
+      await pool.query(
+        "SELECT * FROM authorization_audit WHERE action='workspace_read'",
+      )
+    ).rows;
+    expect(events).toHaveLength(1);
+    expect(grants).toContain(events[0].grant_id);
+    expect(events[0]).toMatchObject({
+      actor_id: fixture.target.id,
+      staff_id: fixture.target.id,
+      workspace_id: fixture.owner.learner.id,
+      grant_type: type,
+    });
+  },
+);
+
+it.each(["assignment", "support", "evidence_review"] as const)(
+  "staff audit rolls back %s grants and revokes when event insertion fails",
+  async (type) => {
+    const fixture = await staffAuditFixture(type);
+    const grantId = await fixture.create();
+    const eventsBefore = (
+      await pool.query("SELECT * FROM authorization_audit ORDER BY id")
+    ).rows;
+    const grantsBefore = (
+      await pool.query(`SELECT * FROM ${fixture.table} ORDER BY id`)
+    ).rows;
+    try {
+      await pool.query(`CREATE FUNCTION dne_test_reject_staff_audit() RETURNS trigger
+        LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic staff audit failure'; END $$`);
+      await pool.query(`CREATE TRIGGER dne_test_reject_staff_audit BEFORE INSERT ON authorization_audit
+        FOR EACH ROW EXECUTE FUNCTION dne_test_reject_staff_audit()`);
+      await expect(fixture.create()).rejects.toThrow(
+        "Synthetic staff audit failure",
+      );
+      await expect(fixture.revoke(fixture.admin.id, grantId)).rejects.toThrow(
+        "Synthetic staff audit failure",
+      );
+      if (type !== "evidence_review")
+        await expect(fixture.read()).rejects.toThrow(
+          "Synthetic staff audit failure",
+        );
+      expect(
+        (await pool.query(`SELECT * FROM ${fixture.table} ORDER BY id`)).rows,
+      ).toEqual(grantsBefore);
+      expect(
+        (await pool.query("SELECT * FROM authorization_audit ORDER BY id"))
+          .rows,
+      ).toEqual(eventsBefore);
+      // Members still read their own data without creating a staff event.
+      expect(
+        await fixture.access.readWorkspace(
+          fixture.owner.token,
+          fixture.owner.learner.id,
+        ),
+      ).toMatchObject({ kind: "allowed", via: "member" });
+    } finally {
+      await pool.query(
+        "DROP TRIGGER IF EXISTS dne_test_reject_staff_audit ON authorization_audit",
+      );
+      await pool.query("DROP FUNCTION IF EXISTS dne_test_reject_staff_audit()");
+    }
+    expect(await fixture.revoke(fixture.admin.id, grantId)).toBe(true);
+  },
+);
+
+it.each(["assignment", "support"] as const)(
+  "staff audit emits no %s read event for wrong workspace, expired or revoked grants",
+  async (type) => {
+    const fixture = await staffAuditFixture(type);
+    const grantId = await fixture.create();
+    expect(
+      await fixture.access.readWorkspace(
+        fixture.target.token,
+        fixture.other.learner.id,
+        fixture.purpose,
+      ),
+    ).toEqual({ kind: "denied" });
+    expect(
+      await fixture.access.readWorkspace(
+        fixture.other.token,
+        fixture.owner.learner.id,
+      ),
+    ).toEqual({ kind: "denied" });
+    if (type === "support") {
+      expect(
+        await fixture.access.readWorkspace(
+          fixture.target.token,
+          fixture.owner.learner.id,
+        ),
+      ).toEqual({ kind: "denied" });
+      expect(
+        await fixture.access.readWorkspace(
+          fixture.target.token,
+          fixture.owner.learner.id,
+          "wrong synthetic purpose",
+        ),
+      ).toEqual({ kind: "denied" });
+    }
+    await pool.query(
+      `UPDATE ${fixture.table} SET starts_at=CURRENT_TIMESTAMP-INTERVAL '2 hours',expires_at=CURRENT_TIMESTAMP-INTERVAL '1 hour' WHERE id=$1`,
+      [grantId],
+    );
+    expect(await fixture.read()).toEqual({ kind: "denied" });
+    expect(await fixture.revoke(fixture.admin.id, grantId)).toBe(true);
+    expect(await fixture.read()).toEqual({ kind: "denied" });
+    expect(
+      (
+        await pool.query(
+          "SELECT action FROM authorization_audit WHERE grant_id=$1 ORDER BY id",
+          [grantId],
+        )
+      ).rows,
+    ).toEqual([{ action: "grant_created" }, { action: "grant_revoked" }]);
+  },
+);
+
+it.each(["assignment", "support"] as const)(
+  "staff audit serializes a %s read before a concurrent revocation",
+  async (type) => {
+    const fixture = await staffAuditFixture(type);
+    const grantId = await fixture.create();
+    const reader = await pool.connect();
+    let revoking: Promise<boolean> | undefined;
+    try {
+      await reader.query("BEGIN");
+      expect(
+        await fixture.read(authorizationStore(reader as unknown as Pool)),
+      ).toMatchObject({ kind: "allowed" });
+      revoking = fixture.revoke(fixture.admin.id, grantId);
+      expect(await blockingPids(`UPDATE ${fixture.table} g`)).not.toEqual([]);
+      await reader.query("COMMIT");
+      expect(await revoking).toBe(true);
+      expect(await fixture.read()).toEqual({ kind: "denied" });
+      expect(
+        (
+          await pool.query(
+            "SELECT action FROM authorization_audit WHERE grant_id=$1 ORDER BY id",
+            [grantId],
+          )
+        ).rows,
+      ).toEqual([
+        { action: "grant_created" },
+        { action: "workspace_read" },
+        { action: "grant_revoked" },
+      ]);
+    } finally {
+      await reader.query("ROLLBACK");
+      await Promise.allSettled(revoking ? [revoking] : []);
+      reader.release();
+    }
+  },
+);
+
+it.each(["assignment", "support"] as const)(
+  "staff audit denies an overlapping %s read after revocation locks the grant",
+  async (type) => {
+    const fixture = await staffAuditFixture(type);
+    const grantId = await fixture.create();
+    const revoker = await pool.connect();
+    let reading: ReturnType<typeof fixture.read> | undefined;
+    try {
+      await revoker.query("BEGIN");
+      expect(
+        await fixture.revoke(
+          fixture.admin.id,
+          grantId,
+          authorizationStore(revoker as unknown as Pool),
+        ),
+      ).toBe(true);
+      reading = fixture.read();
+      expect(await blockingPids("FOR SHARE OF g")).not.toEqual([]);
+      await revoker.query("COMMIT");
+      expect(await reading).toEqual({ kind: "denied" });
+      expect(
+        (
+          await pool.query(
+            "SELECT action FROM authorization_audit WHERE grant_id=$1 ORDER BY id",
+            [grantId],
+          )
+        ).rows,
+      ).toEqual([{ action: "grant_created" }, { action: "grant_revoked" }]);
+    } finally {
+      await revoker.query("ROLLBACK");
+      await Promise.allSettled(reading ? [reading] : []);
+      revoker.release();
+    }
+  },
+);
+
+it("staff audit keeps immutable history through revocation and deletes only the removed workspace", async () => {
+  const fixture = await staffAuditFixture("assignment");
+  const grantId = await fixture.create();
+  const otherGrant = await fixture.access.grantAssignment(
+    fixture.admin.id,
+    fixture.target.id,
+    fixture.other.learner.id,
+    "coach",
+    fixture.purpose,
+    new Date(Date.now() + 60_000),
+  );
+  expect(await fixture.read()).toMatchObject({ kind: "allowed" });
+  expect(await fixture.revoke(fixture.admin.id, grantId)).toBe(true);
+  await expect(
+    pool.query(
+      "UPDATE authorization_audit SET action='grant_created' WHERE workspace_id=$1",
+      [fixture.owner.learner.id],
+    ),
+  ).rejects.toThrow("immutable");
+  await expect(
+    pool.query("DELETE FROM authorization_audit WHERE workspace_id=$1", [
+      fixture.owner.learner.id,
+    ]),
+  ).rejects.toThrow("immutable");
+  // Removing the revoked grant itself must not discard its historical events.
+  await pool.query("DELETE FROM assignment_grants WHERE id=$1", [grantId]);
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*) FROM authorization_audit WHERE workspace_id=$1",
+        [fixture.owner.learner.id],
+      )
+    ).rows[0].count,
+  ).toBe("3");
+  await db.remove(fixture.owner.learner.id);
+  expect(
+    (
+      await pool.query(
+        "SELECT grant_id,workspace_id FROM authorization_audit ORDER BY id",
+      )
+    ).rows,
+  ).toEqual([{ grant_id: otherGrant, workspace_id: fixture.other.learner.id }]);
+  expect(
+    await fixture.access.readWorkspace(
+      fixture.target.token,
+      fixture.other.learner.id,
+    ),
+  ).toMatchObject({ kind: "allowed" });
+});
+
 it("requires purpose-bound support access and records every privileged read", async () => {
   const owner = await member(),
     admin = await staff("platform_admin"),
@@ -4071,8 +4645,8 @@ it("requires purpose-bound support access and records every privileged read", as
   expect(
     (
       await pool.query(
-        "SELECT count(*) FROM authorization_audit WHERE support_access_id=$1 AND purpose=$2",
-        [supportGrant, "resolve case 42"],
+        "SELECT count(*) FROM authorization_audit WHERE grant_type='support' AND grant_id=$1 AND action='workspace_read'",
+        [supportGrant],
       )
     ).rows[0].count,
   ).toBe("2");
@@ -4089,7 +4663,7 @@ it("requires purpose-bound support access and records every privileged read", as
   expect(
     (
       await pool.query(
-        "SELECT count(*) FROM authorization_audit WHERE support_access_id=$1",
+        "SELECT count(*) FROM authorization_audit WHERE grant_type='support' AND grant_id=$1 AND action='workspace_read'",
         [supportGrant],
       )
     ).rows[0].count,
@@ -4111,7 +4685,7 @@ it("requires purpose-bound support access and records every privileged read", as
   expect(
     (
       await pool.query(
-        "SELECT count(*) FROM authorization_audit WHERE support_access_id=$1",
+        "SELECT count(*) FROM authorization_audit WHERE grant_type='support' AND grant_id=$1 AND action='workspace_read'",
         [supportGrant],
       )
     ).rows[0].count,
