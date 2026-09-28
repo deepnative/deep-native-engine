@@ -346,6 +346,48 @@ it("allows an empty owned workspace and denies absent authorization", async () =
   ).resolves.toEqual({ kind: "denied" });
 });
 
+it("fails closed on database audit failure without returning privileged success or content", async () => {
+  const query = vi.fn().mockRejectedValue(new Error("Synthetic audit failure"));
+  const access = authorizationStore({ query } as unknown as Pool);
+  const attempts = [
+    () =>
+      access.grantAssignment(
+        admin,
+        staff,
+        workspace,
+        "coach",
+        "review",
+        future,
+      ),
+    () =>
+      access.grantSupport(
+        admin,
+        staff,
+        workspace,
+        "operator",
+        "support",
+        future,
+      ),
+    () =>
+      access.grantEvidenceReview(
+        admin,
+        staff,
+        grant,
+        submission,
+        "review",
+        future,
+      ),
+    () => access.revokeAssignment(admin, grant),
+    () => access.revokeSupport(admin, grant),
+    () => access.revokeEvidenceReview(admin, grant),
+    () => access.readWorkspace(token, workspace),
+    () => access.readWorkspace(token, workspace, "support"),
+  ];
+  for (const attempt of attempts)
+    await expect(attempt()).rejects.toThrow("Synthetic audit failure");
+  expect(query).toHaveBeenCalledTimes(attempts.length);
+});
+
 it.each([
   ["short", workspace, undefined],
   [token, "bad", undefined],

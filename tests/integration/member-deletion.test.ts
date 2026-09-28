@@ -315,7 +315,9 @@ it("removes every current member-linked local row and object through the real ro
     requestFingerprint({ kind: "system" }),
   );
   for (const row of tracked)
-    expect(await count(row), `${row.table} before deletion`).toBe(1);
+    expect(await count(row), `${row.table} before deletion`).toBe(
+      row.table === "authorization_audit" ? 4 : 1,
+    );
   for (const key of [...first.keys, ...second.keys])
     expect(await files.get(key)).toBeInstanceOf(Buffer);
   const reviewerLink = await evidence.issueDownload(
@@ -363,7 +365,9 @@ it("removes every current member-linked local row and object through the real ro
   for (const row of tracked.slice(0, tracked.length / 2))
     expect(await count(row), `${row.table} owner after deletion`).toBe(0);
   for (const row of tracked.slice(tracked.length / 2))
-    expect(await count(row), `${row.table} unrelated after deletion`).toBe(1);
+    expect(await count(row), `${row.table} unrelated after deletion`).toBe(
+      row.table === "authorization_audit" ? 4 : 1,
+    );
   expect(
     (
       await pool.query("SELECT member_id FROM adapter_jobs WHERE id=$1", [

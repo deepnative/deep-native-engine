@@ -149,7 +149,7 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
       throw new Error("Privileged grant denied.");
     const row = (
       await pool.query<{ id: string }>(
-        `INSERT INTO ${table}(
+        `WITH changed AS (INSERT INTO ${table}(
            id,staff_id,staff_role,workspace_id,purpose,expires_at,granted_by
          )
          SELECT $1,$2,$3,$4,$5,$6,$7
@@ -164,7 +164,13 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
              WHERE p.id=$2 AND p.kind='staff' AND s.role=$3
                AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
            )
-         RETURNING id`,
+         RETURNING id,staff_id,workspace_id,granted_by
+         ), audited AS (
+           INSERT INTO authorization_audit(actor_id,staff_id,workspace_id,grant_type,grant_id,action)
+           SELECT granted_by,staff_id,workspace_id,
+                  '${table === "assignment_grants" ? "assignment" : "support"}',id,'grant_created'
+           FROM changed RETURNING grant_id AS id
+         ) SELECT id FROM audited`,
         [
           randomUUID(),
           staffId,
@@ -192,14 +198,26 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
     return Boolean(
       (
         await pool.query(
-          `UPDATE ${table} g SET revoked_at=CURRENT_TIMESTAMP
+          `WITH changed AS (UPDATE ${table} g SET revoked_at=CURRENT_TIMESTAMP
            WHERE g.id=$2 AND g.revoked_at IS NULL
              AND EXISTS(
                SELECT 1 FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
                WHERE p.id=$1 AND p.kind='staff' AND s.role='platform_admin'
                  AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
              )
-           RETURNING g.id`,
+           RETURNING g.*
+           ), audited AS (
+             INSERT INTO authorization_audit(actor_id,staff_id,workspace_id,grant_type,grant_id,action)
+             ${
+               table === "reviewer_evidence_grants"
+                 ? `SELECT $1,g.reviewer_id,a.workspace_id,'evidence_review',g.id,'grant_revoked'
+                    FROM changed g JOIN assignment_grants a ON a.id=g.assignment_id`
+                 : `SELECT $1,g.staff_id,g.workspace_id,
+                           '${table === "assignment_grants" ? "assignment" : "support"}',g.id,'grant_revoked'
+                    FROM changed g`
+             }
+             RETURNING grant_id AS id
+           ) SELECT id FROM audited`,
           [adminId, grantId],
         )
       ).rows[0],
@@ -257,7 +275,7 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
         throw new Error("Privileged grant denied.");
       const row = (
         await pool.query<{ id: string }>(
-          `INSERT INTO reviewer_evidence_grants(
+          `WITH changed AS (INSERT INTO reviewer_evidence_grants(
              id,reviewer_id,assignment_id,submission_id,purpose,expires_at,granted_by
            )
            SELECT $1,$2,g.id,s.id,$5,$6,$7
@@ -283,7 +301,13 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
                WHERE p.id=$2 AND p.kind='staff' AND profile.role='reviewer'
                  AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
              )
-           RETURNING id`,
+           RETURNING id,reviewer_id,assignment_id,granted_by
+           ), audited AS (
+             INSERT INTO authorization_audit(actor_id,staff_id,workspace_id,grant_type,grant_id,action)
+             SELECT g.granted_by,g.reviewer_id,a.workspace_id,'evidence_review',g.id,'grant_created'
+             FROM changed g JOIN assignment_grants a ON a.id=g.assignment_id
+             RETURNING grant_id AS id
+           ) SELECT id FROM audited`,
           [
             randomUUID(),
             reviewerId,
@@ -328,34 +352,39 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
              FROM principals p LEFT JOIN staff_profiles s ON s.principal_id=p.id
              WHERE p.token_hash=$1 AND p.revoked_at IS NULL
                AND p.expires_at>CURRENT_TIMESTAMP
+             FOR SHARE OF p
+           ), assignments AS (
+             SELECT g.id,g.purpose FROM identity i JOIN assignment_grants g
+               ON g.staff_id=i.id AND g.staff_role=i.role
+             WHERE i.kind='staff' AND i.role='coach' AND g.workspace_id=$2
+               AND g.revoked_at IS NULL AND g.starts_at<=CURRENT_TIMESTAMP
+               AND g.expires_at>CURRENT_TIMESTAMP
+             ORDER BY g.id LIMIT 1 FOR SHARE OF g
+           ), support AS (
+             SELECT g.id,g.purpose FROM identity i JOIN support_access_grants g
+               ON g.staff_id=i.id AND g.staff_role=i.role
+             WHERE i.kind='staff' AND g.workspace_id=$2 AND g.purpose=$3
+               AND g.revoked_at IS NULL AND g.starts_at<=CURRENT_TIMESTAMP
+               AND g.expires_at>CURRENT_TIMESTAMP
+             ORDER BY g.id LIMIT 1 FOR SHARE OF g
            ), authorized AS (
              SELECT * FROM (
-               SELECT 'member'::text AS via,NULL::uuid AS support_id,
+               SELECT 'member'::text AS via,NULL::uuid AS grant_id,
                       NULL::text AS purpose
                FROM identity i JOIN workspaces w ON w.owner_principal_id=i.id
                WHERE i.kind='member' AND w.id=$2
                UNION ALL
-               SELECT 'assignment',NULL::uuid,g.purpose
-               FROM identity i JOIN assignment_grants g
-                 ON g.staff_id=i.id AND g.staff_role=i.role
-               WHERE i.kind='staff' AND i.role='coach' AND g.workspace_id=$2
-                 AND g.revoked_at IS NULL AND g.starts_at<=CURRENT_TIMESTAMP
-                 AND g.expires_at>CURRENT_TIMESTAMP
+               SELECT 'assignment',id,purpose FROM assignments
                UNION ALL
-               SELECT 'support',g.id,g.purpose
-               FROM identity i JOIN support_access_grants g
-                 ON g.staff_id=i.id AND g.staff_role=i.role
-               WHERE i.kind='staff' AND g.workspace_id=$2 AND g.purpose=$3
-                 AND g.revoked_at IS NULL AND g.starts_at<=CURRENT_TIMESTAMP
-                 AND g.expires_at>CURRENT_TIMESTAMP
+               SELECT 'support',id,purpose FROM support
              ) candidates ORDER BY CASE via WHEN 'member' THEN 1 WHEN 'assignment' THEN 2 ELSE 3 END
              LIMIT 1
            ), audited AS (
              INSERT INTO authorization_audit(
-               staff_id,workspace_id,support_access_id,action,purpose
+               actor_id,staff_id,workspace_id,grant_type,grant_id,action
              )
-             SELECT i.id,$2,a.support_id,'support_content_read',a.purpose
-             FROM authorized a CROSS JOIN identity i WHERE a.via='support'
+             SELECT i.id,i.id,$2,a.via,a.grant_id,'workspace_read'
+             FROM authorized a CROSS JOIN identity i WHERE a.via IN ('assignment','support')
              RETURNING id
            )
            SELECT a.via,a.purpose,e.lesson_id,e.lesson_version,e.instruction,
