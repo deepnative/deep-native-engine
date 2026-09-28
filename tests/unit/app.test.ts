@@ -96,6 +96,7 @@ it("denies an unconfigured operator metrics route and returns only a configured 
         submittedAssignment: "observed submission",
         returnEligible: "matured first-open cohort",
         crossContentReturned: "bounded observed return",
+        usefulness: "coarse self-reported usefulness",
       },
       counts: {
         members: 3,
@@ -107,6 +108,7 @@ it("denies an unconfigured operator metrics route and returns only a configured 
         returnEligible: 2,
         crossContentReturned: 1,
       },
+      usefulness: { disclosure: "suppressed", helpfulShareBand: null },
     }),
   };
   const allowed = managedAgent(
@@ -127,6 +129,19 @@ it("denies an unconfigured operator metrics route and returns only a configured 
     crossContentReturned: 1,
   });
   expect(response.body.scope).toBe("synthetic-local-preview");
+  expect(response.body.usefulness).toEqual({
+    disclosure: "suppressed",
+    helpfulShareBand: null,
+  });
+  metrics.snapshot.mockRejectedValueOnce(
+    new Error("private usefulness detail"),
+  );
+  const failed = await allowed
+    .get("/operator/metrics?member_id=forged")
+    .set("Host", host)
+    .expect(503);
+  expect(failed.text).not.toContain("private usefulness detail");
+  expect(failed.text).not.toContain("helpfulShareBand");
 });
 function managedAgent(application: ReturnType<typeof app>) {
   const server = application.listen(0);
