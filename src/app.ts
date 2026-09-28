@@ -1594,8 +1594,10 @@ export function app(
       structuredPrerequisites,
       minimumExperience: (value("minimum_experience") ||
         "new") as DraftContent["minimumExperience"],
-      rubric: null,
-      rubricVersion: null,
+      rubric: value("rubric").trim() ? value("rubric") : null,
+      rubricVersion: value("rubric_version").trim()
+        ? Number(value("rubric_version"))
+        : null,
     };
     if (!(await catalog.createDraft(res.locals.token as string, draft))) {
       res
@@ -1603,7 +1605,7 @@ export function app(
         .send(
           errorPage(
             "Draft not saved",
-            "Check the fields, prerequisite references, next version and editor access.",
+            "Check the fields, rubric and its positive whole-number version, prerequisite references, next version and editor access.",
           ),
         );
       return;

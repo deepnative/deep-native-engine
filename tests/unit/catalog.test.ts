@@ -90,6 +90,8 @@ it("validates versioned metadata and audience tags before creating a draft", asy
     { rights: "a".repeat(2001) },
     { prerequisites: "a".repeat(2001) },
     { rubric: "a".repeat(10001) },
+    { rubricVersion: 0 },
+    { rubricVersion: 1.5 },
     { rubricVersion: -1 },
   ])
     expect(validDraft({ ...sample, ...change })).toBe(false);

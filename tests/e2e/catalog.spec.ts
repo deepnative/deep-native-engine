@@ -320,7 +320,7 @@ test("[L25] editor and member see a real gated draft, review, publish and retire
 
     await editorPage.goto("/editor/library");
     await editorPage.getByLabel("Content ID").fill(id);
-    await editorPage.getByLabel("Version").fill("1");
+    await editorPage.getByLabel("Version", { exact: true }).fill("1");
     await editorPage.getByLabel("Title").fill(title);
     await editorPage
       .getByLabel("Body")
@@ -461,5 +461,143 @@ test("[L26] member search selects the latest eligible version while simulated as
     });
   } finally {
     await outsider.close();
+  }
+});
+
+test("[L73] staff authors exact synthetic rubric versions without granting formal assessment", async ({
+  browser,
+  page,
+}, testInfo) => {
+  const id =
+    testInfo.project.name === "desktop-chromium" ? "SYN-989" : "SYN-991";
+  const title = `Invented rubric assignment ${id}`;
+  const editor = await staff("editor");
+  const reviewer = await staff("reviewer");
+  const editorContext = await browser.newContext({ baseURL: origin });
+  const reviewerContext = await browser.newContext({ baseURL: origin });
+  try {
+    await page.goto("/editor/library");
+    await expect(
+      page.getByRole("heading", { name: "Staff workflow unavailable" }),
+    ).toBeVisible();
+    await useToken(editorContext, editor.token);
+    await useToken(reviewerContext, reviewer.token);
+    const editorPage = await editorContext.newPage();
+    const reviewerPage = await reviewerContext.newPage();
+    const fillDraft = async (
+      draftPage: Page,
+      version: number,
+      rubric: string,
+    ) => {
+      await draftPage.goto("/editor/library");
+      await draftPage.getByLabel("Content ID").fill(id);
+      await draftPage
+        .getByLabel("Version", { exact: true })
+        .fill(String(version));
+      await draftPage.getByLabel("Kind").selectOption("assignment");
+      await draftPage.getByLabel("Title").fill(title);
+      await draftPage
+        .getByLabel("Body")
+        .fill(`Invented noncoding assignment version ${version}.`);
+      await draftPage.getByLabel("Owner").fill("Synthetic editor");
+      await draftPage.getByLabel("Sources").fill("Invented local brief");
+      await draftPage.getByLabel("Rights").fill("Original synthetic text");
+      await draftPage.getByLabel("Assignment rubric (optional)").fill(rubric);
+    };
+    await fillDraft(editorPage, 1, "Explain the source and uncertainty.");
+    await editorPage.getByRole("button", { name: "Save draft" }).click();
+    await expect(
+      editorPage.getByRole("heading", { name: "Draft not saved" }),
+    ).toBeVisible();
+    expect(
+      (
+        await pool.query(
+          "SELECT count(*)::int AS count FROM content_versions WHERE id=$1",
+          [id],
+        )
+      ).rows[0].count,
+    ).toBe(0);
+    await fillDraft(reviewerPage, 1, "Explain the source and uncertainty.");
+    await reviewerPage
+      .getByLabel("Rubric version (required with rubric)")
+      .fill("1");
+    await reviewerPage.getByRole("button", { name: "Save draft" }).click();
+    await expect(
+      reviewerPage.getByRole("heading", { name: "Draft not saved" }),
+    ).toBeVisible();
+
+    for (const [version, rubric] of [
+      [1, "Explain the source and uncertainty."],
+      [2, "Compare the source and explain uncertainty."],
+    ] as const) {
+      await fillDraft(editorPage, version, rubric);
+      await editorPage
+        .getByLabel("Rubric version (required with rubric)")
+        .fill(String(version));
+      await expect(
+        editorPage.getByText(
+          "not qualified instruction or formal human assessment",
+        ),
+      ).toBeVisible();
+      await editorPage.getByRole("button", { name: "Save draft" }).click();
+      await expect(editorPage).toHaveURL(
+        new RegExp(`/editor/library/${id}/${version}$`),
+      );
+      await expect(
+        editorPage.getByText(`Versioned rubric ${version}`),
+      ).toBeVisible();
+      await expect(editorPage.getByText(rubric)).toBeVisible();
+      await editorPage
+        .getByRole("button", { name: "Submit for review" })
+        .click();
+      await reviewerPage.goto(`/editor/library/${id}/${version}`);
+      await reviewerPage
+        .getByLabel(
+          "I checked the source and rights statement for this synthetic item.",
+        )
+        .check();
+      await reviewerPage
+        .getByRole("button", { name: "Approve synthetic review" })
+        .click();
+      await editorPage.reload();
+      await editorPage
+        .getByRole("button", { name: "Publish to local library" })
+        .click();
+    }
+    await onboard(page);
+    await page.goto(`/library?q=${id}`);
+    await page.getByRole("link", { name: title }).click();
+    await expect(
+      page.locator("p.eyebrow").filter({ hasText: "PUBLISHED · VERSION 2" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Compare the source and explain uncertainty."),
+    ).toBeVisible();
+    await editorPage.goto(`/editor/library/${id}/1`);
+    await expect(
+      editorPage.getByText("Explain the source and uncertainty."),
+    ).toBeVisible();
+    expect(
+      (
+        await pool.query(
+          "SELECT version,rubric,rubric_version FROM content_versions WHERE id=$1 ORDER BY version",
+          [id],
+        )
+      ).rows,
+    ).toEqual([
+      {
+        version: 1,
+        rubric: "Explain the source and uncertainty.",
+        rubric_version: 1,
+      },
+      {
+        version: 2,
+        rubric: "Compare the source and explain uncertainty.",
+        rubric_version: 2,
+      },
+    ]);
+  } finally {
+    await editorContext.close();
+    await reviewerContext.close();
   }
 });
