@@ -76,7 +76,7 @@ import {
   type DraftContent,
 } from "./catalog.ts";
 import { disabledTrackStore, type TrackStore } from "./track-readiness.ts";
-import { DOMAINS, type Domain } from "./content.ts";
+import { BACKGROUNDS, DOMAINS, GOALS, type Domain } from "./content.ts";
 import { disabledProposalStore, type ProposalStore } from "./proposals.ts";
 import { workflowBundle, workflowRegistry } from "./workflow-registry.ts";
 import {
@@ -1593,6 +1593,51 @@ export function app(
     const fields = req.body as Fields;
     const value = (name: string) =>
       typeof fields[name] === "string" ? (fields[name] as string) : "";
+    const reject = async (message: string) => {
+      const items = await catalog.staffList(res.locals.token as string);
+      if (items === null) {
+        res
+          .status(422)
+          .send(
+            errorPage(
+              "Draft not saved",
+              "A current editor identity is required to create synthetic content.",
+            ),
+          );
+        return;
+      }
+      res
+        .status(422)
+        .send(
+          staffLibraryPage(items, res.locals.csrf as string, fields, [message]),
+        );
+    };
+    const tags = (name: string, choices: object): string[] | null => {
+      const raw = fields[name];
+      if (raw === undefined) return [];
+      const values = Array.isArray(raw) ? raw : [raw];
+      if (
+        values.length > Object.keys(choices).length ||
+        values.some(
+          (item) => typeof item !== "string" || !Object.hasOwn(choices, item),
+        ) ||
+        new Set(values).size !== values.length
+      )
+        return null;
+      return values as string[];
+    };
+    const malformedTagKey = Object.keys(fields).some((name) =>
+      /^(?:goals|backgrounds|domains)(?:\[|\.)/.test(name),
+    );
+    const goals = tags("goals", GOALS);
+    const backgrounds = tags("backgrounds", BACKGROUNDS);
+    const domains = tags("domains", DOMAINS);
+    if (malformedTagKey || !goals || !backgrounds || !domains) {
+      await reject(
+        "Choose unique, listed audience tags. Remove unknown or repeated values and try again.",
+      );
+      return;
+    }
     let structuredPrerequisites: PrerequisiteSpec | undefined;
     if (value("structured_prerequisites").trim()) {
       try {
@@ -1601,14 +1646,9 @@ export function app(
           throw new Error("Invalid prerequisite contract");
         structuredPrerequisites = parsed;
       } catch {
-        res
-          .status(422)
-          .send(
-            errorPage(
-              "Draft not saved",
-              "Use valid versioned prerequisite JSON with published synthetic references.",
-            ),
-          );
+        await reject(
+          "Use valid versioned prerequisite JSON with published synthetic references.",
+        );
         return;
       }
     }
@@ -1622,9 +1662,9 @@ export function app(
       owner: value("owner"),
       sources: value("sources"),
       rights: value("rights"),
-      goals: [],
-      backgrounds: [],
-      domains: [],
+      goals,
+      backgrounds,
+      domains,
       prerequisites: value("prerequisites"),
       structuredPrerequisites,
       minimumExperience: (value("minimum_experience") ||
@@ -1635,14 +1675,9 @@ export function app(
         : null,
     };
     if (!(await catalog.createDraft(res.locals.token as string, draft))) {
-      res
-        .status(422)
-        .send(
-          errorPage(
-            "Draft not saved",
-            "Check the fields, rubric and its positive whole-number version, prerequisite references, next version and editor access.",
-          ),
-        );
+      await reject(
+        "Check the fields, rubric and its positive whole-number version, prerequisite references, next version and editor access.",
+      );
       return;
     }
     res.redirect(303, `/editor/library/${draft.id}/${draft.version}`);

@@ -601,3 +601,299 @@ test("[L73] staff authors exact synthetic rubric versions without granting forma
     await reviewerContext.close();
   }
 });
+
+test("[L75] staff audience tags follow synthetic versions into learner choices", async ({
+  browser,
+  page,
+}, testInfo) => {
+  const number = testInfo.project.name === "desktop-chromium" ? 830 : 840;
+  const lessonId = `SYN-${number}`;
+  const assignmentId = `SYN-${number + 1}`;
+  const lessonTitle = `Invented tagged lesson ${lessonId}`;
+  const assignmentTitle = `Invented work assignment ${assignmentId}`;
+  const editor = await staff("editor");
+  const reviewer = await staff("reviewer");
+  const editorContext = await browser.newContext({ baseURL: origin });
+  const reviewerContext = await browser.newContext({ baseURL: origin });
+  const professionalContext = await browser.newContext({ baseURL: origin });
+  const technicalContext = await browser.newContext({ baseURL: origin });
+  try {
+    await useToken(editorContext, editor.token);
+    await useToken(reviewerContext, reviewer.token);
+    const editorPage = await editorContext.newPage();
+    const reviewerPage = await reviewerContext.newPage();
+    const author = async (
+      id: string,
+      version: number,
+      kind: "lesson" | "assignment",
+      title: string,
+      goal: string,
+      background: string,
+      domain: string,
+    ) => {
+      await editorPage.goto("/editor/library");
+      await editorPage.getByLabel("Content ID").fill(id);
+      await editorPage
+        .getByLabel("Version", { exact: true })
+        .fill(String(version));
+      await editorPage.getByLabel("Kind").selectOption(kind);
+      await editorPage.getByLabel("Title").fill(title);
+      await editorPage
+        .getByLabel("Body")
+        .fill(`Original invented ${kind} version ${version}.`);
+      await editorPage.getByLabel("Owner").fill("Synthetic editor");
+      await editorPage.getByLabel("Sources").fill("Invented local brief");
+      await editorPage.getByLabel("Rights").fill("Original synthetic text");
+      await editorPage.locator(`input[name="goals"][value="${goal}"]`).check();
+      await editorPage
+        .locator(`input[name="backgrounds"][value="${background}"]`)
+        .check();
+      await editorPage
+        .locator(`input[name="domains"][value="${domain}"]`)
+        .check();
+      await editorPage.getByRole("button", { name: "Save draft" }).click();
+      await expect(editorPage).toHaveURL(
+        new RegExp(`/editor/library/${id}/${version}$`),
+      );
+      await expect(editorPage.locator("dl")).toContainText(goal);
+      await expect(editorPage.locator("dl")).toContainText(background);
+      await expect(editorPage.locator("dl")).toContainText(domain);
+      await editorPage.reload();
+      await expect(editorPage.locator("dl")).toContainText(domain);
+      await editorPage
+        .getByRole("button", { name: "Submit for review" })
+        .click();
+      await reviewerPage.goto(`/editor/library/${id}/${version}`);
+      await reviewerPage
+        .getByLabel(
+          "I checked the source and rights statement for this synthetic item.",
+        )
+        .check();
+      await reviewerPage
+        .getByRole("button", { name: "Approve synthetic review" })
+        .click();
+      await editorPage.reload();
+      await editorPage
+        .getByRole("button", { name: "Publish to local library" })
+        .click();
+      await expect(
+        editorPage.getByText(`PUBLISHED · VERSION ${version}`),
+      ).toBeVisible();
+    };
+    await editorPage.goto("/editor/library");
+    const invalid = new URLSearchParams({
+      csrf: await editorPage
+        .locator('form[action="/editor/library"] input[name="csrf"]')
+        .inputValue(),
+      id: lessonId,
+      version: "1",
+      kind: "lesson",
+      title: lessonTitle,
+      body: "Original invented lesson version 1.",
+      owner: "Synthetic editor",
+      sources: "Invented local brief",
+      rights: "Original synthetic text",
+    });
+    invalid.append("goals", "everyday");
+    invalid.append("goals", "everyday");
+    const rejected = await editorPage.request.post("/editor/library", {
+      headers: { origin, "content-type": "application/x-www-form-urlencoded" },
+      data: invalid.toString(),
+    });
+    expect(rejected.status()).toBe(422);
+    expect(await rejected.text()).toContain(
+      "Choose unique, listed audience tags",
+    );
+    expect(
+      (
+        await pool.query(
+          "SELECT count(*)::int AS count FROM content_versions WHERE id=$1",
+          [lessonId],
+        )
+      ).rows[0].count,
+    ).toBe(0);
+    invalid.set("csrf", "forged");
+    expect(
+      (
+        await editorPage.request.post("/editor/library", {
+          headers: {
+            origin,
+            "content-type": "application/x-www-form-urlencoded",
+          },
+          data: invalid.toString(),
+        })
+      ).status(),
+    ).toBe(403);
+    await reviewerPage.goto("/editor/library");
+    invalid.set(
+      "csrf",
+      await reviewerPage
+        .locator('form[action="/editor/library"] input[name="csrf"]')
+        .inputValue(),
+    );
+    invalid.delete("goals");
+    invalid.append("goals", "everyday");
+    expect(
+      (
+        await reviewerPage.request.post("/editor/library", {
+          headers: {
+            origin,
+            "content-type": "application/x-www-form-urlencoded",
+          },
+          data: invalid.toString(),
+        })
+      ).status(),
+    ).toBe(422);
+    expect(
+      (
+        await pool.query(
+          "SELECT count(*)::int AS count FROM content_versions WHERE id=$1",
+          [lessonId],
+        )
+      ).rows[0].count,
+    ).toBe(0);
+    await author(
+      lessonId,
+      1,
+      "lesson",
+      lessonTitle,
+      "everyday",
+      "explorer",
+      "education",
+    );
+    await author(
+      assignmentId,
+      1,
+      "assignment",
+      assignmentTitle,
+      "work",
+      "professional",
+      "finance",
+    );
+
+    await page.goto("/");
+    await page.getByLabel("Your starting point").selectOption("explorer");
+    await page
+      .getByLabel("What would you like to do?")
+      .selectOption("everyday");
+    await page.locator('input[name="domain_tags"][value="education"]').check();
+    await page.getByLabel("I'll use invented or sample information").check();
+    await page.getByRole("button", { name: "Start my learning path" }).click();
+    await expect(
+      page.getByText(`Optional published sample lesson: ${lessonTitle}`),
+    ).toBeVisible();
+    await page.goto(
+      `/library?q=${encodeURIComponent(lessonTitle)}&goal=everyday&background=explorer&domain=education`,
+    );
+    await expect(page.getByRole("link", { name: lessonTitle })).toBeVisible();
+    await page.getByRole("link", { name: lessonTitle }).click();
+    const generalCookie = (await page.context().cookies()).find(
+      (item) => item.name === "dne_preview",
+    )!;
+    const generalId = (
+      await pool.query<{ id: string }>(
+        "SELECT id FROM learners WHERE token_hash=$1",
+        [createHash("sha256").update(generalCookie.value).digest("hex")],
+      )
+    ).rows[0]!.id;
+    expect(
+      (
+        await pool.query(
+          "SELECT content_version FROM lesson_activity WHERE member_id=$1 AND content_id=$2",
+          [generalId, lessonId],
+        )
+      ).rows[0],
+    ).toEqual({ content_version: 1 });
+
+    const professionalPage = await professionalContext.newPage();
+    await professionalPage.goto("/");
+    await professionalPage
+      .getByLabel("Your starting point")
+      .selectOption("professional");
+    await professionalPage
+      .getByLabel("What would you like to do?")
+      .selectOption("work");
+    await professionalPage
+      .locator('input[name="domain_tags"][value="finance"]')
+      .check();
+    await professionalPage
+      .getByLabel("I'll use invented or sample information")
+      .check();
+    await professionalPage
+      .getByRole("button", { name: "Start my learning path" })
+      .click();
+    await expect(
+      professionalPage.getByRole("button", {
+        name: `Choose ${assignmentTitle}`,
+      }),
+    ).toBeVisible();
+    await expect(professionalPage.getByText(lessonTitle)).toHaveCount(0);
+
+    const technicalPage = await technicalContext.newPage();
+    await onboard(technicalPage, "technical", "build");
+    await expect(technicalPage.getByText(lessonTitle)).toHaveCount(0);
+    await author(
+      lessonId,
+      2,
+      "lesson",
+      lessonTitle,
+      "build",
+      "technical",
+      "operations",
+    );
+    await editorPage.goto(`/editor/library/${lessonId}/1`);
+    await expect(editorPage.locator("dl")).toContainText("everyday");
+    await expect(editorPage.locator("dl")).toContainText("explorer");
+    await expect(editorPage.locator("dl")).toContainText("education");
+    await technicalPage.goto("/learn");
+    await technicalPage
+      .locator('input[name="domain_tags"][value="operations"]')
+      .check();
+    await technicalPage
+      .getByRole("button", { name: "Save my direction" })
+      .click();
+    await expect(
+      technicalPage.getByText(
+        `Optional published sample lesson: ${lessonTitle}`,
+      ),
+    ).toBeVisible();
+    await page.goto("/learn");
+    await expect(page.getByText(lessonTitle)).toHaveCount(0);
+    expect(
+      (
+        await pool.query(
+          "SELECT content_version FROM lesson_activity WHERE member_id=$1 AND content_id=$2",
+          [generalId, lessonId],
+        )
+      ).rows[0],
+    ).toEqual({ content_version: 1 });
+    expect(
+      (
+        await pool.query(
+          "SELECT version,goals,backgrounds,domains FROM content_versions WHERE id=$1 ORDER BY version",
+          [lessonId],
+        )
+      ).rows,
+    ).toEqual([
+      {
+        version: 1,
+        goals: ["everyday"],
+        backgrounds: ["explorer"],
+        domains: ["education"],
+      },
+      {
+        version: 2,
+        goals: ["build"],
+        backgrounds: ["technical"],
+        domains: ["operations"],
+      },
+    ]);
+  } finally {
+    await catalogStore(pool).retire(editor.token, lessonId);
+    await catalogStore(pool).retire(editor.token, assignmentId);
+    await editorContext.close();
+    await reviewerContext.close();
+    await professionalContext.close();
+    await technicalContext.close();
+  }
+});
