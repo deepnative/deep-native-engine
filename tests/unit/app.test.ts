@@ -37,6 +37,7 @@ import {
   disabledAvailabilityStore,
   type AvailabilityStore,
 } from "../../src/availability.ts";
+import type { ManualObservationStore } from "../../src/manual-observations.ts";
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
 const member = {
@@ -237,6 +238,121 @@ it("denies an unconfigured operator metrics route and returns only a configured 
     .expect(503);
   expect(failed.text).not.toContain("private usefulness detail");
   expect(failed.text).not.toContain("helpfulShareBand");
+});
+it("keeps the synthetic manual register admin-only, idempotent and explicitly unverified", async () => {
+  const denied = managedAgent(app(storage(), { origin, secret: "secret" }));
+  await denied.get("/operator/test-receipts").set("Host", host).expect(403);
+  const observations = {
+    list: vi.fn<ManualObservationStore["list"]>().mockResolvedValue([]),
+    record: vi
+      .fn<ManualObservationStore["record"]>()
+      .mockResolvedValue({ kind: "denied" }),
+  };
+  const agent = managedAgent(
+    app(storage(), {
+      origin,
+      secret: "secret",
+      manualObservations: observations,
+    }),
+  );
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  const register = await agent
+    .get("/operator/test-receipts")
+    .set("Host", host)
+    .expect(200);
+  expect(register.text).toContain("not provider verification");
+  const key = register.text.match(
+    /name="idempotencyKey" value="([a-f0-9-]+)"/,
+  )![1]!;
+  const input = {
+    memberId: "11111111-1111-4111-8111-111111111111",
+    idempotencyKey: key,
+    evidenceReference: "SYN-INVENTED-01",
+    amountCents: "2500",
+    confirm: "yes",
+  };
+  const post = (fields: Record<string, string>, token = csrf) =>
+    agent
+      .post("/operator/test-receipts")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf: token, ...fields });
+  await post(input, "forged").expect(403);
+  await post({ ...input, evidenceReference: "REAL-BANK" }).expect(422);
+  expect(observations.record).not.toHaveBeenCalled();
+  await post(input).expect(403);
+  observations.record.mockResolvedValueOnce({ kind: "invalid" });
+  await post(input).expect(422);
+  observations.record.mockResolvedValueOnce({ kind: "member_missing" });
+  await post(input).expect(422);
+  observations.record.mockResolvedValueOnce({ kind: "conflict" });
+  await post(input).expect(409);
+  const saved = {
+    id: "22222222-2222-4222-8222-222222222222",
+    memberId: input.memberId,
+    actorId: "33333333-3333-4333-8333-333333333333",
+    idempotencyKey: key,
+    evidenceReference: input.evidenceReference,
+    amountCents: 2500,
+    status: "unverified_manual" as const,
+    createdAt: new Date("2026-09-27T12:00:00Z"),
+  };
+  observations.record.mockResolvedValueOnce({
+    kind: "created",
+    observation: saved,
+  });
+  await post(input).expect(303);
+  observations.record.mockResolvedValueOnce({
+    kind: "replayed",
+    observation: saved,
+  });
+  await post(input).expect(303);
+  expect(observations.record).toHaveBeenLastCalledWith(expect.any(String), {
+    memberId: input.memberId,
+    idempotencyKey: key,
+    evidenceReference: input.evidenceReference,
+    amountCents: 2500,
+  });
+  observations.list.mockResolvedValueOnce([
+    { ...saved, evidenceReference: "SYN-<script>" },
+  ]);
+  const shown = await agent
+    .get("/operator/test-receipts")
+    .set("Host", host)
+    .expect(200);
+  expect(shown.text).toContain("SYN-&lt;script&gt;");
+  expect(shown.text).not.toContain("SYN-<script>");
+  observations.list.mockResolvedValueOnce(null);
+  await agent.get("/operator/test-receipts").set("Host", host).expect(403);
+  observations.list.mockRejectedValueOnce(new Error("private SQL detail"));
+  const failedRead = await agent
+    .get("/operator/test-receipts")
+    .set("Host", host)
+    .expect(503);
+  expect(failedRead.text).not.toContain("private SQL detail");
+  observations.record.mockRejectedValueOnce(new Error("private SQL detail"));
+  const failedWrite = await post(input).expect(503);
+  expect(failedWrite.text).not.toContain("private SQL detail");
+  const live = managedAgent(
+    app(storage(), {
+      origin,
+      secret: "secret",
+      mode: "live",
+      manualObservations: observations,
+    }),
+  );
+  await live.get("/operator/test-receipts").set("Host", host).expect(404);
+  const liveHome = await live.get("/").set("Host", host).expect(200);
+  const liveCsrf = liveHome.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  await live
+    .post("/operator/test-receipts")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf: liveCsrf, ...input })
+    .expect(404);
 });
 function managedAgent(application: ReturnType<typeof app>) {
   const server = application.listen(0);

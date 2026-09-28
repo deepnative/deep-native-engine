@@ -20,7 +20,9 @@ import {
   evidencePage,
   availabilityPage,
   privateProgressPage,
+  manualObservationPage,
 } from "../../src/views.ts";
+import type { ManualObservation } from "../../src/manual-observations.ts";
 import type { AssignmentAttempt } from "../../src/attempts.ts";
 import type { ContentVersion } from "../../src/catalog.ts";
 import type { Milestone } from "../../src/store.ts";
@@ -37,6 +39,27 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("labels a capped internal synthetic register without rendering forged markup", () => {
+  const record: ManualObservation = {
+    id: "11111111-1111-4111-8111-111111111111",
+    memberId: "22222222-2222-4222-8222-222222222222",
+    actorId: "33333333-3333-4333-8333-333333333333",
+    idempotencyKey: "44444444-4444-4444-8444-444444444444",
+    evidenceReference: "SYN-<script>",
+    amountCents: 1234,
+    status: "unverified_manual",
+    createdAt: new Date("2026-09-27T12:00:00Z"),
+  };
+  const html = manualObservationPage(
+    Array(100).fill(record),
+    "csrf",
+    record.id,
+  );
+  expect(html).toContain("newest 100");
+  expect(html).toContain("SYN-&lt;script&gt;");
+  expect(html).not.toContain("SYN-<script>");
+  expect(html).toContain("not provider verification");
+});
 it("shows private usefulness choices only for self-assessed exact lesson versions", () => {
   const sample = {
     kind: "sample lesson" as const,

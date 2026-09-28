@@ -30,6 +30,7 @@ import type { ExpertRecord, TrackSnapshot } from "./track-readiness.ts";
 import type { Proposal } from "./proposals.ts";
 import type { WorkflowBundle } from "./workflow-registry.ts";
 import type { WorkflowFeedback } from "./workflow-feedback.ts";
+import type { ManualObservation } from "./manual-observations.ts";
 import type { CircleListing } from "./circles.ts";
 import type { AssignmentAttempt } from "./attempts.ts";
 import type { ActivityItem } from "./progress.ts";
@@ -164,6 +165,16 @@ export function expertRegistryPage(records: ExpertRecord[]) {
   return page(
     "Expert coverage registry",
     `<section class="error-page"><p class="eyebrow">OPERATOR VIEW · EVIDENCE PENDING</p><h1>Expert coverage registry</h1><p class="lead">Roster records alone do not prove qualification or availability. Verify evidence, dates, backup and uncommitted capacity before any owner-approved service offer.</p><ul>${records.map((record) => `<li><strong>${escape(DOMAINS[record.domain])} · ${escape(record.serviceType)}</strong> · ${escape(record.staffRole)} · ${record.startsAt.toISOString().slice(0, 10)} to ${record.endsAt.toISOString().slice(0, 10)} · CAD ${(record.loadedCostCents / 100).toFixed(2)} loaded cost · ${record.capacityMinutes - record.committedMinutes} uncommitted minutes · backup ${record.backupStaffId ? "recorded" : "missing"} · ${record.verifiedAt ? "verification recorded" : "verification pending"}${record.retiredAt ? " · retired" : ""}</li>`).join("")}</ul>${records.length ? "" : "<p>No expert commitments are recorded.</p>"}</section>`,
+  );
+}
+export function manualObservationPage(
+  observations: ManualObservation[],
+  csrf: string,
+  idempotencyKey: string,
+) {
+  return page(
+    "Unverified synthetic manual observations",
+    `<section class="reading"><p class="eyebrow">INTERNAL SYNTHETIC TEST · NO LIVE PAYMENT</p><h1>Unverified manual observations</h1><p>These invented records are not provider verification, a paid invoice, a charge, service delivery or a grant of access. Enter no card, bank, client or real payment details.</p><form method="post" action="/operator/test-receipts">${hidden(csrf)}<input type="hidden" name="idempotencyKey" value="${escape(idempotencyKey)}"><label for="manual-member">Existing local member ID</label><input id="manual-member" name="memberId" required><label for="manual-evidence">Invented evidence reference (SYN- prefix)</label><input id="manual-evidence" name="evidenceReference" required><label for="manual-cents">Invented CAD cents</label><input id="manual-cents" name="amountCents" type="number" min="1" max="10000000" step="1" required><label><input type="checkbox" name="confirm" value="yes" required> This is invented test evidence, not a payment confirmation</label><button type="submit">Record unverified observation</button></form><h2>Internal test register</h2><ul>${observations.map((item) => `<li><strong>${escape(item.evidenceReference)}</strong> · member ${escape(item.memberId)} · CAD ${(item.amountCents / 100).toFixed(2)} · ${escape(item.status)} · recorded ${item.createdAt.toISOString()} · actor ${escape(item.actorId)}</li>`).join("")}</ul>${observations.length === 100 ? "<p>Showing the newest 100 synthetic observations. Older records may be present in the local test database.</p>" : observations.length ? "" : "<p>No synthetic manual observations are recorded.</p>"}</section>`,
   );
 }
 export function proposalListPage(items: Proposal[], csrf: string) {

@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v38",
+  "version": "initial-learning-v39",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans and optional eligible current published sample-lesson recommendations, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts and immutable local submission revisions, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations with owner-only exact-version private feedback, private versioned synthetic lesson activity and member-private exact-version usefulness self-reports with a suppressed operator-only coarse snapshot, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans and optional eligible current published sample-lesson recommendations, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts and immutable local submission revisions, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations with owner-only exact-version private feedback, private versioned synthetic lesson activity and member-private exact-version usefulness self-reports with a suppressed operator-only coarse snapshot, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity; platform-admin-only synthetic manual observation register with no paid state or entitlement",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -641,6 +641,15 @@
       "steps": "Open a public draft, save and correct private exact-version feedback, reject stale replay and forged CSRF, inspect owner export and other-member/reviewer denial, withdraw and delete the preview",
       "expected": "Only the active owner sees or changes a bounded private self-report; public draft/download and another member reveal no note, stale writes fail, withdrawal and deletion erase the retained note, and no qualified review or publication is claimed",
       "issues": [115, 311],
+      "critical": true
+    },
+    {
+      "id": "L72",
+      "actor": "Platform administrator, synthetic IT, other-profession and general members, and reviewer",
+      "preconditions": "Test-mode local preview, active platform administrator, three existing synthetic members and no payment provider",
+      "steps": "Create one unverified invented observation per member through the admin form, reload the register, replay the same key, conflict on changed cents, attempt member/reviewer reads and writes, and reject forged CSRF",
+      "expected": "Only the platform administrator sees and writes the append-only internal register; all backgrounds obey the same rule, replays do not duplicate, conflicting keys and forged requests fail, and no payment or entitlement is asserted",
+      "issues": [32, 313],
       "critical": true
     }
   ],

@@ -18,6 +18,7 @@ import { memberExportStore } from "./member-export.ts";
 import { usefulnessStore } from "./usefulness.ts";
 import { workflowFeedbackStore } from "./workflow-feedback.ts";
 import { availabilityStore } from "./availability.ts";
+import { manualObservationStore } from "./manual-observations.ts";
 
 export function evidenceCapabilityClock(
   mode: string,
@@ -70,6 +71,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       usefulness: usefulnessStore(pool),
       workflowFeedback: workflowFeedbackStore(pool),
       availability: availabilityStore(pool),
+      manualObservations: manualObservationStore(pool),
       evidence: evidenceStore(
         pool,
         fileObjectStorage(settings.privateStorageRoot),
