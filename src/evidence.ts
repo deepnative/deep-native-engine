@@ -277,56 +277,185 @@ export function evidenceStore(
     );
   }
 
-  async function accessible(token: string, evidenceId: string) {
-    if (!tokenPattern.test(token) || !uuidPattern.test(evidenceId)) return;
-    return (
-      await pool.query<EvidenceMetadata>(
-        `WITH identity AS (
-           SELECT p.id,p.kind,s.role
-           FROM principals p LEFT JOIN staff_profiles s ON s.principal_id=p.id
-           WHERE p.token_hash=$1 AND p.revoked_at IS NULL
-             AND p.expires_at>CURRENT_TIMESTAMP
-         )
-         SELECT e.id,e.workspace_id,e.original_name,e.media_type,e.storage_key
-         FROM evidence_objects e CROSS JOIN identity i
-         WHERE e.id=$2 AND e.quarantine_state='clean' AND (
-           (i.kind='member' AND i.id=e.owner_principal_id)
-           OR (i.kind='staff' AND e.private_review_allowed
-             AND (i.role<>'reviewer' OR EXISTS(
-               SELECT 1 FROM evidence_review_submissions submission
-               JOIN reviewer_evidence_grants exact_grant
-                 ON exact_grant.submission_id=submission.id
-               JOIN assignment_grants bound_assignment
-                 ON bound_assignment.id=exact_grant.assignment_id
-               WHERE submission.evidence_id=e.id
-                 AND submission.status IN ('queued','reviewed')
-                 AND submission.submitted_by=e.owner_principal_id
-                 AND exact_grant.reviewer_id=i.id
-                 AND exact_grant.revoked_at IS NULL
-                 AND exact_grant.starts_at<=CURRENT_TIMESTAMP
-                 AND exact_grant.expires_at>CURRENT_TIMESTAMP
-                 AND bound_assignment.staff_id=i.id
-                 AND bound_assignment.staff_role='reviewer'
-                 AND bound_assignment.workspace_id=e.workspace_id
-                 AND bound_assignment.revoked_at IS NULL
-                 AND bound_assignment.starts_at<=CURRENT_TIMESTAMP
-                 AND bound_assignment.expires_at>CURRENT_TIMESTAMP
-             )) AND EXISTS(
-             SELECT 1 FROM assignment_grants g
-             WHERE g.staff_id=i.id AND g.staff_role=i.role
-               AND g.workspace_id=e.workspace_id AND g.revoked_at IS NULL
-               AND g.starts_at<=CURRENT_TIMESTAMP AND g.expires_at>CURRENT_TIMESTAMP
-           ))
-           OR (i.kind='member' AND e.learning_circle_id IS NOT NULL AND EXISTS(
-             SELECT 1 FROM cohort_memberships m
-             WHERE m.member_id=i.id AND m.cohort_id=e.learning_circle_id
-               AND m.can_read_shared_content AND m.revoked_at IS NULL
-               AND (m.expires_at IS NULL OR m.expires_at>CURRENT_TIMESTAMP)
-           ))
-         )`,
-        [hash(token), evidenceId],
+  async function accessible(
+    client: PoolClient,
+    token: string,
+    evidenceId: string,
+  ) {
+    // Lock the authorization path in the same order as workspace/evidence removal.
+    // Every lock remains held through object retrieval, audit insertion and commit.
+    const identity = (
+      await client.query<{
+        id: string;
+        kind: "member" | "staff";
+        role: string | null;
+        expires_at: Date;
+      }>(
+        `SELECT p.id,p.kind,s.role,p.expires_at
+       FROM principals p LEFT JOIN staff_profiles s ON s.principal_id=p.id
+       WHERE p.token_hash=$1 AND p.revoked_at IS NULL
+         AND p.expires_at>clock_timestamp() FOR SHARE OF p`,
+        [hash(token)],
       )
     ).rows[0];
+    if (!identity) return;
+    const workspace = (
+      await client.query<{ id: string }>(
+        `SELECT w.id FROM workspaces w JOIN evidence_objects e ON e.workspace_id=w.id
+       WHERE e.id=$1 AND w.deleting_at IS NULL FOR SHARE OF w`,
+        [evidenceId],
+      )
+    ).rows[0];
+    if (!workspace) return;
+    const row = (
+      await client.query<
+        EvidenceMetadata & {
+          owner_principal_id: string;
+          private_review_allowed: boolean;
+          learning_circle_id: string | null;
+        }
+      >(
+        `SELECT e.id,e.workspace_id,e.original_name,e.media_type,e.storage_key,
+              e.owner_principal_id,e.private_review_allowed,e.learning_circle_id
+       FROM evidence_objects e WHERE e.id=$1 AND e.workspace_id=$2
+         AND e.quarantine_state='clean' FOR SHARE OF e`,
+        [evidenceId, workspace.id],
+      )
+    ).rows[0];
+    if (!row) return;
+    let validUntil = identity.expires_at;
+    if (identity.kind === "member") {
+      if (identity.id !== row.owner_principal_id) {
+        const membership = (
+          await client.query<{ expires_at: Date | null }>(
+            `SELECT expires_at FROM cohort_memberships
+           WHERE member_id=$1 AND cohort_id=$2 AND can_read_shared_content
+             AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>clock_timestamp())
+           FOR SHARE`,
+            [identity.id, row.learning_circle_id],
+          )
+        ).rows[0];
+        if (!membership) return;
+        validUntil = new Date(
+          Math.min(
+            validUntil.getTime(),
+            (membership.expires_at ?? validUntil).getTime(),
+          ),
+        );
+      }
+      return { row, validUntil };
+    }
+    if (!row.private_review_allowed) return;
+    let submissionId: string | null = null;
+    if (identity.role === "reviewer") {
+      const submission = (
+        await client.query<{ id: string }>(
+          `SELECT id FROM evidence_review_submissions
+         WHERE evidence_id=$1 AND submitted_by=$2 AND status IN ('queued','reviewed')
+         FOR SHARE`,
+          [evidenceId, row.owner_principal_id],
+        )
+      ).rows[0];
+      if (!submission) return;
+      submissionId = submission.id;
+    }
+    const assignment = (
+      await client.query<{ id: string; expires_at: Date }>(
+        `SELECT g.id,g.expires_at FROM assignment_grants g
+       WHERE g.staff_id=$1 AND g.staff_role=$2 AND g.workspace_id=$3
+         AND g.revoked_at IS NULL AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp()
+         AND ($4::uuid IS NULL OR EXISTS(
+           SELECT 1 FROM reviewer_evidence_grants exact_grant
+           WHERE exact_grant.assignment_id=g.id AND exact_grant.submission_id=$4
+             AND exact_grant.reviewer_id=$1 AND exact_grant.revoked_at IS NULL
+             AND exact_grant.starts_at<=clock_timestamp() AND exact_grant.expires_at>clock_timestamp()
+         ))
+       ORDER BY g.id LIMIT 1 FOR SHARE OF g`,
+        [identity.id, identity.role, workspace.id, submissionId],
+      )
+    ).rows[0];
+    if (!assignment) return;
+    validUntil = new Date(
+      Math.min(validUntil.getTime(), assignment.expires_at.getTime()),
+    );
+    let exactId: string | undefined;
+    if (submissionId) {
+      const exact = (
+        await client.query<{ id: string; expires_at: Date }>(
+          `SELECT g.id,g.expires_at FROM reviewer_evidence_grants g
+         WHERE g.assignment_id=$1 AND g.submission_id=$2 AND g.reviewer_id=$3
+           AND g.revoked_at IS NULL AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp()
+         ORDER BY g.id LIMIT 1 FOR SHARE OF g`,
+          [assignment.id, submissionId, identity.id],
+        )
+      ).rows[0];
+      if (!exact) return;
+      exactId = exact.id;
+      validUntil = new Date(
+        Math.min(validUntil.getTime(), exact.expires_at.getTime()),
+      );
+    }
+    return {
+      row,
+      validUntil,
+      staff: { actorId: identity.id, assignmentId: assignment.id, exactId },
+    };
+  }
+
+  async function withAccess<T>(
+    token: string,
+    evidenceId: string,
+    action: "evidence_link_issued" | "evidence_bytes_loaded",
+    use: (row: EvidenceMetadata) => T | Promise<T>,
+    isCurrent: (result: T) => boolean,
+  ): Promise<T | Denied> {
+    if (!tokenPattern.test(token) || !uuidPattern.test(evidenceId))
+      return { kind: "denied" };
+    const client = await pool.connect();
+    let releaseError: Error | undefined;
+    try {
+      await client.query("BEGIN");
+      const allowed = await accessible(client, token, evidenceId);
+      if (!allowed) {
+        await client.query("ROLLBACK");
+        return { kind: "denied" };
+      }
+      const result = await use(allowed.row);
+      if (allowed.staff) {
+        const { actorId, assignmentId, exactId } = allowed.staff;
+        await client.query(
+          `INSERT INTO authorization_audit(
+             actor_id,staff_id,workspace_id,grant_type,grant_id,action,evidence_id,assignment_grant_id,occurred_at
+           ) VALUES($1,$1,$2,$3,$4,$5,$6,$7,clock_timestamp())`,
+          [
+            actorId,
+            allowed.row.workspace_id,
+            exactId ? "evidence_review" : "assignment",
+            exactId ?? assignmentId,
+            action,
+            evidenceId,
+            assignmentId,
+          ],
+        );
+      }
+      // Transaction time is frozen at BEGIN. Recheck wall time after potentially
+      // slow storage/audit work, rolling back the event if the access expired.
+      const current = await client.query<{ valid: boolean }>(
+        "SELECT clock_timestamp() < $1::timestamptz AS valid",
+        [allowed.validUntil],
+      );
+      if (!current.rows[0]!.valid || !isCurrent(result)) {
+        await client.query("ROLLBACK");
+        return { kind: "denied" };
+      }
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      if (!(await rollback(client))) releaseError = error as Error;
+      throw error;
+    } finally {
+      client.release(releaseError);
+    }
   }
 
   async function removeKeys(keys: string[]) {
@@ -663,26 +792,40 @@ export function evidenceStore(
       );
     },
     async issueDownload(token, evidenceId) {
-      if (!(await accessible(token, evidenceId))) return { kind: "denied" };
-      const expires = clock() + 5 * 60 * 1000,
-        nonce = randomBytes(24).toString("hex");
-      return {
-        kind: "issued",
-        capability: `${expires}.${nonce}.${signature(evidenceId, expires, nonce)}`,
-        expiresAt: new Date(expires),
-      };
+      return withAccess(
+        token,
+        evidenceId,
+        "evidence_link_issued",
+        () => {
+          const expires = clock() + 5 * 60 * 1000,
+            nonce = randomBytes(24).toString("hex");
+          return {
+            kind: "issued" as const,
+            capability: `${expires}.${nonce}.${signature(evidenceId, expires, nonce)}`,
+            expiresAt: new Date(expires),
+          };
+        },
+        (issued) => validCapability(evidenceId, issued.capability, clock()),
+      );
     },
     async download(token, evidenceId, capability) {
       if (!validCapability(evidenceId, capability, clock()))
         return { kind: "denied" };
-      const row = await accessible(token, evidenceId);
-      if (!row) return { kind: "denied" };
-      return {
-        kind: "allowed",
-        name: row.original_name,
-        mediaType: row.media_type,
-        data: await objects.get(row.storage_key),
-      };
+      return withAccess(
+        token,
+        evidenceId,
+        "evidence_bytes_loaded",
+        async (row) => {
+          const data = await objects.get(row.storage_key);
+          return {
+            kind: "allowed" as const,
+            name: row.original_name,
+            mediaType: row.media_type,
+            data,
+          };
+        },
+        () => validCapability(evidenceId, capability, clock()),
+      );
     },
     async addDerivative(evidenceId, kind, data) {
       if (
