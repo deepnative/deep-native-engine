@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import request from "supertest";
 import type { Server } from "node:http";
+import { once } from "node:events";
 import { app } from "../../src/app.ts";
 import type { Store } from "../../src/store.ts";
 import {
@@ -533,25 +534,50 @@ it("keeps member proposals private and moderation unable to publish", async () =
 });
 it("shows honest track states and restricts the expert evidence roster", async () => {
   const tracks = disabledTrackStore();
-  const server = app(storage(), { origin, secret: "secret", tracks });
+  // Own the listener for the whole case and use its explicitly bound address.
+  // These public/denied/allowed requests must never depend on automatic listener reuse.
+  const readinessClient = async (application: ReturnType<typeof app>) => {
+    const listener = application.listen(0, "127.0.0.1");
+    managedServers.push(listener);
+    await once(listener, "listening");
+    expect(listener.address()).toMatchObject({
+      address: "127.0.0.1",
+      family: "IPv4",
+    });
+    return request.agent(listener);
+  };
+  const publicAgent = await readinessClient(
+    app(storage(), { origin, secret: "secret", tracks }),
+  );
   const publicView = await atStage(
     "GET /readiness/tracks public",
-    request(server).get("/readiness/tracks").set("Host", host).expect(200),
+    publicAgent
+      .get("/readiness/tracks")
+      .set("Host", host)
+      .expect((response) => {
+        if (response.status !== 200)
+          throw new Error(
+            `Public readiness response: ${JSON.stringify({ status: response.status, method: response.request.method, target: response.request.url, contentType: response.headers["content-type"] })}`,
+          );
+      })
+      .expect(200),
   );
   expect(publicView.text).toContain("in preparation");
   expect(publicView.text).toContain("General learners");
   await atStage(
     "GET /operator/experts denied",
-    request(server).get("/operator/experts").set("Host", host).expect(403),
+    publicAgent.get("/operator/experts").set("Host", host).expect(403),
   );
-  const allowed = app(storage(), {
-    origin,
-    secret: "secret",
-    tracks: { ...tracks, registry: async () => [] },
-  });
+  const allowed = await readinessClient(
+    app(storage(), {
+      origin,
+      secret: "secret",
+      tracks: { ...tracks, registry: async () => [] },
+    }),
+  );
   const roster = await atStage(
     "GET /operator/experts allowed",
-    request(allowed).get("/operator/experts").set("Host", host).expect(200),
+    allowed.get("/operator/experts").set("Host", host).expect(200),
   );
   expect(roster.text).toContain("No expert commitments are recorded");
 });

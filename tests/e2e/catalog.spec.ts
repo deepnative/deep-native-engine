@@ -169,13 +169,55 @@ test("[L57] private moderation worklist orders by submission and loses revoked a
       await expect(item.getByText(/Elapsed: [0-9]+ minutes/)).toBeVisible();
     }
     await expect(worklist.getByText("no response-time promise")).toBeVisible();
+    const audited = async () =>
+      (
+        await pool.query(
+          "SELECT proposal_id,action FROM proposal_audit WHERE actor_id=$1 AND proposal_id=ANY($2::uuid[]) ORDER BY id",
+          [moderator.id, [older, later]],
+        )
+      ).rows;
+    expect(await audited()).toEqual([
+      { proposal_id: older, action: "proposal_read" },
+      { proposal_id: later, action: "proposal_read" },
+    ]);
+    await worklist
+      .locator("main li")
+      .filter({ hasText: olderTitle })
+      .getByRole("button", { name: "Quarantine for review" })
+      .click();
+    await expect(
+      worklist.locator("main li").filter({ hasText: olderTitle }),
+    ).toContainText("quarantined");
+    await worklist
+      .locator("main li")
+      .filter({ hasText: olderTitle })
+      .getByRole("button", { name: "Reject and redact" })
+      .click();
+    await expect(worklist.getByText(olderTitle)).toHaveCount(0);
+    const committed = await audited();
+    expect(committed).toEqual([
+      { proposal_id: older, action: "proposal_read" },
+      { proposal_id: later, action: "proposal_read" },
+      { proposal_id: older, action: "proposal_quarantined" },
+      { proposal_id: older, action: "proposal_read" },
+      { proposal_id: later, action: "proposal_read" },
+      { proposal_id: older, action: "proposal_rejected" },
+      { proposal_id: later, action: "proposal_read" },
+    ]);
+    expect(await proposals.preview(cookie.value, older)).toMatchObject({
+      state: "rejected",
+      title: null,
+      body: null,
+      sources: null,
+    });
+
     await pool.query(
       "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE id=$1",
       [moderator.id],
     );
     await worklist
       .locator("main li")
-      .filter({ hasText: olderTitle })
+      .filter({ hasText: laterTitle })
       .getByRole("button", { name: "Reject and redact" })
       .click();
     await expect(
@@ -185,9 +227,10 @@ test("[L57] private moderation worklist orders by submission and loses revoked a
     await expect(
       worklist.getByRole("heading", { name: "Moderation unavailable" }),
     ).toBeVisible();
-    expect(await proposals.preview(cookie.value, older)).toMatchObject({
+    expect(await proposals.preview(cookie.value, later)).toMatchObject({
       state: "submitted",
     });
+    expect(await audited()).toEqual(committed);
   } finally {
     await moderatorContext.close();
     await reviewerContext.close();
