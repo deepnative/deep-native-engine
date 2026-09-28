@@ -10,6 +10,7 @@ import {
   dashboard,
   privateProgressPage,
   evidencePage,
+  localAiConsentPage,
   evidenceRevisionPage,
   lesson,
   readinessPage,
@@ -69,6 +70,10 @@ import {
   MAX_EVIDENCE_BYTES,
   type EvidenceStore,
 } from "./evidence.ts";
+import {
+  disabledLocalAiConsentStore,
+  type LocalAiConsentStore,
+} from "./local-ai-consent.ts";
 import { FOUNDATION_ACCESS, COACHING_OFFERS } from "./offers.ts";
 import {
   disabledCatalogStore,
@@ -129,6 +134,7 @@ export function app(
     adapters?: AdapterReadiness[];
     authorization?: AuthorizationStore;
     evidence?: EvidenceStore;
+    localAiConsent?: LocalAiConsentStore;
     catalog?: CatalogStore;
     tracks?: TrackStore;
     proposals?: ProposalStore;
@@ -149,6 +155,8 @@ export function app(
   const adapters = options.adapters ?? adapterReadiness({}, mode);
   const authorization = options.authorization ?? disabledAuthorizationStore();
   const evidence = options.evidence ?? disabledEvidenceStore();
+  const localAiConsent =
+    options.localAiConsent ?? disabledLocalAiConsentStore();
   const catalog = options.catalog ?? disabledCatalogStore();
   const tracks = options.tracks ?? disabledTrackStore();
   const proposals = options.proposals ?? disabledProposalStore();
@@ -758,6 +766,111 @@ export function app(
       return;
     }
     res.redirect(303, "/evidence");
+  });
+  app.get("/evidence/local-ai", async (_req, res) => {
+    res.send(
+      localAiConsentPage(
+        await localAiConsent.list(res.locals.token as string),
+        res.locals.csrf as string,
+      ),
+    );
+  });
+  app.post("/evidence/local-ai/:evidenceId/grant", async (req, res) => {
+    if ((req.body as Fields).confirm !== "yes") {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Confirmation needed",
+            "Choose the local-only permission before continuing.",
+          ),
+        );
+      return;
+    }
+    const outcome = await localAiConsent.grant(
+      res.locals.token as string,
+      req.params.evidenceId as string,
+    );
+    if (outcome.kind !== "granted") {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Local simulation unavailable",
+            "Refresh your evidence and check the current version and safety state.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/evidence/local-ai");
+  });
+  app.post("/evidence/local-ai/:receiptId/withdraw", async (req, res) => {
+    if ((req.body as Fields).confirm !== "yes") {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Confirmation needed",
+            "Confirm withdrawal before continuing.",
+          ),
+        );
+      return;
+    }
+    if (
+      !(await localAiConsent.withdraw(
+        res.locals.token as string,
+        req.params.receiptId as string,
+      ))
+    ) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Permission unavailable",
+            "This local permission is no longer available.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/evidence/local-ai");
+  });
+  app.post("/evidence/local-ai/:receiptId/queue", async (req, res) => {
+    const receiptId = req.params.receiptId as string;
+    const outcome = await localAiConsent.enqueue(
+      res.locals.token as string,
+      receiptId,
+      receiptId,
+    );
+    if (outcome.kind !== "queued") {
+      res
+        .status(outcome.kind === "conflict" ? 409 : 403)
+        .send(
+          errorPage(
+            "Local simulation unavailable",
+            "Refresh the page and check the exact-source permission.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/evidence/local-ai");
+  });
+  app.post("/evidence/local-ai/:jobId/run", async (req, res) => {
+    const outcome = await localAiConsent.run(
+      res.locals.token as string,
+      req.params.jobId as string,
+    );
+    if (outcome.kind !== "completed") {
+      res
+        .status(outcome.kind === "unavailable" ? 409 : 403)
+        .send(
+          errorPage(
+            "Local simulation unavailable",
+            "Refresh the page. No live AI provider was contacted.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/evidence/local-ai");
   });
   const revisionParent = async (token: string, id: string) =>
     (await evidence.owned(token)).find(

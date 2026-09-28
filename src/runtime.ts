@@ -6,6 +6,8 @@ import { migrate, store } from "./store.ts";
 import { app } from "./app.ts";
 import { authorizationStore } from "./authorization.ts";
 import { evidenceStore, fileObjectStorage } from "./evidence.ts";
+import { deterministicRegistry } from "./adapters.ts";
+import { localAiConsentStore } from "./local-ai-consent.ts";
 import { catalogStore, seedDraftPack } from "./catalog.ts";
 import { trackStore } from "./track-readiness.ts";
 import { proposalStore } from "./proposals.ts";
@@ -56,6 +58,7 @@ export async function start(env: NodeJS.ProcessEnv) {
   try {
     await migrate(pool);
     await seedDraftPack(pool);
+    const objects = fileObjectStorage(settings.privateStorageRoot);
     const server = app(store(pool), {
       ...settings,
       authorization: authorizationStore(pool),
@@ -72,9 +75,15 @@ export async function start(env: NodeJS.ProcessEnv) {
       workflowFeedback: workflowFeedbackStore(pool),
       availability: availabilityStore(pool),
       manualObservations: manualObservationStore(pool),
+      // config() rejects live hosting before reaching this local runtime.
+      localAiConsent: localAiConsentStore(
+        pool,
+        objects,
+        deterministicRegistry(env, settings.mode as "demo" | "test"),
+      ),
       evidence: evidenceStore(
         pool,
-        fileObjectStorage(settings.privateStorageRoot),
+        objects,
         settings.secret,
         evidenceCapabilityClock(
           settings.mode,

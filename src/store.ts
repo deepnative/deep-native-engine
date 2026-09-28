@@ -127,6 +127,7 @@ export async function migrate(pool: Pool) {
       "036-staff-evidence-access-audit.sql",
       "037-sample-slot-conflicts.sql",
       "038-proposal-moderation-audit.sql",
+      "039-local-ai-consent.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

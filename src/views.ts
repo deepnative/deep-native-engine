@@ -37,6 +37,7 @@ import type { ActivityItem } from "./progress.ts";
 import type { UsefulnessReport } from "./usefulness.ts";
 import type { PracticeHistory, PracticeSource } from "./practice.ts";
 import type { OwnedEvidence } from "./evidence.ts";
+import type { LocalAiChoice } from "./local-ai-consent.ts";
 import { localSlotTime, type AvailableSlot } from "./availability.ts";
 import { learningPlan } from "./learning-plan.ts";
 import type { SubmissionError, SubmissionField } from "./validation.ts";
@@ -496,7 +497,7 @@ export function evidencePage(
   };
   return page(
     "Your private evidence",
-    `<nav class="breadcrumb"><a href="/learn">← Your learning path</a></nav><section class="reading"><p class="eyebrow">PRIVATE LOCAL PREVIEW · SAMPLE INFORMATION ONLY</p><h1>Your private evidence</h1><p>Save an invented text sample and control its private-review consent. A new sample stays pending until a safety check runs; no live scanner or qualified reviewer is connected. Do not upload personal, client or confidential material.</p>${notice(errors)}<h2>Saved samples</h2>${
+    `<nav class="breadcrumb"><a href="/learn">← Your learning path</a></nav><section class="reading"><p class="eyebrow">PRIVATE LOCAL PREVIEW · SAMPLE INFORMATION ONLY</p><h1>Your private evidence</h1><p>Save an invented text sample and control its private-review consent. A new sample stays pending until a safety check runs; no live scanner or qualified reviewer is connected. Do not upload personal, client or confidential material.</p><p><a href="/evidence/local-ai">Choose an invented sample for local AI simulation</a></p>${notice(errors)}<h2>Saved samples</h2>${
       items.length
         ? `<ul>${items
             .map((item) => {
@@ -506,6 +507,24 @@ export function evidencePage(
             .join("")}</ul>`
         : "<p>No sample evidence saved yet. Add an invented text sample below.</p>"
     }<h2>Export these preview samples</h2><p><a href="/api/evidence/export">Download my evidence JSON</a>. This includes current sample metadata and clean source bytes encoded as base64. Pending or blocked sample bytes, derivatives, assignments, milestones, career plans, billing and hosted copies are not included. The export stops at 20 samples or 4 MiB of clean source data; download or delete individual samples if you reach that limit.</p><h2>New private text sample</h2><form method="post" action="/evidence">${hidden(csrf)}<label for="evidence-name">Sample title</label><input id="evidence-name" name="name" maxlength="200" required value="${escape(attempted.name)}"><label for="evidence-sample">Invented text sample</label><textarea id="evidence-sample" name="sample" maxlength="4000" required>${escape(attempted.sample)}</textarea><label class="check"><input type="checkbox" name="rights_confirmed" value="yes" required><span>I created this invented sample and have the right to store it.</span></label><label class="check"><input type="checkbox" name="private_review_consent" value="yes" required><span>I explicitly allow this sample to be considered for private review if a safety check and authorized reviewer are later configured. I can revoke this consent.</span></label><button type="submit">Save private text sample</button></form></section>`,
+  );
+}
+export function localAiConsentPage(
+  choices: LocalAiChoice[],
+  csrf: string,
+  errors: string[] = [],
+) {
+  const status = (value: string) =>
+    value === "succeeded"
+      ? "Simulated locally. No provider request or qualified review occurred."
+      : value === "pending"
+        ? "Queued only in this local preview"
+        : value === "running" || value === "needs_reconciliation"
+          ? "Outcome needs local reconciliation; it will not be retried automatically"
+          : "Local simulation unavailable or failed";
+  return page(
+    "Local AI simulation permission",
+    `<nav class="breadcrumb"><a href="/evidence">← Your private evidence</a></nav><section class="reading"><p class="eyebrow">PRIVATE LOCAL SIMULATION · INVENTED TEXT ONLY</p><h1>Choose exactly what this preview may use</h1><p>This local prototype can use one clean version of your invented text sample for a deterministic AI simulation. It makes no network request to an AI provider, gives no qualified feedback, and does not establish production consent. Review or circle permission does not enable it. Do not put personal, client or confidential information here.</p>${notice(errors)}${choices.length ? `<ul>${choices.map((choice) => `<li><h2>${escape(choice.name)}</h2><p>Private version ${choice.revisionNumber} · ${escape(choice.evidenceId)}</p>${choice.receiptId ? `<p role="status">Local simulation permission granted for this exact version.</p><form method="post" action="/evidence/local-ai/${encodeURIComponent(choice.receiptId)}/queue">${hidden(csrf)}<button type="submit">Queue local simulation</button></form><form method="post" action="/evidence/local-ai/${encodeURIComponent(choice.receiptId)}/withdraw">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Withdraw local AI permission for ${escape(choice.name)}</span></label><button class="secondary" type="submit">Withdraw permission</button></form>` : `${choice.withdrawnAt ? '<p role="status">Local AI permission withdrawn. Future simulations need a new grant.</p>' : ""}<form method="post" action="/evidence/local-ai/${encodeURIComponent(choice.evidenceId)}/grant">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I permit this exact invented sample version to be used for local deterministic AI simulation. I can withdraw permission before it runs. No external AI provider is connected.</span></label><button type="submit">Grant local simulation permission</button></form>`}${choice.jobs.length ? `<h3>Local jobs</h3><ul>${choice.jobs.map((job) => `<li><p>${escape(status(job.status))}</p>${job.status === "pending" ? `<form method="post" action="/evidence/local-ai/${encodeURIComponent(job.id)}/run">${hidden(csrf)}<button type="submit">Run local simulation</button></form>` : ""}</li>`).join("")}</ul>` : ""}</li>`).join("")}</ul>` : "<p>No clean current invented text sample is available. Save a sample, then complete its local safety check.</p>"}</section>`,
   );
 }
 export function evidenceRevisionPage(
