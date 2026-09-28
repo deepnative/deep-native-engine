@@ -19,6 +19,7 @@ import {
   assignmentAttemptPage,
   evidencePage,
   localAiConsentPage,
+  localAiControlPage,
   availabilityPage,
   privateProgressPage,
   manualObservationPage,
@@ -288,6 +289,31 @@ it("describes local AI permission and every job state without leaking sample tex
   expect(active).toContain("Simulated locally. No provider request");
   expect(active).toContain("Outcome needs local reconciliation");
   expect(active).toContain("Local simulation unavailable or failed");
+  const paused = localAiConsentPage(
+    [
+      {
+        evidenceId: "sample-id",
+        name: "Invented sample.txt",
+        revisionNumber: 2,
+        receiptId: "receipt-id",
+        grantedAt: new Date(),
+        withdrawnAt: null,
+        jobs: [{ id: "pending", status: "pending" }],
+      },
+    ],
+    "csrf",
+    [],
+    "paused",
+  );
+  expect(paused).toContain("Local simulations are paused");
+  expect(paused).not.toContain("Queue local simulation</button>");
+  expect(paused).not.toContain("Run local simulation</button>");
+  expect(paused).toContain("Withdraw permission");
+  expect(localAiConsentPage([], "csrf", [], "unavailable")).toContain(
+    "Local simulations are unavailable",
+  );
+  expect(localAiControlPage(false, "csrf")).toContain("Pause local simulation");
+  expect(localAiControlPage(true, "csrf")).toContain("Resume local simulation");
 });
 it("keeps optional planning gated and renders escaped, unsent per-version drafts", () => {
   const off = careerPage({ enabled: false, entries: [], drafts: [] }, "csrf");

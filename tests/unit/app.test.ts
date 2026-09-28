@@ -17,6 +17,7 @@ import {
   disabledLocalAiConsentStore,
   type LocalAiConsentStore,
 } from "../../src/local-ai-consent.ts";
+import type { LocalAiControlStore } from "../../src/local-ai-control.ts";
 import {
   disabledCatalogStore,
   type CatalogStore,
@@ -762,6 +763,102 @@ it("requires explicit member confirmation and current local AI permission at eve
     status: "succeeded",
   });
   await post("/evidence/local-ai/job-id/run").expect(303);
+});
+it("keeps local AI pause control admin-only and shows member unavailability", async () => {
+  const missingControl = managedAgent(
+    app(storage(), { origin, secret: "secret" }),
+  );
+  const missingHome = await missingControl
+    .get("/")
+    .set("Host", host)
+    .expect(200);
+  const missingCsrf = missingHome.text.match(
+    /name="csrf" value="([a-f0-9]+)"/,
+  )![1]!;
+  await missingControl.get("/operator/local-ai").set("Host", host).expect(403);
+  await missingControl
+    .post("/operator/local-ai")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf: missingCsrf, state: "paused", confirm: "yes" })
+    .expect(403);
+  const localAiControl = {
+    current: vi
+      .fn<LocalAiControlStore["current"]>()
+      .mockResolvedValue("paused"),
+    read: vi.fn<LocalAiControlStore["read"]>().mockResolvedValue(null),
+    set: vi.fn<LocalAiControlStore["set"]>().mockResolvedValue(false),
+  };
+  const agent = managedAgent(
+    app(db, { origin, secret: "secret", localAiControl }),
+  );
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  await agent.get("/operator/local-ai").set("Host", host).expect(403);
+  localAiControl.read.mockResolvedValueOnce({ paused: false });
+  const control = await agent
+    .get("/operator/local-ai")
+    .set("Host", host)
+    .expect(200);
+  expect(control.text).toContain("Local simulation is available");
+  const post = (state: string, confirm = "yes") =>
+    agent
+      .post("/operator/local-ai")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, state, confirm });
+  await post("invalid").expect(422);
+  await post("paused", "no").expect(422);
+  expect(localAiControl.set).not.toHaveBeenCalled();
+  await post("paused").expect(403);
+  localAiControl.set.mockResolvedValueOnce(true);
+  await post("paused").expect(303);
+  expect(localAiControl.set).toHaveBeenLastCalledWith(expect.any(String), true);
+  localAiControl.set.mockResolvedValueOnce(true);
+  await post("enabled").expect(303);
+  expect(localAiControl.set).toHaveBeenLastCalledWith(
+    expect.any(String),
+    false,
+  );
+
+  active();
+  const memberPage = await agent
+    .get("/evidence/local-ai")
+    .set("Host", host)
+    .expect(200);
+  expect(memberPage.text).toContain("Local simulations are paused");
+  const pausedQueue = await agent
+    .post("/evidence/local-ai/receipt-id/queue")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf })
+    .expect(403);
+  expect(pausedQueue.text).toContain("No new local job was queued");
+  const pausedRun = await agent
+    .post("/evidence/local-ai/job-id/run")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf })
+    .expect(403);
+  expect(pausedRun.text).toContain("will not retry automatically");
+
+  const live = managedAgent(
+    app(storage(), { origin, secret: "secret", mode: "live", localAiControl }),
+  );
+  const liveHome = await live.get("/").set("Host", host).expect(200);
+  const liveCsrf = liveHome.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  await live.get("/operator/local-ai").set("Host", host).expect(404);
+  await live
+    .post("/operator/local-ai")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf: liveCsrf, state: "paused", confirm: "yes" })
+    .expect(404);
 });
 let db: ReturnType<typeof storage>;
 beforeEach(() => {

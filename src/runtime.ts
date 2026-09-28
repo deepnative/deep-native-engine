@@ -8,6 +8,7 @@ import { authorizationStore } from "./authorization.ts";
 import { evidenceStore, fileObjectStorage } from "./evidence.ts";
 import { deterministicRegistry } from "./adapters.ts";
 import { localAiConsentStore } from "./local-ai-consent.ts";
+import { localAiControlStore } from "./local-ai-control.ts";
 import { catalogStore, seedDraftPack } from "./catalog.ts";
 import { trackStore } from "./track-readiness.ts";
 import { proposalStore } from "./proposals.ts";
@@ -81,6 +82,7 @@ export async function start(env: NodeJS.ProcessEnv) {
         objects,
         deterministicRegistry(env, settings.mode as "demo" | "test"),
       ),
+      localAiControl: localAiControlStore(pool),
       evidence: evidenceStore(
         pool,
         objects,

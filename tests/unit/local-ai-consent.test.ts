@@ -86,6 +86,8 @@ function setup(
     broken?: boolean;
     phase2Denied?: boolean;
     invalidPhase2Job?: boolean;
+    paused?: boolean;
+    phase2Paused?: boolean;
   } = {},
 ) {
   const s = { ...source, ...options.source },
@@ -100,6 +102,15 @@ function setup(
       commits++;
       return { rows: [] };
     }
+    if (sql.includes("SELECT paused FROM local_ai_control"))
+      return {
+        rows: [
+          {
+            paused:
+              options.paused || (options.phase2Paused && commits > 0) || false,
+          },
+        ],
+      };
     if (sql.includes("SELECT e.id FROM evidence_objects"))
       return { rows: [{ id }] };
     if (sql.includes("SELECT id FROM principals"))
@@ -497,4 +508,23 @@ it("rejects mismatched adapter identity or live mode before delivering any sourc
     expect(await f.service.run("member", jid)).toEqual({ kind: "denied" });
     expect(f.execute).not.toHaveBeenCalled();
   }
+});
+
+it("pause denies queue and claim, and preserves a held second-phase attempt", async () => {
+  const paused = setup({ paused: true });
+  expect(await paused.service.enqueue("member", rid, "key")).toEqual({
+    kind: "denied",
+  });
+  expect(await paused.service.run("member", jid)).toEqual({ kind: "denied" });
+  expect(paused.execute).not.toHaveBeenCalled();
+  const later = setup({ phase2Paused: true });
+  expect(await later.service.run("member", jid)).toEqual({
+    kind: "unavailable",
+  });
+  expect(later.execute).not.toHaveBeenCalled();
+  expect(
+    later.query.mock.calls.filter(([sql]) =>
+      sql.startsWith("UPDATE adapter_jobs"),
+    ),
+  ).toHaveLength(1);
 });
