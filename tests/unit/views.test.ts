@@ -29,6 +29,7 @@ import type { Milestone } from "../../src/store.ts";
 import type { CareerSnapshot } from "../../src/career.ts";
 import type { ExpertRecord } from "../../src/track-readiness.ts";
 import type { Proposal } from "../../src/proposals.ts";
+import { workflowBundle } from "../../src/workflow-registry.ts";
 const learner = {
   id: "a",
   background: "explorer" as const,
@@ -39,6 +40,45 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("shows a private workflow improvement with an exact version and a stale-safe draft", async () => {
+  const workflow = await workflowBundle("WF-001");
+  expect(workflow).not.toBeNull();
+  const form = proposalListPage([], "csrf", workflow);
+  expect(form).toContain('name="workflow_id" value="WF-001"');
+  expect(form).toContain('name="workflow_version" value="1"');
+  expect(form).toContain("no public reuse rights are granted");
+  const proposal: Proposal = {
+    id: "sample",
+    title: "Invented improvement",
+    body: "Add an invented check",
+    sources: "Original sample",
+    workflowId: "WF-001",
+    workflowVersion: 1,
+    state: "draft",
+    createdAt: new Date("2026-09-28T12:00:00Z"),
+    submittedAt: null,
+  };
+  expect(proposalPreviewPage(proposal, "csrf")).toContain(
+    "Workflow reference: WF-001 version 1",
+  );
+  const stale = proposalPreviewPage(proposal, "csrf", false);
+  expect(stale).toContain("no longer current");
+  expect(stale).not.toContain("Submit to private moderation");
+  expect(stale).toContain("Withdraw and redact");
+  expect(
+    moderationPage(
+      [
+        {
+          ...proposal,
+          state: "submitted",
+          submittedAt: new Date("2026-09-28T12:01:00Z"),
+        },
+      ],
+      "csrf",
+      new Date("2026-09-28T12:02:00Z"),
+    ),
+  ).toContain("Workflow reference: WF-001 version 1");
+});
 it("labels a capped internal synthetic register without rendering forged markup", () => {
   const record: ManualObservation = {
     id: "11111111-1111-4111-8111-111111111111",

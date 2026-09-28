@@ -44,7 +44,9 @@ const sections = {
   careerDrafts: `SELECT id,kind,title,body,approved,version,
     created_at AS "createdAt",updated_at AS "updatedAt"
     FROM career_drafts WHERE member_id=$1 ORDER BY created_at,id LIMIT $2`,
-  proposals: `SELECT id,title,body,sources,state,created_at AS "createdAt",
+  proposals: `SELECT id,title,body,sources,state,
+    workflow_id AS "workflowId",workflow_version AS "workflowVersion",
+    created_at AS "createdAt",
     submitted_at AS "submittedAt",withdrawn_at AS "withdrawnAt"
     FROM member_proposals WHERE member_id=$1 ORDER BY created_at,id LIMIT $2`,
   workflowFeedback: `SELECT workflow_id AS "workflowId",

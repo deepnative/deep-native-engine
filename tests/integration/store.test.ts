@@ -900,6 +900,82 @@ it("keeps consented member samples private through moderation, withdrawal and de
     ).rows[0],
   ).toEqual({ n: 0 });
 });
+it("binds a private workflow improvement to its current version and redacts it on withdrawal", async () => {
+  const owner = await member();
+  const other = await member();
+  const moderatorToken = randomBytes(32).toString("hex");
+  await authorizationStore(pool).provisionStaff(
+    moderatorToken,
+    "moderator",
+    new Date(Date.now() + 86_400_000),
+  );
+  const proposals = proposalStore(pool);
+  const sample = {
+    title: "Invented workflow improvement",
+    body: "Add a plain-language check to the sample requirements workflow.",
+    sources: "Original invented suggestion; no client data",
+  };
+  expect(
+    await proposals.createDraft(owner.token, sample, true, {
+      id: "WF-999",
+      version: 1,
+    }),
+  ).toBeNull();
+  expect(
+    await proposals.createDraft(owner.token, sample, true, {
+      id: "WF-001",
+      version: 2,
+    }),
+  ).toBeNull();
+  const id = await proposals.createDraft(owner.token, sample, true, {
+    id: "WF-001",
+    version: 1,
+  });
+  expect(id).toEqual(expect.any(String));
+  expect(await proposals.preview(other.token, id!)).toBeNull();
+  expect(await proposals.preview(owner.token, id!)).toMatchObject({
+    workflowId: "WF-001",
+    workflowVersion: 1,
+    state: "draft",
+  });
+  const changedRegistry = proposalStore(
+    pool,
+    async () => ({ version: 2 }) as never,
+  );
+  expect(await changedRegistry.submit(owner.token, id!, true)).toBe(false);
+  expect(await proposals.moderationQueue(moderatorToken)).toEqual([]);
+  expect(await proposals.submit(owner.token, id!, true)).toBe(true);
+  expect(await proposals.submit(owner.token, id!, true)).toBe(false);
+  expect(await proposals.moderationQueue(moderatorToken)).toMatchObject([
+    { id, workflowId: "WF-001", workflowVersion: 1, state: "submitted" },
+  ]);
+  const before = await memberExportStore(pool).exportOwned(owner.token);
+  expect(before).toMatchObject({
+    kind: "ready",
+    payload: {
+      records: { proposals: [{ workflowId: "WF-001", workflowVersion: 1 }] },
+    },
+  });
+  expect(await proposals.withdraw(owner.token, id!)).toBe(true);
+  expect(await proposals.moderationQueue(moderatorToken)).toEqual([]);
+  expect(await proposals.preview(owner.token, id!)).toMatchObject({
+    title: null,
+    body: null,
+    sources: null,
+    workflowId: null,
+    workflowVersion: null,
+    state: "withdrawn",
+  });
+  const after = await memberExportStore(pool).exportOwned(owner.token);
+  expect(after).toMatchObject({
+    kind: "ready",
+    payload: {
+      records: {
+        proposals: [{ body: null, workflowId: null, workflowVersion: null }],
+      },
+    },
+  });
+});
 it("orders synthetic moderation by submission time and revokes queue access", async () => {
   const proposals = proposalStore(pool);
   const learner = await member();

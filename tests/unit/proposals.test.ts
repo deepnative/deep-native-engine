@@ -64,8 +64,11 @@ it("bounds member operations and binds moderation reads to fresh role authorizat
     .mockResolvedValueOnce({ rows: [draft] })
     .mockResolvedValueOnce({ rows: [draft] })
     .mockResolvedValueOnce({ rows: [] })
+    .mockResolvedValueOnce({
+      rows: [{ workflowId: null, workflowVersion: null }],
+    })
     .mockResolvedValueOnce({ rowCount: 1 })
-    .mockResolvedValueOnce({ rowCount: 0 })
+    .mockResolvedValueOnce({ rows: [] })
     .mockResolvedValueOnce({ rowCount: 1 })
     .mockResolvedValueOnce({ rowCount: 0 })
     .mockResolvedValueOnce({ rows: [{ allowed: false, id: null }] })
@@ -88,8 +91,56 @@ it("bounds member operations and binds moderation reads to fresh role authorizat
   expect(await store.moderationQueue("moderator")).toEqual([draft]);
   expect(await store.moderate("moderator", draft.id, "quarantine")).toBe(true);
   expect(await store.moderate("moderator", draft.id, "reject")).toBe(false);
-  expect(query.mock.calls[9]?.[0]).toContain("LEFT JOIN LATERAL");
-  expect(query.mock.calls[12]?.[0]).toContain(
+  expect(query.mock.calls[10]?.[0]).toContain("LEFT JOIN LATERAL");
+  expect(query.mock.calls[13]?.[0]).toContain(
     "title=CASE WHEN $3='rejected' THEN NULL",
   );
+});
+
+it("rejects forged or stale workflow references and refuses stale draft submission", async () => {
+  const query = vi
+    .fn()
+    .mockResolvedValueOnce({ rows: [{ id: draft.id }] })
+    .mockResolvedValueOnce({
+      rows: [{ workflowId: "WF-001", workflowVersion: 1 }],
+    })
+    .mockResolvedValueOnce({
+      rows: [{ workflowId: "WF-001", workflowVersion: 1 }],
+    })
+    .mockResolvedValueOnce({ rowCount: 1 });
+  let current = 1;
+  const resolve = vi.fn(async (id: string) =>
+    id === "WF-001" ? ({ version: current } as never) : null,
+  );
+  const store = proposalStore({ query } as unknown as Pool, resolve);
+  expect(
+    await store.createDraft("member", value, true, {
+      id: "WF-999",
+      version: 1,
+    }),
+  ).toBeNull();
+  expect(
+    await store.createDraft("member", value, true, {
+      id: "WF-001",
+      version: 0,
+    }),
+  ).toBeNull();
+  expect(
+    await store.createDraft("member", value, true, {
+      id: "WF-001",
+      version: 2,
+    }),
+  ).toBeNull();
+  expect(query).not.toHaveBeenCalled();
+  expect(
+    await store.createDraft("member", value, true, {
+      id: "WF-001",
+      version: 1,
+    }),
+  ).toBe(draft.id);
+  current = 2;
+  expect(await store.submit("member", draft.id, true)).toBe(false);
+  current = 1;
+  expect(await store.submit("member", draft.id, true)).toBe(true);
+  expect(query).toHaveBeenCalledTimes(4);
 });
