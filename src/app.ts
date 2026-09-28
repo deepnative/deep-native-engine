@@ -16,6 +16,7 @@ import {
   libraryPage,
   workflowRegistryPage,
   workflowDetailPage,
+  workflowFeedbackPage,
   circlesPage,
   contentPreview,
   studyReflectionPage,
@@ -76,6 +77,11 @@ import { disabledTrackStore, type TrackStore } from "./track-readiness.ts";
 import { DOMAINS, type Domain } from "./content.ts";
 import { disabledProposalStore, type ProposalStore } from "./proposals.ts";
 import { workflowBundle, workflowRegistry } from "./workflow-registry.ts";
+import {
+  disabledWorkflowFeedbackStore,
+  parseWorkflowFeedback,
+  type WorkflowFeedbackStore,
+} from "./workflow-feedback.ts";
 import { disabledCircleStore, type CircleStore } from "./circles.ts";
 import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
@@ -125,6 +131,7 @@ export function app(
     attempts?: AttemptStore;
     practice?: PracticeStore;
     usefulness?: UsefulnessStore;
+    workflowFeedback?: WorkflowFeedbackStore;
     memberExport?: MemberExportStore;
     availability?: AvailabilityStore;
   },
@@ -143,6 +150,8 @@ export function app(
   const attempts = options.attempts ?? disabledAttemptStore();
   const practice = options.practice ?? disabledPracticeStore();
   const usefulness = options.usefulness ?? disabledUsefulnessStore();
+  const workflowFeedback =
+    options.workflowFeedback ?? disabledWorkflowFeedbackStore();
   const memberExport = options.memberExport ?? disabledMemberExportStore();
   const availability = options.availability ?? disabledAvailabilityStore();
   app.disable("x-powered-by");
@@ -507,6 +516,7 @@ export function app(
       "/circles",
       "/tailored-review",
       "/availability",
+      "/workflow-feedback",
     ],
     async (req, res, next) => {
       const session = await store.session(res.locals.token as string);
@@ -1027,6 +1037,111 @@ export function app(
     res.type("text/markdown; charset=utf-8");
     res.attachment(`${item.id}-v${item.version}.md`);
     res.send(item.download);
+  });
+  app.get("/workflow-feedback/:id", async (req, res) => {
+    const id = req.params.id as string;
+    const [item, reports] = await Promise.all([
+      workflowBundle(id),
+      workflowFeedback.list(res.locals.token as string),
+    ]);
+    const own = reports.filter((report) => report.workflowId === id);
+    if (!item && own.length === 0) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Workflow unavailable",
+            "This demonstration does not exist.",
+          ),
+        );
+      return;
+    }
+    res.send(workflowFeedbackPage(item, own, res.locals.csrf as string, id));
+  });
+  app.post("/workflow-feedback/:id/save", async (req, res) => {
+    const fields = req.body as Fields;
+    const version = Number(fields.workflow_version);
+    const revision = Number(fields.revision);
+    const note = parseWorkflowFeedback(fields.note);
+    if (
+      fields.confirm !== "yes" ||
+      !note ||
+      !Number.isSafeInteger(version) ||
+      version < 1 ||
+      !Number.isSafeInteger(revision) ||
+      revision < 0
+    ) {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Feedback not saved",
+            "Enter 1–1,000 characters of invented private feedback and confirm your intent.",
+          ),
+        );
+      return;
+    }
+    if (
+      !(await workflowFeedback.save(
+        res.locals.token as string,
+        req.params.id as string,
+        version,
+        note,
+        revision,
+      ))
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Feedback unchanged",
+            "Nothing was saved. Reopen the workflow and check its current version and your note before trying again.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, `/workflow-feedback/${req.params.id}`);
+  });
+  app.post("/workflow-feedback/:id/withdraw", async (req, res) => {
+    const fields = req.body as Fields;
+    const version = Number(fields.workflow_version);
+    const revision = Number(fields.revision);
+    if (
+      fields.confirm !== "yes" ||
+      !Number.isSafeInteger(version) ||
+      version < 1 ||
+      !Number.isSafeInteger(revision) ||
+      revision < 1
+    ) {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Feedback unchanged",
+            "Confirm withdrawal from your private note.",
+          ),
+        );
+      return;
+    }
+    if (
+      !(await workflowFeedback.withdraw(
+        res.locals.token as string,
+        req.params.id as string,
+        version,
+        revision,
+      ))
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Feedback unchanged",
+            "Nothing was removed. Reopen your private note to check its current state.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, `/workflow-feedback/${req.params.id}`);
   });
   app.get("/library", async (req, res) => {
     const member = res.locals.learner as Learner;

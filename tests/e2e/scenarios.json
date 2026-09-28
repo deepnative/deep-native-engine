@@ -1,7 +1,7 @@
 {
-  "version": "initial-learning-v37",
+  "version": "initial-learning-v38",
   "fullMvpVersion": "full-mvp-v1",
-  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans and optional eligible current published sample-lesson recommendations, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts and immutable local submission revisions, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations, private versioned synthetic lesson activity and member-private exact-version usefulness self-reports with a suppressed operator-only coarse snapshot, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity",
+  "scope": "Local learning preview with revisable interests, private evidence, gated content, honest track states, private proposals and scoped synthetic moderation triage, time-fitting starter plans and optional eligible current published sample-lesson recommendations, published synthetic assignment choices with version-pinned prerequisites and private versioned synthetic assignment attempts and immutable local submission revisions, member-managed invented text evidence and local review intent, bounded structured member export, private goal milestones, optional private career plans and unsent member-approved drafts, read-only synthetic workflow demonstrations with owner-only exact-version private feedback, private versioned synthetic lesson activity and member-private exact-version usefulness self-reports with a suppressed operator-only coarse snapshot, optional synthetic local circle membership operator-only aggregate preview metrics and staff content worklist denial after profile changes, ephemeral source-grounded local study reflection, saved private exact-version sample practice, and reviewer denial for raw workspace drafts; not reviewed foundation content, a live community, commercial access or the full B1 member-to-reviewer journey; private read-only sample appointment-window discovery with no booking or live qualified capacity",
   "projects": ["desktop-chromium", "mobile-chromium"],
   "slice": [
     {
@@ -632,6 +632,15 @@
       "steps": "Member self-assesses and reports usefulness, member and reviewer attempt the operator endpoint, operator reads the suppressed snapshot and tries forged filters, then member deletes the preview",
       "expected": "Only the operator sees a labelled suppressed/coarse-only usefulness block with no member or lesson detail; forged filters cannot narrow it, deletion erases the answer and no live or qualified outcome is claimed",
       "issues": [121, 309],
+      "critical": true
+    },
+    {
+      "id": "L71",
+      "actor": "General learner, unrelated professional member and reviewer",
+      "preconditions": "Three public file-backed synthetic workflow drafts and separate private local sessions",
+      "steps": "Open a public draft, save and correct private exact-version feedback, reject stale replay and forged CSRF, inspect owner export and other-member/reviewer denial, withdraw and delete the preview",
+      "expected": "Only the active owner sees or changes a bounded private self-report; public draft/download and another member reveal no note, stale writes fail, withdrawal and deletion erase the retained note, and no qualified review or publication is claimed",
+      "issues": [115, 311],
       "critical": true
     }
   ],
