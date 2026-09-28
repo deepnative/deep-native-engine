@@ -1370,7 +1370,15 @@ it("supports the local editor/reviewer workflow without bypassing rejected trans
       publishedAt: null,
     },
   ]);
-  await agent.get("/editor/library").set("Host", host).expect(200);
+  const editorPage = await agent
+    .get("/editor/library")
+    .set("Host", host)
+    .expect(200);
+  expect(editorPage.text).toContain('name="rubric"');
+  expect(editorPage.text).toContain('name="rubric_version"');
+  expect(editorPage.text).toContain(
+    "not qualified instruction or formal human assessment",
+  );
   const post = (path: string, body: Record<string, string> = {}) =>
     agent
       .post(path)
@@ -1411,6 +1419,21 @@ it("supports the local editor/reviewer workflow without bypassing rejected trans
       version: 1,
       origin: "curated",
       structuredPrerequisites: { schemaVersion: 1, all: [] },
+    }),
+  );
+  catalog.createDraft.mockResolvedValueOnce(true);
+  await post("/editor/library", {
+    ...fields,
+    kind: "assignment",
+    rubric: "Check source and uncertainty.",
+    rubric_version: "2",
+  }).expect(303);
+  expect(catalog.createDraft).toHaveBeenLastCalledWith(
+    expect.any(String),
+    expect.objectContaining({
+      kind: "assignment",
+      rubric: "Check source and uncertainty.",
+      rubricVersion: 2,
     }),
   );
   for (const action of ["submit", "approve", "publish", "unknown"]) {

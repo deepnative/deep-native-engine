@@ -651,6 +651,15 @@
       "expected": "Only the platform administrator sees and writes the append-only internal register; all backgrounds obey the same rule, replays do not duplicate, conflicting keys and forged requests fail, and no payment or entitlement is asserted",
       "issues": [32, 313],
       "critical": true
+    },
+    {
+      "id": "L73",
+      "actor": "Synthetic editor, reviewer, general learner and unrelated visitor",
+      "preconditions": "Local staff preview with no qualified curriculum approval",
+      "steps": "Reject an incomplete rubric pair, author and publish an invented assignment rubric from the staff form, then publish a revised content/rubric version and inspect both versions and member access",
+      "expected": "Invalid draft is not stored; only an editor creates the exact versioned rubric, the member sees the latest published pair, earlier version stays immutable, and no formal assessment or qualified approval is claimed",
+      "issues": [97, 323],
+      "critical": true
     }
   ],
   "fullMvp": [
