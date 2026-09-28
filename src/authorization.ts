@@ -131,6 +131,10 @@ export function disabledAuthorizationStore(): AuthorizationStore {
 }
 
 export function authorizationStore(pool: Pool): AuthorizationStore {
+  // Grant mutations lock the administrator principal before writing the grant,
+  // then its audit event, all in one statement/transaction. FOR SHARE conflicts
+  // with revoked_at updates; foreign-key FOR KEY SHARE alone does not. A waiting
+  // authorization rechecks the updated principal after revocation commits.
   async function grant(
     table: "assignment_grants" | "support_access_grants",
     adminId: string,
@@ -158,6 +162,7 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
              SELECT 1 FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
              WHERE p.id=$7 AND p.kind='staff' AND s.role='platform_admin'
                AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
+             FOR SHARE OF p
            )
            AND EXISTS(
              SELECT 1 FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
@@ -204,6 +209,7 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
                SELECT 1 FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
                WHERE p.id=$1 AND p.kind='staff' AND s.role='platform_admin'
                  AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
+               FOR SHARE OF p
              )
            RETURNING g.*
            ), audited AS (
@@ -294,6 +300,7 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
                  ON profile.principal_id=p.id
                WHERE p.id=$7 AND p.kind='staff' AND profile.role='platform_admin'
                  AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
+               FOR SHARE OF p
              )
              AND EXISTS(
                SELECT 1 FROM principals p JOIN staff_profiles profile
