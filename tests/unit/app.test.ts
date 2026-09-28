@@ -1406,6 +1406,7 @@ it("offers ephemeral source-grounded study reflection only for the current publi
 });
 it("supports the local editor/reviewer workflow without bypassing rejected transitions", async () => {
   const catalog = catalogMock();
+  catalog.staffList.mockResolvedValue([]);
   const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
@@ -1519,6 +1520,70 @@ it("supports the local editor/reviewer workflow without bypassing rejected trans
   await post("/editor/library/SYN-001/retire").expect(409);
   catalog.retire.mockResolvedValueOnce(true);
   await post("/editor/library/SYN-001/retire").expect(303);
+});
+it("accepts controlled synthetic audience tags and preserves the form on rejection", async () => {
+  const catalog = catalogMock();
+  catalog.staffList.mockResolvedValue([]);
+  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  const fields = {
+    id: "SYN-211",
+    version: "1",
+    kind: "assignment",
+    title: "Invented <review> activity",
+    body: "An invented exercise",
+    owner: "Editor",
+    sources: "Original sample",
+    rights: "Owned sample",
+    goals: ["everyday", "work"],
+    backgrounds: ["explorer", "professional"],
+    domains: ["education", "operations"],
+  };
+  const post = (input: Record<string, unknown>, token = csrf) =>
+    agent
+      .post("/editor/library")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf: token, ...input });
+  catalog.createDraft.mockResolvedValue(true);
+  await post(fields, "forged").expect(403);
+  expect(catalog.createDraft).not.toHaveBeenCalled();
+  await post(fields).expect(303);
+  expect(catalog.createDraft).toHaveBeenLastCalledWith(
+    expect.any(String),
+    expect.objectContaining({
+      goals: ["everyday", "work"],
+      backgrounds: ["explorer", "professional"],
+      domains: ["education", "operations"],
+    }),
+  );
+  catalog.createDraft.mockClear();
+  catalog.staffList.mockResolvedValueOnce(null);
+  await post({ ...fields, goals: ["unknown"] }).expect(422);
+  expect(catalog.createDraft).not.toHaveBeenCalled();
+  for (const input of [
+    { ...fields, goals: ["work", "work"] },
+    { ...fields, goals: ["unknown"] },
+    {
+      ...fields,
+      backgrounds: ["explorer", "professional", "technical", "explorer"],
+    },
+    { ...fields, domains: ["education", ""] },
+    { ...fields, "domains[0]": "education" },
+  ]) {
+    const rejected = await post(input).expect(422);
+    expect(rejected.text).toContain("Choose unique, listed audience tags");
+    expect(rejected.text).toContain("Invented &lt;review&gt; activity");
+    expect(rejected.text).toContain("An invented exercise");
+    expect(rejected.text).toContain('name="goals"');
+    expect(catalog.createDraft).not.toHaveBeenCalled();
+  }
+  const rejected = await post({ ...fields, goals: ["work", "work"] }).expect(
+    422,
+  );
+  expect(rejected.text).toMatch(/name="goals" value="work" checked/);
 });
 it("does not expose the staff workflow page to a member", async () => {
   const catalog = catalogMock();
