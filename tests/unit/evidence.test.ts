@@ -36,6 +36,34 @@ const metadata = {
   storage_key: storageKey,
 };
 
+const accessIdentity = {
+  id: evidenceId,
+  kind: "member",
+  role: null,
+  expires_at: new Date("2030-01-01"),
+};
+const accessMetadata = {
+  ...metadata,
+  owner_principal_id: evidenceId,
+  private_review_allowed: true,
+  learning_circle_id: null,
+};
+function ownedAccess() {
+  return [accessIdentity, { id: evidenceId }, accessMetadata, { valid: true }];
+}
+function staffAccess(role: "coach" | "reviewer" = "coach") {
+  return [
+    { ...accessIdentity, kind: "staff", role },
+    { id: evidenceId },
+    accessMetadata,
+    ...(role === "reviewer" ? [{ id: "submission" }] : []),
+    { id: "assignment", expires_at: new Date("2030-01-01") },
+    ...(role === "reviewer"
+      ? [{ id: "exact", expires_at: new Date("2030-01-01") }]
+      : []),
+  ];
+}
+
 function objectStorage() {
   return {
     put: vi.fn<ObjectStorage["put"]>().mockResolvedValue(undefined),
@@ -630,7 +658,7 @@ it("keeps review, publication and exact-circle consent independent", async () =>
 
 it("issues short-lived capabilities and rechecks authorization at download", async () => {
   let now = 1_800_000_000_000;
-  const db = database(metadata, metadata, undefined),
+  const db = database(...ownedAccess(), ...ownedAccess(), undefined),
     objects = objectStorage(),
     evidence = evidenceStore(db.pool, objects, "secret", () => now);
   await expect(evidence.issueDownload("bad", evidenceId)).resolves.toEqual({
@@ -681,7 +709,7 @@ it.each([
 });
 
 it("rejects a well-formed capability with a changed signature", async () => {
-  const db = database(metadata),
+  const db = database(...ownedAccess()),
     evidence = evidenceStore(
       db.pool,
       objectStorage(),
@@ -694,6 +722,181 @@ it("rejects a well-formed capability with a changed signature", async () => {
   await expect(evidence.download(token, evidenceId, changed)).resolves.toEqual({
     kind: "denied",
   });
+});
+
+it.each(["coach", "reviewer"] as const)(
+  "commits the %s audit before returning a staff link",
+  async (role) => {
+    const db = database(...staffAccess(role), undefined, { valid: true });
+    const evidence = evidenceStore(db.pool, objectStorage(), "secret");
+    const issued = await evidence.issueDownload(token, evidenceId);
+    expect(issued.kind).toBe("issued");
+    const audit = db.query.mock.calls.find(([sql]) =>
+      sql.includes("INSERT INTO authorization_audit"),
+    );
+    expect(audit).toBeDefined();
+    expect(db.query.mock.calls.at(-1)).toEqual(["COMMIT"]);
+    expect(db.client.release).toHaveBeenCalledWith(undefined);
+  },
+);
+
+it.each(
+  [
+    [],
+    [accessIdentity],
+    [accessIdentity, { id: evidenceId }],
+    [{ ...accessIdentity, id: storageKey }, { id: evidenceId }, accessMetadata],
+    [
+      { ...accessIdentity, kind: "staff", role: "coach" },
+      { id: evidenceId },
+      { ...accessMetadata, private_review_allowed: false },
+    ],
+    staffAccess("reviewer").slice(0, 3),
+    staffAccess("coach").slice(0, 3),
+    staffAccess("reviewer").slice(0, 5),
+  ].map((rows) => ({ rows })),
+)(
+  "withholds access when a required authorization record is absent (%j)",
+  async ({ rows }) => {
+    const db = database(...rows),
+      objects = objectStorage();
+    expect(
+      await evidenceStore(db.pool, objects, "secret").issueDownload(
+        token,
+        evidenceId,
+      ),
+    ).toEqual({ kind: "denied" });
+    expect(objects.get).not.toHaveBeenCalled();
+    expect(db.query).toHaveBeenCalledWith("ROLLBACK");
+    expect(
+      db.query.mock.calls.some(([sql]) =>
+        sql.includes("INSERT INTO authorization_audit"),
+      ),
+    ).toBe(false);
+  },
+);
+
+it.each([null, new Date("2029-01-01")])(
+  "preserves authorized circle access without a staff event (%j)",
+  async (expires) => {
+    const db = database(
+      { ...accessIdentity, id: storageKey },
+      { id: evidenceId },
+      { ...accessMetadata, learning_circle_id: "shared-circle" },
+      { expires_at: expires },
+      { valid: true },
+    );
+    expect(
+      await evidenceStore(db.pool, objectStorage(), "secret").issueDownload(
+        token,
+        evidenceId,
+      ),
+    ).toMatchObject({ kind: "issued" });
+    expect(
+      db.query.mock.calls.some(([sql]) =>
+        sql.includes("INSERT INTO authorization_audit"),
+      ),
+    ).toBe(false);
+  },
+);
+
+it("rejects invalid evidence IDs before opening an access transaction", async () => {
+  const db = database();
+  expect(
+    await evidenceStore(db.pool, objectStorage(), "secret").issueDownload(
+      token,
+      "bad",
+    ),
+  ).toEqual({ kind: "denied" });
+  expect(db.connect).not.toHaveBeenCalled();
+});
+
+it.each([false, true])(
+  "withholds a capability on audit failure and discards a broken rollback connection (%j)",
+  async (brokenRollback) => {
+    const db = database(...staffAccess());
+    const failure = new Error("Synthetic audit write failed");
+    db.failOn(/INSERT INTO authorization_audit/, failure);
+    if (brokenRollback)
+      db.failOn(/^ROLLBACK$/, new Error("Synthetic rollback failure"));
+    await expect(
+      evidenceStore(db.pool, objectStorage(), "secret").issueDownload(
+        token,
+        evidenceId,
+      ),
+    ).rejects.toBe(failure);
+    expect(db.query).not.toHaveBeenCalledWith("COMMIT");
+    expect(db.client.release).toHaveBeenCalledWith(
+      brokenRollback ? failure : undefined,
+    );
+  },
+);
+
+it("rolls back staff success when authorization expires during storage or audit work", async () => {
+  const db = database(...staffAccess(), undefined, { valid: false });
+  expect(
+    await evidenceStore(db.pool, objectStorage(), "secret").issueDownload(
+      token,
+      evidenceId,
+    ),
+  ).toEqual({ kind: "denied" });
+  expect(db.query).toHaveBeenCalledWith("ROLLBACK");
+  expect(db.query).not.toHaveBeenCalledWith("COMMIT");
+});
+
+it.each(["link", "bytes"] as const)(
+  "withholds %s if the capability expires before transaction completion",
+  async (operation) => {
+    let now = 1_800_000_000_000;
+    const issued = await evidenceStore(
+      database(...ownedAccess()).pool,
+      objectStorage(),
+      "secret",
+      () => now,
+    ).issueDownload(token, evidenceId);
+    if (issued.kind !== "issued") throw new Error("Owner link denied");
+    const db = database(...staffAccess(), undefined, { valid: true });
+    const originalQuery = db.client.query;
+    const wrapped = {
+      connect: async () => ({
+        ...db.client,
+        query: async (sql: string) => {
+          const result = await originalQuery(sql);
+          if (sql.includes("INSERT INTO authorization_audit")) now += 300_001;
+          return result;
+        },
+      }),
+    } as unknown as Pool;
+    const scoped = evidenceStore(wrapped, objectStorage(), "secret", () => now);
+    expect(
+      await (operation === "link"
+        ? scoped.issueDownload(token, evidenceId)
+        : scoped.download(token, evidenceId, issued.capability)),
+    ).toEqual({ kind: "denied" });
+    expect(db.query).toHaveBeenCalledWith("ROLLBACK");
+  },
+);
+
+it("does not return loaded bytes when the final commit fails", async () => {
+  const issued = await evidenceStore(
+    database(...ownedAccess()).pool,
+    objectStorage(),
+    "secret",
+  ).issueDownload(token, evidenceId);
+  if (issued.kind !== "issued") throw new Error("Owner link denied");
+  const db = database(...staffAccess(), undefined, { valid: true }),
+    objects = objectStorage();
+  const failure = new Error("Synthetic commit failure");
+  db.failOn(/^COMMIT$/, failure);
+  await expect(
+    evidenceStore(db.pool, objects, "secret").download(
+      token,
+      evidenceId,
+      issued.capability,
+    ),
+  ).rejects.toBe(failure);
+  expect(objects.get).toHaveBeenCalledOnce();
+  expect(db.query).toHaveBeenCalledWith("ROLLBACK");
 });
 
 it("stores derived private objects and cleans them after a failed insert", async () => {

@@ -1133,7 +1133,7 @@ test("[L18] explicit consent, quarantine and fresh authorization protect private
   expect((await session(context)).id).toBeTruthy();
 });
 
-test("[L19] only submitted evidence reaches the reviewer and revocation stops downloads", async ({
+test("[L19] staff evidence access is audited and revocation stops downloads", async ({
   page,
   context,
   browser,
@@ -1245,9 +1245,31 @@ test("[L19] only submitted evidence reaches the reviewer and revocation stops do
     expect(await downloaded.body()).toEqual(
       Buffer.from("%PDF-synthetic-review"),
     );
+    const staffEvents = async () =>
+      (
+        await pool.query(
+          `SELECT actor_id,staff_id,workspace_id,evidence_id,grant_type,grant_id,assignment_grant_id,action
+         FROM authorization_audit WHERE evidence_id=$1 AND staff_id=$2 ORDER BY id`,
+          [id, reviewer.id],
+        )
+      ).rows;
+    const firstEvents = await staffEvents();
+    expect(firstEvents).toEqual(
+      ["evidence_link_issued", "evidence_bytes_loaded"].map((action) => ({
+        actor_id: reviewer.id,
+        staff_id: reviewer.id,
+        workspace_id: owner.id,
+        evidence_id: id,
+        grant_type: "evidence_review",
+        grant_id: exactGrant,
+        assignment_grant_id: grant,
+        action,
+      })),
+    );
     expect(await access.revokeEvidenceReview(admin.id, exactGrant)).toBe(true);
     expect((await reviewerPage.request.get(link)).status()).toBe(403);
-    await access.grantEvidenceReview(
+    expect(await staffEvents()).toEqual(firstEvents);
+    const replacementGrant = await access.grantEvidenceReview(
       admin.id,
       reviewer.id,
       grant,
@@ -1256,8 +1278,17 @@ test("[L19] only submitted evidence reaches the reviewer and revocation stops do
       new Date(Date.now() + 60_000),
     );
     expect((await reviewerPage.request.get(link)).status()).toBe(200);
+    const replacementEvents = await staffEvents();
+    expect(replacementEvents).toEqual([
+      ...firstEvents,
+      {
+        ...firstEvents[1],
+        grant_id: replacementGrant,
+      },
+    ]);
     expect(await access.revokeAssignment(admin.id, grant)).toBe(true);
     expect((await reviewerPage.request.get(link)).status()).toBe(403);
+    expect(await staffEvents()).toEqual(replacementEvents);
   } finally {
     await reviewerPage.context().close();
   }
@@ -1277,6 +1308,62 @@ test("[L19] only submitted evidence reaches the reviewer and revocation stops do
     ).toBe(403);
   } finally {
     await editorPage.context().close();
+  }
+  const coach = await staff("coach");
+  const coachAssignment = await access.grantAssignment(
+    admin.id,
+    coach.id,
+    owner.id,
+    "coach",
+    "synthetic audited browser coaching",
+    new Date(Date.now() + 60_000),
+  );
+  const coachPage = await browser.newPage();
+  try {
+    await useToken(coachPage.context(), coach.token);
+    await coachPage.goto("/");
+    const issued = await coachPage.request.post(
+      `/api/evidence/${id}/download-link`,
+      {
+        headers: { Origin: origin, "X-CSRF-Token": await csrfToken(coachPage) },
+      },
+    );
+    expect(issued.status()).toBe(200);
+    const link = (await issued.json()).href as string;
+    const loaded = await coachPage.request.get(link);
+    expect(loaded.status()).toBe(200);
+    expect(await loaded.body()).toEqual(Buffer.from("%PDF-synthetic-review"));
+    const coachEvents = async () =>
+      (
+        await pool.query(
+          "SELECT actor_id,staff_id,workspace_id,evidence_id,grant_type,grant_id,assignment_grant_id,action FROM authorization_audit WHERE evidence_id=$1 AND staff_id=$2 ORDER BY id",
+          [id, coach.id],
+        )
+      ).rows;
+    const recorded = await coachEvents();
+    expect(recorded).toEqual(
+      ["evidence_link_issued", "evidence_bytes_loaded"].map((action) => ({
+        actor_id: coach.id,
+        staff_id: coach.id,
+        workspace_id: owner.id,
+        evidence_id: id,
+        grant_type: "assignment",
+        grant_id: coachAssignment,
+        assignment_grant_id: coachAssignment,
+        action,
+      })),
+    );
+    expect(
+      (
+        await page.request.post(`/api/evidence/${id}/revoke-private-review`, {
+          headers: { Origin: origin, "X-CSRF-Token": csrf },
+        })
+      ).status(),
+    ).toBe(204);
+    expect((await coachPage.request.get(link)).status()).toBe(403);
+    expect(await coachEvents()).toEqual(recorded);
+  } finally {
+    await coachPage.context().close();
   }
 });
 

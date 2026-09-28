@@ -4265,6 +4265,8 @@ it.each(["assignment", "support", "evidence_review"] as const)(
         grant_type: type,
         grant_id: grantId,
         action: expect.stringMatching(/^grant_(created|revoked)$/),
+        evidence_id: null,
+        assignment_grant_id: null,
         occurred_at: expect.any(Date),
       });
     }
