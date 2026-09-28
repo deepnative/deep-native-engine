@@ -13,22 +13,32 @@ function fakePool(
 ) {
   const statements: string[] = [];
   let released = false;
+  let destroyed = false;
   const pool = {
     connect: async () => ({
       query: async (sql: string) => {
         statements.push(sql);
         if (failAt && sql.includes(failAt))
           throw new Error("private database details");
-        if (sql.includes("FROM principals p JOIN learners l"))
+        if (
+          sql.includes("FROM principals p JOIN learners l") ||
+          sql.startsWith("SELECT id FROM principals")
+        )
           return { rows: owner ? [owner] : [] };
         return { rows: rows(sql) };
       },
-      release: () => {
+      release: (error?: Error) => {
         released = true;
+        destroyed = error instanceof Error;
       },
     }),
   } as unknown as Pool;
-  return { pool, statements, wasReleased: () => released };
+  return {
+    pool,
+    statements,
+    wasReleased: () => released,
+    wasDestroyed: () => destroyed,
+  };
 }
 
 it("fails closed without configured export storage or an active owner", async () => {
@@ -39,13 +49,11 @@ it("fails closed without configured export storage or an active owner", async ()
   expect(await memberExportStore(fake.pool).exportOwned("x")).toEqual({
     kind: "denied",
   });
-  expect(fake.statements[0]).toBe(
-    "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY",
-  );
+  expect(fake.statements[0]).toBe("BEGIN ISOLATION LEVEL REPEATABLE READ");
   expect(fake.wasReleased()).toBe(true);
 });
 
-it("returns a versioned all-section snapshot after a read-only commit", async () => {
+it("returns a versioned all-section snapshot after its authorized transaction commits", async () => {
   const fake = fakePool({ id: "member-1", goal: "everyday" }, (sql) =>
     sql.includes("FROM learning_milestones")
       ? [{ milestoneTitle: "Invented milestone" }]
@@ -62,6 +70,7 @@ it("returns a versioned all-section snapshot after a read-only commit", async ()
   });
   expect(fake.statements).toContain("COMMIT");
   expect(fake.wasReleased()).toBe(true);
+  expect(fake.wasDestroyed()).toBe(false);
 });
 
 it("rejects excessive records and bytes without returning a partial export", async () => {
@@ -102,4 +111,36 @@ it("returns a generic unavailable result and releases a failed connection", asyn
     kind: "denied",
   });
   expect(rollbackFails.wasReleased()).toBe(true);
+  expect(rollbackFails.wasDestroyed()).toBe(true);
+});
+
+it("withholds a snapshot if the member expires before commit", async () => {
+  const statements: string[] = [];
+  const fake = {
+    connect: async () => ({
+      query: async (sql: string) => {
+        statements.push(sql);
+        return {
+          rows: sql.includes("FROM principals p JOIN learners l")
+            ? [{ id: "member-1" }]
+            : [],
+        };
+      },
+      release() {},
+    }),
+  } as unknown as Pool;
+  expect(await memberExportStore(fake).exportOwned("x")).toEqual({
+    kind: "denied",
+  });
+  expect(statements).not.toContain("COMMIT");
+  expect(statements.at(-1)).toBe("ROLLBACK");
+});
+
+it("withholds private records when commit fails", async () => {
+  const fake = fakePool({ id: "member-1" }, () => [], "COMMIT");
+  expect(await memberExportStore(fake.pool).exportOwned("x")).toEqual({
+    kind: "unavailable",
+  });
+  expect(fake.wasReleased()).toBe(true);
+  expect(fake.statements.at(-1)).toBe("ROLLBACK");
 });
