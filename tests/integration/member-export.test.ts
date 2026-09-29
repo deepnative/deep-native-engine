@@ -10,6 +10,10 @@ import {
 } from "../../src/member-export.ts";
 import { migrate, store } from "../../src/store.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
+import { localAiConsentStore } from "../../src/local-ai-consent.ts";
+import { deterministicRegistry } from "../../src/adapters.ts";
+import { jobStore, requestFingerprint } from "../../src/jobs.ts";
+import { authorizationStore } from "../../src/authorization.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
@@ -40,6 +44,323 @@ beforeEach(async () => {
 });
 afterEach(async () => rm(storageRoot, { recursive: true, force: true }));
 afterAll(async () => pool.end());
+
+async function receiptFixture(owner: Awaited<ReturnType<typeof member>>) {
+  const objects = fileObjectStorage(storageRoot);
+  const evidence = evidenceStore(pool, objects, "synthetic-export-receipt");
+  const local = localAiConsentStore(
+    pool,
+    objects,
+    deterministicRegistry({}, "test"),
+  );
+  const uploaded = await evidence.upload(owner.token, {
+    name: "Private synthetic source.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Private source content excluded from permission export"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+  });
+  if (uploaded.kind !== "created") throw Error("Synthetic upload failed");
+  await evidence.transitionQuarantine(uploaded.id, "clean");
+  const granted = await local.grant(owner.token, uploaded.id);
+  if (granted.kind !== "granted") throw Error("Synthetic permission failed");
+  return {
+    evidence,
+    local,
+    evidenceId: uploaded.id,
+    receiptId: granted.receiptId,
+  };
+}
+
+it("exports each retained local permission receipt once with safe owned job linkage", async () => {
+  const owner = await member(),
+    other = await member();
+  const own = await receiptFixture(owner);
+  expect(await own.local.grant(owner.token, own.evidenceId)).toEqual({
+    kind: "granted",
+    receiptId: own.receiptId,
+  });
+  const pending = await own.local.enqueue(
+    owner.token,
+    own.receiptId,
+    "private-export-idempotency-key",
+  );
+  expect(pending.kind).toBe("queued");
+  expect(
+    await own.local.enqueue(
+      owner.token,
+      own.receiptId,
+      "private-export-idempotency-key",
+    ),
+  ).toEqual(pending);
+  const generic = await jobStore(pool).enqueueForMember(
+    owner.token,
+    "email",
+    "test",
+    "notify",
+    "private-generic-key",
+    requestFingerprint("private-fingerprint"),
+  );
+  const snapshot = await ready(owner.token);
+  expect(snapshot.records).toMatchObject({
+    localAiReceipts: [
+      {
+        id: own.receiptId,
+        evidenceId: own.evidenceId,
+        revisionNumber: 1,
+        purpose: "evidence-summary-local-v1",
+        statementVersion: "local-simulation-v1",
+        grantedAt: expect.any(Date),
+        withdrawnAt: null,
+      },
+    ],
+    adapterJobs: expect.arrayContaining([
+      expect.objectContaining({
+        id: pending.kind === "queued" ? pending.jobId : "",
+        localAiReceiptId: own.receiptId,
+      }),
+      expect.objectContaining({ id: generic.id, localAiReceiptId: null }),
+    ]),
+  });
+  const records = snapshot.records as {
+    localAiReceipts: Record<string, unknown>[];
+    adapterJobs: Record<string, unknown>[];
+  };
+  expect(records.localAiReceipts).toHaveLength(1);
+  expect(Object.keys(records.localAiReceipts[0]!).sort()).toEqual(
+    [
+      "id",
+      "evidenceId",
+      "revisionNumber",
+      "purpose",
+      "statementVersion",
+      "grantedAt",
+      "withdrawnAt",
+    ].sort(),
+  );
+  expect(Object.keys(records.adapterJobs[0]!).sort()).toEqual(
+    [
+      "id",
+      "adapter",
+      "mode",
+      "status",
+      "attempts",
+      "maxAttempts",
+      "safeError",
+      "createdAt",
+      "updatedAt",
+      "localAiReceiptId",
+    ].sort(),
+  );
+  expect(await ready(owner.token)).toEqual(snapshot);
+  expect((await ready(other.token)).records).toMatchObject({
+    localAiReceipts: [],
+    adapterJobs: [],
+  });
+  expect(JSON.stringify(snapshot)).not.toMatch(
+    /Private source|private-export-idempotency|private-generic-key|source_digest|storage_key|request_fingerprint|attempt_token/,
+  );
+  expect(await own.local.withdraw(owner.token, own.receiptId)).toBe(true);
+  const withdrawn = await ready(owner.token);
+  expect(withdrawn.records).toMatchObject({
+    localAiReceipts: [{ id: own.receiptId, withdrawnAt: expect.any(Date) }],
+  });
+  expect(await own.local.withdraw(owner.token, own.receiptId)).toBe(true);
+  expect(await ready(owner.token)).toEqual(withdrawn);
+  const replacement = await own.local.grant(owner.token, own.evidenceId);
+  expect(replacement.kind).toBe("granted");
+  if (replacement.kind !== "granted") throw Error("Synthetic regrant failed");
+  expect(replacement.receiptId).not.toBe(own.receiptId);
+  expect((await ready(owner.token)).records).toMatchObject({
+    localAiReceipts: [
+      { id: own.receiptId, withdrawnAt: expect.any(Date) },
+      { id: replacement.receiptId, withdrawnAt: null },
+    ],
+  });
+});
+
+it("never links an owned job to another member's receipt", async () => {
+  const owner = await member(),
+    other = await member();
+  const foreign = await receiptFixture(other);
+  const pending = await foreign.local.enqueue(
+    other.token,
+    foreign.receiptId,
+    "synthetic-mismatched-owner",
+  );
+  if (pending.kind !== "queued") throw Error("Synthetic job failed");
+  // The receipt FK does not enforce equal ownership; defend at export even
+  // against inconsistent rows that cannot be created through the member API.
+  await pool.query("UPDATE adapter_jobs SET member_id=$1 WHERE id=$2", [
+    owner.id,
+    pending.jobId,
+  ]);
+  const snapshot = await ready(owner.token);
+  expect(snapshot.records).toMatchObject({
+    localAiReceipts: [],
+    adapterJobs: [{ id: pending.jobId, localAiReceiptId: null }],
+  });
+  expect(JSON.stringify(snapshot)).not.toContain(foreign.receiptId);
+  expect((await ready(other.token)).records).toMatchObject({
+    localAiReceipts: [{ id: foreign.receiptId }],
+    adapterJobs: [],
+  });
+});
+
+it("denies staff-only access while retained owner permission history exists", async () => {
+  const owner = await member();
+  const own = await receiptFixture(owner);
+  const staff = token();
+  await authorizationStore(pool).provisionStaff(
+    staff,
+    "reviewer",
+    new Date(Date.now() + 86_400_000),
+  );
+  expect(await exported.exportOwned(staff)).toEqual({ kind: "denied" });
+  expect((await ready(owner.token)).records).toMatchObject({
+    localAiReceipts: [{ id: own.receiptId }],
+  });
+});
+
+it("retains retired source permission history until source deletion cascades receipts and jobs", async () => {
+  const owner = await member();
+  const own = await receiptFixture(owner);
+  expect(
+    (await own.local.enqueue(owner.token, own.receiptId, "retired-source-job"))
+      .kind,
+  ).toBe("queued");
+  expect(await own.evidence.submitForReview(owner.token, own.evidenceId)).toBe(
+    true,
+  );
+  const revised = await own.evidence.upload(owner.token, {
+    name: "Revision.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Private replacement source"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+    revisesId: own.evidenceId,
+  });
+  if (revised.kind !== "created") throw Error("Synthetic revision failed");
+  await own.evidence.transitionQuarantine(revised.id, "clean");
+  const permission = await own.local.grant(owner.token, revised.id);
+  if (permission.kind !== "granted")
+    throw Error("Synthetic revision grant failed");
+  expect((await ready(owner.token)).records).toMatchObject({
+    localAiReceipts: [
+      {
+        id: own.receiptId,
+        evidenceId: own.evidenceId,
+        revisionNumber: 1,
+        withdrawnAt: expect.any(Date),
+      },
+      {
+        id: permission.receiptId,
+        evidenceId: revised.id,
+        revisionNumber: 2,
+        withdrawnAt: null,
+      },
+    ],
+  });
+  expect(await own.local.grant(owner.token, own.evidenceId)).toEqual({
+    kind: "denied",
+  });
+  expect(await own.evidence.remove(owner.token, revised.id)).toBe(true);
+  expect((await ready(owner.token)).records).toMatchObject({
+    localAiReceipts: [{ id: own.receiptId, withdrawnAt: expect.any(Date) }],
+  });
+  expect(await own.evidence.remove(owner.token, own.evidenceId)).toBe(true);
+  expect((await ready(owner.token)).records).toMatchObject({
+    localAiReceipts: [],
+    adapterJobs: [],
+  });
+});
+
+it("counts retained receipts at the aggregate record boundary and fails closed on receipt query errors", async () => {
+  const owner = await member();
+  const own = await receiptFixture(owner);
+  await own.local.withdraw(owner.token, own.receiptId);
+  await pool.query(
+    `INSERT INTO local_ai_receipts(id,member_id,workspace_id,evidence_id,revision_number,source_digest,purpose,statement_version,granted_at,withdrawn_at)
+    SELECT gen_random_uuid(),member_id,workspace_id,evidence_id,revision_number,source_digest,purpose,statement_version,granted_at,withdrawn_at
+    FROM local_ai_receipts CROSS JOIN generate_series(1,$2) WHERE id=$1`,
+    [own.receiptId, MAX_MEMBER_EXPORT_RECORDS - 1],
+  );
+  expect(
+    ((await ready(owner.token)).records as { localAiReceipts: unknown[] })
+      .localAiReceipts,
+  ).toHaveLength(MAX_MEMBER_EXPORT_RECORDS);
+  const generic = await jobStore(pool).enqueueForMember(
+    owner.token,
+    "email",
+    "test",
+    "notify",
+    "boundary-job",
+    requestFingerprint("synthetic"),
+  );
+  expect(await exported.exportOwned(owner.token)).toEqual({ kind: "limit" });
+  await assertAuthorizationUnlocked(owner.id);
+  await pool.query("DELETE FROM adapter_jobs WHERE id=$1", [generic.id]);
+  const broken = {
+    async connect() {
+      const client = await pool.connect();
+      return {
+        query(sql: string, values?: unknown[]) {
+          return sql.includes("FROM local_ai_receipts")
+            ? client.query(
+                "SELECT synthetic_missing_receipt_column FROM local_ai_receipts",
+              )
+            : client.query(sql, values);
+        },
+        release: client.release.bind(client),
+      };
+    },
+  } as unknown as Pool;
+  expect(await memberExportStore(broken).exportOwned(owner.token)).toEqual({
+    kind: "unavailable",
+  });
+  await assertAuthorizationUnlocked(owner.id);
+  expect(
+    ((await ready(owner.token)).records as { localAiReceipts: unknown[] })
+      .localAiReceipts,
+  ).toHaveLength(MAX_MEMBER_EXPORT_RECORDS);
+});
+
+it("keeps receipt withdrawal and linked job status in one repeatable snapshot", async () => {
+  const owner = await member();
+  const own = await receiptFixture(owner);
+  expect(
+    (await own.local.enqueue(owner.token, own.receiptId, "snapshot-job")).kind,
+  ).toBe("queued");
+  const controlled = controlledExport();
+  const reading = controlled.exported.exportOwned(owner.token);
+  try {
+    await controlled.authorized.wait;
+    expect(await own.local.withdraw(owner.token, own.receiptId)).toBe(true);
+    controlled.resume.release();
+    expect(await reading).toMatchObject({
+      kind: "ready",
+      payload: {
+        records: {
+          localAiReceipts: [{ id: own.receiptId, withdrawnAt: null }],
+          adapterJobs: [{ localAiReceiptId: own.receiptId, status: "pending" }],
+        },
+      },
+    });
+    expect((await ready(owner.token)).records).toMatchObject({
+      localAiReceipts: [{ id: own.receiptId, withdrawnAt: expect.any(Date) }],
+      adapterJobs: [{ localAiReceiptId: own.receiptId, status: "exhausted" }],
+    });
+  } finally {
+    controlled.resume.release();
+    await Promise.allSettled([reading]);
+  }
+});
 
 function gate() {
   let release!: () => void;
@@ -152,6 +473,7 @@ it.each([
       verification: "Original verification",
       complete: false,
     });
+    await receiptFixture(owner);
     const mutator = await pool.connect();
     const controlled = controlledExport();
     controlled.resume.release();
@@ -342,6 +664,12 @@ it.each(["session revocation", "account deletion"] as const)(
       verification: "Original verification",
       complete: false,
     });
+    const receipt = await receiptFixture(owner);
+    await receipt.local.enqueue(
+      owner.token,
+      receipt.receiptId,
+      "export-deletion-race",
+    );
     const controlled = controlledExport();
     const reading = controlled.exported.exportOwned(owner.token);
     const mutator = await pool.connect();
@@ -382,11 +710,30 @@ it.each(["session revocation", "account deletion"] as const)(
         payload: {
           records: {
             exercises: [{ instruction: "Private synthetic export marker" }],
+            localAiReceipts: [{ id: receipt.receiptId }],
+            adapterJobs: [{ localAiReceiptId: receipt.receiptId }],
           },
         },
       });
       await changing;
       expect(exportStateAtMutation).toBe("committed");
+      if (action === "account deletion") {
+        expect(
+          (
+            await pool.query(
+              "SELECT id FROM local_ai_receipts WHERE member_id=$1",
+              [owner.id],
+            )
+          ).rows,
+        ).toEqual([]);
+        expect(
+          (
+            await pool.query("SELECT id FROM adapter_jobs WHERE member_id=$1", [
+              owner.id,
+            ])
+          ).rows,
+        ).toEqual([]);
+      }
       expect(observed).toBe("blocked");
       expect(await exported.exportOwned(owner.token)).toEqual({
         kind: "denied",
@@ -406,6 +753,7 @@ it("withholds private records if the session expires during export assembly", as
     verification: "Invented verification",
     complete: false,
   });
+  await receiptFixture(owner);
   const deadline = (
     await pool.query(
       "UPDATE principals SET expires_at=clock_timestamp()+INTERVAL '5 seconds' WHERE id=$1 RETURNING expires_at",
@@ -463,7 +811,7 @@ it("exports current structured records only for their active owner, with redacti
   );
   const own = await ready(a.token);
   expect(own).toMatchObject({
-    version: "local-member-records-v5",
+    version: "local-member-records-v6",
     profile: { id: a.id, background: "explorer" },
     records: {
       milestones: [{ milestoneTitle: "Invented milestone" }],

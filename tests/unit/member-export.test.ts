@@ -4,6 +4,7 @@ import {
   disabledMemberExportStore,
   memberExportStore,
   MAX_MEMBER_EXPORT_RECORDS,
+  MAX_MEMBER_EXPORT_BYTES,
 } from "../../src/member-export.ts";
 
 function fakePool(
@@ -63,7 +64,7 @@ it("returns a versioned all-section snapshot after its authorized transaction co
   expect(result).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v5",
+      version: "local-member-records-v6",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
     },
@@ -92,6 +93,79 @@ it("rejects excessive records and bytes without returning a partial export", asy
     kind: "limit",
   });
   expect(huge.statements).not.toContain("COMMIT");
+});
+
+it("counts receipts with other sections at exactly the existing record limit", async () => {
+  const receipts = Array.from(
+    { length: MAX_MEMBER_EXPORT_RECORDS - 1 },
+    (_, id) => ({ id }),
+  );
+  const rows = (sql: string) =>
+    sql.includes("FROM local_ai_receipts")
+      ? receipts
+      : sql.includes("FROM exercises")
+        ? [{ instruction: "Synthetic" }]
+        : [];
+  expect(
+    await memberExportStore(
+      fakePool({ id: "member-1" }, rows).pool,
+    ).exportOwned("x"),
+  ).toMatchObject({ kind: "ready" });
+  receipts.push({ id: MAX_MEMBER_EXPORT_RECORDS });
+  const excessive = fakePool({ id: "member-1" }, rows);
+  expect(await memberExportStore(excessive.pool).exportOwned("x")).toEqual({
+    kind: "limit",
+  });
+  expect(excessive.statements).not.toContain("COMMIT");
+});
+
+it("counts receipt metadata in the exact UTF-8 byte boundary", async () => {
+  let instruction = "";
+  const rows = (sql: string) =>
+    sql.includes("FROM local_ai_receipts")
+      ? [
+          {
+            id: "receipt-1",
+            evidenceId: "source-1",
+            revisionNumber: 1,
+            purpose: "evidence-summary-local-v1",
+            statementVersion: "local-simulation-v1",
+            grantedAt: "2026-09-28T00:00:00.000Z",
+            withdrawnAt: null,
+          },
+        ]
+      : sql.includes("FROM exercises")
+        ? [{ instruction }]
+        : [];
+  const run = () =>
+    memberExportStore(fakePool({ id: "member-1" }, rows).pool).exportOwned("x");
+  const baseline = await run();
+  if (baseline.kind !== "ready") throw Error("Synthetic baseline unavailable");
+  const padding =
+    MAX_MEMBER_EXPORT_BYTES -
+    Buffer.byteLength(JSON.stringify(baseline.payload));
+  instruction = "é" + "x".repeat(padding - 2);
+  const exact = await run();
+  expect(exact.kind).toBe("ready");
+  if (exact.kind !== "ready") throw Error("Exact boundary unavailable");
+  expect(Buffer.byteLength(JSON.stringify(exact.payload))).toBe(
+    MAX_MEMBER_EXPORT_BYTES,
+  );
+  instruction += "x";
+  expect(await run()).toEqual({ kind: "limit" });
+});
+
+it("withholds all sections when the receipt query fails", async () => {
+  const broken = fakePool(
+    { id: "member-1" },
+    () => [],
+    "FROM local_ai_receipts",
+  );
+  expect(await memberExportStore(broken.pool).exportOwned("x")).toEqual({
+    kind: "unavailable",
+  });
+  expect(broken.statements).not.toContain("COMMIT");
+  expect(broken.wasReleased()).toBe(true);
 });
 
 it("returns a generic unavailable result and releases a failed connection", async () => {

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { testPool } from "../support/database.ts";
 import { jobStore, requestFingerprint } from "../../src/jobs.ts";
+import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 
 const pool = testPool();
 test.afterAll(async () => pool.end());
@@ -47,25 +48,111 @@ test("[L61] current owner downloads private structured records while unrelated, 
        VALUES($1,$2,'Invented goal','Owner-only milestone','Review next step')`,
       [randomUUID(), ownerId],
     );
+    const ownerToken = (await context.cookies()).find(
+      (item) => item.name === "dne_preview",
+    )!.value;
+    const source = await evidenceStore(
+      pool,
+      fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!),
+      "browser-secret",
+    ).upload(ownerToken, {
+      name: `export-local-ai-${randomUUID()}.txt`,
+      mediaType: "text/plain",
+      data: Buffer.from("Invented export receipt source"),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    });
+    expect(source.kind).toBe("created");
+    if (source.kind !== "created") throw Error("Synthetic source unavailable");
+    expect(
+      await evidenceStore(
+        pool,
+        fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!),
+        "browser-secret",
+      ).transitionQuarantine(source.id, "clean"),
+    ).toBe(true);
     await expect(
       page.getByRole("link", {
         name: "Download my structured preview records",
       }),
     ).toBeVisible();
+    await page.goto("/evidence/local-ai");
+    await page
+      .getByLabel("I permit this exact invented sample version")
+      .check();
+    await page
+      .getByRole("button", { name: "Grant local simulation permission" })
+      .click();
+    const receiptId = (
+      await pool.query<{ id: string }>(
+        "SELECT id FROM local_ai_receipts WHERE evidence_id=$1 AND withdrawn_at IS NULL",
+        [source.id],
+      )
+    ).rows[0]!.id;
+    await page.getByRole("button", { name: "Queue local simulation" }).click();
+    const jobId = (
+      await pool.query<{ id: string }>(
+        "SELECT id FROM adapter_jobs WHERE local_ai_receipt_id=$1",
+        [receiptId],
+      )
+    ).rows[0]!.id;
     const own = await page.request.get("/api/member/export");
     expect(own.status()).toBe(200);
     expect(own.headers()["content-disposition"]).toContain(
       "deep-native-member-records.json",
     );
     expect(own.headers()["cache-control"]).toBe("no-store");
-    expect(await own.json()).toMatchObject({
-      version: "local-member-records-v5",
+    const granted = await own.json();
+    expect(granted.records.localAiReceipts).toMatchObject([
+      { id: receiptId, evidenceId: source.id },
+    ]);
+    expect(granted).toMatchObject({
+      version: "local-member-records-v6",
       profile: { id: ownerId },
-      records: { milestones: [{ milestoneTitle: "Owner-only milestone" }] },
+      records: {
+        milestones: [{ milestoneTitle: "Owner-only milestone" }],
+        localAiReceipts: [
+          {
+            id: receiptId,
+            evidenceId: source.id,
+            revisionNumber: 1,
+            purpose: "evidence-summary-local-v1",
+            statementVersion: "local-simulation-v1",
+            withdrawnAt: null,
+          },
+        ],
+      },
     });
+    expect(
+      granted.records.adapterJobs.find(
+        (job: { id: string }) => job.id === jobId,
+      ),
+    ).toMatchObject({ id: jobId, localAiReceiptId: receiptId });
+    expect(granted.records.localAiReceipts[0].grantedAt).toBeTruthy();
+    expect(JSON.stringify(granted)).not.toContain(
+      "Invented export receipt source",
+    );
+    await page.getByLabel(/Withdraw local AI permission for/).check();
+    await page.getByRole("button", { name: "Withdraw permission" }).click();
+    const withdrawn = await (
+      await page.request.get("/api/member/export")
+    ).json();
+    expect(withdrawn.records.localAiReceipts).toMatchObject([
+      { id: receiptId, evidenceId: source.id },
+    ]);
+    expect(withdrawn.records.localAiReceipts[0].withdrawnAt).toBeTruthy();
+    expect(
+      withdrawn.records.adapterJobs.find(
+        (job: { id: string }) => job.id === jobId,
+      ),
+    ).toMatchObject({ id: jobId, localAiReceiptId: receiptId });
     const other = await otherPage.request.get("/api/member/export");
     expect(other.status()).toBe(200);
     expect((await other.json()).records.milestones).toEqual([]);
+    expect((await other.json()).records.localAiReceipts).toEqual([]);
     await pool.query(
       "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
       [ownerId],
@@ -139,9 +226,15 @@ test("[L67] deterministic member jobs export only to their owner and disappear w
       requestFingerprint({ system: marker }),
     );
     const own = await (await page.request.get("/api/member/export")).json();
-    expect(own.version).toBe("local-member-records-v5");
+    expect(own.version).toBe("local-member-records-v6");
     expect(own.records.adapterJobs).toMatchObject([
-      { id: owned.id, adapter: "email", mode: "test", status: "pending" },
+      {
+        id: owned.id,
+        adapter: "email",
+        mode: "test",
+        status: "pending",
+        localAiReceiptId: null,
+      },
     ]);
     expect(JSON.stringify(own)).not.toContain(`member-${marker}`);
     const elsewhere = await (
