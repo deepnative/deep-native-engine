@@ -225,7 +225,40 @@ export function proposalPreviewPage(
   );
   return page(
     "Private proposal",
-    `<section class="error-page"><p class="eyebrow">PRIVATE SAMPLE · ${escape(item.state.toUpperCase())}</p><h1>${escape(item.title ?? "Redacted proposal")}</h1><p class="lead">This is not published or licensed for public reuse.</p>${item.workflowId ? `<p>Workflow reference: ${escape(item.workflowId)} version ${item.workflowVersion}</p>` : ""}${!referenceCurrent && item.state === "draft" ? '<p role="status">This workflow version is no longer current. You can read or withdraw this private draft, but start a new version-pinned proposal before submitting.</p>' : ""}${item.body ? `<h2>Sample</h2><p>${escape(item.body)}</p><h2>Sources and rights notes</h2><p>${escape(item.sources!)}</p>` : "<p>The proposal text has been removed.</p>"}${canSubmit ? `<form method="post" action="/contribute/${escape(item.id)}/submit">${hidden(csrf)}<label class="check"><input type="checkbox" name="rights_confirmed" value="yes" required><span>I created this sample or have the rights to submit it for private moderation. No public license is granted.</span></label><button type="submit">Submit to private moderation</button></form>` : ""}${canWithdraw ? `<form method="post" action="/contribute/${escape(item.id)}/withdraw">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Remove the proposal text and stop moderation.</span></label><button type="submit">Withdraw and redact</button></form>` : ""}<p><a href="/contribute">Your sample proposals</a></p></section>`,
+    `<section class="error-page"><p class="eyebrow">PRIVATE SAMPLE · ${escape(item.state.toUpperCase())}</p><h1>${escape(item.title ?? "Redacted proposal")}</h1><p class="lead">This is not published or licensed for public reuse.</p>${item.workflowId ? `<p>Workflow reference: ${escape(item.workflowId)} version ${item.workflowVersion}</p>` : ""}${!referenceCurrent && item.state === "draft" ? '<p role="status">This workflow version is no longer current. You can read or withdraw this private draft, but start a new version-pinned proposal before submitting.</p>' : ""}${item.body ? `<h2>Sample</h2><p>${escape(item.body)}</p><h2>Sources and rights notes</h2><p>${escape(item.sources!)}</p>` : "<p>The proposal text has been removed.</p>"}${canSubmit ? `<p>Saved revision ${item.revision}. Corrections stay private until you submit this exact revision.</p>${proposalEditForm(item.id, csrf, item.revision, { title: item.title!, body: item.body!, sources: item.sources! })}<form method="post" action="/contribute/${escape(item.id)}/submit">${hidden(csrf)}<input type="hidden" name="revision" value="${item.revision}"><label class="check"><input type="checkbox" name="rights_confirmed" value="yes" required><span>I created this sample or have the rights to submit it for private moderation. No public license is granted.</span></label><button type="submit">Submit to private moderation</button></form>` : ""}${canWithdraw ? `<form method="post" action="/contribute/${escape(item.id)}/withdraw">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Remove the proposal text and stop moderation.</span></label><button type="submit">Withdraw and redact</button></form>` : ""}<p><a href="/contribute">Your sample proposals</a></p></section>`,
+  );
+}
+type ProposalEditFields = { title: string; body: string; sources: string };
+function proposalEditForm(
+  id: string,
+  csrf: string,
+  revision: number,
+  value: ProposalEditFields,
+) {
+  return `<form method="post" action="/contribute/${escape(id)}/edit">${hidden(csrf)}<input type="hidden" name="revision" value="${revision}"><label for="edit-proposal-title">Title</label><input id="edit-proposal-title" name="title" maxlength="160" required value="${escape(value.title)}"><label for="edit-proposal-body">Original sample</label><textarea id="edit-proposal-body" name="body" maxlength="4000" required>${escape(value.body)}</textarea><label for="edit-proposal-sources">Sources and rights notes</label><textarea id="edit-proposal-sources" name="sources" maxlength="1000" required>${escape(value.sources)}</textarea><button type="submit">Save corrections</button></form>`;
+}
+export function proposalEditRecoveryPage(
+  id: string,
+  csrf: string,
+  message: string,
+  attempted: ProposalEditFields,
+  revision?: number,
+  outcomeUnknown = false,
+) {
+  const bounded = {
+    title: attempted.title.slice(0, 160),
+    body: attempted.body.slice(0, 4000),
+    sources: attempted.sources.slice(0, 1000),
+  };
+  const title = outcomeUnknown
+    ? "Proposal correction outcome unknown"
+    : "Proposal corrections not saved";
+  const status = outcomeUnknown
+    ? "OUTCOME UNCONFIRMED"
+    : "CORRECTIONS NOT SAVED";
+  return page(
+    title,
+    `<section class="error-page"><p class="eyebrow">PRIVATE SAMPLE · ${status}</p><h1>${title}</h1><div class="notice" role="alert"><p>${escape(message)}</p></div>${revision !== undefined ? `<p>You were changing saved revision ${revision}. Check these fields and try again. A changed draft will require you to review the current preview first.</p>${proposalEditForm(id, csrf, revision, bounded)}` : `<p>Copy your attempted text before opening the current preview. This page does not retry the write.</p><label for="unsaved-proposal-title">Attempted title</label><input id="unsaved-proposal-title" readonly value="${escape(bounded.title)}"><label for="unsaved-proposal-body">Attempted sample</label><textarea id="unsaved-proposal-body" readonly>${escape(bounded.body)}</textarea><label for="unsaved-proposal-sources">Attempted sources and rights notes</label><textarea id="unsaved-proposal-sources" readonly>${escape(bounded.sources)}</textarea>`}<p><a href="/contribute/${escape(id)}">Open the current private preview</a> to check the saved revision and submission state.</p></section>`,
   );
 }
 export function moderationPage(items: Proposal[], csrf: string, now: Date) {

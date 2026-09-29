@@ -52,6 +52,7 @@ it("shows a private workflow improvement with an exact version and a stale-safe 
   expect(form).toContain("no public reuse rights are granted");
   const proposal: Proposal = {
     id: "sample",
+    revision: 1,
     title: "Invented improvement",
     body: "Add an invented check",
     sources: "Original sample",
@@ -67,6 +68,7 @@ it("shows a private workflow improvement with an exact version and a stale-safe 
   const stale = proposalPreviewPage(proposal, "csrf", false);
   expect(stale).toContain("no longer current");
   expect(stale).not.toContain("Submit to private moderation");
+  expect(stale).not.toContain("Save corrections");
   expect(stale).toContain("Withdraw and redact");
   expect(
     moderationPage(
@@ -433,6 +435,7 @@ it("renders private goals, unsent reminders and escaped editable milestone notes
 it("escapes private proposal text and never renders a publish action", () => {
   const item: Proposal = {
     id: "test-id",
+    revision: 3,
     title: "<sample>",
     body: "<script>unsafe</script>",
     sources: "Original & invented",
@@ -449,6 +452,11 @@ it("escapes private proposal text and never renders a publish action", () => {
   expect(preview).toContain("&lt;script&gt;unsafe&lt;/script&gt;");
   expect(preview).toContain("Original &amp; invented");
   expect(preview).toContain("Submit to private moderation");
+  expect(preview).toContain("Saved revision 3");
+  expect(preview).toContain('name="revision" value="3"');
+  expect(preview).toContain("Save corrections");
+  expect(preview).not.toContain('name="rights_confirmed" value="yes" checked');
+  expect(preview).not.toContain("<script>unsafe</script>");
   expect(preview).toContain("Withdraw and redact");
   expect(preview).not.toContain("Publish proposal");
   expect(

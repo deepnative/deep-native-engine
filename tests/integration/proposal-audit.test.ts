@@ -36,7 +36,7 @@ it("audits private queue reads and quarantine/reject transitions", async () => {
       },
       true,
     );
-    expect(await proposals.submit(memberToken, id!, true)).toBe(true);
+    expect(await proposals.submit(memberToken, id!, true, 1)).toBe("submitted");
     ids.push(id!);
   }
   expect(await proposals.moderationQueue(staffToken)).toHaveLength(2);
@@ -84,7 +84,7 @@ async function fixture(role: "moderator" | "platform_admin" = "moderator") {
     version: 1,
   }))!;
   expect(id).toBeTruthy();
-  expect(await proposals.submit(owner.token, id, true)).toBe(true);
+  expect(await proposals.submit(owner.token, id, true, 1)).toBe("submitted");
   return { owner, token, actor, id, value };
 }
 async function events() {
@@ -106,7 +106,7 @@ it.each(["moderator", "platform_admin"] as const)(
       f.value,
       true,
     ))!;
-    await proposals.submit(second.token, secondId, true);
+    await proposals.submit(second.token, secondId, true, 1);
     const queue = await proposals.moderationQueue(f.token);
     expect(queue?.map((row) => row.id)).toEqual([f.id, secondId]);
     expect(await proposals.moderate(f.token, f.id, "quarantine")).toBe(true);
@@ -252,7 +252,7 @@ it.each(["insert", "commit"] as const)(
     const f = await fixture();
     const other = await member();
     const otherId = (await proposals.createDraft(other.token, f.value, true))!;
-    await proposals.submit(other.token, otherId, true);
+    await proposals.submit(other.token, otherId, true, 1);
     try {
       await pool.query(
         `CREATE FUNCTION fail_proposal_test_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.proposal_id='${otherId}'::uuid OR NEW.action<>'proposal_read' THEN RAISE EXCEPTION 'Synthetic proposal audit failure'; END IF; RETURN NEW; END $$`,
@@ -589,7 +589,7 @@ it("retains immutable history through withdrawal and staff revocation, then dele
   const f = await fixture();
   const other = await member();
   const otherId = (await proposals.createDraft(other.token, f.value, true))!;
-  await proposals.submit(other.token, otherId, true);
+  await proposals.submit(other.token, otherId, true, 1);
   await proposals.moderationQueue(f.token);
   const history = await events();
   await expect(
