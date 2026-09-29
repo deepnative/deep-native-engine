@@ -44,6 +44,7 @@ APP_FILES = {
     "vitest.integration.config.ts", "scripts/quality-gates.mjs", "scripts/gate-probes.mjs",
     "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "scripts/full-release-evidence.mjs", "tests/e2e/scenarios.json", "tests/e2e/full-mvp-approval.json", "src/main.ts", "migrations/001-learning.sql",
     "assets/docs/content/circles/preview-circles.json", "public/attempt-save.js",
+    "assets/docs/content/events/preview-events.json",
 }
 
 # Bounded, high-confidence source scan. These signatures are intentionally
@@ -402,6 +403,58 @@ def validate_links(root, files):
                     f"Broken local link in {diagnostic_ref(name)}: {diagnostic_ref(target)}")
 
 
+def validate_event_previews(root):
+    """Validate the bounded synthetic catalog; never infer seats or readiness."""
+    events = json.loads((root / "assets/docs/content/events/preview-events.json").read_text())
+    message = "Invalid local event preview fixture"
+    require(isinstance(events, list) and 0 < len(events) <= 100, message)
+    keys = {"id", "version", "status", "title", "description", "agenda", "goals",
+            "domainTags", "itRoles", "startsAt", "endsAt", "fixtureCapacity"}
+    tags = {
+        "goals": {"everyday", "work", "build"},
+        "domainTags": {"education", "health", "finance", "creative", "public", "operations"},
+        "itRoles": {"software", "qa", "data", "cloud", "security", "architecture",
+                    "analysis", "delivery", "product", "other"},
+    }
+    versions = {}
+    for event in events:
+        require(isinstance(event, dict) and set(event) == keys, message)
+        require(isinstance(event["id"], str) and
+                re.fullmatch(r"[a-z][a-z0-9-]{0,79}", event["id"]), message)
+        require(type(event["version"]) is int and 0 < event["version"] <= 1000000, message)
+        require(event["status"] in ("current", "retired", "replaced"), message)
+        for key in ("title", "description"):
+            require(isinstance(event[key], str) and 0 < len(event[key].strip()) <= 1000, message)
+        require(isinstance(event["agenda"], list) and 0 < len(event["agenda"]) <= 10 and
+                all(isinstance(item, str) and 0 < len(item.strip()) <= 1000
+                    for item in event["agenda"]), message)
+        for key, allowed in tags.items():
+            values = event[key]
+            require(isinstance(values, list) and len(values) <= len(allowed) and
+                    all(isinstance(value, str) and value in allowed for value in values) and
+                    len(values) == len(set(values)), message)
+        require(bool(event["goals"]), message)
+        require(type(event["fixtureCapacity"]) is int and 0 < event["fixtureCapacity"] <= 100, message)
+        times = []
+        for key in ("startsAt", "endsAt"):
+            value = event[key]
+            require(isinstance(value, str) and
+                    re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.000Z", value), message)
+            try:
+                times.append(datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.000Z"))
+            except ValueError:
+                require(False, message)
+        require(times[1] > times[0], message)
+        group = versions.setdefault(event["id"], {})
+        require(event["version"] not in group, "Duplicate local event preview version")
+        group[event["version"]] = event["status"]
+    for group in versions.values():
+        latest = max(group)
+        require(all((status != "current" or version == latest) and
+                    (status != "replaced" or version < latest)
+                    for version, status in group.items()), message)
+
+
 def validate(root):
     files = repository_files(root)
     validate_scope(root, files)
@@ -421,6 +474,7 @@ def validate(root):
                 isinstance(item["description"], str) and len(item["description"]) > 25 and
                 type(item["capacity"]) is int and item["capacity"] == 4 for item in circles),
             "Invalid local circle metadata or capacity")
+    validate_event_previews(root)
     register = json.loads((root / "tests/e2e/scenarios.json").read_text())
     require(register["fullMvpVersion"] == "full-mvp-v1", "Full-MVP proposal version changed without gate review")
     baseline = {f"ROADMAP-{n:02d}" for n in range(1, 10)} | {f"BUILD-{n:02d}" for n in range(1, 11)} | {f"ECO-{n:02d}" for n in range(1, 9)}

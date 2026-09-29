@@ -26,6 +26,8 @@ import {
   workflowDetailPage,
   workflowFeedbackPage,
   circlesPage,
+  eventDiscoveryPage,
+  eventDetailPage,
   contentPreview,
   studyReflectionPage,
   privatePracticePage,
@@ -98,6 +100,7 @@ import {
   type WorkflowFeedbackStore,
 } from "./workflow-feedback.ts";
 import { disabledCircleStore, type CircleStore } from "./circles.ts";
+import { eventPreviewDetail, listEventPreviews } from "./events.ts";
 import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
 import { disabledPracticeStore, type PracticeStore } from "./practice.ts";
@@ -715,6 +718,7 @@ export function app(
       "/contribute",
       "/evidence",
       "/circles",
+      "/events",
       "/tailored-review",
       "/availability",
       "/workflow-feedback",
@@ -1207,6 +1211,43 @@ export function app(
         res.locals.csrf as string,
       ),
     );
+  });
+  app.get("/events", (req, res) => {
+    const member = res.locals.learner as Learner;
+    const allTopics = req.query.all === "1";
+    res.send(
+      eventDiscoveryPage(
+        listEventPreviews(
+          {
+            goal: member.goal,
+            domainTags: member.domainTags ?? [],
+            itRoles: member.itRoles ?? [],
+          },
+          { allTopics },
+        ),
+        member.timezone,
+        allTopics,
+      ),
+    );
+  });
+  app.get("/events/:id/:version", (req, res) => {
+    const rawVersion = req.params.version as string;
+    const version = /^[1-9][0-9]*$/.test(rawVersion) ? Number(rawVersion) : NaN;
+    const detail = eventPreviewDetail(req.params.id as string, version);
+    if (detail.status === "missing") {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Event version unavailable",
+            "This exact event version is not in the local preview. Browse current sample events separately.",
+          ),
+        );
+      return;
+    }
+    res
+      .status(detail.status === "current" ? 200 : 410)
+      .send(eventDetailPage(detail, (res.locals.learner as Learner).timezone));
   });
   app.post("/circles/:id/join", async (req, res) => {
     const result = await circles.join(

@@ -44,6 +44,38 @@ import {
   type AvailabilityStore,
 } from "../../src/availability.ts";
 import type { ManualObservationStore } from "../../src/manual-observations.ts";
+it("serves goal-matched event previews only to active members and never accepts enrollment", async () => {
+  const db = storage();
+  const agent = managedAgent(app(db, { origin, secret: "secret" }));
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const listing = await agent.get("/events").set("Host", host).expect(200);
+  expect(listing.text).toContain("Synthetic preview; enrollment unavailable");
+  expect(listing.text).toContain("/events/everyday-ai-preview/2");
+  expect(listing.text).not.toContain("/events/technical-practice-preview/1");
+  const all = await agent.get("/events?all=1").set("Host", host).expect(200);
+  expect(all.text).toContain("/events/technical-practice-preview/1");
+  const detail = await agent
+    .get("/events/everyday-ai-preview/2")
+    .set("Host", host)
+    .expect(200);
+  expect(detail.text).toContain("Access and cost: unresolved");
+  await agent
+    .get("/events/everyday-ai-preview/1")
+    .set("Host", host)
+    .expect(410);
+  await agent.get("/events/unknown-preview/1").set("Host", host).expect(404);
+  const unavailable = await agent
+    .post("/events/everyday-ai-preview/2/enroll")
+    .set("Host", host)
+    .set("Origin", origin)
+    .send({ csrf: "forged" })
+    .expect(403);
+  expect(unavailable.text).not.toContain("enrolled");
+  expect(db.create).not.toHaveBeenCalled();
+  expect(db.save).not.toHaveBeenCalled();
+  db.session.mockResolvedValue({ kind: "expired" });
+  await agent.get("/events").set("Host", host).expect(303);
+});
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
 const member = {
