@@ -140,6 +140,7 @@ it("creates only an explicit, active-member synthetic grant and commits its even
   ).toBe(true);
   expect(db.query.mock.calls.at(-1)?.[0]).toBe("COMMIT");
   expect(db.client.release).toHaveBeenCalledOnce();
+  expect(db.client.release).toHaveBeenCalledWith(false);
 });
 
 it("does not grant to an unavailable member and rolls back", async () => {
@@ -148,6 +149,7 @@ it("does not grant to an unavailable member and rolls back", async () => {
     db.ledger.grant(member, "review_minutes", 2, "no-member", window),
   ).rejects.toMatchObject({ code: "unavailable" });
   expect(db.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
+  expect(db.client.release).toHaveBeenCalledWith(false);
 });
 
 it("replays only the exact request for a key without a second mutation", async () => {
@@ -336,7 +338,7 @@ it("writes off only available units before expiry through an event", async () =>
   ).rejects.toMatchObject({ code: "unavailable" });
 });
 
-it("hides database failures, releases connections, and tolerates failed rollback", async () => {
+it("hides database failures and discards a connection whose rollback failed", async () => {
   const db = database();
   db.query.mockRejectedValueOnce(new Error("synthetic-secret-marker"));
   db.query.mockRejectedValueOnce(new Error("rollback unavailable"));
@@ -344,10 +346,26 @@ it("hides database failures, releases connections, and tolerates failed rollback
     db.ledger.grant(member, "coach_minutes", 1, "failure", window),
   ).rejects.toEqual(new LedgerFailure("unavailable"));
   expect(db.client.release).toHaveBeenCalledOnce();
+  expect(db.client.release).toHaveBeenCalledWith(true);
   const noConnection = syntheticLedger({
     connect: vi.fn().mockRejectedValue(new Error("synthetic-secret-marker")),
   } as unknown as Pool);
   await expect(
     noConnection.grant(member, "coach_minutes", 1, "failure", window),
   ).rejects.toEqual(new LedgerFailure("unavailable"));
+});
+
+it("preserves a safe ledger failure when rollback fails and discards the connection", async () => {
+  const db = database({ available: 1 });
+  const execute = db.query.getMockImplementation()!;
+  db.query.mockImplementation(async (sql, args) => {
+    if (sql === "ROLLBACK")
+      throw new Error("synthetic-private-rollback-marker");
+    return execute(sql, args);
+  });
+  await expect(
+    db.ledger.reserve(member, grant, 2, "insufficient-rollback"),
+  ).rejects.toEqual(new LedgerFailure("insufficient"));
+  expect(db.client.release).toHaveBeenCalledOnce();
+  expect(db.client.release).toHaveBeenCalledWith(true);
 });
