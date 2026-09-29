@@ -118,7 +118,7 @@ test("[L74] member submits and withdraws a version-pinned private workflow impro
     await expect(page.getByText("PRIVATE SAMPLE · SUBMITTED")).toBeVisible();
     const replay = await context.request.post(`/contribute/${id}/submit`, {
       headers: { origin },
-      form: { csrf, rights_confirmed: "yes" },
+      form: { csrf, rights_confirmed: "yes", revision: "1" },
     });
     expect(replay.status()).toBe(409);
     const moderatorPage = await moderator.newPage();

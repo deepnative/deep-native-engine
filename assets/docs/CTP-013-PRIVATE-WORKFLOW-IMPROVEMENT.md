@@ -6,4 +6,6 @@ The optional workflow ID and version are stored with the member-owned proposal i
 
 This is a private synthetic suggestion, not a contribution license, qualified review, approved instruction or publication. The existing moderator can quarantine or reject it, but cannot approve or publish it. Reuse terms, sharing scope, qualified reviewer identity and any public publication remain blocked on #97, #114 and #115. A database or file-read failure returns an unconfirmed result and must not be interpreted as a save or submission.
 
+The later [#351 private correction slice](CTP-013-PRIVATE-PROPOSAL-CORRECTION.md) lets the owner correct only an eligible current-version draft before submitting the exact displayed revision. Stale or retired workflow drafts remain readable and withdrawable without an edit or implicit version migration.
+
 Migration 034 adds nullable, paired workflow-reference columns. It does not rewrite existing generic proposals, and older app versions can ignore the optional columns for a rollback. Reversing the feature removes the new form link and reference handling; retain or delete the added reference columns only through a separately reviewed data migration. For local disposable test data, member deletion already cascades the proposal rows. This note does not assert hosted backup erasure or production retention terms.

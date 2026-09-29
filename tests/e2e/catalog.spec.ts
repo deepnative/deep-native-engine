@@ -132,8 +132,12 @@ test("[L57] private moderation worklist orders by submission and loses revoked a
     { ...sample, title: olderTitle },
     true,
   ))!;
-  expect(await proposals.submit(cookie.value, older, true)).toBe(true);
-  expect(await proposals.submit(cookie.value, later, true)).toBe(true);
+  expect(await proposals.submit(cookie.value, older, true, 1)).toBe(
+    "submitted",
+  );
+  expect(await proposals.submit(cookie.value, later, true, 1)).toBe(
+    "submitted",
+  );
   await pool.query(
     `UPDATE member_proposals SET submitted_at=CASE WHEN id=$1 THEN CURRENT_TIMESTAMP-INTERVAL '2 hours' ELSE CURRENT_TIMESTAMP-INTERVAL '1 hour' END WHERE id IN ($1,$2)`,
     [older, later],

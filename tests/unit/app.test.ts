@@ -390,6 +390,7 @@ async function atStage<T>(stage: string, request: PromiseLike<T>): Promise<T> {
 it("keeps member proposals private and moderation unable to publish", async () => {
   const sample: Proposal = {
     id: "sample-id",
+    revision: 1,
     title: "Original sample",
     body: "Invented details",
     sources: "Original",
@@ -402,7 +403,8 @@ it("keeps member proposals private and moderation unable to publish", async () =
     createDraft: vi.fn<ProposalStore["createDraft"]>().mockResolvedValue(null),
     owned: vi.fn<ProposalStore["owned"]>().mockResolvedValue([sample]),
     preview: vi.fn<ProposalStore["preview"]>().mockResolvedValue(null),
-    submit: vi.fn<ProposalStore["submit"]>().mockResolvedValue(false),
+    editDraft: vi.fn<ProposalStore["editDraft"]>().mockResolvedValue("denied"),
+    submit: vi.fn<ProposalStore["submit"]>().mockResolvedValue("denied"),
     withdraw: vi.fn<ProposalStore["withdraw"]>().mockResolvedValue(false),
     moderationQueue: vi
       .fn<ProposalStore["moderationQueue"]>()
@@ -461,11 +463,182 @@ it("keeps member proposals private and moderation unable to publish", async () =
     .get(`/contribute/${sample.id}`)
     .set("Host", host)
     .expect(200);
+  await memberPost(`/contribute/${sample.id}/edit`, {
+    revision: "1",
+    title: "",
+    body: sample.body!,
+    sources: sample.sources!,
+  }).expect(422);
+  expect(proposals.editDraft).not.toHaveBeenCalled();
+  const duplicateEdit = await memberAgent
+    .post(`/contribute/${sample.id}/edit`)
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send(
+      `csrf=${memberCsrf}&revision=1&title=First&title=Second&body=Sample&sources=Original`,
+    )
+    .expect(422);
+  expect(duplicateEdit.text).toContain("No correction was saved");
+  expect(proposals.editDraft).not.toHaveBeenCalled();
+  await memberPost(`/contribute/${sample.id}/edit`, {
+    revision: "1.0",
+    title: sample.title!,
+    body: sample.body!,
+    sources: sample.sources!,
+  }).expect(422);
+  await memberPost(`/contribute/${sample.id}/edit`, {
+    revision: "999999999999999999999",
+    title: sample.title!,
+    body: sample.body!,
+    sources: sample.sources!,
+  }).expect(422);
+  const oversized = await memberPost(`/contribute/${sample.id}/edit`, {
+    revision: "1",
+    title: "<unsafe>" + "x".repeat(161),
+    body: sample.body!,
+    sources: sample.sources!,
+  }).expect(422);
+  expect(oversized.text).toContain("&lt;unsafe&gt;");
+  expect(oversized.text).not.toContain("<unsafe>");
+  await memberPost(`/contribute/${sample.id}/edit`, {
+    revision: "1",
+    title: sample.title!,
+    body: sample.body!,
+    sources: sample.sources!,
+    workflow_id: "WF-001",
+  }).expect(422);
+  const noBody = await memberAgent
+    .post(`/contribute/${sample.id}/edit`)
+    .set("Host", host)
+    .set("Origin", origin)
+    .set("x-csrf-token", memberCsrf)
+    .expect(422);
+  expect(noBody.text).toContain("No correction was saved");
+  await memberAgent
+    .post(`/contribute/${sample.id}/edit`)
+    .set("Host", host)
+    .set("Origin", origin)
+    .set("x-csrf-token", memberCsrf)
+    .set("Content-Type", "text/plain")
+    .send("malformed edit")
+    .expect(422);
+  const badCsrf = await memberAgent
+    .post(`/contribute/${sample.id}/edit`)
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({
+      csrf: "wrong",
+      revision: "1",
+      title: "<attempted>",
+      body: sample.body!,
+      sources: sample.sources!,
+    })
+    .expect(403);
+  expect(badCsrf.text).toContain("&lt;attempted&gt;");
+  db.session.mockResolvedValueOnce({ kind: "expired" });
+  const expiredEdit = await memberPost(`/contribute/${sample.id}/edit`, {
+    revision: "1",
+    title: "<unsaved>",
+    body: sample.body!,
+    sources: sample.sources!,
+  }).expect(401);
+  expect(expiredEdit.text).toContain("&lt;unsaved&gt;");
+  proposals.editDraft.mockResolvedValueOnce("conflict");
+  const conflict = await memberPost(`/contribute/${sample.id}/edit`, {
+    revision: "1",
+    title: "Revised sample",
+    body: sample.body!,
+    sources: sample.sources!,
+  }).expect(409);
+  expect(conflict.text).toContain("Open the current private preview");
+  proposals.editDraft.mockResolvedValueOnce("invalid");
+  const invalidEdit = await memberPost(`/contribute/${sample.id}/edit`, {
+    revision: "1",
+    title: sample.title!,
+    body: sample.body!,
+    sources: sample.sources!,
+  }).expect(422);
+  expect(invalidEdit.text).toContain("correction fields or revision");
+  expect(invalidEdit.text).toContain("workflow version is no longer current");
+  proposals.editDraft.mockResolvedValueOnce("denied");
+  await memberPost(`/contribute/${sample.id}/edit`, {
+    revision: "1",
+    title: sample.title!,
+    body: sample.body!,
+    sources: sample.sources!,
+  }).expect(404);
+  proposals.editDraft.mockRejectedValueOnce(
+    new Error("private database detail"),
+  );
+  const uncertainEdit = await memberPost(`/contribute/${sample.id}/edit`, {
+    revision: "1",
+    title: "Uncertain sample",
+    body: sample.body!,
+    sources: sample.sources!,
+  }).expect(503);
+  expect(uncertainEdit.text).toContain("Saving could not be confirmed");
+  expect(uncertainEdit.text).toContain("Proposal correction outcome unknown");
+  expect(uncertainEdit.text).toContain("OUTCOME UNCONFIRMED");
+  expect(uncertainEdit.text).not.toContain("Proposal corrections not saved");
+  expect(uncertainEdit.text).toContain("Uncertain sample");
+  expect(uncertainEdit.text).not.toContain("private database detail");
+  proposals.editDraft.mockResolvedValueOnce("saved");
+  await memberPost(`/contribute/${sample.id}/edit`, {
+    revision: "1",
+    title: "Revised sample",
+    body: sample.body!,
+    sources: sample.sources!,
+  }).expect(303);
+  expect(proposals.editDraft).toHaveBeenLastCalledWith(
+    expect.any(String),
+    sample.id,
+    { title: "Revised sample", body: sample.body, sources: sample.sources },
+    1,
+  );
   await memberPost(`/contribute/${sample.id}/submit`, {}).expect(409);
-  proposals.submit.mockResolvedValue(true);
+  await memberAgent
+    .post(`/contribute/${sample.id}/submit`)
+    .set("Host", host)
+    .set("Origin", origin)
+    .set("x-csrf-token", memberCsrf)
+    .set("Content-Type", "text/plain")
+    .send("malformed submission")
+    .expect(409);
   await memberPost(`/contribute/${sample.id}/submit`, {
+    revision: "1.0",
+    rights_confirmed: "yes",
+  }).expect(409);
+  await memberPost(`/contribute/${sample.id}/submit`, {
+    revision: "1",
+    rights_confirmed: "bogus",
+  }).expect(409);
+  await memberPost(`/contribute/${sample.id}/submit`, {
+    revision: "1",
+    rights_confirmed: "yes",
+    workflow_id: "WF-001",
+  }).expect(409);
+  proposals.submit.mockResolvedValueOnce("conflict");
+  const staleSubmit = await memberPost(`/contribute/${sample.id}/submit`, {
+    revision: "1",
+    rights_confirmed: "yes",
+  }).expect(409);
+  expect(staleSubmit.text).toContain("Nothing was submitted");
+  await memberPost(`/contribute/${sample.id}/submit`, {
+    revision: "1",
+  }).expect(409);
+  proposals.submit.mockResolvedValue("submitted");
+  await memberPost(`/contribute/${sample.id}/submit`, {
+    revision: "1",
     rights_confirmed: "yes",
   }).expect(303);
+  expect(proposals.submit).toHaveBeenLastCalledWith(
+    expect.any(String),
+    sample.id,
+    true,
+    1,
+  );
   await memberPost(`/contribute/${sample.id}/withdraw`, {}).expect(409);
   await memberPost(`/contribute/${sample.id}/withdraw`, {
     confirm: "yes",
@@ -1126,7 +1299,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v6",
+          version: "local-member-records-v7",
           profile: { id: "owned" },
           records: { milestones: [] },
         },
@@ -1153,7 +1326,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v6",
+    version: "local-member-records-v7",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");

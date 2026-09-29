@@ -137,7 +137,7 @@ it("denies staff, expired and forged writes; retains historical answers but perm
   expect(ownExport).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v6",
+      version: "local-member-records-v7",
       records: {
         lessonUsefulness: [{ choice: "helpful", contentId: lessonId }],
       },

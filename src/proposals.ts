@@ -18,6 +18,7 @@ export interface Proposal {
   workflowId?: string | null;
   workflowVersion?: number | null;
   state: ProposalState;
+  revision: number;
   createdAt: Date;
   submittedAt: Date | null;
 }
@@ -30,7 +31,18 @@ export interface ProposalStore {
   ): Promise<string | null>;
   owned(token: string): Promise<Proposal[]>;
   preview(token: string, id: string): Promise<Proposal | null>;
-  submit(token: string, id: string, rightsConfirmed: boolean): Promise<boolean>;
+  editDraft(
+    token: string,
+    id: string,
+    value: { title: string; body: string; sources: string },
+    expectedRevision: number,
+  ): Promise<"saved" | "conflict" | "denied" | "invalid">;
+  submit(
+    token: string,
+    id: string,
+    rightsConfirmed: boolean,
+    expectedRevision: number,
+  ): Promise<"submitted" | "conflict" | "denied">;
   withdraw(token: string, id: string): Promise<boolean>;
   moderationQueue(token: string): Promise<Proposal[] | null>;
   moderate(
@@ -39,32 +51,39 @@ export interface ProposalStore {
     action: "quarantine" | "reject",
   ): Promise<boolean>;
 }
-export function validProposal(value: {
-  title: string;
-  body: string;
-  sources: string;
-}): boolean {
-  return (
-    value.title.trim().length > 0 &&
-    value.title.length <= 160 &&
-    value.body.trim().length > 0 &&
-    value.body.length <= 4000 &&
-    value.sources.trim().length > 0 &&
-    value.sources.length <= 1000
+export function validProposal(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const fields = value as Record<string, unknown>;
+  return Object.entries({ title: 160, body: 4000, sources: 1000 }).every(
+    ([name, max]) => {
+      const field = fields[name];
+      return (
+        typeof field === "string" &&
+        field.trim().length > 0 &&
+        field.length <= max &&
+        !field.includes("\0")
+      );
+    },
   );
+}
+const proposalIdPattern =
+  /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function validRevision(value: number): boolean {
+  return Number.isInteger(value) && value > 0 && value <= 2147483647;
 }
 export function disabledProposalStore(): ProposalStore {
   return {
     createDraft: async () => null,
     owned: async () => [],
     preview: async () => null,
-    submit: async () => false,
+    editDraft: async () => "denied",
+    submit: async () => "denied",
     withdraw: async () => false,
     moderationQueue: async () => null,
     moderate: async () => false,
   };
 }
-const columns = `mp.id,mp.title,mp.body,mp.sources,mp.state,
+const columns = `mp.id,mp.title,mp.body,mp.sources,mp.state,mp.revision,
  mp.workflow_id AS "workflowId",mp.workflow_version AS "workflowVersion",
  mp.created_at AS "createdAt",mp.submitted_at AS "submittedAt"`;
 const member = `p.token_hash=$1 AND p.kind='member'
@@ -82,6 +101,80 @@ export function proposalStore(
   pool: Pool,
   resolveWorkflow = workflowBundle,
 ): ProposalStore {
+  async function withOwner<T>(
+    token: string,
+    id: string,
+    denied: T,
+    use: (client: PoolClient, row: Proposal) => Promise<T>,
+  ): Promise<T> {
+    if (!proposalIdPattern.test(id)) return denied;
+    const client = await pool.connect();
+    let releaseError: Error | undefined;
+    try {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL lock_timeout='5s'");
+      // Match deletion/moderation ordering. Authorization remains locked until
+      // commit; row locking makes revision checks and state changes atomic.
+      const principal = (
+        await client.query<{ id: string; expires_at: Date }>(
+          `SELECT id,expires_at FROM principals WHERE token_hash=$1 AND kind='member'
+           AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE`,
+          [hash(token)],
+        )
+      ).rows[0];
+      if (!principal) {
+        await client.query("ROLLBACK");
+        return denied;
+      }
+      const workspace = await client.query(
+        `SELECT id FROM workspaces WHERE owner_principal_id=$1
+         AND deleting_at IS NULL FOR SHARE`,
+        [principal.id],
+      );
+      if (!workspace.rows[0]) {
+        await client.query("ROLLBACK");
+        return denied;
+      }
+      const row = (
+        await client.query<Proposal>(
+          `SELECT ${columns} FROM member_proposals mp
+           WHERE mp.member_id=$1 AND mp.id=$2 FOR UPDATE`,
+          [principal.id, id],
+        )
+      ).rows[0];
+      if (!row) {
+        await client.query("ROLLBACK");
+        return denied;
+      }
+      const result = await use(client, row);
+      const current = await client.query<{ valid: boolean }>(
+        "SELECT clock_timestamp() < $1::timestamptz AS valid",
+        [principal.expires_at],
+      );
+      if (!current.rows[0]!.valid) {
+        await client.query("ROLLBACK");
+        return denied;
+      }
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        releaseError = new Error("Proposal mutation rollback failed");
+      }
+      throw error;
+    } finally {
+      client.release(releaseError);
+    }
+  }
+
+  async function currentWorkflow(row: Proposal): Promise<boolean> {
+    if (!row.workflowId) return true;
+    const current = await resolveWorkflow(row.workflowId);
+    return !!current && current.version === row.workflowVersion;
+  }
+
   async function audit(
     client: PoolClient,
     actor: ModerationActor,
@@ -256,44 +349,61 @@ export function proposalStore(
       );
       return result.rows[0] ?? null;
     },
-    async submit(token, id, rightsConfirmed) {
-      if (!rightsConfirmed) return false;
-      const draft = await pool.query<{
-        workflowId: string | null;
-        workflowVersion: number | null;
-      }>(
-        `SELECT mp.workflow_id AS "workflowId",
-           mp.workflow_version AS "workflowVersion"
-         FROM member_proposals mp JOIN principals p ON p.id=mp.member_id
-         WHERE ${member} AND mp.id=$2 AND mp.state='draft'`,
-        [hash(token), id],
+    async editDraft(token, id, value, expectedRevision) {
+      if (!validRevision(expectedRevision) || !validProposal(value))
+        return "invalid";
+      return withOwner<"saved" | "conflict" | "denied">(
+        token,
+        id,
+        "denied",
+        async (client, row) => {
+          if (row.state !== "draft" || !(await currentWorkflow(row)))
+            return "denied";
+          if (row.revision !== expectedRevision || row.revision === 2147483647)
+            return "conflict";
+          // Keep owner/reference/attestations immutable; replace current text
+          // in place without retaining prior-text history.
+          await client.query(
+            `UPDATE member_proposals SET title=$2,body=$3,sources=$4,
+             revision=revision+1 WHERE id=$1`,
+            [id, value.title, value.body, value.sources],
+          );
+          return "saved";
+        },
       );
-      const reference = draft.rows[0];
-      if (!reference) return false;
-      if (reference.workflowId) {
-        const current = await resolveWorkflow(reference.workflowId);
-        if (!current || current.version !== reference.workflowVersion)
-          return false;
-      }
-      const result = await pool.query(
-        `UPDATE member_proposals mp SET state='submitted',
-           rights_attested_at=CURRENT_TIMESTAMP,submitted_at=CURRENT_TIMESTAMP
-         FROM principals p WHERE p.id=mp.member_id AND ${member}
-           AND mp.id=$2 AND mp.state='draft'`,
-        [hash(token), id],
+    },
+    async submit(token, id, rightsConfirmed, expectedRevision) {
+      if (!rightsConfirmed || !validRevision(expectedRevision)) return "denied";
+      return withOwner<"submitted" | "conflict" | "denied">(
+        token,
+        id,
+        "denied",
+        async (client, row) => {
+          if (row.state !== "draft" || !(await currentWorkflow(row)))
+            return "denied";
+          if (row.revision !== expectedRevision) return "conflict";
+          await client.query(
+            `UPDATE member_proposals SET state='submitted',
+             rights_attested_at=clock_timestamp(),submitted_at=clock_timestamp()
+             WHERE id=$1`,
+            [id],
+          );
+          return "submitted";
+        },
       );
-      return result.rowCount === 1;
     },
     async withdraw(token, id) {
-      const result = await pool.query(
-        `UPDATE member_proposals mp SET state='withdrawn',title=NULL,body=NULL,
+      return withOwner(token, id, false, async (client, row) => {
+        if (!["draft", "submitted", "quarantined"].includes(row.state))
+          return false;
+        await client.query(
+          `UPDATE member_proposals SET state='withdrawn',title=NULL,body=NULL,
            sources=NULL,workflow_id=NULL,workflow_version=NULL,
-           withdrawn_at=CURRENT_TIMESTAMP
-         FROM principals p WHERE p.id=mp.member_id AND ${member}
-           AND mp.id=$2 AND mp.state IN ('draft','submitted','quarantined')`,
-        [hash(token), id],
-      );
-      return result.rowCount === 1;
+           withdrawn_at=clock_timestamp() WHERE id=$1`,
+          [id],
+        );
+        return true;
+      });
     },
     async moderationQueue(token) {
       return withModerator<Proposal[] | null>(

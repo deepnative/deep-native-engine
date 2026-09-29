@@ -53,7 +53,7 @@ const sections = {
   careerDrafts: `SELECT id,kind,title,body,approved,version,
     created_at AS "createdAt",updated_at AS "updatedAt"
     FROM career_drafts WHERE member_id=$1 ORDER BY created_at,id LIMIT $2`,
-  proposals: `SELECT id,title,body,sources,state,
+  proposals: `SELECT id,title,body,sources,state,revision,
     workflow_id AS "workflowId",workflow_version AS "workflowVersion",
     created_at AS "createdAt",
     submitted_at AS "submittedAt",withdrawn_at AS "withdrawnAt"
@@ -123,7 +123,7 @@ export function memberExportStore(pool: Pool): MemberExportStore {
           }
           const payload = {
             kind: "ready",
-            version: "local-member-records-v6",
+            version: "local-member-records-v7",
             profile: owner.rows[0],
             records,
           };

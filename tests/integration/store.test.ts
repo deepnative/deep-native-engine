@@ -845,10 +845,10 @@ it("keeps consented member samples private through moderation, withdrawal and de
     title: input.title,
     state: "draft",
   });
-  expect(await proposals.submit(first.token, id!, false)).toBe(false);
-  expect(await proposals.submit(other.token, id!, true)).toBe(false);
-  expect(await proposals.submit(first.token, id!, true)).toBe(true);
-  expect(await proposals.submit(first.token, id!, true)).toBe(false);
+  expect(await proposals.submit(first.token, id!, false, 1)).toBe("denied");
+  expect(await proposals.submit(other.token, id!, true, 1)).toBe("denied");
+  expect(await proposals.submit(first.token, id!, true, 1)).toBe("submitted");
+  expect(await proposals.submit(first.token, id!, true, 1)).toBe("denied");
   expect(await proposals.moderationQueue(reviewerToken)).toBeNull();
   expect((await proposals.moderationQueue(moderatorToken))?.[0]).toMatchObject({
     id,
@@ -871,7 +871,9 @@ it("keeps consented member samples private through moderation, withdrawal and de
     state: "withdrawn",
   });
   const second = await proposals.createDraft(first.token, input, true);
-  expect(await proposals.submit(first.token, second!, true)).toBe(true);
+  expect(await proposals.submit(first.token, second!, true, 1)).toBe(
+    "submitted",
+  );
   expect(await proposals.moderate(moderatorToken, second!, "reject")).toBe(
     true,
   );
@@ -880,7 +882,9 @@ it("keeps consented member samples private through moderation, withdrawal and de
     body: null,
   });
   const third = await proposals.createDraft(first.token, input, true);
-  expect(await proposals.submit(first.token, third!, true)).toBe(true);
+  expect(await proposals.submit(first.token, third!, true, 1)).toBe(
+    "submitted",
+  );
   expect(await proposals.moderate(moderatorToken, third!, "quarantine")).toBe(
     true,
   );
@@ -942,10 +946,12 @@ it("binds a private workflow improvement to its current version and redacts it o
     pool,
     async () => ({ version: 2 }) as never,
   );
-  expect(await changedRegistry.submit(owner.token, id!, true)).toBe(false);
+  expect(await changedRegistry.submit(owner.token, id!, true, 1)).toBe(
+    "denied",
+  );
   expect(await proposals.moderationQueue(moderatorToken)).toEqual([]);
-  expect(await proposals.submit(owner.token, id!, true)).toBe(true);
-  expect(await proposals.submit(owner.token, id!, true)).toBe(false);
+  expect(await proposals.submit(owner.token, id!, true, 1)).toBe("submitted");
+  expect(await proposals.submit(owner.token, id!, true, 1)).toBe("denied");
   expect(await proposals.moderationQueue(moderatorToken)).toMatchObject([
     { id, workflowId: "WF-001", workflowVersion: 1, state: "submitted" },
   ]);
@@ -1018,8 +1024,12 @@ it("orders synthetic moderation by submission time and revokes queue access", as
     sample,
     true,
   ))!;
-  expect(await proposals.submit(learner.token, secondDraft, true)).toBe(true);
-  expect(await proposals.submit(learner.token, firstDraft, true)).toBe(true);
+  expect(await proposals.submit(learner.token, secondDraft, true, 1)).toBe(
+    "submitted",
+  );
+  expect(await proposals.submit(learner.token, firstDraft, true, 1)).toBe(
+    "submitted",
+  );
   await pool.query(
     `UPDATE member_proposals SET created_at=CASE WHEN id=$1 THEN '2026-09-20T00:00:00Z'::timestamptz ELSE '2026-09-21T00:00:00Z'::timestamptz END,
        submitted_at=CASE WHEN id=$1 THEN '2026-09-24T00:00:00Z'::timestamptz ELSE '2026-09-23T00:00:00Z'::timestamptz END
@@ -1050,7 +1060,9 @@ it("orders synthetic moderation by submission time and revokes queue access", as
     (await proposals.moderationQueue(moderatorToken))?.map((item) => item.id),
   ).toEqual([firstDraft]);
   const racing = (await proposals.createDraft(learner.token, sample, true))!;
-  expect(await proposals.submit(learner.token, racing, true)).toBe(true);
+  expect(await proposals.submit(learner.token, racing, true, 1)).toBe(
+    "submitted",
+  );
   const settled = await Promise.all([
     proposals.withdraw(learner.token, racing),
     proposals.moderate(moderatorToken, racing, "reject"),
@@ -2044,7 +2056,7 @@ it("keeps synthetic assignment submissions immutable across private revisions an
   expect(ownedExport).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v6",
+      version: "local-member-records-v7",
       records: {
         assignmentSubmissions: [
           { attemptId: id, sequence: 1, response: firstText },
@@ -4912,7 +4924,7 @@ it("attributes deterministic adapter jobs only to an active member and keeps ide
   expect(await memberExportStore(pool).exportOwned(owner.token)).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v6",
+      version: "local-member-records-v7",
       records: { adapterJobs: [{ id: first.id, mode: "test" }] },
     },
   });

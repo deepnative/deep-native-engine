@@ -37,6 +37,7 @@ import {
   expertRegistryPage,
   proposalListPage,
   proposalPreviewPage,
+  proposalEditRecoveryPage,
   moderationPage,
   milestonesPage,
   careerPage,
@@ -122,6 +123,25 @@ import {
 } from "./manual-observations.ts";
 const attemptWritePath =
   /^\/assignments\/attempts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(save|submit|revise)$/i;
+const proposalEditPath = /^\/contribute\/([^/]+)\/edit$/;
+function proposalAttempt(body: unknown) {
+  const fields = (body ?? {}) as Fields;
+  const text = (name: string, max: number) =>
+    typeof fields[name] === "string"
+      ? (fields[name] as string).slice(0, max)
+      : "";
+  return {
+    title: text("title", 160),
+    body: text("body", 4000),
+    sources: text("sources", 1000),
+  };
+}
+function proposalRevision(value: unknown): number | undefined {
+  if (typeof value !== "string" || !/^[1-9][0-9]*$/.test(value))
+    return undefined;
+  const revision = Number(value);
+  return Number.isSafeInteger(revision) ? revision : undefined;
+}
 function attemptedResponse(body: unknown, action: string) {
   const fields = (body ?? {}) as Fields;
   const value =
@@ -228,6 +248,7 @@ export function app(
     res.locals.token = session;
     res.locals.csrf = csrf(session, options.secret);
     const write = attemptWritePath.exec(req.originalUrl.split("?")[0]!);
+    const proposalWrite = proposalEditPath.exec(req.originalUrl.split("?")[0]!);
     if (
       ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) &&
       (req.get("origin") !== options.origin ||
@@ -246,6 +267,19 @@ export function app(
               "This form was not accepted. Copy your response, reopen the attempt and use the refreshed form.",
               attemptedResponse(req.body, write[2]!),
               write[1]!,
+            ),
+          );
+        return;
+      }
+      if (req.get("origin") === options.origin && proposalWrite) {
+        res
+          .status(403)
+          .send(
+            proposalEditRecoveryPage(
+              proposalWrite[1]!,
+              res.locals.csrf as string,
+              "This form was not accepted. Copy your attempted text, then open the current private preview and use a refreshed form.",
+              proposalAttempt(req.body),
             ),
           );
         return;
@@ -692,6 +726,10 @@ export function app(
           req.method === "POST"
             ? attemptWritePath.exec(req.originalUrl.split("?")[0]!)
             : null;
+        const proposalWrite =
+          req.method === "POST"
+            ? proposalEditPath.exec(req.originalUrl.split("?")[0]!)
+            : null;
         if (write) {
           res
             .status(401)
@@ -703,6 +741,19 @@ export function app(
                 "No write was accepted. Copy your response before starting a fresh preview session; the previous private attempt cannot be reopened from a new session.",
                 attemptedResponse(req.body, write[2]!),
                 write[1]!,
+              ),
+            );
+          return;
+        }
+        if (proposalWrite) {
+          res
+            .status(401)
+            .send(
+              proposalEditRecoveryPage(
+                proposalWrite[1]!,
+                res.locals.csrf as string,
+                "No correction was saved. Copy your attempted text before starting a fresh preview session; an expired session cannot reopen the earlier draft.",
+                proposalAttempt(req.body),
               ),
             );
           return;
@@ -1277,20 +1328,127 @@ export function app(
       ),
     );
   });
-  app.post("/contribute/:id/submit", async (req, res) => {
-    if (
-      !(await proposals.submit(
+  app.post("/contribute/:id/edit", async (req, res) => {
+    const fields = (req.body ?? {}) as Fields;
+    const attempted = proposalAttempt(fields);
+    const revision = proposalRevision(fields.revision);
+    const permitted = new Set(["csrf", "revision", "title", "body", "sources"]);
+    const malformed = Object.keys(fields).some((key) => !permitted.has(key));
+    const textValid = [
+      [fields.title, 160],
+      [fields.body, 4000],
+      [fields.sources, 1000],
+    ].every(
+      ([value, max]) =>
+        typeof value === "string" &&
+        value.trim().length > 0 &&
+        value.length <= (max as number),
+    );
+    if (revision === undefined || malformed || !textValid) {
+      res
+        .status(422)
+        .send(
+          proposalEditRecoveryPage(
+            req.params.id as string,
+            res.locals.csrf as string,
+            "Complete the title, original sample and sources notes within their limits. Use one value per field and reopen the current preview if its revision is missing or changed. No correction was saved.",
+            attempted,
+            revision,
+          ),
+        );
+      return;
+    }
+    let result: Awaited<ReturnType<ProposalStore["editDraft"]>>;
+    try {
+      result = await proposals.editDraft(
         res.locals.token as string,
         req.params.id as string,
-        req.body.rights_confirmed === "yes",
-      ))
+        attempted,
+        revision,
+      );
+    } catch {
+      res
+        .status(503)
+        .send(
+          proposalEditRecoveryPage(
+            req.params.id as string,
+            res.locals.csrf as string,
+            "Saving could not be confirmed. Copy your attempted text and open the current preview to check the saved revision before trying again.",
+            attempted,
+            undefined,
+            true,
+          ),
+        );
+      return;
+    }
+    if (result === "saved") {
+      res.redirect(303, `/contribute/${req.params.id}`);
+      return;
+    }
+    if (result === "denied") {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Proposal unavailable",
+            "Only an active owner can correct a current private draft.",
+          ),
+        );
+      return;
+    }
+    res
+      .status(result === "invalid" ? 422 : 409)
+      .send(
+        proposalEditRecoveryPage(
+          req.params.id as string,
+          res.locals.csrf as string,
+          result === "conflict"
+            ? "The saved draft changed after this form opened. Nothing was saved. Open the current private preview before choosing what to keep."
+            : "The correction fields or revision could not be accepted, or this workflow version is no longer current. Nothing was saved. Check the field limits and open the current private preview before trying again.",
+          attempted,
+        ),
+      );
+  });
+  app.post("/contribute/:id/submit", async (req, res) => {
+    const fields = (req.body ?? {}) as Fields;
+    const revision = proposalRevision(fields.revision);
+    if (
+      revision === undefined ||
+      Object.keys(fields).some(
+        (key) => !["csrf", "revision", "rights_confirmed"].includes(key),
+      ) ||
+      (fields.rights_confirmed !== undefined &&
+        fields.rights_confirmed !== "yes")
     ) {
       res
         .status(409)
         .send(
-          errorPage(
-            "Proposal not submitted",
-            "Confirm original rights and check draft state.",
+          proposalEditRecoveryPage(
+            req.params.id as string,
+            res.locals.csrf as string,
+            "Submission needs one valid saved revision and explicit rights confirmation. Nothing was submitted.",
+            { title: "", body: "", sources: "" },
+          ),
+        );
+      return;
+    }
+    const result = await proposals.submit(
+      res.locals.token as string,
+      req.params.id as string,
+      fields.rights_confirmed === "yes",
+      revision,
+    );
+    if (result !== "submitted") {
+      res
+        .status(409)
+        .send(
+          proposalEditRecoveryPage(
+            req.params.id as string,
+            res.locals.csrf as string,
+            result === "conflict"
+              ? "The saved draft changed after this submission form opened. Nothing was submitted. Review the current private preview and confirm rights for its revision."
+              : "Confirm original rights and check the current draft state. Nothing was submitted.",
+            { title: "", body: "", sources: "" },
           ),
         );
       return;
