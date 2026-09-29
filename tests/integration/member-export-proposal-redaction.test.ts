@@ -301,7 +301,7 @@ it.each(["withdraw", "reject"] as const)(
   15_000,
 );
 
-it("keeps created-date export order when proposal UUID lock order is reversed", async () => {
+it("keeps stable primary-key page order when creation dates are reversed", async () => {
   const ownerToken = token();
   await members.create(ownerToken, {
     background: "explorer",
@@ -350,7 +350,7 @@ it("keeps created-date export order when proposal UUID lock order is reversed", 
     expect(earlier).toMatchObject({
       kind: "ready",
       payload: {
-        records: { proposals: [{ id: earlierId }, { id: laterId }] },
+        records: { proposals: [{ id: laterId }, { id: earlierId }] },
       },
     });
     expect(await writing).toBe(true);
@@ -360,8 +360,8 @@ it("keeps created-date export order when proposal UUID lock order is reversed", 
       payload: {
         records: {
           proposals: [
-            { id: earlierId, title: "Invented earlier private proposal" },
             { id: laterId, state: "withdrawn", title: null, body: null },
+            { id: earlierId, title: "Invented earlier private proposal" },
           ],
         },
       },

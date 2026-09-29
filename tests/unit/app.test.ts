@@ -1582,9 +1582,16 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v9",
+          version: "local-member-records-v10",
           profile: { id: "owned" },
           records: { milestones: [] },
+          page: {
+            number: 1,
+            recordCount: 0,
+            consistency: "live-pages",
+            complete: true,
+            nextCursor: null,
+          },
         },
       }),
   };
@@ -1609,12 +1616,12 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v9",
+    version: "local-member-records-v10",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
   expect(ready.headers["content-disposition"]).toContain(
-    "deep-native-member-records.json",
+    "deep-native-member-records-page-1.json",
   );
 });
 it("serves the local welcome, stylesheet and safe security headers", async () => {
@@ -4158,4 +4165,63 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
   expect(bounded.text).toContain("&lt;time&gt;");
   expect(bounded.text).toContain("&#13;\n");
   expect(bounded.text).not.toContain("<time>");
+});
+
+it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
+  const payload = {
+    kind: "ready" as const,
+    version: "local-member-records-v10" as const,
+    profile: { id: "owned" },
+    records: { milestones: [] },
+    page: {
+      number: 2,
+      recordCount: 3,
+      consistency: "live-pages" as const,
+      complete: false,
+      nextCursor: "signed-next",
+    },
+  };
+  const memberExport = {
+    exportOwned: vi
+      .fn<MemberExportStore["exportOwned"]>()
+      .mockResolvedValue({ kind: "ready", payload }),
+  };
+  const agent = await managedAgent(
+    app(storage(), { origin, secret: "secret", memberExport }),
+  );
+  const html = await agent
+    .get("/member/export?cursor=signed-current")
+    .set("Host", host)
+    .expect(200);
+  expect(html.text).toContain("Download page 2");
+  expect(html.text).toContain("Next page");
+  expect(html.text).toContain("/api/member/export?cursor=signed-current");
+  expect(html.headers["referrer-policy"]).toBe("no-referrer");
+  expect(html.headers["cache-control"]).toBe("no-store");
+  expect(memberExport.exportOwned).toHaveBeenLastCalledWith(
+    expect.any(String),
+    "signed-current",
+  );
+  const download = await agent
+    .get("/api/member/export?cursor=signed-current")
+    .set("Host", host)
+    .expect(200);
+  expect(download.headers["content-disposition"]).toContain(
+    "deep-native-member-records-page-2.json",
+  );
+  expect(download.headers["referrer-policy"]).toBe("no-referrer");
+  const calls = memberExport.exportOwned.mock.calls.length;
+  await agent
+    .get("/api/member/export?cursor=one&cursor=two")
+    .set("Host", host)
+    .expect(403);
+  expect(memberExport.exportOwned).toHaveBeenCalledTimes(calls);
+  for (const kind of ["denied", "limit", "unavailable"] as const) {
+    memberExport.exportOwned.mockResolvedValueOnce({ kind });
+    const error = await agent
+      .get("/member/export")
+      .set("Host", host)
+      .expect(kind === "denied" ? 403 : kind === "limit" ? 413 : 503);
+    expect(error.text).toContain("Export unavailable");
+  }
 });

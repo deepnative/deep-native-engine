@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { testPool } from "../support/database.ts";
 import { jobStore, requestFingerprint } from "../../src/jobs.ts";
@@ -102,7 +103,7 @@ test("[L61] current owner downloads private structured records while unrelated, 
     const own = await page.request.get("/api/member/export");
     expect(own.status()).toBe(200);
     expect(own.headers()["content-disposition"]).toContain(
-      "deep-native-member-records.json",
+      "deep-native-member-records-page-1.json",
     );
     expect(own.headers()["cache-control"]).toBe("no-store");
     const granted = await own.json();
@@ -110,7 +111,7 @@ test("[L61] current owner downloads private structured records while unrelated, 
       { id: receiptId, evidenceId: source.id },
     ]);
     expect(granted).toMatchObject({
-      version: "local-member-records-v9",
+      version: "local-member-records-v10",
       profile: { id: ownerId },
       records: {
         milestones: [{ milestoneTitle: "Owner-only milestone" }],
@@ -226,7 +227,7 @@ test("[L67] deterministic member jobs export only to their owner and disappear w
       requestFingerprint({ system: marker }),
     );
     const own = await (await page.request.get("/api/member/export")).json();
-    expect(own.version).toBe("local-member-records-v9");
+    expect(own.version).toBe("local-member-records-v10");
     expect(own.records.adapterJobs).toMatchObject([
       {
         id: owned.id,
@@ -257,6 +258,141 @@ test("[L67] deterministic member jobs export only to their owner and disappear w
       await other.request.get("/api/member/export")
     ).json();
     expect(remaining.profile.id).toBe(await memberId(otherContext));
+  } finally {
+    await otherContext.close();
+  }
+});
+
+test("[L90] owner downloads every bounded live page with safe continuation and current authorization", async ({
+  page,
+  context,
+  browser,
+}) => {
+  const otherContext = await browser.newContext({
+    baseURL: "http://127.0.0.1:4317",
+  });
+  try {
+    await onboard(page);
+    const other = await otherContext.newPage();
+    await onboard(other);
+    const ownerId = await memberId(context);
+    const ids: string[] = [];
+    for (let index = 0; index < 120; index++) {
+      const id = `10000000-${randomUUID().slice(9)}`;
+      ids.push(id);
+      await pool.query(
+        `INSERT INTO member_proposals(id,member_id,title,body,sources,sample_attested_at)
+        VALUES($1,$2,'Invented page proposal',$3,'Original',clock_timestamp())`,
+        [id, ownerId, 'é\\"'.repeat(1000)],
+      );
+    }
+    await page
+      .getByRole("link", { name: "Download my structured preview records" })
+      .click();
+    await expect(
+      page.getByRole("heading", {
+        name: "Download private preview records",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/Each page is a live read, not one frozen snapshot/),
+    ).toBeVisible();
+    // A record arriving after the HTML preview changes the byte cut. Only
+    // continuation from the downloaded response can preserve the displaced row.
+    await expect(
+      page.getByRole("link", { name: "Next page", exact: true }),
+    ).toHaveCount(0);
+    const inserted = `00000000-0000-4000-8000-${randomUUID().slice(-12)}`;
+    ids.push(inserted);
+    await pool.query(
+      `INSERT INTO member_proposals(id,member_id,title,body,sources,sample_attested_at)
+       SELECT $1,$2,'Invented intervening proposal',body,'Original',clock_timestamp()
+       FROM member_proposals WHERE member_id=$2 LIMIT 1`,
+      [inserted, ownerId],
+    );
+    const found: string[] = [];
+    let count = 0;
+    let savedContinuation = "";
+    while (true) {
+      count++;
+      expect(count).toBeLessThan(10);
+      const link = page.getByRole("button", {
+        name: `Download page ${count}`,
+        exact: true,
+      });
+      const [download] = await Promise.all([
+        page.waitForEvent("download"),
+        link.click(),
+      ]);
+      expect(download.suggestedFilename()).toBe(
+        `deep-native-member-records-page-${count}.json`,
+      );
+      const bytes = await readFile((await download.path())!);
+      expect(bytes.byteLength).toBeLessThanOrEqual(256 * 1024);
+      const payload = JSON.parse(bytes.toString("utf8"));
+      expect(payload.page).toMatchObject({
+        number: count,
+        consistency: "live-pages",
+      });
+      expect(payload.page.recordCount).toBeLessThanOrEqual(100);
+      expect(payload.page.recordCount).toBeGreaterThan(0);
+      found.push(
+        ...payload.records.proposals.map((row: { id: string }) => row.id),
+      );
+      const next = page.getByRole("link", { name: "Next page", exact: true });
+      if (payload.page.complete) {
+        expect(payload.page.nextCursor).toBeNull();
+        await expect(next).toHaveCount(0);
+        break;
+      }
+      expect(payload.page.nextCursor).toBeTruthy();
+      const nextHref = (await next.getAttribute("href"))!;
+      savedContinuation = nextHref;
+      const denied = await other.request.get(
+        nextHref.replace("/member/export", "/api/member/export"),
+      );
+      expect(denied.status()).toBe(403);
+      expect(await denied.json()).toEqual({ error: "forbidden" });
+      await next.focus();
+      await expect(next).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(
+        page.getByRole("heading", { name: `Page ${count + 1}`, exact: true }),
+      ).toBeVisible();
+    }
+    expect(count).toBeGreaterThan(1);
+    expect(found).toEqual(ids.sort());
+    expect(new Set(found).size).toBe(121);
+    await expect(page.getByText(/End of this live traversal/)).toBeVisible();
+    expect((await page.request.get(`${savedContinuation}x`)).status()).toBe(
+      403,
+    );
+    await pool.query(
+      "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+      [ownerId],
+    );
+    await page
+      .getByRole("button", { name: `Download page ${count}`, exact: true })
+      .click();
+    await expect(page.getByRole("status")).toContainText(
+      "This page was not downloaded",
+    );
+    await expect(
+      page.getByRole("link", { name: "Next page", exact: true }),
+    ).toHaveCount(0);
+    const revoked = await page.goto(savedContinuation);
+    expect(revoked!.status()).toBe(403);
+    await expect(
+      page.getByRole("heading", { name: "Export unavailable", exact: true }),
+    ).toBeVisible();
+    expect(
+      (
+        await page.request.get(
+          savedContinuation.replace("/member/export", "/api/member/export"),
+        )
+      ).status(),
+    ).toBe(403);
   } finally {
     await otherContext.close();
   }

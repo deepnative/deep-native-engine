@@ -64,13 +64,16 @@ test("[F-BUILD-08-A] owner export excludes another member's private records", as
     const ownerLink = page.getByRole("link", { name: linkName });
 
     await requiredCheck(1, async () => {
-      await expect(ownerLink).toHaveAttribute("href", "/api/member/export");
+      await expect(ownerLink).toHaveAttribute("href", "/member/export");
+      await ownerLink.click();
       const [download] = await Promise.all([
         page.waitForEvent("download"),
-        ownerLink.click(),
+        page
+          .getByRole("button", { name: "Download page 1", exact: true })
+          .click(),
       ]);
       expect(download.suggestedFilename()).toBe(
-        "deep-native-member-records.json",
+        "deep-native-member-records-page-1.json",
       );
       const downloadPath = await download.path();
       expect(downloadPath).not.toBeNull();
@@ -79,7 +82,7 @@ test("[F-BUILD-08-A] owner export excludes another member's private records", as
         profile: { id: string };
         records: { milestones: { milestoneTitle: string }[] };
       };
-      expect(payload.version).toBe("local-member-records-v9");
+      expect(payload.version).toBe("local-member-records-v10");
       expect(payload.profile.id).toBe(ownerId);
       expect(payload.records.milestones).toMatchObject([
         { milestoneTitle: ownerTitle },
@@ -89,17 +92,20 @@ test("[F-BUILD-08-A] owner export excludes another member's private records", as
       const response = await page.request.get("/api/member/export");
       expect(response.status()).toBe(200);
       expect(response.headers()["content-disposition"]).toContain(
-        "deep-native-member-records.json",
+        "deep-native-member-records-page-1.json",
       );
       expect(response.headers()["cache-control"]).toBe("no-store");
     });
 
     await requiredCheck(2, async () => {
       const outsiderLink = outsiderPage.getByRole("link", { name: linkName });
-      await expect(outsiderLink).toHaveAttribute("href", "/api/member/export");
+      await expect(outsiderLink).toHaveAttribute("href", "/member/export");
+      await outsiderLink.click();
       const [download] = await Promise.all([
         outsiderPage.waitForEvent("download"),
-        outsiderLink.click(),
+        outsiderPage
+          .getByRole("button", { name: "Download page 1", exact: true })
+          .click(),
       ]);
       const downloadPath = await download.path();
       expect(downloadPath).not.toBeNull();
