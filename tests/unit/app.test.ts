@@ -3960,3 +3960,79 @@ it("preserves attempted text and separates stale, ineligible, expired and uncert
   expect(invalidForm.text).toContain("Form needs a refresh");
   expect(invalidForm.text).toContain("A newer &lt;private&gt; response");
 });
+
+it("downloads only the selected simulated portfolio snapshot with safe attachment metadata", async () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const earlier = "Invented <private> first\nKeep this";
+  const later = "Invented <private> second\nKeep this";
+  const item = {
+    id,
+    contentId: "SYN-960",
+    contentVersion: 1,
+    title: "Invented <script> assignment",
+    goalAtStart: "everyday",
+    response: "unsubmitted draft must not enter comparison",
+    revision: 4,
+    startedAt: new Date("2026-09-24T00:00:00Z"),
+    savedAt: new Date("2026-09-24T00:04:00Z"),
+    submittedAt: null,
+    submissionCount: 2,
+    submissions: [
+      { sequence: 1, response: earlier, submittedAt: "2026-09-24T00:01:00Z" },
+      { sequence: 2, response: later, submittedAt: "2026-09-24T00:02:00Z" },
+    ],
+    currentPublished: false,
+    currentEligible: false,
+  };
+  const db = storage();
+  const attempts = {
+    ...disabledAttemptStore(),
+    detail: vi.fn().mockResolvedValue(item),
+  };
+  const agent = managedAgent(app(db, { origin, secret: "secret", attempts }));
+  await agent.get("/").set("Host", host).expect(200);
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const get = (sequence: string) =>
+    agent
+      .get(`/assignments/attempts/${id}/portfolio/${sequence}`)
+      .set("Host", host);
+  const result = await get("1").expect(200);
+  expect(result.headers["content-type"]).toContain("text/html");
+  expect(result.headers["content-disposition"]).toBe(
+    'attachment; filename="simulated-portfolio-submission-1.html"',
+  );
+  expect(result.headers["cache-control"]).toBe("no-store");
+  expect(result.text).toContain("SIMULATED · SELF-AUTHORED · UNREVIEWED");
+  expect(result.text).toContain("assignment version 1");
+  expect(result.text).toContain("Invented &lt;script&gt; assignment");
+  expect(result.text).not.toContain("<script>");
+  expect(result.text).toContain("submission 1");
+  expect(result.text).toContain("Invented &lt;private&gt; first");
+  expect(result.text).not.toContain("Invented &lt;private&gt; second");
+  expect(result.text).not.toContain(item.response);
+  for (const sequence of ["0", "01", "11", "3", "1.html", "-1"])
+    await get(sequence).expect(404);
+  await agent
+    .get("/assignments/attempts/invalid/portfolio/1")
+    .set("Host", host)
+    .expect(404);
+  attempts.detail.mockResolvedValue(null);
+  await get("1").expect(404);
+  attempts.detail.mockResolvedValue({ ...item, submissions: undefined });
+  await get("1").expect(404);
+  attempts.detail.mockResolvedValue({
+    ...item,
+    submissions: [
+      {
+        sequence: 10,
+        response: "<".repeat(4000) + "\r\n",
+        submittedAt: "<time>",
+      },
+    ],
+  });
+  const bounded = await get("10").expect(200);
+  expect(Buffer.byteLength(bounded.text)).toBeLessThan(30000);
+  expect(bounded.text).toContain("&lt;time&gt;");
+  expect(bounded.text).toContain("&#13;\n");
+  expect(bounded.text).not.toContain("<time>");
+});

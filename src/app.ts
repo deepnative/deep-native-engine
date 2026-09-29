@@ -47,6 +47,7 @@ import {
   assignmentAttemptsPage,
   assignmentAttemptPage,
   assignmentComparisonPage,
+  assignmentPortfolioStatement,
   assignmentWriteRecoveryPage,
   exerciseWriteRecoveryPage,
   assignmentReadinessPage,
@@ -2467,6 +2468,33 @@ export function app(
       return;
     }
     res.send(assignmentAttemptPage(item, res.locals.csrf as string));
+  });
+  app.get("/assignments/attempts/:id/portfolio/:sequence", async (req, res) => {
+    const id = req.params.id as string;
+    const sequence = req.params.sequence as string;
+    const item =
+      attemptId(id) && /^(?:[1-9]|10)$/.test(sequence)
+        ? await attempts.detail(res.locals.token as string, id)
+        : null;
+    const entry = item?.submissions?.find(
+      (saved) => saved.sequence === Number(sequence),
+    );
+    if (!item || !entry) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Statement unavailable",
+            "Choose a retained submitted version from one of your own private attempts.",
+          ),
+        );
+      return;
+    }
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="simulated-portfolio-submission-${entry.sequence}.html"`,
+    );
+    res.type("html").send(assignmentPortfolioStatement(item, entry));
   });
   app.get("/assignments/attempts/:id/compare", async (req, res) => {
     const id = req.params.id as string;

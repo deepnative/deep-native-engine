@@ -33,7 +33,7 @@ import type { WorkflowBundle } from "./workflow-registry.ts";
 import type { WorkflowFeedback } from "./workflow-feedback.ts";
 import type { ManualObservation } from "./manual-observations.ts";
 import type { CircleListing } from "./circles.ts";
-import type { AssignmentAttempt } from "./attempts.ts";
+import type { AssignmentAttempt, AssignmentSubmission } from "./attempts.ts";
 import type { compareResponses } from "./attempt-compare.ts";
 import type { ActivityItem } from "./progress.ts";
 import type { UsefulnessReport } from "./usefulness.ts";
@@ -430,7 +430,7 @@ export function assignmentAttemptPage(
       ? `<p><a href="${url}/compare?from=${history[0]!.sequence}&amp;to=${history.at(-1)!.sequence}">Compare private submissions</a></p>`
       : "";
   const historyView = history.length
-    ? `<section aria-label="Private local submission history"><h2>Private local submission history</h2><ol>${history.map((entry) => `<li><strong>Submission ${entry.sequence}</strong> · ${escape(entry.submittedAt)}<pre class="content-text">${escape(entry.response)}</pre></li>`).join("")}</ol>${compareLink}<p>These submitted versions are immutable, synthetic and unreviewed. Deleting this attempt deletes every version.</p></section>`
+    ? `<section aria-label="Private local submission history"><h2>Private local submission history</h2><ol>${history.map((entry) => `<li><strong>Submission ${entry.sequence}</strong> · ${escape(entry.submittedAt)}<pre class="content-text">${escape(entry.response)}</pre><p><a href="${url}/portfolio/${entry.sequence}" download>Download simulated portfolio statement for submission ${entry.sequence}</a></p></li>`).join("")}</ol>${compareLink}<p>These submitted versions and their portfolio statements are simulated, self-authored and unreviewed. Downloads contain only the selected immutable submission; they are not credentials or formal assessments. Deleting this attempt deletes every stored version; it cannot erase files you already downloaded.</p></section>`
     : "";
   const revisionAction =
     item.currentEligible && item.submittedAt && prior < 10 && !conflict
@@ -443,6 +443,13 @@ export function assignmentAttemptPage(
     `<section class="error-page"><p class="eyebrow">PRIVATE LOCAL PREVIEW · NO FORMAL REVIEW</p><h1>${escape(item.title)}</h1><p>Assignment version ${item.contentVersion} · goal when started: ${escape(item.goalAtStart)} · ${item.submittedAt ? "submitted locally" : prior > 0 ? (item.savedAt ? "private revision draft saved" : "private revision started") : item.savedAt ? "private draft saved" : "started only"}</p><p>This attempt stays pinned to its original assignment and rubric version. Submitting only records your own saved sample response; it does not send it to a reviewer or assess your skill.</p>${error ? `<div class="notice" role="alert"><p>${escape(error)}</p></div>` : ""}${!item.currentEligible && !item.submittedAt ? "<p>The assignment or your current direction changed. Your earlier work remains private and readable, but this version cannot be edited. Choose an available sample to start again.</p>" : ""}<h2>Your response</h2>${responseView}${conflict ? `<p>${unsaved !== undefined ? "Copy your unsaved text before reloading the saved attempt to reconcile it." : "Reload this attempt to check the current saved state before trying again."}</p>` : ""}${item.currentEligible && item.savedAt && !item.submittedAt && !conflict ? `<form method="post" action="${url}/submit">${hidden(csrf)}<input type="hidden" name="revision" value="${item.revision}"><input type="hidden" name="response_snapshot" value="${escape(item.response)}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Submit this saved version locally; no human review is connected.</span></label><button type="submit">Submit saved version locally</button></form>` : ""}${revisionAction}${historyView}<form method="post" action="${url}/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete this private attempt and all its submissions</span></label><button class="secondary" type="submit">Delete attempt</button></form><p><a href="/assignments/attempts">All private attempts</a> · <a href="/learn">Your learning path</a></p></section>${editable ? '<script type="module" src="/assets/attempt-save.js"></script>' : ""}`,
   );
 }
+export function assignmentPortfolioStatement(
+  item: AssignmentAttempt,
+  entry: AssignmentSubmission,
+) {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Simulated portfolio statement</title></head><body><main><h1>Simulated portfolio statement</h1><p><strong>SIMULATED · SELF-AUTHORED · UNREVIEWED</strong></p><p>Private local learning sample. This is not a credential, qualification, expert assessment or paid review. No reviewer has assessed this response.</p><h2>${escape(item.title)}</h2><p>Assignment: ${escape(item.contentId)} · assignment version ${item.contentVersion}</p><p>Attempt: ${escape(item.id)} · submission ${entry.sequence}</p><p>Submitted locally: ${escape(entry.submittedAt)}</p><h2>Self-authored sample response</h2><pre style="white-space:pre-wrap;overflow-wrap:anywhere"><span>${escape(entry.response).replace(/\r/g, "&#13;")}</span></pre><p>This file contains one immutable submitted snapshot, not a current draft. Keep it private. Deleting the source attempt cannot erase a downloaded copy.</p></main></body></html>`;
+}
+
 export function assignmentComparisonPage(
   item: AssignmentAttempt,
   from: number,
