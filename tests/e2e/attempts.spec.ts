@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -585,5 +586,112 @@ test("[L85] three learner backgrounds compare only their own immutable private s
     }
   } finally {
     await Promise.all(retained.map((entry) => entry.context.close()));
+  }
+});
+
+test("[L88] private simulated portfolio statements pin submitted versions across learner backgrounds", async ({
+  page,
+  browser,
+}, info) => {
+  const actors = await publishers();
+  const id = info.project.name === "desktop-chromium" ? "SYN-884" : "SYN-885";
+  const title = `Invented portfolio statement ${id}`;
+  await publish(actors, sample(id, 1, title));
+  for (const [background, goal] of [
+    ["explorer", "everyday"],
+    ["professional", "work"],
+    ["technical", "build"],
+  ]) {
+    const context = await browser.newContext({
+      baseURL: origin,
+      viewport: page.viewportSize() ?? undefined,
+    });
+    try {
+      const learner = await context.newPage();
+      await onboard(learner, background!, goal!);
+      const attemptId = await chooseAndStart(learner, title);
+      const answers = [
+        `Invented ${background} first <script>alert("sample")</script> response.`,
+        `Invented ${background} second response and revised verification.`,
+      ];
+      for (const [index, answer] of answers.entries()) {
+        if (index) {
+          await learner.getByLabel("Start a new private revision").check();
+          await learner
+            .getByRole("button", { name: "Revise privately" })
+            .click();
+        }
+        await learner.getByLabel("Private sample response").fill(answer);
+        await learner
+          .getByLabel("I used only invented or sample information")
+          .check();
+        await learner
+          .getByRole("button", { name: "Save private draft" })
+          .click();
+        await learner.getByLabel("Submit this saved version locally").check();
+        await learner
+          .getByRole("button", { name: "Submit saved version locally" })
+          .click();
+      }
+      await learner.reload();
+      await expect(
+        learner.getByText(
+          "These submitted versions and their portfolio statements are simulated, self-authored and unreviewed.",
+          { exact: false },
+        ),
+      ).toBeVisible();
+      for (const sequence of [1, 2]) {
+        const link = learner.getByRole("link", {
+          name: `Download simulated portfolio statement for submission ${sequence}`,
+        });
+        await link.focus();
+        await expect(link).toBeFocused();
+        const downloadPromise = learner.waitForEvent("download");
+        await learner.keyboard.press("Enter");
+        const download = await downloadPromise;
+        expect(download.suggestedFilename()).toBe(
+          `simulated-portfolio-submission-${sequence}.html`,
+        );
+        const html = await readFile((await download.path())!, "utf8");
+        expect(html).toContain("SIMULATED · SELF-AUTHORED · UNREVIEWED");
+        expect(html).toContain(`submission ${sequence}`);
+        expect(html).toContain(
+          `Invented ${background} ${sequence === 1 ? "first" : "second"}`,
+        );
+        expect(html).not.toContain(
+          `Invented ${background} ${sequence === 1 ? "second" : "first"}`,
+        );
+        expect(html).not.toContain("<script>");
+      }
+      const outsider = await browser.newContext({ baseURL: origin });
+      try {
+        const other = await outsider.newPage();
+        await onboard(other, "explorer", "everyday");
+        const denied = await other.request.get(
+          `/assignments/attempts/${attemptId}/portfolio/1`,
+        );
+        expect(denied.status()).toBe(404);
+        expect(await denied.text()).not.toContain(
+          `Invented ${background} first`,
+        );
+      } finally {
+        await outsider.close();
+      }
+      await learner
+        .getByLabel("Delete this private attempt and all its submissions")
+        .check();
+      await learner
+        .getByRole("button", { name: "Delete attempt", exact: true })
+        .click();
+      const deleted = await learner.request.get(
+        `/assignments/attempts/${attemptId}/portfolio/1`,
+      );
+      expect(deleted.status()).toBe(404);
+      expect(await deleted.text()).not.toContain(
+        `Invented ${background} first`,
+      );
+    } finally {
+      await context.close();
+    }
   }
 });
