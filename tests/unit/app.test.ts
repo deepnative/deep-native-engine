@@ -1299,7 +1299,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v7",
+          version: "local-member-records-v8",
           profile: { id: "owned" },
           records: { milestones: [] },
         },
@@ -1326,7 +1326,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v7",
+    version: "local-member-records-v8",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -1607,11 +1607,15 @@ it("saves only acknowledged current-version private sample practice and recovers
     body: "Compare <invented> details with the source.",
     goal: "everyday" as const,
     response: null as string | null,
+    withdrawnAt: null as Date | null,
   };
   const practice = {
     current: vi.fn<PracticeStore["current"]>().mockResolvedValue(source),
     history: vi.fn<PracticeStore["history"]>().mockResolvedValue([]),
     save: vi.fn<PracticeStore["save"]>().mockResolvedValue("saved"),
+    withdraw: vi
+      .fn<PracticeStore["withdraw"]>()
+      .mockResolvedValue("unavailable"),
   };
   const agent = managedAgent(app(db, { origin, secret: "secret", practice }));
   await agent.get("/practice").set("Host", host).expect(303);
@@ -1669,6 +1673,7 @@ it("saves only acknowledged current-version private sample practice and recovers
       response: valid.response,
       savedAt: new Date(),
       available: false,
+      withdrawnAt: null,
     },
   ]);
   const history = await agent.get("/practice").set("Host", host).expect(200);
@@ -1680,10 +1685,103 @@ it("saves only acknowledged current-version private sample practice and recovers
   await post(valid).expect(409);
   practice.save.mockResolvedValueOnce("unavailable");
   await post(valid).expect(409);
+  practice.save.mockResolvedValueOnce("withdrawn");
+  const withdrawnSave = await post(valid).expect(409);
+  expect(withdrawnSave.text).toContain("cannot accept another note");
+  source.response = null;
+  source.withdrawnAt = new Date("2026-09-28T12:00:00Z");
+  const withdrawnCurrent = await agent
+    .get("/library/SYN-131/practice")
+    .set("Host", host)
+    .expect(200);
+  expect(withdrawnCurrent.text).toContain("note was withdrawn");
+  expect(withdrawnCurrent.text).not.toContain("Save private practice");
+  expect(withdrawnCurrent.text).not.toContain(
+    "Your saved sample and source comparison",
+  );
   practice.current.mockResolvedValueOnce(null);
   await agent.get("/library/SYN-131/practice").set("Host", host).expect(404);
   practice.current.mockResolvedValueOnce(null);
   await post(valid).expect(409);
+});
+it("requires an owned, confirmed exact-version withdrawal from practice history", async () => {
+  const practice = {
+    current: vi.fn<PracticeStore["current"]>().mockResolvedValue(null),
+    history: vi.fn<PracticeStore["history"]>().mockResolvedValue([]),
+    save: vi.fn<PracticeStore["save"]>().mockResolvedValue("unavailable"),
+    withdraw: vi.fn<PracticeStore["withdraw"]>().mockResolvedValue("withdrawn"),
+  };
+  const agent = managedAgent(app(db, { origin, secret: "secret", practice }));
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  const post = (
+    fields: Record<string, string | string[]>,
+    path = "/practice/SYN-131/2/withdraw",
+  ) =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  await post({ confirm: "yes" }).expect(303);
+  expect(practice.withdraw).not.toHaveBeenCalled();
+  active();
+  db.session.mockResolvedValueOnce({ kind: "expired" });
+  await post({ confirm: "yes" }).expect(303);
+  db.session.mockResolvedValueOnce({ kind: "new" });
+  await post({ confirm: "yes" }).expect(303);
+  expect(practice.withdraw).not.toHaveBeenCalled();
+  await post({ confirm: "yes" }, "/practice/SYN-131/0/withdraw").expect(404);
+  await post(
+    { confirm: "yes" },
+    "/practice/SYN-131/2147483648/withdraw",
+  ).expect(404);
+  await post({ confirm: "yes" }, "/practice/not-a-source/2/withdraw").expect(
+    404,
+  );
+  await post({ confirm: "" }).expect(422);
+  await post({ confirm: ["yes", "yes"] }).expect(422);
+  await post({ confirm: "yes", response: "forged" }).expect(422);
+  await agent
+    .post("/practice/SYN-131/2/withdraw")
+    .set("Host", host)
+    .set("Origin", origin)
+    .set("x-csrf-token", csrf)
+    .expect(422);
+  await agent
+    .post("/practice/SYN-131/2/withdraw")
+    .set("Host", host)
+    .type("form")
+    .send({ csrf, confirm: "yes" })
+    .expect(403);
+  await post({ csrf: "forged", confirm: "yes" }).expect(403);
+  await agent
+    .post("/practice/SYN-131/2/withdraw")
+    .set("Host", host)
+    .set("Origin", origin)
+    .set("x-csrf-token", csrf)
+    .type("form")
+    .send({ csrf: [csrf, csrf], confirm: "yes" })
+    .expect(422);
+  expect(practice.withdraw).not.toHaveBeenCalled();
+  await post({ confirm: "yes" }).expect(303);
+  expect(practice.withdraw).toHaveBeenCalledWith(
+    expect.any(String),
+    "SYN-131",
+    2,
+  );
+  practice.withdraw.mockResolvedValueOnce("already-withdrawn");
+  await post({ confirm: "yes" }).expect(303);
+  practice.withdraw.mockResolvedValueOnce("unavailable");
+  await post({ confirm: "yes" }).expect(404);
+  practice.withdraw.mockRejectedValueOnce(new Error("secret database detail"));
+  const unknown = await post({ confirm: "yes" }).expect(503);
+  expect(unknown.text).toContain("Withdrawal outcome unknown");
+  expect(unknown.text).toContain(
+    "inspect this exact version before trying again",
+  );
+  expect(unknown.text).not.toContain("secret database detail");
 });
 it("offers ephemeral source-grounded study reflection only for the current published lesson", async () => {
   const catalog = catalogMock();

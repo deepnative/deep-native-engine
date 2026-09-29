@@ -1676,8 +1676,74 @@ export function app(
     res.send(
       privatePracticeHistoryPage(
         await practice.history(res.locals.token as string),
+        res.locals.csrf as string,
       ),
     );
+  });
+  app.post("/practice/:id/:version/withdraw", async (req, res) => {
+    const id = req.params.id as string;
+    const rawVersion = req.params.version as string;
+    const version = Number(rawVersion);
+    if (
+      !/^[A-Z]{2,5}-[0-9]{3}$/.test(id) ||
+      !/^[1-9][0-9]*$/.test(rawVersion) ||
+      !Number.isSafeInteger(version) ||
+      version > 2_147_483_647
+    ) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Practice note unavailable",
+            "No owned note matches that exact version.",
+          ),
+        );
+      return;
+    }
+    const fields = (req.body ?? {}) as Fields;
+    if (
+      typeof fields.csrf !== "string" ||
+      fields.confirm !== "yes" ||
+      Object.keys(fields).some((key) => key !== "csrf" && key !== "confirm")
+    ) {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Confirm withdrawal",
+            "Open private practice history and confirm the exact note you want to withdraw.",
+          ),
+        );
+      return;
+    }
+    try {
+      const result = await practice.withdraw(
+        res.locals.token as string,
+        id,
+        version,
+      );
+      if (result === "unavailable") {
+        res
+          .status(404)
+          .send(
+            errorPage(
+              "Practice note unavailable",
+              "No owned note matches that exact version.",
+            ),
+          );
+        return;
+      }
+      res.redirect(303, "/practice");
+    } catch {
+      res
+        .status(503)
+        .send(
+          errorPage(
+            "Withdrawal outcome unknown",
+            "The storage result could not be confirmed. Open private practice history and inspect this exact version before trying again.",
+          ),
+        );
+    }
   });
   app.get("/library/:id/practice", async (req, res) => {
     const source = await practice.current(
@@ -1769,6 +1835,17 @@ export function app(
           errorPage(
             "A note already exists",
             "This lesson version accepts one private note. Return to the practice page to see the saved response; it was not overwritten.",
+          ),
+        );
+      return;
+    }
+    if (result === "withdrawn") {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Practice note withdrawn",
+            "This lesson version has a withdrawn marker and cannot accept another note. Inspect private practice history before trying another version.",
           ),
         );
       return;

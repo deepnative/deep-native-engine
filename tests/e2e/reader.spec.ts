@@ -352,3 +352,136 @@ test("[L58] cross-audience private practice persists one exact sample version an
     page.getByText("Source unavailable; saved private note only"),
   ).toBeVisible();
 });
+
+test("[L81] three learning backgrounds withdraw an exact private note with keyboard confirmation and no resurrection", async ({
+  page,
+}, info) => {
+  const mobile = info.project.name === "mobile-chromium";
+  expect(page.viewportSize()?.width).toBe(mobile ? 412 : 1280);
+  for (const [index, background, goal] of [
+    [0, "explorer", "everyday"],
+    [1, "professional", "work"],
+    [2, "technical", "build"],
+  ] as const) {
+    const id = `SYN-${mobile ? 931 + 2 * index : 921 + 2 * index}`;
+    const otherId = `SYN-${mobile ? 932 + 2 * index : 922 + 2 * index}`;
+    const { catalog, editor } = await syntheticLesson(id);
+    await syntheticLesson(otherId);
+    await page.context().clearCookies();
+    await onboard(page, background, goal);
+    const response = `Invented private response for ${background}`;
+    const otherResponse = `Unrelated invented response for ${background}`;
+    await page.goto(`/library/${id}/practice`);
+    const csrf = await page.locator('input[name="csrf"]').inputValue();
+    await page.getByLabel("Your sample response").fill(response);
+    await page
+      .getByLabel(
+        "I used only invented or sample information and want to save this private note.",
+      )
+      .check();
+    await page.getByRole("button", { name: "Save private practice" }).click();
+    await page.goto(`/library/${otherId}/practice`);
+    await page.getByLabel("Your sample response").fill(otherResponse);
+    await page
+      .getByLabel(
+        "I used only invented or sample information and want to save this private note.",
+      )
+      .check();
+    await page.getByRole("button", { name: "Save private practice" }).click();
+    await page.goto("/practice");
+    const row = page.getByRole("listitem").filter({ hasText: id });
+    await expect(row.getByText(response)).toBeVisible();
+    await expect(page.getByText(otherResponse)).toBeVisible();
+    await row.getByRole("button", { name: "Withdraw private note" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/practice$/);
+    await expect(row.getByText(response)).toBeVisible();
+    const confirm = row.getByRole("checkbox", {
+      name: /Withdraw this exact version/,
+    });
+    await confirm.focus();
+    await page.keyboard.press("Space");
+    await expect(confirm).toBeChecked();
+    await row.getByRole("button", { name: "Withdraw private note" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/practice$/);
+    const marker = page.getByRole("listitem").filter({ hasText: id });
+    await expect(marker.getByRole("status")).toContainText("Withdrawn");
+    await expect(page.getByText(response)).toHaveCount(0);
+    await expect(page.getByText(otherResponse)).toBeVisible();
+    await expect(
+      marker.getByRole("button", { name: "Withdraw private note" }),
+    ).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    const exportResponse = await page
+      .context()
+      .request.get("/api/member/export");
+    expect(exportResponse.status()).toBe(200);
+    const exported = (await exportResponse.json()) as {
+      version: string;
+      records: {
+        privatePractice: {
+          contentId: string;
+          response: string | null;
+          state: string;
+          withdrawnAt: string | null;
+        }[];
+      };
+    };
+    expect(exported.version).toBe("local-member-records-v8");
+    expect(exported.records.privatePractice).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentId: id,
+          response: null,
+          state: "withdrawn",
+          withdrawnAt: expect.any(String),
+        }),
+        expect.objectContaining({
+          contentId: otherId,
+          response: otherResponse,
+          state: "saved",
+          withdrawnAt: null,
+        }),
+      ]),
+    );
+    expect(JSON.stringify(exported)).not.toContain(response);
+    const stale = await page.context().request.post(`/library/${id}/practice`, {
+      headers: { Origin: origin },
+      form: { csrf, content_version: "1", response, synthetic: "yes" },
+      maxRedirects: 0,
+    });
+    expect(stale.status()).toBe(409);
+    await page.goto(`/library/${id}/practice`);
+    await expect(
+      page.getByText("note was withdrawn", { exact: false }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Save private practice" }),
+    ).toHaveCount(0);
+    await expect(page.getByText(response)).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", {
+        name: "Your saved sample and source comparison",
+      }),
+    ).toHaveCount(0);
+    expect(await catalog.retire(editor, id)).toBe(true);
+    const repeated = await page
+      .context()
+      .request.post(`/practice/${id}/1/withdraw`, {
+        headers: { Origin: origin },
+        form: { csrf, confirm: "yes" },
+        maxRedirects: 0,
+      });
+    expect(repeated.status()).toBe(303);
+    await page.goto("/practice");
+    await expect(
+      page.getByRole("listitem").filter({ hasText: id }),
+    ).toContainText("Source unavailable");
+    await expect(page.getByText(response)).toHaveCount(0);
+  }
+});

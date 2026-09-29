@@ -130,6 +130,7 @@ export async function migrate(pool: Pool) {
       "039-local-ai-consent.sql",
       "040-local-ai-control.sql",
       "041-proposal-draft-revision.sql",
+      "042-private-practice-withdrawal.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
