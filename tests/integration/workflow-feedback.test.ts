@@ -98,7 +98,7 @@ it("rejects unknown versions and staff, revocation and expiry while retaining on
   expect(own).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v9",
+      version: "local-member-records-v10",
       records: {
         workflowFeedback: [
           { workflowId: "WF-001", workflowVersion: 1, note: "Invented" },

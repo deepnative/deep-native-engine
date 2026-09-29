@@ -533,3 +533,134 @@ it("fails closed on attempt-row lock timeout and releases owner locks", async ()
     blocker.release();
   }
 }, 15_000);
+
+async function submissionContinuation() {
+  const f = await fixture();
+  await pool.query(
+    `INSERT INTO exercises(learner_id,workspace_id,lesson_id,lesson_version,instruction,verification)
+    SELECT $1,$1,'synthetic-page-'||n,1,'Invented instruction','Invented check' FROM generate_series(1,97) AS n`,
+    [f.ownerId],
+  );
+  const secret = randomBytes(32);
+  const first = await memberExportStore(pool, secret).exportOwned(f.ownerToken);
+  if (first.kind !== "ready" || !first.payload.page.nextCursor)
+    throw Error("Synthetic continuation unavailable");
+  expect(first.payload.records.assignmentSubmissions).toHaveLength(1);
+  return { ...f, secret, cursor: first.payload.page.nextCursor };
+}
+function continuationParentReader(secret: Buffer, pause: boolean) {
+  const parentLocked = gate(),
+    resume = gate(),
+    connected = gate();
+  const state = { pid: 0 };
+  const wrapper = {
+    connect: async () => {
+      const client = await pool.connect();
+      state.pid = (await client.query("SELECT pg_backend_pid() AS pid")).rows[0]
+        .pid as number;
+      connected.release();
+      return {
+        query: async (sql: string, values?: unknown[]) => {
+          const result = await client.query(sql, values);
+          if (pause && sql.startsWith("SELECT a.id")) {
+            parentLocked.release();
+            await resume.wait;
+          }
+          return result;
+        },
+        release: client.release.bind(client),
+      };
+    },
+  } as unknown as Pool;
+  return {
+    exported: memberExportStore(wrapper, secret),
+    parentLocked,
+    resume,
+    connected,
+    state,
+  };
+}
+it("resumed submission export waits on a deleting parent without holding child locks first", async () => {
+  const f = await submissionContinuation();
+  const writer = await pool.connect();
+  const reader = continuationParentReader(f.secret, false);
+  let reading: ReturnType<typeof reader.exported.exportOwned> | undefined;
+  let finished = false;
+  try {
+    const pid = (await writer.query("SELECT pg_backend_pid() AS pid")).rows[0]
+      .pid as number;
+    await writer.query("BEGIN");
+    await writer.query("SET LOCAL lock_timeout='1s'");
+    await writer.query(
+      "SELECT id FROM assignment_attempts WHERE id=$1 FOR UPDATE",
+      [f.attemptId],
+    );
+    reading = reader.exported
+      .exportOwned(f.ownerToken, f.cursor)
+      .then((value) => {
+        finished = true;
+        return value;
+      });
+    await reader.connected.wait;
+    expect(await waitForBlocking(reader.state.pid, pid, () => finished)).toBe(
+      "blocked",
+    );
+    // This cascade must complete while the reader waits; a child-first reader
+    // would deadlock or make the writer hit the actual one-second lock bound.
+    await writer.query("DELETE FROM assignment_attempts WHERE id=$1", [
+      f.attemptId,
+    ]);
+    await writer.query("COMMIT");
+    expect(await reading).toEqual({ kind: "unavailable" });
+    expect(
+      await memberExportStore(pool, f.secret).exportOwned(
+        f.ownerToken,
+        f.cursor,
+      ),
+    ).toMatchObject({
+      kind: "ready",
+      payload: { records: { assignmentSubmissions: [] } },
+    });
+  } finally {
+    await writer.query("ROLLBACK");
+    await Promise.allSettled(reading ? [reading] : []);
+    writer.release();
+  }
+}, 15000);
+it("resumed submission export locks parents before reading and completes before competing deletion", async () => {
+  const f = await submissionContinuation();
+  const reader = continuationParentReader(f.secret, true);
+  const writer = observableRemoval();
+  const reading = reader.exported.exportOwned(f.ownerToken, f.cursor);
+  let writing: Promise<boolean> | undefined;
+  let finished = false;
+  try {
+    await reader.parentLocked.wait;
+    writing = writer.attempts
+      .remove(f.ownerToken, f.attemptId)
+      .then((value) => {
+        finished = true;
+        return value;
+      });
+    await writer.connected.wait;
+    expect(
+      await waitForBlocking(writer.state.pid, reader.state.pid, () => finished),
+    ).toBe("blocked");
+    reader.resume.release();
+    expect(await reading).toMatchObject({
+      kind: "ready",
+      payload: {
+        records: {
+          assignmentSubmissions: [
+            { attemptId: f.attemptId, sequence: 2, response: f.second },
+          ],
+        },
+        page: { complete: true },
+      },
+    });
+    expect(await writing).toBe(true);
+  } finally {
+    reader.resume.release();
+    await Promise.allSettled([reading, ...(writing ? [writing] : [])]);
+  }
+}, 15000);

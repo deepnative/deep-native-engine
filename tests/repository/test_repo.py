@@ -442,7 +442,7 @@ class RepositoryFixture(unittest.TestCase):
             gate.validate_archive(self.root)
 
     def test_unmeasured_application_source_fails_scope(self):
-        for name in ("app/main.py", "src/hidden.js", "assets/docs/application.js", "assets/docs/unreviewed.xlsx"):
+        for name in ("app/main.py", "src/hidden.js", "public/unreviewed.js", "assets/docs/application.js", "assets/docs/unreviewed.xlsx"):
             with self.subTest(name=name):
                 path = self.root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -463,7 +463,7 @@ class RepositoryFixture(unittest.TestCase):
 
     def test_removing_application_gate_files_blocks_verification(self):
         files = gate.repository_files(self.root)
-        for name in ("package-lock.json", "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "vitest.config.ts", "tests/e2e/scenarios.json"):
+        for name in ("package-lock.json", "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "vitest.config.ts", "tests/e2e/scenarios.json", "public/member-export.js"):
             with self.subTest(name=name), self.assertRaisesRegex(gate.GateError, "Required application"):
                 gate.validate_scope(self.root, [f for f in files if f != name])
 

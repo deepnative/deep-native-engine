@@ -653,7 +653,7 @@ it("exports v8 marker metadata with null response, keeps other notes private and
   expect(exported).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v9",
+      version: "local-member-records-v10",
       records: {
         privatePractice: [
           {
@@ -704,7 +704,7 @@ it("exports v8 marker metadata with null response, keeps other notes private and
     { response: "Other member private response" },
   ]);
 });
-it("counts content-free withdrawn markers at the unchanged aggregate export record cap", async () => {
+it("continues beyond the per-page cap without losing or disclosing withdrawn practice text", async () => {
   const owner = await member();
   await pool.query(
     `INSERT INTO content_versions(id,version,kind,origin,title,body,owner,sources,rights)
@@ -729,7 +729,51 @@ it("counts content-free withdrawn markers at the unchanged aggregate export reco
     VALUES($1,'SYN-139',$2,'everyday',NULL,clock_timestamp())`,
     [owner.id, MAX_MEMBER_EXPORT_RECORDS + 1],
   );
-  expect(await exports.exportOwned(owner.token)).toEqual({ kind: "limit" });
+  const first = await exports.exportOwned(owner.token);
+  expect(first).toMatchObject({
+    kind: "ready",
+    payload: {
+      page: {
+        recordCount: 100,
+        complete: false,
+        nextCursor: expect.any(String),
+      },
+    },
+  });
+  if (first.kind !== "ready") throw Error("Synthetic first page unavailable");
+  expect(first.payload.records.privatePractice).toHaveLength(100);
+  expect(
+    first.payload.records.privatePractice!.every(
+      (row) => row.response === null && row.state === "withdrawn",
+    ),
+  ).toBe(true);
+  const last = await exports.exportOwned(
+    owner.token,
+    first.payload.page.nextCursor!,
+  );
+  expect(last).toMatchObject({
+    kind: "ready",
+    payload: {
+      records: {
+        privatePractice: [
+          {
+            contentId: "SYN-139",
+            contentVersion: 101,
+            response: null,
+            state: "withdrawn",
+          },
+        ],
+      },
+      page: { number: 2, recordCount: 1, complete: true, nextCursor: null },
+    },
+  });
+  if (last.kind !== "ready") throw Error("Synthetic last page unavailable");
+  expect(
+    [
+      ...first.payload.records.privatePractice!,
+      ...last.payload.records.privatePractice!,
+    ].map((row) => row.contentVersion),
+  ).toEqual(Array.from({ length: 101 }, (_, index) => index + 1));
 });
 
 it("never exports a stale response after waiting for a concurrent withdrawal to commit", async () => {

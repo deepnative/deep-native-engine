@@ -21,6 +21,7 @@ import {
   assignmentComparisonPage,
   assignmentReadinessPage,
   evidencePage,
+  memberExportPage,
   localAiConsentPage,
   localAiControlPage,
   availabilityPage,
@@ -1312,7 +1313,7 @@ it("renders unsaved profile edits with an actionable field error while keeping t
   expect(html).toContain('<option value="" selected>Not specified</option>');
   expect(html).toContain("Understand AI and try something useful");
   expect(html).toContain("Weekly time: About 15 minutes · Time zone: UTC");
-  expect(html.indexOf('href="/api/member/export"')).toBeLessThan(
+  expect(html.indexOf('href="/member/export"')).toBeLessThan(
     html.indexOf('href="#timezone"'),
   );
 });
@@ -1598,4 +1599,42 @@ it("renders private attempt states without treating a local submission as review
   expect(
     assignmentAttemptPage({ ...withHistory, currentEligible: false }, "csrf"),
   ).not.toContain("Revise privately");
+});
+
+it("explains live bounded export pages without embedding private records and offers a restart", () => {
+  const payload = {
+    kind: "ready" as const,
+    version: "local-member-records-v10" as const,
+    profile: { id: "owned" },
+    records: { milestones: [{ title: "private <script>never show</script>" }] },
+    page: {
+      number: 1,
+      recordCount: 1,
+      consistency: "live-pages" as const,
+      complete: true,
+      nextCursor: null,
+    },
+  };
+  const complete = memberExportPage(payload);
+  expect(complete).toContain("live read, not one frozen snapshot");
+  expect(complete).toContain("Download this page to reveal the next step");
+  expect(complete).toContain('data-url="/api/member/export"');
+  expect(complete).toContain("data-export-next hidden");
+  expect(complete).not.toContain("never show");
+  const partial = memberExportPage(
+    {
+      ...payload,
+      page: {
+        ...payload.page,
+        number: 2,
+        complete: false,
+        nextCursor: 'signed<&"',
+      },
+    },
+    'old<&"',
+  );
+  expect(partial).toContain("Download page 2");
+  expect(partial).toContain("Next page");
+  expect(partial).not.toContain('signed<&"');
+  expect(partial).toContain("Start export again");
 });

@@ -23,7 +23,8 @@ const token = () => randomBytes(32).toString("hex");
 const ready = async (value: string) => {
   const result = await exported.exportOwned(value);
   expect(result.kind).toBe("ready");
-  return result.kind === "ready" ? result.payload : {};
+  if (result.kind !== "ready") throw Error("Owner export unavailable");
+  return result.payload;
 };
 const member = async () => {
   const value = token();
@@ -93,7 +94,7 @@ it("exports a withdrawn completed exercise as a text-free retained completion ma
     "withdrawn",
   );
   const after = await ready(owner.token);
-  expect(after.version).toBe("local-member-records-v9");
+  expect(after.version).toBe("local-member-records-v10");
   expect(after.records).toMatchObject({
     exercises: [
       {
@@ -175,7 +176,7 @@ it("exports each retained local permission receipt once with safe owned job link
       expect.objectContaining({ id: generic.id, localAiReceiptId: null }),
     ]),
   });
-  const records = snapshot.records as {
+  const records = snapshot.records as unknown as {
     localAiReceipts: Record<string, unknown>[];
     adapterJobs: Record<string, unknown>[];
   };
@@ -224,11 +225,16 @@ it("exports each retained local permission receipt once with safe owned job link
   expect(replacement.kind).toBe("granted");
   if (replacement.kind !== "granted") throw Error("Synthetic regrant failed");
   expect(replacement.receiptId).not.toBe(own.receiptId);
-  expect((await ready(owner.token)).records).toMatchObject({
-    localAiReceipts: [
-      { id: own.receiptId, withdrawnAt: expect.any(Date) },
-      { id: replacement.receiptId, withdrawnAt: null },
-    ],
+  const regranted = await ready(owner.token);
+  expect(regranted.records.localAiReceipts).toHaveLength(2);
+  expect(regranted.records).toMatchObject({
+    localAiReceipts: expect.arrayContaining([
+      expect.objectContaining({
+        id: own.receiptId,
+        withdrawnAt: expect.any(Date),
+      }),
+      expect.objectContaining({ id: replacement.receiptId, withdrawnAt: null }),
+    ]),
   });
 });
 
@@ -301,21 +307,23 @@ it("retains retired source permission history until source deletion cascades rec
   const permission = await own.local.grant(owner.token, revised.id);
   if (permission.kind !== "granted")
     throw Error("Synthetic revision grant failed");
-  expect((await ready(owner.token)).records).toMatchObject({
-    localAiReceipts: [
-      {
+  const retired = await ready(owner.token);
+  expect(retired.records.localAiReceipts).toHaveLength(2);
+  expect(retired.records).toMatchObject({
+    localAiReceipts: expect.arrayContaining([
+      expect.objectContaining({
         id: own.receiptId,
         evidenceId: own.evidenceId,
         revisionNumber: 1,
         withdrawnAt: expect.any(Date),
-      },
-      {
+      }),
+      expect.objectContaining({
         id: permission.receiptId,
         evidenceId: revised.id,
         revisionNumber: 2,
         withdrawnAt: null,
-      },
-    ],
+      }),
+    ]),
   });
   expect(await own.local.grant(owner.token, own.evidenceId)).toEqual({
     kind: "denied",
@@ -342,8 +350,11 @@ it("counts retained receipts at the aggregate record boundary and fails closed o
     [own.receiptId, MAX_MEMBER_EXPORT_RECORDS - 1],
   );
   expect(
-    ((await ready(owner.token)).records as { localAiReceipts: unknown[] })
-      .localAiReceipts,
+    (
+      (await ready(owner.token)).records as unknown as {
+        localAiReceipts: unknown[];
+      }
+    ).localAiReceipts,
   ).toHaveLength(MAX_MEMBER_EXPORT_RECORDS);
   const generic = await jobStore(pool).enqueueForMember(
     owner.token,
@@ -353,7 +364,10 @@ it("counts retained receipts at the aggregate record boundary and fails closed o
     "boundary-job",
     requestFingerprint("synthetic"),
   );
-  expect(await exported.exportOwned(owner.token)).toEqual({ kind: "limit" });
+  expect(await exported.exportOwned(owner.token)).toMatchObject({
+    kind: "ready",
+    payload: { page: { complete: false, recordCount: 100 } },
+  });
   await assertAuthorizationUnlocked(owner.id);
   await pool.query("DELETE FROM adapter_jobs WHERE id=$1", [generic.id]);
   const broken = {
@@ -376,8 +390,11 @@ it("counts retained receipts at the aggregate record boundary and fails closed o
   });
   await assertAuthorizationUnlocked(owner.id);
   expect(
-    ((await ready(owner.token)).records as { localAiReceipts: unknown[] })
-      .localAiReceipts,
+    (
+      (await ready(owner.token)).records as unknown as {
+        localAiReceipts: unknown[];
+      }
+    ).localAiReceipts,
   ).toHaveLength(MAX_MEMBER_EXPORT_RECORDS);
 });
 
@@ -961,14 +978,15 @@ it("exports current structured records only for their active owner, with redacti
   );
   const own = await ready(a.token);
   expect(own).toMatchObject({
-    version: "local-member-records-v9",
+    version: "local-member-records-v10",
     profile: { id: a.id, background: "explorer" },
     records: {
       milestones: [{ milestoneTitle: "Invented milestone" }],
     },
   });
   expect(
-    (own.records as { proposals: { body: string | null }[] }).proposals,
+    (own.records as unknown as { proposals: { body: string | null }[] })
+      .proposals,
   ).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ body: "Invented proposal text" }),
@@ -998,10 +1016,12 @@ it("exports current structured records only for their active owner, with redacti
   const after = await ready(a.token);
   expect(after).toMatchObject({ records: { milestones: [] } });
   expect(
-    (after.records as { proposals: { body: string | null }[] }).proposals,
+    (after.records as unknown as { proposals: { body: string | null }[] })
+      .proposals,
   ).toHaveLength(2);
   expect(
-    (after.records as { proposals: { body: string | null }[] }).proposals,
+    (after.records as unknown as { proposals: { body: string | null }[] })
+      .proposals,
   ).toEqual(expect.arrayContaining([expect.objectContaining({ body: null })]));
   expect(JSON.stringify(after)).not.toContain("Invented proposal text");
   await pool.query(
@@ -1011,7 +1031,7 @@ it("exports current structured records only for their active owner, with redacti
   expect(await exported.exportOwned(a.token)).toEqual({ kind: "denied" });
 });
 
-it("fails closed at record and byte limits without returning a partial snapshot", async () => {
+it("returns explicitly incomplete bounded pages at record and byte limits", async () => {
   const a = await member();
   for (let i = 0; i <= MAX_MEMBER_EXPORT_RECORDS; i++) {
     await pool.query(
@@ -1020,7 +1040,10 @@ it("fails closed at record and byte limits without returning a partial snapshot"
       [randomUUID(), a.id, `Idea ${i}`],
     );
   }
-  expect(await exported.exportOwned(a.token)).toEqual({ kind: "limit" });
+  expect(await exported.exportOwned(a.token)).toMatchObject({
+    kind: "ready",
+    payload: { page: { complete: false, nextCursor: expect.any(String) } },
+  });
   await assertAuthorizationUnlocked(a.id);
   await pool.query("DELETE FROM member_proposals WHERE member_id=$1", [a.id]);
   for (let i = 0; i < 70; i++) {
@@ -1030,7 +1053,10 @@ it("fails closed at record and byte limits without returning a partial snapshot"
       [randomUUID(), a.id, `Idea ${i}`, `${i}${"x".repeat(3990)}`],
     );
   }
-  expect(await exported.exportOwned(a.token)).toEqual({ kind: "limit" });
+  expect(await exported.exportOwned(a.token)).toMatchObject({
+    kind: "ready",
+    payload: { page: { complete: false, nextCursor: expect.any(String) } },
+  });
   await assertAuthorizationUnlocked(a.id);
   await pool.query("DELETE FROM member_proposals WHERE member_id=$1", [a.id]);
   expect(await exported.exportOwned(a.token)).toMatchObject({
@@ -1039,7 +1065,7 @@ it("fails closed at record and byte limits without returning a partial snapshot"
   });
 });
 
-it("keeps one repeatable-read snapshot when another connection changes a record mid-export", async () => {
+it("withholds stale milestone text changed after a repeatable-read snapshot", async () => {
   const a = await member();
   const id = randomUUID();
   await pool.query(
@@ -1068,12 +1094,8 @@ it("keeps one repeatable-read snapshot when another connection changes a record 
     },
   } as unknown as Pool;
   const result = await memberExportStore(wrapper).exportOwned(a.token);
-  expect(result).toMatchObject({
-    kind: "ready",
-    payload: {
-      records: { milestones: [{ milestoneTitle: "Original milestone" }] },
-    },
-  });
+  expect(result).toEqual({ kind: "unavailable" });
+  expect(JSON.stringify(result)).not.toContain("Original milestone");
   expect((await ready(a.token)).records).toMatchObject({
     milestones: [{ milestoneTitle: "Later milestone" }],
   });

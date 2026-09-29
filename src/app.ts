@@ -15,6 +15,7 @@ import {
   dashboard,
   privateProgressPage,
   evidencePage,
+  memberExportPage,
   localAiConsentPage,
   localAiControlPage,
   evidenceRevisionPage,
@@ -594,28 +595,63 @@ export function app(
       )
       .json(result);
   });
-  app.get("/api/member/export", async (_req, res) => {
-    const result = await memberExport.exportOwned(res.locals.token as string);
+  app.get(["/api/member/export", "/member/export"], async (req, res) => {
+    res.set("Referrer-Policy", "no-referrer");
+    const html = req.path === "/member/export";
+    const fail = (status: number, error: string, message: string) => {
+      if (html)
+        res.status(status).send(errorPage("Export unavailable", message));
+      else
+        res
+          .status(status)
+          .json(status === 413 ? { error, message } : { error });
+    };
+    const cursor = req.query.cursor;
+    if (cursor !== undefined && typeof cursor !== "string") {
+      fail(
+        403,
+        "forbidden",
+        "Export access or continuation is unavailable. Return to your learning space and start again.",
+      );
+      return;
+    }
+    const result = await memberExport.exportOwned(
+      res.locals.token as string,
+      cursor,
+    );
     if (result.kind === "denied") {
-      res.status(403).json({ error: "forbidden" });
+      fail(
+        403,
+        "forbidden",
+        "Export access or continuation is unavailable. Return to your learning space and start again.",
+      );
       return;
     }
     if (result.kind === "limit") {
-      res.status(413).json({
-        error: "export_limit",
-        message: `This preview export is limited to ${MAX_MEMBER_EXPORT_RECORDS} records and ${MAX_MEMBER_EXPORT_BYTES / 1024} KiB. Remove unneeded preview records, then retry.`,
-      });
+      fail(
+        413,
+        "export_limit",
+        `A single record cannot fit within this preview's ${MAX_MEMBER_EXPORT_RECORDS} records and ${MAX_MEMBER_EXPORT_BYTES / 1024} KiB per-page bounds. No records from this page were returned.`,
+      );
       return;
     }
     if (result.kind === "unavailable") {
-      res.status(503).json({ error: "export_unavailable" });
+      fail(
+        503,
+        "export_unavailable",
+        "This live page could not be read safely. Return to your learning space and start again.",
+      );
+      return;
+    }
+    if (html) {
+      res.send(memberExportPage(result.payload, cursor));
       return;
     }
     res
       .type("application/json")
       .set(
         "Content-Disposition",
-        'attachment; filename="deep-native-member-records.json"',
+        `attachment; filename="deep-native-member-records-page-${result.payload.page.number}.json"`,
       )
       .json(result.payload);
   });
