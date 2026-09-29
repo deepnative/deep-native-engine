@@ -8,6 +8,7 @@ import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { COOKIE } from "../../src/session.ts";
 import { migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
+import { withLoopback } from "../support/loopback-server.ts";
 
 const pool = testPool();
 const db = store(pool);
@@ -75,11 +76,27 @@ async function fixture() {
   return { owner, outsider, reviewer, attempts, id };
 }
 
+async function getWithApp(
+  application: ReturnType<typeof app>,
+  token: string,
+  id: string,
+  query: string,
+) {
+  return withLoopback(application, (server) =>
+    request(server)
+      .get(`/assignments/attempts/${id}/compare${query}`)
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${token}`),
+  );
+}
+
 function get(token: string, id: string, query: string) {
-  return request(app(db, { origin, secret, attempts: attemptStore(pool) }))
-    .get(`/assignments/attempts/${id}/compare${query}`)
-    .set("Host", "127.0.0.1:3000")
-    .set("Cookie", `${COOKIE}=${token}`);
+  return getWithApp(
+    app(db, { origin, secret, attempts: attemptStore(pool) }),
+    token,
+    id,
+    query,
+  );
 }
 
 type RequestStage =
@@ -232,7 +249,7 @@ it("compares only retained owner snapshots after retirement without writing or e
 
 it("fails closed on expired, deleted and failed snapshot reads", async () => {
   const { owner, attempts, id } = await fixture();
-  const failing = request(
+  const failing = getWithApp(
     app(db, {
       origin,
       secret,
@@ -243,10 +260,10 @@ it("fails closed on expired, deleted and failed snapshot reads", async () => {
         },
       },
     }),
-  )
-    .get(`/assignments/attempts/${id}/compare?from=1&to=2`)
-    .set("Host", "127.0.0.1:3000")
-    .set("Cookie", `${COOKIE}=${owner.token}`);
+    owner.token,
+    id,
+    "?from=1&to=2",
+  );
   const unavailable = await observed("failed-read", failing);
   expect(unavailable.status).toBe(503);
   expect(unavailable.text).not.toContain("synthetic private database secret");

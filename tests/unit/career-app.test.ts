@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import { app } from "../../src/app.ts";
 import { disabledCareerStore, type CareerStore } from "../../src/career.ts";
 import type { Store } from "../../src/store.ts";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 
 const origin = "http://127.0.0.1:3000";
 const host = "127.0.0.1:3000";
@@ -24,10 +25,7 @@ const draft = {
 };
 let server: Server | undefined;
 afterEach(async () => {
-  if (server)
-    await new Promise<void>((resolve, reject) =>
-      server!.close((error) => (error ? reject(error) : resolve())),
-    );
+  if (server) await closeLoopback(server);
   server = undefined;
 });
 
@@ -61,7 +59,7 @@ it("requires current member, deliberate opt-in, valid private content and versio
     revokeDraft: vi.fn<CareerStore["revokeDraft"]>().mockResolvedValue(false),
     deleteDraft: vi.fn<CareerStore["deleteDraft"]>().mockResolvedValue(false),
   };
-  server = app(db, { origin, secret: "secret", career }).listen(0);
+  server = await listenLoopback(app(db, { origin, secret: "secret", career }));
   const agent = request.agent(server);
   const welcome = await agent.get("/").set("Host", host).expect(200);
   const csrf = welcome.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
