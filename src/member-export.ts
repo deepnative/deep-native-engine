@@ -55,11 +55,16 @@ const sections = {
   careerDrafts: `SELECT id,kind,title,body,approved,version,
     created_at AS "createdAt",updated_at AS "updatedAt"
     FROM career_drafts WHERE member_id=$1 ORDER BY created_at,id LIMIT $2`,
-  proposals: `SELECT id,title,body,sources,state,revision,
-    workflow_id AS "workflowId",workflow_version AS "workflowVersion",
-    created_at AS "createdAt",
-    submitted_at AS "submittedAt",withdrawn_at AS "withdrawnAt"
-    FROM member_proposals WHERE member_id=$1 ORDER BY created_at,id LIMIT $2`,
+  // Withdrawal and rejection redact these fields. Lock rows in UUID order,
+  // matching moderation's lock order, then restore the export's date order.
+  // A changed tuple under REPEATABLE READ makes the export fail closed.
+  proposals: `WITH locked AS MATERIALIZED (
+    SELECT id,title,body,sources,state,revision,
+      workflow_id AS "workflowId",workflow_version AS "workflowVersion",
+      created_at AS "createdAt",
+      submitted_at AS "submittedAt",withdrawn_at AS "withdrawnAt"
+    FROM member_proposals WHERE member_id=$1 ORDER BY id LIMIT $2 FOR SHARE
+    ) SELECT * FROM locked ORDER BY "createdAt",id`,
   workflowFeedback: `SELECT workflow_id AS "workflowId",
     workflow_version AS "workflowVersion",note,revision,
     created_at AS "createdAt",updated_at AS "updatedAt"
