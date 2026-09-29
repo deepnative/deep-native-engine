@@ -467,3 +467,123 @@ test("[L66] a member privately revises a submitted synthetic assignment without 
   );
   expect(remaining.rows[0].n).toBe(0);
 });
+
+test("[L85] three learner backgrounds compare only their own immutable private submissions", async ({
+  page,
+  browser,
+}, info) => {
+  const id = info.project.name === "desktop-chromium" ? "SYN-960" : "SYN-961";
+  const title = `Invented comparison assignment ${id}`;
+  const actors = await publishers();
+  await publish(actors, sample(id, 1, title));
+  const cases = [
+    { background: "explorer", goal: "everyday" },
+    { background: "professional", goal: "work" },
+    { background: "technical", goal: "build" },
+  ];
+  const retained: {
+    id: string;
+    context: Awaited<ReturnType<typeof browser.newContext>>;
+  }[] = [];
+  try {
+    for (const [index, entry] of cases.entries()) {
+      const context = await browser.newContext({
+        baseURL: origin,
+        viewport: page.viewportSize() ?? undefined,
+      });
+      retained.push({ id: "", context });
+      const learner = await context.newPage();
+      await onboard(learner, entry.background, entry.goal);
+      const attemptId = await chooseAndStart(learner, title);
+      retained[index]!.id = attemptId;
+      const first = `Invented ${entry.background} first line\nKeep this line`;
+      const second = `Invented ${entry.background} second line\nKeep this line`;
+      for (const answer of [first, second]) {
+        if (answer === second) {
+          await learner.getByLabel("Start a new private revision").check();
+          await learner
+            .getByRole("button", { name: "Revise privately" })
+            .click();
+        }
+        await learner.getByLabel("Private sample response").fill(answer);
+        await learner
+          .getByLabel("I used only invented or sample information")
+          .check();
+        await learner
+          .getByRole("button", { name: "Save private draft" })
+          .click();
+        await learner.getByLabel("Submit this saved version locally").check();
+        await learner
+          .getByRole("button", { name: "Submit saved version locally" })
+          .click();
+      }
+      const history = learner.getByRole("region", {
+        name: "Private local submission history",
+      });
+      await expect(history).toContainText(first);
+      await expect(history).toContainText(second);
+      await learner
+        .getByRole("link", { name: "Compare private submissions" })
+        .focus();
+      await learner.keyboard.press("Enter");
+      await expect(
+        learner.getByRole("heading", { name: "Compare private submissions" }),
+      ).toBeVisible();
+      await expect(
+        learner.getByRole("region", { name: "Original submissions" }),
+      ).toContainText(first);
+      await expect(
+        learner.getByRole("region", { name: "Original submissions" }),
+      ).toContainText(second);
+      await expect(
+        learner.getByRole("region", { name: "Text changes" }),
+      ).toContainText("Removed");
+      await expect(
+        learner.getByRole("region", { name: "Text changes" }),
+      ).toContainText("Added");
+      expect(
+        await learner.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      ).toBe(true);
+      await learner.getByLabel("From submission").focus();
+      await expect(learner.getByLabel("From submission")).toBeFocused();
+      await learner.getByLabel("From submission").selectOption("2");
+      await expect(learner.getByLabel("From submission")).toHaveValue("2");
+      await learner.keyboard.press("Tab");
+      await expect(learner.getByLabel("To submission")).toBeFocused();
+      await learner.getByLabel("To submission").selectOption("1");
+      await expect(learner.getByLabel("To submission")).toHaveValue("1");
+      await learner.keyboard.press("Tab");
+      await expect(
+        learner.getByRole("button", { name: "Compare submissions" }),
+      ).toBeFocused();
+      await learner.keyboard.press("Enter");
+      await expect(
+        learner.getByRole("heading", { name: /From submission 2/ }),
+      ).toBeVisible();
+      const outsider = retained[0]!.context.pages()[0]!;
+      if (index > 0) {
+        const foreign = await outsider.request.get(
+          `/assignments/attempts/${attemptId}/compare?from=1&to=2`,
+        );
+        expect(foreign.status()).toBe(404);
+        expect(await foreign.text()).not.toContain(second);
+      }
+    }
+    expect(await actors.catalog.retire(actors.editor, id)).toBe(true);
+    for (const entry of retained) {
+      const learner = entry.context.pages()[0]!;
+      await learner.reload();
+      await expect(
+        learner.getByRole("region", { name: "Original submissions" }),
+      ).toBeVisible();
+      expect(
+        (await (await learner.request.get("/api/member/export")).json()).records
+          .assignmentSubmissions,
+      ).toHaveLength(2);
+    }
+  } finally {
+    await Promise.all(retained.map((entry) => entry.context.close()));
+  }
+});

@@ -33,6 +33,7 @@ import type { WorkflowFeedback } from "./workflow-feedback.ts";
 import type { ManualObservation } from "./manual-observations.ts";
 import type { CircleListing } from "./circles.ts";
 import type { AssignmentAttempt } from "./attempts.ts";
+import type { compareResponses } from "./attempt-compare.ts";
 import type { ActivityItem } from "./progress.ts";
 import type { UsefulnessReport } from "./usefulness.ts";
 import type { PracticeHistory, PracticeSource } from "./practice.ts";
@@ -392,8 +393,12 @@ export function assignmentAttemptPage(
       ? `<label for="unsaved-attempt-response">Unsaved response to copy</label><textarea id="unsaved-attempt-response" rows="8" readonly>${escape(unsaved)}</textarea>`
       : `<pre class="content-text">${escape(item.response)}</pre>`;
   const history = item.submissions ?? [];
+  const compareLink =
+    history.length >= 2
+      ? `<p><a href="${url}/compare?from=${history[0]!.sequence}&amp;to=${history.at(-1)!.sequence}">Compare private submissions</a></p>`
+      : "";
   const historyView = history.length
-    ? `<section aria-label="Private local submission history"><h2>Private local submission history</h2><ol>${history.map((entry) => `<li><strong>Submission ${entry.sequence}</strong> · ${escape(entry.submittedAt)}<pre class="content-text">${escape(entry.response)}</pre></li>`).join("")}</ol><p>These submitted versions are immutable, synthetic and unreviewed. Deleting this attempt deletes every version.</p></section>`
+    ? `<section aria-label="Private local submission history"><h2>Private local submission history</h2><ol>${history.map((entry) => `<li><strong>Submission ${entry.sequence}</strong> · ${escape(entry.submittedAt)}<pre class="content-text">${escape(entry.response)}</pre></li>`).join("")}</ol>${compareLink}<p>These submitted versions are immutable, synthetic and unreviewed. Deleting this attempt deletes every version.</p></section>`
     : "";
   const revisionAction =
     item.currentEligible && item.submittedAt && prior < 10 && !conflict
@@ -404,6 +409,35 @@ export function assignmentAttemptPage(
   return page(
     "Private assignment attempt",
     `<section class="error-page"><p class="eyebrow">PRIVATE LOCAL PREVIEW · NO FORMAL REVIEW</p><h1>${escape(item.title)}</h1><p>Assignment version ${item.contentVersion} · goal when started: ${escape(item.goalAtStart)} · ${item.submittedAt ? "submitted locally" : prior > 0 ? (item.savedAt ? "private revision draft saved" : "private revision started") : item.savedAt ? "private draft saved" : "started only"}</p><p>This attempt stays pinned to its original assignment and rubric version. Submitting only records your own saved sample response; it does not send it to a reviewer or assess your skill.</p>${error ? `<div class="notice" role="alert"><p>${escape(error)}</p></div>` : ""}${!item.currentEligible && !item.submittedAt ? "<p>The assignment or your current direction changed. Your earlier work remains private and readable, but this version cannot be edited. Choose an available sample to start again.</p>" : ""}<h2>Your response</h2>${responseView}${conflict ? `<p>${unsaved !== undefined ? "Copy your unsaved text before reloading the saved attempt to reconcile it." : "Reload this attempt to check the current saved state before trying again."}</p>` : ""}${item.currentEligible && item.savedAt && !item.submittedAt && !conflict ? `<form method="post" action="${url}/submit">${hidden(csrf)}<input type="hidden" name="revision" value="${item.revision}"><input type="hidden" name="response_snapshot" value="${escape(item.response)}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Submit this saved version locally; no human review is connected.</span></label><button type="submit">Submit saved version locally</button></form>` : ""}${revisionAction}${historyView}<form method="post" action="${url}/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete this private attempt and all its submissions</span></label><button class="secondary" type="submit">Delete attempt</button></form><p><a href="/assignments/attempts">All private attempts</a> · <a href="/learn">Your learning path</a></p></section>${editable ? '<script type="module" src="/assets/attempt-save.js"></script>' : ""}`,
+  );
+}
+export function assignmentComparisonPage(
+  item: AssignmentAttempt,
+  from: number,
+  to: number,
+  comparison: ReturnType<typeof compareResponses>,
+) {
+  // HTML input-stream newline normalization would otherwise change CR/CRLF
+  // snapshot text before a learner can copy it from the rendered page.
+  const exactText = (value: string) => escape(value).replace(/\r/g, "&#13;");
+  const base = `/assignments/attempts/${encodeURIComponent(item.id)}`;
+  const submissions = item.submissions!;
+  const first = submissions.find((entry) => entry.sequence === from)!;
+  const second = submissions.find((entry) => entry.sequence === to)!;
+  const options = (selected: number) =>
+    submissions
+      .map(
+        (entry) =>
+          `<option value="${entry.sequence}"${entry.sequence === selected ? " selected" : ""}>Submission ${entry.sequence} · ${escape(entry.submittedAt)}</option>`,
+      )
+      .join("");
+  const changes =
+    comparison.kind === "identical"
+      ? "<p>No text changed between these two submissions.</p>"
+      : `<p>${comparison.kind === "sections" ? "Section comparison: the long responses are shown in full below, while the changed middle is grouped into removed and added sections." : "Line comparison: unchanged, removed and added lines are labelled below."}</p><ol>${comparison.changes.map((change) => `<li><strong>${change.kind === "unchanged" ? "Unchanged" : change.kind === "removed" ? "Removed" : "Added"}</strong><pre class="content-text"><span>${exactText(change.text)}</span></pre></li>`).join("")}</ol>`;
+  return page(
+    "Compare private submissions",
+    `<section class="error-page"><p class="eyebrow">PRIVATE LOCAL PREVIEW · NO FORMAL REVIEW</p><h1>Compare private submissions</h1><p>${escape(item.title)} · assignment version ${item.contentVersion}. These are your immutable, unreviewed synthetic submissions. This comparison does not assess your work.</p><form method="get" action="${base}/compare"><fieldset><legend>Choose two submitted versions</legend><label for="compare-from">From submission</label><select id="compare-from" name="from" required>${options(from)}</select><label for="compare-to">To submission</label><select id="compare-to" name="to" required>${options(to)}</select></fieldset><button type="submit">Compare submissions</button></form><section aria-label="Text changes"><h2>Text changes</h2>${changes}</section><section aria-label="Original submissions"><h2>Original submissions</h2><h3>From submission ${first.sequence} · ${escape(first.submittedAt)}</h3><pre class="content-text"><span>${exactText(first.response)}</span></pre><h3>To submission ${second.sequence} · ${escape(second.submittedAt)}</h3><pre class="content-text"><span>${exactText(second.response)}</span></pre></section><p><a href="${base}">Return to this private attempt</a></p></section>`,
   );
 }
 export function assignmentWriteRecoveryPage(
