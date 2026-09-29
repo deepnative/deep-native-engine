@@ -82,10 +82,107 @@ function get(token: string, id: string, query: string) {
     .set("Cookie", `${COOKIE}=${token}`);
 }
 
+type RequestStage =
+  | "owner"
+  | "outsider"
+  | "staff"
+  | "forged"
+  | "invalid-same"
+  | "invalid-missing"
+  | "invalid-leading-zero"
+  | "invalid-duplicate"
+  | "revoked"
+  | "failed-read"
+  | "expired"
+  | "deleted";
+
+function transportDiagnostic(stage: RequestStage, error: unknown) {
+  const fault =
+    error && typeof error === "object"
+      ? (error as Record<string, unknown>)
+      : {};
+  const parserCodes = [
+    "HPE_INVALID_CONSTANT",
+    "HPE_INVALID_HEADER_TOKEN",
+    "HPE_UNEXPECTED_CONTENT_LENGTH",
+  ] as const;
+  const connectionCodes = [
+    "ECONNRESET",
+    "ECONNREFUSED",
+    "EPIPE",
+    "ETIMEDOUT",
+  ] as const;
+  const code =
+    [...parserCodes, ...connectionCodes].find(
+      (known) => fault.code === known,
+    ) ?? "other";
+  const framing =
+    code === "HPE_INVALID_CONSTANT"
+      ? "start-line"
+      : code === "HPE_INVALID_HEADER_TOKEN"
+        ? "header"
+        : code === "HPE_UNEXPECTED_CONTENT_LENGTH"
+          ? "content-length"
+          : connectionCodes.some((known) => known === code)
+            ? "connection"
+            : "unknown";
+  const bytesParsed =
+    typeof fault.bytesParsed === "number" &&
+    Number.isSafeInteger(fault.bytesParsed) &&
+    fault.bytesParsed >= 0
+      ? fault.bytesParsed
+      : "unavailable";
+  const rawPacketBytes =
+    Buffer.isBuffer(fault.rawPacket) || fault.rawPacket instanceof Uint8Array
+      ? fault.rawPacket.byteLength
+      : "unavailable";
+  return new Error(
+    `Comparison request failed: stage=${stage} framing=${framing} code=${code} bytesParsed=${bytesParsed} rawPacketBytes=${rawPacketBytes}`,
+  );
+}
+
+async function observed<T>(
+  stage: RequestStage,
+  pending: PromiseLike<T>,
+): Promise<T> {
+  try {
+    return await pending;
+  } catch (error) {
+    throw transportDiagnostic(stage, error);
+  }
+}
+
+it("limits a parser failure to fixed request stage and numeric framing metadata", async () => {
+  const error = {
+    code: "HPE_INVALID_CONSTANT",
+    bytesParsed: 7,
+    rawPacket: Buffer.from("synthetic private packet words"),
+    message: "synthetic private response words",
+  };
+  let diagnostic: Error | undefined;
+  try {
+    await observed("owner", Promise.reject(error));
+  } catch (caught) {
+    diagnostic = caught as Error;
+  }
+  expect(diagnostic?.message).toContain("stage=owner");
+  expect(diagnostic?.message).toContain("framing=start-line");
+  expect(diagnostic?.message).toContain("code=HPE_INVALID_CONSTANT");
+  expect(diagnostic?.message).toContain("bytesParsed=7");
+  expect(diagnostic?.message).toContain("rawPacketBytes=30");
+  expect(diagnostic?.message).not.toContain("private");
+  expect(diagnostic?.message).not.toContain("synthetic");
+  expect(diagnostic?.message).not.toContain("packet words");
+  expect(diagnostic?.cause).toBeUndefined();
+});
+
 it("compares only retained owner snapshots after retirement without writing or exposing a draft", async () => {
   const { owner, outsider, reviewer, attempts, id } = await fixture();
   const before = await attempts.detail(owner.token, id);
-  const response = await get(owner.token, id, "?from=2&to=1");
+  const response = await observed(
+    "owner",
+    get(owner.token, id, "?from=2&to=1"),
+  );
   expect(response.status).toBe(200);
   expect(response.headers["cache-control"]).toBe("no-store");
   expect(response.text).toContain("From submission 2");
@@ -96,22 +193,28 @@ it("compares only retained owner snapshots after retirement without writing or e
   expect(response.text).not.toContain("Invented <private>");
   expect(response.text).not.toContain("approved by a reviewer");
   expect(await attempts.detail(owner.token, id)).toEqual(before);
-  const foreign = await get(outsider.token, id, "?from=1&to=2");
+  const foreign = await observed(
+    "outsider",
+    get(outsider.token, id, "?from=1&to=2"),
+  );
   expect(foreign.status).toBe(404);
   expect(foreign.text).not.toContain("Invented &lt;private&gt;");
-  const staff = await get(reviewer, id, "?from=1&to=2");
+  const staff = await observed("staff", get(reviewer, id, "?from=1&to=2"));
   expect(staff.status).toBe(303);
   expect(staff.text).not.toContain("Invented &lt;private&gt;");
-  const forged = await get(owner.token, randomUUID(), "?from=1&to=2");
+  const forged = await observed(
+    "forged",
+    get(owner.token, randomUUID(), "?from=1&to=2"),
+  );
   expect(forged.status).toBe(404);
   expect(forged.text).not.toContain("Invented &lt;private&gt;");
-  for (const query of [
-    "?from=1&to=1",
-    "?from=1&to=3",
-    "?from=01&to=2",
-    "?from=1&from=2&to=2",
-  ]) {
-    const invalid = await get(owner.token, id, query);
+  for (const [stage, query] of [
+    ["invalid-same", "?from=1&to=1"],
+    ["invalid-missing", "?from=1&to=3"],
+    ["invalid-leading-zero", "?from=01&to=2"],
+    ["invalid-duplicate", "?from=1&from=2&to=2"],
+  ] as const) {
+    const invalid = await observed(stage, get(owner.token, id, query));
     expect(invalid.status).toBe(422);
     expect(invalid.text).not.toContain("Invented &lt;private&gt;");
   }
@@ -119,7 +222,10 @@ it("compares only retained owner snapshots after retirement without writing or e
     "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE id=$1",
     [owner.id],
   );
-  const revoked = await get(owner.token, id, "?from=1&to=2");
+  const revoked = await observed(
+    "revoked",
+    get(owner.token, id, "?from=1&to=2"),
+  );
   expect(revoked.status).not.toBe(200);
   expect(revoked.text).not.toContain("Invented &lt;private&gt;");
 });
@@ -141,7 +247,7 @@ it("fails closed on expired, deleted and failed snapshot reads", async () => {
     .get(`/assignments/attempts/${id}/compare?from=1&to=2`)
     .set("Host", "127.0.0.1:3000")
     .set("Cookie", `${COOKIE}=${owner.token}`);
-  const unavailable = await failing;
+  const unavailable = await observed("failed-read", failing);
   expect(unavailable.status).toBe(503);
   expect(unavailable.text).not.toContain("synthetic private database secret");
   expect(unavailable.text).not.toContain("Invented &lt;private&gt;");
@@ -149,7 +255,10 @@ it("fails closed on expired, deleted and failed snapshot reads", async () => {
     "UPDATE principals SET expires_at=CURRENT_TIMESTAMP-interval '1 second' WHERE id=$1",
     [owner.id],
   );
-  const expired = await get(owner.token, id, "?from=1&to=2");
+  const expired = await observed(
+    "expired",
+    get(owner.token, id, "?from=1&to=2"),
+  );
   expect(expired.status).not.toBe(200);
   expect(expired.text).not.toContain("Invented &lt;private&gt;");
   await pool.query(
@@ -157,7 +266,10 @@ it("fails closed on expired, deleted and failed snapshot reads", async () => {
     [owner.id],
   );
   expect(await attempts.remove(owner.token, id)).toBe(true);
-  const deleted = await get(owner.token, id, "?from=1&to=2");
+  const deleted = await observed(
+    "deleted",
+    get(owner.token, id, "?from=1&to=2"),
+  );
   expect(deleted.status).toBe(404);
   expect(deleted.text).not.toContain("Invented &lt;private&gt;");
 });

@@ -1,6 +1,6 @@
 import { LESSON } from "./content.ts";
 import type { AssignmentAttempt } from "./attempts.ts";
-import type { Exercise, LessonActivity } from "./store.ts";
+import type { Exercise, ExerciseHistory, LessonActivity } from "./store.ts";
 
 export interface ActivityItem {
   kind: "starter exercise" | "sample lesson" | "assignment attempt";
@@ -17,6 +17,7 @@ export function activityItems(
   exercise: Exercise | undefined,
   lessons: LessonActivity[],
   attempts: AssignmentAttempt[],
+  starterHistory: ExerciseHistory[] = [],
 ): ActivityItem[] {
   const items: ActivityItem[] = [];
   if (exercise) {
@@ -24,9 +25,32 @@ export function activityItems(
       kind: "starter exercise",
       title: LESSON.title,
       version: LESSON.version,
-      state: exercise.completed_at ? "Self-reported complete" : "Draft saved",
+      state: exercise.completed_at
+        ? exercise.withdrawn_at
+          ? "Self-reported complete; text withdrawn"
+          : "Self-reported complete"
+        : "Draft saved",
       availability: "Local foundation preview; no qualified review",
-      href: "/lesson",
+      href: `/lesson?version=${LESSON.version}#starter-version-${LESSON.version}`,
+    });
+  }
+  for (const row of starterHistory) {
+    if (
+      row.lessonId !== LESSON.id ||
+      row.version === LESSON.version ||
+      !row.completedAt
+    )
+      continue;
+    items.push({
+      kind: "starter exercise",
+      title: LESSON.title,
+      version: row.version,
+      state: row.withdrawnAt
+        ? "Self-reported complete; text withdrawn"
+        : "Self-reported complete",
+      availability:
+        "Earlier starter version retained; no new work on this version",
+      href: `/lesson?version=${row.version}#starter-version-${row.version}`,
     });
   }
   for (const lesson of lessons) {

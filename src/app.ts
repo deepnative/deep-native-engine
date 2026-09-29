@@ -2322,19 +2322,29 @@ export function app(
   });
   app.get("/progress", async (_req, res) => {
     const member = res.locals.learner as Learner;
-    const [exercise, lessons, memberAttempts, reports] = await Promise.all([
-      store.progress(member.id),
+    const [lessons, memberAttempts, reports] = await Promise.all([
       store.lessonActivities(member.id),
       attempts.list(res.locals.token as string),
       usefulness.list(res.locals.token as string),
     ]);
-    res.send(
-      privateProgressPage(
-        activityItems(exercise, lessons, memberAttempts),
-        reports,
-        res.locals.csrf as string,
-      ),
+    const html = await store.withExerciseRead(
+      res.locals.token as string,
+      (rows) =>
+        privateProgressPage(
+          activityItems(currentStarter(rows), lessons, memberAttempts, rows),
+          reports,
+          res.locals.csrf as string,
+        ),
     );
+    if (html === null) {
+      res
+        .status(403)
+        .send(
+          errorPage("Progress unavailable", "Open your learning path again."),
+        );
+      return;
+    }
+    res.send(html);
   });
   app.post("/library/:id/usefulness", async (req, res) => {
     const fields = req.body as Fields;
@@ -3134,24 +3144,58 @@ export function app(
     await store.updateProfile(member.id, edit.input);
     res.redirect(303, "/learn");
   });
-  app.get("/lesson", async (_req, res) => {
+  app.get("/lesson", async (req, res) => {
     const member = res.locals.learner as Learner;
+    const requested = req.query.version;
+    const version =
+      typeof requested === "string" && /^[1-9]\d*$/.test(requested)
+        ? Number(requested)
+        : null;
+    if (
+      requested !== undefined &&
+      (!version || !Number.isSafeInteger(version) || version > 2147483647)
+    ) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Exercise version unavailable",
+            "Open your private activity to find a retained version.",
+          ),
+        );
+      return;
+    }
     const html = await store.withExerciseRead(
       res.locals.token as string,
       (rows) =>
-        lesson(
-          member,
-          currentStarter(rows),
-          res.locals.csrf as string,
-          [],
-          rows,
-        ),
+        version !== null &&
+        !rows.some(
+          (row) =>
+            row.lessonId === LESSON.id &&
+            row.version === version &&
+            (version === LESSON.version || row.completedAt !== null),
+        )
+          ? null
+          : lesson(
+              member,
+              currentStarter(rows),
+              res.locals.csrf as string,
+              [],
+              rows,
+            ),
     );
     if (html === null) {
       res
-        .status(403)
+        .status(version === null ? 403 : 404)
         .send(
-          errorPage("Lesson unavailable", "Open your learning path again."),
+          errorPage(
+            version === null
+              ? "Lesson unavailable"
+              : "Exercise version unavailable",
+            version === null
+              ? "Open your learning path again."
+              : "That exact retained version is unavailable. Open your private activity to inspect what remains.",
+          ),
         );
       return;
     }
