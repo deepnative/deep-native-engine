@@ -3134,14 +3134,36 @@ it("reports unknown pages and storage failures without leaking secrets or claimi
   expect(failed.text).toContain("could not confirm");
   expect(failed.text).not.toContain("secret connection");
   active();
-  db.save.mockRejectedValueOnce(new Error("lost acknowledgment"));
-  await agent
+  const attemptedInstruction =
+    "Plan a sample workshop with <script>window.leak=true</script> details.";
+  const attemptedVerification =
+    "Check the invented schedule against the original notes.\nKeep uncertainty visible.";
+  db.save.mockRejectedValueOnce(new Error("lost acknowledgment secret"));
+  const uncertainExercise = await agent
     .post("/exercise")
     .set("Host", host)
     .set("Origin", origin)
     .type("form")
-    .send({ csrf, intent: "draft" })
+    .send({
+      csrf,
+      intent: "draft",
+      instruction: attemptedInstruction,
+      verification: attemptedVerification,
+    })
     .expect(503);
+  expect(uncertainExercise.headers["cache-control"]).toContain("no-store");
+  expect(uncertainExercise.text).toContain("Save outcome unknown");
+  expect(uncertainExercise.text).toContain("Attempted instruction");
+  expect(uncertainExercise.text).toContain("Attempted way to check");
+  expect(uncertainExercise.text).toContain(
+    "&lt;script&gt;window.leak=true&lt;/script&gt;",
+  );
+  expect(uncertainExercise.text).toContain(attemptedVerification);
+  expect(uncertainExercise.text).toContain(
+    "Inspect saved lesson (opens in a new tab)",
+  );
+  expect(uncertainExercise.text).not.toContain("lost acknowledgment secret");
+  expect(uncertainExercise.text).not.toContain("Your draft is saved");
   db.remove.mockRejectedValueOnce(new Error("storage unavailable"));
   await agent
     .post("/delete")
