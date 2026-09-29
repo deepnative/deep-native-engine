@@ -45,6 +45,7 @@ import type {
   ProfileError,
   ProfileField,
   ProfileFormState,
+  ProfileStartResult,
   SubmissionError,
   SubmissionField,
 } from "./validation.ts";
@@ -424,10 +425,19 @@ export function careerPage(
     `<section class="error-page career-page">${intro}<p>Everything here stays private and unsent. Approval marks one saved draft version for your own planning; editing resets it. Outcomes are your own reports, not verified employment or income.</p><h2>Career, opportunity and contract plans</h2>${entries ? `<ul class="career-list">${entries}</ul>` : "<p>No optional planning records yet.</p>"}<h3>Add a planning record</h3><form method="post" action="/career/entries">${hidden(csrf)}${careerEntryFields("new-entry", draft.editEntryId ? undefined : draft.entry)}<button type="submit">Save planning record</button></form><h2>Private professional drafts</h2>${drafts ? `<ul class="career-list">${drafts}</ul>` : "<p>No private professional drafts yet.</p>"}<h3>Add an unsent draft</h3><form method="post" action="/career/drafts">${hidden(csrf)}${careerDraftFields("new-draft", draft.editDraftId ? undefined : draft.professional)}<button type="submit">Save unsent draft</button></form><h2>Leave this optional path</h2><form method="post" action="/career/disable">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete all optional career records and drafts; keep my learning milestones</span></label><button class="secondary" type="submit">Turn off and delete career planning</button></form><p><a href="/learn">Return to learning</a></p></section>`,
   );
 }
-export function welcome(csrf: string, error: string[] = []) {
+export function welcome(
+  csrf: string,
+  error: string[] = [],
+  onboardingState?: ProfileStartResult,
+) {
+  const syntheticError = onboardingState?.errors.find(
+    (item) => item.field === "synthetic",
+  )?.message;
   return page(
-    "A practical start with AI",
-    `<section class="hero"><div><p class="eyebrow">YOUR NEXT CHAPTER STARTS HERE</p><h1>Find your place<br>in the future of <em>AI.</em></h1><p class="lead">A little curiosity. A useful skill. Something you can put into practice today.</p><div class="pill-row"><span>No coding required</span><span>Learn at your pace</span><span>Built for different starting points</span></div></div><aside class="path-card"><span class="eyebrow">YOUR FIRST SMALL WIN</span><h2>A clearer instruction.<br>A more useful result.</h2><p>Learn how to give AI context, set a useful task and check its answer.</p><div class="path-step"><b>01</b><span>Choose your direction</span></div><div class="path-step"><b>02</b><span>Learn one practical idea</span></div><div class="path-step"><b>03</b><span>Try it. Check it. Keep it.</span></div><p class="small">12 minutes · One guided exercise</p></aside></section><section class="onboard"><div><p class="eyebrow">MAKE THIS YOUR STARTING POINT</p><h2>What brings you here?</h2><p>Choose an example that feels useful to you, whether you are exploring AI, applying it at work or building something new.</p><p class="small">Your work stays on this computer. This browser can access it for up to 30 days; clearing its cookie loses access. Use Delete this preview to remove your saved work.</p></div><form method="post" action="/start">${hidden(csrf)}${notice(error)}${profileFields()}<label class="check"><input type="checkbox" name="synthetic" value="yes" required><span>I'll use invented or sample information in this preview.</span></label><button type="submit">Start my learning path <span aria-hidden="true">↗</span></button></form></section>`,
+    onboardingState?.errors.length
+      ? "Error in your onboarding"
+      : "A practical start with AI",
+    `<section class="hero"><div><p class="eyebrow">YOUR NEXT CHAPTER STARTS HERE</p><h1>Find your place<br>in the future of <em>AI.</em></h1><p class="lead">A little curiosity. A useful skill. Something you can put into practice today.</p><div class="pill-row"><span>No coding required</span><span>Learn at your pace</span><span>Built for different starting points</span></div></div><aside class="path-card"><span class="eyebrow">YOUR FIRST SMALL WIN</span><h2>A clearer instruction.<br>A more useful result.</h2><p>Learn how to give AI context, set a useful task and check its answer.</p><div class="path-step"><b>01</b><span>Choose your direction</span></div><div class="path-step"><b>02</b><span>Learn one practical idea</span></div><div class="path-step"><b>03</b><span>Try it. Check it. Keep it.</span></div><p class="small">12 minutes · One guided exercise</p></aside></section><section class="onboard"><div><p class="eyebrow">MAKE THIS YOUR STARTING POINT</p><h2>What brings you here?</h2><p>Choose an example that feels useful to you, whether you are exploring AI, applying it at work or building something new.</p><p class="small">Your work stays on this computer. This browser can access it for up to 30 days; clearing its cookie loses access. Use Delete this preview to remove your saved work.</p></div><form method="post" action="/start">${hidden(csrf)}${onboardingState ? profileErrorSummary(onboardingState, "Fix your starting choices") : notice(error)}${profileFields(undefined, onboardingState?.attempted, onboardingState?.errors)}<label class="check"><input id="synthetic" type="checkbox" name="synthetic" value="yes" required${onboardingState?.syntheticAcknowledged ? " checked" : ""}${syntheticError ? ' aria-invalid="true" aria-describedby="synthetic-error"' : ""}><span>I'll use invented or sample information in this preview.</span></label>${syntheticError ? `<p id="synthetic-error" class="field-error">${escape(syntheticError)}</p>` : ""}<button type="submit">Start my learning path <span aria-hidden="true">↗</span></button></form></section>`,
   );
 }
 function usefulnessAction(
@@ -465,8 +475,11 @@ export function privateProgressPage(
     }<p><a href="/learn">Return to your learning path</a></p></section>`,
   );
 }
-function profileErrorSummary(edit: ProfileEditResult) {
-  return `<div class="notice" role="alert"><h3>Fix your profile before saving</h3><p>Your changes were not saved. Correct the marked fields, then save again.</p><ul>${edit.errors.map((error) => `<li><a href="#${error.field}">${escape(error.message)}</a></li>`).join("")}</ul></div>`;
+function profileErrorSummary(
+  edit: ProfileEditResult,
+  heading = "Fix your profile before saving",
+) {
+  return `<div class="notice" role="alert"><h3>${escape(heading)}</h3><p>Your changes were not saved. Correct the marked fields, then save again.</p><ul>${edit.errors.map((error) => `<li><a href="#${error.field}">${escape(error.message)}</a></li>`).join("")}</ul></div>`;
 }
 export function dashboard(
   learner: Learner,

@@ -4,7 +4,12 @@ import cookieParser from "cookie-parser";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { COOKIE, COOKIE_OPTIONS, token, csrf, validCsrf } from "./session.ts";
-import { profile, profileEdit, submission, type Fields } from "./validation.ts";
+import {
+  profileStart,
+  profileEdit,
+  submission,
+  type Fields,
+} from "./validation.ts";
 import {
   welcome,
   dashboard,
@@ -652,18 +657,12 @@ export function app(
     res.send(welcome(csrf(fresh, options.secret)));
   });
   app.post("/start", async (req, res) => {
-    const input = profile(req.body as Fields);
-    if (!input) {
-      res
-        .status(422)
-        .send(
-          welcome(res.locals.csrf as string, [
-            "Choose valid starting point, goal, time zone, weekly time and optional interests, and confirm you will use sample information.",
-          ]),
-        );
+    const start = profileStart(req.body as Fields);
+    if (!start.input) {
+      res.status(422).send(welcome(res.locals.csrf as string, [], start));
       return;
     }
-    await store.create(res.locals.token as string, input);
+    await store.create(res.locals.token as string, start.input);
     res.redirect(303, "/learn");
   });
   app.use(
