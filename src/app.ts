@@ -4,7 +4,7 @@ import cookieParser from "cookie-parser";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { COOKIE, COOKIE_OPTIONS, token, csrf, validCsrf } from "./session.ts";
-import { profile, submission, type Fields } from "./validation.ts";
+import { profile, profileEdit, submission, type Fields } from "./validation.ts";
 import {
   welcome,
   dashboard,
@@ -2630,8 +2630,8 @@ export function app(
   });
   app.post("/profile", async (req, res) => {
     const member = res.locals.learner as Learner;
-    const input = profile({ ...(req.body as Fields), synthetic: "yes" });
-    if (!input) {
+    const edit = profileEdit(req.body as Fields);
+    if (!edit.input) {
       const [progress, published, choice, activity] = await Promise.all([
         store.progress(member.id),
         catalog.search({}),
@@ -2645,17 +2645,16 @@ export function app(
             member,
             progress,
             res.locals.csrf as string,
-            [
-              "Choose valid profile, time zone and weekly time options before saving.",
-            ],
+            [],
             eligibleAssignments(published, member, progress, activity),
             choice,
             recommendLesson(published, member, progress, activity),
+            edit,
           ),
         );
       return;
     }
-    await store.updateProfile(member.id, input);
+    await store.updateProfile(member.id, edit.input);
     res.redirect(303, "/learn");
   });
   app.get("/lesson", async (_req, res) => {

@@ -40,7 +40,14 @@ import type { OwnedEvidence } from "./evidence.ts";
 import type { LocalAiChoice } from "./local-ai-consent.ts";
 import { localSlotTime, type AvailableSlot } from "./availability.ts";
 import { learningPlan } from "./learning-plan.ts";
-import type { SubmissionError, SubmissionField } from "./validation.ts";
+import type {
+  ProfileEditResult,
+  ProfileError,
+  ProfileField,
+  ProfileFormState,
+  SubmissionError,
+  SubmissionField,
+} from "./validation.ts";
 export function escape(value: string) {
   return value.replace(
     /[&<>"']/g,
@@ -61,46 +68,64 @@ export function notice(errors: string[]) {
 export function hidden(csrf: string) {
   return `<input type="hidden" name="csrf" value="${csrf}">`;
 }
-function profileFields(learner?: Learner) {
+function profileFields(
+  learner?: Learner,
+  attempted?: ProfileFormState,
+  errors: ProfileError[] = [],
+) {
+  const fieldError = (field: ProfileField) =>
+    errors.find((error) => error.field === field)?.message;
+  const errorText = (field: ProfileField) => {
+    const message = fieldError(field);
+    return message
+      ? `<p id="${field}-error" class="field-error">${escape(message)}</p>`
+      : "";
+  };
   const select = (
-    name: string,
+    name: ProfileField,
     label: string,
     choices: Record<string, string>,
     selected?: string | null,
     required = false,
-  ) =>
-    `<label for="${name}">${label}</label><select id="${name}" name="${name}" ${required ? "required" : ""}><option value="">${required ? "Choose one" : "Not specified"}</option>${Object.entries(
+  ) => {
+    const invalid = Boolean(fieldError(name));
+    return `<label for="${name}">${label}</label><select id="${name}" name="${name}" ${required ? "required" : ""}${invalid ? ` aria-invalid="true" aria-describedby="${name}-error"` : ""}><option value=""${selected === "" ? " selected" : ""}>${required ? "Choose one" : "Not specified"}</option>${Object.entries(
       choices,
     )
       .map(
         ([key, value]) =>
           `<option value="${key}" ${selected === key ? "selected" : ""}>${value}</option>`,
       )
-      .join("")}</select>`;
+      .join("")}</select>${errorText(name)}`;
+  };
   const checks = (
-    name: string,
+    name: ProfileField,
     label: string,
     choices: Record<string, string>,
     selected: readonly string[],
-  ) =>
-    `<fieldset><legend>${label}</legend><div class="option-grid">${Object.entries(
+  ) => {
+    const invalid = Boolean(fieldError(name));
+    return `<fieldset id="${name}" tabindex="-1"${invalid ? ` aria-invalid="true" aria-describedby="${name}-error"` : ""}><legend>${label}</legend><div class="option-grid">${Object.entries(
       choices,
     )
       .map(
         ([key, value]) =>
           `<label class="check"><input type="checkbox" name="${name}" value="${key}" ${selected.includes(key) ? "checked" : ""}><span>${value}</span></label>`,
       )
-      .join("")}</div></fieldset>`;
-  return `${select("background", "Your starting point", BACKGROUNDS, learner?.background, true)}
-    ${select("goal", "What would you like to do?", GOALS, learner?.goal, true)}
+      .join("")}</div></fieldset>${errorText(name)}`;
+  };
+  const timezoneError = fieldError("timezone");
+  const exploratoryError = fieldError("exploratory");
+  return `${select("background", "Your starting point", BACKGROUNDS, attempted ? attempted.background : learner?.background, true)}
+    ${select("goal", "What would you like to do?", GOALS, attempted ? attempted.goal : learner?.goal, true)}
     <p class="small">You can add more interests or change your goal later. These choices never determine admission or payment.</p>
-    ${checks("background_tags", "Other starting points (optional)", BACKGROUNDS, learner?.backgroundTags ?? [])}
-    ${checks("domain_tags", "Domains of interest (optional)", DOMAINS, learner?.domainTags ?? [])}
-    ${checks("it_roles", "IT specialties (optional)", IT_ROLES, learner?.itRoles ?? [])}
-    ${select("experience", "Experience with AI (optional)", EXPERIENCE, learner?.experience)}
-    <label for="timezone">Time zone (optional)</label><input type="text" id="timezone" name="timezone" value="${escape(learner?.timezone ?? "")}" maxlength="64" placeholder="e.g. America/Toronto"><p class="small">Use a location-style time zone. This preview does not schedule appointments.</p>
-    ${select("weekly_minutes", "Weekly time available (optional)", WEEKLY_TIME, learner?.weeklyMinutes?.toString())}
-    <label class="check"><input type="checkbox" name="exploratory" value="yes" ${learner?.exploratory ? "checked" : ""}><span>Keep an exploratory path open alongside my primary goal.</span></label>`;
+    ${checks("background_tags", "Other starting points (optional)", BACKGROUNDS, attempted ? attempted.backgroundTags : (learner?.backgroundTags ?? []))}
+    ${checks("domain_tags", "Domains of interest (optional)", DOMAINS, attempted ? attempted.domainTags : (learner?.domainTags ?? []))}
+    ${checks("it_roles", "IT specialties (optional)", IT_ROLES, attempted ? attempted.itRoles : (learner?.itRoles ?? []))}
+    ${select("experience", "Experience with AI (optional)", EXPERIENCE, attempted ? attempted.experience : learner?.experience)}
+    <label for="timezone">Time zone (optional)</label><input type="text" id="timezone" name="timezone" value="${escape(attempted ? attempted.timezone : (learner?.timezone ?? ""))}" maxlength="64" placeholder="e.g. America/Toronto" aria-describedby="timezone-help${timezoneError ? " timezone-error" : ""}"${timezoneError ? ' aria-invalid="true"' : ""}><p id="timezone-help" class="small">Use a location-style time zone. This preview does not schedule appointments.</p>${errorText("timezone")}
+    ${select("weekly_minutes", "Weekly time available (optional)", WEEKLY_TIME, attempted ? attempted.weeklyMinutes : learner?.weeklyMinutes?.toString())}
+    <label class="check"><input id="exploratory" type="checkbox" name="exploratory" value="yes" ${attempted ? (attempted.exploratory ? "checked" : "") : learner?.exploratory ? "checked" : ""}${exploratoryError ? ' aria-invalid="true" aria-describedby="exploratory-error"' : ""}><span>Keep an exploratory path open alongside my primary goal.</span></label>${errorText("exploratory")}`;
 }
 export function readinessPage(
   mode: ApplicationMode,
@@ -440,6 +465,9 @@ export function privateProgressPage(
     }<p><a href="/learn">Return to your learning path</a></p></section>`,
   );
 }
+function profileErrorSummary(edit: ProfileEditResult) {
+  return `<div class="notice" role="alert"><h3>Fix your profile before saving</h3><p>Your changes were not saved. Correct the marked fields, then save again.</p><ul>${edit.errors.map((error) => `<li><a href="#${error.field}">${escape(error.message)}</a></li>`).join("")}</ul></div>`;
+}
 export function dashboard(
   learner: Learner,
   progress: Exercise | undefined,
@@ -448,6 +476,7 @@ export function dashboard(
   assignments: ContentVersion[] = [],
   choice: AssignmentChoice | null = null,
   recommendedLesson: ContentVersion | null = null,
+  profileState?: ProfileEditResult,
 ) {
   const done = Boolean(progress?.completed_at);
   const status = done
@@ -463,8 +492,10 @@ export function dashboard(
     ? `<p><strong>Optional published sample lesson:</strong> ${escape(recommendedLesson.title)} · version ${recommendedLesson.version}. <a href="/library/${encodeURIComponent(recommendedLesson.id)}">Open current sample lesson</a>.</p><p class="small">This catalog sample has no scheduled duration or qualified curriculum sign-off. Opening it records activity; it does not assess your skill.</p>`
     : '<p role="status">No additional published sample lesson currently fits your direction and completed prerequisites. Your starter lesson remains available.</p>';
   return page(
-    "Your learning path",
-    `<section class="dashboard-head"><div><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment.</span></aside></section><section class="learning-plan" aria-labelledby="learning-plan-title"><p class="eyebrow">PRIVATE FOUNDATION PREVIEW</p><h2 id="learning-plan-title">Your starter plan</h2><p>Focus: ${escape(plan.focus)}. ${escape(plan.guidance)}</p><p class="small">Weekly time: ${escape(time ?? "Not specified")} · Time zone: ${escape(learner.timezone ?? "Not specified")} · AI experience: self-reported ${escape(learner.experience ? EXPERIENCE[learner.experience] : "Not specified")}</p><ol>${plan.steps.map((step) => `<li>${step.minutes} minutes · ${escape(step.action)}</li>`).join("")}</ol>${plan.nextSession ? `<p>${escape(plan.nextSession)}</p>` : ""}${plan.exploratory ? `<p>${escape(plan.exploratory)}</p>` : ""}<p class="small">The timed steps use only the local starter lesson. Revisit or skip steps you already completed. These suggestions do not book coaching or certify a skill.</p><section aria-label="Suggested next sample lesson"><h3>Explore another sample lesson</h3>${nextLesson}</section></section>${assignmentSection(assignments, choice, csrf)}<section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? "Review your work" : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card"><p class="eyebrow">WHERE THIS CAN GO</p><h2>Learn together.<br>Contribute something useful.</h2><p>Learning circles, peer contributions and more paths are on the roadmap. This preview begins with your first practical exercise.</p><p class="small">Community and coaching features are not yet available.</p></aside></section><p><a class="button secondary" href="/library">Browse published learning library</a> <a class="button secondary" href="/milestones">Plan goals and milestones</a> <a class="button secondary" href="/career">Explore optional career planning</a> <a class="button secondary" href="/contribute">Draft a private sample contribution</a> <a class="button secondary" href="/evidence">Manage private evidence</a> <a class="button secondary" href="/progress">View private learning activity</a> <a class="button secondary" href="/tailored-review">Check tailored-review availability</a> <a class="button secondary" href="/availability">View sample appointment windows</a></p><p><a href="/api/member/export">Download my structured preview records</a>. This versioned JSON includes current profile, learning, plans and retained proposal records. Evidence samples use a separate download. The export stops at 100 records or 256 KiB and excludes audit, billing, derivatives, provider and backup copies.</p><section class="profile-form"><h2>Adjust your direction</h2><p>Change goals and interests whenever you want. Your saved exercise stays with this preview.</p><form method="post" action="/profile">${hidden(csrf)}${notice(errors)}${profileFields(learner)}<button type="submit">Save my direction</button></form></section><form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete my local preview and all its saved work.</span></label><button class="secondary" type="submit">Delete this preview</button></form>`,
+    profileState?.errors.length
+      ? "Error in your profile"
+      : "Your learning path",
+    `<section class="dashboard-head"><div><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment.</span></aside></section><section class="learning-plan" aria-labelledby="learning-plan-title"><p class="eyebrow">PRIVATE FOUNDATION PREVIEW</p><h2 id="learning-plan-title">Your starter plan</h2><p>Focus: ${escape(plan.focus)}. ${escape(plan.guidance)}</p><p class="small">Weekly time: ${escape(time ?? "Not specified")} · Time zone: ${escape(learner.timezone ?? "Not specified")} · AI experience: self-reported ${escape(learner.experience ? EXPERIENCE[learner.experience] : "Not specified")}</p><ol>${plan.steps.map((step) => `<li>${step.minutes} minutes · ${escape(step.action)}</li>`).join("")}</ol>${plan.nextSession ? `<p>${escape(plan.nextSession)}</p>` : ""}${plan.exploratory ? `<p>${escape(plan.exploratory)}</p>` : ""}<p class="small">The timed steps use only the local starter lesson. Revisit or skip steps you already completed. These suggestions do not book coaching or certify a skill.</p><section aria-label="Suggested next sample lesson"><h3>Explore another sample lesson</h3>${nextLesson}</section></section>${assignmentSection(assignments, choice, csrf)}<section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? "Review your work" : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card"><p class="eyebrow">WHERE THIS CAN GO</p><h2>Learn together.<br>Contribute something useful.</h2><p>Learning circles, peer contributions and more paths are on the roadmap. This preview begins with your first practical exercise.</p><p class="small">Community and coaching features are not yet available.</p></aside></section><p><a class="button secondary" href="/library">Browse published learning library</a> <a class="button secondary" href="/milestones">Plan goals and milestones</a> <a class="button secondary" href="/career">Explore optional career planning</a> <a class="button secondary" href="/contribute">Draft a private sample contribution</a> <a class="button secondary" href="/evidence">Manage private evidence</a> <a class="button secondary" href="/progress">View private learning activity</a> <a class="button secondary" href="/tailored-review">Check tailored-review availability</a> <a class="button secondary" href="/availability">View sample appointment windows</a></p><p><a href="/api/member/export">Download my structured preview records</a>. This versioned JSON includes current profile, learning, plans and retained proposal records. Evidence samples use a separate download. The export stops at 100 records or 256 KiB and excludes audit, billing, derivatives, provider and backup copies.</p><section class="profile-form"><h2>Adjust your direction</h2><p>Change goals and interests whenever you want. Your saved exercise stays with this preview.</p><form method="post" action="/profile">${hidden(csrf)}${profileState ? profileErrorSummary(profileState) : notice(errors)}${profileFields(learner, profileState?.attempted, profileState?.errors)}<button type="submit">Save my direction</button></form></section><form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete my local preview and all its saved work.</span></label><button class="secondary" type="submit">Delete this preview</button></form>`,
   );
 }
 function evidenceLineage(item: OwnedEvidence) {

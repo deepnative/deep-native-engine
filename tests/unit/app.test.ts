@@ -1873,15 +1873,37 @@ it("onboards only valid profiles and ignores caller-controlled ownership", async
 it("lets an active member revise their direction without selecting another owner", async () => {
   const { agent, csrf } = await client();
   active();
-  await agent
+  const rejected = await agent
     .post("/profile")
     .set("Host", host)
     .set("Origin", origin)
     .type("form")
-    .send({ csrf, background: "explorer", goal: "admin" })
-    .expect(422)
-    .expect(/Choose valid profile, time zone and weekly time options/);
+    .send({
+      csrf,
+      background: "professional",
+      goal: "work",
+      domain_tags: "education",
+      it_roles: "analysis",
+      weekly_minutes: "60",
+      timezone: "Mars/Olympus",
+    })
+    .expect(422);
+  expect(rejected.text).toContain("Error in your profile");
+  expect(rejected.text).toContain('href="#timezone"');
+  expect(rejected.text).toContain('id="timezone"');
+  expect(rejected.text).toContain('aria-invalid="true"');
+  expect(rejected.text).toContain('value="Mars/Olympus"');
+  expect(rejected.text).toContain('<option value="work" selected>');
+  expect(rejected.text).toContain('<option value="60" selected>');
+  expect(rejected.text).toContain(
+    'name="domain_tags" value="education" checked',
+  );
+  expect(rejected.text).toContain('name="it_roles" value="analysis" checked');
+  expect(rejected.text).toContain("Understand AI and try something useful");
   expect(db.updateProfile).not.toHaveBeenCalled();
+  const savedPage = await agent.get("/learn").set("Host", host).expect(200);
+  expect(savedPage.text).toContain('<option value="everyday" selected>');
+  expect(savedPage.text).not.toContain('value="Mars/Olympus"');
   await agent
     .post("/profile")
     .set("Host", host)
@@ -1894,6 +1916,8 @@ it("lets an active member revise their direction without selecting another owner
       domain_tags: "education",
       it_roles: "analysis",
       exploratory: "yes",
+      weekly_minutes: "60",
+      timezone: "America/Toronto",
       id: "other",
     })
     .expect(303)
@@ -1905,6 +1929,8 @@ it("lets an active member revise their direction without selecting another owner
       domainTags: ["education"],
       itRoles: ["analysis"],
       exploratory: true,
+      weeklyMinutes: 60,
+      timezone: "America/Toronto",
     }),
   );
 });

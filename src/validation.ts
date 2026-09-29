@@ -13,6 +13,36 @@ export interface SubmissionError {
   field: SubmissionField | null;
   message: string;
 }
+export type ProfileField =
+  | "background"
+  | "goal"
+  | "background_tags"
+  | "domain_tags"
+  | "it_roles"
+  | "experience"
+  | "timezone"
+  | "weekly_minutes"
+  | "exploratory";
+export interface ProfileError {
+  field: ProfileField;
+  message: string;
+}
+export interface ProfileFormState {
+  background: string;
+  goal: string;
+  backgroundTags: string[];
+  domainTags: string[];
+  itRoles: string[];
+  experience: string;
+  timezone: string;
+  weeklyMinutes: string;
+  exploratory: boolean;
+}
+export interface ProfileEditResult {
+  input: LearnerProfile | null;
+  attempted: ProfileFormState;
+  errors: ProfileError[];
+}
 function timeZone(value: unknown): string | null | undefined {
   if (value === undefined || value === "") return null;
   if (typeof value !== "string" || value.length > 64 || value.trim() !== value)
@@ -37,7 +67,16 @@ function selections(value: unknown, choices: object): string[] | null {
     return null;
   return values as string[];
 }
-export function profile(body: Fields): LearnerProfile | null {
+function safeChoice(value: unknown, choices: object): string {
+  return typeof value === "string" && Object.hasOwn(choices, value)
+    ? value
+    : "";
+}
+function safeSelections(value: unknown, choices: object): string[] {
+  const values = Array.isArray(value) ? value : [value];
+  return [...new Set(values.filter((item) => safeChoice(item, choices)))];
+}
+function parseProfile(body: Fields): ProfileEditResult {
   const backgroundTags = selections(body.background_tags, BACKGROUNDS);
   const domainTags = selections(body.domain_tags, DOMAINS);
   const itRoles = selections(body.it_roles, IT_ROLES);
@@ -49,35 +88,91 @@ export function profile(body: Fields): LearnerProfile | null {
           Object.hasOwn(WEEKLY_TIME, body.weekly_minutes)
         ? Number(body.weekly_minutes)
         : undefined;
+  const errors: ProfileError[] = [];
+  if (!safeChoice(body.background, BACKGROUNDS))
+    errors.push({
+      field: "background",
+      message: "Your starting point: choose one of the listed options.",
+    });
+  if (!safeChoice(body.goal, GOALS))
+    errors.push({
+      field: "goal",
+      message: "What would you like to do? Choose one of the listed options.",
+    });
+  if (!backgroundTags)
+    errors.push({
+      field: "background_tags",
+      message: "Other starting points: choose each listed option only once.",
+    });
+  if (!domainTags)
+    errors.push({
+      field: "domain_tags",
+      message: "Domains of interest: choose each listed option only once.",
+    });
+  if (!itRoles)
+    errors.push({
+      field: "it_roles",
+      message: "IT specialties: choose each listed option only once.",
+    });
   if (
-    typeof body.background !== "string" ||
-    !Object.hasOwn(BACKGROUNDS, body.background) ||
-    typeof body.goal !== "string" ||
-    !Object.hasOwn(GOALS, body.goal) ||
-    body.synthetic !== "yes" ||
-    !backgroundTags ||
-    !domainTags ||
-    !itRoles ||
-    timezone === undefined ||
-    weeklyMinutes === undefined ||
-    (body.experience !== undefined &&
-      body.experience !== "" &&
-      (typeof body.experience !== "string" ||
-        !Object.hasOwn(EXPERIENCE, body.experience))) ||
-    (body.exploratory !== undefined && body.exploratory !== "yes")
+    body.experience !== undefined &&
+    body.experience !== "" &&
+    !safeChoice(body.experience, EXPERIENCE)
   )
-    return null;
-  return {
-    background: body.background as LearnerProfile["background"],
-    goal: body.goal as LearnerProfile["goal"],
-    backgroundTags: backgroundTags as LearnerProfile["backgroundTags"],
-    domainTags: domainTags as LearnerProfile["domainTags"],
-    itRoles: itRoles as LearnerProfile["itRoles"],
-    experience: (body.experience || null) as LearnerProfile["experience"],
+    errors.push({
+      field: "experience",
+      message: "Experience with AI: choose one of the listed options.",
+    });
+  if (timezone === undefined)
+    errors.push({
+      field: "timezone",
+      message:
+        "Time zone: enter a valid location-style time zone, or leave it blank.",
+    });
+  if (weeklyMinutes === undefined)
+    errors.push({
+      field: "weekly_minutes",
+      message: "Weekly time available: choose one of the listed options.",
+    });
+  if (body.exploratory !== undefined && body.exploratory !== "yes")
+    errors.push({
+      field: "exploratory",
+      message: "Exploratory path: use the listed checkbox only.",
+    });
+  const attempted: ProfileFormState = {
+    background: safeChoice(body.background, BACKGROUNDS),
+    goal: safeChoice(body.goal, GOALS),
+    backgroundTags: safeSelections(body.background_tags, BACKGROUNDS),
+    domainTags: safeSelections(body.domain_tags, DOMAINS),
+    itRoles: safeSelections(body.it_roles, IT_ROLES),
+    experience: safeChoice(body.experience, EXPERIENCE),
+    timezone:
+      typeof body.timezone === "string" && body.timezone.length <= 64
+        ? body.timezone
+        : "",
+    weeklyMinutes: safeChoice(body.weekly_minutes, WEEKLY_TIME),
     exploratory: body.exploratory === "yes",
-    timezone,
-    weeklyMinutes,
   };
+  const input: LearnerProfile | null = errors.length
+    ? null
+    : {
+        background: body.background as LearnerProfile["background"],
+        goal: body.goal as LearnerProfile["goal"],
+        backgroundTags: backgroundTags as LearnerProfile["backgroundTags"],
+        domainTags: domainTags as LearnerProfile["domainTags"],
+        itRoles: itRoles as LearnerProfile["itRoles"],
+        experience: (body.experience || null) as LearnerProfile["experience"],
+        exploratory: body.exploratory === "yes",
+        timezone,
+        weeklyMinutes,
+      };
+  return { input, attempted, errors };
+}
+export function profile(body: Fields): LearnerProfile | null {
+  return body.synthetic === "yes" ? parseProfile(body).input : null;
+}
+export function profileEdit(body: Fields): ProfileEditResult {
+  return parseProfile(body);
 }
 export function submission(body: Fields) {
   const instruction =
