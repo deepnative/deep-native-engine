@@ -109,15 +109,55 @@ export function workflowFeedbackStore(pool: Pool): WorkflowFeedbackStore {
         expectedRevision < 1
       )
         return false;
-      const result = await pool.query(
-        `DELETE FROM workflow_feedback f USING principals p,learners l
-         WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
-           AND p.expires_at>CURRENT_TIMESTAMP AND l.id=p.id
-           AND f.member_id=l.id AND f.workflow_id=$2 AND f.workflow_version=$3
-           AND f.revision=$4 RETURNING f.revision`,
-        [hash(token), workflowId, workflowVersion, expectedRevision],
-      );
-      return result.rowCount === 1;
+      try {
+        const client = await pool.connect();
+        let releaseError: Error | undefined;
+        try {
+          await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+          await client.query("SET LOCAL lock_timeout='5s'");
+          // Hold principal and workspace before waiting for an export's
+          // feedback-row lock. Revocation and account deletion cannot pass
+          // those shared locks; expiry is checked again after the row wait.
+          const principal = (
+            await client.query<{ id: string; expiresAt: Date }>(
+              `SELECT id,expires_at AS "expiresAt" FROM principals
+               WHERE token_hash=$1 AND kind='member' AND revoked_at IS NULL
+                 AND expires_at>clock_timestamp() FOR SHARE`,
+              [hash(token)],
+            )
+          ).rows[0];
+          if (!principal) return false;
+          const workspace = await client.query(
+            `SELECT id FROM workspaces WHERE owner_principal_id=$1
+             AND deleting_at IS NULL FOR SHARE`,
+            [principal.id],
+          );
+          if (!workspace.rows[0]) return false;
+          const deleted = await client.query(
+            `DELETE FROM workflow_feedback WHERE member_id=$1
+             AND workflow_id=$2 AND workflow_version=$3 AND revision=$4
+             RETURNING revision`,
+            [principal.id, workflowId, workflowVersion, expectedRevision],
+          );
+          if (deleted.rowCount !== 1) return false;
+          const current = await client.query<{ valid: boolean }>(
+            "SELECT clock_timestamp() < $1::timestamptz AS valid",
+            [principal.expiresAt],
+          );
+          if (!current.rows[0]?.valid) return false;
+          await client.query("COMMIT");
+          return true;
+        } finally {
+          try {
+            await client.query("ROLLBACK");
+          } catch {
+            releaseError = new Error("Feedback withdrawal rollback failed");
+          }
+          client.release(releaseError);
+        }
+      } catch {
+        return false;
+      }
     },
   };
 }
