@@ -3,7 +3,8 @@ import request from "supertest";
 import type { Server } from "node:http";
 import { once } from "node:events";
 import { app } from "../../src/app.ts";
-import type { Store } from "../../src/store.ts";
+import type { Store, ExerciseHistory } from "../../src/store.ts";
+import { LESSON } from "../../src/content.ts";
 import {
   disabledAuthorizationStore,
   type AuthorizationStore,
@@ -950,11 +951,36 @@ it("shows the approved no-purchase preview while keeping production terms undeci
   await agent.get("/checkout/pilot").set("Host", host).expect(404);
 });
 function storage() {
+  const progress = vi.fn<Store["progress"]>().mockResolvedValue(undefined);
   return {
     session: vi.fn<Store["session"]>().mockResolvedValue({ kind: "new" }),
     create: vi.fn<Store["create"]>().mockResolvedValue(undefined),
     updateProfile: vi.fn<Store["updateProfile"]>().mockResolvedValue(undefined),
-    progress: vi.fn<Store["progress"]>().mockResolvedValue(undefined),
+    progress,
+    withExerciseRead: async <T>(
+      _token: string,
+      render: (rows: ExerciseHistory[]) => T,
+    ): Promise<T | null> => {
+      const saved = await progress(member.id);
+      return render(
+        saved
+          ? [
+              {
+                lessonId: LESSON.id,
+                version: LESSON.version,
+                instruction: saved.instruction,
+                verification: saved.verification,
+                completedAt: saved.completed_at,
+                withdrawnAt: saved.withdrawn_at ?? null,
+                goalAtStart: saved.goal_at_start ?? null,
+              },
+            ]
+          : [],
+      );
+    },
+    withdrawExercise: vi
+      .fn<Store["withdrawExercise"]>()
+      .mockResolvedValue("unavailable"),
     lessonActivities: vi.fn<Store["lessonActivities"]>().mockResolvedValue([]),
     openLesson: vi.fn<Store["openLesson"]>().mockResolvedValue(true),
     advanceLesson: vi.fn<Store["advanceLesson"]>().mockResolvedValue(true),
@@ -968,7 +994,7 @@ function storage() {
     createMilestone: vi.fn<Store["createMilestone"]>().mockResolvedValue(null),
     updateMilestone: vi.fn<Store["updateMilestone"]>().mockResolvedValue(false),
     deleteMilestone: vi.fn<Store["deleteMilestone"]>().mockResolvedValue(false),
-    save: vi.fn<Store["save"]>().mockResolvedValue(undefined),
+    save: vi.fn<Store["save"]>().mockResolvedValue("saved"),
     remove: vi.fn<Store["remove"]>().mockResolvedValue(undefined),
   };
 }
@@ -1450,7 +1476,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v8",
+          version: "local-member-records-v9",
           profile: { id: "owned" },
           records: { milestones: [] },
         },
@@ -1477,7 +1503,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v8",
+    version: "local-member-records-v9",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -1550,34 +1576,47 @@ it("enforces private workspace and cohort decisions on direct API requests", asy
         body: "Shared guide",
       }),
   };
-  const agent = managedAgent(
-    app(db, { origin, secret: "secret", authorization }),
+  const server = app(db, { origin, secret: "secret", authorization }).listen(0);
+  managedServers.push(server);
+  await once(server, "listening");
+  const agent = request.agent(server);
+  await atStage("open session", agent.get("/").set("Host", host).expect(200));
+  await atStage(
+    "deny foreign workspace",
+    agent
+      .get("/api/workspaces/other/private?purpose=ticket")
+      .set("Host", host)
+      .expect(403, { error: "forbidden" }),
   );
-  await agent.get("/").set("Host", host).expect(200);
-  await agent
-    .get("/api/workspaces/other/private?purpose=ticket")
-    .set("Host", host)
-    .expect(403, { error: "forbidden" });
-  await agent
-    .get("/api/workspaces/owned/private")
-    .set("Host", host)
-    .expect(200)
-    .expect((response) => expect(response.body.via).toBe("member"));
+  await atStage(
+    "read own workspace",
+    agent
+      .get("/api/workspaces/owned/private")
+      .set("Host", host)
+      .expect(200)
+      .expect((response) => expect(response.body.via).toBe("member")),
+  );
   expect(authorization.readWorkspace).toHaveBeenNthCalledWith(
     1,
     expect.stringMatching(/^[a-f0-9]{64}$/),
     "other",
     "ticket",
   );
-  await agent
-    .get("/api/cohorts/group/content/other")
-    .set("Host", host)
-    .expect(403, { error: "forbidden" });
-  await agent
-    .get("/api/cohorts/group/content/guide")
-    .set("Host", host)
-    .expect(200)
-    .expect((response) => expect(response.body.body).toBe("Shared guide"));
+  await atStage(
+    "deny foreign cohort content",
+    agent
+      .get("/api/cohorts/group/content/other")
+      .set("Host", host)
+      .expect(403, { error: "forbidden" }),
+  );
+  await atStage(
+    "read shared cohort content",
+    agent
+      .get("/api/cohorts/group/content/guide")
+      .set("Host", host)
+      .expect(200)
+      .expect((response) => expect(response.body.body).toBe("Shared guide")),
+  );
 });
 it("preserves an unregistered session across tabs and rotates an expired session", async () => {
   const { agent, csrf } = await client();
@@ -2506,7 +2545,13 @@ it("retains invalid answers without claiming they were saved, then saves valid i
     .set("Host", host)
     .set("Origin", origin)
     .type("form")
-    .send({ csrf, intent: "complete", instruction: "short" })
+    .send({
+      csrf,
+      lesson_id: LESSON.id,
+      lesson_version: String(LESSON.version),
+      intent: "complete",
+      instruction: "short",
+    })
     .expect(422);
   expect(invalid.text).toContain("short");
   expect(invalid.text).toContain('href="#instruction"');
@@ -2522,6 +2567,8 @@ it("retains invalid answers without claiming they were saved, then saves valid i
     .type("form")
     .send({
       csrf,
+      lesson_id: LESSON.id,
+      lesson_version: String(LESSON.version),
       intent: "draft",
       instruction: "My private draft",
       learner_id: "other",
@@ -3146,6 +3193,8 @@ it("reports unknown pages and storage failures without leaking secrets or claimi
     .type("form")
     .send({
       csrf,
+      lesson_id: LESSON.id,
+      lesson_version: String(LESSON.version),
       intent: "draft",
       instruction: attemptedInstruction,
       verification: attemptedVerification,
@@ -3183,6 +3232,134 @@ it("handles completed or saved paths without inventing formal assessment", async
   });
   const page = await agent.get("/learn").set("Host", host);
   expect(page.text).toContain("Completed · self-assessed");
+});
+it("requires a confirmed owned version to withdraw completed starter text", async () => {
+  const { agent, csrf } = await client();
+  active();
+  db.progress.mockResolvedValue({
+    instruction: "Invented private instruction",
+    verification: "Invented private verification",
+    completed_at: new Date("2026-09-29T00:00:00Z"),
+  });
+  const current = await agent.get("/lesson").set("Host", host).expect(200);
+  expect(current.text).toContain("Withdraw completed exercise text");
+  const post = (path: string, body: Record<string, string>) =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...body });
+  await post("/exercise/clear-instructions/1/withdraw", {}).expect(422);
+  await post("/exercise/clear-instructions/1/withdraw", {
+    confirm: "yes",
+    learner_id: "other",
+  }).expect(422);
+  await post("/exercise/clear-instructions/0/withdraw", {
+    confirm: "yes",
+  }).expect(404);
+  await post("/exercise/other/1/withdraw", { confirm: "yes" }).expect(404);
+  expect(db.withdrawExercise).not.toHaveBeenCalled();
+  db.withdrawExercise.mockResolvedValueOnce("withdrawn");
+  await post("/exercise/clear-instructions/1/withdraw", { confirm: "yes" })
+    .expect(303)
+    .expect("Location", "/lesson");
+  expect(db.withdrawExercise).toHaveBeenCalledWith(
+    expect.any(String),
+    LESSON.id,
+    1,
+  );
+  db.withdrawExercise.mockResolvedValueOnce("already-withdrawn");
+  await post("/exercise/clear-instructions/1/withdraw", {
+    confirm: "yes",
+  }).expect(303);
+  await post("/exercise/clear-instructions/1/withdraw", {
+    confirm: "yes",
+  }).expect(404);
+  db.withdrawExercise.mockRejectedValueOnce(
+    new Error("secret database detail"),
+  );
+  const uncertain = await post("/exercise/clear-instructions/1/withdraw", {
+    confirm: "yes",
+  }).expect(503);
+  expect(uncertain.text).not.toContain("secret database detail");
+  expect(uncertain.text).toContain("inspect the current state");
+});
+it("never echoes stale exercise text after withdrawal, including validation and uncertain saves", async () => {
+  const { agent, csrf } = await client();
+  active();
+  db.progress.mockResolvedValue({
+    instruction: null,
+    verification: null,
+    completed_at: new Date("2026-09-29T00:00:00Z"),
+    withdrawn_at: new Date("2026-09-29T01:00:00Z"),
+  });
+  const attempted =
+    "Invented stale private instruction that must remain hidden";
+  const post = (instruction: string, verification: string) =>
+    agent
+      .post("/exercise")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf,
+        lesson_id: LESSON.id,
+        lesson_version: String(LESSON.version),
+        intent: "complete",
+        instruction,
+        verification,
+        checked: "yes",
+      });
+  const invalid = await post(attempted, "short").expect(409);
+  expect(invalid.text).not.toContain(attempted);
+  expect(db.save).not.toHaveBeenCalled();
+  db.save.mockResolvedValueOnce("withdrawn");
+  const stale = await post(
+    attempted,
+    "Check the invented source against notes",
+  ).expect(409);
+  expect(stale.text).not.toContain(attempted);
+  db.save.mockRejectedValueOnce(new Error("secret database detail"));
+  const uncertain = await post(
+    attempted,
+    "Check the invented source against notes",
+  ).expect(503);
+  expect(uncertain.text).not.toContain(attempted);
+  expect(uncertain.text).not.toContain("secret database detail");
+  const page = await agent.get("/lesson").set("Host", host).expect(200);
+  expect(page.text).toContain("Saved exercise text withdrawn");
+  expect(page.text).not.toContain(attempted);
+});
+it("rejects a form pinned to another starter version before saving or echoing its text", async () => {
+  const { agent, csrf } = await client();
+  active();
+  const staleText = "Invented text from an earlier starter exercise version";
+  for (const version of ["2", "", "01"]) {
+    const result = await agent
+      .post("/exercise")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf,
+        lesson_id: LESSON.id,
+        lesson_version: version,
+        intent: "draft",
+        instruction: staleText,
+      })
+      .expect(409);
+    expect(result.text).not.toContain(staleText);
+  }
+  expect(db.save).not.toHaveBeenCalled();
+});
+it("withholds lesson text when the owner read cannot be confirmed", async () => {
+  const { agent } = await client();
+  active();
+  db.withExerciseRead = async () => null;
+  const response = await agent.get("/lesson").set("Host", host).expect(403);
+  expect(response.text).toContain("Lesson unavailable");
+  expect(response.text).not.toContain("Your instruction");
 });
 it("selects only an eligible published assignment for the active member and rejects stale or forged choices", async () => {
   const item: ContentVersion = {

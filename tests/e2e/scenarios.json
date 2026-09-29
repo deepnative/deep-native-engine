@@ -572,6 +572,15 @@
       "critical": true
     },
     {
+      "id": "L86",
+      "actor": "General, non-IT professional and IT learners",
+      "preconditions": "Three separate local member sessions with completed invented starter exercises; desktop or mobile Chromium",
+      "steps": "Complete the starter exercise, inspect owner export, deny a second member's read and withdrawal, save the second member's own exercise, use the keyboard confirmation to withdraw both owner text fields, reload each lesson and export, and submit a stale completed form",
+      "expected": "Both owner text fields disappear from lesson and export while the unrelated member's work remains; a text-free self-reported completion marker remains, stale saves cannot restore text, and the responsive page makes no hosted-erasure or qualified-review claim",
+      "issues": [363, 40],
+      "critical": true
+    },
+    {
       "id": "L59",
       "actor": "Member and unrelated member",
       "preconditions": "Active local preview with private PostgreSQL evidence storage and no live scanner",

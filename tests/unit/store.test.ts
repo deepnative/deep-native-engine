@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 import { store, hash, migrate } from "../../src/store.ts";
 import type { MilestoneInput } from "../../src/milestones.ts";
 function pool() {
-  const query = vi.fn().mockResolvedValue({ rows: [] });
+  const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
   return { query, value: { query } as unknown as Pool };
 }
 it("binds the hash rather than raw bearer tokens and distinguishes new, expired and active sessions", async () => {
@@ -300,4 +300,202 @@ it("keeps milestone reads and optimistic edits scoped to the owning member", asy
   expect(p.query.mock.calls[6]![1]).toEqual(["member-a", "milestone-a", 2]);
   p.query.mockResolvedValueOnce({ rowCount: 0 });
   expect(await db.deleteMilestone("member-a", "milestone-a", 1)).toBe(false);
+});
+
+function exercisePool(
+  options: {
+    principal?: boolean;
+    workspace?: boolean;
+    completed?: boolean;
+    existing?: boolean;
+    withdrawn?: boolean;
+    expired?: boolean;
+    failAt?: string;
+    rollbackFails?: boolean;
+  } = {},
+) {
+  const query = vi.fn(async (sql: string) => {
+    if (sql === options.failAt || (sql === "ROLLBACK" && options.rollbackFails))
+      throw new Error("synthetic failure");
+    if (sql.startsWith("SELECT id,expires_at"))
+      return {
+        rows:
+          options.principal === false
+            ? []
+            : [{ id: "owned", expires_at: new Date("2035-01-01") }],
+      };
+    if (sql.startsWith("SELECT id FROM workspaces"))
+      return { rows: options.workspace === false ? [] : [{ id: "owned" }] };
+    if (sql.startsWith("SELECT completed_at"))
+      return {
+        rows:
+          options.existing === false
+            ? []
+            : [
+                {
+                  completed_at:
+                    options.completed === false ? null : new Date("2026-01-01"),
+                  withdrawn_at: options.withdrawn
+                    ? new Date("2026-01-02")
+                    : null,
+                },
+              ],
+      };
+    if (sql.startsWith("SELECT lesson_id"))
+      return {
+        rows: [
+          {
+            lessonId: "clear-instructions",
+            version: 1,
+            instruction: "Invented private text",
+            verification: "Invented check",
+            completedAt: new Date("2026-01-01"),
+            withdrawnAt: null,
+            goalAtStart: "everyday",
+          },
+        ],
+      };
+    if (sql.startsWith("SELECT clock_timestamp"))
+      return { rows: [{ valid: !options.expired }] };
+    return { rows: [], rowCount: 1 };
+  });
+  const release = vi.fn();
+  const connect = vi.fn().mockResolvedValue({ query, release });
+  return {
+    query,
+    release,
+    connect,
+    value: { query, connect } as unknown as Pool,
+  };
+}
+
+it.each([
+  [{}, "withdrawn"],
+  [{ withdrawn: true }, "already-withdrawn"],
+  [{ existing: false }, "unavailable"],
+  [{ completed: false }, "unavailable"],
+  [{ principal: false }, "unavailable"],
+  [{ workspace: false }, "unavailable"],
+  [{ expired: true }, "unavailable"],
+] as const)(
+  "reports the truthful exercise withdrawal outcome for %j",
+  async (options, outcome) => {
+    const p = exercisePool(options);
+    expect(
+      await store(p.value).withdrawExercise(
+        "private-owner-token",
+        "clear-instructions",
+        1,
+      ),
+    ).toBe(outcome);
+    expect(p.release).toHaveBeenCalledExactlyOnceWith(undefined);
+  },
+);
+
+it("renders exercise history under read locks, denies unavailable owners and binds historical versions", async () => {
+  const p = exercisePool();
+  const render = vi.fn((rows) => JSON.stringify(rows));
+  expect(await store(p.value).withExerciseRead("owner", render)).toContain(
+    "Invented private text",
+  );
+  expect(render).toHaveBeenCalledOnce();
+  expect(
+    p.query.mock.calls.find(([sql]) =>
+      sql.startsWith("SELECT id FROM workspaces"),
+    )![0],
+  ).toContain("FOR SHARE");
+  expect(
+    await store(exercisePool({ principal: false }).value).withExerciseRead(
+      "owner",
+      render,
+    ),
+  ).toBeNull();
+  const old = pool();
+  await store(old.value).progress("owned", "older-lesson", 2);
+  expect(old.query).toHaveBeenCalledWith(expect.any(String), [
+    "owned",
+    "older-lesson",
+    2,
+  ]);
+});
+
+it("rejects malformed exercise withdrawal identifiers and bearer tokens before connecting", async () => {
+  const p = exercisePool(),
+    db = store(p.value);
+  for (const [id, version] of [
+    [null, 1],
+    ["../x", 1],
+    ["clear-instructions", 0],
+    ["clear-instructions", 1.1],
+    ["clear-instructions", 2147483648],
+  ] as const) {
+    expect(await db.withdrawExercise("owner", id as string, version)).toBe(
+      "unavailable",
+    );
+  }
+  for (const token of ["", " ", null] as const) {
+    expect(
+      await db.withdrawExercise(token as string, "clear-instructions", 1),
+    ).toBe("unavailable");
+    expect(
+      await db.withExerciseRead(token as string, () => "unexpected"),
+    ).toBeNull();
+  }
+  expect(p.connect).not.toHaveBeenCalled();
+});
+
+it("rolls back exercise callback/query/commit failures and discards a failed rollback connection", async () => {
+  for (const options of [
+    { failAt: "COMMIT" },
+    { failAt: "SET LOCAL lock_timeout='5s'", rollbackFails: true },
+  ]) {
+    const p = exercisePool(options);
+    await expect(
+      store(p.value).withdrawExercise("owner", "clear-instructions", 1),
+    ).rejects.toThrow("synthetic failure");
+    expect(p.query).toHaveBeenCalledWith("ROLLBACK");
+    expect(p.release).toHaveBeenCalledWith(
+      options.rollbackFails ? expect.any(Error) : undefined,
+    );
+  }
+  const p = exercisePool();
+  await expect(
+    store(p.value).withExerciseRead("owner", () => {
+      throw new Error("render unavailable");
+    }),
+  ).rejects.toThrow("render unavailable");
+  expect(p.query).toHaveBeenCalledWith("ROLLBACK");
+  p.connect.mockRejectedValueOnce(new Error("connection unavailable"));
+  await expect(
+    store(p.value).withdrawExercise("owner", "clear-instructions", 1),
+  ).rejects.toThrow("connection unavailable");
+});
+
+it("distinguishes saved, immutable completion and withdrawn exercise save outcomes", async () => {
+  const p = pool(),
+    db = store(p.value);
+  p.query.mockResolvedValueOnce({ rows: [], rowCount: 1 });
+  expect(
+    await db.save("owned", {
+      instruction: "sample",
+      verification: "check",
+      complete: true,
+    }),
+  ).toBe("saved");
+  for (const rows of [
+    [],
+    [{ withdrawn_at: null }],
+    [{ withdrawn_at: new Date() }],
+  ]) {
+    p.query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows });
+    expect(
+      await db.save("owned", {
+        instruction: "stale",
+        verification: "stale",
+        complete: false,
+      }),
+    ).toBe(rows[0]?.withdrawn_at ? "withdrawn" : "unchanged");
+  }
 });

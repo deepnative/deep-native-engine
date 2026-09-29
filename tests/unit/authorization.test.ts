@@ -24,6 +24,57 @@ function database(...rows: unknown[]) {
   return { query, access: authorizationStore({ query } as unknown as Pool) };
 }
 
+function workspaceDatabase(
+  records: unknown[],
+  options: {
+    denied?: boolean;
+    missingWorkspace?: boolean;
+    current?: boolean | null;
+    via?: "member" | "assignment" | "support";
+    failAt?: string;
+    rollbackFails?: boolean;
+  } = {},
+) {
+  const via = options.via ?? "member";
+  const release = vi.fn();
+  const query = vi.fn(async (sql: string, _values?: unknown[]) => {
+    if (options.failAt && sql.includes(options.failAt))
+      throw Error("Synthetic read failure");
+    if (options.rollbackFails && sql === "ROLLBACK")
+      throw Error("Synthetic rollback failure");
+    if (sql.includes("WITH identity AS"))
+      return {
+        rows: options.denied
+          ? []
+          : [
+              {
+                via,
+                purpose: via === "support" ? "resolve ticket" : null,
+                actor_id: staff,
+                grant_id: via === "member" ? null : grant,
+                grant_expires_at: future,
+              },
+            ],
+      };
+    if (sql.startsWith("SELECT id FROM workspaces"))
+      return { rows: options.missingWorkspace ? [] : [{ id: workspace }] };
+    if (sql.includes("FROM exercises")) return { rows: records };
+    if (sql.includes("AS valid"))
+      return {
+        rows:
+          options.current === null ? [] : [{ valid: options.current ?? true }],
+      };
+    return { rows: [] };
+  });
+  return {
+    query,
+    release,
+    access: authorizationStore({
+      connect: async () => ({ query, release }),
+    } as unknown as Pool),
+  };
+}
+
 it("uses a fail-closed authorization store when privileged access is unconfigured", async () => {
   const disabled = disabledAuthorizationStore();
   await expect(disabled.readWorkspace(token, workspace)).resolves.toEqual({
@@ -283,26 +334,29 @@ it("revokes each grant type only for valid identifiers and an active administrat
 });
 
 it("returns authorized private records with their server-derived access path", async () => {
-  const db = database([
-    {
-      via: "support",
-      purpose: "resolve ticket",
-      lesson_id: "lesson-a",
-      lesson_version: 1,
-      instruction: "private",
-      verification: "check",
-      completed_at: null,
-    },
-    {
-      via: "support",
-      purpose: "resolve ticket",
-      lesson_id: "lesson-b",
-      lesson_version: 2,
-      instruction: "private two",
-      verification: "check two",
-      completed_at: new Date("2026-01-01T00:00:00Z"),
-    },
-  ]);
+  const db = workspaceDatabase(
+    [
+      {
+        via: "support",
+        purpose: "resolve ticket",
+        lesson_id: "lesson-a",
+        lesson_version: 1,
+        instruction: "private",
+        verification: "check",
+        completed_at: null,
+      },
+      {
+        via: "support",
+        purpose: "resolve ticket",
+        lesson_id: "lesson-b",
+        lesson_version: 2,
+        instruction: "private two",
+        verification: "check two",
+        completed_at: new Date("2026-01-01T00:00:00Z"),
+      },
+    ],
+    { via: "support" },
+  );
   await expect(
     db.access.readWorkspace(token, workspace, " resolve ticket "),
   ).resolves.toMatchObject({
@@ -315,7 +369,9 @@ it("returns authorized private records with their server-derived access path", a
       { lessonId: "lesson-b", lessonVersion: 2, instruction: "private two" },
     ],
   });
-  expect(db.query.mock.calls[0]![1]).toEqual([
+  expect(
+    db.query.mock.calls.find(([sql]) => sql.includes("WITH identity AS"))![1],
+  ).toEqual([
     expect.stringMatching(/^[a-f0-9]{64}$/),
     workspace,
     "resolve ticket",
@@ -323,15 +379,7 @@ it("returns authorized private records with their server-derived access path", a
 });
 
 it("allows an empty owned workspace and denies absent authorization", async () => {
-  const allowed = database({
-    via: "member",
-    purpose: null,
-    lesson_id: null,
-    lesson_version: null,
-    instruction: null,
-    verification: null,
-    completed_at: null,
-  });
+  const allowed = workspaceDatabase([]);
   await expect(allowed.access.readWorkspace(token, workspace)).resolves.toEqual(
     {
       kind: "allowed",
@@ -342,13 +390,19 @@ it("allows an empty owned workspace and denies absent authorization", async () =
     },
   );
   await expect(
-    database(undefined).access.readWorkspace(token, workspace),
+    workspaceDatabase([], { denied: true }).access.readWorkspace(
+      token,
+      workspace,
+    ),
   ).resolves.toEqual({ kind: "denied" });
 });
 
 it("fails closed on database audit failure without returning privileged success or content", async () => {
   const query = vi.fn().mockRejectedValue(new Error("Synthetic audit failure"));
-  const access = authorizationStore({ query } as unknown as Pool);
+  const access = authorizationStore({
+    query,
+    connect: async () => ({ query, release: vi.fn() }),
+  } as unknown as Pool);
   const attempts = [
     () =>
       access.grantAssignment(
@@ -385,7 +439,7 @@ it("fails closed on database audit failure without returning privileged success 
   ];
   for (const attempt of attempts)
     await expect(attempt()).rejects.toThrow("Synthetic audit failure");
-  expect(query).toHaveBeenCalledTimes(attempts.length);
+  expect(query).toHaveBeenCalledTimes(attempts.length + 2);
 });
 
 it.each([
@@ -428,4 +482,61 @@ it.each([
   await expect(
     authorizationStore({} as Pool).readCohort(value, cohort, content),
   ).resolves.toEqual({ kind: "denied" });
+});
+
+it("represents withdrawn exercise text as null with its retained timestamp", async () => {
+  const withdrawnAt = new Date("2026-09-29T00:00:00Z");
+  const db = workspaceDatabase([
+    {
+      via: "member",
+      purpose: null,
+      lesson_id: "lesson-a",
+      lesson_version: 1,
+      instruction: null,
+      verification: null,
+      completed_at: new Date("2026-09-28T00:00:00Z"),
+      withdrawn_at: withdrawnAt,
+    },
+  ]);
+  await expect(
+    db.access.readWorkspace(token, workspace),
+  ).resolves.toMatchObject({
+    kind: "allowed",
+    records: [{ instruction: null, verification: null, withdrawnAt }],
+  });
+});
+
+it.each([{ missingWorkspace: true }, { current: false }, { current: null }])(
+  "denies unavailable workspaces or authorization expiring while waiting",
+  async (options) => {
+    const db = workspaceDatabase([], options);
+    expect(await db.access.readWorkspace(token, workspace)).toEqual({
+      kind: "denied",
+    });
+    expect(db.query.mock.calls.some(([sql]) => sql === "COMMIT")).toBe(false);
+    expect(db.release).toHaveBeenCalledWith(undefined);
+  },
+);
+
+it.each(["FROM exercises", "INSERT INTO authorization_audit", "COMMIT"])(
+  "fails closed and releases the transaction after %s fails",
+  async (failAt) => {
+    const db = workspaceDatabase([], { via: "assignment", failAt });
+    await expect(db.access.readWorkspace(token, workspace)).rejects.toThrow(
+      "Synthetic read failure",
+    );
+    expect(db.query.mock.calls.at(-1)![0]).toBe("ROLLBACK");
+    expect(db.release).toHaveBeenCalledWith(undefined);
+  },
+);
+
+it("discards the connection if failed read rollback cannot release privacy locks", async () => {
+  const db = workspaceDatabase([], {
+    failAt: "FROM exercises",
+    rollbackFails: true,
+  });
+  await expect(db.access.readWorkspace(token, workspace)).rejects.toThrow(
+    "Synthetic read failure",
+  );
+  expect(db.release).toHaveBeenCalledWith(expect.any(Error));
 });

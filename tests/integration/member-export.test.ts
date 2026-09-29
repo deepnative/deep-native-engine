@@ -75,6 +75,56 @@ async function receiptFixture(owner: Awaited<ReturnType<typeof member>>) {
   };
 }
 
+it("exports a withdrawn completed exercise as a text-free retained completion marker", async () => {
+  const owner = await member();
+  const other = await member();
+  expect(
+    await db.save(owner.id, {
+      instruction: "Invented private starter instruction",
+      verification: "Invented private starter verification",
+      complete: true,
+    }),
+  ).toBe("saved");
+  const before = await ready(owner.token);
+  expect(JSON.stringify(before)).toContain(
+    "Invented private starter instruction",
+  );
+  expect(await db.withdrawExercise(owner.token, "clear-instructions", 1)).toBe(
+    "withdrawn",
+  );
+  const after = await ready(owner.token);
+  expect(after.version).toBe("local-member-records-v9");
+  expect(after.records).toMatchObject({
+    exercises: [
+      {
+        lessonId: "clear-instructions",
+        lessonVersion: 1,
+        instruction: null,
+        verification: null,
+        completedAt: expect.any(Date),
+        state: "withdrawn",
+        withdrawnAt: expect.any(Date),
+      },
+    ],
+  });
+  expect(JSON.stringify(after)).not.toContain(
+    "Invented private starter instruction",
+  );
+  expect(JSON.stringify(after)).not.toContain(
+    "Invented private starter verification",
+  );
+  expect((await ready(other.token)).records).toMatchObject({ exercises: [] });
+  await db.remove(owner.id);
+  expect((await exported.exportOwned(owner.token)).kind).toBe("denied");
+  expect(
+    (
+      await pool.query("SELECT count(*) FROM exercises WHERE learner_id=$1", [
+        owner.id,
+      ])
+    ).rows[0].count,
+  ).toBe("0");
+});
+
 it("exports each retained local permission receipt once with safe owned job linkage", async () => {
   const owner = await member(),
     other = await member();
@@ -361,6 +411,106 @@ it("keeps receipt withdrawal and linked job status in one repeatable snapshot", 
     await Promise.allSettled([reading]);
   }
 });
+
+it("serializes an export formed first before completed-exercise withdrawal", async () => {
+  const owner = await member();
+  await db.save(owner.id, {
+    instruction: "Invented export-first starter instruction",
+    verification: "Invented export-first starter check",
+    complete: true,
+  });
+  const controlled = controlledExport();
+  const reading = controlled.exported.exportOwned(owner.token);
+  const writerConnected = gate();
+  let writerPid = 0;
+  const writerPool = {
+    async connect() {
+      const client = await pool.connect();
+      writerPid = (await client.query("SELECT pg_backend_pid() AS pid")).rows[0]
+        .pid as number;
+      writerConnected.release();
+      return client;
+    },
+  } as unknown as Pool;
+  let writing: Promise<string> | undefined;
+  let finished = false;
+  try {
+    await controlled.authorized.wait;
+    writing = store(writerPool)
+      .withdrawExercise(owner.token, "clear-instructions", 1)
+      .then((value) => {
+        finished = true;
+        return value;
+      });
+    await writerConnected.wait;
+    expect(
+      await waitForOperation(writerPid, controlled.state.pid, () => finished),
+    ).toBe("blocked");
+    controlled.resume.release();
+    const earlier = await reading;
+    expect(earlier.kind).toBe("ready");
+    expect(JSON.stringify(earlier)).toContain(
+      "Invented export-first starter instruction",
+    );
+    expect(await writing).toBe("withdrawn");
+    const after = await ready(owner.token);
+    expect(JSON.stringify(after)).not.toContain(
+      "Invented export-first starter instruction",
+    );
+    expect(after.records).toMatchObject({
+      exercises: [{ state: "withdrawn", instruction: null }],
+    });
+  } finally {
+    controlled.resume.release();
+    await Promise.allSettled([reading, ...(writing ? [writing] : [])]);
+  }
+}, 15_000);
+
+it("fails closed when an exercise withdrawal commits before an in-flight export locks its row", async () => {
+  const owner = await member();
+  await db.save(owner.id, {
+    instruction: "Invented withdrawal-first starter instruction",
+    verification: "Invented withdrawal-first starter check",
+    complete: true,
+  });
+  const mutator = await pool.connect();
+  const controlled = controlledExport();
+  controlled.resume.release();
+  let reading: ReturnType<typeof exported.exportOwned> | undefined;
+  let finished = false;
+  try {
+    const writerPid = (await mutator.query("SELECT pg_backend_pid() AS pid"))
+      .rows[0].pid as number;
+    await mutator.query("BEGIN");
+    await mutator.query(
+      "UPDATE exercises SET instruction=NULL,verification=NULL,withdrawn_at=clock_timestamp() WHERE learner_id=$1 AND lesson_id='clear-instructions' AND lesson_version=1",
+      [owner.id],
+    );
+    reading = controlled.exported.exportOwned(owner.token).then((result) => {
+      finished = true;
+      return result;
+    });
+    await controlled.connected.wait;
+    expect(
+      await waitForOperation(controlled.state.pid, writerPid, () => finished),
+    ).toBe("blocked");
+    await mutator.query("COMMIT");
+    const result = await reading;
+    expect(JSON.stringify(result)).not.toContain(
+      "Invented withdrawal-first starter instruction",
+    );
+    expect(result.kind).toBe("unavailable");
+    expect((await ready(owner.token)).records).toMatchObject({
+      exercises: [
+        { state: "withdrawn", instruction: null, verification: null },
+      ],
+    });
+  } finally {
+    await mutator.query("ROLLBACK");
+    await Promise.allSettled(reading ? [reading] : []);
+    mutator.release();
+  }
+}, 15_000);
 
 function gate() {
   let release!: () => void;
@@ -811,7 +961,7 @@ it("exports current structured records only for their active owner, with redacti
   );
   const own = await ready(a.token);
   expect(own).toMatchObject({
-    version: "local-member-records-v8",
+    version: "local-member-records-v9",
     profile: { id: a.id, background: "explorer" },
     records: {
       milestones: [{ milestoneTitle: "Invented milestone" }],

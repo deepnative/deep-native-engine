@@ -24,8 +24,9 @@ export type WorkspaceAccess =
       records: Array<{
         lessonId: string;
         lessonVersion: number;
-        instruction: string;
-        verification: string;
+        instruction: string | null;
+        verification: string | null;
+        withdrawnAt: Date | null;
         completedAt: Date | null;
       }>;
     };
@@ -102,14 +103,20 @@ function isRole(value: string): value is StaffRole {
   return STAFF_ROLES.includes(value as StaffRole);
 }
 
-interface WorkspaceRow {
+interface WorkspaceDecision {
   via: "member" | "assignment" | "support";
   purpose: string | null;
-  lesson_id: string | null;
-  lesson_version: number | null;
+  actor_id: string;
+  grant_id: string | null;
+  grant_expires_at: Date | null;
+}
+interface WorkspaceRow {
+  lesson_id: string;
+  lesson_version: number;
   instruction: string | null;
   verification: string | null;
   completed_at: Date | null;
+  withdrawn_at: Date | null;
 }
 
 export function disabledAuthorizationStore(): AuthorizationStore {
@@ -352,75 +359,123 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
       const purpose = suppliedPurpose?.trim();
       if (purpose !== undefined && (!purpose || purpose.length > 200))
         return { kind: "denied" };
-      const rows = (
-        await pool.query<WorkspaceRow>(
-          `WITH identity AS (
-             SELECT p.id,p.kind,s.role
-             FROM principals p LEFT JOIN staff_profiles s ON s.principal_id=p.id
-             WHERE p.token_hash=$1 AND p.revoked_at IS NULL
-               AND p.expires_at>CURRENT_TIMESTAMP
-             FOR SHARE OF p
-           ), assignments AS (
-             SELECT g.id,g.purpose FROM identity i JOIN assignment_grants g
-               ON g.staff_id=i.id AND g.staff_role=i.role
-             WHERE i.kind='staff' AND i.role='coach' AND g.workspace_id=$2
-               AND g.revoked_at IS NULL AND g.starts_at<=CURRENT_TIMESTAMP
-               AND g.expires_at>CURRENT_TIMESTAMP
-             ORDER BY g.id LIMIT 1 FOR SHARE OF g
-           ), support AS (
-             SELECT g.id,g.purpose FROM identity i JOIN support_access_grants g
-               ON g.staff_id=i.id AND g.staff_role=i.role
-             WHERE i.kind='staff' AND g.workspace_id=$2 AND g.purpose=$3
-               AND g.revoked_at IS NULL AND g.starts_at<=CURRENT_TIMESTAMP
-               AND g.expires_at>CURRENT_TIMESTAMP
-             ORDER BY g.id LIMIT 1 FOR SHARE OF g
-           ), authorized AS (
-             SELECT * FROM (
-               SELECT 'member'::text AS via,NULL::uuid AS grant_id,
-                      NULL::text AS purpose
-               FROM identity i JOIN workspaces w ON w.owner_principal_id=i.id
-               WHERE i.kind='member' AND w.id=$2
-               UNION ALL
-               SELECT 'assignment',id,purpose FROM assignments
-               UNION ALL
-               SELECT 'support',id,purpose FROM support
-             ) candidates ORDER BY CASE via WHEN 'member' THEN 1 WHEN 'assignment' THEN 2 ELSE 3 END
-             LIMIT 1
-           ), audited AS (
-             INSERT INTO authorization_audit(
-               actor_id,staff_id,workspace_id,grant_type,grant_id,action
+      const client = await pool.connect();
+      let releaseError: Error | undefined;
+      try {
+        await client.query("BEGIN");
+        await client.query("SET LOCAL lock_timeout='5s'");
+        // Lock the actor and selected grant before the workspace, matching owner
+        // withdrawal/deletion ordering. Audit foreign keys must not take a
+        // workspace lock before this ordering has been established.
+        const decision = (
+          await client.query<WorkspaceDecision>(
+            `WITH identity AS (
+               SELECT p.id,p.kind,s.role
+               FROM principals p LEFT JOIN staff_profiles s ON s.principal_id=p.id
+               WHERE p.token_hash=$1 AND p.revoked_at IS NULL
+                 AND p.expires_at>clock_timestamp()
+               FOR SHARE OF p
+             ), assignments AS (
+               SELECT g.id,g.purpose,g.expires_at FROM identity i JOIN assignment_grants g
+                 ON g.staff_id=i.id AND g.staff_role=i.role
+               WHERE i.kind='staff' AND i.role='coach' AND g.workspace_id=$2
+                 AND g.revoked_at IS NULL AND g.starts_at<=clock_timestamp()
+                 AND g.expires_at>clock_timestamp()
+               ORDER BY g.id LIMIT 1 FOR SHARE OF g
+             ), support AS (
+               SELECT g.id,g.purpose,g.expires_at FROM identity i JOIN support_access_grants g
+                 ON g.staff_id=i.id AND g.staff_role=i.role
+               WHERE i.kind='staff' AND g.workspace_id=$2 AND g.purpose=$3
+                 AND g.revoked_at IS NULL AND g.starts_at<=clock_timestamp()
+                 AND g.expires_at>clock_timestamp()
+               ORDER BY g.id LIMIT 1 FOR SHARE OF g
+             ), authorized AS (
+               SELECT * FROM (
+                 SELECT 'member'::text AS via,NULL::uuid AS grant_id,
+                        NULL::text AS purpose,NULL::timestamptz AS grant_expires_at
+                 FROM identity i JOIN workspaces w ON w.owner_principal_id=i.id
+                 WHERE i.kind='member' AND w.id=$2
+                 UNION ALL
+                 SELECT 'assignment',id,purpose,expires_at FROM assignments
+                 UNION ALL
+                 SELECT 'support',id,purpose,expires_at FROM support
+               ) candidates ORDER BY CASE via WHEN 'member' THEN 1 WHEN 'assignment' THEN 2 ELSE 3 END
+               LIMIT 1
              )
-             SELECT i.id,i.id,$2,a.via,a.grant_id,'workspace_read'
-             FROM authorized a CROSS JOIN identity i WHERE a.via IN ('assignment','support')
-             RETURNING id
-           )
-           SELECT a.via,a.purpose,e.lesson_id,e.lesson_version,e.instruction,
-                  e.verification,e.completed_at,(SELECT count(*) FROM audited)
-           FROM authorized a LEFT JOIN exercises e ON e.workspace_id=$2
-           ORDER BY e.lesson_id,e.lesson_version`,
-          [hash(token), workspaceId, purpose ?? null],
-        )
-      ).rows;
-      if (!rows[0]) return { kind: "denied" };
-      return {
-        kind: "allowed",
-        via: rows[0].via,
-        workspaceId,
-        purpose: rows[0].purpose,
-        records: rows.flatMap((row) =>
-          row.lesson_id === null
-            ? []
-            : [
-                {
-                  lessonId: row.lesson_id,
-                  lessonVersion: row.lesson_version!,
-                  instruction: row.instruction!,
-                  verification: row.verification!,
-                  completedAt: row.completed_at,
-                },
-              ],
-        ),
-      };
+             SELECT a.*,i.id AS actor_id FROM authorized a CROSS JOIN identity i`,
+            [hash(token), workspaceId, purpose ?? null],
+          )
+        ).rows[0];
+        if (!decision) {
+          await client.query("ROLLBACK");
+          return { kind: "denied" };
+        }
+        const workspace = await client.query(
+          "SELECT id FROM workspaces WHERE id=$1 AND deleting_at IS NULL FOR SHARE",
+          [workspaceId],
+        );
+        if (!workspace.rows[0]) {
+          await client.query("ROLLBACK");
+          return { kind: "denied" };
+        }
+        // A new READ COMMITTED statement after the workspace wait sees any
+        // committed withdrawal. Row locks also cover direct concurrent updates.
+        const records = (
+          await client.query<WorkspaceRow>(
+            `SELECT lesson_id,lesson_version,instruction,verification,completed_at,withdrawn_at
+             FROM exercises WHERE workspace_id=$1
+             ORDER BY lesson_id,lesson_version FOR SHARE`,
+            [workspaceId],
+          )
+        ).rows;
+        if (decision.via !== "member")
+          await client.query(
+            `INSERT INTO authorization_audit(actor_id,staff_id,workspace_id,grant_type,grant_id,action)
+             VALUES($1,$1,$2,$3,$4,'workspace_read')`,
+            [decision.actor_id, workspaceId, decision.via, decision.grant_id],
+          );
+        // Locks prevent revocation/changes to the selected grant, but wall-clock
+        // expiry can pass during a wait. Do not return content or keep its audit.
+        const current = (
+          await client.query<{ valid: boolean }>(
+            `SELECT expires_at>clock_timestamp()
+               AND ($2::timestamptz IS NULL OR $2>clock_timestamp()) AS valid
+             FROM principals WHERE id=$1 AND revoked_at IS NULL`,
+            [decision.actor_id, decision.grant_expires_at],
+          )
+        ).rows[0];
+        if (!current?.valid) {
+          await client.query("ROLLBACK");
+          return { kind: "denied" };
+        }
+        const result: WorkspaceAccess = {
+          kind: "allowed",
+          via: decision.via,
+          workspaceId,
+          purpose: decision.purpose,
+          records: records.map((row) => ({
+            lessonId: row.lesson_id,
+            lessonVersion: row.lesson_version,
+            instruction: row.instruction,
+            verification: row.verification,
+            completedAt: row.completed_at,
+            withdrawnAt: row.withdrawn_at,
+          })),
+        };
+        // Form the result while its privacy locks are held. A withdrawal cannot
+        // complete until this transaction releases those locks.
+        await client.query("COMMIT");
+        return result;
+      } catch (error) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          releaseError = new Error("Workspace read rollback failed");
+        }
+        throw error;
+      } finally {
+        client.release(releaseError);
+      }
     },
     async readCohort(token, cohortId, contentId) {
       if (
