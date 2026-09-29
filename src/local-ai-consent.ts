@@ -382,22 +382,33 @@ export function localAiConsentStore(
           return { kind: "denied" };
         const digest = fingerprint(authorization.permission);
         const scopedKey = "local-ai:" + hash(key);
-        const inserted = await client.query<{ id: string }>(
-          "INSERT INTO adapter_jobs(id,member_id,adapter,mode,operation,idempotency_key,request_fingerprint,prompt_template_version,model_contract_version,local_ai_receipt_id) VALUES($1,$2,'ai',$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(idempotency_key) DO NOTHING RETURNING id",
-          [
-            randomUUID(),
-            authorization.row.owner_principal_id,
-            registry.mode,
-            LOCAL_AI_PURPOSE,
-            scopedKey,
-            digest,
-            LOCAL_AI_STATEMENT_VERSION,
-            MODEL,
-            id,
-          ],
-        );
-        if (inserted.rows[0])
-          return { kind: "queued", jobId: inserted.rows[0].id };
+        // receipt() holds UPDATE through commit, serializing every enqueue and
+        // local job transition. Existing unresolved rows also fence new keys;
+        // exact-key replay below remains available even with legacy duplicates.
+        const unresolved = (
+          await client.query<{ id: string }>(
+            "SELECT id FROM adapter_jobs WHERE local_ai_receipt_id=$1 AND operation=$2 AND status IN ('pending','running','failed','needs_reconciliation') LIMIT 1",
+            [id, LOCAL_AI_PURPOSE],
+          )
+        ).rows[0];
+        if (!unresolved) {
+          const inserted = await client.query<{ id: string }>(
+            "INSERT INTO adapter_jobs(id,member_id,adapter,mode,operation,idempotency_key,request_fingerprint,prompt_template_version,model_contract_version,local_ai_receipt_id) VALUES($1,$2,'ai',$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(idempotency_key) DO NOTHING RETURNING id",
+            [
+              randomUUID(),
+              authorization.row.owner_principal_id,
+              registry.mode,
+              LOCAL_AI_PURPOSE,
+              scopedKey,
+              digest,
+              LOCAL_AI_STATEMENT_VERSION,
+              MODEL,
+              id,
+            ],
+          );
+          if (inserted.rows[0])
+            return { kind: "queued", jobId: inserted.rows[0].id };
+        }
         const existing = (
           await client.query<Job>(
             "SELECT * FROM adapter_jobs WHERE idempotency_key=$1",

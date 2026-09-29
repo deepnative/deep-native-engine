@@ -82,6 +82,7 @@ function setup(
     bytes?: Buffer;
     existing?: boolean;
     insertion?: boolean;
+    unresolved?: boolean;
     fail?: string;
     broken?: boolean;
     phase2Denied?: boolean;
@@ -160,6 +161,8 @@ function setup(
       };
     if (sql.includes("SELECT id,status FROM adapter_jobs"))
       return { rows: [{ id: jid, status: j.status }] };
+    if (sql.includes("SELECT id FROM adapter_jobs"))
+      return { rows: options.unresolved ? [{ id: jid }] : [] };
     if (sql.includes("INSERT INTO adapter_jobs"))
       return { rows: options.insertion === false ? [] : [{ id: jid }] };
     if (sql.includes("SELECT * FROM adapter_jobs"))
@@ -358,6 +361,36 @@ it("queues identical requests once and rejects every changed idempotency binding
       "key",
     ),
   ).toEqual({ kind: "denied" });
+});
+it("keeps exact-key replay available while unresolved work fences new or changed keys", async () => {
+  expect(
+    await setup({ unresolved: true }).service.enqueue("member", rid, "key"),
+  ).toEqual({ kind: "queued", jobId: jid });
+  for (const options of [
+    { missing: "collision" },
+    { job: { request_fingerprint: "changed" } },
+    { job: { local_ai_receipt_id: "foreign" } },
+    { job: { member_id: "foreign" } },
+  ]) {
+    const f = setup({ unresolved: true, ...options });
+    expect(await f.service.enqueue("member", rid, "key")).toEqual({
+      kind: "conflict",
+    });
+    expect(
+      f.query.mock.calls.some(([sql]) =>
+        sql.includes("INSERT INTO adapter_jobs"),
+      ),
+    ).toBe(false);
+    expect(f.execute).not.toHaveBeenCalled();
+  }
+});
+it("denies enqueue when persisted unresolved state cannot be read", async () => {
+  const f = setup({ fail: "SELECT id FROM adapter_jobs" });
+  expect(await f.service.enqueue("member", rid, "key")).toEqual({
+    kind: "denied",
+  });
+  expect(f.execute).not.toHaveBeenCalled();
+  expect(f.release).toHaveBeenCalledWith(false);
 });
 it("rechecks every job provenance field before claiming, denying legacy, foreign and forged jobs", async () => {
   for (const missing of ["jobHint", "receiptHint", "job"])
