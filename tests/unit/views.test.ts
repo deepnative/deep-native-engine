@@ -18,6 +18,7 @@ import {
   careerPage,
   assignmentAttemptsPage,
   assignmentAttemptPage,
+  assignmentComparisonPage,
   assignmentReadinessPage,
   evidencePage,
   localAiConsentPage,
@@ -33,6 +34,7 @@ import {
 import { EVENT_PREVIEWS } from "../../src/events.ts";
 import type { ManualObservation } from "../../src/manual-observations.ts";
 import type { AssignmentAttempt } from "../../src/attempts.ts";
+import { compareResponses } from "../../src/attempt-compare.ts";
 import type { AssignmentReadiness } from "../../src/assignment-readiness.ts";
 import type { ContentVersion } from "../../src/catalog.ts";
 import type { Milestone } from "../../src/store.ts";
@@ -1351,6 +1353,120 @@ it("renders private attempt states without treating a local submission as review
   expect(history).toContain("Invented &lt;first&gt; answer");
   expect(history).not.toContain("Invented <first> answer");
   expect(history).toContain("Revise privately");
+  expect(history).not.toContain("Compare private submissions");
+  const twoVersions = {
+    ...withHistory,
+    submissions: [
+      ...withHistory.submissions,
+      {
+        sequence: 2,
+        response: "Invented <second> answer",
+        submittedAt: "2026-09-24T00:03:00Z",
+      },
+    ],
+  };
+  expect(assignmentAttemptPage(twoVersions, "csrf")).toContain(
+    `/assignments/attempts/${item.id}/compare?from=1&amp;to=2`,
+  );
+  const compared = assignmentComparisonPage(
+    twoVersions,
+    1,
+    2,
+    compareResponses(
+      twoVersions.submissions[0]!.response,
+      twoVersions.submissions[1]!.response,
+    ),
+  );
+  expect(compared).toContain("Compare private submissions");
+  expect(compared).toContain("From submission 1");
+  expect(compared).toContain("To submission 2");
+  expect(compared).toContain("Invented &lt;first&gt; answer");
+  expect(compared).toContain("Invented &lt;second&gt; answer");
+  expect(compared).not.toContain("Invented <first> answer");
+  expect(compared).not.toContain("Saved private draft");
+  const multiline = {
+    ...twoVersions,
+    submissions: [
+      { ...twoVersions.submissions[0]!, response: "Shared line\nOld line\n" },
+      { ...twoVersions.submissions[1]!, response: "Shared line\nNew line\n" },
+    ],
+  };
+  const lines = assignmentComparisonPage(
+    multiline,
+    1,
+    2,
+    compareResponses(
+      multiline.submissions[0]!.response,
+      multiline.submissions[1]!.response,
+    ),
+  );
+  expect(lines).toContain("Line comparison");
+  expect(lines).toContain("Unchanged");
+  expect(lines).toContain("Removed");
+  expect(lines).toContain("Added");
+  const same = {
+    ...multiline,
+    submissions: [
+      multiline.submissions[0]!,
+      {
+        ...multiline.submissions[1]!,
+        response: multiline.submissions[0]!.response,
+      },
+    ],
+  };
+  expect(
+    assignmentComparisonPage(
+      same,
+      1,
+      2,
+      compareResponses(
+        same.submissions[0]!.response,
+        same.submissions[1]!.response,
+      ),
+    ),
+  ).toContain("No text changed");
+  const long = {
+    ...multiline,
+    submissions: [
+      {
+        ...multiline.submissions[0]!,
+        response: "Shared\n" + "Old\n".repeat(501),
+      },
+      {
+        ...multiline.submissions[1]!,
+        response: "Shared\n" + "New\n".repeat(501),
+      },
+    ],
+  };
+  expect(
+    assignmentComparisonPage(
+      long,
+      1,
+      2,
+      compareResponses(
+        long.submissions[0]!.response,
+        long.submissions[1]!.response,
+      ),
+    ),
+  ).toContain("Section comparison");
+  const mixed = {
+    ...multiline,
+    submissions: [
+      { ...multiline.submissions[0]!, response: "A\rB\r\nC" },
+      { ...multiline.submissions[1]!, response: "A\rB\r\nD" },
+    ],
+  };
+  const mixedHtml = assignmentComparisonPage(
+    mixed,
+    1,
+    2,
+    compareResponses(
+      mixed.submissions[0]!.response,
+      mixed.submissions[1]!.response,
+    ),
+  );
+  expect(mixedHtml).toContain("A&#13;B&#13;\nC");
+  expect(mixedHtml).not.toContain("A\rB");
   expect(assignmentAttemptsPage([withHistory])).toContain(
     "1 private local submission",
   );

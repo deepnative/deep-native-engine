@@ -3335,6 +3335,70 @@ it("keeps private milestones local, validates edits and refuses stale or foreign
   await post("/milestones", { ...input, csrf: "invalid" }).expect(403);
 });
 
+it("compares only two selected submissions from an owned private attempt", async () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const earlier = "Invented <private> first\nKeep this";
+  const later = "Invented <private> second\nKeep this";
+  const item = {
+    id,
+    contentId: "SYN-960",
+    contentVersion: 1,
+    title: "Invented assignment",
+    goalAtStart: "everyday",
+    response: "unsubmitted draft must not enter comparison",
+    revision: 4,
+    startedAt: new Date("2026-09-24T00:00:00Z"),
+    savedAt: new Date("2026-09-24T00:04:00Z"),
+    submittedAt: null,
+    submissionCount: 2,
+    submissions: [
+      { sequence: 1, response: earlier, submittedAt: "2026-09-24T00:01:00Z" },
+      { sequence: 2, response: later, submittedAt: "2026-09-24T00:02:00Z" },
+    ],
+    currentPublished: false,
+    currentEligible: false,
+  };
+  const db = storage();
+  const attempts = {
+    ...disabledAttemptStore(),
+    detail: vi.fn().mockResolvedValue(item),
+  };
+  const agent = managedAgent(app(db, { origin, secret: "secret", attempts }));
+  await agent.get("/").set("Host", host).expect(200);
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const get = (query: string) =>
+    agent.get(`/assignments/attempts/${id}/compare${query}`).set("Host", host);
+  const result = await get("?from=1&to=2").expect(200);
+  expect(result.text).toContain("Compare private submissions");
+  expect(result.text).toContain("Invented &lt;private&gt; first");
+  expect(result.text).toContain("Invented &lt;private&gt; second");
+  expect(result.text).not.toContain(
+    "unsubmitted draft must not enter comparison",
+  );
+  expect(result.text).not.toContain("Invented <private>");
+  expect(attempts.detail).toHaveBeenCalledTimes(1);
+  for (const query of [
+    "",
+    "?from=1&to=1",
+    "?from=0&to=2",
+    "?from=01&to=2",
+    "?from=1&from=2&to=2",
+    "?from=1&to=3",
+  ]) {
+    const invalid = await get(query).expect(422);
+    expect(invalid.text).not.toContain(earlier);
+    expect(invalid.text).not.toContain(later);
+  }
+  attempts.detail.mockResolvedValue(null);
+  await get("?from=1&to=2").expect(404);
+  await agent
+    .get("/assignments/attempts/invalid/compare?from=1&to=2")
+    .set("Host", host)
+    .expect(404);
+  attempts.detail.mockResolvedValue({ ...item, submissions: undefined });
+  await get("?from=1&to=2").expect(422);
+});
+
 it("keeps synthetic assignment attempts private through start, validation, conflicts, submission and deletion", async () => {
   const id = "11111111-1111-4111-8111-111111111111";
   const item = {

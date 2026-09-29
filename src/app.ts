@@ -46,6 +46,7 @@ import {
   errorPage,
   assignmentAttemptsPage,
   assignmentAttemptPage,
+  assignmentComparisonPage,
   assignmentWriteRecoveryPage,
   exerciseWriteRecoveryPage,
   assignmentReadinessPage,
@@ -104,6 +105,7 @@ import {
 import { disabledCircleStore, type CircleStore } from "./circles.ts";
 import { eventPreviewDetail, listEventPreviews } from "./events.ts";
 import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
+import { compareResponses } from "./attempt-compare.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
 import { disabledPracticeStore, type PracticeStore } from "./practice.ts";
 import {
@@ -2441,6 +2443,57 @@ export function app(
       return;
     }
     res.send(assignmentAttemptPage(item, res.locals.csrf as string));
+  });
+  app.get("/assignments/attempts/:id/compare", async (req, res) => {
+    const id = req.params.id as string;
+    const item = attemptId(id)
+      ? await attempts.detail(res.locals.token as string, id)
+      : null;
+    if (!item) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Attempt unavailable",
+            "Open one of your own saved attempts.",
+          ),
+        );
+      return;
+    }
+    const selector = (value: unknown) =>
+      typeof value === "string" && /^(?:[1-9]|10)$/.test(value)
+        ? Number(value)
+        : null;
+    const from = selector(req.query.from);
+    const to = selector(req.query.to);
+    const submissions = item.submissions ?? [];
+    if (
+      from === null ||
+      to === null ||
+      from === to ||
+      !submissions.some((entry) => entry.sequence === from) ||
+      !submissions.some((entry) => entry.sequence === to)
+    ) {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Choose two submissions",
+            "Choose two different saved submission versions from your private attempt, then compare again.",
+          ),
+        );
+      return;
+    }
+    const first = submissions.find((entry) => entry.sequence === from)!;
+    const second = submissions.find((entry) => entry.sequence === to)!;
+    res.send(
+      assignmentComparisonPage(
+        item,
+        from,
+        to,
+        compareResponses(first.response, second.response),
+      ),
+    );
   });
   app.post("/assignments/attempts/:id/save", async (req, res) => {
     const id = req.params.id as string;
