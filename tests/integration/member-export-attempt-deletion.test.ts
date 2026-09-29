@@ -5,6 +5,7 @@ import { attemptStore } from "../../src/attempts.ts";
 import { authorizationStore } from "../../src/authorization.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { memberExportStore } from "../../src/member-export.ts";
+import { activityItems } from "../../src/progress.ts";
 import { migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
 
@@ -192,8 +193,73 @@ async function fixture() {
     { sequence: 1, response: first },
     { sequence: 2, response: second },
   ]);
-  return { ownerToken, ownerId, attemptId: attemptId!, first, second, draft };
+  return {
+    ownerToken,
+    ownerId,
+    editorToken,
+    attemptId: attemptId!,
+    first,
+    second,
+    draft,
+  };
 }
+
+it("lists only owned submission metadata and keeps each exact version after direction change and retirement", async () => {
+  const f = await fixture();
+  const outsiderToken = token();
+  await members.create(outsiderToken, {
+    background: "professional",
+    goal: "work",
+  });
+  const owned = await attempts.list(f.ownerToken);
+  expect(owned).toHaveLength(1);
+  expect(owned[0]?.submissionHistory).toMatchObject([
+    { sequence: 1, submittedAt: expect.any(String) },
+    { sequence: 2, submittedAt: expect.any(String) },
+  ]);
+  expect(Object.keys(owned[0]!.submissionHistory![0]!)).toEqual([
+    "sequence",
+    "submittedAt",
+  ]);
+  expect("submissions" in owned[0]!).toBe(false);
+  expect("response" in owned[0]!).toBe(false);
+  const initial = activityItems(undefined, [], owned);
+  expect(initial.map((item) => item.state)).toEqual([
+    "Submission 1 · submitted locally; no qualified review",
+    "Submission 2 · submitted locally; no qualified review",
+    "Current revision draft saved",
+  ]);
+  expect(initial.map((item) => item.href)).toEqual([
+    `/assignments/attempts/${f.attemptId}?version=1&submission=1#submission-1`,
+    `/assignments/attempts/${f.attemptId}?version=1&submission=2#submission-2`,
+    `/assignments/attempts/${f.attemptId}`,
+  ]);
+  expect(await attempts.list(outsiderToken)).toEqual([]);
+  expect(await attempts.detail(outsiderToken, f.attemptId)).toBeNull();
+  await pool.query("UPDATE learners SET goal='work' WHERE id=$1", [f.ownerId]);
+  expect(await catalogStore(pool).retire(f.editorToken, "SYN-960")).toBe(true);
+  const retained = await attempts.list(f.ownerToken);
+  expect(
+    activityItems(undefined, [], retained).map((item) => item.state),
+  ).toEqual(initial.map((item) => item.state));
+  expect(retained[0]?.currentPublished).toBe(false);
+  expect(retained[0]?.contentVersion).toBe(1);
+  expect(await attempts.remove(f.ownerToken, f.attemptId)).toBe(true);
+  expect(await attempts.list(f.ownerToken)).toEqual([]);
+});
+
+it("does not return a partial progress list when snapshot metadata cannot be read", async () => {
+  const f = await fixture();
+  const failed = attemptStore({
+    query: async () => {
+      throw new Error("Synthetic PostgreSQL read fault");
+    },
+  } as unknown as Pool);
+  await expect(failed.list(f.ownerToken)).rejects.toThrow(
+    "Synthetic PostgreSQL read fault",
+  );
+  expect(await attempts.list(f.ownerToken)).toHaveLength(1);
+});
 
 it("does not export any attempt or submission text after owner deletes the series", async () => {
   const f = await fixture();

@@ -174,6 +174,80 @@ it("retains self-reported and submitted states on historical exact versions", ()
   expect(html).toContain("None is a qualified assessment");
 });
 
+it("shows each immutable assignment submission separately from a later draft without response text", () => {
+  const first = "Private first synthetic response must stay off progress";
+  const second = "Private second synthetic response must stay off progress";
+  const items = activityItems(
+    undefined,
+    [],
+    [
+      attempt({
+        contentVersion: 2,
+        response: "Private current draft must stay off progress",
+        savedAt: now,
+        submissionCount: 2,
+        submissionHistory: [
+          { sequence: 1, submittedAt: "2026-09-23T10:00:00Z" },
+          { sequence: 2, submittedAt: "2026-09-24T10:00:00Z" },
+        ],
+        submissions: [
+          { sequence: 1, submittedAt: "2026-09-23T10:00:00Z", response: first },
+          {
+            sequence: 2,
+            submittedAt: "2026-09-24T10:00:00Z",
+            response: second,
+          },
+        ],
+      }),
+    ],
+  );
+  expect(items).toHaveLength(3);
+  expect(items.map((item) => item.state)).toEqual([
+    "Submission 1 · submitted locally; no qualified review",
+    "Submission 2 · submitted locally; no qualified review",
+    "Current revision draft saved",
+  ]);
+  expect(items.map((item) => item.href)).toEqual([
+    "/assignments/attempts/8f43dd18-6f38-4894-b348-ac0288dc15e3?version=2&submission=1#submission-1",
+    "/assignments/attempts/8f43dd18-6f38-4894-b348-ac0288dc15e3?version=2&submission=2#submission-2",
+    "/assignments/attempts/8f43dd18-6f38-4894-b348-ac0288dc15e3",
+  ]);
+  const html = privateProgressPage(items);
+  expect(html).toContain("2026-09-23T10:00:00Z");
+  expect(html).toContain("2026-09-24T10:00:00Z");
+  expect(html).not.toContain(first);
+  expect(html).not.toContain(second);
+  expect(html).not.toContain("Private current draft");
+});
+
+it("shows a newly started revision separately and avoids a duplicate current submission", () => {
+  const previous = [{ sequence: 1, submittedAt: "2026-09-23T10:00:00Z" }];
+  const started = activityItems(
+    undefined,
+    [],
+    [attempt({ submissionHistory: previous, submissionCount: 1 })],
+  );
+  expect(started.map((item) => item.state)).toEqual([
+    "Submission 1 · submitted locally; no qualified review",
+    "Current revision started",
+  ]);
+  const submitted = activityItems(
+    undefined,
+    [],
+    [
+      attempt({
+        submissionHistory: previous,
+        submissionCount: 1,
+        submittedAt: now,
+      }),
+    ],
+  );
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]?.state).toBe(
+    "Submission 1 · submitted locally; no qualified review",
+  );
+});
+
 it("escapes a synthetic content title before displaying private activity", () => {
   const html = privateProgressPage(
     activityItems(undefined, [lesson({ title: "<script>bad</script>" })], []),

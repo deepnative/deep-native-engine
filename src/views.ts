@@ -34,7 +34,11 @@ import type { WorkflowBundle } from "./workflow-registry.ts";
 import type { WorkflowFeedback } from "./workflow-feedback.ts";
 import type { ManualObservation } from "./manual-observations.ts";
 import type { CircleListing } from "./circles.ts";
-import type { AssignmentAttempt, AssignmentSubmission } from "./attempts.ts";
+import type {
+  AssignmentAttempt,
+  AssignmentAttemptListItem,
+  AssignmentSubmission,
+} from "./attempts.ts";
 import type { compareResponses } from "./attempt-compare.ts";
 import type { ActivityItem } from "./progress.ts";
 import type { UsefulnessReport } from "./usefulness.ts";
@@ -413,7 +417,7 @@ export function assignmentReadinessPage(
     `<section class="assignment-options assignment-preparation"><p class="eyebrow">PRIVATE LOCAL PREVIEW · SYNTHETIC SAMPLE</p><h1>Prepare ${escape(item.title)}</h1><p>Assignment version ${item.contentVersion}. Your current goal and interests match this sample. Each requirement below names an exact published version; opening this checklist records no progress.</p>${status}<h2>Prerequisite checklist</h2>${item.requirements.length ? `<ul>${item.requirements.map(readinessRequirement).join("")}</ul>` : "<p>No additional local prerequisites are named.</p>"}<p>Starting a lesson and reporting its completion are separate choices. A self-report is not a formal review or proof of competence.</p><p><a href="/learn">Return to your learning path</a></p></section>`,
   );
 }
-export function assignmentAttemptsPage(items: AssignmentAttempt[]) {
+export function assignmentAttemptsPage(items: AssignmentAttemptListItem[]) {
   const rows = items.map((item) => {
     const prior = item.submissionCount ?? 0;
     const state = item.submittedAt
@@ -453,7 +457,7 @@ export function assignmentAttemptPage(
       ? `<p><a href="${url}/compare?from=${history[0]!.sequence}&amp;to=${history.at(-1)!.sequence}">Compare private submissions</a></p>`
       : "";
   const historyView = history.length
-    ? `<section aria-label="Private local submission history"><h2>Private local submission history</h2><ol>${history.map((entry) => `<li><strong>Submission ${entry.sequence}</strong> · ${escape(entry.submittedAt)}<pre class="content-text">${escape(entry.response)}</pre><p><a href="${url}/portfolio/${entry.sequence}" download>Download simulated portfolio statement for submission ${entry.sequence}</a></p></li>`).join("")}</ol>${compareLink}<p>These submitted versions and their portfolio statements are simulated, self-authored and unreviewed. Downloads contain only the selected immutable submission; they are not credentials or formal assessments. Deleting this attempt deletes every stored version; it cannot erase files you already downloaded.</p></section>`
+    ? `<section aria-label="Private local submission history"><h2>Private local submission history</h2><ol>${history.map((entry) => `<li id="submission-${entry.sequence}"><strong>Submission ${entry.sequence}</strong> · ${escape(entry.submittedAt)}<pre class="content-text">${escape(entry.response)}</pre><p><a href="${url}/portfolio/${entry.sequence}" download>Download simulated portfolio statement for submission ${entry.sequence}</a></p></li>`).join("")}</ol>${compareLink}<p>These submitted versions and their portfolio statements are simulated, self-authored and unreviewed. Downloads contain only the selected immutable submission; they are not credentials or formal assessments. Deleting this attempt deletes every stored version; it cannot erase files you already downloaded.</p></section>`
     : "";
   const revisionAction =
     item.currentEligible && item.submittedAt && prior < 10 && !conflict
@@ -650,7 +654,7 @@ export function privateProgressPage(
         ? `<ol>${items
             .map(
               (item) =>
-                `<li><h2>${escape(item.title)}</h2><p>${escape(item.kind)} · version ${item.version} · ${escape(item.state)}</p><p>${escape(item.availability)}</p>${item.href ? `<a href="${escape(item.href)}">Open this private activity</a>` : "<span>No current content link for this version.</span>"}${usefulnessAction(item, reports, csrf)}</li>`,
+                `<li><h2>${escape(item.title)}</h2><p>${escape(item.kind)} · version ${item.version} · ${escape(item.state)}${item.submittedAt ? ` · ${escape(item.submittedAt)}` : ""}</p><p>${escape(item.availability)}</p>${item.href ? `<a href="${escape(item.href)}">Open this private activity</a>` : "<span>No current content link for this version.</span>"}${usefulnessAction(item, reports, csrf)}</li>`,
             )
             .join("")}</ol>`
         : '<p>No learning activity has been saved in this preview yet. <a href="/learn">Open your starter plan</a> to begin with a sample lesson.</p>'
