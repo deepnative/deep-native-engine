@@ -3791,9 +3791,11 @@ it("keeps synthetic assignment attempts private through start, validation, confl
     409,
   );
   await post(`/assignments/attempts/${id}/delete`, {}).expect(409);
-  await post(`/assignments/attempts/${id}/delete`, { confirm: "yes" }).expect(
-    409,
-  );
+  const uncertainDeletion = await post(`/assignments/attempts/${id}/delete`, {
+    confirm: "yes",
+  }).expect(409);
+  expect(uncertainDeletion.text).toContain("Deletion not confirmed");
+  expect(uncertainDeletion.text).toContain("check whether this record remains");
   attempts.remove.mockResolvedValue(true);
   await post(`/assignments/attempts/${id}/delete`, { confirm: "yes" }).expect(
     303,

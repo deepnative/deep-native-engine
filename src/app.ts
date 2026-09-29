@@ -2728,17 +2728,24 @@ export function app(
   });
   app.post("/assignments/attempts/:id/delete", async (req, res) => {
     const id = req.params.id as string;
-    if (
-      !attemptId(id) ||
-      (req.body as Fields).confirm !== "yes" ||
-      !(await attempts.remove(res.locals.token as string, id))
-    ) {
+    if (!attemptId(id) || (req.body as Fields).confirm !== "yes") {
       res
         .status(409)
         .send(
           errorPage(
             "Attempt unchanged",
             "Confirm deletion of one of your own attempts.",
+          ),
+        );
+      return;
+    }
+    if (!(await attempts.remove(res.locals.token as string, id))) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Deletion not confirmed",
+            "Open your attempts to check whether this record remains before trying again.",
           ),
         );
       return;
