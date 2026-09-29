@@ -1346,13 +1346,14 @@ it("denies a member tailored-review request without accepting a service", async 
   expect(failedLookup.text).not.toContain("private roster reference");
 });
 it("serves a member-owned activity view only through the active session", async () => {
+  const history = vi.spyOn(db, "withExerciseRead");
   const attempts = {
     ...disabledAttemptStore(),
     list: vi.fn().mockResolvedValue([]),
   };
   const agent = managedAgent(app(db, { origin, secret: "secret", attempts }));
   await agent.get("/progress").set("Host", host).expect(303);
-  expect(db.progress).not.toHaveBeenCalled();
+  expect(history).not.toHaveBeenCalled();
   expect(db.lessonActivities).not.toHaveBeenCalled();
   expect(attempts.list).not.toHaveBeenCalled();
   active();
@@ -1373,11 +1374,78 @@ it("serves a member-owned activity view only through the active session", async 
     .expect(200);
   expect(response.text).toContain("Private invented reading");
   expect(response.text).toContain("Opened in reader");
-  expect(db.progress).toHaveBeenCalledWith(member.id);
+  expect(history).toHaveBeenCalledWith(
+    expect.stringMatching(/^[a-f0-9]{64}$/),
+    expect.any(Function),
+  );
   expect(db.lessonActivities).toHaveBeenCalledWith(member.id);
   expect(attempts.list).toHaveBeenCalledWith(
     expect.stringMatching(/^[a-f0-9]{64}$/),
   );
+});
+it("pins retained starter links to owned versions and reports unavailable or failed reads honestly", async () => {
+  const retained: ExerciseHistory[] = [
+    {
+      lessonId: LESSON.id,
+      version: 2,
+      instruction: "Earlier invented instruction",
+      verification: "Earlier invented check",
+      completedAt: new Date("2026-09-25T12:00:00Z"),
+      withdrawnAt: null,
+      goalAtStart: "work",
+    },
+  ];
+  db.withExerciseRead = async <T>(
+    _token: string,
+    render: (rows: ExerciseHistory[]) => T,
+  ): Promise<T | null> => render(retained);
+  const agent = managedAgent(app(db, { origin, secret: "secret" }));
+  active();
+  const progress = await agent
+    .get("/progress?member_id=other")
+    .set("Host", host)
+    .expect(200);
+  expect(progress.text).toContain(
+    "starter exercise · version 2 · Self-reported complete",
+  );
+  expect(progress.text).toContain("/lesson?version=2#starter-version-2");
+  expect(progress.text).not.toContain("Earlier invented instruction");
+  const exact = await agent
+    .get("/lesson?version=2")
+    .set("Host", host)
+    .expect(200);
+  expect(exact.text).toContain('id="starter-version-2"');
+  expect(exact.text).toContain("Earlier invented instruction");
+  for (const version of ["0", "no", "2147483648", "2&version=1", "3"]) {
+    const missing = await agent
+      .get(`/lesson?version=${version}`)
+      .set("Host", host)
+      .expect(404);
+    expect(missing.text).toContain("Exercise version unavailable");
+    expect(missing.text).not.toContain("Earlier invented instruction");
+  }
+  retained.push({
+    lessonId: LESSON.id,
+    version: 3,
+    instruction: "Unfinished historical draft",
+    verification: null,
+    completedAt: null,
+    withdrawnAt: null,
+    goalAtStart: "work",
+  });
+  const draft = await agent
+    .get("/lesson?version=3")
+    .set("Host", host)
+    .expect(404);
+  expect(draft.text).not.toContain("Unfinished historical draft");
+  db.withExerciseRead = async () => null;
+  const denied = await agent.get("/progress").set("Host", host).expect(403);
+  expect(denied.text).not.toContain("Earlier invented instruction");
+  db.withExerciseRead = async () => {
+    throw new Error("private storage detail");
+  };
+  const failed = await agent.get("/progress").set("Host", host).expect(503);
+  expect(failed.text).not.toContain("private storage detail");
 });
 it("accepts a member's confirmed usefulness choice and fails closed on stale, forged and uncertain writes", async () => {
   const usefulness = {

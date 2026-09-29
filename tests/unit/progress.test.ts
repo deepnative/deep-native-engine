@@ -58,6 +58,73 @@ it("distinguishes a starter draft and observed lesson opening from completion", 
   expect(items[2]?.href).toContain("/assignments/attempts/");
 });
 
+it("shows each retained starter completion at its recorded version without withdrawn text", () => {
+  const items = activityItems(
+    {
+      instruction: null,
+      verification: null,
+      completed_at: now,
+      withdrawn_at: now,
+    },
+    [],
+    [],
+    [
+      {
+        lessonId: "clear-instructions",
+        version: 1,
+        instruction: null,
+        verification: null,
+        completedAt: now,
+        withdrawnAt: now,
+        goalAtStart: "everyday",
+      },
+      {
+        lessonId: "clear-instructions",
+        version: 2,
+        instruction: "Earlier invented instruction",
+        verification: "Earlier invented check",
+        completedAt: now,
+        withdrawnAt: null,
+        goalAtStart: "work",
+      },
+      {
+        lessonId: "clear-instructions",
+        version: 3,
+        instruction: null,
+        verification: null,
+        completedAt: now,
+        withdrawnAt: now,
+        goalAtStart: "build",
+      },
+      {
+        lessonId: "other-lesson",
+        version: 4,
+        instruction: "Unrelated invented words",
+        verification: null,
+        completedAt: now,
+        withdrawnAt: null,
+        goalAtStart: "work",
+      },
+      {
+        lessonId: "clear-instructions",
+        version: 5,
+        instruction: "Unfinished draft",
+        verification: null,
+        completedAt: null,
+        withdrawnAt: null,
+        goalAtStart: "work",
+      },
+    ],
+  );
+  expect(items.map((item) => item.version)).toEqual([1, 2, 3]);
+  expect(items[0]?.state).toContain("text withdrawn");
+  expect(items[1]?.href).toBe("/lesson?version=2#starter-version-2");
+  expect(items[2]?.state).toContain("text withdrawn");
+  const html = privateProgressPage(items);
+  expect(html).not.toContain("Earlier invented instruction");
+  expect(html).not.toContain("Earlier invented check");
+});
+
 it("retains self-reported and submitted states on historical exact versions", () => {
   const items = activityItems(
     { instruction: "invented", verification: "check", completed_at: now },

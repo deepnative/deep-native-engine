@@ -38,6 +38,7 @@ import {
   type DraftContent,
 } from "../../src/catalog.ts";
 import { recommendLesson } from "../../src/assignment-choice.ts";
+import { activityItems } from "../../src/progress.ts";
 import { memberExportStore } from "../../src/member-export.ts";
 const pool = testPool(),
   db = store(pool);
@@ -5928,6 +5929,52 @@ it("withdraws completed starter exercise text idempotently while preserving hist
       ])
     ).rows,
   ).toEqual([]);
+});
+
+it("reads mixed starter versions for owner progress without exposing withdrawn words or another member", async () => {
+  const owner = await member(),
+    other = await member();
+  await db.save(owner.learner.id, input);
+  await pool.query(
+    `INSERT INTO exercises(learner_id,workspace_id,lesson_id,lesson_version,instruction,verification,completed_at,goal_at_start)
+     VALUES($1,$1,'clear-instructions',2,'Older invented words','Older invented check',clock_timestamp(),'work'),
+           ($1,$1,'clear-instructions',3,'Still retained words','Still retained check',clock_timestamp(),'build')`,
+    [owner.learner.id],
+  );
+  expect(await db.withdrawExercise(owner.token, "clear-instructions", 2)).toBe(
+    "withdrawn",
+  );
+  const progress = await db.withExerciseRead(owner.token, (rows) => {
+    const current = rows.find(
+      (row) => row.lessonId === "clear-instructions" && row.version === 1,
+    )!;
+    return activityItems(
+      {
+        instruction: current.instruction,
+        verification: current.verification,
+        completed_at: current.completedAt,
+        withdrawn_at: current.withdrawnAt,
+      },
+      [],
+      [],
+      rows,
+    );
+  });
+  expect(
+    progress?.map((item) => [item.version, item.state, item.href]),
+  ).toEqual([
+    [1, "Self-reported complete", "/lesson?version=1#starter-version-1"],
+    [
+      2,
+      "Self-reported complete; text withdrawn",
+      "/lesson?version=2#starter-version-2",
+    ],
+    [3, "Self-reported complete", "/lesson?version=3#starter-version-3"],
+  ]);
+  expect(JSON.stringify(progress)).not.toContain("Older invented words");
+  expect(await db.withExerciseRead(other.token, (rows) => rows)).toEqual([]);
+  await db.remove(owner.learner.id);
+  expect(await db.withExerciseRead(owner.token, (rows) => rows)).toBeNull();
 });
 
 it("withdraws historical starter exercise versions after direction changes without rewriting completion", async () => {
