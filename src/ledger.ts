@@ -69,6 +69,48 @@ function requireQuantity(value: number) {
     throw new LedgerFailure("invalid_request");
 }
 
+export type SyntheticCompletion =
+  | {
+      reference: string;
+      category: "review_minutes" | "support_minutes";
+      deliveredMinutes: number;
+      preparationMinutes: number;
+    }
+  | {
+      reference: string;
+      category: "study_requests";
+      quantity: 1;
+    };
+
+function completionSnapshot(value: SyntheticCompletion): SyntheticCompletion {
+  if (
+    !value ||
+    typeof value.reference !== "string" ||
+    !/^synthetic:[A-Za-z0-9][A-Za-z0-9._-]{0,109}$/.test(value.reference)
+  )
+    throw new LedgerFailure("invalid_request");
+  const { reference, category } = value;
+  if (category === "study_requests") {
+    if (value.quantity !== 1) throw new LedgerFailure("invalid_request");
+    return { reference, category, quantity: 1 };
+  }
+  if (category !== "review_minutes" && category !== "support_minutes")
+    throw new LedgerFailure("invalid_request");
+  requireQuantity(value.deliveredMinutes);
+  if (
+    !Number.isSafeInteger(value.preparationMinutes) ||
+    value.preparationMinutes < 0
+  )
+    throw new LedgerFailure("invalid_request");
+  requireQuantity(value.deliveredMinutes + value.preparationMinutes);
+  return {
+    reference,
+    category,
+    deliveredMinutes: value.deliveredMinutes,
+    preparationMinutes: value.preparationMinutes,
+  };
+}
+
 interface EventInput {
   operation: "grant" | "reserve" | "consume" | "release" | "expire" | "adjust";
   memberId: string;
@@ -77,6 +119,7 @@ interface EventInput {
   category?: LedgerCategory;
   quantity?: number;
   window?: ValidityWindow;
+  completion?: SyntheticCompletion;
 }
 interface EventResult {
   resultId: string;
@@ -108,6 +151,12 @@ export interface SyntheticLedger {
     reservationId: string,
     key: string,
   ): Promise<string>;
+  settleCompletion(
+    memberId: string,
+    reservationId: string,
+    key: string,
+    completion: SyntheticCompletion,
+  ): Promise<string>;
   release(
     memberId: string,
     reservationId: string,
@@ -130,7 +179,7 @@ export function syntheticLedger(
   async function apply(
     key: string,
     input: EventInput,
-    change: (client: PoolClient) => Promise<EventResult>,
+    change: (client: PoolClient, eventId: string) => Promise<EventResult>,
   ) {
     requireKey(key);
     const fingerprint = createHash("sha256")
@@ -159,14 +208,15 @@ export function syntheticLedger(
         await client.query("COMMIT");
         return previous.result_id;
       }
-      const result = await change(client);
+      const eventId = randomUUID();
+      const result = await change(client, eventId);
       await client.query(
         `INSERT INTO synthetic_entitlement_events
          (id,member_id,grant_id,reservation_id,operation,quantity,
           idempotency_key,request_fingerprint,result_id)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
         [
-          randomUUID(),
+          eventId,
           input.memberId,
           result.grantId,
           result.reservationId,
@@ -337,6 +387,98 @@ export function syntheticLedger(
     },
     consume(memberId, reservationId, key) {
       return settle("consume", memberId, reservationId, key);
+    },
+    async settleCompletion(memberId, reservationId, key, value) {
+      requireId(memberId);
+      requireId(reservationId);
+      // Snapshot only the defined fields before awaiting. Fingerprints and
+      // evidence must describe the same value even if a caller mutates theirs.
+      const completion = completionSnapshot(value);
+      const human = completion.category !== "study_requests";
+      const quantity = human
+        ? completion.deliveredMinutes + completion.preparationMinutes
+        : completion.quantity;
+      return apply(
+        key,
+        { operation: "consume", memberId, reservationId, completion },
+        async (client, eventId) => {
+          const row = (
+            await client.query<{
+              grant_id: string;
+              quantity: number;
+              state: string;
+              category: LedgerCategory;
+            }>(
+              `SELECT r.grant_id,r.quantity,r.state,g.category
+               FROM synthetic_entitlement_reservations r
+               JOIN synthetic_entitlement_grants g ON g.id=r.grant_id
+               WHERE r.id=$1 AND g.member_id=$2
+                 AND NOT EXISTS (
+                   SELECT 1 FROM synthetic_slot_holds h WHERE h.reservation_id=r.id
+                 )
+               FOR UPDATE OF r,g`,
+              [reservationId, memberId],
+            )
+          ).rows[0];
+          if (
+            !row ||
+            row.category !== completion.category ||
+            row.quantity !== quantity
+          )
+            throw new LedgerFailure("unavailable");
+          if (row.state !== "reserved")
+            throw new LedgerFailure("already_settled");
+          // The two-integer advisory space is separate from apply()'s bigint
+          // idempotency lock. Check ownership first, then serialize reference
+          // reuse across distinct grants without exposing the existing record.
+          await client.query(
+            "SELECT pg_advisory_xact_lock(27044,hashtext($1))",
+            [completion.reference],
+          );
+          const previousCompletion = (
+            await client.query(
+              "SELECT 1 FROM synthetic_entitlement_settlements WHERE completion_ref=$1",
+              [completion.reference],
+            )
+          ).rows[0];
+          if (previousCompletion)
+            throw new LedgerFailure("idempotency_conflict");
+          // Like consume(), this is internal settlement of previously reserved
+          // units, including after expiry/revocation; it grants no new access.
+          await client.query(
+            `UPDATE synthetic_entitlement_grants SET reserved=reserved-$2,
+             consumed=consumed+$2 WHERE id=$1`,
+            [row.grant_id, quantity],
+          );
+          await client.query(
+            "UPDATE synthetic_entitlement_reservations SET state='consumed' WHERE id=$1",
+            [reservationId],
+          );
+          await client.query(
+            `INSERT INTO synthetic_entitlement_settlements
+             (id,member_id,grant_id,reservation_id,completion_ref,category,
+              quantity,delivered_minutes,preparation_minutes)
+             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [
+              eventId,
+              memberId,
+              row.grant_id,
+              reservationId,
+              completion.reference,
+              completion.category,
+              quantity,
+              human ? completion.deliveredMinutes : null,
+              human ? completion.preparationMinutes : null,
+            ],
+          );
+          return {
+            resultId: eventId,
+            grantId: row.grant_id,
+            reservationId,
+            quantity,
+          };
+        },
+      );
     },
     release(memberId, reservationId, key) {
       return settle("release", memberId, reservationId, key);
