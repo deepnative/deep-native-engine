@@ -188,6 +188,7 @@ export function syntheticLedger(
     const client = await pool.connect().catch(() => {
       throw new LedgerFailure("unavailable");
     });
+    let broken = false;
     try {
       await client.query("BEGIN");
       // Serialize same-key retries before reading the event. Grant row locks
@@ -230,12 +231,14 @@ export function syntheticLedger(
       await client.query("COMMIT");
       return result.resultId;
     } catch (error) {
-      await client.query("ROLLBACK").catch(() => {});
+      await client.query("ROLLBACK").catch(() => {
+        broken = true;
+      });
       throw error instanceof LedgerFailure
         ? error
         : new LedgerFailure("unavailable");
     } finally {
-      client.release();
+      client.release(broken);
     }
   }
 
