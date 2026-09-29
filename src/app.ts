@@ -47,6 +47,7 @@ import {
   assignmentAttemptsPage,
   assignmentAttemptPage,
   assignmentWriteRecoveryPage,
+  assignmentReadinessPage,
   availabilityPage,
   manualObservationPage,
 } from "./views.ts";
@@ -124,6 +125,10 @@ import {
   parseManualObservation,
   type ManualObservationStore,
 } from "./manual-observations.ts";
+import {
+  disabledAssignmentReadinessStore,
+  type AssignmentReadinessStore,
+} from "./assignment-readiness.ts";
 const attemptWritePath =
   /^\/assignments\/attempts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(save|submit|revise)$/i;
 const proposalEditPath = /^\/contribute\/([^/]+)\/edit$/;
@@ -179,6 +184,7 @@ export function app(
     memberExport?: MemberExportStore;
     availability?: AvailabilityStore;
     manualObservations?: ManualObservationStore;
+    assignmentReadiness?: AssignmentReadinessStore;
   },
 ) {
   const app = express();
@@ -208,6 +214,8 @@ export function app(
   const availability = options.availability ?? disabledAvailabilityStore();
   const manualObservations =
     options.manualObservations ?? disabledManualObservationStore();
+  const assignmentReadiness =
+    options.assignmentReadiness ?? disabledAssignmentReadinessStore();
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -1690,6 +1698,23 @@ export function app(
         );
       return;
     }
+    const requestedVersion = req.query.version;
+    if (
+      requestedVersion !== undefined &&
+      (typeof requestedVersion !== "string" ||
+        !/^[1-9][0-9]*$/.test(requestedVersion) ||
+        Number(requestedVersion) !== item.version)
+    ) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Content version unavailable",
+            "That exact published version is no longer current. Return to your learning path to check its prerequisites again.",
+          ),
+        );
+      return;
+    }
     if (item.kind === "lesson") {
       if (!(await store.openLesson(member.id, item.id, item.version))) {
         res
@@ -2017,7 +2042,7 @@ export function app(
     }
     res.redirect(
       303,
-      `/library/${encodeURIComponent(req.params.id as string)}`,
+      `/library/${encodeURIComponent(req.params.id as string)}?version=${version}`,
     );
   });
   app.get("/editor/library", async (_req, res) => {
@@ -2199,12 +2224,25 @@ export function app(
   });
   app.get("/learn", async (_req, res) => {
     const member = res.locals.learner as Learner;
-    const [progress, published, choice, activity] = await Promise.all([
-      store.progress(member.id),
-      catalog.search({}),
-      store.assignmentChoice(member.id),
-      store.lessonActivities(member.id),
-    ]);
+    const [progress, published, choice, activity, readiness] =
+      await Promise.all([
+        store.progress(member.id),
+        catalog.search({}),
+        store.assignmentChoice(member.id),
+        store.lessonActivities(member.id),
+        assignmentReadiness.list(res.locals.token as string),
+      ]);
+    if (readiness === null) {
+      res
+        .status(503)
+        .send(
+          errorPage(
+            "Learning path unavailable",
+            "Your prerequisite status could not be checked. Try opening your learning path again; nothing was changed.",
+          ),
+        );
+      return;
+    }
     res.send(
       dashboard(
         member,
@@ -2214,8 +2252,45 @@ export function app(
         eligibleAssignments(published, member, progress, activity),
         choice,
         recommendLesson(published, member, progress, activity),
+        undefined,
+        readiness,
       ),
     );
+  });
+  app.get("/assignments/readiness/:id", async (req, res) => {
+    const rawVersion = req.query.version;
+    if (
+      typeof rawVersion !== "string" ||
+      !/^[1-9][0-9]*$/.test(rawVersion) ||
+      !Number.isSafeInteger(Number(rawVersion))
+    ) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Assignment unavailable",
+            "Open a current sample assignment from your learning path.",
+          ),
+        );
+      return;
+    }
+    const readiness = await assignmentReadiness.get(
+      res.locals.token as string,
+      req.params.id as string,
+      Number(rawVersion),
+    );
+    if (!readiness) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Assignment unavailable",
+            "This exact sample assignment is not available for your current direction.",
+          ),
+        );
+      return;
+    }
+    res.send(assignmentReadinessPage(readiness, res.locals.csrf as string));
   });
   app.get("/progress", async (_req, res) => {
     const member = res.locals.learner as Learner;
@@ -2907,12 +2982,25 @@ export function app(
     const member = res.locals.learner as Learner;
     const edit = profileEdit(req.body as Fields);
     if (!edit.input) {
-      const [progress, published, choice, activity] = await Promise.all([
-        store.progress(member.id),
-        catalog.search({}),
-        store.assignmentChoice(member.id),
-        store.lessonActivities(member.id),
-      ]);
+      const [progress, published, choice, activity, readiness] =
+        await Promise.all([
+          store.progress(member.id),
+          catalog.search({}),
+          store.assignmentChoice(member.id),
+          store.lessonActivities(member.id),
+          assignmentReadiness.list(res.locals.token as string),
+        ]);
+      if (readiness === null) {
+        res
+          .status(503)
+          .send(
+            errorPage(
+              "Learning path unavailable",
+              "Your prerequisite status could not be checked. Nothing was changed.",
+            ),
+          );
+        return;
+      }
       res
         .status(422)
         .send(
@@ -2925,6 +3013,7 @@ export function app(
             choice,
             recommendLesson(published, member, progress, activity),
             edit,
+            readiness,
           ),
         );
       return;

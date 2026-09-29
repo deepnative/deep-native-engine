@@ -44,6 +44,7 @@ import {
   type AvailabilityStore,
 } from "../../src/availability.ts";
 import type { ManualObservationStore } from "../../src/manual-observations.ts";
+import type { AssignmentReadinessStore } from "../../src/assignment-readiness.ts";
 it("serves goal-matched event previews only to active members and never accepts enrollment", async () => {
   const db = storage();
   const agent = managedAgent(app(db, { origin, secret: "secret" }));
@@ -83,6 +84,124 @@ const member = {
   background: "explorer" as const,
   goal: "everyday" as const,
 };
+it("keeps personalized assignment preparation private, exact and read-only", async () => {
+  const db = storage();
+  const blocked = {
+    contentId: "SYN-831",
+    contentVersion: 1,
+    title: "Invented sample",
+    eligible: false,
+    requirements: [],
+  };
+  const readiness = {
+    list: vi
+      .fn<AssignmentReadinessStore["list"]>()
+      .mockResolvedValue([blocked]),
+    get: vi.fn<AssignmentReadinessStore["get"]>().mockResolvedValue(blocked),
+  };
+  const agent = managedAgent(
+    app(db, { origin, secret: "secret", assignmentReadiness: readiness }),
+  );
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  await agent
+    .get("/assignments/readiness/SYN-831?version=1")
+    .set("Host", host)
+    .expect(303);
+  expect(readiness.get).not.toHaveBeenCalled();
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const path = await agent.get("/learn").set("Host", host).expect(200);
+  expect(path.text).toContain("Prepare Invented sample");
+  const detail = await agent
+    .get("/assignments/readiness/SYN-831?version=1")
+    .set("Host", host)
+    .expect(200);
+  expect(detail.text).toContain("not yet available to choose or start");
+  expect(detail.text).not.toContain("Start or return to this private attempt");
+  expect(db.openLesson).not.toHaveBeenCalled();
+  expect(db.chooseAssignment).not.toHaveBeenCalled();
+  await agent
+    .get("/assignments/readiness/SYN-831?version=bad")
+    .set("Host", host)
+    .expect(404);
+  expect(readiness.get).toHaveBeenCalledTimes(1);
+  readiness.get.mockResolvedValueOnce(null);
+  await agent
+    .get("/assignments/readiness/SYN-831?version=2")
+    .set("Host", host)
+    .expect(404);
+  readiness.list.mockResolvedValueOnce(null);
+  const unavailable = await agent.get("/learn").set("Host", host).expect(503);
+  expect(unavailable.text).not.toContain("Invented sample");
+  readiness.list.mockResolvedValueOnce(null);
+  const unsavedProfile = await agent
+    .post("/profile")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf })
+    .expect(503);
+  expect(unsavedProfile.text).not.toContain("Invented sample");
+  db.session.mockResolvedValue({ kind: "expired" });
+  await agent
+    .get("/assignments/readiness/SYN-831?version=1")
+    .set("Host", host)
+    .expect(303);
+  expect(readiness.get).toHaveBeenCalledTimes(2);
+});
+it("rejects stale pinned lesson links before opening or changing activity", async () => {
+  const db = storage();
+  const catalog = catalogMock();
+  const item: ContentVersion = {
+    id: "SYN-830",
+    version: 2,
+    kind: "lesson",
+    origin: "curated",
+    title: "Current invented lesson",
+    body: "Sample",
+    owner: "Editor",
+    sources: "Original",
+    rights: "Owned",
+    goals: [],
+    backgrounds: [],
+    domains: [],
+    prerequisites: "None",
+    rubric: null,
+    rubricVersion: null,
+    state: "published",
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date(),
+    publishedAt: new Date(),
+  };
+  catalog.published.mockResolvedValue(item);
+  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  await agent.get("/library/SYN-830?version=1").set("Host", host).expect(409);
+  await agent
+    .get("/library/SYN-830?version=wrong")
+    .set("Host", host)
+    .expect(409);
+  expect(db.openLesson).not.toHaveBeenCalled();
+  const current = await agent
+    .get("/library/SYN-830?version=2")
+    .set("Host", host)
+    .expect(200);
+  expect(current.text).toContain("Current invented lesson");
+  expect(db.openLesson).toHaveBeenCalledTimes(1);
+  const advanced = await agent
+    .post("/library/SYN-830/progress")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf, content_version: "2", intent: "start" })
+    .expect(303);
+  expect(advanced.headers.location).toBe("/library/SYN-830?version=2");
+  catalog.published.mockResolvedValue({ ...item, version: 3 });
+  await agent.get("/library/SYN-830?version=2").set("Host", host).expect(409);
+  expect(db.openLesson).toHaveBeenCalledTimes(1);
+});
 const managedServers: Server[] = [];
 it("keeps workflow feedback owner-only and never claims a failed or stale write", async () => {
   const feedback = {

@@ -22,6 +22,7 @@ import { usefulnessStore } from "./usefulness.ts";
 import { workflowFeedbackStore } from "./workflow-feedback.ts";
 import { availabilityStore } from "./availability.ts";
 import { manualObservationStore } from "./manual-observations.ts";
+import { assignmentReadinessStore } from "./assignment-readiness.ts";
 
 export function evidenceCapabilityClock(
   mode: string,
@@ -76,6 +77,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       workflowFeedback: workflowFeedbackStore(pool),
       availability: availabilityStore(pool),
       manualObservations: manualObservationStore(pool),
+      assignmentReadiness: assignmentReadinessStore(pool),
       // config() rejects live hosting before reaching this local runtime.
       localAiConsent: localAiConsentStore(
         pool,

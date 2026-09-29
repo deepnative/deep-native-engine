@@ -40,6 +40,10 @@ import type { OwnedEvidence } from "./evidence.ts";
 import type { LocalAiChoice } from "./local-ai-consent.ts";
 import { localSlotTime, type AvailableSlot } from "./availability.ts";
 import type { EventPreview, EventPreviewDetail } from "./events.ts";
+import type {
+  AssignmentReadiness,
+  ReadinessRequirement,
+} from "./assignment-readiness.ts";
 import { learningPlan } from "./learning-plan.ts";
 import type {
   ProfileEditResult,
@@ -305,6 +309,54 @@ function assignmentSection(
   );
   return `<section class="assignment-options" aria-labelledby="assignment-options-title"><p class="eyebrow">PUBLISHED SAMPLE CONTENT</p><h2 id="assignment-options-title">Choose a practice assignment</h2><p class="small">Suggestions match your current direction and self-reported experience. A completed local exercise can satisfy only the explicitly named local prerequisite; it is not a skill assessment.</p>${selected ? `<p role="status">Your chosen sample: <a href="/library/${encodeURIComponent(selected.id)}">${escape(selected.title)}</a> · version ${selected.version}</p><form method="post" action="/assignments/attempts/start">${hidden(csrf)}<button type="submit">Start or return to this private attempt</button></form>` : choice ? '<p role="status">Your saved choice is no longer available for this direction or published version. Choose another sample below.</p>' : ""}<p><a href="/assignments/attempts">Your private assignment attempts</a></p>${items.length ? `<ul>${items.map((item) => `<li><strong>${escape(item.title)}</strong> · version ${item.version} · ${escape(EXPERIENCE[item.minimumExperience ?? "new"])}<p>${escape(prerequisiteDescription(item, "No prerequisite"))}</p><form method="post" action="/assignments/select">${hidden(csrf)}<input type="hidden" name="content_id" value="${escape(item.id)}"><input type="hidden" name="content_version" value="${item.version}"><button type="submit" class="secondary">Choose ${escape(item.title)}</button> <a href="/library/${encodeURIComponent(item.id)}">Read sample</a></form></li>`).join("")}</ul>` : "<p>No published assignment currently fits your goal, interests, experience and completed prerequisites. Continue with the local foundation lesson or revise your direction.</p>"}</section>`;
 }
+function assignmentPreparationSection(items: AssignmentReadiness[]) {
+  const blocked = items.filter((item) => !item.eligible);
+  if (!blocked.length) return "";
+  return `<section class="assignment-options" aria-labelledby="assignment-preparation-title"><p class="eyebrow">PRIVATE LOCAL PREPARATION</p><h2 id="assignment-preparation-title">Prepare a future assignment</h2><p>These published sample assignments match your current direction but are not ready to choose. Check the exact prerequisite version and your own activity before starting an attempt.</p><ul>${blocked.map((item) => `<li><strong>${escape(item.title)}</strong> · version ${item.contentVersion}<p><a href="/assignments/readiness/${encodeURIComponent(item.contentId)}?version=${item.contentVersion}">Prepare ${escape(item.title)}</a></p></li>`).join("")}</ul></section>`;
+}
+
+function readinessRequirement(item: ReadinessRequirement): string {
+  if (item.kind === "unavailable")
+    return "<li><strong>Unavailable</strong> · This exact prerequisite is not currently safe to use. Return later or choose another sample; earlier private activity is unchanged.</li>";
+  const observed = {
+    "not-started": "Not started",
+    started: "Started",
+    "self-assessed": "Self-assessed",
+    completed: "Completed",
+    unavailable: "Unavailable",
+  }[item.observed];
+  const required = item.required
+    ? {
+        started: "Start this lesson",
+        "self-assessed": "Self-assess this lesson after reading",
+        completed: "Complete the local foundation exercise",
+      }[item.required]
+    : "Check this prerequisite";
+  const label =
+    item.kind === "exercise"
+      ? "Local clear-instructions exercise"
+      : (item.title ?? "Sample lesson");
+  const link =
+    !item.satisfied && item.action?.kind === "lesson"
+      ? `<p><a href="/library/${encodeURIComponent(item.action.contentId)}?version=${item.action.contentVersion}">Open prerequisite lesson: ${escape(label)}</a></p>`
+      : !item.satisfied && item.action?.kind === "exercise"
+        ? '<p><a href="/lesson">Complete the local foundation exercise</a></p>'
+        : "";
+  return `<li><strong>${escape(label)}</strong>${item.contentVersion === undefined ? " · version unavailable" : ` · version ${item.contentVersion}`}<p>Needed: ${required}. Your exact-version activity: <span>${observed}</span>${item.satisfied ? " · requirement met" : " · requirement not yet met"}.</p>${item.detailsLimited ? "<p>Additional prerequisite details are summarized here; this status reflects your saved activity and current eligibility check.</p>" : ""}${link}${item.requirements.length ? `<ul>${item.requirements.map(readinessRequirement).join("")}</ul>` : ""}</li>`;
+}
+
+export function assignmentReadinessPage(
+  item: AssignmentReadiness,
+  csrf: string,
+) {
+  const status = item.eligible
+    ? `<p role="status">The current sample is available to choose. This is based only on the existing local prerequisite checks; it is not a skill assessment.</p><form method="post" action="/assignments/select">${hidden(csrf)}<input type="hidden" name="content_id" value="${escape(item.contentId)}"><input type="hidden" name="content_version" value="${item.contentVersion}"><button type="submit">Choose this sample assignment</button></form>`
+    : '<p role="status">This sample is not yet available to choose or start. Complete an available next step, then reload this checklist.</p>';
+  return page(
+    `Prepare ${item.title}`,
+    `<section class="assignment-options assignment-preparation"><p class="eyebrow">PRIVATE LOCAL PREVIEW · SYNTHETIC SAMPLE</p><h1>Prepare ${escape(item.title)}</h1><p>Assignment version ${item.contentVersion}. Your current goal and interests match this sample. Each requirement below names an exact published version; opening this checklist records no progress.</p>${status}<h2>Prerequisite checklist</h2>${item.requirements.length ? `<ul>${item.requirements.map(readinessRequirement).join("")}</ul>` : "<p>No additional local prerequisites are named.</p>"}<p>Starting a lesson and reporting its completion are separate choices. A self-report is not a formal review or proof of competence.</p><p><a href="/learn">Return to your learning path</a></p></section>`,
+  );
+}
 export function assignmentAttemptsPage(items: AssignmentAttempt[]) {
   const rows = items.map((item) => {
     const prior = item.submissionCount ?? 0;
@@ -524,6 +576,7 @@ export function dashboard(
   choice: AssignmentChoice | null = null,
   recommendedLesson: ContentVersion | null = null,
   profileState?: ProfileEditResult,
+  readiness: AssignmentReadiness[] = [],
 ) {
   const done = Boolean(progress?.completed_at);
   const status = done
@@ -542,7 +595,7 @@ export function dashboard(
     profileState?.errors.length
       ? "Error in your profile"
       : "Your learning path",
-    `<section class="dashboard-head"><div><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment.</span></aside></section><section class="learning-plan" aria-labelledby="learning-plan-title"><p class="eyebrow">PRIVATE FOUNDATION PREVIEW</p><h2 id="learning-plan-title">Your starter plan</h2><p>Focus: ${escape(plan.focus)}. ${escape(plan.guidance)}</p><p class="small">Weekly time: ${escape(time ?? "Not specified")} · Time zone: ${escape(learner.timezone ?? "Not specified")} · AI experience: self-reported ${escape(learner.experience ? EXPERIENCE[learner.experience] : "Not specified")}</p><ol>${plan.steps.map((step) => `<li>${step.minutes} minutes · ${escape(step.action)}</li>`).join("")}</ol>${plan.nextSession ? `<p>${escape(plan.nextSession)}</p>` : ""}${plan.exploratory ? `<p>${escape(plan.exploratory)}</p>` : ""}<p class="small">The timed steps use only the local starter lesson. Revisit or skip steps you already completed. These suggestions do not book coaching or certify a skill.</p><section aria-label="Suggested next sample lesson"><h3>Explore another sample lesson</h3>${nextLesson}</section></section>${assignmentSection(assignments, choice, csrf)}<section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? "Review your work" : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card"><p class="eyebrow">WHERE THIS CAN GO</p><h2>Learn together.<br>Contribute something useful.</h2><p>Learning circles, peer contributions and more paths are on the roadmap. This preview begins with your first practical exercise.</p><p class="small">Community and coaching features are not yet available.</p></aside></section><p><a class="button secondary" href="/library">Browse published learning library</a> <a class="button secondary" href="/milestones">Plan goals and milestones</a> <a class="button secondary" href="/career">Explore optional career planning</a> <a class="button secondary" href="/contribute">Draft a private sample contribution</a> <a class="button secondary" href="/evidence">Manage private evidence</a> <a class="button secondary" href="/progress">View private learning activity</a> <a class="button secondary" href="/tailored-review">Check tailored-review availability</a> <a class="button secondary" href="/availability">View sample appointment windows</a> <a class="button secondary" href="/events">Explore local events</a></p><p><a href="/api/member/export">Download my structured preview records</a>. This versioned JSON includes current profile, learning, plans and retained proposal records. Evidence samples use a separate download. The export stops at 100 records or 256 KiB and excludes audit, billing, derivatives, provider and backup copies.</p><section class="profile-form"><h2>Adjust your direction</h2><p>Change goals and interests whenever you want. Your saved exercise stays with this preview.</p><form method="post" action="/profile">${hidden(csrf)}${profileState ? profileErrorSummary(profileState) : notice(errors)}${profileFields(learner, profileState?.attempted, profileState?.errors)}<button type="submit">Save my direction</button></form></section><form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete my local preview and all its saved work.</span></label><button class="secondary" type="submit">Delete this preview</button></form>`,
+    `<section class="dashboard-head"><div><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment.</span></aside></section><section class="learning-plan" aria-labelledby="learning-plan-title"><p class="eyebrow">PRIVATE FOUNDATION PREVIEW</p><h2 id="learning-plan-title">Your starter plan</h2><p>Focus: ${escape(plan.focus)}. ${escape(plan.guidance)}</p><p class="small">Weekly time: ${escape(time ?? "Not specified")} · Time zone: ${escape(learner.timezone ?? "Not specified")} · AI experience: self-reported ${escape(learner.experience ? EXPERIENCE[learner.experience] : "Not specified")}</p><ol>${plan.steps.map((step) => `<li>${step.minutes} minutes · ${escape(step.action)}</li>`).join("")}</ol>${plan.nextSession ? `<p>${escape(plan.nextSession)}</p>` : ""}${plan.exploratory ? `<p>${escape(plan.exploratory)}</p>` : ""}<p class="small">The timed steps use only the local starter lesson. Revisit or skip steps you already completed. These suggestions do not book coaching or certify a skill.</p><section aria-label="Suggested next sample lesson"><h3>Explore another sample lesson</h3>${nextLesson}</section></section>${assignmentSection(assignments, choice, csrf)}${assignmentPreparationSection(readiness)}<section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? "Review your work" : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card"><p class="eyebrow">WHERE THIS CAN GO</p><h2>Learn together.<br>Contribute something useful.</h2><p>Learning circles, peer contributions and more paths are on the roadmap. This preview begins with your first practical exercise.</p><p class="small">Community and coaching features are not yet available.</p></aside></section><p><a class="button secondary" href="/library">Browse published learning library</a> <a class="button secondary" href="/milestones">Plan goals and milestones</a> <a class="button secondary" href="/career">Explore optional career planning</a> <a class="button secondary" href="/contribute">Draft a private sample contribution</a> <a class="button secondary" href="/evidence">Manage private evidence</a> <a class="button secondary" href="/progress">View private learning activity</a> <a class="button secondary" href="/tailored-review">Check tailored-review availability</a> <a class="button secondary" href="/availability">View sample appointment windows</a> <a class="button secondary" href="/events">Explore local events</a></p><p><a href="/api/member/export">Download my structured preview records</a>. This versioned JSON includes current profile, learning, plans and retained proposal records. Evidence samples use a separate download. The export stops at 100 records or 256 KiB and excludes audit, billing, derivatives, provider and backup copies.</p><section class="profile-form"><h2>Adjust your direction</h2><p>Change goals and interests whenever you want. Your saved exercise stays with this preview.</p><form method="post" action="/profile">${hidden(csrf)}${profileState ? profileErrorSummary(profileState) : notice(errors)}${profileFields(learner, profileState?.attempted, profileState?.errors)}<button type="submit">Save my direction</button></form></section><form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete my local preview and all its saved work.</span></label><button class="secondary" type="submit">Delete this preview</button></form>`,
   );
 }
 function evidenceLineage(item: OwnedEvidence) {

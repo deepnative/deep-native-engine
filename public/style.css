@@ -382,6 +382,14 @@ progress {
 .assignment-options li p {
   margin: 8px 0;
 }
+.assignment-preparation li {
+  overflow-wrap: anywhere;
+}
+.assignment-preparation ul ul {
+  margin-top: 12px;
+  padding-left: 20px;
+  border-left: 2px solid var(--line);
+}
 .milestone-page,
 .career-page {
   max-width: 850px;

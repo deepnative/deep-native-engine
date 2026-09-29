@@ -17,6 +17,7 @@ import {
   careerPage,
   assignmentAttemptsPage,
   assignmentAttemptPage,
+  assignmentReadinessPage,
   evidencePage,
   localAiConsentPage,
   localAiControlPage,
@@ -31,6 +32,7 @@ import {
 import { EVENT_PREVIEWS } from "../../src/events.ts";
 import type { ManualObservation } from "../../src/manual-observations.ts";
 import type { AssignmentAttempt } from "../../src/attempts.ts";
+import type { AssignmentReadiness } from "../../src/assignment-readiness.ts";
 import type { ContentVersion } from "../../src/catalog.ts";
 import type { Milestone } from "../../src/store.ts";
 import type { CareerSnapshot } from "../../src/career.ts";
@@ -48,6 +50,134 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("keeps blocked synthetic assignments separate from selectable choices and escapes their titles", () => {
+  const blocked: AssignmentReadiness = {
+    contentId: "SYN-831",
+    contentVersion: 2,
+    title: "Invented <practice>",
+    eligible: false,
+    requirements: [],
+  };
+  const html = dashboard(
+    learner,
+    undefined,
+    "token",
+    [],
+    [],
+    null,
+    null,
+    undefined,
+    [blocked],
+  );
+  expect(html).toContain("Prepare a future assignment");
+  expect(html).toContain("Prepare Invented &lt;practice&gt;");
+  expect(html).toContain("/assignments/readiness/SYN-831?version=2");
+  expect(html).not.toContain("Invented <practice>");
+  expect(
+    dashboard(learner, undefined, "token", [], [], null, null, undefined, [
+      { ...blocked, eligible: true },
+    ]),
+  ).not.toContain("Prepare a future assignment");
+});
+
+it("shows exact observed prerequisite states and only safe next actions", () => {
+  const item: AssignmentReadiness = {
+    contentId: "SYN-831",
+    contentVersion: 1,
+    title: "Invented <assignment>",
+    eligible: false,
+    requirements: [
+      {
+        kind: "lesson",
+        contentId: "SYN-830",
+        contentVersion: 3,
+        title: "Invented <lesson>",
+        required: "started",
+        observed: "not-started",
+        satisfied: false,
+        action: { kind: "lesson", contentId: "SYN-830", contentVersion: 3 },
+        requirements: [
+          {
+            kind: "exercise",
+            contentId: "clear-instructions",
+            contentVersion: 1,
+            required: "completed",
+            observed: "not-started",
+            satisfied: false,
+            action: {
+              kind: "exercise",
+              contentId: "clear-instructions",
+              contentVersion: 1,
+            },
+            requirements: [],
+          },
+          {
+            kind: "unavailable",
+            observed: "unavailable",
+            satisfied: false,
+            requirements: [],
+          },
+        ],
+      },
+    ],
+  };
+  const html = assignmentReadinessPage(item, "token");
+  expect(html).toContain("Prepare Invented &lt;assignment&gt;");
+  expect(html).toContain("Not started");
+  expect(html).toContain("Unavailable");
+  expect(html).toContain("/library/SYN-830?version=3");
+  expect(html).toContain('href="/lesson"');
+  expect(html).not.toContain("Invented <lesson>");
+  expect(html).not.toContain("Start or return to this private attempt");
+  const ready = assignmentReadinessPage(
+    {
+      ...item,
+      eligible: true,
+      requirements: [
+        {
+          kind: "lesson",
+          contentId: "SYN-830",
+          contentVersion: 3,
+          title: "Invented lesson",
+          required: "self-assessed",
+          observed: "self-assessed",
+          satisfied: true,
+          detailsLimited: true,
+          requirements: [],
+        },
+      ],
+    },
+    "token",
+  );
+  expect(ready).toContain("Choose this sample assignment");
+  expect(ready).toContain("Self-assessed");
+  expect(ready).toContain("Additional prerequisite details are summarized");
+  expect(ready).not.toContain("Open prerequisite lesson");
+  expect(
+    assignmentReadinessPage(
+      { ...item, eligible: true, requirements: [] },
+      "token",
+    ),
+  ).toContain("No additional local prerequisites");
+  const incomplete = assignmentReadinessPage(
+    {
+      ...item,
+      requirements: [
+        {
+          kind: "lesson",
+          observed: "started",
+          satisfied: false,
+          requirements: [],
+        },
+      ],
+    },
+    "token",
+  );
+  expect(incomplete).toContain("Sample lesson");
+  expect(incomplete).toContain("version unavailable");
+  expect(incomplete).toContain("Check this prerequisite");
+  expect(incomplete).not.toContain("Open prerequisite lesson");
+});
 it("shows versioned synthetic event discovery and truthful local time without fixture seats", () => {
   const event = EVENT_PREVIEWS.find(
     (item) => item.id === "everyday-ai-preview" && item.version === 2,
