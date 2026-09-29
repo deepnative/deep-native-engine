@@ -633,6 +633,11 @@ test("[L88] private simulated portfolio statements pin submitted versions across
           .getByRole("button", { name: "Submit saved version locally" })
           .click();
       }
+      await expect(
+        learner.getByRole("region", {
+          name: "Private local submission history",
+        }),
+      ).toContainText("Submission 2");
       await learner.reload();
       await expect(
         learner.getByText(
