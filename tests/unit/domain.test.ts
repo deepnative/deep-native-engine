@@ -5,7 +5,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../../src/config.ts";
 import { exercise } from "../../src/content.ts";
-import { profile, profileEdit, submission } from "../../src/validation.ts";
+import {
+  profile,
+  profileEdit,
+  profileStart,
+  submission,
+} from "../../src/validation.ts";
 import { token, csrf, validCsrf } from "../../src/session.ts";
 const database = "postgresql://dne:sample@127.0.0.1:54329/dne_dev";
 describe("local-only configuration", () => {
@@ -274,6 +279,51 @@ describe("learner inputs", () => {
         message: expect.stringContaining("Time zone"),
       },
     ]);
+  });
+  it("keeps onboarding acknowledgement explicit while retaining safe attempted choices", () => {
+    const body = {
+      background: "explorer",
+      goal: "everyday",
+      domain_tags: "education",
+      timezone: "Mars/Olympus",
+      weekly_minutes: "30",
+    };
+    const omitted = profileStart(body);
+    expect(omitted.input).toBeNull();
+    expect(omitted.syntheticAcknowledged).toBe(false);
+    expect(omitted.errors.map((error) => error.field)).toEqual([
+      "timezone",
+      "synthetic",
+    ]);
+    expect(omitted.attempted).toMatchObject({
+      background: "explorer",
+      goal: "everyday",
+      domainTags: ["education"],
+      timezone: "Mars/Olympus",
+      weeklyMinutes: "30",
+    });
+    const duplicate = profileStart({
+      ...body,
+      timezone: "UTC",
+      synthetic: ["yes", "yes"],
+    });
+    expect(duplicate.input).toBeNull();
+    expect(duplicate.syntheticAcknowledged).toBe(false);
+    expect(duplicate.errors.map((error) => error.field)).toEqual(["synthetic"]);
+    const accepted = profileStart({
+      ...body,
+      timezone: "UTC",
+      synthetic: "yes",
+    });
+    expect(accepted.errors).toEqual([]);
+    expect(accepted.syntheticAcknowledged).toBe(true);
+    expect(accepted.input).toMatchObject({
+      background: "explorer",
+      goal: "everyday",
+      domainTags: ["education"],
+      timezone: "UTC",
+      weeklyMinutes: 30,
+    });
   });
   it("allows an unfinished draft but validates every completed answer", () => {
     expect(submission({ intent: "draft" })).toMatchObject({

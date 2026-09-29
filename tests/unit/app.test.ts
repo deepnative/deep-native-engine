@@ -1870,6 +1870,123 @@ it("onboards only valid profiles and ignores caller-controlled ownership", async
     .expect(303)
     .expect("Location", "/learn");
 });
+it("retains safe onboarding choices and acknowledgement on an unsaved field error", async () => {
+  const { agent, csrf } = await client();
+  const attempted = {
+    csrf,
+    background: "professional",
+    goal: "work",
+    background_tags: "technical",
+    domain_tags: "finance",
+    experience: "some",
+    timezone: "Mars/Olympus",
+    weekly_minutes: "60",
+    synthetic: "yes",
+  };
+  const invalid = await agent
+    .post("/start")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send(attempted)
+    .expect(422);
+  expect(db.create).not.toHaveBeenCalled();
+  expect(invalid.text).toContain("<title>Error in your onboarding");
+  expect(invalid.text).toContain("Your changes were not saved");
+  expect(invalid.text).toContain('href="#timezone"');
+  expect(invalid.text).toContain('<option value="professional" selected>');
+  expect(invalid.text).toContain('<option value="work" selected>');
+  expect(invalid.text).toContain(
+    'name="background_tags" value="technical" checked',
+  );
+  expect(invalid.text).toContain('name="domain_tags" value="finance" checked');
+  expect(invalid.text).toContain('<option value="some" selected>');
+  expect(invalid.text).toContain('<option value="60" selected>');
+  expect(invalid.text).toContain(
+    'id="timezone" name="timezone" value="Mars/Olympus"',
+  );
+  expect(invalid.text).toContain(
+    'aria-describedby="timezone-help timezone-error"',
+  );
+  expect(invalid.text).toContain(
+    'name="synthetic" value="yes" required checked',
+  );
+  await agent.get("/").set("Host", host).expect(200);
+  const unrelated = managedAgent(app(db, { origin, secret: "secret" }));
+  const otherPage = await unrelated.get("/").set("Host", host).expect(200);
+  expect(otherPage.text).not.toContain('value="Mars/Olympus"');
+  expect(otherPage.text).not.toContain('<option value="work" selected>');
+  await agent
+    .post("/start")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ ...attempted, timezone: "America/Toronto" })
+    .expect(303);
+  expect(db.create).toHaveBeenCalledTimes(1);
+  expect(db.create).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({
+      background: "professional",
+      goal: "work",
+      backgroundTags: ["technical"],
+      domainTags: ["finance"],
+      experience: "some",
+      timezone: "America/Toronto",
+      weeklyMinutes: 60,
+    }),
+  );
+});
+it("rejects forged onboarding inputs and never infers a missing sample-data acknowledgement", async () => {
+  const { agent, csrf } = await client();
+  const invalid = await agent
+    .post("/start")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({
+      csrf,
+      background: ["technical", "technical"],
+      goal: "admin",
+      domain_tags: ["finance", "finance"],
+      experience: ["new", "some"],
+      weekly_minutes: ["15", "60"],
+      timezone: '<img src=x onerror="alert(1)">',
+      synthetic: ["yes", "yes"],
+    })
+    .expect(422);
+  expect(db.create).not.toHaveBeenCalled();
+  for (const field of [
+    "background",
+    "goal",
+    "domain_tags",
+    "experience",
+    "weekly_minutes",
+    "timezone",
+    "synthetic",
+  ])
+    expect(invalid.text).toContain(`href="#${field}"`);
+  expect(invalid.text).toContain('name="domain_tags" value="finance" checked');
+  expect(invalid.text).toContain(
+    'value="&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"',
+  );
+  expect(invalid.text).not.toContain('<img src=x onerror="alert(1)">');
+  expect(invalid.text).not.toContain('<option value="admin"');
+  expect(invalid.text).not.toContain(
+    'name="synthetic" value="yes" required checked',
+  );
+  const missing = await agent
+    .post("/start")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf, background: "explorer", goal: "everyday" })
+    .expect(422);
+  expect(missing.text).toContain('href="#synthetic"');
+  expect(missing.text).toContain('id="synthetic" type="checkbox"');
+  expect(missing.text).toContain('aria-describedby="synthetic-error"');
+  expect(db.create).not.toHaveBeenCalled();
+});
 it("lets an active member revise their direction without selecting another owner", async () => {
   const { agent, csrf } = await client();
   active();

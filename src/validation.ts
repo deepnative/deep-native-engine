@@ -22,7 +22,8 @@ export type ProfileField =
   | "experience"
   | "timezone"
   | "weekly_minutes"
-  | "exploratory";
+  | "exploratory"
+  | "synthetic";
 export interface ProfileError {
   field: ProfileField;
   message: string;
@@ -42,6 +43,9 @@ export interface ProfileEditResult {
   input: LearnerProfile | null;
   attempted: ProfileFormState;
   errors: ProfileError[];
+}
+export interface ProfileStartResult extends ProfileEditResult {
+  syntheticAcknowledged: boolean;
 }
 function timeZone(value: unknown): string | null | undefined {
   if (value === undefined || value === "") return null;
@@ -169,10 +173,29 @@ function parseProfile(body: Fields): ProfileEditResult {
   return { input, attempted, errors };
 }
 export function profile(body: Fields): LearnerProfile | null {
-  return body.synthetic === "yes" ? parseProfile(body).input : null;
+  return profileStart(body).input;
 }
 export function profileEdit(body: Fields): ProfileEditResult {
   return parseProfile(body);
+}
+export function profileStart(body: Fields): ProfileStartResult {
+  const result = parseProfile(body);
+  const syntheticAcknowledged = body.synthetic === "yes";
+  return {
+    ...result,
+    input: syntheticAcknowledged ? result.input : null,
+    errors: syntheticAcknowledged
+      ? result.errors
+      : [
+          ...result.errors,
+          {
+            field: "synthetic",
+            message:
+              "Confirm that you will use only invented or sample information.",
+          },
+        ],
+    syntheticAcknowledged,
+  };
 }
 export function submission(body: Fields) {
   const instruction =
