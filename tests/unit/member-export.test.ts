@@ -64,7 +64,7 @@ it("returns a versioned all-section snapshot after its authorized transaction co
   expect(result).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v7",
+      version: "local-member-records-v8",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
     },

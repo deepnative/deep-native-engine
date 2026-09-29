@@ -63,9 +63,14 @@ const sections = {
     created_at AS "createdAt",updated_at AS "updatedAt"
     FROM workflow_feedback WHERE member_id=$1
     ORDER BY workflow_id,workflow_version LIMIT $2`,
+  // A withdrawal may commit while the repeatable-read owner lookup waits.
+  // Lock the note too: a changed snapshot tuple must fail closed, not export
+  // its pre-withdrawal response. Owner/workspace locks are acquired first.
   privatePractice: `SELECT content_id AS "contentId",content_version AS "contentVersion",
-    goal_at_save AS "goalAtSave",response,saved_at AS "savedAt"
-    FROM private_practice WHERE member_id=$1 ORDER BY content_id,content_version LIMIT $2`,
+    goal_at_save AS "goalAtSave",response,saved_at AS "savedAt",
+    CASE WHEN withdrawn_at IS NULL THEN 'saved' ELSE 'withdrawn' END AS state,
+    withdrawn_at AS "withdrawnAt"
+    FROM private_practice WHERE member_id=$1 ORDER BY content_id,content_version LIMIT $2 FOR SHARE`,
   circleMemberships: `SELECT circle_id AS "circleId",joined_at AS "joinedAt",
     left_at AS "leftAt" FROM preview_circle_memberships
     WHERE member_id=$1 ORDER BY circle_id LIMIT $2`,
@@ -123,7 +128,7 @@ export function memberExportStore(pool: Pool): MemberExportStore {
           }
           const payload = {
             kind: "ready",
-            version: "local-member-records-v7",
+            version: "local-member-records-v8",
             profile: owner.rows[0],
             records,
           };

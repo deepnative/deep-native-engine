@@ -22,6 +22,8 @@ import {
   localAiControlPage,
   availabilityPage,
   privateProgressPage,
+  privatePracticePage,
+  privatePracticeHistoryPage,
   manualObservationPage,
 } from "../../src/views.ts";
 import type { ManualObservation } from "../../src/manual-observations.ts";
@@ -43,6 +45,52 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("offers confirmed exact-version practice withdrawal and redacts the retained marker", () => {
+  const saved = {
+    id: "SYN-131",
+    version: 2,
+    title: "Invented lesson",
+    response: "<private invented response>",
+    savedAt: new Date("2026-09-28T11:00:00Z"),
+    available: false,
+    withdrawnAt: null,
+  };
+  const active = privatePracticeHistoryPage([saved], "csrf");
+  expect(active).toContain("&lt;private invented response&gt;");
+  expect(active).toContain('action="/practice/SYN-131/2/withdraw"');
+  expect(active).toContain('name="confirm" value="yes" required');
+  expect(active).toContain("Source unavailable; saved private note only");
+  const withdrawn = privatePracticeHistoryPage(
+    [
+      {
+        ...saved,
+        response: null,
+        withdrawnAt: new Date("2026-09-28T12:00:00Z"),
+      },
+    ],
+    "csrf",
+  );
+  expect(withdrawn).toContain("Withdrawn 2026-09-28T12:00:00.000Z");
+  expect(withdrawn).toContain("Source unavailable");
+  expect(withdrawn).not.toContain("private invented response");
+  expect(withdrawn).not.toContain("Your saved words");
+  expect(withdrawn).not.toContain("Withdraw private note");
+  expect(withdrawn).not.toContain("Current source and saved comparison");
+  const source = {
+    id: saved.id,
+    version: saved.version,
+    title: saved.title,
+    body: "<synthetic source>",
+    goal: "everyday" as const,
+    response: null,
+    withdrawnAt: new Date("2026-09-28T12:00:00Z"),
+  };
+  const current = privatePracticePage(source, "csrf");
+  expect(current).toContain("note was withdrawn");
+  expect(current).not.toContain("Save private practice");
+  expect(current).not.toContain("Your saved sample and source comparison");
+  expect(current).not.toContain("private invented response");
+});
 it("shows a private workflow improvement with an exact version and a stale-safe draft", async () => {
   const workflow = await workflowBundle("WF-001");
   expect(workflow).not.toBeNull();
