@@ -112,5 +112,13 @@ it("lets a moderator reach a newer submission past 100 retained quarantined prop
     ).toEqual({ quarantined: 100, submitted: 1 });
   } finally {
     server.close();
+    // The verification runner reuses this database for browser journeys.
+    // A retained 100-row fixture would hide newer moderation items there.
+    // Proposal rows reference the moderator without ON DELETE CASCADE, so
+    // remove the owning member (and its proposals) before the staff record.
+    await pool.query("DELETE FROM principals WHERE id=$1", [
+      session.learner.id,
+    ]);
+    await pool.query("DELETE FROM principals WHERE id=$1", [staffId]);
   }
 });

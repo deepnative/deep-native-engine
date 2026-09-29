@@ -18,11 +18,16 @@ const sections = {
     FROM lesson_usefulness WHERE member_id=$1 ORDER BY content_id,content_version LIMIT $2`,
   assignmentChoices: `SELECT content_id AS "contentId",content_version AS "contentVersion",
     chosen_at AS "chosenAt" FROM learner_assignment_choices WHERE member_id=$1 LIMIT $2`,
-  assignmentAttempts: `SELECT id,content_id AS "contentId",content_version AS "contentVersion",
-    goal_at_start AS "goalAtStart",response,revision,
-    submission_count AS "submissionCount",started_at AS "startedAt",
-    saved_at AS "savedAt",submitted_at AS "submittedAt"
-    FROM assignment_attempts WHERE member_id=$1 ORDER BY started_at,id LIMIT $2`,
+  // Whole-series deletion cascades submission snapshots through this parent.
+  // Lock attempts before reading either section, in stable UUID order, then
+  // restore the prior display order. A changed snapshot tuple fails closed.
+  assignmentAttempts: `WITH locked AS MATERIALIZED (
+    SELECT id,content_id AS "contentId",content_version AS "contentVersion",
+      goal_at_start AS "goalAtStart",response,revision,
+      submission_count AS "submissionCount",started_at AS "startedAt",
+      saved_at AS "savedAt",submitted_at AS "submittedAt"
+    FROM assignment_attempts WHERE member_id=$1 ORDER BY id LIMIT $2 FOR SHARE
+    ) SELECT * FROM locked ORDER BY "startedAt",id`,
   assignmentSubmissions: `SELECT s.attempt_id AS "attemptId",s.sequence,s.response,
     s.submitted_at AS "submittedAt" FROM assignment_submission_snapshots s
     JOIN assignment_attempts a ON a.id=s.attempt_id

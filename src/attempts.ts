@@ -160,12 +160,60 @@ export function attemptStore(pool: Pool): AttemptStore {
       return result.rowCount === 1;
     },
     async remove(token, id) {
-      const result = await pool.query(
-        `DELETE FROM assignment_attempts a USING learners l,principals p
-         WHERE a.member_id=l.id AND p.id=l.id AND ${activeMember} AND a.id=$2`,
-        [hash(token), id],
-      );
-      return result.rowCount === 1;
+      try {
+        const client = await pool.connect();
+        let committed = false;
+        let releaseError: Error | undefined;
+        try {
+          await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+          await client.query("SET LOCAL lock_timeout='5s'");
+          // Match owner export and account deletion: principal, workspace,
+          // then the attempt whose deletion cascades its submission history.
+          const principal = (
+            await client.query<{ id: string; expiresAt: Date }>(
+              `SELECT id,expires_at AS "expiresAt" FROM principals
+               WHERE token_hash=$1 AND kind='member' AND revoked_at IS NULL
+                 AND expires_at>clock_timestamp() FOR SHARE`,
+              [hash(token)],
+            )
+          ).rows[0];
+          if (!principal) return false;
+          const workspace = await client.query(
+            `SELECT id FROM workspaces WHERE owner_principal_id=$1
+             AND deleting_at IS NULL FOR SHARE`,
+            [principal.id],
+          );
+          if (!workspace.rows[0]) return false;
+          const deleted = await client.query(
+            `DELETE FROM assignment_attempts WHERE member_id=$1 AND id=$2`,
+            [principal.id, id],
+          );
+          if (deleted.rowCount !== 1) return false;
+          // CURRENT_TIMESTAMP is fixed at transaction start, which may be
+          // older than a wait on an export's attempt row lock.
+          const current = await client.query<{ valid: boolean }>(
+            "SELECT clock_timestamp() < $1::timestamptz AS valid",
+            [principal.expiresAt],
+          );
+          if (!current.rows[0]?.valid) return false;
+          await client.query("COMMIT");
+          committed = true;
+          return true;
+        } finally {
+          if (!committed) {
+            try {
+              await client.query("ROLLBACK");
+            } catch {
+              releaseError = new Error("Attempt deletion rollback failed");
+            }
+          }
+          client.release(releaseError);
+        }
+      } catch {
+        // A lost commit acknowledgement leaves deletion uncertain, never a
+        // confirmed success. The caller directs the member to inspect state.
+        return false;
+      }
     },
   };
 }
