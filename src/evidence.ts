@@ -494,11 +494,13 @@ export function evidenceStore(
     async exportOwned(token) {
       if (!tokenPattern.test(token)) return { kind: "denied" };
       const client = await pool.connect();
+      let releaseError: Error | undefined;
       try {
         await client.query("BEGIN");
-        const owner = await client.query<{ id: string }>(
-          `SELECT id FROM principals WHERE token_hash=$1 AND kind='member'
-           AND revoked_at IS NULL AND expires_at>CURRENT_TIMESTAMP FOR SHARE`,
+        const owner = await client.query<{ id: string; validUntil: Date }>(
+          `SELECT id,expires_at AS "validUntil" FROM principals
+           WHERE token_hash=$1 AND kind='member' AND revoked_at IS NULL
+             AND expires_at>clock_timestamp() FOR SHARE`,
           [hash(token)],
         );
         if (!owner.rows[0]) {
@@ -578,13 +580,24 @@ export function evidenceStore(
             sourceBase64,
           });
         }
+        // BEGIN freezes CURRENT_TIMESTAMP; source reads can outlive the session.
+        // Keep the principal and evidence locks until this wall-clock check commits.
+        const current = await client.query<{ valid: boolean }>(
+          "SELECT clock_timestamp() < $1::timestamptz AS valid",
+          [owner.rows[0].validUntil],
+        );
+        if (!current.rows[0]?.valid) {
+          await client.query("ROLLBACK");
+          return { kind: "denied" };
+        }
         await client.query("COMMIT");
         return { kind: "ready", version: "local-evidence-v1", items };
       } catch {
-        await client.query("ROLLBACK").catch(() => undefined);
+        if (!(await rollback(client)))
+          releaseError = new Error("Evidence export rollback failed");
         return { kind: "unavailable" };
       } finally {
-        client.release();
+        client.release(releaseError);
       }
     },
     async upload(token, input) {

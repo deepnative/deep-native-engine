@@ -302,14 +302,18 @@ it("exports bounded owned clean bytes and only metadata for unsafe samples", asy
     sha256: createHash("sha256").update(data).digest("hex"),
     storageKey,
   };
-  const db = database({ id: evidenceId }, [
-    row,
-    {
-      ...row,
-      id: "33333333-3333-4333-8333-333333333333",
-      quarantineState: "pending",
-    },
-  ]);
+  const db = database(
+    { id: evidenceId, validUntil: new Date("2030-01-01") },
+    [
+      row,
+      {
+        ...row,
+        id: "33333333-3333-4333-8333-333333333333",
+        quarantineState: "pending",
+      },
+    ],
+    { valid: true },
+  );
   const objects = objectStorage();
   const result = await evidenceStore(db.pool, objects, "secret").exportOwned(
     token,
@@ -326,6 +330,37 @@ it("exports bounded owned clean bytes and only metadata for unsafe samples", asy
   expect(objects.get).toHaveBeenCalledTimes(1);
   expect(db.query).toHaveBeenCalledWith("COMMIT");
   expect(db.client.release).toHaveBeenCalledTimes(1);
+});
+it("withholds assembled private source when its owner expires before export commit", async () => {
+  const data = Buffer.from("Synthetic private source");
+  const db = database(
+    { id: evidenceId, validUntil: new Date("2030-01-01") },
+    [
+      {
+        id: evidenceId,
+        name: "private.txt",
+        mediaType: "text/plain",
+        quarantineState: "clean",
+        privateReviewAllowed: true,
+        privateReviewRevokedAt: null,
+        createdAt: new Date(),
+        byteSize: data.length,
+        sha256: createHash("sha256").update(data).digest("hex"),
+        storageKey,
+      },
+    ],
+    { valid: false },
+  );
+  const objects = objectStorage();
+  objects.get.mockResolvedValue(data);
+  const result = await evidenceStore(db.pool, objects, "secret").exportOwned(
+    token,
+  );
+  expect(objects.get).toHaveBeenCalledTimes(1);
+  expect(result).toEqual({ kind: "denied" });
+  expect(JSON.stringify(result)).not.toContain("Synthetic private source");
+  expect(db.query).toHaveBeenCalledWith("ROLLBACK");
+  expect(db.query).not.toHaveBeenCalledWith("COMMIT");
 });
 it("denies invalid or expired export identities and fails closed at count and byte limits", async () => {
   const invalid = database();
@@ -390,15 +425,13 @@ it("withholds the entire export if a source is corrupt or storage fails", async 
   ).resolves.toEqual({ kind: "unavailable" });
   expect(missing.query).toHaveBeenCalledWith("ROLLBACK");
   const broken = database();
-  broken.failOn(
-    /SELECT id FROM principals/,
-    new Error("private database detail"),
-  );
+  broken.failOn(/FROM principals/, new Error("private database detail"));
   broken.failOn(/^ROLLBACK$/, new Error("private rollback detail"));
   await expect(
     evidenceStore(broken.pool, objectStorage(), "secret").exportOwned(token),
   ).resolves.toEqual({ kind: "unavailable" });
   expect(broken.query).toHaveBeenCalledWith("ROLLBACK");
+  expect(broken.client.release).toHaveBeenCalledWith(expect.any(Error));
 });
 
 it("writes valid uploads without persisting raw content", async () => {
