@@ -786,6 +786,8 @@ test("[L06] independent sessions cannot select another learner to read or overwr
       headers: { Origin: origin },
       form: {
         csrf,
+        lesson_id: "clear-instructions",
+        lesson_version: "1",
         intent: "draft",
         instruction: "Own text",
         learner_id: a.id,
@@ -820,6 +822,8 @@ test("[L07] cross-origin and CSRF attacks cannot save or delete progress", async
       headers: { Origin: from! },
       form: {
         csrf: value!,
+        lesson_id: "clear-instructions",
+        lesson_version: "1",
         intent: "complete",
         instruction,
         verification,
@@ -864,6 +868,8 @@ test("[L08] repeated or late submissions preserve the completed version", async 
     headers: { Origin: origin },
     form: {
       csrf,
+      lesson_id: "clear-instructions",
+      lesson_version: "1",
       intent: "complete",
       instruction,
       verification,
@@ -872,7 +878,13 @@ test("[L08] repeated or late submissions preserve the completed version", async 
   });
   await page.request.post("/exercise", {
     headers: { Origin: origin },
-    form: { csrf, intent: "draft", instruction: "Late draft" },
+    form: {
+      csrf,
+      lesson_id: "clear-instructions",
+      lesson_version: "1",
+      intent: "draft",
+      instruction: "Late draft",
+    },
   });
   expect(
     (await pool.query("SELECT * FROM exercises WHERE learner_id=$1", [id]))
@@ -977,15 +989,14 @@ test("[L12] database failure is honest and prior saved progress is recoverable",
       page.getByRole("heading", { name: "Save outcome unknown" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("alert").getByText("may or may not have been saved", {
+      page.getByText("The storage result could not be confirmed", {
         exact: false,
       }),
     ).toBeVisible();
-    await expect(page.getByLabel("Attempted instruction")).toHaveValue(
+    await expect(page.getByLabel("Attempted instruction")).toHaveCount(0);
+    await expect(page.getByLabel("Attempted way to check")).toHaveCount(0);
+    await expect(page.locator("main")).not.toContainText(
       "A new attempt that may not be saved.",
-    );
-    await expect(page.getByLabel("Attempted way to check")).toHaveValue(
-      verification,
     );
   } finally {
     await pool.query("ALTER TABLE unavailable_exercises RENAME TO exercises");

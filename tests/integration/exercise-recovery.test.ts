@@ -44,7 +44,12 @@ function postExercise(token: string, save: typeof db.save) {
     .set("Origin", origin)
     .set("Cookie", `${COOKIE}=${token}`)
     .type("form")
-    .send({ ...attempted, csrf: csrf(token, secret) });
+    .send({
+      ...attempted,
+      csrf: csrf(token, secret),
+      lesson_id: "clear-instructions",
+      lesson_version: "1",
+    });
 }
 
 async function savedRow(id: string) {

@@ -1522,6 +1522,15 @@ it("backfills and safely reruns authorization migration over populated learning 
     await client.query(learnerProfile);
     await client.query(learnerPlan);
     await client.query(learnerPlan);
+    await client.query(
+      await readFile(
+        new URL(
+          "../../migrations/043-exercise-withdrawal.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     const migrated = store(client as unknown as Pool);
     await expect(migrated.session(activeToken)).resolves.toMatchObject({
       kind: "active",
@@ -2056,7 +2065,7 @@ it("keeps synthetic assignment submissions immutable across private revisions an
   expect(ownedExport).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v8",
+      version: "local-member-records-v9",
       records: {
         assignmentSubmissions: [
           { attemptId: id, sequence: 1, response: firstText },
@@ -4492,16 +4501,31 @@ it.each(["assignment", "support"] as const)(
   async (type) => {
     const fixture = await staffAuditFixture(type);
     const grantId = await fixture.create();
-    const reader = await pool.connect();
+    const reached = exerciseLatch(),
+      resume = exerciseLatch();
+    const scoped = authorizationStore(
+      wrappedPool(
+        (client) =>
+          ({
+            async query(sql: string, values?: unknown[]) {
+              if (sql === "COMMIT") {
+                reached.release();
+                await resume.wait;
+              }
+              return client.query(sql, values);
+            },
+            release: client.release.bind(client),
+          }) as unknown as PoolClient,
+      ),
+    );
+    const reading = fixture.read(scoped);
     let revoking: Promise<boolean> | undefined;
     try {
-      await reader.query("BEGIN");
-      expect(
-        await fixture.read(authorizationStore(reader as unknown as Pool)),
-      ).toMatchObject({ kind: "allowed" });
+      await reached.wait;
       revoking = fixture.revoke(fixture.admin.id, grantId);
       expect(await blockingPids(`UPDATE ${fixture.table} g`)).not.toEqual([]);
-      await reader.query("COMMIT");
+      resume.release();
+      expect(await reading).toMatchObject({ kind: "allowed" });
       expect(await revoking).toBe(true);
       expect(await fixture.read()).toEqual({ kind: "denied" });
       expect(
@@ -4517,9 +4541,8 @@ it.each(["assignment", "support"] as const)(
         { action: "grant_revoked" },
       ]);
     } finally {
-      await reader.query("ROLLBACK");
-      await Promise.allSettled(revoking ? [revoking] : []);
-      reader.release();
+      resume.release();
+      await Promise.allSettled([reading, ...(revoking ? [revoking] : [])]);
     }
   },
 );
@@ -4924,7 +4947,7 @@ it("attributes deterministic adapter jobs only to an active member and keeps ide
   expect(await memberExportStore(pool).exportOwned(owner.token)).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v8",
+      version: "local-member-records-v9",
       records: { adapterJobs: [{ id: first.id, mode: "test" }] },
     },
   });
@@ -5854,3 +5877,509 @@ it("recovers its own PostgreSQL completion after losing the acknowledgement", as
   });
   expect(await jobs.find(created.id)).toEqual(result.job);
 });
+
+it("withdraws completed starter exercise text idempotently while preserving history and isolation", async () => {
+  const owner = await member(),
+    other = await member();
+  await db.save(owner.learner.id, input);
+  await db.save(other.learner.id, input);
+  const before = await db.progress(owner.learner.id);
+  expect(await db.withdrawExercise(owner.token, "clear-instructions", 1)).toBe(
+    "withdrawn",
+  );
+  expect(await db.withdrawExercise(owner.token, "clear-instructions", 1)).toBe(
+    "already-withdrawn",
+  );
+  expect(
+    await db.save(owner.learner.id, {
+      ...input,
+      instruction: "Stale private text",
+    }),
+  ).toBe("withdrawn");
+  expect(await db.progress(owner.learner.id)).toMatchObject({
+    instruction: null,
+    verification: null,
+    completed_at: before!.completed_at,
+    goal_at_start: before!.goal_at_start,
+    withdrawn_at: expect.any(Date),
+  });
+  expect(await db.progress(other.learner.id)).toMatchObject({
+    instruction: input.instruction,
+    verification: input.verification,
+    withdrawn_at: null,
+  });
+  expect(await db.withExerciseRead(owner.token, (rows) => rows)).toMatchObject([
+    {
+      lessonId: "clear-instructions",
+      version: 1,
+      instruction: null,
+      verification: null,
+      completedAt: before!.completed_at,
+      withdrawnAt: expect.any(Date),
+      goalAtStart: "everyday",
+    },
+  ]);
+  await db.remove(owner.learner.id);
+  expect(await db.withExerciseRead(owner.token, (rows) => rows)).toBeNull();
+  expect(
+    (
+      await pool.query("SELECT * FROM exercises WHERE learner_id=$1", [
+        owner.learner.id,
+      ])
+    ).rows,
+  ).toEqual([]);
+});
+
+it("withdraws historical starter exercise versions after direction changes without rewriting completion", async () => {
+  const owner = await member();
+  await db.save(owner.learner.id, input);
+  await pool.query(
+    `INSERT INTO exercises(learner_id,workspace_id,lesson_id,lesson_version,instruction,verification,completed_at,goal_at_start)
+    VALUES($1,$1,'clear-instructions',2,'Version two sample','Version two check',clock_timestamp(),'work')`,
+    [owner.learner.id],
+  );
+  const before = await db.withExerciseRead(owner.token, (rows) => rows);
+  await pool.query("UPDATE learners SET goal='build' WHERE id=$1", [
+    owner.learner.id,
+  ]);
+  expect(await db.withdrawExercise(owner.token, "clear-instructions", 1)).toBe(
+    "withdrawn",
+  );
+  expect(
+    await db.progress(owner.learner.id, "clear-instructions", 2),
+  ).toMatchObject({
+    instruction: "Version two sample",
+    goal_at_start: "work",
+    withdrawn_at: null,
+  });
+  expect(await db.withdrawExercise(owner.token, "clear-instructions", 2)).toBe(
+    "withdrawn",
+  );
+  await migrate(pool);
+  await migrate(pool);
+  const after = await db.withExerciseRead(owner.token, (rows) => rows);
+  expect(
+    after!.map((row) => [
+      row.lessonId,
+      row.version,
+      row.completedAt,
+      row.goalAtStart,
+    ]),
+  ).toEqual(
+    before!.map((row) => [
+      row.lessonId,
+      row.version,
+      row.completedAt,
+      row.goalAtStart,
+    ]),
+  );
+  expect(
+    after!.every(
+      (row) =>
+        row.instruction === null &&
+        row.verification === null &&
+        row.withdrawnAt instanceof Date,
+    ),
+  ).toBe(true);
+});
+
+it("denies starter exercise withdrawal and private rendering for foreign, staff, inactive or deleting identities", async () => {
+  const owner = await member(),
+    other = await member();
+  await db.save(owner.learner.id, input);
+  const operator = await staff("operator");
+  for (const token of [other.token, operator.token, "missing"]) {
+    expect(await db.withdrawExercise(token, "clear-instructions", 1)).toBe(
+      "unavailable",
+    );
+    const text = await db.withExerciseRead(token, (rows) =>
+      JSON.stringify(rows),
+    );
+    expect(text).toBe(token === other.token ? "[]" : null);
+  }
+  expect(await db.withdrawExercise(owner.token, "clear-instructions", 2)).toBe(
+    "unavailable",
+  );
+  for (const state of ["expired", "revoked", "deleting"] as const) {
+    const fixture = await member();
+    await db.save(fixture.learner.id, input);
+    if (state === "deleting")
+      await pool.query(
+        "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE id=$1",
+        [fixture.learner.id],
+      );
+    else
+      await pool.query(
+        state === "expired"
+          ? "UPDATE principals SET expires_at=clock_timestamp() WHERE id=$1"
+          : "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+        [fixture.learner.id],
+      );
+    expect(
+      await db.withdrawExercise(fixture.token, "clear-instructions", 1),
+    ).toBe("unavailable");
+    expect(
+      await db.withExerciseRead(fixture.token, () => {
+        throw new Error("Unauthorized rendering");
+      }),
+    ).toBeNull();
+    expect(await db.progress(fixture.learner.id)).toMatchObject({
+      instruction: input.instruction,
+      withdrawn_at: null,
+    });
+  }
+  const draft = await member();
+  await db.save(draft.learner.id, { ...input, complete: false });
+  expect(await db.withdrawExercise(draft.token, "clear-instructions", 1)).toBe(
+    "unavailable",
+  );
+  expect(await db.progress(draft.learner.id)).toMatchObject({
+    instruction: input.instruction,
+    completed_at: null,
+    withdrawn_at: null,
+  });
+});
+
+it("enforces coherent starter exercise withdrawal markers in PostgreSQL", async () => {
+  const owner = await member();
+  await db.save(owner.learner.id, { ...input, complete: false });
+  for (const change of [
+    "instruction=NULL",
+    "verification=NULL",
+    "withdrawn_at=clock_timestamp()",
+    "instruction=NULL,verification=NULL,withdrawn_at=clock_timestamp()",
+  ]) {
+    await expect(
+      pool.query(`UPDATE exercises SET ${change} WHERE learner_id=$1`, [
+        owner.learner.id,
+      ]),
+    ).rejects.toMatchObject({ code: "23514" });
+  }
+  await db.save(owner.learner.id, input);
+  await db.withdrawExercise(owner.token, "clear-instructions", 1);
+  await expect(
+    pool.query(
+      "UPDATE exercises SET instruction='Stale sample' WHERE learner_id=$1",
+      [owner.learner.id],
+    ),
+  ).rejects.toMatchObject({ code: "23514" });
+});
+
+it.each(["update", "commit"] as const)(
+  "does not report starter exercise withdrawal success after a lost %s acknowledgement",
+  async (fault) => {
+    const owner = await member();
+    await db.save(owner.learner.id, input);
+    const uncertain = store(
+      wrappedPool(
+        (client) =>
+          ({
+            async query(sql: string, values?: unknown[]) {
+              const result = await client.query(sql, values);
+              if (
+                (fault === "update" &&
+                  sql.startsWith("UPDATE exercises SET instruction=NULL")) ||
+                (fault === "commit" && sql === "COMMIT")
+              )
+                throw new Error("Synthetic acknowledgement failure");
+              return result;
+            },
+            release: client.release.bind(client),
+          }) as unknown as PoolClient,
+      ),
+    );
+    await expect(
+      uncertain.withdrawExercise(owner.token, "clear-instructions", 1),
+    ).rejects.toThrow("Synthetic acknowledgement failure");
+    expect(await db.progress(owner.learner.id)).toMatchObject(
+      fault === "update"
+        ? {
+            instruction: input.instruction,
+            verification: input.verification,
+            withdrawn_at: null,
+          }
+        : {
+            instruction: null,
+            verification: null,
+            withdrawn_at: expect.any(Date),
+          },
+    );
+    expect(
+      await db.withdrawExercise(owner.token, "clear-instructions", 1),
+    ).toBe(fault === "update" ? "withdrawn" : "already-withdrawn");
+  },
+);
+
+function exerciseLatch() {
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { wait, release };
+}
+function controlledExercise(fragment: string) {
+  const reached = exerciseLatch(),
+    resume = exerciseLatch();
+  const controlled = store(
+    wrappedPool(
+      (client) =>
+        ({
+          async query(sql: string, values?: unknown[]) {
+            const result = await client.query(sql, values);
+            if (sql.startsWith(fragment)) {
+              reached.release();
+              await resume.wait;
+            }
+            return result;
+          },
+          release: client.release.bind(client),
+        }) as unknown as PoolClient,
+    ),
+  );
+  return { controlled, reached, resume };
+}
+
+it.each(["read-first", "withdraw-first"] as const)(
+  "serializes starter exercise response formation %s with withdrawal",
+  async (order) => {
+    const owner = await member();
+    await db.save(owner.learner.id, input);
+    const first = controlledExercise(
+      order === "read-first"
+        ? "SELECT lesson_id AS"
+        : "UPDATE exercises SET instruction=NULL",
+    );
+    const a =
+      order === "read-first"
+        ? first.controlled.withExerciseRead(owner.token, (rows) =>
+            JSON.stringify(rows),
+          )
+        : first.controlled.withdrawExercise(
+            owner.token,
+            "clear-instructions",
+            1,
+          );
+    let b: Promise<string | null> | undefined;
+    try {
+      await first.reached.wait;
+      b =
+        order === "read-first"
+          ? db.withdrawExercise(owner.token, "clear-instructions", 1)
+          : db.withExerciseRead(owner.token, (rows) => JSON.stringify(rows));
+      expect(
+        (await blockingPids("SELECT id FROM workspaces")).length,
+      ).toBeGreaterThan(0);
+      first.resume.release();
+      const resultA = await a,
+        resultB = await b;
+      if (order === "read-first") {
+        expect(resultA).toContain(input.instruction);
+        expect(resultB).toBe("withdrawn");
+      } else {
+        expect(resultA).toBe("withdrawn");
+        expect(resultB).not.toContain(input.instruction);
+        expect(resultB).toContain('"instruction":null');
+      }
+      expect(
+        await db.withExerciseRead(owner.token, (rows) => JSON.stringify(rows)),
+      ).not.toContain(input.instruction);
+    } finally {
+      first.resume.release();
+      await Promise.allSettled([a, ...(b ? [b] : [])]);
+    }
+  },
+);
+
+it.each(["save-first", "withdraw-first"] as const)(
+  "prevents starter exercise text resurrection with %s ordering",
+  async (order) => {
+    const owner = await member();
+    await db.save(owner.learner.id, input);
+    if (order === "save-first") {
+      const client = await pool.connect();
+      let withdrawal: Promise<string> | undefined;
+      try {
+        await client.query("BEGIN");
+        expect(
+          await store(client as unknown as Pool).save(owner.learner.id, {
+            ...input,
+            instruction: "Stale text",
+          }),
+        ).toBe("unchanged");
+        withdrawal = db.withdrawExercise(owner.token, "clear-instructions", 1);
+        expect(
+          (
+            await blockingPids(
+              "SELECT completed_at,withdrawn_at FROM exercises",
+            )
+          ).length,
+        ).toBeGreaterThan(0);
+        await client.query("COMMIT");
+        expect(await withdrawal).toBe("withdrawn");
+      } finally {
+        await client.query("ROLLBACK");
+        await Promise.allSettled(withdrawal ? [withdrawal] : []);
+        client.release();
+      }
+    } else {
+      const first = controlledExercise("UPDATE exercises SET instruction=NULL");
+      const withdrawal = first.controlled.withdrawExercise(
+        owner.token,
+        "clear-instructions",
+        1,
+      );
+      let saving: Promise<string> | undefined;
+      try {
+        await first.reached.wait;
+        saving = db.save(owner.learner.id, {
+          ...input,
+          instruction: "Stale text",
+        });
+        expect(
+          (await blockingPids("INSERT INTO exercises")).length,
+        ).toBeGreaterThan(0);
+        first.resume.release();
+        expect(await withdrawal).toBe("withdrawn");
+        expect(await saving).toBe("withdrawn");
+      } finally {
+        first.resume.release();
+        await Promise.allSettled([withdrawal, ...(saving ? [saving] : [])]);
+      }
+    }
+    expect(await db.progress(owner.learner.id)).toMatchObject({
+      instruction: null,
+      verification: null,
+      withdrawn_at: expect.any(Date),
+    });
+  },
+);
+
+it("rolls back starter exercise withdrawal when the owner expires during a workspace lock wait", async () => {
+  const owner = await member();
+  await db.save(owner.learner.id, input);
+  const blocker = await pool.connect();
+  let pending: Promise<string> | undefined;
+  const expiry = new Date(Date.now() + 250);
+  try {
+    await pool.query("UPDATE principals SET expires_at=$2 WHERE id=$1", [
+      owner.learner.id,
+      expiry,
+    ]);
+    await blocker.query("BEGIN");
+    await blocker.query("SELECT id FROM workspaces WHERE id=$1 FOR UPDATE", [
+      owner.learner.id,
+    ]);
+    pending = db.withdrawExercise(owner.token, "clear-instructions", 1);
+    expect(
+      (await blockingPids("SELECT id FROM workspaces")).length,
+    ).toBeGreaterThan(0);
+    await pool.query(
+      "SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM ($1::timestamptz-clock_timestamp())))+0.02)",
+      [expiry],
+    );
+    await blocker.query("COMMIT");
+    expect(await pending).toBe("unavailable");
+    expect(await db.progress(owner.learner.id)).toMatchObject({
+      instruction: input.instruction,
+      verification: input.verification,
+      withdrawn_at: null,
+    });
+  } finally {
+    await blocker.query("ROLLBACK");
+    await Promise.allSettled(pending ? [pending] : []);
+    blocker.release();
+  }
+});
+
+it.each(["delete", "revoke", "deletion-marker"] as const)(
+  "denies waiting starter exercise withdrawal when %s commits first",
+  async (action) => {
+    const owner = await member();
+    await db.save(owner.learner.id, input);
+    const blocker = await pool.connect();
+    let pending: Promise<string> | undefined;
+    try {
+      await blocker.query("BEGIN");
+      if (action === "delete")
+        await store(blocker as unknown as Pool).remove(owner.learner.id);
+      else
+        await blocker.query(
+          action === "revoke"
+            ? "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1"
+            : "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE id=$1",
+          [owner.learner.id],
+        );
+      pending = db.withdrawExercise(owner.token, "clear-instructions", 1);
+      expect(
+        (
+          await blockingPids(
+            action === "deletion-marker"
+              ? "SELECT id FROM workspaces"
+              : "SELECT id,expires_at FROM principals",
+          )
+        ).length,
+      ).toBeGreaterThan(0);
+      await blocker.query("COMMIT");
+      expect(await pending).toBe("unavailable");
+      expect(
+        await db.withExerciseRead(owner.token, () => "unexpected private read"),
+      ).toBeNull();
+      expect(await db.progress(owner.learner.id)).toEqual(
+        action === "delete"
+          ? undefined
+          : expect.objectContaining({
+              instruction: input.instruction,
+              withdrawn_at: null,
+            }),
+      );
+    } finally {
+      await blocker.query("ROLLBACK");
+      await Promise.allSettled(pending ? [pending] : []);
+      blocker.release();
+    }
+  },
+);
+
+it.each(["delete", "revoke", "deletion-marker"] as const)(
+  "orders starter exercise withdrawal before a concurrent %s",
+  async (action) => {
+    const owner = await member();
+    await db.save(owner.learner.id, input);
+    const first = controlledExercise("UPDATE exercises SET instruction=NULL");
+    const pending = first.controlled.withdrawExercise(
+      owner.token,
+      "clear-instructions",
+      1,
+    );
+    let change: Promise<unknown> | undefined;
+    const sql =
+      action === "delete"
+        ? "DELETE FROM principals WHERE id=$1"
+        : action === "revoke"
+          ? "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1"
+          : "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE id=$1";
+    try {
+      await first.reached.wait;
+      change = pool.query(sql, [owner.learner.id]);
+      expect((await blockingPids(sql)).length).toBeGreaterThan(0);
+      first.resume.release();
+      expect(await pending).toBe("withdrawn");
+      await change;
+      expect(
+        await db.withExerciseRead(owner.token, () => "unexpected private read"),
+      ).toBeNull();
+      expect(await db.progress(owner.learner.id)).toEqual(
+        action === "delete"
+          ? undefined
+          : expect.objectContaining({
+              instruction: null,
+              verification: null,
+              withdrawn_at: expect.any(Date),
+            }),
+      );
+    } finally {
+      first.resume.release();
+      await Promise.allSettled([pending, ...(change ? [change] : [])]);
+    }
+  },
+);

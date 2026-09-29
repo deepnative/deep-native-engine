@@ -53,7 +53,7 @@ import {
   availabilityPage,
   manualObservationPage,
 } from "./views.ts";
-import type { Store, Learner } from "./store.ts";
+import type { Store, Learner, Exercise, ExerciseHistory } from "./store.ts";
 import { eligibleAssignments, recommendLesson } from "./assignment-choice.ts";
 import {
   validPrerequisiteSpec,
@@ -94,7 +94,7 @@ import {
   type DraftContent,
 } from "./catalog.ts";
 import { disabledTrackStore, type TrackStore } from "./track-readiness.ts";
-import { BACKGROUNDS, DOMAINS, GOALS, type Domain } from "./content.ts";
+import { BACKGROUNDS, DOMAINS, GOALS, LESSON, type Domain } from "./content.ts";
 import { disabledProposalStore, type ProposalStore } from "./proposals.ts";
 import { workflowBundle, workflowRegistry } from "./workflow-registry.ts";
 import {
@@ -163,6 +163,21 @@ function attemptedResponse(body: unknown, action: string) {
         : "";
   return typeof value === "string" ? value : "";
 }
+function currentStarter(rows: ExerciseHistory[]): Exercise | undefined {
+  const row = rows.find(
+    (item) => item.lessonId === LESSON.id && item.version === LESSON.version,
+  );
+  return row
+    ? {
+        instruction: row.instruction,
+        verification: row.verification,
+        completed_at: row.completedAt,
+        withdrawn_at: row.withdrawnAt,
+        goal_at_start: row.goalAtStart,
+      }
+    : undefined;
+}
+
 export function app(
   store: Store,
   options: {
@@ -3077,36 +3092,176 @@ export function app(
   });
   app.get("/lesson", async (_req, res) => {
     const member = res.locals.learner as Learner;
-    res.send(
-      lesson(
-        member,
-        await store.progress(member.id),
-        res.locals.csrf as string,
-      ),
+    const html = await store.withExerciseRead(
+      res.locals.token as string,
+      (rows) =>
+        lesson(
+          member,
+          currentStarter(rows),
+          res.locals.csrf as string,
+          [],
+          rows,
+        ),
     );
+    if (html === null) {
+      res
+        .status(403)
+        .send(
+          errorPage("Lesson unavailable", "Open your learning path again."),
+        );
+      return;
+    }
+    res.send(html);
   });
   app.post("/exercise", async (req, res) => {
     const member = res.locals.learner as Learner;
-    const input = submission(req.body as Fields);
-    if (input.errors.length) {
+    const form = req.body as Fields;
+    if (
+      form.lesson_id !== LESSON.id ||
+      form.lesson_version !== String(LESSON.version)
+    ) {
       res
-        .status(422)
+        .status(409)
         .send(
-          lesson(
-            member,
-            { ...input, completed_at: null },
-            res.locals.csrf as string,
-            input.errors,
+          errorPage(
+            "Exercise form out of date",
+            "Open the current lesson before saving. An older form cannot be moved to a new version.",
           ),
         );
       return;
     }
+    const input = submission(form);
+    if (input.errors.length) {
+      const html = await store.withExerciseRead(
+        res.locals.token as string,
+        (rows) =>
+          currentStarter(rows)?.withdrawn_at
+            ? null
+            : lesson(
+                member,
+                { ...input, completed_at: null },
+                res.locals.csrf as string,
+                input.errors,
+                rows,
+              ),
+      );
+      if (html === null) {
+        res
+          .status(409)
+          .send(
+            errorPage(
+              "Exercise text withdrawn",
+              "The saved text cannot be restored. Open your lesson to inspect the retained completion.",
+            ),
+          );
+        return;
+      }
+      res.status(422).send(html);
+      return;
+    }
     try {
-      await store.save(member.id, input);
+      const outcome = await store.save(member.id, input);
+      if (outcome === "withdrawn") {
+        res
+          .status(409)
+          .send(
+            errorPage(
+              "Exercise text withdrawn",
+              "The saved text cannot be restored. Open your lesson to inspect the retained completion.",
+            ),
+          );
+        return;
+      }
+    } catch {
+      let recovery: string | null = null;
+      try {
+        recovery = await store.withExerciseRead(
+          res.locals.token as string,
+          (rows) =>
+            currentStarter(rows)?.withdrawn_at
+              ? null
+              : exerciseWriteRecoveryPage(
+                  input.instruction,
+                  input.verification,
+                ),
+        );
+      } catch {
+        // The write outcome is uncertain and private state could not be read.
+      }
+      res
+        .status(503)
+        .send(
+          recovery ??
+            errorPage(
+              "Save outcome unknown",
+              "The storage result could not be confirmed. Open your lesson to inspect the current state before trying again.",
+            ),
+        );
+      return;
+    }
+    res.redirect(303, "/lesson");
+  });
+  app.post("/exercise/:lessonId/:version/withdraw", async (req, res) => {
+    const { lessonId, version } = req.params;
+    const parsedVersion = Number(version);
+    if (
+      lessonId !== LESSON.id ||
+      !/^[1-9]\d*$/.test(version) ||
+      !Number.isSafeInteger(parsedVersion) ||
+      parsedVersion > 2147483647
+    ) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Exercise unavailable",
+            "Open your lesson to find saved work.",
+          ),
+        );
+      return;
+    }
+    const fields = req.body as Fields;
+    if (
+      fields.confirm !== "yes" ||
+      Object.keys(fields).some((key) => key !== "csrf" && key !== "confirm")
+    ) {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Confirm withdrawal",
+            "Check the confirmation box on your lesson before withdrawing saved text.",
+          ),
+        );
+      return;
+    }
+    let outcome: Awaited<ReturnType<Store["withdrawExercise"]>>;
+    try {
+      outcome = await store.withdrawExercise(
+        res.locals.token as string,
+        lessonId,
+        parsedVersion,
+      );
     } catch {
       res
         .status(503)
-        .send(exerciseWriteRecoveryPage(input.instruction, input.verification));
+        .send(
+          errorPage(
+            "Withdrawal outcome unknown",
+            "The storage result could not be confirmed. Open your lesson to inspect the current state.",
+          ),
+        );
+      return;
+    }
+    if (outcome === "unavailable") {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Exercise unavailable",
+            "Open your lesson to find saved work.",
+          ),
+        );
       return;
     }
     res.redirect(303, "/lesson");

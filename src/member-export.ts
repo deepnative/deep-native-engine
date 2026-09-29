@@ -6,8 +6,10 @@ export const MAX_MEMBER_EXPORT_BYTES = 256 * 1024;
 
 const sections = {
   exercises: `SELECT lesson_id AS "lessonId",lesson_version AS "lessonVersion",
-    instruction,verification,completed_at AS "completedAt",goal_at_start AS "goalAtStart"
-    FROM exercises WHERE learner_id=$1 ORDER BY lesson_id,lesson_version LIMIT $2`,
+    instruction,verification,completed_at AS "completedAt",goal_at_start AS "goalAtStart",
+    CASE WHEN withdrawn_at IS NULL THEN 'saved' ELSE 'withdrawn' END AS state,
+    withdrawn_at AS "withdrawnAt"
+    FROM exercises WHERE learner_id=$1 ORDER BY lesson_id,lesson_version LIMIT $2 FOR SHARE`,
   lessonActivity: `SELECT content_id AS "contentId",content_version AS "contentVersion",
     opened_at AS "openedAt",started_at AS "startedAt",self_assessed_at AS "selfAssessedAt"
     FROM lesson_activity WHERE member_id=$1 ORDER BY content_id,content_version LIMIT $2`,
@@ -128,7 +130,7 @@ export function memberExportStore(pool: Pool): MemberExportStore {
           }
           const payload = {
             kind: "ready",
-            version: "local-member-records-v8",
+            version: "local-member-records-v9",
             profile: owner.rows[0],
             records,
           };

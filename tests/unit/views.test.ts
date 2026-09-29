@@ -53,6 +53,80 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("offers exact-version withdrawal and preserves a text-free completion state", () => {
+  const saved = {
+    instruction: "Invented <private> instruction",
+    verification: "Invented <private> verification",
+    completed_at: new Date("2026-09-29T00:00:00Z"),
+    withdrawn_at: null,
+  };
+  const active = lesson(learner, saved, "csrf");
+  expect(active).toContain('action="/exercise/clear-instructions/1/withdraw"');
+  expect(active).toContain("Withdraw both saved text fields for version 1");
+  expect(active).toContain("Invented &lt;private&gt; instruction");
+  expect(active).not.toContain("Invented <private> instruction");
+  const withdrawn = lesson(
+    learner,
+    {
+      ...saved,
+      instruction: null,
+      verification: null,
+      withdrawn_at: new Date("2026-09-29T01:00:00Z"),
+    },
+    "csrf",
+  );
+  expect(withdrawn).toContain("Saved exercise text withdrawn");
+  expect(withdrawn).toContain(
+    "self-reported completion, date and version remain",
+  );
+  expect(withdrawn).not.toContain("Invented &lt;private&gt;");
+  expect(withdrawn).not.toContain("Withdraw completed exercise text");
+});
+it("keeps older completed exercise versions withdrawable after a source change", () => {
+  const html = lesson(
+    learner,
+    undefined,
+    "csrf",
+    [],
+    [
+      {
+        lessonId: "clear-instructions",
+        version: 2,
+        instruction: "Older invented instruction",
+        verification: "Older invented check",
+        completedAt: new Date("2026-09-29T00:00:00Z"),
+        withdrawnAt: null,
+        goalAtStart: "work",
+      },
+    ],
+  );
+  expect(html).toContain("Earlier starter exercise · version 2");
+  expect(html).toContain('action="/exercise/clear-instructions/2/withdraw"');
+  expect(html).toContain("Older invented instruction");
+  const withdrawn = lesson(
+    learner,
+    undefined,
+    "csrf",
+    [],
+    [
+      {
+        lessonId: "clear-instructions",
+        version: 2,
+        instruction: null,
+        verification: null,
+        completedAt: new Date("2026-09-29T00:00:00Z"),
+        withdrawnAt: new Date("2026-09-29T01:00:00Z"),
+        goalAtStart: "work",
+      },
+    ],
+  );
+  expect(withdrawn).toContain("Earlier starter exercise · version 2");
+  expect(withdrawn).toContain("Your self-reported completion remains");
+  expect(withdrawn).not.toContain("Older invented instruction");
+  expect(withdrawn).not.toContain(
+    'action="/exercise/clear-instructions/2/withdraw"',
+  );
+});
 it("keeps blocked synthetic assignments separate from selectable choices and escapes their titles", () => {
   const blocked: AssignmentReadiness = {
     contentId: "SYN-831",
