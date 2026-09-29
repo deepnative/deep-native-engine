@@ -8,6 +8,7 @@ import { authorizationStore } from "../../src/authorization.ts";
 import { proposalStore } from "../../src/proposals.ts";
 import { hash, migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 const pool = testPool();
 const db = store(pool);
 const proposals = proposalStore(pool);
@@ -266,11 +267,13 @@ it.each(["insert", "commit"] as const)(
         "Synthetic proposal audit failure",
       );
       const origin = "http://127.0.0.1:3000";
-      const server = app(db, {
-        origin,
-        secret: "synthetic-proposal-secret",
-        proposals,
-      }).listen(0);
+      const server = await listenLoopback(
+        app(db, {
+          origin,
+          secret: "synthetic-proposal-secret",
+          proposals,
+        }),
+      );
       try {
         const agent = request.agent(server);
         const entry = await agent
@@ -309,9 +312,7 @@ it.each(["insert", "commit"] as const)(
         expect(write.text).toContain("We could not save or load that");
         expect(write.text).not.toContain(f.value.body);
       } finally {
-        await new Promise<void>((resolve, reject) =>
-          server.close((error) => (error ? reject(error) : resolve())),
-        );
+        await closeLoopback(server);
       }
       expect(await events()).toEqual([]);
       await expect(proposals.moderate(f.token, f.id, "reject")).rejects.toThrow(

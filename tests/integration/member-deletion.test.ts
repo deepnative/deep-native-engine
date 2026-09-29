@@ -16,6 +16,7 @@ import { COOKIE, csrf } from "../../src/session.ts";
 import { jobStore, requestFingerprint } from "../../src/jobs.ts";
 import { migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 
 const pool = testPool();
 const db = store(pool);
@@ -58,9 +59,11 @@ async function postDelete(value: string, form: Record<string, string>) {
     .type("form")
     .send(form);
 }
-function serve(objects: ObjectStorage, remove = db.remove.bind(db)) {
+async function serve(objects: ObjectStorage, remove = db.remove.bind(db)) {
   const evidence = evidenceStore(pool, objects, secret);
-  server = app({ ...db, remove }, { origin, secret, evidence }).listen(0);
+  server = await listenLoopback(
+    app({ ...db, remove }, { origin, secret, evidence }),
+  );
   return evidence;
 }
 
@@ -85,9 +88,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   if (server) {
-    await new Promise<void>((resolve, reject) =>
-      server!.close((error) => (error ? reject(error) : resolve())),
-    );
+    await closeLoopback(server);
     server = undefined;
   }
   await rm(storageRoot, { recursive: true, force: true });
@@ -290,7 +291,7 @@ async function seedOwned(
 
 it("removes every current member-linked local row and object through the real route while retaining another member", async () => {
   const files = fileObjectStorage(storageRoot);
-  const evidence = serve(files);
+  const evidence = await serve(files);
   await pool.query("INSERT INTO cohorts(id) VALUES('sample-cohort')");
   const admin = token(),
     reviewerToken = token(),
@@ -410,7 +411,7 @@ it("reports object and database deletion failures and safely finishes on retry",
     },
   };
   let failDatabase = true;
-  const evidence = serve(flakyObjects, async (id) => {
+  const evidence = await serve(flakyObjects, async (id) => {
     if (failDatabase) {
       failDatabase = false;
       throw new Error("synthetic private database failure");

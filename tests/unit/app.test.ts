@@ -1,7 +1,6 @@
 import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import request from "supertest";
-import type { Server } from "node:http";
-import { once } from "node:events";
+import { createServer, type Server } from "node:http";
 import { app } from "../../src/app.ts";
 import type { Store, ExerciseHistory } from "../../src/store.ts";
 import { LESSON } from "../../src/content.ts";
@@ -46,9 +45,10 @@ import {
 } from "../../src/availability.ts";
 import type { ManualObservationStore } from "../../src/manual-observations.ts";
 import type { AssignmentReadinessStore } from "../../src/assignment-readiness.ts";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 it("serves goal-matched event previews only to active members and never accepts enrollment", async () => {
   const db = storage();
-  const agent = managedAgent(app(db, { origin, secret: "secret" }));
+  const agent = await managedAgent(app(db, { origin, secret: "secret" }));
   db.session.mockResolvedValue({ kind: "active", learner: member });
   const listing = await agent.get("/events").set("Host", host).expect(200);
   expect(listing.text).toContain("Synthetic preview; enrollment unavailable");
@@ -100,7 +100,7 @@ it("keeps personalized assignment preparation private, exact and read-only", asy
       .mockResolvedValue([blocked]),
     get: vi.fn<AssignmentReadinessStore["get"]>().mockResolvedValue(blocked),
   };
-  const agent = managedAgent(
+  const agent = await managedAgent(
     app(db, { origin, secret: "secret", assignmentReadiness: readiness }),
   );
   const home = await agent.get("/").set("Host", host).expect(200);
@@ -175,7 +175,9 @@ it("rejects stale pinned lesson links before opening or changing activity", asyn
     publishedAt: new Date(),
   };
   catalog.published.mockResolvedValue(item);
-  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", catalog }),
+  );
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   db.session.mockResolvedValue({ kind: "active", learner: member });
@@ -212,7 +214,7 @@ it("keeps workflow feedback owner-only and never claims a failed or stale write"
       .fn<WorkflowFeedbackStore["withdraw"]>()
       .mockResolvedValue(false),
   };
-  const agent = managedAgent(
+  const agent = await managedAgent(
     app(db, { origin, secret: "secret", workflowFeedback: feedback }),
   );
   const home = await agent.get("/").set("Host", host).expect(200);
@@ -312,7 +314,7 @@ it("keeps optional slot discovery private and reports read failures without impl
     ]),
   };
   const db = storage();
-  const agent = managedAgent(
+  const agent = await managedAgent(
     app(db, { origin, secret: "secret", availability }),
   );
   await agent.get("/availability").set("Host", host).expect(303);
@@ -335,7 +337,9 @@ it("keeps optional slot discovery private and reports read failures without impl
   expect(noZone.text).toContain("Choose a valid time zone");
 });
 it("denies an unconfigured operator metrics route and returns only a configured aggregate", async () => {
-  const denied = managedAgent(app(storage(), { origin, secret: "secret" }));
+  const denied = await managedAgent(
+    app(storage(), { origin, secret: "secret" }),
+  );
   await denied.get("/operator/metrics").set("Host", host).expect(403);
   const metrics = {
     snapshot: vi.fn<MetricsStore["snapshot"]>().mockResolvedValue({
@@ -365,7 +369,7 @@ it("denies an unconfigured operator metrics route and returns only a configured 
       usefulness: { disclosure: "suppressed", helpfulShareBand: null },
     }),
   };
-  const allowed = managedAgent(
+  const allowed = await managedAgent(
     app(storage(), { origin, secret: "secret", metrics }),
   );
   const response = await allowed
@@ -398,7 +402,9 @@ it("denies an unconfigured operator metrics route and returns only a configured 
   expect(failed.text).not.toContain("helpfulShareBand");
 });
 it("keeps the synthetic manual register admin-only, idempotent and explicitly unverified", async () => {
-  const denied = managedAgent(app(storage(), { origin, secret: "secret" }));
+  const denied = await managedAgent(
+    app(storage(), { origin, secret: "secret" }),
+  );
   await denied.get("/operator/test-receipts").set("Host", host).expect(403);
   const observations = {
     list: vi.fn<ManualObservationStore["list"]>().mockResolvedValue([]),
@@ -406,7 +412,7 @@ it("keeps the synthetic manual register admin-only, idempotent and explicitly un
       .fn<ManualObservationStore["record"]>()
       .mockResolvedValue({ kind: "denied" }),
   };
-  const agent = managedAgent(
+  const agent = await managedAgent(
     app(storage(), {
       origin,
       secret: "secret",
@@ -493,7 +499,7 @@ it("keeps the synthetic manual register admin-only, idempotent and explicitly un
   observations.record.mockRejectedValueOnce(new Error("private SQL detail"));
   const failedWrite = await post(input).expect(503);
   expect(failedWrite.text).not.toContain("private SQL detail");
-  const live = managedAgent(
+  const live = await managedAgent(
     app(storage(), {
       origin,
       secret: "secret",
@@ -512,22 +518,40 @@ it("keeps the synthetic manual register admin-only, idempotent and explicitly un
     .send({ csrf: liveCsrf, ...input })
     .expect(404);
 });
-function managedAgent(application: ReturnType<typeof app>) {
-  const server = application.listen(0);
+async function managedAgent(application: ReturnType<typeof app>) {
+  const server = await listenLoopback(application);
   managedServers.push(server);
   return request.agent(server);
 }
-afterEach(async () => {
-  await Promise.all(
-    managedServers
-      .splice(0)
-      .map(
-        (server) =>
-          new Promise<void>((resolve, reject) =>
-            server.close((error) => (error ? reject(error) : resolve())),
-          ),
-      ),
+it("keeps another loopback listener from answering managed HTTP requests", async () => {
+  const agent = await managedAgent(
+    app(storage(), { origin, secret: "secret" }),
   );
+  const server = managedServers.at(-1);
+  const address = server?.address();
+  if (!address || typeof address === "string")
+    throw new Error("Managed test listener has no TCP port");
+  let foreignHits = 0;
+  const foreign = createServer((_request, response) => {
+    foreignHits += 1;
+    response.writeHead(418).end("synthetic foreign listener");
+  });
+  const foreignBound = await new Promise<boolean>((resolve, reject) => {
+    foreign.once("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") resolve(false);
+      else reject(error);
+    });
+    foreign.listen(address.port, "127.0.0.1", () => resolve(true));
+  });
+  try {
+    await agent.get("/readiness").set("Host", host).expect(200);
+    expect(foreignHits).toBe(0);
+  } finally {
+    if (foreignBound) await closeLoopback(foreign);
+  }
+});
+afterEach(async () => {
+  await Promise.all(managedServers.splice(0).map(closeLoopback));
 });
 async function atStage<T>(stage: string, request: PromiseLike<T>): Promise<T> {
   try {
@@ -566,7 +590,7 @@ it("keeps member proposals private and moderation unable to publish", async () =
       .mockResolvedValue(null),
     moderate: vi.fn<ProposalStore["moderate"]>().mockResolvedValue(false),
   };
-  const agent = managedAgent(
+  const agent = await managedAgent(
     app(storage(), { origin, secret: "secret", proposals }),
   );
   const home = await agent.get("/").set("Host", host).expect(200);
@@ -587,7 +611,7 @@ it("keeps member proposals private and moderation unable to publish", async () =
   proposals.moderate.mockResolvedValue(true);
   await post("/moderate/proposals/sample-id/reject", {}).expect(303);
 
-  const memberAgent = managedAgent(
+  const memberAgent = await managedAgent(
     app(db, { origin, secret: "secret", proposals }),
   );
   const entry = await memberAgent.get("/").set("Host", host).expect(200);
@@ -870,9 +894,8 @@ it("shows honest track states and restricts the expert evidence roster", async (
   // Own the listener for the whole case and use its explicitly bound address.
   // These public/denied/allowed requests must never depend on automatic listener reuse.
   const readinessClient = async (application: ReturnType<typeof app>) => {
-    const listener = application.listen(0, "127.0.0.1");
+    const listener = await listenLoopback(application);
     managedServers.push(listener);
-    await once(listener, "listening");
     expect(listener.address()).toMatchObject({
       address: "127.0.0.1",
       family: "IPv4",
@@ -915,7 +938,9 @@ it("shows honest track states and restricts the expert evidence roster", async (
   expect(roster.text).toContain("No expert commitments are recorded");
 });
 it("shows the approved no-purchase preview while keeping production terms undecided", async () => {
-  const agent = managedAgent(app(storage(), { origin, secret: "secret" }));
+  const agent = await managedAgent(
+    app(storage(), { origin, secret: "secret" }),
+  );
   const catalog = await agent
     .get("/api/offer-hypotheses")
     .set("Host", host)
@@ -1054,7 +1079,7 @@ it("requires explicit member confirmation and current local AI permission at eve
       .fn<LocalAiConsentStore["run"]>()
       .mockResolvedValue({ kind: "denied" }),
   };
-  const agent = managedAgent(
+  const agent = await managedAgent(
     app(db, { origin, secret: "secret", localAiConsent }),
   );
   const home = await agent.get("/").set("Host", host).expect(200);
@@ -1118,7 +1143,7 @@ it("requires explicit member confirmation and current local AI permission at eve
   await post("/evidence/local-ai/job-id/run").expect(303);
 });
 it("keeps local AI pause control admin-only and shows member unavailability", async () => {
-  const missingControl = managedAgent(
+  const missingControl = await managedAgent(
     app(storage(), { origin, secret: "secret" }),
   );
   const missingHome = await missingControl
@@ -1143,7 +1168,7 @@ it("keeps local AI pause control admin-only and shows member unavailability", as
     read: vi.fn<LocalAiControlStore["read"]>().mockResolvedValue(null),
     set: vi.fn<LocalAiControlStore["set"]>().mockResolvedValue(false),
   };
-  const agent = managedAgent(
+  const agent = await managedAgent(
     app(db, { origin, secret: "secret", localAiControl }),
   );
   const home = await agent.get("/").set("Host", host).expect(200);
@@ -1199,7 +1224,7 @@ it("keeps local AI pause control admin-only and shows member unavailability", as
     .expect(403);
   expect(pausedRun.text).toContain("will not retry automatically");
 
-  const live = managedAgent(
+  const live = await managedAgent(
     app(storage(), { origin, secret: "secret", mode: "live", localAiControl }),
   );
   const liveHome = await live.get("/").set("Host", host).expect(200);
@@ -1227,7 +1252,9 @@ it("renders only local circle state and handles join, full, denied, and leave ou
     join: vi.fn<CircleStore["join"]>().mockResolvedValue("joined"),
     leave: vi.fn<CircleStore["leave"]>().mockResolvedValue(true),
   };
-  const agent = managedAgent(app(db, { origin, secret: "secret", circles }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", circles }),
+  );
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   await agent.get("/circles").set("Host", host).expect(303);
@@ -1273,7 +1300,9 @@ function catalogMock() {
   };
 }
 async function client(evidence?: EvidenceStore) {
-  const agent = managedAgent(app(db, { origin, secret: "secret", evidence }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", evidence }),
+  );
   const response = await agent.get("/").set("Host", host).expect(200);
   const csrf = response.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   return { agent, csrf };
@@ -1286,7 +1315,9 @@ it("denies a member tailored-review request without accepting a service", async 
     ...disabledTrackStore(),
     snapshot: vi.fn<TrackStore["snapshot"]>(disabledTrackStore().snapshot),
   };
-  const agent = managedAgent(app(db, { origin, secret: "secret", tracks }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", tracks }),
+  );
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   await agent.get("/tailored-review").set("Host", host).expect(303);
@@ -1351,7 +1382,9 @@ it("serves a member-owned activity view only through the active session", async 
     ...disabledAttemptStore(),
     list: vi.fn().mockResolvedValue([]),
   };
-  const agent = managedAgent(app(db, { origin, secret: "secret", attempts }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", attempts }),
+  );
   await agent.get("/progress").set("Host", host).expect(303);
   expect(history).not.toHaveBeenCalled();
   expect(db.lessonActivities).not.toHaveBeenCalled();
@@ -1399,7 +1432,7 @@ it("pins retained starter links to owned versions and reports unavailable or fai
     _token: string,
     render: (rows: ExerciseHistory[]) => T,
   ): Promise<T | null> => render(retained);
-  const agent = managedAgent(app(db, { origin, secret: "secret" }));
+  const agent = await managedAgent(app(db, { origin, secret: "secret" }));
   active();
   const progress = await agent
     .get("/progress?member_id=other")
@@ -1453,7 +1486,9 @@ it("accepts a member's confirmed usefulness choice and fails closed on stale, fo
     save: vi.fn<UsefulnessStore["save"]>().mockResolvedValue(true),
     withdraw: vi.fn<UsefulnessStore["withdraw"]>().mockResolvedValue(true),
   };
-  const agent = managedAgent(app(db, { origin, secret: "secret", usefulness }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", usefulness }),
+  );
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   const post = (fields: Record<string, string>, validOrigin = true) =>
@@ -1553,7 +1588,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         },
       }),
   };
-  const agent = managedAgent(
+  const agent = await managedAgent(
     app(storage(), { origin, secret: "secret", memberExport }),
   );
   await agent
@@ -1597,7 +1632,7 @@ it("serves the local welcome, stylesheet and safe security headers", async () =>
   expect(res.headers["cache-control"]).toBe("no-store");
 });
 it("reports deterministic integration readiness without claiming live effects", async () => {
-  const agent = managedAgent(app(db, { origin, secret: "s" }));
+  const agent = await managedAgent(app(db, { origin, secret: "s" }));
   const res = await agent.get("/readiness").set("Host", host).expect(200);
   expect(res.text).toContain("DEMO ENVIRONMENT");
   expect(res.text).toMatch(/<strong>ai<\/strong> · simulated/);
@@ -1606,7 +1641,7 @@ it("reports deterministic integration readiness without claiming live effects", 
   expect(res.text).not.toContain("configured");
 });
 it("serves concurrent requests through one test agent without transport failures", async () => {
-  const server = app(db, { origin, secret: "secret" }).listen(0);
+  const server = await listenLoopback(app(db, { origin, secret: "secret" }));
   try {
     const agent = request.agent(server);
     const responses = await Promise.all(
@@ -1619,9 +1654,7 @@ it("serves concurrent requests through one test agent without transport failures
       expect(response.text).toContain("DEMO ENVIRONMENT");
     }
   } finally {
-    await new Promise<void>((resolve, reject) =>
-      server.close((error) => (error ? reject(error) : resolve())),
-    );
+    await closeLoopback(server);
   }
 });
 it("enforces private workspace and cohort decisions on direct API requests", async () => {
@@ -1647,9 +1680,10 @@ it("enforces private workspace and cohort decisions on direct API requests", asy
         body: "Shared guide",
       }),
   };
-  const server = app(db, { origin, secret: "secret", authorization }).listen(0);
+  const server = await listenLoopback(
+    app(db, { origin, secret: "secret", authorization }),
+  );
   managedServers.push(server);
-  await once(server, "listening");
   const agent = request.agent(server);
   await atStage("open session", agent.get("/").set("Host", host).expect(200));
   await atStage(
@@ -1722,7 +1756,9 @@ it("shows only eligible published content to members and escapes draft previews"
     reviewedAt: new Date("2026-09-23"),
     publishedAt: new Date("2026-09-23"),
   };
-  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", catalog }),
+  );
   await agent.get("/").set("Host", host).expect(200);
   await agent.get("/library").set("Host", host).expect(303);
   active();
@@ -1796,7 +1832,9 @@ it("records only exact synthetic lesson openings and rejects invalid, stale or u
     publishedAt: new Date(),
   };
   catalog.published.mockResolvedValue(item);
-  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", catalog }),
+  );
   const welcome = await agent.get("/").set("Host", host).expect(200);
   const csrf = welcome.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   active();
@@ -1878,7 +1916,9 @@ it("saves only acknowledged current-version private sample practice and recovers
       .fn<PracticeStore["withdraw"]>()
       .mockResolvedValue("unavailable"),
   };
-  const agent = managedAgent(app(db, { origin, secret: "secret", practice }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", practice }),
+  );
   await agent.get("/practice").set("Host", host).expect(303);
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
@@ -1972,7 +2012,9 @@ it("requires an owned, confirmed exact-version withdrawal from practice history"
     save: vi.fn<PracticeStore["save"]>().mockResolvedValue("unavailable"),
     withdraw: vi.fn<PracticeStore["withdraw"]>().mockResolvedValue("withdrawn"),
   };
-  const agent = managedAgent(app(db, { origin, secret: "secret", practice }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", practice }),
+  );
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   const post = (
@@ -2068,7 +2110,9 @@ it("offers ephemeral source-grounded study reflection only for the current publi
     publishedAt: new Date(),
   };
   catalog.published.mockResolvedValue(item);
-  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", catalog }),
+  );
   await agent.get("/library/SYN-106/study").set("Host", host).expect(303);
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
@@ -2154,7 +2198,9 @@ it("offers ephemeral source-grounded study reflection only for the current publi
 it("supports the local editor/reviewer workflow without bypassing rejected transitions", async () => {
   const catalog = catalogMock();
   catalog.staffList.mockResolvedValue([]);
-  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", catalog }),
+  );
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   catalog.staffList.mockResolvedValueOnce([
@@ -2271,7 +2317,9 @@ it("supports the local editor/reviewer workflow without bypassing rejected trans
 it("accepts controlled synthetic audience tags and preserves the form on rejection", async () => {
   const catalog = catalogMock();
   catalog.staffList.mockResolvedValue([]);
-  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", catalog }),
+  );
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   const fields = {
@@ -2334,7 +2382,9 @@ it("accepts controlled synthetic audience tags and preserves the form on rejecti
 });
 it("does not expose the staff workflow page to a member", async () => {
   const catalog = catalogMock();
-  const server = app(db, { origin, secret: "secret", catalog }).listen(0);
+  const server = await listenLoopback(
+    app(db, { origin, secret: "secret", catalog }),
+  );
   managedServers.push(server);
   let receivedRequests = 0;
   server.on("request", () => {
@@ -2444,7 +2494,7 @@ it("retains safe onboarding choices and acknowledgement on an unsaved field erro
     'name="synthetic" value="yes" required checked',
   );
   await agent.get("/").set("Host", host).expect(200);
-  const unrelated = managedAgent(app(db, { origin, secret: "secret" }));
+  const unrelated = await managedAgent(app(db, { origin, secret: "secret" }));
   const otherPage = await unrelated.get("/").set("Host", host).expect(200);
   expect(otherPage.text).not.toContain('value="Mars/Olympus"');
   expect(otherPage.text).not.toContain('<option value="work" selected>');
@@ -2586,11 +2636,8 @@ it("lets an active member revise their direction without selecting another owner
 it.each(["/learn", "/lesson", "/exercise", "/profile", "/delete"])(
   "sends unauthenticated visitors away from %s",
   async (path) => {
-    await request(app(db, { origin, secret: "s" }))
-      .get(path)
-      .set("Host", host)
-      .expect(303)
-      .expect("Location", "/");
+    const agent = await managedAgent(app(db, { origin, secret: "s" }));
+    await agent.get(path).set("Host", host).expect(303).expect("Location", "/");
   },
 );
 it("renders the active path and lesson using only the owned session", async () => {
@@ -3202,12 +3249,10 @@ it("keeps evidence form writes owner-scoped, confirmed and truthful", async () =
     .expect(403);
 });
 it("rejects unrecognized Host and cross-origin, missing-origin or invalid-CSRF writes", async () => {
+  const badHostAgent = await managedAgent(app(db, { origin, secret: "s" }));
   await atStage(
     "GET / unrecognized Host",
-    request(app(db, { origin, secret: "s" }))
-      .get("/")
-      .set("Host", "attacker.invalid")
-      .expect(403),
+    badHostAgent.get("/").set("Host", "attacker.invalid").expect(403),
   );
   const { agent, csrf } = await atStage("GET / session setup", client());
   for (const from of ["http://attacker.invalid", "null", ""]) {
@@ -3457,7 +3502,9 @@ it("selects only an eligible published assignment for the active member and reje
   };
   const catalog = catalogMock();
   catalog.search.mockResolvedValue([item]);
-  const agent = managedAgent(app(db, { origin, secret: "secret", catalog }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", catalog }),
+  );
   const entry = await agent.get("/").set("Host", host).expect(200);
   const csrf = entry.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   const post = (values: Record<string, string>) =>
@@ -3611,7 +3658,9 @@ it("compares only two selected submissions from an owned private attempt", async
     ...disabledAttemptStore(),
     detail: vi.fn().mockResolvedValue(item),
   };
-  const agent = managedAgent(app(db, { origin, secret: "secret", attempts }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", attempts }),
+  );
   await agent.get("/").set("Host", host).expect(200);
   db.session.mockResolvedValue({ kind: "active", learner: member });
   const get = (query: string) =>
@@ -3673,7 +3722,9 @@ it("keeps synthetic assignment attempts private through start, validation, confl
     revise: vi.fn().mockResolvedValue(false),
     remove: vi.fn().mockResolvedValue(false),
   };
-  const agent = managedAgent(app(db, { origin, secret: "secret", attempts }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", attempts }),
+  );
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   db.session.mockResolvedValue({ kind: "active", learner: member });
@@ -3896,7 +3947,9 @@ it("preserves attempted text and separates stale, ineligible, expired and uncert
     revise: vi.fn().mockResolvedValue(false),
     remove: vi.fn().mockResolvedValue(false),
   };
-  const agent = managedAgent(app(db, { origin, secret: "secret", attempts }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", attempts }),
+  );
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   db.session.mockResolvedValue({ kind: "active", learner: member });
@@ -4057,7 +4110,9 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
     ...disabledAttemptStore(),
     detail: vi.fn().mockResolvedValue(item),
   };
-  const agent = managedAgent(app(db, { origin, secret: "secret", attempts }));
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", attempts }),
+  );
   await agent.get("/").set("Host", host).expect(200);
   db.session.mockResolvedValue({ kind: "active", learner: member });
   const get = (sequence: string) =>

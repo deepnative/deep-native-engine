@@ -7,12 +7,10 @@ import {
   workflowRegistry,
 } from "../../src/workflow-registry.ts";
 import type { Store } from "../../src/store.ts";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 let server: Server | undefined;
 afterEach(async () => {
-  if (server)
-    await new Promise<void>((resolve, reject) =>
-      server!.close((error) => (error ? reject(error) : resolve())),
-    );
+  if (server) await closeLoopback(server);
   server = undefined;
 });
 
@@ -39,10 +37,12 @@ it("serves read-only demonstration pages and inert Markdown attachments", async 
   const store = {
     session: vi.fn<Store["session"]>().mockResolvedValue({ kind: "new" }),
   } as unknown as Store;
-  server = app(store, {
-    origin: "http://127.0.0.1:3000",
-    secret: "secret",
-  }).listen(0);
+  server = await listenLoopback(
+    app(store, {
+      origin: "http://127.0.0.1:3000",
+      secret: "secret",
+    }),
+  );
   const agent = request.agent(server);
   const get = (path: string) => agent.get(path).set("Host", "127.0.0.1:3000");
   const list = await get("/workflows").expect(200);

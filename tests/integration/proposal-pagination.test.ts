@@ -6,6 +6,7 @@ import { authorizationStore } from "../../src/authorization.ts";
 import { proposalStore } from "../../src/proposals.ts";
 import { migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 
 const pool = testPool();
 const db = store(pool);
@@ -72,11 +73,13 @@ it("lets a moderator reach a newer submission past 100 retained quarantined prop
   });
 
   const origin = "http://127.0.0.1:3000";
-  const server = app(db, {
-    origin,
-    secret: "synthetic-moderation-pagination-secret",
-    proposals,
-  }).listen(0);
+  const server = await listenLoopback(
+    app(db, {
+      origin,
+      secret: "synthetic-moderation-pagination-secret",
+      proposals,
+    }),
+  );
   try {
     const agent = request.agent(server);
     const getPage = (path: string) =>
@@ -111,7 +114,7 @@ it("lets a moderator reach a newer submission past 100 retained quarantined prop
       Object.fromEntries(retained.rows.map((row) => [row.state, +row.count])),
     ).toEqual({ quarantined: 100, submitted: 1 });
   } finally {
-    server.close();
+    await closeLoopback(server);
     // The verification runner reuses this database for browser journeys.
     // A retained 100-row fixture would hide newer moderation items there.
     // Proposal rows reference the moderator without ON DELETE CASCADE, so

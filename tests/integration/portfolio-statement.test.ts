@@ -8,6 +8,7 @@ import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { COOKIE } from "../../src/session.ts";
 import { migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
+import { withLoopback } from "../support/loopback-server.ts";
 
 const pool = testPool();
 const db = store(pool);
@@ -75,11 +76,27 @@ async function fixture(retire = true) {
   return { owner, outsider, reviewer, attempts, id, catalog, editor };
 }
 
+function getWithApp(
+  application: ReturnType<typeof app>,
+  token: string,
+  id: string,
+  query: string,
+) {
+  return withLoopback(application, (server) =>
+    request(server)
+      .get(`/assignments/attempts/${id}/portfolio/${query}`)
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${token}`),
+  );
+}
+
 function get(token: string, id: string, query: string) {
-  return request(app(db, { origin, secret, attempts: attemptStore(pool) }))
-    .get(`/assignments/attempts/${id}/portfolio/${query}`)
-    .set("Host", "127.0.0.1:3000")
-    .set("Cookie", `${COOKIE}=${token}`);
+  return getWithApp(
+    app(db, { origin, secret, attempts: attemptStore(pool) }),
+    token,
+    id,
+    query,
+  );
 }
 
 it("downloads exact retained owner submissions after revision and retirement, with isolation and no writes", async () => {
@@ -161,7 +178,7 @@ it("does not fall back to attempt text for a missing snapshot or leak database f
   const missing = await get(owner.token, id, "1");
   expect(missing.status).toBe(404);
   expect(missing.text).not.toContain("Invented &lt;private&gt;");
-  const failing = await request(
+  const failing = await getWithApp(
     app(db, {
       origin,
       secret,
@@ -172,10 +189,10 @@ it("does not fall back to attempt text for a missing snapshot or leak database f
         },
       },
     }),
-  )
-    .get(`/assignments/attempts/${id}/portfolio/1`)
-    .set("Host", "127.0.0.1:3000")
-    .set("Cookie", `${COOKIE}=${owner.token}`);
+    owner.token,
+    id,
+    "1",
+  );
   expect(failing.status).toBe(503);
   expect(failing.text).not.toContain("private database detail");
   expect(failing.headers["content-disposition"]).toBeUndefined();

@@ -5,6 +5,7 @@ import { app } from "../../src/app.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
 import { migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
+import { withLoopback } from "../support/loopback-server.ts";
 
 const pool = testPool();
 const db = store(pool);
@@ -38,18 +39,20 @@ async function fixture() {
 }
 
 function postExercise(token: string, save: typeof db.save) {
-  return request(app({ ...db, save }, { origin, secret }))
-    .post("/exercise")
-    .set("Host", "127.0.0.1:3000")
-    .set("Origin", origin)
-    .set("Cookie", `${COOKIE}=${token}`)
-    .type("form")
-    .send({
-      ...attempted,
-      csrf: csrf(token, secret),
-      lesson_id: "clear-instructions",
-      lesson_version: "1",
-    });
+  return withLoopback(app({ ...db, save }, { origin, secret }), (server) =>
+    request(server)
+      .post("/exercise")
+      .set("Host", "127.0.0.1:3000")
+      .set("Origin", origin)
+      .set("Cookie", `${COOKIE}=${token}`)
+      .type("form")
+      .send({
+        ...attempted,
+        csrf: csrf(token, secret),
+        lesson_id: "clear-instructions",
+        lesson_version: "1",
+      }),
+  );
 }
 
 async function savedRow(id: string) {
@@ -110,10 +113,12 @@ it("does not claim rollback when commit succeeds but acknowledgement fails", asy
     },
   ]);
 
-  const inspect = await request(app(db, { origin, secret }))
-    .get("/lesson")
-    .set("Host", "127.0.0.1:3000")
-    .set("Cookie", `${COOKIE}=${token}`);
+  const inspect = await withLoopback(app(db, { origin, secret }), (server) =>
+    request(server)
+      .get("/lesson")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${token}`),
+  );
   expect(inspect.status).toBe(200);
   expect(inspect.text).toContain("Revise the invented plan");
   expect(inspect.text).toContain("completed");
