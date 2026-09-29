@@ -48,6 +48,7 @@ it("fails closed when proposal storage is unavailable", async () => {
   expect(await disabled.submit("member", draft.id, true, 1)).toBe("denied");
   expect(await disabled.withdraw("member", draft.id)).toBe(false);
   expect(await disabled.moderationQueue("moderator")).toBeNull();
+  expect(await disabled.moderationPage("moderator")).toBeNull();
   expect(await disabled.moderate("moderator", draft.id, "reject")).toBe(false);
 });
 it("keeps invalid consent and rights submissions out of storage", async () => {
@@ -272,6 +273,8 @@ it("discards a mutation connection when rollback fails", async () => {
 
 function moderationFixture(
   options: {
+    actorId?: string;
+    candidates?: { id: string; member_id: string; submitted_at: string }[];
     principal?: boolean;
     profile?: boolean;
     expired?: boolean;
@@ -296,12 +299,19 @@ function moderationFixture(
         rows:
           options.principal === false
             ? []
-            : [{ id: "actor", expires_at: new Date("2099-01-01") }],
+            : [
+                {
+                  id: options.actorId ?? "actor",
+                  expires_at: new Date("2099-01-01"),
+                },
+              ],
       };
     if (statement.startsWith("SELECT role FROM staff_profiles"))
       return { rows: options.profile === false ? [] : [{ role: "moderator" }] };
     if (statement.startsWith("SELECT mp.id,mp.member_id"))
-      return { rows: [{ id: "proposal", member_id: "member" }] };
+      return {
+        rows: options.candidates ?? [{ id: "proposal", member_id: "member" }],
+      };
     if (statement.startsWith("SELECT id FROM workspaces"))
       return { rows: [{ id: "workspace" }] };
     if (statement.startsWith("WITH locked"))
@@ -406,4 +416,68 @@ it("denies malformed proposal IDs without a database query", async () => {
   expect(await f.store.submit("member", "invalid", true, 1)).toBe("denied");
   expect(await f.store.withdraw("member", "invalid")).toBe(false);
   expect(f.connect).not.toHaveBeenCalled();
+});
+
+it("returns a bounded continuation even when a full candidate window was withdrawn before it was locked", async () => {
+  const options = {
+    candidates: Array.from({ length: 100 }, (_, index) => ({
+      id: `11111111-1111-1111-1111-${String(index).padStart(12, "0")}`,
+      member_id: "member",
+      submitted_at: "2026-09-01 00:00:00.123456+00",
+    })),
+    rows: [] as Proposal[],
+  };
+  const f = moderationFixture(options);
+  const first = await f.store.moderationPage("staff");
+  expect(first?.items).toEqual([]);
+  expect(first?.nextCursor).toEqual(expect.any(String));
+  expect(first!.nextCursor!.length).toBeLessThanOrEqual(512);
+  expect(f.history).toEqual([]);
+  options.candidates = [];
+  expect(await f.store.moderationPage("staff", first!.nextCursor)).toEqual({
+    items: [],
+    nextCursor: null,
+  });
+});
+
+it("accepts only the issuing actor and session's intact continuation in the same store instance", async () => {
+  const options = {
+    actorId: "actor",
+    candidates: Array.from({ length: 100 }, () => ({
+      id: draft.id,
+      member_id: "member",
+      submitted_at: "2026-09-01 00:00:00.123456+00",
+    })),
+  };
+  const f = moderationFixture(options);
+  const first = await f.store.moderationPage("staff");
+  const cursor = first!.nextCursor!;
+  const history = [...f.history];
+  for (const invalid of [
+    null,
+    42,
+    [],
+    {},
+    "",
+    "x".repeat(513),
+    "bad",
+    cursor.replace("v1.", "v2."),
+    cursor.replace(draft.id, "-".repeat(36)),
+    cursor.slice(0, -43) + "x".repeat(43),
+    cursor + "=",
+  ]) {
+    expect(await f.store.moderationPage("staff", invalid)).toBeNull();
+    expect(f.history).toEqual(history);
+  }
+  expect(await f.store.moderationPage("other-session", cursor)).toBeNull();
+  options.actorId = "other-actor";
+  expect(await f.store.moderationPage("staff", cursor)).toBeNull();
+  options.actorId = "actor";
+  expect(
+    await moderationFixture(options).store.moderationPage("staff", cursor),
+  ).toBeNull();
+  expect(await f.store.moderationPage("staff", cursor)).toMatchObject({
+    items: [{ ...draft, state: "submitted" }],
+  });
+  expect(f.history).toHaveLength(2);
 });

@@ -561,6 +561,9 @@ it("keeps member proposals private and moderation unable to publish", async () =
     moderationQueue: vi
       .fn<ProposalStore["moderationQueue"]>()
       .mockResolvedValue(null),
+    moderationPage: vi
+      .fn<ProposalStore["moderationPage"]>()
+      .mockResolvedValue(null),
     moderate: vi.fn<ProposalStore["moderate"]>().mockResolvedValue(false),
   };
   const agent = managedAgent(
@@ -570,7 +573,7 @@ it("keeps member proposals private and moderation unable to publish", async () =
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   await agent.get("/contribute").set("Host", host).expect(303);
   await agent.get("/moderate/proposals").set("Host", host).expect(403);
-  proposals.moderationQueue.mockResolvedValue([]);
+  proposals.moderationPage.mockResolvedValue({ items: [], nextCursor: null });
   await agent.get("/moderate/proposals").set("Host", host).expect(200);
   const post = (path: string, fields: Record<string, string>) =>
     agent
