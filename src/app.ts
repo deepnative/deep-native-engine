@@ -492,8 +492,12 @@ export function app(
     }
     res.redirect(303, "/operator/test-receipts");
   });
-  app.get("/moderate/proposals", async (_req, res) => {
-    const queue = await proposals.moderationQueue(res.locals.token as string);
+  app.get("/moderate/proposals", async (req, res) => {
+    const continuation = req.query.after;
+    const queue = await proposals.moderationPage(
+      res.locals.token as string,
+      continuation,
+    );
     if (!queue) {
       res
         .status(403)
@@ -502,7 +506,12 @@ export function app(
         );
       return;
     }
-    res.send(moderationPage(queue, res.locals.csrf as string, new Date()));
+    res.send(
+      moderationPage(queue.items, res.locals.csrf as string, new Date(), {
+        nextCursor: queue.nextCursor,
+        continued: continuation !== undefined,
+      }),
+    );
   });
   app.post("/moderate/proposals/:id/:action", async (req, res) => {
     const action = req.params.action;

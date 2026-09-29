@@ -268,10 +268,41 @@ export function proposalEditRecoveryPage(
     `<section class="error-page"><p class="eyebrow">PRIVATE SAMPLE · ${status}</p><h1>${title}</h1><div class="notice" role="alert"><p>${escape(message)}</p></div>${revision !== undefined ? `<p>You were changing saved revision ${revision}. Check these fields and try again. A changed draft will require you to review the current preview first.</p>${proposalEditForm(id, csrf, revision, bounded)}` : `<p>Copy your attempted text before opening the current preview. This page does not retry the write.</p><label for="unsaved-proposal-title">Attempted title</label><input id="unsaved-proposal-title" readonly value="${escape(bounded.title)}"><label for="unsaved-proposal-body">Attempted sample</label><textarea id="unsaved-proposal-body" readonly>${escape(bounded.body)}</textarea><label for="unsaved-proposal-sources">Attempted sources and rights notes</label><textarea id="unsaved-proposal-sources" readonly>${escape(bounded.sources)}</textarea>`}<p><a href="/contribute/${escape(id)}">Open the current private preview</a> to check the saved revision and submission state.</p></section>`,
   );
 }
-export function moderationPage(items: Proposal[], csrf: string, now: Date) {
+export function moderationPage(
+  items: Proposal[],
+  csrf: string,
+  now: Date,
+  navigation: { nextCursor: string | null; continued: boolean } = {
+    nextCursor: null,
+    continued: false,
+  },
+) {
+  const entries = items
+    .map(
+      (item) =>
+        `<li><strong>${escape(item.title!)}</strong> · ${escape(item.state)}${item.workflowId ? `<p>Workflow reference: ${escape(item.workflowId)} version ${item.workflowVersion}</p>` : ""}<p>Submitted (UTC): <time datetime="${item.submittedAt!.toISOString()}">${item.submittedAt!.toISOString()}</time> · Elapsed: ${Math.max(0, Math.floor((now.getTime() - item.submittedAt!.getTime()) / 60_000))} minutes</p><p>${escape(item.body!)}</p><p>Sources: ${escape(item.sources!)}</p>${item.state === "submitted" ? `<form method="post" action="/moderate/proposals/${escape(item.id)}/quarantine">${hidden(csrf)}<button type="submit">Quarantine for review</button></form>` : ""}<form method="post" action="/moderate/proposals/${escape(item.id)}/reject">${hidden(csrf)}<button type="submit">Reject and redact</button></form></li>`,
+    )
+    .join("");
+  const empty = items.length
+    ? ""
+    : navigation.nextCursor
+      ? "<p>No eligible proposals remain in this page. Continue to the next page.</p>"
+      : navigation.continued
+        ? "<p>No later eligible proposals are currently available.</p>"
+        : "<p>No submitted proposals await moderation.</p>";
+  const next = navigation.nextCursor
+    ? `<p>Showing up to 100 proposals. More proposals may be waiting. The next page may be empty if this was the last full page.</p><a href="/moderate/proposals?after=${escape(encodeURIComponent(navigation.nextCursor))}">Next page</a>`
+    : items.length === 100 && !navigation.continued
+      ? "<p>Showing the first 100 proposals. More proposals may be waiting; return to this queue to check again.</p>"
+      : navigation.continued
+        ? "<p>End of the current moderation worklist.</p>"
+        : "";
+  const back = navigation.continued
+    ? '<a href="/moderate/proposals">Return to start</a>'
+    : "";
   return page(
     "Private proposal moderation",
-    `<section class="error-page"><p class="eyebrow">MODERATOR ONLY · NO PUBLICATION</p><h1>Private proposal moderation</h1><p class="lead">Review submitted sample text in quarantine. You can quarantine or reject and redact it. Approval and publication are unavailable while licensing policy is pending. This private synthetic worklist has no response-time promise. Elapsed age is as of page load.</p><ul>${items.map((item) => `<li><strong>${escape(item.title!)}</strong> · ${escape(item.state)}${item.workflowId ? `<p>Workflow reference: ${escape(item.workflowId)} version ${item.workflowVersion}</p>` : ""}<p>Submitted (UTC): <time datetime="${item.submittedAt!.toISOString()}">${item.submittedAt!.toISOString()}</time> · Elapsed: ${Math.max(0, Math.floor((now.getTime() - item.submittedAt!.getTime()) / 60_000))} minutes</p><p>${escape(item.body!)}</p><p>Sources: ${escape(item.sources!)}</p>${item.state === "submitted" ? `<form method="post" action="/moderate/proposals/${escape(item.id)}/quarantine">${hidden(csrf)}<button type="submit">Quarantine for review</button></form>` : ""}<form method="post" action="/moderate/proposals/${escape(item.id)}/reject">${hidden(csrf)}<button type="submit">Reject and redact</button></form></li>`).join("")}</ul>${items.length ? "" : "<p>No submitted proposals await moderation.</p>"}${items.length === 100 ? "<p>Showing the first 100 proposals. More proposals may be waiting; process or refresh this queue to see them.</p>" : ""}</section>`,
+    `<section class="error-page"><p class="eyebrow">MODERATOR ONLY · NO PUBLICATION</p><h1>Private proposal moderation</h1><p class="lead">Review submitted sample text in quarantine. You can quarantine or reject and redact it. Approval and publication are unavailable while licensing policy is pending. This private synthetic worklist has no response-time promise. Elapsed age is as of page load.</p><ul>${entries}</ul>${empty}<nav aria-label="Moderation pages">${next}${back}</nav>${navigation.continued ? "<p>This worklist can change while you browse. Return to start to check earlier submissions.</p>" : ""}</section>`,
   );
 }
 export function offerHypothesesPage() {

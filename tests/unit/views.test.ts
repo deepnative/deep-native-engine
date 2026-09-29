@@ -851,6 +851,29 @@ it("escapes private proposal text and never renders a publish action", () => {
     ),
   ).not.toContain("Quarantine for review");
 });
+it("offers accessible moderation continuation and honest empty/end states", () => {
+  const now = new Date("2026-09-25T12:00:00Z");
+  const first = moderationPage([], "csrf", now, {
+    nextCursor: "opaque-cursor",
+    continued: false,
+  });
+  expect(first).toContain('aria-label="Moderation pages"');
+  expect(first).toContain('href="/moderate/proposals?after=opaque-cursor"');
+  expect(first).toContain("Next page");
+  expect(first).toContain("The next page may be empty");
+  expect(first).toContain("No eligible proposals remain in this page");
+  expect(first).not.toContain("No submitted proposals await moderation");
+  expect(first).not.toContain("Return to start");
+
+  const last = moderationPage([], "csrf", now, {
+    nextCursor: null,
+    continued: true,
+  });
+  expect(last).toContain("No later eligible proposals are currently available");
+  expect(last).toContain('href="/moderate/proposals">Return to start');
+  expect(last).not.toContain("Next page");
+  expect(last).not.toContain("No submitted proposals await moderation");
+});
 it("shows a private plan for known time and time zone without a paid action", () => {
   const html = dashboard(
     {

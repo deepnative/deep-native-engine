@@ -1,4 +1,9 @@
-import { randomUUID } from "node:crypto";
+import {
+  createHmac,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { hash } from "./store.ts";
 import { workflowBundle } from "./workflow-registry.ts";
@@ -45,6 +50,10 @@ export interface ProposalStore {
   ): Promise<"submitted" | "conflict" | "denied">;
   withdraw(token: string, id: string): Promise<boolean>;
   moderationQueue(token: string): Promise<Proposal[] | null>;
+  moderationPage(
+    token: string,
+    cursor?: unknown,
+  ): Promise<{ items: Proposal[]; nextCursor: string | null } | null>;
   moderate(
     token: string,
     id: string,
@@ -80,6 +89,7 @@ export function disabledProposalStore(): ProposalStore {
     submit: async () => "denied",
     withdraw: async () => false,
     moderationQueue: async () => null,
+    moderationPage: async () => null,
     moderate: async () => false,
   };
 }
@@ -101,6 +111,43 @@ export function proposalStore(
   pool: Pool,
   resolveWorkflow = workflowBundle,
 ): ProposalStore {
+  // Continuation is intentionally local to this store instance. Restarting it
+  // invalidates old links; the first page always remains available.
+  const cursorKey = randomBytes(32);
+  function cursorSignature(payload: string, actorId: string, token: string) {
+    return createHmac("sha256", cursorKey)
+      .update(
+        JSON.stringify([
+          "private-moderation-page",
+          actorId,
+          hash(token),
+          payload,
+        ]),
+      )
+      .digest("base64url");
+  }
+  function readCursor(cursor: unknown, actorId: string, token: string) {
+    if (typeof cursor !== "string" || cursor.length > 512) return null;
+    const match =
+      /^v1\.([A-Za-z0-9_-]{1,128})\.([a-f0-9-]{36})\.([A-Za-z0-9_-]{43})$/.exec(
+        cursor,
+      );
+    if (!match || !proposalIdPattern.test(match[2]!)) return null;
+    const payload = cursor.slice(0, cursor.lastIndexOf("."));
+    if (
+      !timingSafeEqual(
+        Buffer.from(match[3]!),
+        Buffer.from(cursorSignature(payload, actorId, token)),
+      )
+    )
+      return null;
+    // Only this instance can authenticate the exact PostgreSQL timestamp text.
+    // Never round-trip it through JavaScript Date (which loses microseconds).
+    return {
+      submittedAt: Buffer.from(match[1]!, "base64url").toString("utf8"),
+      id: match[2]!,
+    };
+  }
   async function withOwner<T>(
     token: string,
     id: string,
@@ -207,7 +254,9 @@ export function proposalStore(
       client: PoolClient,
       actor: ModerationActor,
       rows: ModerationProposal[],
+      nextCursor: string | null,
     ) => Promise<T>,
+    cursor?: unknown,
   ): Promise<T> {
     const client = await pool.connect();
     let releaseError: Error | undefined;
@@ -237,19 +286,30 @@ export function proposalStore(
         await client.query("ROLLBACK");
         return denied;
       }
-      // Capture only identifiers until all ownership/state locks are held.
+      const after =
+        cursor === undefined ? null : readCursor(cursor, principal.id, token);
+      if (cursor !== undefined && !after) {
+        await client.query("ROLLBACK");
+        return denied;
+      }
+      // Capture only identifiers and ordering metadata until all locks are held.
       // Exclude already deleting/absent workspaces before LIMIT so they cannot
       // permanently hide a later eligible proposal during deletion recovery.
       // A concurrently withdrawn/deleted candidate is excluded, never replaced
       // with an unlocked row beyond this invocation's ordered 100-row window.
       const candidates = (
-        await client.query<{ id: string; member_id: string }>(
-          `SELECT mp.id,mp.member_id FROM member_proposals mp
+        await client.query<{
+          id: string;
+          member_id: string;
+          submitted_at: string;
+        }>(
+          `SELECT mp.id,mp.member_id,mp.submitted_at::text FROM member_proposals mp
          JOIN workspaces w ON w.owner_principal_id=mp.member_id
          WHERE w.deleting_at IS NULL AND mp.state IN ('submitted','quarantined')
            AND ($1::uuid IS NULL OR mp.id=$1)
+           AND ($2::timestamptz IS NULL OR (mp.submitted_at,mp.id)>($2::timestamptz,$3::uuid))
          ORDER BY mp.submitted_at,mp.id LIMIT 100`,
-          [id],
+          [id, after?.submittedAt ?? null, after?.id ?? null],
         )
       ).rows;
       const members = candidates.map((row) => row.member_id);
@@ -278,7 +338,20 @@ export function proposalStore(
           [candidates.map((row) => row.id), workspaces.map((row) => row.id)],
         )
       ).rows;
-      const result = await use(client, { ...principal, ...profile }, rows);
+      // Advance past the candidate boundary even if it was withdrawn/deleted
+      // while locks were acquired. Do not look ahead or refill the window.
+      let nextCursor: string | null = null;
+      if (candidates.length === 100) {
+        const boundary = candidates[99]!;
+        const payload = `v1.${Buffer.from(boundary.submitted_at).toString("base64url")}.${boundary.id}`;
+        nextCursor = `${payload}.${cursorSignature(payload, principal.id, token)}`;
+      }
+      const result = await use(
+        client,
+        { ...principal, ...profile },
+        rows,
+        nextCursor,
+      );
       // BEGIN time is frozen. Audit insertion can itself wait; check actual
       // wall time after every lock/write, before COMMIT and private output.
       const current = await client.query<{ valid: boolean }>(
@@ -301,6 +374,29 @@ export function proposalStore(
     } finally {
       client.release(releaseError);
     }
+  }
+
+  async function moderationPage(token: string, cursor?: unknown) {
+    return withModerator<{
+      items: Proposal[];
+      nextCursor: string | null;
+    } | null>(
+      token,
+      null,
+      null,
+      async (client, actor, rows, nextCursor) => {
+        for (const row of rows)
+          await audit(client, actor, row, "proposal_read", row.state);
+        return {
+          items: rows.map(
+            ({ workspace_id: _workspace, member_id: _member, ...proposal }) =>
+              proposal,
+          ),
+          nextCursor,
+        };
+      },
+      cursor,
+    );
   }
 
   return {
@@ -406,20 +502,9 @@ export function proposalStore(
       });
     },
     async moderationQueue(token) {
-      return withModerator<Proposal[] | null>(
-        token,
-        null,
-        null,
-        async (client, actor, rows) => {
-          for (const row of rows)
-            await audit(client, actor, row, "proposal_read", row.state);
-          return rows.map(
-            ({ workspace_id: _workspace, member_id: _member, ...proposal }) =>
-              proposal,
-          );
-        },
-      );
+      return (await moderationPage(token))?.items ?? null;
     },
+    moderationPage,
     async moderate(token, id, action) {
       if (action !== "quarantine" && action !== "reject") return false;
       return withModerator(token, id, false, async (client, actor, rows) => {
