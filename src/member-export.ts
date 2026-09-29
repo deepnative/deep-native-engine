@@ -64,7 +64,7 @@ const sections = {
     workflow_version AS "workflowVersion",note,revision,
     created_at AS "createdAt",updated_at AS "updatedAt"
     FROM workflow_feedback WHERE member_id=$1
-    ORDER BY workflow_id,workflow_version LIMIT $2`,
+    ORDER BY workflow_id,workflow_version LIMIT $2 FOR SHARE`,
   // A withdrawal may commit while the repeatable-read owner lookup waits.
   // Lock the note too: a changed snapshot tuple must fail closed, not export
   // its pre-withdrawal response. Owner/workspace locks are acquired first.

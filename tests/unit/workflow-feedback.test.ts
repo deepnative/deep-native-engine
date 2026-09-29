@@ -42,12 +42,10 @@ it("keeps disabled feedback unavailable without implying persistence", async () 
   expect(await feedback.withdraw("owner", "WF-001", 1, 1)).toBe(false);
 });
 
-it("uses optimistic create, correction and withdrawal results without inventing a save", async () => {
+it("uses optimistic create and correction results without inventing a save", async () => {
   const query = vi
     .fn()
     .mockResolvedValueOnce({ rows: [] })
-    .mockResolvedValueOnce({ rowCount: 1 })
-    .mockResolvedValueOnce({ rowCount: 0 })
     .mockResolvedValueOnce({ rowCount: 1 })
     .mockResolvedValueOnce({ rowCount: 0 })
     .mockResolvedValueOnce({ rowCount: 1 })
@@ -58,10 +56,59 @@ it("uses optimistic create, correction and withdrawal results without inventing 
   expect(await feedback.save("owner", "WF-001", 1, "Replay", 0)).toBe(false);
   expect(await feedback.save("owner", "WF-001", 1, "Correction", 1)).toBe(true);
   expect(await feedback.save("owner", "WF-001", 1, "Stale", 1)).toBe(false);
-  expect(await feedback.withdraw("owner", "WF-001", 1, 2)).toBe(true);
-  expect(await feedback.withdraw("owner", "WF-001", 1, 2)).toBe(false);
-  expect(query).toHaveBeenCalledTimes(7);
+  expect(query).toHaveBeenCalledTimes(5);
   expect(query.mock.calls[1]![1]).toContain("First");
+});
+
+function withdrawalPool(
+  options: {
+    principal?: boolean;
+    workspace?: boolean;
+    deleted?: boolean;
+    current?: boolean;
+    rejectOn?: string;
+    rollbackFails?: boolean;
+  } = {},
+) {
+  const release = vi.fn();
+  const query = vi.fn(async (statement: string) => {
+    if (options.rejectOn && statement.startsWith(options.rejectOn))
+      throw new Error("Simulated database failure");
+    if (options.rollbackFails && statement === "ROLLBACK")
+      throw new Error("Simulated rollback failure");
+    if (statement.includes("FROM principals"))
+      return {
+        rows:
+          options.principal === false
+            ? []
+            : [{ id: "member", expiresAt: new Date("2030-01-01") }],
+      };
+    if (statement.includes("FROM workspaces"))
+      return { rows: options.workspace === false ? [] : [{ id: "workspace" }] };
+    if (statement.startsWith("DELETE FROM workflow_feedback"))
+      return { rowCount: options.deleted === false ? 0 : 1 };
+    if (statement.startsWith("SELECT clock_timestamp()"))
+      return { rows: [{ valid: options.current !== false }] };
+    return { rows: [], rowCount: 0 };
+  });
+  const connect = vi.fn(async () => ({ query, release }));
+  return {
+    pool: { connect } as unknown as Pool,
+    connect,
+    query,
+    release,
+  };
+}
+
+it("withdraws only a current revision for an authorized member and active workspace", async () => {
+  const db = withdrawalPool();
+  const feedback = workflowFeedbackStore(db.pool);
+  expect(await feedback.withdraw("owner", "WF-001", 1, 2)).toBe(true);
+  expect(db.query.mock.calls.map(([statement]) => statement)).toContain(
+    "COMMIT",
+  );
+  expect(db.release).toHaveBeenCalledOnce();
+  expect(db.release).toHaveBeenCalledWith(undefined);
   for (const [id, version, revision] of [
     ["invalid", 1, 1],
     ["WF-001", 0, 1],
@@ -70,5 +117,57 @@ it("uses optimistic create, correction and withdrawal results without inventing 
     ["WF-001", 1, 1.5],
   ] as const)
     expect(await feedback.withdraw("owner", id, version, revision)).toBe(false);
-  expect(query).toHaveBeenCalledTimes(7);
+  expect(db.connect).toHaveBeenCalledOnce();
+});
+
+it.each([
+  ["revoked or missing member", { principal: false }],
+  ["unavailable workspace", { workspace: false }],
+  ["stale or missing revision", { deleted: false }],
+  ["expired session after the row wait", { current: false }],
+] as const)("does not withdraw for %s", async (_reason, options) => {
+  const db = withdrawalPool(options);
+  const feedback = workflowFeedbackStore(db.pool);
+  expect(await feedback.withdraw("owner", "WF-001", 1, 2)).toBe(false);
+  expect(db.query.mock.calls.map(([statement]) => statement)).not.toContain(
+    "COMMIT",
+  );
+  expect(db.query.mock.calls.map(([statement]) => statement)).toContain(
+    "ROLLBACK",
+  );
+  expect(db.release).toHaveBeenCalledWith(undefined);
+});
+
+it.each(["DELETE FROM workflow_feedback", "COMMIT"])(
+  "fails closed and releases its transaction on %s failure",
+  async (statement) => {
+    const db = withdrawalPool({ rejectOn: statement });
+    expect(
+      await workflowFeedbackStore(db.pool).withdraw("owner", "WF-001", 1, 2),
+    ).toBe(false);
+    expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+    expect(db.release).toHaveBeenCalledWith(undefined);
+  },
+);
+
+it("disposes a connection whose failed withdrawal cannot be rolled back", async () => {
+  const db = withdrawalPool({ deleted: false, rollbackFails: true });
+  expect(
+    await workflowFeedbackStore(db.pool).withdraw("owner", "WF-001", 1, 2),
+  ).toBe(false);
+  expect(db.release).toHaveBeenCalledWith(expect.any(Error));
+});
+
+it("fails closed when the feedback database connection is unavailable", async () => {
+  const connect = vi
+    .fn()
+    .mockRejectedValue(new Error("Connection unavailable"));
+  expect(
+    await workflowFeedbackStore({ connect } as unknown as Pool).withdraw(
+      "owner",
+      "WF-001",
+      1,
+      2,
+    ),
+  ).toBe(false);
 });
