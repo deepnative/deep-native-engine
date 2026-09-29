@@ -32,6 +32,7 @@ import type { CareerSnapshot } from "../../src/career.ts";
 import type { ExpertRecord } from "../../src/track-readiness.ts";
 import type { Proposal } from "../../src/proposals.ts";
 import { workflowBundle } from "../../src/workflow-registry.ts";
+import { profileEdit } from "../../src/validation.ts";
 const learner = {
   id: "a",
   background: "explorer" as const,
@@ -914,6 +915,71 @@ it("shows optional profile choices and retains the exercise context after a goal
   expect(previous).toContain(
     "saved practice remains tied to your earlier goal",
   );
+});
+it("renders unsaved profile edits with an actionable field error while keeping the saved plan", () => {
+  const saved = {
+    ...learner,
+    backgroundTags: ["explorer" as const],
+    domainTags: ["education" as const],
+    experience: "new" as const,
+    timezone: "UTC",
+    weeklyMinutes: 15,
+  };
+  const edit = profileEdit({
+    background: "professional",
+    goal: "work",
+    domain_tags: "finance",
+    exploratory: "yes",
+    timezone: "Mars/Olympus",
+    weekly_minutes: "60",
+  });
+  const html = dashboard(saved, undefined, "token", [], [], null, null, edit);
+  expect(html).toContain("<title>Error in your profile");
+  expect(html).toContain("Your changes were not saved");
+  expect(html).toContain('href="#timezone"');
+  expect(html).toContain('id="timezone" name="timezone" value="Mars/Olympus"');
+  expect(html).toContain('aria-describedby="timezone-help timezone-error"');
+  expect(html).toContain('aria-invalid="true"');
+  expect(html).toContain('id="timezone-error"');
+  expect(html).toContain('<option value="work" selected>');
+  expect(html).toContain('<option value="professional" selected>');
+  expect(html).toContain('name="domain_tags" value="finance" checked');
+  expect(html).toContain('name="exploratory" value="yes" checked');
+  expect(html).not.toContain('name="domain_tags" value="education" checked');
+  expect(html).toContain('<option value="60" selected>');
+  expect(html).toContain('<option value="" selected>Not specified</option>');
+  expect(html).toContain("Understand AI and try something useful");
+  expect(html).toContain("Weekly time: About 15 minutes · Time zone: UTC");
+  expect(html.indexOf('href="/api/member/export"')).toBeLessThan(
+    html.indexOf('href="#timezone"'),
+  );
+});
+it("links multiple profile errors and escapes attempted text without reflecting forged options", () => {
+  const edit = profileEdit({
+    background: "technical",
+    goal: "admin",
+    domain_tags: ["finance", "finance"],
+    timezone: '<img src=x onerror="alert(1)">',
+    weekly_minutes: ["15", "60"],
+    exploratory: "no",
+  });
+  const html = dashboard(learner, undefined, "token", [], [], null, null, edit);
+  expect(html).toContain('href="#goal"');
+  expect(html).toContain('href="#domain_tags"');
+  expect(html).toContain('href="#timezone"');
+  expect(html).toContain('href="#weekly_minutes"');
+  expect(html).toContain('href="#exploratory"');
+  expect(html).toContain('id="domain_tags" tabindex="-1" aria-invalid="true"');
+  expect(html).toContain('id="domain_tags-error"');
+  expect(html).toContain(
+    'value="&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"',
+  );
+  expect(html).not.toContain('<img src=x onerror="alert(1)">');
+  expect(html).not.toContain('<option value="admin"');
+  expect(html).toContain('name="domain_tags" value="finance" checked');
+  expect(html).toContain('id="weekly_minutes" name="weekly_minutes"');
+  expect(html).toContain('id="exploratory" type="checkbox"');
+  expect(html).toContain('aria-describedby="exploratory-error"');
 });
 
 it("renders private attempt states without treating a local submission as reviewed work", () => {

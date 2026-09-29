@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../../src/config.ts";
 import { exercise } from "../../src/content.ts";
-import { profile, submission } from "../../src/validation.ts";
+import { profile, profileEdit, submission } from "../../src/validation.ts";
 import { token, csrf, validCsrf } from "../../src/session.ts";
 const database = "postgresql://dne:sample@127.0.0.1:54329/dne_dev";
 describe("local-only configuration", () => {
@@ -175,6 +175,105 @@ describe("learner inputs", () => {
         weekly_minutes: "15",
       }),
     ).toMatchObject({ timezone: "UTC", weeklyMinutes: 15 });
+  });
+  it("preserves a member's safe attempted direction while leaving cleared choices empty", () => {
+    const edit = profileEdit({
+      background: "professional",
+      goal: "work",
+      domain_tags: "finance",
+      timezone: "America/Toronto",
+      weekly_minutes: "60",
+    });
+    expect(edit.errors).toEqual([]);
+    expect(edit.attempted).toEqual({
+      background: "professional",
+      goal: "work",
+      backgroundTags: [],
+      domainTags: ["finance"],
+      itRoles: [],
+      experience: "",
+      timezone: "America/Toronto",
+      weeklyMinutes: "60",
+      exploratory: false,
+    });
+    expect(edit.input).toMatchObject({
+      background: "professional",
+      goal: "work",
+      domainTags: ["finance"],
+      experience: null,
+      weeklyMinutes: 60,
+    });
+  });
+  it("reports distinct profile edit errors without losing safe attempted choices", () => {
+    const edit = profileEdit({
+      background: "technical",
+      goal: "build",
+      domain_tags: ["finance", "finance"],
+      it_roles: ["security", "unknown"],
+      experience: "some",
+      timezone: "Mars/Olympus",
+      weekly_minutes: "60",
+    });
+    expect(edit.input).toBeNull();
+    expect(edit.errors.map((error) => error.field)).toEqual([
+      "domain_tags",
+      "it_roles",
+      "timezone",
+    ]);
+    expect(edit.attempted).toMatchObject({
+      background: "technical",
+      goal: "build",
+      domainTags: ["finance"],
+      itRoles: ["security"],
+      experience: "some",
+      timezone: "Mars/Olympus",
+      weeklyMinutes: "60",
+    });
+  });
+  it("bounds forged, duplicate, oversized and non-string profile edit values", () => {
+    const edit = profileEdit({
+      background: ["explorer", "technical"],
+      goal: "admin",
+      background_tags: ["explorer", "explorer"],
+      domain_tags: ["education", "unknown"],
+      it_roles: ["software", 9],
+      experience: ["new", "some"],
+      timezone: "x".repeat(65),
+      weekly_minutes: ["15", "60"],
+      exploratory: ["yes", "yes"],
+    });
+    expect(edit.input).toBeNull();
+    expect(edit.errors.map((error) => error.field)).toEqual([
+      "background",
+      "goal",
+      "background_tags",
+      "domain_tags",
+      "it_roles",
+      "experience",
+      "timezone",
+      "weekly_minutes",
+      "exploratory",
+    ]);
+    expect(edit.attempted).toEqual({
+      background: "",
+      goal: "",
+      backgroundTags: ["explorer"],
+      domainTags: ["education"],
+      itRoles: ["software"],
+      experience: "",
+      timezone: "",
+      weeklyMinutes: "",
+      exploratory: false,
+    });
+    expect(
+      profileEdit({ background: "explorer", goal: "everyday", timezone: 42 })
+        .errors,
+    ).toEqual([
+      {
+        field: "timezone",
+        message: expect.stringContaining("Time zone"),
+      },
+    ]);
   });
   it("allows an unfinished draft but validates every completed answer", () => {
     expect(submission({ intent: "draft" })).toMatchObject({

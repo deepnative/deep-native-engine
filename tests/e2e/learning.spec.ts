@@ -289,6 +289,181 @@ test("[L30] professional can correct an invalid time zone and retain a noncoding
   await page.reload();
   await expect(page.getByLabel("Weekly time available")).toHaveValue("30");
 });
+test("[L78] profile error preserves every intended edit until keyboard correction saves it", async ({
+  browser,
+}) => {
+  const unrelatedContext = await browser.newContext();
+  try {
+    const unrelatedPage = await unrelatedContext.newPage();
+    await begin(unrelatedPage, "explorer", "everyday");
+    await unrelatedPage.goto("/learn");
+    for (const [background, startingGoal, nextGoal] of [
+      ["explorer", "everyday", "work"],
+      ["professional", "work", "build"],
+      ["technical", "build", "everyday"],
+    ] as const) {
+      const context = await browser.newContext();
+      try {
+        const page = await context.newPage();
+        await page.goto("/");
+        await page.getByLabel("Your starting point").selectOption(background);
+        await page
+          .getByLabel("What would you like to do?")
+          .selectOption(startingGoal);
+        await page
+          .locator('input[name="domain_tags"][value="education"]')
+          .check();
+        await page.getByLabel("Experience with AI").selectOption("some");
+        await page.getByLabel("Time zone (optional)").fill("UTC");
+        await page.getByLabel("Weekly time available").selectOption("30");
+        await page
+          .getByLabel("I'll use invented or sample information")
+          .check();
+        await page
+          .getByRole("button", { name: "Start my learning path" })
+          .click();
+        await expect(page).toHaveURL(/\/learn$/);
+
+        const member = await session(context);
+        await page.getByRole("link", { name: "Open lesson" }).click();
+        const originalTitle = await page.locator("#exercise-title").innerText();
+        const originalDraft = `Invented practice for ${background} before editing profile`;
+        await page.getByLabel("Your instruction to AI").fill(originalDraft);
+        await page.getByRole("button", { name: "Save draft" }).click();
+        await page.getByRole("link", { name: "Your learning path" }).click();
+        const saved = async () =>
+          (
+            await pool.query(
+              "SELECT goal,domain_tags,experience,time_zone,weekly_minutes FROM learners WHERE id=$1",
+              [member.id],
+            )
+          ).rows[0];
+        const before = await saved();
+        const plan = page.getByRole("region", { name: "Your starter plan" });
+        const originalPlan = await plan.innerText();
+        await page
+          .getByLabel("What would you like to do?")
+          .selectOption(nextGoal);
+        await page
+          .locator('input[name="domain_tags"][value="education"]')
+          .uncheck();
+        await page
+          .locator('input[name="domain_tags"][value="finance"]')
+          .check();
+        await page.getByLabel("Experience with AI").selectOption("");
+        await page.getByLabel("Weekly time available").selectOption("60");
+        await page.getByLabel("Time zone (optional)").fill("Mars/Olympus");
+
+        const invalidResponse = page.waitForResponse(
+          (response) =>
+            response.url().endsWith("/profile") &&
+            response.request().method() === "POST",
+        );
+        await page.getByRole("button", { name: "Save my direction" }).click();
+        expect((await invalidResponse).status()).toBe(422);
+        await expect(page.getByLabel("What would you like to do?")).toHaveValue(
+          nextGoal,
+        );
+        await expect(page).toHaveTitle(/error/i);
+        await expect(page.getByRole("alert")).toContainText(/not saved/i);
+        await expect(
+          page.locator('input[name="domain_tags"][value="education"]'),
+        ).not.toBeChecked();
+        await expect(
+          page.locator('input[name="domain_tags"][value="finance"]'),
+        ).toBeChecked();
+        await expect(page.getByLabel("Experience with AI")).toHaveValue("");
+        await expect(page.getByLabel("Weekly time available")).toHaveValue(
+          "60",
+        );
+        const timezone = page.getByLabel("Time zone (optional)");
+        await expect(timezone).toHaveValue("Mars/Olympus");
+        await expect(timezone).toHaveAttribute("aria-invalid", "true");
+        const descriptionId = await timezone.getAttribute("aria-describedby");
+        expect(descriptionId).toMatch(/timezone-error/);
+        await expect(page.locator("#timezone-error")).toBeVisible();
+        const errorLink = page.getByRole("alert").getByRole("link", {
+          name: /Time zone/i,
+        });
+        await expect(errorLink).toHaveAttribute("href", "#timezone");
+        await page
+          .getByRole("link", {
+            name: "Download my structured preview records",
+          })
+          .focus();
+        await page.keyboard.press("Tab");
+        await expect(errorLink).toBeFocused();
+        await page.keyboard.press("Enter");
+        await expect(timezone).toBeFocused();
+        expect(await saved()).toEqual(before);
+        expect(await plan.innerText()).toBe(originalPlan);
+        await unrelatedPage.reload();
+        await expect(
+          unrelatedPage.getByLabel("What would you like to do?"),
+        ).toHaveValue("everyday");
+        await expect(
+          unrelatedPage.getByLabel("Time zone (optional)"),
+        ).toHaveValue("");
+        await expect(
+          unrelatedPage.locator('input[name="domain_tags"][value="finance"]'),
+        ).not.toBeChecked();
+        await expect(unrelatedPage.getByText("Mars/Olympus")).toHaveCount(0);
+
+        await timezone.fill("America/Toronto");
+        await page.getByRole("button", { name: "Save my direction" }).click();
+        await expect(page).toHaveURL(/\/learn$/);
+        await page.reload();
+        await expect(page.getByLabel("What would you like to do?")).toHaveValue(
+          nextGoal,
+        );
+        await expect(
+          page.locator('input[name="domain_tags"][value="finance"]'),
+        ).toBeChecked();
+        await expect(
+          page.locator('input[name="domain_tags"][value="education"]'),
+        ).not.toBeChecked();
+        await expect(page.getByLabel("Experience with AI")).toHaveValue("");
+        await expect(page.getByLabel("Weekly time available")).toHaveValue(
+          "60",
+        );
+        await expect(page.getByLabel("Time zone (optional)")).toHaveValue(
+          "America/Toronto",
+        );
+        expect(await saved()).toMatchObject({
+          goal: nextGoal,
+          domain_tags: ["finance"],
+          experience: null,
+          time_zone: "America/Toronto",
+          weekly_minutes: 60,
+        });
+        await page.getByRole("link", { name: "Continue exercise" }).click();
+        await expect(page.locator("#exercise-title")).toHaveText(originalTitle);
+        await expect(page.getByLabel("Your instruction to AI")).toHaveValue(
+          originalDraft,
+        );
+        await expect(
+          page.getByText("saved practice remains tied to your earlier goal"),
+        ).toBeVisible();
+        expect(
+          (
+            await pool.query(
+              "SELECT lesson_version,goal_at_start,instruction FROM exercises WHERE learner_id=$1",
+              [member.id],
+            )
+          ).rows[0],
+        ).toMatchObject({
+          lesson_version: 1,
+          goal_at_start: startingGoal,
+          instruction: originalDraft,
+        });
+      } finally {
+        await context.close();
+      }
+    }
+  } finally {
+    await unrelatedContext.close();
+  }
+});
 test("[L31] technical learner sees an experienced, private plan without a coding prerequisite", async ({
   page,
   browser,
