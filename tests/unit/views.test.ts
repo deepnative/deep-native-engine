@@ -6,6 +6,7 @@ import {
   welcome,
   dashboard,
   lesson,
+  exerciseWriteRecoveryPage,
   errorPage,
   contentPreview,
   libraryPage,
@@ -1084,6 +1085,24 @@ it("renders all accessible entry choices and actionable validation", () => {
   expect(welcome("token", ["Fix <field>"])).toContain("Fix &lt;field&gt;");
   expect(notice([])).toBe("");
   expect(errorPage("Oops", "Try <again>")).toContain("Try &lt;again&gt;");
+});
+it("keeps uncertain exercise text copyable and private without claiming a save", () => {
+  const html = exerciseWriteRecoveryPage(
+    "<script>window.leak=true</script> sample task",
+    "Compare the invented notes\nwith the original.",
+  );
+  expect(html).toContain('role="alert"');
+  expect(html).toContain("may or may not have been saved");
+  expect(html).toContain('for="attempted-instruction"');
+  expect(html).toContain('for="attempted-verification"');
+  expect(html).toContain("readonly");
+  expect(html).toContain("&lt;script&gt;window.leak=true&lt;/script&gt;");
+  expect(html).not.toContain("<script>window.leak=true</script>");
+  expect(html).toContain(
+    'href="/lesson" target="_blank" rel="noopener noreferrer"',
+  );
+  expect(html).not.toContain("Your draft is saved");
+  expect(html).not.toContain('<form method="post"');
 });
 it("distinguishes unsaved, draft and self-assessed completion without inventing progress", () => {
   expect(dashboard(learner, undefined, "token")).toContain(

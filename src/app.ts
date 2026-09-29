@@ -47,6 +47,7 @@ import {
   assignmentAttemptsPage,
   assignmentAttemptPage,
   assignmentWriteRecoveryPage,
+  exerciseWriteRecoveryPage,
   assignmentReadinessPage,
   availabilityPage,
   manualObservationPage,
@@ -3047,7 +3048,14 @@ export function app(
         );
       return;
     }
-    await store.save(member.id, input);
+    try {
+      await store.save(member.id, input);
+    } catch {
+      res
+        .status(503)
+        .send(exerciseWriteRecoveryPage(input.instruction, input.verification));
+      return;
+    }
     res.redirect(303, "/lesson");
   });
   app.post("/delete", async (req, res) => {

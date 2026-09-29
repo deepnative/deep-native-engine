@@ -974,18 +974,23 @@ test("[L12] database failure is honest and prior saved progress is recoverable",
   try {
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect(
-      page.getByRole("heading", { name: "We could not save or load that" }),
+      page.getByRole("heading", { name: "Save outcome unknown" }),
     ).toBeVisible();
     await expect(
-      page.getByText("We could not confirm the result.", { exact: false }),
+      page.getByRole("alert").getByText("may or may not have been saved", {
+        exact: false,
+      }),
     ).toBeVisible();
+    await expect(page.getByLabel("Attempted instruction")).toHaveValue(
+      "A new attempt that may not be saved.",
+    );
+    await expect(page.getByLabel("Attempted way to check")).toHaveValue(
+      verification,
+    );
   } finally {
     await pool.query("ALTER TABLE unavailable_exercises RENAME TO exercises");
   }
-  await page
-    .getByRole("link", { name: "Return to your learning path" })
-    .click();
-  await page.getByRole("link", { name: "Continue exercise" }).click();
+  await page.goto("/lesson");
   await expect(page.getByLabel("Your instruction to AI")).toHaveValue(
     instruction,
   );
