@@ -71,6 +71,28 @@ async function objectManifest(root: string) {
   return entries;
 }
 
+async function closePoolSockets(pool: Pool) {
+  // pg-pool can resolve end() after removing clients from its list but before
+  // their client.end callbacks finish. Wait for those socket removals before
+  // dropping this test's temporary database.
+  let remaining = pool.totalCount;
+  let finish!: () => void;
+  const closed = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const onRemove = () => {
+    if (--remaining === 0) finish();
+  };
+  if (remaining) pool.on("remove", onRemove);
+  else finish();
+  try {
+    await pool.end();
+    await closed;
+  } finally {
+    pool.off("remove", onRemove);
+  }
+}
+
 it("restores only a synthetic snapshot into a new database and preserves private evidence boundaries", async () => {
   await rm("artifacts/restore-drill.json", { force: true });
   const configured = process.env.DNE_TEST_DATABASE_URL;
@@ -357,9 +379,9 @@ it("restores only a synthetic snapshot into a new database and preserves private
     };
   } finally {
     // Attempt every owned-resource cleanup even if another cleanup fails.
-    const closed = await Promise.allSettled(pools.map((pool) => pool.end()));
+    const closed = await Promise.allSettled(pools.map(closePoolSockets));
     const dropped = await Promise.allSettled(
-      owned.map((name) => admin.query(`DROP DATABASE "${name}" WITH (FORCE)`)),
+      owned.map((name) => admin.query(`DROP DATABASE "${name}"`)),
     );
     const removed = await Promise.allSettled([
       admin.end(),
