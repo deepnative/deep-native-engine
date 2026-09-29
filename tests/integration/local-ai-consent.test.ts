@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import { testPool } from "../support/database.ts";
-import { migrate, store } from "../../src/store.ts";
+import { hash, migrate, store } from "../../src/store.ts";
 import { jobStore, requestFingerprint } from "../../src/jobs.ts";
 const pool = testPool();
 const db = store(pool);
@@ -108,7 +108,7 @@ function latch() {
   return { promise, resolve };
 }
 // Observe the exact dispatch connection, not an unrelated busy session.
-function observedDispatch() {
+function observedDispatch(storage = objects) {
   const backend = { pid: 0 };
   const observedPool = {
     async connect() {
@@ -121,7 +121,7 @@ function observedDispatch() {
   } as unknown as typeof pool;
   return {
     backend,
-    service: localAiConsentStore(observedPool, objects, {
+    service: localAiConsentStore(observedPool, storage, {
       mode: "test",
       adapter: () => ({ ...registry.adapter("ai", "test"), execute }),
     }),
@@ -195,6 +195,272 @@ it("queues identical keys once, rejects changed receipt collisions, and persists
     JSON.stringify((await pool.query("SELECT * FROM adapter_jobs")).rows),
   ).not.toContain("Invented");
 });
+it("rejects a distinct key while the exact receipt has an unresolved job", async () => {
+  const own = await granted();
+  const first = await local.enqueue(own.token, own.receiptId, "first-key");
+  expect(first.kind).toBe("queued");
+  expect(await local.enqueue(own.token, own.receiptId, "second-key")).toEqual({
+    kind: "conflict",
+  });
+  expect(await local.enqueue(own.token, own.receiptId, "first-key")).toEqual(
+    first,
+  );
+  const differentMode = localAiConsentStore(
+    pool,
+    objects,
+    deterministicRegistry({}, "demo"),
+  );
+  expect(
+    await differentMode.enqueue(own.token, own.receiptId, "first-key"),
+  ).toEqual({ kind: "conflict" });
+  expect(
+    await differentMode.enqueue(own.token, own.receiptId, "demo-new-key"),
+  ).toEqual({ kind: "conflict" });
+  expect(
+    (
+      await pool.query(
+        "SELECT id FROM adapter_jobs WHERE local_ai_receipt_id=$1",
+        [own.receiptId],
+      )
+    ).rowCount,
+  ).toBe(1);
+  expect(execute).not.toHaveBeenCalled();
+});
+it.each(["running", "failed", "needs_reconciliation"])(
+  "keeps %s work fenced across a new connection pool and preserves exact-key replay",
+  async (status) => {
+    const own = await granted();
+    const first = await local.enqueue(own.token, own.receiptId, "original-key");
+    if (first.kind !== "queued") throw Error("No synthetic job");
+    if (status === "running") {
+      // A durable attempt left by an interrupted worker has an unknown outcome.
+      await pool.query(
+        "UPDATE adapter_jobs SET status='running',attempt_token=$2,attempt_count=1,lease_until=clock_timestamp()-interval '1 second' WHERE id=$1",
+        [first.jobId, randomUUID()],
+      );
+    } else {
+      if (status === "failed")
+        execute.mockResolvedValueOnce({ invalid: true } as never);
+      else execute.mockRejectedValueOnce(Error("synthetic unknown outcome"));
+      expect(await local.run(own.token, first.jobId)).toMatchObject({ status });
+    }
+    const restartedPool = testPool();
+    const restarted = localAiConsentStore(restartedPool, objects, registry);
+    try {
+      expect(
+        await restarted.enqueue(own.token, own.receiptId, "different-key"),
+      ).toEqual({ kind: "conflict" });
+      expect(
+        await restarted.enqueue(own.token, own.receiptId, "original-key"),
+      ).toEqual(first);
+      expect(
+        (
+          await pool.query(
+            "SELECT id,status FROM adapter_jobs WHERE local_ai_receipt_id=$1",
+            [own.receiptId],
+          )
+        ).rows,
+      ).toEqual([{ id: first.jobId, status }]);
+      expect(execute).toHaveBeenCalledTimes(status === "running" ? 0 : 1);
+      if (status === "running" || status === "needs_reconciliation") {
+        expect(await local.run(own.token, first.jobId)).toMatchObject({
+          status: "needs_reconciliation",
+        });
+        expect(
+          await restarted.enqueue(own.token, own.receiptId, "another-key"),
+        ).toEqual({ kind: "conflict" });
+        expect(execute).toHaveBeenCalledTimes(status === "running" ? 0 : 1);
+      }
+    } finally {
+      await restartedPool.end();
+    }
+  },
+);
+it("serializes simultaneous distinct keys from separate stores to one unresolved job", async () => {
+  const own = await granted();
+  const entered = latch(),
+    release = latch();
+  const observed = observedDispatch({
+    ...objects,
+    get: async (key) => {
+      entered.resolve();
+      await release.promise;
+      return objects.get(key);
+    },
+  });
+  const first = observed.service.enqueue(
+    own.token,
+    own.receiptId,
+    "race-first",
+  );
+  await entered.promise;
+  const secondPool = testPool();
+  const second = localAiConsentStore(secondPool, objects, registry).enqueue(
+    own.token,
+    own.receiptId,
+    "race-second",
+  );
+  try {
+    await waitForDispatchBlock(
+      observed.backend.pid,
+      "SELECT * FROM evidence_objects%FOR UPDATE",
+    );
+  } finally {
+    release.resolve();
+    await Promise.allSettled([first, second]);
+    await secondPool.end();
+  }
+  const winner = await first;
+  if (winner.kind !== "queued") throw Error("No synthetic race winner");
+  expect(await second).toEqual({ kind: "conflict" });
+  expect(
+    (
+      await pool.query(
+        "SELECT id,status FROM adapter_jobs WHERE local_ai_receipt_id=$1",
+        [own.receiptId],
+      )
+    ).rows,
+  ).toEqual([{ id: winner.jobId, status: "pending" }]);
+  expect(execute).not.toHaveBeenCalled();
+});
+it.each(["succeeded", "exhausted"])(
+  "allows a new key after %s while retaining replay of the terminal job",
+  async (status) => {
+    const own = await granted();
+    const first = await local.enqueue(own.token, own.receiptId, "terminal-key");
+    if (first.kind !== "queued") throw Error("No synthetic job");
+    if (status === "exhausted") {
+      execute.mockResolvedValue({ invalid: true } as never);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        expect(await local.run(own.token, first.jobId)).toMatchObject({
+          status: "failed",
+        });
+        expect(
+          await local.enqueue(own.token, own.receiptId, "premature-key"),
+        ).toEqual({ kind: "conflict" });
+      }
+    }
+    expect(await local.run(own.token, first.jobId)).toMatchObject({ status });
+    const next = await local.enqueue(own.token, own.receiptId, "next-key");
+    expect(next.kind).toBe("queued");
+    expect(next).not.toEqual(first);
+    expect(
+      await local.enqueue(own.token, own.receiptId, "terminal-key"),
+    ).toEqual(first);
+    expect(await local.enqueue(own.token, own.receiptId, "third-key")).toEqual({
+      kind: "conflict",
+    });
+    expect(
+      (
+        await pool.query(
+          "SELECT status FROM adapter_jobs WHERE local_ai_receipt_id=$1 ORDER BY created_at,id",
+          [own.receiptId],
+        )
+      ).rows,
+    ).toEqual([{ status }, { status: "pending" }]);
+  },
+);
+it("fences legacy duplicate rows without hiding exact replay or rewriting unknown outcomes", async () => {
+  const own = await granted();
+  const first = await local.enqueue(own.token, own.receiptId, "legacy-first");
+  if (first.kind !== "queued") throw Error("No synthetic job");
+  const legacyId = randomUUID();
+  await pool.query(
+    "INSERT INTO adapter_jobs(id,member_id,adapter,mode,operation,idempotency_key,request_fingerprint,prompt_template_version,model_contract_version,local_ai_receipt_id,status,safe_error) SELECT $1,member_id,adapter,mode,operation,$2,request_fingerprint,prompt_template_version,model_contract_version,local_ai_receipt_id,'needs_reconciliation','provider_outcome_unknown' FROM adapter_jobs WHERE id=$3",
+    [legacyId, "local-ai:" + hash("legacy-held"), first.jobId],
+  );
+  expect(await local.enqueue(own.token, own.receiptId, "legacy-first")).toEqual(
+    first,
+  );
+  expect(await local.enqueue(own.token, own.receiptId, "legacy-held")).toEqual({
+    kind: "queued",
+    jobId: legacyId,
+  });
+  expect(await local.enqueue(own.token, own.receiptId, "new-key")).toEqual({
+    kind: "conflict",
+  });
+  expect(await local.run(own.token, first.jobId)).toMatchObject({
+    status: "succeeded",
+  });
+  expect(
+    await local.enqueue(own.token, own.receiptId, "after-success"),
+  ).toEqual({
+    kind: "conflict",
+  });
+  expect(await local.run(own.token, legacyId)).toMatchObject({
+    status: "needs_reconciliation",
+  });
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(
+    (
+      await pool.query(
+        "SELECT id,status FROM adapter_jobs WHERE local_ai_receipt_id=$1 ORDER BY created_at,id",
+        [own.receiptId],
+      )
+    ).rows,
+  ).toEqual([
+    { id: first.jobId, status: "succeeded" },
+    { id: legacyId, status: "needs_reconciliation" },
+  ]);
+});
+it.each([
+  "withdrawal",
+  "revision",
+  "source deletion",
+  "member deletion",
+  "expired session",
+  "revoked session",
+  "platform pause",
+  "cross-member access",
+])(
+  "rechecks %s before enqueue after a known terminal result",
+  async (boundary) => {
+    const own = await queued();
+    expect(await local.run(own.token, own.jobId)).toMatchObject({
+      status: "succeeded",
+    });
+    let token = own.token;
+    if (boundary === "withdrawal")
+      expect(await local.withdraw(own.token, own.receiptId)).toBe(true);
+    else if (boundary === "revision") {
+      await evidence.submitForReview(own.token, own.evidenceId);
+      await fixture(own, own.evidenceId, "Invented new source");
+    } else if (boundary === "source deletion")
+      await evidence.remove(own.token, own.evidenceId);
+    else if (boundary === "member deletion") {
+      await evidence.removeWorkspace(own.token);
+      await db.remove(own.id);
+    } else if (boundary === "expired session")
+      await pool.query(
+        "UPDATE principals SET expires_at=clock_timestamp() WHERE id=$1",
+        [own.id],
+      );
+    else if (boundary === "revoked session")
+      await pool.query(
+        "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+        [own.id],
+      );
+    else if (boundary === "platform pause")
+      await pool.query(
+        "UPDATE local_ai_control SET paused=true WHERE singleton=true",
+      );
+    else token = (await member()).token;
+    expect(await local.enqueue(token, own.receiptId, "after-terminal")).toEqual(
+      {
+        kind: "denied",
+      },
+    );
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        await pool.query(
+          "SELECT id FROM adapter_jobs WHERE local_ai_receipt_id=$1 AND status<>'succeeded'",
+          [own.receiptId],
+        )
+      ).rows,
+    ).toEqual([]);
+  },
+);
 it("denies generic execution of legacy member AI rows before adapter lookup or execution", async () => {
   const own = await member();
   const jobs = jobStore(pool);
