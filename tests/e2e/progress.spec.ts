@@ -162,11 +162,11 @@ test("[L62] member sees only their exact-version activity with truthful progress
     }),
   });
   await expect(assignment).toContainText(
-    "Submitted locally; no qualified review",
+    "Submission 1 · submitted locally; no qualified review",
   );
   await expect(assignment.getByRole("link")).toHaveAttribute(
     "href",
-    `/assignments/attempts/${attemptId}`,
+    `/assignments/attempts/${attemptId}?version=1&submission=1#submission-1`,
   );
   const persisted = await pool.query(
     `SELECT (SELECT count(*) FROM exercises WHERE learner_id=$1) AS exercises,
@@ -246,7 +246,7 @@ test("[L62] member sees only their exact-version activity with truthful progress
   );
   await expect(assignment.getByRole("link")).toHaveAttribute(
     "href",
-    `/assignments/attempts/${attemptId}`,
+    `/assignments/attempts/${attemptId}?version=1&submission=1#submission-1`,
   );
 
   const other = await browser.newContext({ baseURL: origin });

@@ -1,5 +1,5 @@
 import { LESSON } from "./content.ts";
-import type { AssignmentAttempt } from "./attempts.ts";
+import type { AssignmentAttemptListItem } from "./attempts.ts";
 import type { Exercise, ExerciseHistory, LessonActivity } from "./store.ts";
 
 export interface ActivityItem {
@@ -11,12 +11,13 @@ export interface ActivityItem {
   href: string | null;
   contentId?: string;
   reportable?: boolean;
+  submittedAt?: string;
 }
 
 export function activityItems(
   exercise: Exercise | undefined,
   lessons: LessonActivity[],
-  attempts: AssignmentAttempt[],
+  attempts: AssignmentAttemptListItem[],
   starterHistory: ExerciseHistory[] = [],
 ): ActivityItem[] {
   const items: ActivityItem[] = [];
@@ -74,20 +75,37 @@ export function activityItems(
     });
   }
   for (const attempt of attempts) {
+    const availability = !attempt.currentPublished
+      ? "Historical assignment version unavailable for new work"
+      : attempt.currentEligible
+        ? "Current published sample"
+        : "Not eligible for your current direction; history retained";
+    for (const submission of attempt.submissionHistory ?? []) {
+      items.push({
+        kind: "assignment attempt",
+        title: attempt.title,
+        version: attempt.contentVersion,
+        state: `Submission ${submission.sequence} · submitted locally; no qualified review`,
+        availability,
+        href: `/assignments/attempts/${encodeURIComponent(attempt.id)}?version=${attempt.contentVersion}&submission=${submission.sequence}#submission-${submission.sequence}`,
+        submittedAt: submission.submittedAt,
+      });
+    }
+    if (attempt.submittedAt && attempt.submissionHistory?.length) continue;
     items.push({
       kind: "assignment attempt",
       title: attempt.title,
       version: attempt.contentVersion,
       state: attempt.submittedAt
         ? "Submitted locally; no qualified review"
-        : attempt.savedAt
-          ? "Draft saved"
-          : "Started",
-      availability: !attempt.currentPublished
-        ? "Historical assignment version unavailable for new work"
-        : attempt.currentEligible
-          ? "Current published sample"
-          : "Not eligible for your current direction; history retained",
+        : attempt.submissionHistory?.length
+          ? attempt.savedAt
+            ? "Current revision draft saved"
+            : "Current revision started"
+          : attempt.savedAt
+            ? "Draft saved"
+            : "Started",
+      availability,
       href: `/assignments/attempts/${encodeURIComponent(attempt.id)}`,
     });
   }

@@ -14,6 +14,7 @@ export interface AssignmentAttempt {
   savedAt: Date | null;
   submittedAt: Date | null;
   submissionCount?: number;
+  submissionHistory?: Pick<AssignmentSubmission, "sequence" | "submittedAt">[];
   submissions?: AssignmentSubmission[];
   currentPublished: boolean;
   currentEligible: boolean;
@@ -23,8 +24,12 @@ export interface AssignmentSubmission {
   response: string;
   submittedAt: string;
 }
+export type AssignmentAttemptListItem = Omit<
+  AssignmentAttempt,
+  "response" | "submissions"
+>;
 export interface AttemptStore {
-  list(token: string): Promise<AssignmentAttempt[]>;
+  list(token: string): Promise<AssignmentAttemptListItem[]>;
   detail(token: string, id: string): Promise<AssignmentAttempt | null>;
   start(token: string): Promise<string | null>;
   save(
@@ -57,7 +62,7 @@ const currentPublished = `cv.kind='assignment' AND cv.state='published' AND NOT 
 const eligible = `${currentPublished}
   AND member_content_eligible(l.id,cv.id,cv.version)`;
 const columns = `a.id,a.content_id AS "contentId",a.content_version AS "contentVersion",
-  cv.title,a.goal_at_start AS "goalAtStart",a.response,a.revision,
+  cv.title,a.goal_at_start AS "goalAtStart",a.revision,
   a.started_at AS "startedAt",a.saved_at AS "savedAt",a.submitted_at AS "submittedAt",
   a.submission_count AS "submissionCount",
   (${currentPublished}) AS "currentPublished",
@@ -68,8 +73,12 @@ export function attemptStore(pool: Pool): AttemptStore {
   return {
     async list(token) {
       return (
-        await pool.query<AssignmentAttempt>(
-          `SELECT ${columns} FROM assignment_attempts a
+        await pool.query<AssignmentAttemptListItem>(
+          `SELECT ${columns},COALESCE((SELECT jsonb_agg(
+              jsonb_build_object('sequence',s.sequence,'submittedAt',s.submitted_at)
+                ORDER BY s.sequence)
+              FROM assignment_submission_snapshots s WHERE s.attempt_id=a.id),
+              '[]'::jsonb) AS "submissionHistory" FROM assignment_attempts a
          JOIN content_versions cv ON cv.id=a.content_id AND cv.version=a.content_version
          JOIN learners l ON l.id=a.member_id JOIN principals p ON p.id=l.id
          LEFT JOIN learner_assignment_choices ch ON ch.member_id=l.id
@@ -82,7 +91,7 @@ export function attemptStore(pool: Pool): AttemptStore {
       return (
         (
           await pool.query<AssignmentAttempt>(
-            `SELECT ${columns},COALESCE((SELECT jsonb_agg(
+            `SELECT ${columns},a.response,COALESCE((SELECT jsonb_agg(
               jsonb_build_object('sequence',s.sequence,'response',s.response,
                 'submittedAt',s.submitted_at) ORDER BY s.sequence)
               FROM assignment_submission_snapshots s WHERE s.attempt_id=a.id),

@@ -2502,7 +2502,17 @@ export function app(
     const item = attemptId(id)
       ? await attempts.detail(res.locals.token as string, id)
       : null;
-    if (!item) {
+    const linkedSubmission =
+      req.query.version !== undefined || req.query.submission !== undefined;
+    const validLink =
+      !linkedSubmission ||
+      (req.query.version === String(item?.contentVersion) &&
+        typeof req.query.submission === "string" &&
+        /^(?:[1-9]|10)$/.test(req.query.submission) &&
+        item?.submissions?.some(
+          (entry) => entry.sequence === Number(req.query.submission),
+        ));
+    if (!item || !validLink) {
       res
         .status(404)
         .send(

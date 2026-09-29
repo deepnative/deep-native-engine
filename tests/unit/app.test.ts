@@ -3759,6 +3759,45 @@ it("keeps synthetic assignment attempts private through start, validation, confl
   await agent.get(`/assignments/attempts/${id}`).set("Host", host).expect(404);
   attempts.detail.mockResolvedValue(item);
   await agent.get(`/assignments/attempts/${id}`).set("Host", host).expect(200);
+  const submitted = {
+    ...item,
+    submissions: [
+      {
+        sequence: 1,
+        submittedAt: "2026-09-24T00:01:00Z",
+        response: "Saved invented response for the assignment.",
+      },
+    ],
+  };
+  attempts.detail.mockResolvedValue(submitted);
+  const exact = await agent
+    .get(`/assignments/attempts/${id}?version=1&submission=1`)
+    .set("Host", host)
+    .expect(200);
+  expect(exact.text).toContain('id="submission-1"');
+  for (const query of [
+    "?version=2&submission=1",
+    "?version=1&submission=2",
+    "?version=1&submission=01",
+    "?version=1",
+    "?submission=1",
+    "?version=1&submission=1&submission=2",
+  ]) {
+    await agent
+      .get(`/assignments/attempts/${id}${query}`)
+      .set("Host", host)
+      .expect(404);
+  }
+  attempts.detail.mockResolvedValue(item);
+  attempts.list.mockRejectedValueOnce(
+    new Error("Synthetic database read fault"),
+  );
+  const failedProgress = await agent
+    .get("/progress")
+    .set("Host", host)
+    .expect(503);
+  expect(failedProgress.text).toContain("We could not save or load that");
+  expect(failedProgress.text).not.toContain("Synthetic database read fault");
   await post("/assignments/attempts/invalid/save", {
     revision: "2",
     response: "draft",
