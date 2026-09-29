@@ -25,7 +25,10 @@ import {
   privatePracticePage,
   privatePracticeHistoryPage,
   manualObservationPage,
+  eventDiscoveryPage,
+  eventDetailPage,
 } from "../../src/views.ts";
+import { EVENT_PREVIEWS } from "../../src/events.ts";
 import type { ManualObservation } from "../../src/manual-observations.ts";
 import type { AssignmentAttempt } from "../../src/attempts.ts";
 import type { ContentVersion } from "../../src/catalog.ts";
@@ -45,6 +48,61 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("shows versioned synthetic event discovery and truthful local time without fixture seats", () => {
+  const event = EVENT_PREVIEWS.find(
+    (item) => item.id === "everyday-ai-preview" && item.version === 2,
+  )!;
+  const matched = eventDiscoveryPage([event], "America/Toronto");
+  expect(matched).toContain("Events matched to your saved goal or interests");
+  expect(matched).toContain("/events/everyday-ai-preview/2");
+  expect(matched).toContain("GMT-04:00");
+  expect(matched).toContain(`UTC ${event.startsAt}`);
+  expect(matched).toContain("Synthetic preview; enrollment unavailable");
+  expect(matched).toContain("Access and cost: unresolved");
+  expect(matched).toContain("Expert coverage: unresolved");
+  expect(matched).toContain("Recording: unresolved");
+  expect(matched).not.toContain(`of ${event.fixtureCapacity} seats`);
+  const all = eventDiscoveryPage([event], "Mars/Olympus", true);
+  expect(all).toContain("Exploring all topics");
+  expect(all).toContain("Set your time zone");
+  expect(all).not.toContain("Mars/Olympus:");
+  const empty = eventDiscoveryPage([]);
+  expect(empty).toContain("No upcoming synthetic event previews match");
+  expect(empty).toContain("Explore other topics");
+  expect(eventDiscoveryPage([], undefined, true)).toContain(
+    "No upcoming synthetic event previews are available",
+  );
+  const safe = {
+    ...event,
+    title: "<script>Event</script>",
+    description: "<unsafe> description",
+    agenda: ["<unsafe> agenda"],
+  };
+  const detail = eventDetailPage(
+    { status: "current", event: safe },
+    "America/Toronto",
+  );
+  expect(detail).toContain("&lt;script&gt;Event&lt;/script&gt;");
+  expect(detail).toContain("&lt;unsafe&gt; agenda");
+  expect(detail).not.toContain("<script>Event</script>");
+  expect(detail).toContain("Access and cost: unresolved");
+  expect(detail).toContain("Expert coverage: unresolved");
+  expect(detail).toContain("Recording: unresolved");
+  expect(eventDetailPage({ status: "current", event })).toContain(
+    'href="/learn#timezone"',
+  );
+  for (const [status, message] of [
+    ["past", "This event has already started"],
+    ["retired", "This event version was retired"],
+    ["replaced", "This event version was replaced"],
+  ] as const) {
+    const unavailable = eventDetailPage({ status, event });
+    expect(unavailable).toContain(message);
+    expect(unavailable).not.toContain("Sample agenda");
+    expect(unavailable).not.toContain("Sample schedule:");
+    expect(unavailable).toContain("enrollment unavailable");
+  }
+});
 it("offers confirmed exact-version practice withdrawal and redacts the retained marker", () => {
   const saved = {
     id: "SYN-131",

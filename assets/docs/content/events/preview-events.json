@@ -1,0 +1,131 @@
+[
+  {
+    "version": 1,
+    "status": "replaced",
+    "description": "Use an invented example to practise checking AI suggestions together.",
+    "agenda": [
+      "Read a synthetic example",
+      "Compare possible instructions",
+      "Check the suggested result"
+    ],
+    "domainTags": [],
+    "itRoles": [],
+    "fixtureCapacity": 12,
+    "id": "everyday-ai-preview",
+    "title": "Everyday AI practice preview (earlier version)",
+    "goals": [
+      "everyday"
+    ],
+    "startsAt": "2030-11-03T05:00:00.000Z",
+    "endsAt": "2030-11-03T06:00:00.000Z"
+  },
+  {
+    "version": 2,
+    "status": "current",
+    "description": "Use an invented example to practise checking AI suggestions together.",
+    "agenda": [
+      "Read a synthetic example",
+      "Compare possible instructions",
+      "Check the suggested result"
+    ],
+    "domainTags": [
+      "creative"
+    ],
+    "itRoles": [],
+    "fixtureCapacity": 12,
+    "id": "everyday-ai-preview",
+    "title": "Everyday AI practice preview",
+    "goals": [
+      "everyday"
+    ],
+    "startsAt": "2030-11-03T05:30:00.000Z",
+    "endsAt": "2030-11-03T06:30:00.000Z"
+  },
+  {
+    "version": 1,
+    "status": "current",
+    "description": "Use an invented example to practise checking AI suggestions together.",
+    "agenda": [
+      "Read a synthetic example",
+      "Compare possible instructions",
+      "Check the suggested result"
+    ],
+    "domainTags": [
+      "operations",
+      "education"
+    ],
+    "itRoles": [],
+    "fixtureCapacity": 12,
+    "id": "professional-work-preview",
+    "title": "Clearer professional work preview",
+    "goals": [
+      "work"
+    ],
+    "startsAt": "2030-11-03T06:30:00.000Z",
+    "endsAt": "2030-11-03T07:30:00.000Z"
+  },
+  {
+    "version": 1,
+    "status": "current",
+    "description": "Use an invented example to practise checking AI suggestions together.",
+    "agenda": [
+      "Read a synthetic example",
+      "Compare possible instructions",
+      "Check the suggested result"
+    ],
+    "domainTags": [],
+    "itRoles": [
+      "software",
+      "qa",
+      "data"
+    ],
+    "fixtureCapacity": 12,
+    "id": "technical-practice-preview",
+    "title": "Technical AI practice preview",
+    "goals": [
+      "build"
+    ],
+    "startsAt": "2030-11-04T15:00:00.000Z",
+    "endsAt": "2030-11-04T16:00:00.000Z"
+  },
+  {
+    "version": 1,
+    "status": "retired",
+    "description": "Use an invented example to practise checking AI suggestions together.",
+    "agenda": [
+      "Read a synthetic example",
+      "Compare possible instructions",
+      "Check the suggested result"
+    ],
+    "domainTags": [],
+    "itRoles": [],
+    "fixtureCapacity": 12,
+    "id": "retired-learning-preview",
+    "title": "Retired learning preview",
+    "goals": [
+      "everyday"
+    ],
+    "startsAt": "2030-12-01T15:00:00.000Z",
+    "endsAt": "2030-12-01T16:00:00.000Z"
+  },
+  {
+    "version": 1,
+    "status": "current",
+    "description": "Use an invented example to practise checking AI suggestions together.",
+    "agenda": [
+      "Read a synthetic example",
+      "Compare possible instructions",
+      "Check the suggested result"
+    ],
+    "domainTags": [],
+    "itRoles": [],
+    "fixtureCapacity": 12,
+    "id": "past-learning-preview",
+    "title": "Past learning preview",
+    "goals": [
+      "everyday"
+    ],
+    "startsAt": "2020-01-01T15:00:00.000Z",
+    "endsAt": "2020-01-01T16:00:00.000Z"
+  }
+]

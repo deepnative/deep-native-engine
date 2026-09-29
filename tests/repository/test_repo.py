@@ -368,6 +368,41 @@ class RepositoryFixture(unittest.TestCase):
         with self.assertRaisesRegex(gate.GateError, "Invalid local circle metadata or capacity"):
             gate.validate(self.root)
 
+    def test_event_fixture_rejects_invalid_dates_duplicate_versions_and_unsafe_metadata(self):
+        path = self.root / "assets/docs/content/events/preview-events.json"
+        original = json.loads(path.read_text())
+        gate.validate_event_previews(self.root)
+        mutations = [
+            lambda rows: rows.append(dict(rows[0])),
+            lambda rows: rows[0].update(startsAt="2030-02-30T05:00:00.000Z"),
+            lambda rows: rows[0].update(startsAt="2030-11-03T01:00:00-04:00"),
+            lambda rows: rows[0].update(endsAt=rows[0]["startsAt"]),
+            lambda rows: rows[0].update(endsAt="2020-01-01T00:00:00.000Z"),
+            lambda rows: rows[0].update(version=True),
+            lambda rows: rows[0].update(status="current"),
+            lambda rows: rows[1].update(status="replaced"),
+            lambda rows: rows[0].update(fixtureCapacity=-1),
+            lambda rows: rows[0].update(fixtureCapacity=True),
+            lambda rows: rows[0].update(seatsRemaining=12),
+            lambda rows: rows[0].update(goals=["career-admission"]),
+            lambda rows: rows[0].update(domainTags=["invalid"]),
+            lambda rows: rows[0].update(itRoles=["invalid"]),
+            lambda rows: rows[0].update(agenda=[]),
+            lambda rows: rows[0].update(title=" "),
+            lambda rows: rows[0].update(id="../../escape"),
+        ]
+        for mutate in mutations:
+            with self.subTest(mutate=mutate):
+                rows = json.loads(json.dumps(original))
+                mutate(rows)
+                path.write_text(json.dumps(rows))
+                with self.assertRaises(gate.GateError):
+                    gate.validate_event_previews(self.root)
+        for invalid in [[], {}, [None]]:
+            path.write_text(json.dumps(invalid))
+            with self.assertRaises(gate.GateError):
+                gate.validate_event_previews(self.root)
+
     def test_fixture_commits_do_not_start_background_maintenance(self):
         trace = self.root / "artifacts/git-trace.jsonl"
         trace.parent.mkdir(exist_ok=True)

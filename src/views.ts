@@ -39,6 +39,7 @@ import type { PracticeHistory, PracticeSource } from "./practice.ts";
 import type { OwnedEvidence } from "./evidence.ts";
 import type { LocalAiChoice } from "./local-ai-consent.ts";
 import { localSlotTime, type AvailableSlot } from "./availability.ts";
+import type { EventPreview, EventPreviewDetail } from "./events.ts";
 import { learningPlan } from "./learning-plan.ts";
 import type {
   ProfileEditResult,
@@ -541,7 +542,7 @@ export function dashboard(
     profileState?.errors.length
       ? "Error in your profile"
       : "Your learning path",
-    `<section class="dashboard-head"><div><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment.</span></aside></section><section class="learning-plan" aria-labelledby="learning-plan-title"><p class="eyebrow">PRIVATE FOUNDATION PREVIEW</p><h2 id="learning-plan-title">Your starter plan</h2><p>Focus: ${escape(plan.focus)}. ${escape(plan.guidance)}</p><p class="small">Weekly time: ${escape(time ?? "Not specified")} · Time zone: ${escape(learner.timezone ?? "Not specified")} · AI experience: self-reported ${escape(learner.experience ? EXPERIENCE[learner.experience] : "Not specified")}</p><ol>${plan.steps.map((step) => `<li>${step.minutes} minutes · ${escape(step.action)}</li>`).join("")}</ol>${plan.nextSession ? `<p>${escape(plan.nextSession)}</p>` : ""}${plan.exploratory ? `<p>${escape(plan.exploratory)}</p>` : ""}<p class="small">The timed steps use only the local starter lesson. Revisit or skip steps you already completed. These suggestions do not book coaching or certify a skill.</p><section aria-label="Suggested next sample lesson"><h3>Explore another sample lesson</h3>${nextLesson}</section></section>${assignmentSection(assignments, choice, csrf)}<section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? "Review your work" : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card"><p class="eyebrow">WHERE THIS CAN GO</p><h2>Learn together.<br>Contribute something useful.</h2><p>Learning circles, peer contributions and more paths are on the roadmap. This preview begins with your first practical exercise.</p><p class="small">Community and coaching features are not yet available.</p></aside></section><p><a class="button secondary" href="/library">Browse published learning library</a> <a class="button secondary" href="/milestones">Plan goals and milestones</a> <a class="button secondary" href="/career">Explore optional career planning</a> <a class="button secondary" href="/contribute">Draft a private sample contribution</a> <a class="button secondary" href="/evidence">Manage private evidence</a> <a class="button secondary" href="/progress">View private learning activity</a> <a class="button secondary" href="/tailored-review">Check tailored-review availability</a> <a class="button secondary" href="/availability">View sample appointment windows</a></p><p><a href="/api/member/export">Download my structured preview records</a>. This versioned JSON includes current profile, learning, plans and retained proposal records. Evidence samples use a separate download. The export stops at 100 records or 256 KiB and excludes audit, billing, derivatives, provider and backup copies.</p><section class="profile-form"><h2>Adjust your direction</h2><p>Change goals and interests whenever you want. Your saved exercise stays with this preview.</p><form method="post" action="/profile">${hidden(csrf)}${profileState ? profileErrorSummary(profileState) : notice(errors)}${profileFields(learner, profileState?.attempted, profileState?.errors)}<button type="submit">Save my direction</button></form></section><form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete my local preview and all its saved work.</span></label><button class="secondary" type="submit">Delete this preview</button></form>`,
+    `<section class="dashboard-head"><div><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment.</span></aside></section><section class="learning-plan" aria-labelledby="learning-plan-title"><p class="eyebrow">PRIVATE FOUNDATION PREVIEW</p><h2 id="learning-plan-title">Your starter plan</h2><p>Focus: ${escape(plan.focus)}. ${escape(plan.guidance)}</p><p class="small">Weekly time: ${escape(time ?? "Not specified")} · Time zone: ${escape(learner.timezone ?? "Not specified")} · AI experience: self-reported ${escape(learner.experience ? EXPERIENCE[learner.experience] : "Not specified")}</p><ol>${plan.steps.map((step) => `<li>${step.minutes} minutes · ${escape(step.action)}</li>`).join("")}</ol>${plan.nextSession ? `<p>${escape(plan.nextSession)}</p>` : ""}${plan.exploratory ? `<p>${escape(plan.exploratory)}</p>` : ""}<p class="small">The timed steps use only the local starter lesson. Revisit or skip steps you already completed. These suggestions do not book coaching or certify a skill.</p><section aria-label="Suggested next sample lesson"><h3>Explore another sample lesson</h3>${nextLesson}</section></section>${assignmentSection(assignments, choice, csrf)}<section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? "Review your work" : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card"><p class="eyebrow">WHERE THIS CAN GO</p><h2>Learn together.<br>Contribute something useful.</h2><p>Learning circles, peer contributions and more paths are on the roadmap. This preview begins with your first practical exercise.</p><p class="small">Community and coaching features are not yet available.</p></aside></section><p><a class="button secondary" href="/library">Browse published learning library</a> <a class="button secondary" href="/milestones">Plan goals and milestones</a> <a class="button secondary" href="/career">Explore optional career planning</a> <a class="button secondary" href="/contribute">Draft a private sample contribution</a> <a class="button secondary" href="/evidence">Manage private evidence</a> <a class="button secondary" href="/progress">View private learning activity</a> <a class="button secondary" href="/tailored-review">Check tailored-review availability</a> <a class="button secondary" href="/availability">View sample appointment windows</a> <a class="button secondary" href="/events">Explore local events</a></p><p><a href="/api/member/export">Download my structured preview records</a>. This versioned JSON includes current profile, learning, plans and retained proposal records. Evidence samples use a separate download. The export stops at 100 records or 256 KiB and excludes audit, billing, derivatives, provider and backup copies.</p><section class="profile-form"><h2>Adjust your direction</h2><p>Change goals and interests whenever you want. Your saved exercise stays with this preview.</p><form method="post" action="/profile">${hidden(csrf)}${profileState ? profileErrorSummary(profileState) : notice(errors)}${profileFields(learner, profileState?.attempted, profileState?.errors)}<button type="submit">Save my direction</button></form></section><form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete my local preview and all its saved work.</span></label><button class="secondary" type="submit">Delete this preview</button></form>`,
   );
 }
 function evidenceLineage(item: OwnedEvidence) {
@@ -663,6 +664,53 @@ export function circlesPage(
   return page(
     "Local learning circles",
     `<section class="lesson-heading"><p class="eyebrow">PRIVATE LOCAL PREVIEW · NO LIVE COMMUNITY</p><h1>Explore learning circles</h1><p class="lead">Join a small, invented topic space to try the membership controls. No discussion, clinic, expert, recording or shared member evidence is enabled. Your name and private learning work are not shown to other members.</p><p>Joining is optional and grants no paid service or staff role. You can leave at any time; only your own membership state and aggregate seats appear here.</p></section><section aria-label="Available circles"><ul>${items.map((item) => `<li><h2>${escape(item.title)}</h2><p>${escape(item.description)}</p><p>${item.goal === goal ? "Matches your current goal" : "Open to explore"} · ${escape(GOALS[item.goal])} · ${item.seatsRemaining} of ${item.capacity} seats available</p>${item.joined ? `<p role="status">You joined this local circle.</p><form method="post" action="/circles/${escape(item.id)}/leave">${hidden(csrf)}<button class="secondary" type="submit">Leave ${escape(item.title)}</button></form>` : item.seatsRemaining > 0 ? `<form method="post" action="/circles/${escape(item.id)}/join">${hidden(csrf)}<button type="submit">Join ${escape(item.title)}</button></form>` : '<p role="status">This local circle is full.</p>'}</li>`).join("")}</ul></section><p><a href="/learn">Return to your learning path</a></p>`,
+  );
+}
+function previewEventTime(event: EventPreview, timezone?: string | null) {
+  const utc = `UTC ${event.startsAt} to ${event.endsAt}`;
+  const localStart = timezone
+    ? localSlotTime(new Date(event.startsAt), timezone)
+    : null;
+  const localEnd = timezone
+    ? localSlotTime(new Date(event.endsAt), timezone)
+    : null;
+  return `<p>Sample schedule: <time datetime="${escape(event.startsAt)}">${escape(utc)}</time>.</p>${localStart && localEnd ? `<p>In your saved time zone, ${escape(timezone!)}: ${escape(localStart)} to ${escape(localEnd)}.</p>` : '<p>Your local time is unavailable. <a href="/learn#timezone">Set your time zone</a> in your profile to see it.</p>'}`;
+}
+
+export function eventDiscoveryPage(
+  items: EventPreview[],
+  timezone?: string | null,
+  allTopics = false,
+) {
+  const intro = allTopics
+    ? "Exploring all topics"
+    : "Events matched to your saved goal or interests";
+  const list = items.length
+    ? `<ul>${items.map((event) => `<li><h2><a href="/events/${encodeURIComponent(event.id)}/${event.version}">${escape(event.title)}</a></h2><p>${escape(event.description)}</p><p>Version ${event.version} · Synthetic preview; enrollment unavailable</p>${previewEventTime(event, timezone)}</li>`).join("")}</ul>`
+    : `<p role="status">${allTopics ? "No upcoming synthetic event previews are available." : "No upcoming synthetic event previews match your saved goal or interests."} Nothing has been booked or reserved.</p>`;
+  return page(
+    "Sample events",
+    `<nav class="breadcrumb"><a href="/learn">← Your learning path</a></nav><section class="reading"><p class="eyebrow">SYNTHETIC, UNREVIEWED LOCAL PREVIEWS</p><h1>Explore sample events</h1><p>No clinic, qualified expert, recording, enrollment or live community is available here. Sample times and fixture capacity are not available seats.</p><p>Access and cost: unresolved. Expert coverage: unresolved. Recording: unresolved.</p><p role="status">${intro}</p><p>${allTopics ? '<a href="/events">Show matches for my direction</a>' : '<a href="/events?all=1">Explore other topics</a>'}</p>${list}</section>`,
+  );
+}
+
+export function eventDetailPage(
+  detail: Exclude<EventPreviewDetail, { status: "missing" }>,
+  timezone?: string | null,
+) {
+  const event = detail.event;
+  const current = detail.status === "current";
+  const unavailable = {
+    past: "This event has already started",
+    retired: "This event version was retired",
+    replaced: "This event version was replaced",
+  } as const;
+  const agenda = current
+    ? `<h2>Sample agenda</h2><ol>${event.agenda.map((item) => `<li>${escape(item)}</li>`).join("")}</ol>`
+    : `<p role="status">${unavailable[detail.status as keyof typeof unavailable]}. This exact version is unavailable; nothing was booked. Browse current previews separately.</p>`;
+  return page(
+    event.title,
+    `<nav class="breadcrumb"><a href="/events">← Sample events</a></nav><article class="reading"><p class="eyebrow">SYNTHETIC, UNREVIEWED LOCAL PREVIEW</p><h1>${escape(event.title)}</h1><p>Version ${event.version} · Synthetic preview; enrollment unavailable</p><p>${escape(event.description)}</p>${current ? previewEventTime(event, timezone) : ""}${agenda}<h2>Readiness</h2><p>Access and cost: unresolved</p><p>Expert coverage: unresolved</p><p>Recording: unresolved</p><p>No live clinic or reservation exists. A sample fixture capacity is not remaining seats.</p></article>`,
   );
 }
 export function workflowRegistryPage(items: WorkflowBundle[], q: string) {
