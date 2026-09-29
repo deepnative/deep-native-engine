@@ -25,10 +25,19 @@ const sections = {
     s.submitted_at AS "submittedAt" FROM assignment_submission_snapshots s
     JOIN assignment_attempts a ON a.id=s.attempt_id
     WHERE a.member_id=$1 ORDER BY a.started_at,s.sequence LIMIT $2`,
-  adapterJobs: `SELECT id,adapter,mode,status,attempt_count AS attempts,
-    max_attempts AS "maxAttempts",safe_error AS "safeError",
-    created_at AS "createdAt",updated_at AS "updatedAt"
-    FROM adapter_jobs WHERE member_id=$1 ORDER BY created_at,id LIMIT $2`,
+  adapterJobs: `SELECT j.id,j.adapter,j.mode,j.status,j.attempt_count AS attempts,
+    j.max_attempts AS "maxAttempts",j.safe_error AS "safeError",
+    j.created_at AS "createdAt",j.updated_at AS "updatedAt",
+    r.id AS "localAiReceiptId"
+    FROM adapter_jobs j LEFT JOIN local_ai_receipts r
+      ON r.id=j.local_ai_receipt_id AND r.member_id=j.member_id
+    WHERE j.member_id=$1 ORDER BY j.created_at,j.id LIMIT $2`,
+  // Retained history is not current eligibility; withdrawal and revision
+  // retirement do not erase it. Source deletion already cascades these rows.
+  localAiReceipts: `SELECT id,evidence_id AS "evidenceId",
+    revision_number AS "revisionNumber",purpose,statement_version AS "statementVersion",
+    granted_at AS "grantedAt",withdrawn_at AS "withdrawnAt"
+    FROM local_ai_receipts WHERE member_id=$1 ORDER BY granted_at,id LIMIT $2`,
   milestones: `SELECT id,goal_title AS "goalTitle",milestone_title AS "milestoneTitle",
     evidence_note AS "evidenceNote",next_action AS "nextAction",
     reminder_date AS "reminderDate",reminder_time AS "reminderTime",
@@ -114,7 +123,7 @@ export function memberExportStore(pool: Pool): MemberExportStore {
           }
           const payload = {
             kind: "ready",
-            version: "local-member-records-v5",
+            version: "local-member-records-v6",
             profile: owner.rows[0],
             records,
           };
