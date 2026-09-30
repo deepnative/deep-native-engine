@@ -147,10 +147,76 @@ test("[L46] leaving removes own status; forged, expired and cross-origin request
   const cookie = (await context.cookies()).find(
     (entry) => entry.name === "dne_preview",
   )!;
-  await pool.query(
-    "UPDATE principals SET expires_at=CURRENT_TIMESTAMP WHERE token_hash=$1",
-    [createHash("sha256").update(cookie.value).digest("hex")],
-  );
+  const tokenHash = createHash("sha256").update(cookie.value).digest("hex");
+  const membership = async () =>
+    (
+      await pool.query(
+        `SELECT m.circle_id,m.joined_at::text,m.left_at::text
+         FROM preview_circle_memberships m JOIN principals p ON p.id=m.member_id
+         WHERE p.token_hash=$1`,
+        [tokenHash],
+      )
+    ).rows;
+  const before = await membership();
+  const holder = await pool.connect();
+  let joining: Promise<void> | undefined;
+  try {
+    await holder.query("BEGIN");
+    await holder.query(
+      "SELECT pg_advisory_xact_lock(7529,hashtext($1::text))",
+      ["professional-work"],
+    );
+    const holderPid = (
+      await holder.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+    ).rows[0]!.pid;
+    await pool.query(
+      "UPDATE principals SET expires_at=clock_timestamp()+interval '2 seconds' WHERE token_hash=$1",
+      [tokenHash],
+    );
+    joining = Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().endsWith("/circles/professional-work/join") &&
+          response.request().method() === "POST",
+      ),
+      page
+        .getByRole("button", { name: "Join Clearer professional work" })
+        .click(),
+    ]).then(([response]) => {
+      expect(response.status()).toBe(404);
+    });
+    await expect
+      .poll(
+        async () =>
+          (
+            await pool.query(
+              `SELECT 1 FROM pg_stat_activity waiter CROSS JOIN principals p
+               WHERE p.token_hash=$2 AND waiter.state='active'
+                 AND waiter.wait_event_type='Lock'
+                 AND $1::integer=ANY(pg_blocking_pids(waiter.pid))
+                 AND position('pg_advisory_xact_lock(7529' in waiter.query)>0
+                 AND waiter.xact_start<p.expires_at
+                 AND p.expires_at<=clock_timestamp()`,
+              [holderPid, tokenHash],
+            )
+          ).rowCount,
+        { timeout: 5_000, intervals: [10, 20, 50] },
+      )
+      .toBe(1);
+    await holder.query("COMMIT");
+    await joining;
+    await expect(
+      page.getByRole("heading", { name: "Circle unavailable" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Your membership was not changed.", { exact: false }),
+    ).toBeVisible();
+    expect(await membership()).toEqual(before);
+  } finally {
+    await holder.query("ROLLBACK");
+    await Promise.allSettled(joining ? [joining] : []);
+    holder.release();
+  }
   await page.goto("/circles");
   await expect(page).toHaveURL(/\/$/);
   await expect(

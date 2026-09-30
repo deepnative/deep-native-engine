@@ -80,10 +80,11 @@ export function circleStore(pool: Pool): CircleStore {
           "SELECT pg_advisory_xact_lock(7529,hashtext($1::text))",
           [id],
         );
-        const member = await client.query<{ id: string }>(
-          `SELECT p.id FROM principals p JOIN learners l ON l.id=p.id
+        const member = await client.query<{ id: string; expiresAt: string }>(
+          `SELECT p.id,p.expires_at::text AS "expiresAt"
+           FROM principals p JOIN learners l ON l.id=p.id
            WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
-             AND p.expires_at>CURRENT_TIMESTAMP FOR UPDATE OF p`,
+             AND p.expires_at>clock_timestamp() FOR UPDATE OF p`,
           [hash(token)],
         );
         if (!member.rows[0]) {
@@ -96,30 +97,40 @@ export function circleStore(pool: Pool): CircleStore {
            WHERE circle_id=$1 AND member_id=$2 AND left_at IS NULL`,
           [id, memberId],
         );
-        if (existing.rowCount) {
-          await client.query("COMMIT");
-          return "joined";
+        let result: JoinResult = "joined";
+        if (!existing.rowCount) {
+          const count = await client.query<{ n: number }>(
+            `SELECT COUNT(*)::integer AS n FROM preview_circle_memberships m
+             JOIN principals p ON p.id=m.member_id
+             WHERE m.circle_id=$1 AND m.left_at IS NULL
+               AND p.revoked_at IS NULL AND p.expires_at>clock_timestamp()`,
+            [id],
+          );
+          if (count.rows[0]!.n >= circle.capacity) {
+            result = "full";
+          } else {
+            await client.query(
+              `INSERT INTO preview_circle_memberships(circle_id,member_id)
+               VALUES($1,$2)
+               ON CONFLICT(circle_id,member_id) DO UPDATE
+               SET joined_at=CURRENT_TIMESTAMP,left_at=NULL`,
+              [id, memberId],
+            );
+          }
         }
-        const count = await client.query<{ n: number }>(
-          `SELECT COUNT(*)::integer AS n FROM preview_circle_memberships m
-           JOIN principals p ON p.id=m.member_id
-           WHERE m.circle_id=$1 AND m.left_at IS NULL
-             AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP`,
-          [id],
+        // A principal or membership row wait can outlast authorization even
+        // after the circle lock. Keep both locks and check wall time again
+        // before acknowledging a repeated join or committing a write.
+        const current = await client.query<{ valid: boolean }>(
+          "SELECT clock_timestamp() < $1::timestamptz AS valid",
+          [member.rows[0].expiresAt],
         );
-        if (count.rows[0]!.n >= circle.capacity) {
-          await client.query("COMMIT");
-          return "full";
+        if (!current.rows[0]!.valid) {
+          await client.query("ROLLBACK");
+          return "denied";
         }
-        await client.query(
-          `INSERT INTO preview_circle_memberships(circle_id,member_id)
-           VALUES($1,$2)
-           ON CONFLICT(circle_id,member_id) DO UPDATE
-           SET joined_at=CURRENT_TIMESTAMP,left_at=NULL`,
-          [id, memberId],
-        );
         await client.query("COMMIT");
-        return "joined";
+        return result;
       } catch (error) {
         await client.query("ROLLBACK");
         throw error;

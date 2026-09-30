@@ -52,15 +52,22 @@ function joinPool({
   existing = false,
   count = 0,
   failInsert = false,
+  validAtCompletion = true,
 } = {}) {
   const query = vi.fn(async (sql: string) => {
     if (sql.includes("SELECT p.id"))
-      return { rows: member ? [{ id: "member-id" }] : [] };
+      return {
+        rows: member
+          ? [{ id: "member-id", expiresAt: "2030-01-01 00:00:00.123456+00" }]
+          : [],
+      };
     if (sql.includes("SELECT 1 FROM preview_circle_memberships"))
       return { rowCount: existing ? 1 : 0 };
     if (sql.includes("COUNT(*)")) return { rows: [{ n: count }] };
     if (sql.includes("INSERT INTO preview_circle_memberships") && failInsert)
       throw new Error("write failed");
+    if (sql.includes("SELECT clock_timestamp()"))
+      return { rows: [{ valid: validAtCompletion }] };
     return { rows: [], rowCount: 0 };
   });
   const release = vi.fn();
@@ -112,6 +119,24 @@ it("locks the circle before the count, refuses a full circle, and rolls back fai
   ).rejects.toThrow("write failed");
   expect(failed.query.mock.calls.map((call) => call[0])).toContain("ROLLBACK");
   expect(failed.release).toHaveBeenCalledOnce();
+});
+
+it.each([
+  { state: "new membership", existing: false, count: 0 },
+  { state: "repeated join", existing: true, count: 0 },
+  { state: "full circle", existing: false, count: 4 },
+])("denies an expired $state at completion and rolls back", async (state) => {
+  const expired = joinPool({ ...state, validAtCompletion: false });
+  expect(await circleStore(expired.pool).join("token", "everyday-ai")).toBe(
+    "denied",
+  );
+  const statements = expired.query.mock.calls.map(([sql]) => sql);
+  expect(statements).toContain("ROLLBACK");
+  expect(statements).not.toContain("COMMIT");
+  expect(statements.some((sql) => sql.includes("INSERT INTO"))).toBe(
+    state.state === "new membership",
+  );
+  expect(expired.release).toHaveBeenCalledOnce();
 });
 
 it("leaves only an active known membership", async () => {
