@@ -13,6 +13,7 @@ import { hash } from "./store.ts";
 export const MAX_EVIDENCE_BYTES = 1024 * 1024;
 export const MAX_EXPORT_ITEMS = 20;
 export const MAX_EXPORT_BYTES = 4 * MAX_EVIDENCE_BYTES;
+export const EVIDENCE_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
 export const EVIDENCE_TYPES = [
   "text/plain",
   "image/png",
@@ -82,12 +83,26 @@ export interface ExportedEvidence {
   sourceBase64: string | null;
 }
 export type EvidenceExport =
-  | { kind: "denied" | "limit" | "unavailable" }
-  | { kind: "ready"; version: "local-evidence-v1"; items: ExportedEvidence[] };
+  | { kind: "denied" }
+  | { kind: "unavailable" }
+  | {
+      kind: "ready";
+      version: "local-evidence-v2";
+      items: ExportedEvidence[];
+      page: {
+        number: number;
+        itemCount: number;
+        sourceBytes: number;
+        consistency: "live-pages";
+        complete: boolean;
+        nextCursor: string | null;
+        nextHref: string | null;
+      };
+    };
 
 export interface EvidenceStore {
   owned(token: string): Promise<OwnedEvidence[]>;
-  exportOwned(token: string): Promise<EvidenceExport>;
+  exportOwned(token: string, cursor?: string): Promise<EvidenceExport>;
   upload(
     token: string,
     input: EvidenceUpload,
@@ -220,6 +235,57 @@ export function evidenceStore(
   secret: string,
   clock: () => number = Date.now,
 ): EvidenceStore {
+  type ExportCursor = [
+    version: 1,
+    time: string,
+    id: string,
+    page: number,
+    expires: number,
+  ];
+  function signExport(body: string, token: string) {
+    return createHmac("sha256", secret)
+      .update(`evidence-export-v2.${hash(token)}.${body}`)
+      .digest("base64url");
+  }
+  function encodeExport(data: ExportCursor, token: string) {
+    const body = Buffer.from(JSON.stringify(data)).toString("base64url");
+    return `${body}.${signExport(body, token)}`;
+  }
+  function decodeExport(value: string, token: string): ExportCursor | null {
+    if (value.length > 1024) return null;
+    const match = /^([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/.exec(value);
+    if (
+      !match ||
+      !timingSafeEqual(
+        Buffer.from(match[2]!),
+        Buffer.from(signExport(match[1]!, token)),
+      )
+    )
+      return null;
+    try {
+      const data: unknown = JSON.parse(
+        Buffer.from(match[1]!, "base64url").toString("utf8"),
+      );
+      if (
+        !Array.isArray(data) ||
+        data.length !== 5 ||
+        data[0] !== 1 ||
+        typeof data[1] !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(data[1]) ||
+        typeof data[2] !== "string" ||
+        !uuidPattern.test(data[2]) ||
+        !Number.isSafeInteger(data[3]) ||
+        data[3] < 2 ||
+        !Number.isSafeInteger(data[4]) ||
+        data[4] <= clock()
+      )
+        return null;
+      return data as ExportCursor;
+    } catch {
+      return null;
+    }
+  }
+
   async function rollback(client: PoolClient) {
     try {
       await client.query("ROLLBACK");
@@ -491,8 +557,14 @@ export function evidenceStore(
         )
       ).rows;
     },
-    async exportOwned(token) {
+    async exportOwned(token, continuation) {
       if (!tokenPattern.test(token)) return { kind: "denied" };
+      const cursor =
+        continuation === undefined
+          ? undefined
+          : decodeExport(continuation, token);
+      if (cursor === null) return { kind: "denied" };
+      const expires = cursor?.[4] ?? clock() + EVIDENCE_EXPORT_CURSOR_TTL_MS;
       const client = await pool.connect();
       let releaseError: Error | undefined;
       try {
@@ -507,6 +579,17 @@ export function evidenceStore(
           await client.query("ROLLBACK");
           return { kind: "denied" };
         }
+        // Match deletion's workspace-before-evidence lock order. A deleting
+        // workspace is never an export source, even while objects still exist.
+        const workspace = await client.query<{ id: string }>(
+          `SELECT id FROM workspaces WHERE owner_principal_id=$1
+           AND deleting_at IS NULL FOR SHARE`,
+          [owner.rows[0].id],
+        );
+        if (!workspace.rows[0]) {
+          await client.query("ROLLBACK");
+          return { kind: "denied" };
+        }
         const rows = await client.query<{
           id: string;
           name: string;
@@ -515,6 +598,7 @@ export function evidenceStore(
           privateReviewAllowed: boolean;
           privateReviewRevokedAt: Date | null;
           createdAt: Date;
+          orderTime: string;
           revisionParentId: string | null;
           revisionParentStatus: OwnedEvidence["revisionParentStatus"];
           revisionNumber: number;
@@ -527,6 +611,7 @@ export function evidenceStore(
                   e.private_review_allowed AS "privateReviewAllowed",
                   e.private_review_revoked_at AS "privateReviewRevokedAt",
                   e.created_at AS "createdAt",
+                  to_char(e.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "orderTime",
                   e.revision_parent_id AS "revisionParentId",
                   CASE WHEN e.revision_number=1 THEN 'none'
                     WHEN parent.id IS NULL THEN 'deleted'
@@ -536,24 +621,38 @@ export function evidenceStore(
                   e.sha256,e.storage_key AS "storageKey"
            FROM evidence_objects e
            LEFT JOIN evidence_objects parent ON parent.id=e.revision_parent_id
-           WHERE e.owner_principal_id=$1
+           WHERE e.owner_principal_id=$1 AND e.workspace_id=$2
+             AND ($3::timestamptz IS NULL OR (e.created_at,e.id)>($3::timestamptz,$4::uuid))
              AND e.quarantine_state<>'deleting'
-           ORDER BY e.created_at,e.id LIMIT $2 FOR SHARE OF e`,
-          [owner.rows[0].id, MAX_EXPORT_ITEMS + 1],
+           ORDER BY e.created_at,e.id LIMIT $5 FOR SHARE OF e`,
+          [
+            owner.rows[0].id,
+            workspace.rows[0].id,
+            cursor?.[1] ?? null,
+            cursor?.[2] ?? null,
+            MAX_EXPORT_ITEMS + 1,
+          ],
         );
-        const clean = rows.rows.filter(
-          (row) => row.quarantineState === "clean",
-        );
-        if (
-          rows.rows.length > MAX_EXPORT_ITEMS ||
-          clean.reduce((bytes, row) => bytes + row.byteSize, 0) >
-            MAX_EXPORT_BYTES
-        ) {
-          await client.query("ROLLBACK");
-          return { kind: "limit" };
-        }
         const items: ExportedEvidence[] = [];
+        let sourceBytes = 0;
+        let last: (typeof rows.rows)[number] | undefined;
         for (const row of rows.rows) {
+          const bytes = row.quarantineState === "clean" ? row.byteSize : 0;
+          // Stored source sizes are constrained at upload. Corrupt metadata must
+          // not create a non-advancing cursor or bypass the raw-byte budget.
+          if (
+            !Number.isSafeInteger(bytes) ||
+            bytes < 0 ||
+            bytes > MAX_EVIDENCE_BYTES
+          ) {
+            await client.query("ROLLBACK");
+            return { kind: "unavailable" };
+          }
+          if (
+            items.length === MAX_EXPORT_ITEMS ||
+            sourceBytes + bytes > MAX_EXPORT_BYTES
+          )
+            break;
           let sourceBase64: string | null = null;
           if (row.quarantineState === "clean") {
             const data = await objects.get(row.storageKey);
@@ -566,6 +665,8 @@ export function evidenceStore(
             }
             sourceBase64 = data.toString("base64");
           }
+          sourceBytes += bytes;
+          last = row;
           items.push({
             id: row.id,
             name: row.name,
@@ -586,12 +687,35 @@ export function evidenceStore(
           "SELECT clock_timestamp() < $1::timestamptz AS valid",
           [owner.rows[0].validUntil],
         );
-        if (!current.rows[0]?.valid) {
+        if (!current.rows[0]?.valid || clock() >= expires) {
           await client.query("ROLLBACK");
           return { kind: "denied" };
         }
         await client.query("COMMIT");
-        return { kind: "ready", version: "local-evidence-v1", items };
+        const nextCursor =
+          last && items.length < rows.rows.length
+            ? encodeExport(
+                [1, last.orderTime, last.id, (cursor?.[3] ?? 1) + 1, expires],
+                token,
+              )
+            : null;
+        return {
+          kind: "ready",
+          version: "local-evidence-v2",
+          items,
+          page: {
+            number: cursor?.[3] ?? 1,
+            itemCount: items.length,
+            sourceBytes,
+            consistency: "live-pages",
+            complete: nextCursor === null,
+            nextCursor,
+            nextHref:
+              nextCursor === null
+                ? null
+                : `/api/evidence/export?cursor=${encodeURIComponent(nextCursor)}`,
+          },
+        };
       } catch {
         if (!(await rollback(client)))
           releaseError = new Error("Evidence export rollback failed");

@@ -1,6 +1,13 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
-import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
+import {
+  evidenceStore,
+  fileObjectStorage,
+  MAX_EVIDENCE_BYTES,
+  MAX_EXPORT_BYTES,
+  type EvidenceExport,
+} from "../../src/evidence.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
@@ -72,10 +79,10 @@ test("[L59] a member manages invented private evidence with honest safety and co
     expect(pendingExport.status()).toBe(200);
     expect(pendingExport.headers()["cache-control"]).toBe("no-store");
     expect(pendingExport.headers()["content-disposition"]).toContain(
-      "deep-native-evidence.json",
+      "deep-native-evidence-page-1.json",
     );
     expect(await pendingExport.json()).toMatchObject({
-      version: "local-evidence-v1",
+      version: "local-evidence-v2",
       items: [{ id, quarantineState: "pending", sourceBase64: null }],
     });
     await otherPage.goto("/evidence");
@@ -446,6 +453,169 @@ test("[L76] exact-source local AI permission is explicit, withdrawable and never
         })
       ).status(),
     ).toBe(403);
+  } finally {
+    await outsider.close();
+  }
+});
+
+test("[L92] owner downloads bounded evidence pages from current bytes with private continuation and recovery", async ({
+  page,
+  context,
+  browser,
+}) => {
+  const outsider = await browser.newContext({ baseURL: origin });
+  try {
+    await onboard(page);
+    const other = await outsider.newPage();
+    await onboard(other);
+    const token = (await context.cookies()).find(
+      (item) => item.name === "dne_preview",
+    )!.value;
+    const evidence = evidenceStore(
+      pool,
+      fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!),
+      "browser-secret",
+    );
+    async function upload(index: number, clean: boolean) {
+      const result = await evidence.upload(token, {
+        name: `page-${index}.txt`,
+        mediaType: "text/plain",
+        data: Buffer.alloc(clean ? MAX_EVIDENCE_BYTES : 10, 97),
+        consent: {
+          rightsConfirmed: true,
+          privateReview: true,
+          communityPublication: false,
+        },
+      });
+      if (result.kind !== "created") throw Error("Evidence fixture failed");
+      if (clean)
+        expect(await evidence.transitionQuarantine(result.id, "clean")).toBe(
+          true,
+        );
+      return result.id;
+    }
+    const ids: string[] = [];
+    for (let i = 0; i < 24; i++) ids.push(await upload(i, i < 5));
+    await page.goto("/evidence");
+    await page.getByRole("link", { name: "Download my evidence JSON" }).click();
+    await expect(
+      page.getByText("Each page is a live read", { exact: false }),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Next page" })).toBeHidden();
+    // Inserting before the rendered page's boundary displaces a source. A next
+    // link captured before the actual download would silently omit that source.
+    const added = await upload(24, true);
+    ids.push(added);
+    await pool.query(
+      "UPDATE evidence_objects SET created_at=(SELECT min(created_at)-INTERVAL '1 second' FROM evidence_objects WHERE id=ANY($1::uuid[])) WHERE id=$2",
+      [ids, added],
+    );
+    const expected = (
+      await pool.query<{ id: string }>(
+        "SELECT id FROM evidence_objects WHERE id=ANY($1::uuid[]) ORDER BY created_at,id",
+        [ids],
+      )
+    ).rows.map((row) => row.id);
+    const found: string[] = [];
+    let savedCursor = "";
+    for (let number = 1; number <= 3; number++) {
+      const [download] = await Promise.all([
+        page.waitForEvent("download"),
+        page
+          .getByRole("button", { name: `Download page ${number}`, exact: true })
+          .click(),
+      ]);
+      expect(download.suggestedFilename()).toBe(
+        `deep-native-evidence-page-${number}.json`,
+      );
+      const downloaded = JSON.parse(
+        await readFile((await download.path())!, "utf8"),
+      ) as Extract<EvidenceExport, { kind: "ready" }>;
+      expect(downloaded.version).toBe("local-evidence-v2");
+      expect(downloaded.page).toMatchObject({
+        number,
+        consistency: "live-pages",
+        itemCount: downloaded.items.length,
+      });
+      expect(downloaded.items.length).toBeLessThanOrEqual(20);
+      const raw = downloaded.items.reduce(
+        (sum, item) =>
+          sum +
+          (item.sourceBase64
+            ? Buffer.from(item.sourceBase64, "base64").length
+            : 0),
+        0,
+      );
+      expect(raw).toBe(downloaded.page.sourceBytes);
+      expect(raw).toBeLessThanOrEqual(MAX_EXPORT_BYTES);
+      found.push(...downloaded.items.map((item) => item.id));
+      if (number < 3) {
+        expect(downloaded.page.complete).toBe(false);
+        savedCursor = downloaded.page.nextCursor!;
+        const next = page.getByRole("link", { name: "Next page", exact: true });
+        await expect(next).toHaveAttribute(
+          "href",
+          `/evidence/export?cursor=${encodeURIComponent(savedCursor)}`,
+        );
+        await next.focus();
+        await page.keyboard.press("Enter");
+        await expect(
+          page.getByRole("heading", {
+            name: `Page ${number + 1}`,
+            exact: true,
+          }),
+        ).toBeVisible();
+      } else {
+        expect(downloaded.page.complete).toBe(true);
+        await expect(page.getByRole("status")).toContainText(
+          "End of this live traversal",
+        );
+        await expect(
+          page.getByRole("link", { name: "Next page" }),
+        ).toBeHidden();
+      }
+    }
+    expect(found).toEqual(expected);
+    expect(new Set(found).size).toBe(25);
+    expect(
+      (
+        await other.request.get(
+          `/api/evidence/export?cursor=${encodeURIComponent(savedCursor)}`,
+        )
+      ).status(),
+    ).toBe(403);
+    expect(
+      (
+        await page.request.get(
+          `/api/evidence/export?cursor=${encodeURIComponent(savedCursor)}!`,
+        )
+      ).status(),
+    ).toBe(403);
+    await page.goto(
+      `/evidence/export?cursor=${encodeURIComponent(savedCursor)}`,
+    );
+    await pool.query(
+      "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=(SELECT owner_principal_id FROM evidence_objects WHERE id=$1)",
+      [added],
+    );
+    await page
+      .getByRole("button", { name: "Download page 3", exact: true })
+      .click();
+    await expect(page.getByRole("status")).toContainText(
+      "This page was not downloaded",
+    );
+    await expect(page.getByRole("link", { name: "Next page" })).toBeHidden();
+    expect(
+      (
+        await page.request.get(
+          `/api/evidence/export?cursor=${encodeURIComponent(savedCursor)}`,
+        )
+      ).status(),
+    ).toBe(403);
+    await page.getByRole("link", { name: "Start export again" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Export unavailable" }),
+    ).toBeVisible();
   } finally {
     await outsider.close();
   }

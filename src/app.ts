@@ -15,6 +15,7 @@ import {
   dashboard,
   privateProgressPage,
   evidencePage,
+  evidenceExportPage,
   memberExportPage,
   localAiConsentPage,
   localAiControlPage,
@@ -569,29 +570,52 @@ export function app(
     }
     res.json(access);
   });
-  app.get("/api/evidence/export", async (_req, res) => {
-    const result = await evidence.exportOwned(res.locals.token as string);
-    if (result.kind === "denied") {
-      res.status(403).json({ error: "forbidden" });
+  app.get(["/api/evidence/export", "/evidence/export"], async (req, res) => {
+    res.set("Referrer-Policy", "no-referrer");
+    const html = req.path === "/evidence/export";
+    const fail = (status: number, error: string, message: string) => {
+      if (html)
+        res.status(status).send(errorPage("Export unavailable", message));
+      else res.status(status).json({ error });
+    };
+    const cursor = req.query.cursor;
+    if (cursor !== undefined && typeof cursor !== "string") {
+      fail(
+        403,
+        "forbidden",
+        "Export access or continuation is unavailable. Return to your private evidence and start again.",
+      );
       return;
     }
-    if (result.kind === "limit") {
-      res.status(413).json({
-        error: "export_limit",
-        message:
-          "This preview export is limited to 20 samples and 4 MiB of clean source data. Download or delete samples individually, then retry.",
-      });
+    const result = await evidence.exportOwned(
+      res.locals.token as string,
+      cursor,
+    );
+    if (result.kind === "denied") {
+      fail(
+        403,
+        "forbidden",
+        "Export access or continuation is unavailable. Return to your private evidence and start again.",
+      );
       return;
     }
     if (result.kind === "unavailable") {
-      res.status(503).json({ error: "export_unavailable" });
+      fail(
+        503,
+        "export_unavailable",
+        "This live page could not be read safely. Return to your private evidence and start again.",
+      );
+      return;
+    }
+    if (html) {
+      res.send(evidenceExportPage(result.page.number, cursor));
       return;
     }
     res
       .type("application/json")
       .set(
         "Content-Disposition",
-        'attachment; filename="deep-native-evidence.json"',
+        `attachment; filename="deep-native-evidence-page-${result.page.number}.json"`,
       )
       .json(result);
   });
