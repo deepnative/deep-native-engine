@@ -1425,6 +1425,13 @@ it("serves a member-owned activity view only through the active session", async 
   expect(attempts.list).toHaveBeenCalledWith(
     expect.stringMatching(/^[a-f0-9]{64}$/),
   );
+  attempts.list.mockResolvedValueOnce(null);
+  const revokedRead = await agent
+    .get("/progress")
+    .set("Host", host)
+    .expect(403);
+  expect(revokedRead.text).toContain("Progress unavailable");
+  expect(revokedRead.text).not.toContain("Private invented reading");
 });
 it("pins retained starter links to owned versions and reports unavailable or failed reads honestly", async () => {
   const retained: ExerciseHistory[] = [
@@ -3789,6 +3796,17 @@ it("keeps synthetic assignment attempts private through start, validation, confl
     (await agent.get("/assignments/attempts").set("Host", host).expect(200))
       .text,
   ).toContain("Invented assignment");
+  attempts.list.mockResolvedValueOnce(null);
+  const deniedHistory = await agent
+    .get("/assignments/attempts")
+    .set("Host", host)
+    .expect(403);
+  expect(deniedHistory.text).toContain("Assignment history unavailable");
+  expect(deniedHistory.text).not.toContain("Invented assignment");
+  expect(deniedHistory.text).not.toContain(id);
+  expect(deniedHistory.text).not.toContain(
+    "No private assignment attempts yet",
+  );
   await post("/assignments/attempts/start", {}).expect(409);
   attempts.start.mockResolvedValue(id);
   await post("/assignments/attempts/start", {}).expect(303);

@@ -211,7 +211,7 @@ it("lists only owned submission metadata and keeps each exact version after dire
     background: "professional",
     goal: "work",
   });
-  const owned = await attempts.list(f.ownerToken);
+  const owned = (await attempts.list(f.ownerToken))!;
   expect(owned).toHaveLength(1);
   expect(owned[0]?.submissionHistory).toMatchObject([
     { sequence: 1, submittedAt: expect.any(String) },
@@ -238,7 +238,7 @@ it("lists only owned submission metadata and keeps each exact version after dire
   expect(await attempts.detail(outsiderToken, f.attemptId)).toBeNull();
   await pool.query("UPDATE learners SET goal='work' WHERE id=$1", [f.ownerId]);
   expect(await catalogStore(pool).retire(f.editorToken, "SYN-960")).toBe(true);
-  const retained = await attempts.list(f.ownerToken);
+  const retained = (await attempts.list(f.ownerToken))!;
   expect(
     activityItems(undefined, [], retained).map((item) => item.state),
   ).toEqual(initial.map((item) => item.state));
@@ -251,8 +251,16 @@ it("lists only owned submission metadata and keeps each exact version after dire
 it("does not return a partial progress list when snapshot metadata cannot be read", async () => {
   const f = await fixture();
   const failed = attemptStore({
-    query: async () => {
-      throw new Error("Synthetic PostgreSQL read fault");
+    connect: async () => {
+      const client = await pool.connect();
+      return {
+        query: (sql: string, values?: unknown[]) => {
+          if (sql.includes('AS "submissionHistory"'))
+            throw new Error("Synthetic PostgreSQL read fault");
+          return client.query(sql, values);
+        },
+        release: () => client.release(),
+      };
     },
   } as unknown as Pool);
   await expect(failed.list(f.ownerToken)).rejects.toThrow(

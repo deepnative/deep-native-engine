@@ -2576,6 +2576,14 @@ export function app(
       attempts.list(res.locals.token as string),
       usefulness.list(res.locals.token as string),
     ]);
+    if (memberAttempts === null) {
+      res
+        .status(403)
+        .send(
+          errorPage("Progress unavailable", "Open your learning path again."),
+        );
+      return;
+    }
     const html = await store.withExerciseRead(
       res.locals.token as string,
       (rows) =>
@@ -2682,9 +2690,19 @@ export function app(
     res.redirect(303, "/learn");
   });
   app.get("/assignments/attempts", async (_req, res) => {
-    res.send(
-      assignmentAttemptsPage(await attempts.list(res.locals.token as string)),
-    );
+    const items = await attempts.list(res.locals.token as string);
+    if (items === null) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Assignment history unavailable",
+            "Open your learning path again.",
+          ),
+        );
+      return;
+    }
+    res.send(assignmentAttemptsPage(items));
   });
   app.post("/assignments/attempts/start", async (_req, res) => {
     const id = await attempts.start(res.locals.token as string);

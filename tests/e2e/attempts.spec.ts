@@ -786,3 +786,69 @@ test("[L88] private simulated portfolio statements pin submitted versions across
     }
   }
 });
+
+test("[L100] a workspace deletion withholds private assignment history while other members remain isolated", async ({
+  page,
+  browser,
+}, info) => {
+  const id = info.project.name === "desktop-chromium" ? "SYN-956" : "SYN-955";
+  const title = `Private deletion-bound history ${id}`;
+  const actors = await publishers();
+  await publish(actors, sample(id, 1, title));
+  await onboard(page, "explorer", "everyday");
+  const attemptId = await chooseAndStart(page, title);
+  await page
+    .getByLabel("Private sample response")
+    .fill("An invented private history that must be hidden during deletion.");
+  await page.getByLabel("I used only invented or sample information").check();
+  await page.getByRole("button", { name: "Save private draft" }).click();
+  await page.goto("/assignments/attempts");
+  await expect(page.getByRole("link", { name: title })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("link", { name: title })).toBeVisible();
+  const outsider = await browser.newContext({ baseURL: origin });
+  try {
+    const other = await outsider.newPage();
+    await onboard(other, "professional", "work");
+    await other.goto("/assignments/attempts");
+    await expect(
+      other.getByText("No private assignment attempts yet"),
+    ).toBeVisible();
+    await expect(other.getByText(title)).toHaveCount(0);
+    const before = (
+      await pool.query("SELECT * FROM assignment_attempts WHERE id=$1", [
+        attemptId,
+      ])
+    ).rows;
+    await pool.query(
+      "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+      [before[0].member_id],
+    );
+    for (const path of ["/assignments/attempts", "/progress"]) {
+      const result = await page.goto(path);
+      expect(result?.status()).toBe(403);
+      await expect(
+        page.getByRole("heading", {
+          name:
+            path === "/progress"
+              ? "Progress unavailable"
+              : "Assignment history unavailable",
+        }),
+      ).toBeVisible();
+      await expect(page.getByText(title)).toHaveCount(0);
+      await expect(page.locator(`a[href*="${attemptId}"]`)).toHaveCount(0);
+      await expect(
+        page.getByText("No private assignment attempts yet"),
+      ).toHaveCount(0);
+    }
+    expect(
+      (
+        await pool.query("SELECT * FROM assignment_attempts WHERE id=$1", [
+          attemptId,
+        ])
+      ).rows,
+    ).toEqual(before);
+  } finally {
+    await outsider.close();
+  }
+});

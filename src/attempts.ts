@@ -43,7 +43,7 @@ export type AssignmentAttemptListItem = Omit<
   "response" | "submissions" | "rubric" | "rubricVersion"
 >;
 export interface AttemptStore {
-  list(token: string): Promise<AssignmentAttemptListItem[]>;
+  list(token: string): Promise<AssignmentAttemptListItem[] | null>;
   detail(token: string, id: string): Promise<AssignmentAttempt | null>;
   start(token: string): Promise<string | null>;
   save(
@@ -122,7 +122,7 @@ const columns = `a.id,a.content_id AS "contentId",a.content_version AS "contentV
     AND ${eligible}),false) AS "currentEligible"`;
 
 export function attemptStore(pool: Pool): AttemptStore {
-  async function mutate<Row extends QueryResultRow>(
+  async function authorizedOperation<Row extends QueryResultRow>(
     statement: string,
     values: unknown[],
   ) {
@@ -151,7 +151,7 @@ export function attemptStore(pool: Pool): AttemptStore {
       if (!workspace.rows[0]) return null;
       const result = await client.query<Row>(statement, values);
       // CURRENT_TIMESTAMP predates lock waits. Check wall time after every
-      // write, including insert conflicts and submission snapshot insertion.
+      // operation, including reads, insert conflicts and snapshot insertion.
       const current = await client.query<{ valid: boolean }>(
         "SELECT clock_timestamp() < $1::timestamptz AS valid",
         [principal.expiresAt],
@@ -165,7 +165,7 @@ export function attemptStore(pool: Pool): AttemptStore {
         try {
           await client.query("ROLLBACK");
         } catch {
-          releaseError = new Error("Attempt mutation rollback failed");
+          releaseError = new Error("Attempt operation rollback failed");
         }
       }
       client.release(releaseError);
@@ -173,9 +173,8 @@ export function attemptStore(pool: Pool): AttemptStore {
   }
   return {
     async list(token) {
-      return (
-        await pool.query<AssignmentAttemptListItem>(
-          `SELECT ${columns},COALESCE((SELECT jsonb_agg(
+      const result = await authorizedOperation<AssignmentAttemptListItem>(
+        `SELECT ${columns},COALESCE((SELECT jsonb_agg(
               jsonb_build_object('sequence',s.sequence,'submittedAt',s.submitted_at)
                 ORDER BY s.sequence)
               FROM assignment_submission_snapshots s WHERE s.attempt_id=a.id),
@@ -184,9 +183,9 @@ export function attemptStore(pool: Pool): AttemptStore {
          JOIN learners l ON l.id=a.member_id JOIN principals p ON p.id=l.id
          LEFT JOIN learner_assignment_choices ch ON ch.member_id=l.id
          WHERE ${activeMember} ORDER BY a.started_at DESC,a.id`,
-          [hash(token)],
-        )
-      ).rows;
+        [hash(token)],
+      );
+      return result?.rows ?? null;
     },
     async detail(token, id) {
       const client = await pool.connect();
@@ -268,7 +267,7 @@ export function attemptStore(pool: Pool): AttemptStore {
       }
     },
     async start(token) {
-      const result = await mutate<{ id: string }>(
+      const result = await authorizedOperation<{ id: string }>(
         `INSERT INTO assignment_attempts(id,member_id,content_id,content_version,goal_at_start)
          SELECT $2,l.id,cv.id,cv.version,l.goal FROM principals p
          JOIN learners l ON l.id=p.id
@@ -282,7 +281,7 @@ export function attemptStore(pool: Pool): AttemptStore {
       return result?.rows[0]?.id ?? null;
     },
     async save(token, id, revision, response) {
-      const result = await mutate(
+      const result = await authorizedOperation(
         `UPDATE assignment_attempts a SET response=$4,revision=a.revision+1,
            saved_at=CURRENT_TIMESTAMP FROM principals p
          JOIN learners l ON l.id=p.id
@@ -296,7 +295,7 @@ export function attemptStore(pool: Pool): AttemptStore {
       return result?.rowCount === 1;
     },
     async submit(token, id, revision) {
-      const result = await mutate(
+      const result = await authorizedOperation(
         `WITH submitted AS (
          UPDATE assignment_attempts a SET submitted_at=CURRENT_TIMESTAMP,
            submission_count=a.submission_count+1
@@ -317,7 +316,7 @@ export function attemptStore(pool: Pool): AttemptStore {
       return result?.rowCount === 1;
     },
     async revise(token, id) {
-      const result = await mutate(
+      const result = await authorizedOperation(
         `UPDATE assignment_attempts a SET response='',saved_at=NULL,
            submitted_at=NULL,revision=a.revision+1
          FROM principals p JOIN learners l ON l.id=p.id
@@ -354,7 +353,7 @@ export function attemptStore(pool: Pool): AttemptStore {
       )`;
       const result =
         expectedRevision === 0
-          ? await mutate(
+          ? await authorizedOperation(
               `${owned}
                INSERT INTO assignment_submission_reflections
                  (attempt_id,sequence,evidence,gaps,intention)
@@ -362,7 +361,7 @@ export function attemptStore(pool: Pool): AttemptStore {
                ON CONFLICT DO NOTHING RETURNING revision`,
               values,
             )
-          : await mutate(
+          : await authorizedOperation(
               `${owned}
                UPDATE assignment_submission_reflections r
                SET evidence=$4,gaps=$5,intention=$6,
@@ -380,7 +379,7 @@ export function attemptStore(pool: Pool): AttemptStore {
         expectedRevision === 0
       )
         return false;
-      const result = await mutate(
+      const result = await authorizedOperation(
         `WITH owned AS MATERIALIZED (
            SELECT a.id FROM assignment_attempts a
            JOIN assignment_submission_snapshots s ON s.attempt_id=a.id
