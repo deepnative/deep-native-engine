@@ -38,6 +38,7 @@ vi.mock("../../scripts/quality-gates.mjs", async (original) => ({
   assertUnitResults: () => ({ passed: 1, total: 1 }),
   assertCoverage: () => ({}),
   assertJourneys: () => ({ passed: 1, total: 1 }),
+  assertCrossBrowserJourney: () => ({ passed: 1, total: 1, executions: 6 }),
   assertProvisionalReleaseJourneys: () => ({
     approved: false,
     passed: 3,
@@ -393,6 +394,25 @@ it("keeps a failed provisional database setup from passing or leaking", async ()
     ),
   ).toBe(false);
 });
+it("fails before provisional evidence when the required cross-browser run fails", async () => {
+  doubles.spawn.mockImplementation((command, args) => {
+    if (command === "git")
+      return { status: 0, stdout: args[0] !== "status" ? "a".repeat(40) : "" };
+    return {
+      status: command === "npm" && args[1] === "test:e2e:cross-browser" ? 1 : 0,
+      stdout: marker,
+      stderr: marker,
+    };
+  });
+  const report = await run();
+  expect(report.exitStatus).toBe(1);
+  expect(report.error).toBe(
+    "Verification failed during npm run test:e2e:cross-browser.",
+  );
+  expect(report.crossBrowserKeyboardJourney).toBeUndefined();
+  expect(report.provisionalFullMvpEvidence).toBeUndefined();
+  expect(doubles.query).toHaveBeenCalledTimes(2);
+});
 it("treats an idle database error as failure without leaking or losing cleanup", async () => {
   doubles.query.mockImplementationOnce(async () => {
     doubles.pool.emit("error", new Error(marker));
@@ -438,6 +458,12 @@ it("still passes a successful run and cleans its isolated resources", async () =
     ([command, args]) =>
       command === "npm" && args[1] === "test:e2e:provisional",
   );
+  const crossBrowser = doubles.spawn.mock.calls.find(
+    ([command, args]) =>
+      command === "npm" && args[1] === "test:e2e:cross-browser",
+  );
+  expect(crossBrowser).toBeTruthy();
+  expect(report.crossBrowserKeyboardJourney).toMatchObject({ executions: 6 });
   const mainDatabase = new URL(mainBrowser[2].env.DNE_TEST_DATABASE_URL)
     .pathname;
   const provisionalDatabase = new URL(
@@ -446,6 +472,9 @@ it("still passes a successful run and cleans its isolated resources", async () =
   expect(mainDatabase).toMatch(/^\/dne_test_[0-9a-f]{32}$/);
   expect(provisionalDatabase).toMatch(/^\/dne_test_[0-9a-f]{32}$/);
   expect(provisionalDatabase).not.toBe(mainDatabase);
+  expect(new URL(crossBrowser[2].env.DNE_TEST_DATABASE_URL).pathname).toBe(
+    mainDatabase,
+  );
   expect(doubles.end).toHaveBeenCalledOnce();
   expect(output).not.toHaveBeenCalled();
 });

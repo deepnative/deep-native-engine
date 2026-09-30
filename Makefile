@@ -7,7 +7,7 @@ bootstrap:
 setup: bootstrap
 	npm ci
 	$(MAKE) db
-	npx playwright install --with-deps chromium
+	npx playwright install --with-deps chromium firefox webkit
 	@test -f .env || cp .env.example .env
 
 db:

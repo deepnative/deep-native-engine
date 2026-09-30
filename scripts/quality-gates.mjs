@@ -266,6 +266,51 @@ export function assertJourneys(register, report) {
   };
 }
 
+// A bounded local-preview gate. The six-project denominator is independent of
+// the approved local/full-MVP registers and cannot silently shrink with a
+// configuration edit. The L53 behavior definition remains the approved one.
+export function assertCrossBrowserJourney(matrix, approved, report) {
+  const projects = [
+    "desktop-chromium",
+    "narrow-chromium",
+    "desktop-firefox",
+    "narrow-firefox",
+    "desktop-webkit",
+    "narrow-webkit",
+  ];
+  requireGate(
+    matrix?.version === "qa005-l53-cross-browser-v1" &&
+      typeof matrix.scope === "string" &&
+      matrix.scope.length > 0 &&
+      JSON.stringify(matrix.scenarioIds) === JSON.stringify(["L53"]) &&
+      JSON.stringify(matrix.projects) === JSON.stringify(projects),
+    "Changed local cross-browser L53 matrix",
+  );
+  const l53 = approved?.slice?.find((scenario) => scenario.id === "L53");
+  requireGate(l53?.critical === true, "Missing critical approved L53 journey");
+  const result = assertJourneys(
+    {
+      ...approved,
+      version: matrix.version,
+      scope: matrix.scope,
+      slice: [l53],
+      projects,
+    },
+    report,
+  );
+  return {
+    register: result.register,
+    scope: result.scope,
+    passed: result.passed,
+    total: result.total,
+    criticalPassed: result.criticalPassed,
+    criticalTotal: result.criticalTotal,
+    executions: result.executions,
+    projects,
+    uncovered: result.uncovered,
+  };
+}
+
 function assertRequiredCheckEvidence(register, report) {
   const requiredById = new Map(
     register.fullMvp.flatMap((family) =>

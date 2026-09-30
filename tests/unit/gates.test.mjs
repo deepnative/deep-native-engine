@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   assertCoverage,
   assertJourneys,
+  assertCrossBrowserJourney,
   assertFullReleaseJourneys,
   assertProvisionalReleaseJourneys,
   assertUnitResults,
@@ -11,6 +12,12 @@ import {
 const copy = (v) => JSON.parse(JSON.stringify(v));
 const proposal = JSON.parse(
   readFileSync(new URL("../e2e/scenarios.json", import.meta.url), "utf8"),
+);
+const crossBrowser = JSON.parse(
+  readFileSync(
+    new URL("../e2e/cross-browser-scenarios.json", import.meta.url),
+    "utf8",
+  ),
 );
 const counts = { total: 100, covered: 100, skipped: 0 };
 const metrics = () =>
@@ -86,6 +93,78 @@ const browser = () => ({
       ],
     },
   ],
+});
+const crossBrowserReport = () => ({
+  errors: [],
+  suites: [
+    {
+      specs: [
+        {
+          title:
+            "[L53] three learner paths retain visible keyboard focus, actionable errors and circle state",
+          tests: crossBrowser.projects.map(execution),
+        },
+      ],
+    },
+  ],
+});
+it("requires all six first-attempt L53 engine and viewport executions without changing full-MVP scope", () => {
+  const result = assertCrossBrowserJourney(
+    crossBrowser,
+    proposal,
+    crossBrowserReport(),
+  );
+  expect(result).toMatchObject({
+    register: "qa005-l53-cross-browser-v1",
+    passed: 1,
+    total: 1,
+    criticalPassed: 1,
+    criticalTotal: 1,
+    executions: 6,
+    projects: crossBrowser.projects,
+  });
+  expect(result).not.toHaveProperty("fullMvp");
+  expect(proposal.projects).toEqual(["desktop-chromium", "mobile-chromium"]);
+});
+it.each([
+  "missing",
+  "duplicate",
+  "skipped",
+  "retried",
+  "failed",
+  "unexpected",
+  "expected-failure",
+  "report-error",
+])("rejects %s cross-browser L53 evidence", (fault) => {
+  const report = crossBrowserReport();
+  const tests = report.suites[0].specs[0].tests;
+  if (fault === "missing") tests.pop();
+  if (fault === "duplicate") tests.push(execution(tests[0].projectName));
+  if (fault === "skipped") tests[0].results[0].status = "skipped";
+  if (fault === "retried") tests[0].results[0].retry = 1;
+  if (fault === "failed") tests[0].status = "unexpected";
+  if (fault === "unexpected") tests[0].projectName = "unknown";
+  if (fault === "expected-failure") tests[0].expectedStatus = "failed";
+  if (fault === "report-error")
+    report.errors.push({ message: "startup failed" });
+  expect(() =>
+    assertCrossBrowserJourney(crossBrowser, proposal, report),
+  ).toThrow();
+});
+it("rejects a reduced or changed local cross-browser denominator", () => {
+  for (const candidate of [
+    { ...crossBrowser, projects: crossBrowser.projects.slice(1) },
+    {
+      ...crossBrowser,
+      projects: [...crossBrowser.projects.slice(0, -1), "mobile-webkit"],
+    },
+    { ...crossBrowser, scenarioIds: [] },
+    { ...crossBrowser, scenarioIds: ["L01"] },
+    { ...crossBrowser, version: "qa005-l53-cross-browser-v2" },
+  ])
+    expect(() =>
+      assertCrossBrowserJourney(candidate, proposal, crossBrowserReport()),
+    ).toThrow();
 });
 it("requires all unit tests to pass with nonempty, consistent evidence", () => {
   const report = {

@@ -32,7 +32,7 @@ jobs:
       - run: npm ci
       - name: Start PostgreSQL
         run: docker compose up -d --wait
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium firefox webkit
       - name: Run the shared verification command
         run: make verify
       - name: Scan generated artifacts before display or upload

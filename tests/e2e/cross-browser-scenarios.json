@@ -1,0 +1,13 @@
+{
+  "version": "qa005-l53-cross-browser-v1",
+  "scope": "Synthetic local-preview L53 keyboard and recovery journey; desktop and narrow viewports on Chromium, Firefox and WebKit. This is not manual Safari, VoiceOver or release accessibility approval.",
+  "scenarioIds": ["L53"],
+  "projects": [
+    "desktop-chromium",
+    "narrow-chromium",
+    "desktop-firefox",
+    "narrow-firefox",
+    "desktop-webkit",
+    "narrow-webkit"
+  ]
+}
