@@ -190,9 +190,11 @@ it("binds continuation to the session and process key, rejecting tampering and e
   expect(await exporter.exportOwned("other", cursor)).toEqual({
     kind: "denied",
   });
-  expect(
-    await exporter.exportOwned("owner", cursor.slice(0, -2) + "AA"),
-  ).toEqual({ kind: "denied" });
+  const [body, signature] = cursor.split(".");
+  const tampered = `${body}.${signature![0] === "A" ? "B" : "A"}${signature!.slice(1)}`;
+  expect(await exporter.exportOwned("owner", tampered)).toEqual({
+    kind: "denied",
+  });
   expect(
     await memberExportStore(fake.pool).exportOwned("owner", cursor),
   ).toEqual({ kind: "denied" });

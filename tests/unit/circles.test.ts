@@ -139,15 +139,87 @@ it.each([
   expect(expired.release).toHaveBeenCalledOnce();
 });
 
-it("leaves only an active known membership", async () => {
-  const query = vi
-    .fn()
-    .mockResolvedValueOnce({ rowCount: 1 })
-    .mockResolvedValueOnce({ rowCount: 0 });
-  const circles = circleStore({ query } as unknown as Pool);
-  expect(await circles.leave("token", "unknown")).toBe(false);
-  expect(query).not.toHaveBeenCalled();
-  expect(await circles.leave("token", "everyday-ai")).toBe(true);
-  expect(await circles.leave("token", "everyday-ai")).toBe(false);
-  expect(query.mock.calls[0]![0]).toContain("p.expires_at>CURRENT_TIMESTAMP");
+function leavePool({
+  member = true,
+  workspace = true,
+  changed = true,
+  validAtCompletion = true,
+  failUpdate = false,
+  failRollback = false,
+} = {}) {
+  const query = vi.fn(async (sql: string) => {
+    if (sql === "ROLLBACK" && failRollback)
+      throw new Error("rollback unavailable");
+    if (sql.includes("SELECT p.id"))
+      return {
+        rows: member
+          ? [{ id: "member-id", expiresAt: "2030-01-01 00:00:00+00" }]
+          : [],
+      };
+    if (sql.includes("SELECT id FROM workspaces"))
+      return { rows: workspace ? [{ id: "workspace-id" }] : [] };
+    if (sql.includes("UPDATE preview_circle_memberships")) {
+      if (failUpdate) throw new Error("membership write failed");
+      return { rowCount: changed ? 1 : 0 };
+    }
+    if (sql.includes("SELECT clock_timestamp()"))
+      return { rows: [{ valid: validAtCompletion }] };
+    return { rows: [], rowCount: 0 };
+  });
+  const release = vi.fn();
+  const connect = vi.fn().mockResolvedValue({ query, release });
+  const pool = { connect } as unknown as Pool;
+  return { pool, query, release, connect };
+}
+
+it("leaves only a current member's active membership in a nondeleting workspace", async () => {
+  const valid = leavePool();
+  expect(await circleStore(valid.pool).leave("token", "unknown")).toBe(false);
+  expect(valid.connect).not.toHaveBeenCalled();
+  expect(await circleStore(valid.pool).leave("token", "everyday-ai")).toBe(
+    true,
+  );
+  expect(valid.query.mock.calls.map(([sql]) => sql)).toContain("COMMIT");
+  expect(valid.release).toHaveBeenCalledOnce();
+
+  const repeated = leavePool({ changed: false });
+  expect(await circleStore(repeated.pool).leave("token", "everyday-ai")).toBe(
+    false,
+  );
+  const expired = leavePool({ member: false });
+  expect(await circleStore(expired.pool).leave("token", "everyday-ai")).toBe(
+    false,
+  );
+  expect(expired.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+  const deleting = leavePool({ workspace: false });
+  expect(await circleStore(deleting.pool).leave("token", "everyday-ai")).toBe(
+    false,
+  );
+  expect(deleting.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+});
+
+it("rolls back a leave that expires during its membership wait or fails to write", async () => {
+  const late = leavePool({ validAtCompletion: false });
+  expect(await circleStore(late.pool).leave("token", "everyday-ai")).toBe(
+    false,
+  );
+  expect(late.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+  expect(late.query.mock.calls.map(([sql]) => sql)).not.toContain("COMMIT");
+
+  const failed = leavePool({ failUpdate: true });
+  await expect(
+    circleStore(failed.pool).leave("token", "everyday-ai"),
+  ).rejects.toThrow("membership write failed");
+  expect(failed.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+  expect(failed.release).toHaveBeenCalledOnce();
+
+  const unavailableRollback = leavePool({
+    failUpdate: true,
+    failRollback: true,
+  });
+  await expect(
+    circleStore(unavailableRollback.pool).leave("token", "everyday-ai"),
+  ).rejects.toThrow("membership write failed");
+  expect(unavailableRollback.release).toHaveBeenCalledOnce();
+  expect(unavailableRollback.release.mock.calls[0]![0]).toBeInstanceOf(Error);
 });
