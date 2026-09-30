@@ -15,6 +15,8 @@ import {
 import { COOKIE, csrf } from "../../src/session.ts";
 import { jobStore, requestFingerprint } from "../../src/jobs.ts";
 import { migrate, store } from "../../src/store.ts";
+import { start } from "../../src/runtime.ts";
+import { recoverPendingMemberDeletions } from "../../src/deletion-recovery.ts";
 import { testPool } from "../support/database.ts";
 import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 
@@ -479,4 +481,358 @@ it("reports object and database deletion failures and safely finishes on retry",
   const completed = await postDelete(owner.token, form);
   expect(completed.status).toBe(303);
   expect(await db.session(owner.token)).toMatchObject({ kind: "new" });
+});
+
+it("resumes an accepted local deletion after restart even when its session has expired", async () => {
+  const files = fileObjectStorage(storageRoot);
+  let removals = 0;
+  const flakyObjects: ObjectStorage = {
+    ...files,
+    async remove(key) {
+      removals++;
+      if (removals === 2) throw new Error("synthetic interrupted cleanup");
+      await files.remove(key);
+    },
+  };
+  const evidence = await serve(flakyObjects);
+  const owner = await member();
+  const unrelated = await member();
+  const uploaded = await evidence.upload(owner.token, {
+    name: "interrupted.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented private source"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+  });
+  expect(uploaded.kind).toBe("created");
+  if (uploaded.kind !== "created") throw new Error("Evidence setup failed");
+  expect(await evidence.transitionQuarantine(uploaded.id, "clean")).toBe(true);
+  await evidence.addDerivative(
+    uploaded.id,
+    "text-extract",
+    Buffer.from("Invented derived text"),
+  );
+  const keys = (
+    await pool.query<{ storage_key: string }>(
+      `SELECT storage_key FROM evidence_objects WHERE id=$1
+       UNION ALL SELECT storage_key FROM evidence_derivatives WHERE evidence_id=$1`,
+      [uploaded.id],
+    )
+  ).rows.map((row) => row.storage_key);
+  expect(keys).toHaveLength(2);
+
+  const failed = await postDelete(owner.token, {
+    csrf: csrf(owner.token, secret),
+    confirm: "yes",
+  });
+  expect(failed.status).toBe(503);
+  expect(
+    await count({ table: "principals", column: "id", value: owner.id }),
+  ).toBe(1);
+  expect(
+    (
+      await pool.query(
+        "SELECT deleting_at FROM workspaces WHERE owner_principal_id=$1",
+        [owner.id],
+      )
+    ).rows[0]?.deleting_at,
+  ).not.toBeNull();
+  await pool.query(
+    "UPDATE principals SET expires_at=clock_timestamp()-INTERVAL '1 second' WHERE id=$1",
+    [owner.id],
+  );
+  await pool.query(
+    "UPDATE workspaces SET deleting_at=clock_timestamp()-INTERVAL '1 minute' WHERE owner_principal_id=$1",
+    [owner.id],
+  );
+  await closeLoopback(server!);
+  server = undefined;
+
+  const running = await start({
+    DNE_DATABASE_URL: process.env.DNE_TEST_DATABASE_URL,
+    DNE_PORT: String(40_000 + Math.floor(Math.random() * 10_000)),
+    DNE_APP_MODE: "test",
+    DNE_PRIVATE_STORAGE_ROOT: storageRoot,
+  });
+  try {
+    for (let attempt = 0; attempt < 30; attempt++) {
+      if (
+        (await count({
+          table: "principals",
+          column: "id",
+          value: owner.id,
+        })) === 0
+      )
+        break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(
+      await count({ table: "principals", column: "id", value: owner.id }),
+    ).toBe(0);
+    expect(
+      await count({ table: "principals", column: "id", value: unrelated.id }),
+    ).toBe(1);
+    for (const key of keys) await expect(files.get(key)).rejects.toThrow();
+  } finally {
+    await running.close();
+  }
+});
+
+it("serializes two recovery workers and leaves an unrelated member untouched", async () => {
+  const files = fileObjectStorage(storageRoot);
+  let removals = 0;
+  const flakyObjects: ObjectStorage = {
+    ...files,
+    async remove(key) {
+      removals++;
+      if (removals === 2) throw new Error("synthetic interrupted cleanup");
+      await files.remove(key);
+    },
+  };
+  const evidence = await serve(flakyObjects);
+  const owner = await member();
+  const unrelated = await member();
+  const uploaded = await evidence.upload(owner.token, {
+    name: "race.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented race source"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+  });
+  expect(uploaded.kind).toBe("created");
+  if (uploaded.kind !== "created") throw new Error("Evidence setup failed");
+  expect(await evidence.transitionQuarantine(uploaded.id, "clean")).toBe(true);
+  await evidence.addDerivative(
+    uploaded.id,
+    "text-extract",
+    Buffer.from("Invented race derivative"),
+  );
+  const keys = (
+    await pool.query<{ storage_key: string }>(
+      `SELECT storage_key FROM evidence_objects WHERE id=$1
+       UNION ALL SELECT storage_key FROM evidence_derivatives WHERE evidence_id=$1`,
+      [uploaded.id],
+    )
+  ).rows.map((row) => row.storage_key);
+  expect(
+    (
+      await postDelete(owner.token, {
+        csrf: csrf(owner.token, secret),
+        confirm: "yes",
+      })
+    ).status,
+  ).toBe(503);
+  await pool.query(
+    "UPDATE workspaces SET deleting_at=clock_timestamp()-INTERVAL '1 minute' WHERE owner_principal_id=$1",
+    [owner.id],
+  );
+  let entered!: () => void;
+  let resume!: () => void;
+  const removing = new Promise<void>((resolve) => (entered = resolve));
+  const proceed = new Promise<void>((resolve) => (resume = resolve));
+  const slowObjects: ObjectStorage = {
+    ...files,
+    async remove(key) {
+      entered();
+      await proceed;
+      await files.remove(key);
+    },
+  };
+  const winning = recoverPendingMemberDeletions(pool, slowObjects);
+  await removing;
+  try {
+    const competing = await recoverPendingMemberDeletions(pool, files);
+    expect(competing).toMatchObject({ examined: 1, completed: 0, failed: 0 });
+  } finally {
+    resume();
+  }
+  expect(await winning).toMatchObject({ completed: 1, failed: 0 });
+  expect(
+    await count({ table: "principals", column: "id", value: owner.id }),
+  ).toBe(0);
+  expect(
+    await count({ table: "principals", column: "id", value: unrelated.id }),
+  ).toBe(1);
+  for (const key of keys) await expect(files.get(key)).rejects.toThrow();
+});
+
+it("does not accept a new deletion after the owner expires during its principal lock wait", async () => {
+  await serve(fileObjectStorage(storageRoot));
+  const owner = await member();
+  const holder = await pool.connect();
+  await holder.query("BEGIN");
+  await holder.query("SELECT id FROM principals WHERE id=$1 FOR UPDATE", [
+    owner.id,
+  ]);
+  const pending = postDelete(owner.token, {
+    csrf: csrf(owner.token, secret),
+    confirm: "yes",
+  }).then((response) => response);
+  let observedWait = false;
+  let held = true;
+  try {
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const waiting = await pool.query<{ n: number }>(
+        `SELECT count(*)::integer AS n FROM pg_stat_activity
+         WHERE datname=current_database() AND wait_event_type='Lock'
+           AND query LIKE 'SELECT id FROM principals%'`,
+      );
+      if (waiting.rows[0]!.n > 0) {
+        observedWait = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(observedWait).toBe(true);
+    await holder.query(
+      "UPDATE principals SET expires_at=clock_timestamp()-INTERVAL '1 second' WHERE id=$1",
+      [owner.id],
+    );
+    await holder.query("COMMIT");
+    held = false;
+  } finally {
+    if (held) await holder.query("ROLLBACK");
+    holder.release();
+  }
+  const response = await pending;
+  expect(response.status).toBe(503);
+  expect(response.text).toContain("Deletion status unconfirmed");
+  expect(
+    await count({ table: "principals", column: "id", value: owner.id }),
+  ).toBe(1);
+  expect(
+    (
+      await pool.query(
+        "SELECT deleting_at FROM workspaces WHERE owner_principal_id=$1",
+        [owner.id],
+      )
+    ).rows[0]?.deleting_at,
+  ).toBeNull();
+});
+
+it("lets an in-flight evidence upload finish before accepting deletion without a lock cycle", async () => {
+  const files = fileObjectStorage(storageRoot);
+  let entered!: () => void;
+  let resume!: () => void;
+  const uploading = new Promise<void>((resolve) => (entered = resolve));
+  const proceed = new Promise<void>((resolve) => (resume = resolve));
+  const slowObjects: ObjectStorage = {
+    ...files,
+    async put(key, data) {
+      entered();
+      await proceed;
+      await files.put(key, data);
+    },
+  };
+  const evidence = await serve(slowObjects);
+  const owner = await member();
+  const pendingUpload = evidence.upload(owner.token, {
+    name: "in-flight.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented in-flight source"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+  });
+  await uploading;
+  const pendingDelete = postDelete(owner.token, {
+    csrf: csrf(owner.token, secret),
+    confirm: "yes",
+  }).then((response) => response);
+  let observedWait = false;
+  try {
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const waiting = await pool.query<{ n: number }>(
+        `SELECT count(*)::integer AS n FROM pg_stat_activity
+         WHERE datname=current_database() AND wait_event_type='Lock'
+           AND query LIKE 'SELECT id FROM workspaces WHERE owner_principal_id%'`,
+      );
+      if (waiting.rows[0]!.n > 0) {
+        observedWait = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(observedWait).toBe(true);
+  } finally {
+    resume();
+  }
+  const [upload, deletion] = await Promise.allSettled([
+    pendingUpload,
+    pendingDelete,
+  ]);
+  expect(upload.status).toBe("fulfilled");
+  if (upload.status === "fulfilled") expect(upload.value.kind).toBe("created");
+  expect(deletion.status).toBe("fulfilled");
+  if (deletion.status === "fulfilled") expect(deletion.value.status).toBe(303);
+  expect(
+    await count({ table: "principals", column: "id", value: owner.id }),
+  ).toBe(0);
+});
+
+it("converges when recovery overlaps the original confirmed deletion", async () => {
+  const files = fileObjectStorage(storageRoot);
+  let entered!: () => void;
+  let resume!: () => void;
+  const removing = new Promise<void>((resolve) => (entered = resolve));
+  const proceed = new Promise<void>((resolve) => (resume = resolve));
+  const slowObjects: ObjectStorage = {
+    ...files,
+    async remove(key) {
+      entered();
+      await proceed;
+      await files.remove(key);
+    },
+  };
+  const evidence = await serve(slowObjects);
+  const owner = await member();
+  const uploaded = await evidence.upload(owner.token, {
+    name: "overlap.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented overlap source"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+  });
+  expect(uploaded.kind).toBe("created");
+  if (uploaded.kind !== "created") throw new Error("Evidence setup failed");
+  const key = (
+    await pool.query<{ storage_key: string }>(
+      "SELECT storage_key FROM evidence_objects WHERE id=$1",
+      [uploaded.id],
+    )
+  ).rows[0]!.storage_key;
+  const pendingDelete = postDelete(owner.token, {
+    csrf: csrf(owner.token, secret),
+    confirm: "yes",
+  }).then((response) => response);
+  await removing;
+  try {
+    await pool.query(
+      "UPDATE workspaces SET deleting_at=clock_timestamp()-INTERVAL '1 minute' WHERE owner_principal_id=$1",
+      [owner.id],
+    );
+    expect(await recoverPendingMemberDeletions(pool, files)).toMatchObject({
+      examined: 1,
+      completed: 1,
+      failed: 0,
+    });
+  } finally {
+    resume();
+  }
+  expect((await pendingDelete).status).toBe(303);
+  expect(
+    await count({ table: "principals", column: "id", value: owner.id }),
+  ).toBe(0);
+  await expect(files.get(key)).rejects.toThrow();
 });

@@ -24,6 +24,7 @@ import { memberSlotHolds } from "./slot-holds.ts";
 import { availabilityStore } from "./availability.ts";
 import { manualObservationStore } from "./manual-observations.ts";
 import { assignmentReadinessStore } from "./assignment-readiness.ts";
+import { recoverPendingMemberDeletions } from "./deletion-recovery.ts";
 
 export function evidenceCapabilityClock(
   mode: string,
@@ -102,14 +103,40 @@ export async function start(env: NodeJS.ProcessEnv) {
       server.once("listening", resolve);
       server.once("error", reject);
     });
+    let cursor: string | null = null;
+    let activeRecovery: Promise<void> | undefined;
+    const recover = () => {
+      if (activeRecovery) return;
+      activeRecovery = (async () => {
+        try {
+          const result = await recoverPendingMemberDeletions(
+            pool,
+            objects,
+            cursor,
+          );
+          cursor = result.nextCursor;
+          if (result.failed)
+            console.error("A pending local deletion will be retried.");
+        } catch {
+          console.error("Pending local deletion recovery is unavailable.");
+        }
+      })().finally(() => {
+        activeRecovery = undefined;
+      });
+    };
+    const recoveryTimer = setInterval(recover, 5_000);
+    recoveryTimer.unref();
+    recover();
     return {
       server,
       close: async () => {
+        clearInterval(recoveryTimer);
         try {
           await new Promise<void>((resolve, reject) =>
             server.close((error) => (error ? reject(error) : resolve())),
           );
         } finally {
+          await activeRecovery;
           await pool.end();
         }
       },

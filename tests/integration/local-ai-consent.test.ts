@@ -677,7 +677,7 @@ it("dispatch wins deletion: result commits once, then deletion removes source, r
   try {
     await waitForDispatchBlock(
       observed.backend.pid,
-      "SELECT w.id FROM workspaces%FOR UPDATE OF w",
+      "SELECT id FROM workspaces WHERE owner_principal_id%FOR UPDATE",
     );
     expect(
       (

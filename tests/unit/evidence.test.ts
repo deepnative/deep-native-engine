@@ -1054,6 +1054,7 @@ it("deletes every owned workspace object once and tolerates an empty cleanup", a
       { id: evidenceId },
       undefined,
       undefined,
+      { id: evidenceId },
       [
         { id: evidenceId, storage_key: storageKey },
         { id: evidenceId, storage_key: "33333333-3333-4333-8333-333333333333" },
@@ -1062,19 +1063,28 @@ it("deletes every owned workspace object once and tolerates an empty cleanup", a
     ),
     objects = objectStorage(),
     evidence = evidenceStore(db.pool, objects, "secret");
-  await evidence.removeWorkspace("bad");
+  await expect(evidence.removeWorkspace("bad")).rejects.toThrow(
+    "authorization unavailable",
+  );
   await evidence.removeWorkspace(token);
   expect(objects.remove).toHaveBeenCalledTimes(2);
   expect((db.query.mock.calls.at(-1) as unknown[] | undefined)?.[1]).toEqual([
     [evidenceId],
   ]);
   await expect(
-    evidenceStore(database().pool, objectStorage(), "secret").removeWorkspace(
-      token,
-    ),
+    evidenceStore(
+      database({ id: evidenceId }, undefined, undefined, {
+        id: evidenceId,
+      }).pool,
+      objectStorage(),
+      "secret",
+    ).removeWorkspace(token),
   ).resolves.toBeUndefined();
-  const failed = database();
-  failed.failOn(/SELECT w.id/, new Error("workspace lookup failed"));
+  const failed = database({ id: evidenceId });
+  failed.failOn(
+    /SELECT id FROM workspaces WHERE owner_principal_id/,
+    new Error("workspace lookup failed"),
+  );
   failed.failOn(/^ROLLBACK$/, new Error("rollback failed"));
   await expect(
     evidenceStore(failed.pool, objectStorage(), "secret").removeWorkspace(
@@ -1084,10 +1094,15 @@ it("deletes every owned workspace object once and tolerates an empty cleanup", a
   expect(failed.client.release).toHaveBeenCalledWith(expect.any(Error));
 
   await expect(
-    evidenceStore(
-      database({ id: evidenceId }, undefined, undefined, undefined).pool,
-      objectStorage(),
-      "secret",
-    ).removeWorkspace(token),
-  ).resolves.toBeUndefined();
+    evidenceStore(database().pool, objectStorage(), "secret").removeWorkspace(
+      token,
+    ),
+  ).rejects.toThrow("authorization unavailable");
+  const expired = database({ id: evidenceId }, undefined, undefined);
+  const untouched = objectStorage();
+  await expect(
+    evidenceStore(expired.pool, untouched, "secret").removeWorkspace(token),
+  ).rejects.toThrow("authorization expired");
+  expect(untouched.remove).not.toHaveBeenCalled();
+  expect(expired.client.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
 });
