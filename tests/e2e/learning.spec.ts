@@ -259,6 +259,74 @@ test("[L29] exploratory learner revises a time-fitting plan without rewriting sa
     "Plan a small community event",
   );
 });
+
+test("[L101] completed starter plan advances without attributing an earlier goal to a new one", async ({
+  page,
+  browser,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Your starting point").selectOption("explorer");
+  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await page.getByLabel("Weekly time available").selectOption("15");
+  await page.getByLabel("I'll use invented or sample information").check();
+  await page.getByRole("button", { name: "Start my learning path" }).click();
+  const plan = page.getByRole("region", { name: "Your starter plan" });
+  await expect(plan).toContainText("Next session: try the sample exercise");
+  await page.getByRole("link", { name: "Open lesson" }).click();
+  await fill(page);
+  await page.getByLabel("I checked the context").check();
+  await page.getByRole("button", { name: "Complete exercise" }).click();
+  await page.getByRole("link", { name: "See your progress" }).click();
+  await page.reload();
+  await expect(
+    plan
+      .getByRole("status")
+      .filter({ hasText: "completed for your current goal" }),
+  ).toContainText("completed for your current goal");
+  await expect(plan).not.toContainText("try the sample exercise");
+  await expect(
+    plan.getByRole("link", { name: "Review saved starter exercise" }),
+  ).toHaveAttribute("href", "/lesson");
+  await plan
+    .getByRole("link", { name: "Review saved starter exercise" })
+    .focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/lesson$/);
+  await page.goBack();
+  const otherContext = await browser.newContext();
+  try {
+    const other = await otherContext.newPage();
+    await other.goto("/");
+    await other.getByLabel("Your starting point").selectOption("explorer");
+    await other
+      .getByLabel("What would you like to do?")
+      .selectOption("everyday");
+    await other.getByLabel("Weekly time available").selectOption("15");
+    await other.getByLabel("I'll use invented or sample information").check();
+    await other.getByRole("button", { name: "Start my learning path" }).click();
+    await expect(
+      other.getByRole("region", { name: "Your starter plan" }),
+    ).toContainText("Next session: try the sample exercise");
+  } finally {
+    await otherContext.close();
+  }
+  await page.getByLabel("What would you like to do?").selectOption("work");
+  await page.getByRole("button", { name: "Save my direction" }).click();
+  await expect(page).toHaveURL(/\/learn$/);
+  await expect(plan).toContainText("Turn meeting notes into next steps");
+  await expect(
+    plan.getByRole("status").filter({ hasText: "earlier goal" }),
+  ).toContainText("earlier goal");
+  await expect(plan).not.toContainText("completed for your current goal");
+  await expect(
+    plan.getByRole("link", { name: "Browse published sample library" }),
+  ).toHaveAttribute("href", "/library");
+  await plan
+    .getByRole("link", { name: "Browse published sample library" })
+    .focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/library$/);
+});
 test("[L30] professional can correct an invalid time zone and retain a noncoding 30-minute plan", async ({
   page,
 }) => {

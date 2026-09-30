@@ -1231,6 +1231,42 @@ it("distinguishes unsaved, draft and self-assessed completion without inventing 
     'name="instruction"',
   );
 });
+
+it("announces completed starter status and a reachable next action in the plan", () => {
+  const html = dashboard(
+    { ...learner, weeklyMinutes: 15 },
+    { ...draft, completed_at: new Date(), goal_at_start: "everyday" },
+    "token",
+  );
+  const plan = html
+    .split('<section class="learning-plan"')[1]
+    ?.split("</section>")[0];
+  expect(plan).toContain('role="status"');
+  expect(plan).toContain("completed for your current goal");
+  expect(plan).toContain('href="/lesson"');
+  expect(plan).not.toContain("try the sample exercise");
+  expect(plan).toContain("Review saved starter exercise");
+  const withdrawn = dashboard(
+    { ...learner, weeklyMinutes: 15 },
+    {
+      ...draft,
+      instruction: null,
+      verification: null,
+      completed_at: new Date(),
+      goal_at_start: "everyday",
+      withdrawn_at: new Date(),
+    },
+    "token",
+  );
+  const withdrawnPlan = withdrawn
+    .split('<section class="learning-plan"')[1]
+    ?.split("</section>")[0];
+  expect(withdrawnPlan).toContain("saved answers withdrawn");
+  expect(withdrawnPlan).toContain('href="/library"');
+  expect(withdrawnPlan).not.toContain("review your saved starter exercise");
+  expect(withdrawn).toContain("View completion");
+  expect(withdrawn).not.toContain("Review your work");
+});
 it("links each exercise error to only its affected field and clears error state after correction", () => {
   const invalid = lesson(learner, draft, "token", [
     {
