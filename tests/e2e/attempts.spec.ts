@@ -297,6 +297,92 @@ test("[L51] a general learner can copy a failed save and recover without claimin
   await page.getByLabel("I used only invented or sample information").check();
   await page.getByRole("button", { name: "Save private draft" }).click();
   await expect(page.getByLabel("Private sample response")).toHaveValue(unsaved);
+  const waitingText =
+    "An invented replacement that expires while the draft row is locked.";
+  await page.getByLabel("Private sample response").fill(waitingText);
+  await page.getByLabel("I used only invented or sample information").check();
+  const beforeWait = await pool.query(
+    "SELECT * FROM assignment_attempts WHERE id=$1",
+    [attemptId],
+  );
+  const holder = await pool.connect();
+  let saving: Promise<void> | undefined;
+  try {
+    await holder.query("BEGIN");
+    const holderPid = (await holder.query("SELECT pg_backend_pid() AS pid"))
+      .rows[0].pid;
+    await holder.query(
+      "SELECT id FROM assignment_attempts WHERE id=$1 FOR UPDATE",
+      [attemptId],
+    );
+    await pool.query(
+      "UPDATE principals SET expires_at=clock_timestamp()+interval '2 seconds' WHERE id=(SELECT member_id FROM assignment_attempts WHERE id=$1)",
+      [attemptId],
+    );
+    saving = Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().endsWith(`/assignments/attempts/${attemptId}/save`) &&
+          response.request().method() === "POST",
+      ),
+      page.getByRole("button", { name: "Save private draft" }).click(),
+    ]).then(([response]) => {
+      expect(response.status()).toBe(409);
+    });
+    await expect
+      .poll(
+        async () =>
+          (
+            await pool.query(
+              `SELECT 1 FROM pg_stat_activity waiter CROSS JOIN principals p
+       WHERE p.id=(SELECT member_id FROM assignment_attempts WHERE id=$2)
+         AND waiter.state='active' AND waiter.wait_event_type='Lock'
+         AND $1::integer=ANY(pg_blocking_pids(waiter.pid))
+         AND position('UPDATE assignment_attempts' in waiter.query)>0
+         AND waiter.xact_start<p.expires_at AND p.expires_at<=clock_timestamp()`,
+              [holderPid, attemptId],
+            )
+          ).rowCount,
+        { timeout: 4_000, intervals: [10, 20, 50] },
+      )
+      .toBe(1);
+    await holder.query("COMMIT");
+    await saving;
+    await expect(
+      page.getByRole("heading", { name: "Attempt unavailable" }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("Response to copy before leaving this page"),
+    ).toHaveValue(waitingText);
+    await expect(
+      page.getByRole("button", { name: "Save private draft" }),
+    ).toHaveCount(0);
+    expect(
+      (
+        await pool.query("SELECT * FROM assignment_attempts WHERE id=$1", [
+          attemptId,
+        ])
+      ).rows,
+    ).toEqual(beforeWait.rows);
+    expect(
+      (
+        await pool.query(
+          "SELECT count(*)::integer AS count FROM assignment_submission_snapshots WHERE attempt_id=$1",
+          [attemptId],
+        )
+      ).rows,
+    ).toEqual([{ count: 0 }]);
+  } finally {
+    await holder.query("ROLLBACK");
+    await Promise.allSettled(saving ? [saving] : []);
+    holder.release();
+  }
+  await pool.query(
+    "UPDATE principals SET expires_at=clock_timestamp()+interval '1 day' WHERE id=(SELECT member_id FROM assignment_attempts WHERE id=$1)",
+    [attemptId],
+  );
+  await page.getByRole("link", { name: "Reload this attempt" }).click();
+  await expect(page.getByLabel("Private sample response")).toHaveValue(unsaved);
   const laterText = "A second invented response after my session expired.";
   await page.getByLabel("Private sample response").fill(laterText);
   await page.getByLabel("I used only invented or sample information").check();
