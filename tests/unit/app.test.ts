@@ -45,6 +45,7 @@ import {
 } from "../../src/availability.ts";
 import type { ManualObservationStore } from "../../src/manual-observations.ts";
 import type { AssignmentReadinessStore } from "../../src/assignment-readiness.ts";
+import { SlotHoldFailure, type MemberSlotHolds } from "../../src/slot-holds.ts";
 import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 it("serves goal-matched event previews only to active members and never accepts enrollment", async () => {
   const db = storage();
@@ -330,7 +331,9 @@ it("keeps optional slot discovery private and reports read failures without impl
   expect(shown.text).not.toContain('name="staff_id"');
   availability.list.mockRejectedValueOnce(new Error("private database detail"));
   const failed = await agent.get("/availability").set("Host", host).expect(503);
-  expect(failed.text).toContain("Availability could not be checked");
+  expect(failed.text).toContain(
+    "Availability or receipts could not be checked",
+  );
   expect(failed.text).not.toContain("private database detail");
   db.session.mockResolvedValue({ kind: "active", learner: member });
   const noZone = await agent.get("/availability").set("Host", host).expect(200);
@@ -4291,4 +4294,146 @@ it("renders live export page navigation and rechecks download cursors without le
       .expect(kind === "denied" ? 403 : kind === "limit" ? 413 : 503);
     expect(error.text).toContain("Export unavailable");
   }
+});
+
+it("keeps member sample-hold request parameters, receipts and uncertain outcomes private", async () => {
+  const id = "44444444-4444-4444-8444-444444444444";
+  const slot = "22222222-2222-4222-8222-222222222222";
+  const grant = "33333333-3333-4333-8333-333333333333";
+  const receipt = {
+    id,
+    slotId: slot,
+    domain: "education",
+    serviceType: "coaching" as const,
+    startsAt: new Date("2027-10-01T13:00:00Z"),
+    endsAt: new Date("2027-10-01T14:00:00Z"),
+    expiresAt: new Date("2027-09-01T13:10:00Z"),
+    state: "held" as const,
+    quantity: 60,
+  };
+  const holds = {
+    snapshot: vi.fn<MemberSlotHolds["snapshot"]>().mockResolvedValue({
+      grants: [{ id: grant, category: "coach_minutes" }],
+      receipts: [receipt],
+    }),
+    get: vi.fn<MemberSlotHolds["get"]>().mockResolvedValue(receipt),
+    request: vi.fn<MemberSlotHolds["request"]>().mockResolvedValue(id),
+  };
+  const db = storage();
+  const availability = {
+    ...disabledAvailabilityStore(),
+    list: vi.fn<AvailabilityStore["list"]>().mockResolvedValue([
+      { ...receipt, id: slot },
+      { ...receipt, id: "55555555-5555-4555-8555-555555555555" },
+    ]),
+  };
+  const agent = await managedAgent(
+    app(db, {
+      origin,
+      secret: "secret",
+      memberSlotHolds: holds,
+      availability,
+    }),
+  );
+  const home = await agent.get("/").set("Host", host);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  const post = (fields: Record<string, unknown>) =>
+    agent
+      .post("/availability/holds")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  await agent.get(`/availability/holds/${id}`).set("Host", host).expect(303);
+  expect(holds.get).not.toHaveBeenCalled();
+  db.session.mockResolvedValue({
+    kind: "active",
+    learner: { ...member, timezone: "America/Toronto" },
+  });
+  const listing = await agent
+    .get("/availability")
+    .set("Host", host)
+    .expect(200);
+  expect(listing.text).toContain("Reserve sample hold");
+  const formIds = [
+    ...listing.text.matchAll(/name="requestId" value="([a-f0-9-]+)"/g),
+  ].map((match) => match[1]);
+  expect(formIds).toHaveLength(2);
+  expect(new Set(formIds).size).toBe(2);
+  availability.list.mockRejectedValueOnce(new Error("private slot failure"));
+  const partial = await agent
+    .get("/availability")
+    .set("Host", host)
+    .expect(503);
+  expect(partial.text).toContain(`/availability/holds/${id}`);
+  expect(partial.text).not.toContain("private slot failure");
+  expect(listing.text).toContain(`/availability/holds/${id}`);
+  const fields = { slotId: slot, grantId: grant, requestId: id };
+  expect((await post(fields).expect(303)).headers.location).toBe(
+    `/availability/holds/${id}`,
+  );
+  expect(holds.request.mock.calls[0]!.slice(1)).toEqual([slot, grant, id]);
+  expect(holds.request.mock.calls[0]![0]).not.toBe(member.id);
+  for (const malformed of [
+    { ...fields, memberId: "other" },
+    { ...fields, deadline: "late" },
+    { ...fields, slotId: [slot, slot] },
+    { grantId: grant, requestId: id },
+    { slotId: slot, requestId: id },
+    { slotId: slot, grantId: grant },
+  ])
+    await post(malformed).expect(422);
+  await post({ ...fields, csrf: "forged" }).expect(403);
+  expect(holds.request).toHaveBeenCalledTimes(1);
+  const shown = await agent
+    .get(`/availability/holds/${id}`)
+    .set("Host", host)
+    .expect(200);
+  expect(shown.text).toContain("SAMPLE HOLD — NOT A BOOKING");
+  expect(shown.text).toContain("GMT-04:00");
+  expect(shown.text).not.toContain(grant);
+  holds.get.mockResolvedValueOnce(null);
+  const missing = await agent
+    .get(`/availability/holds/${id}`)
+    .set("Host", host)
+    .expect(404);
+  expect(missing.text).toContain("does not confirm the outcome");
+  holds.get.mockRejectedValueOnce(new Error("private database detail"));
+  const unavailable = await agent
+    .get(`/availability/holds/${id}`)
+    .set("Host", host)
+    .expect(503);
+  expect(unavailable.text).not.toContain("private database detail");
+  holds.request.mockRejectedValueOnce(new SlotHoldFailure("unavailable"));
+  expect((await post(fields).expect(409)).text).toContain("No new sample hold");
+  holds.request.mockRejectedValueOnce(new SlotHoldFailure("invalid_request"));
+  expect(
+    (await post({ ...fields, requestId: "bad" }).expect(409)).text,
+  ).not.toContain("Inspect this request's receipt");
+  for (const error of [
+    new SlotHoldFailure("uncertain"),
+    new Error("private detail"),
+  ]) {
+    holds.request.mockRejectedValueOnce(error);
+    const unknown = await post(fields).expect(503);
+    expect(unknown.text).toContain("Do not assume success or failure");
+    expect(unknown.text).toContain(`/availability/holds/${id}`);
+    expect(unknown.text).not.toContain("private detail");
+    expect(
+      (
+        await agent
+          .get(`/availability/holds/${id}`)
+          .set("Host", host)
+          .expect(200)
+      ).text,
+    ).toContain("held");
+  }
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  await agent.get(`/availability/holds/${id}`).set("Host", host).expect(200);
+  holds.snapshot.mockRejectedValueOnce(new Error("private detail"));
+  expect(
+    (await agent.get("/availability").set("Host", host).expect(503)).text,
+  ).toContain("Inspect your receipts again");
+  db.session.mockResolvedValue({ kind: "expired" });
+  await post(fields).expect(303);
 });
