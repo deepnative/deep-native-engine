@@ -54,6 +54,8 @@ import {
   exerciseWriteRecoveryPage,
   assignmentReadinessPage,
   availabilityPage,
+  sampleHoldReceiptPage,
+  sampleHoldRecoveryPage,
   manualObservationPage,
 } from "./views.ts";
 import type { Store, Learner, Exercise, ExerciseHistory } from "./store.ts";
@@ -135,6 +137,11 @@ import {
   disabledAssignmentReadinessStore,
   type AssignmentReadinessStore,
 } from "./assignment-readiness.ts";
+import {
+  disabledMemberSlotHolds,
+  SlotHoldFailure,
+  type MemberSlotHolds,
+} from "./slot-holds.ts";
 const attemptWritePath =
   /^\/assignments\/attempts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(save|submit|revise)$/i;
 const proposalEditPath = /^\/contribute\/([^/]+)\/edit$/;
@@ -204,6 +211,7 @@ export function app(
     workflowFeedback?: WorkflowFeedbackStore;
     memberExport?: MemberExportStore;
     availability?: AvailabilityStore;
+    memberSlotHolds?: MemberSlotHolds;
     manualObservations?: ManualObservationStore;
     assignmentReadiness?: AssignmentReadinessStore;
   },
@@ -233,6 +241,7 @@ export function app(
     options.workflowFeedback ?? disabledWorkflowFeedbackStore();
   const memberExport = options.memberExport ?? disabledMemberExportStore();
   const availability = options.availability ?? disabledAvailabilityStore();
+  const memberHolds = options.memberSlotHolds ?? disabledMemberSlotHolds();
   const manualObservations =
     options.manualObservations ?? disabledManualObservationStore();
   const assignmentReadiness =
@@ -867,21 +876,102 @@ export function app(
   );
   app.get("/availability", async (_req, res) => {
     const member = res.locals.learner as Learner;
+    const [windows, snapshot] = await Promise.allSettled([
+      availability.list(),
+      memberHolds.snapshot(res.locals.token as string),
+    ]);
+    const slots = windows.status === "fulfilled" ? windows.value : [];
+    const failed =
+      windows.status === "rejected" || snapshot.status === "rejected";
+    res.status(failed ? 503 : 200).send(
+      availabilityPage(
+        slots,
+        member.timezone ?? undefined,
+        failed
+          ? "Availability or receipts could not be checked completely. Inspect your receipts again before trying a new sample request."
+          : undefined,
+        {
+          csrf: res.locals.csrf as string,
+          requestIds: Object.fromEntries(
+            slots.map((slot) => [slot.id, randomUUID()]),
+          ),
+          snapshot:
+            snapshot.status === "fulfilled"
+              ? snapshot.value
+              : { grants: [], receipts: [] },
+        },
+      ),
+    );
+  });
+  app.post("/availability/holds", async (req, res) => {
+    const fields = (req.body ?? {}) as Fields;
+    if (
+      Object.keys(fields).some(
+        (key) => !["csrf", "slotId", "grantId", "requestId"].includes(key),
+      ) ||
+      typeof fields.slotId !== "string" ||
+      typeof fields.grantId !== "string" ||
+      typeof fields.requestId !== "string"
+    ) {
+      res
+        .status(422)
+        .send(
+          sampleHoldRecoveryPage(
+            null,
+            "This form was not accepted. Reopen sample availability and use its current form.",
+          ),
+        );
+      return;
+    }
     try {
-      res.send(
-        availabilityPage(
-          await availability.list(),
-          member.timezone ?? undefined,
-        ),
+      const id = await memberHolds.request(
+        res.locals.token as string,
+        fields.slotId,
+        fields.grantId,
+        fields.requestId,
       );
+      res.redirect(303, `/availability/holds/${id}`);
+    } catch (error) {
+      const uncertain =
+        !(error instanceof SlotHoldFailure) || error.code === "uncertain";
+      res
+        .status(uncertain ? 503 : 409)
+        .send(
+          sampleHoldRecoveryPage(
+            /^[0-9a-f-]{36}$/i.test(fields.requestId) ? fields.requestId : null,
+            uncertain
+              ? "The sample hold outcome could not be confirmed. Do not assume success or failure; inspect this request's receipt and your current receipts before trying a new request."
+              : "No new sample hold was created by this request. The slot, session or matching test allowance may be unavailable, or this request may conflict with an earlier one.",
+          ),
+        );
+    }
+  });
+  app.get("/availability/holds/:requestId", async (req, res) => {
+    const member = res.locals.learner as Learner;
+    try {
+      const receipt = await memberHolds.get(
+        res.locals.token as string,
+        req.params.requestId as string,
+      );
+      if (!receipt) {
+        res
+          .status(404)
+          .send(
+            sampleHoldRecoveryPage(
+              null,
+              "No receipt is currently visible for this request and session. An unavailable receipt alone does not confirm the outcome of an earlier write.",
+            ),
+          );
+        return;
+      }
+      res.send(sampleHoldReceiptPage(receipt, member.timezone ?? undefined));
     } catch {
       res
         .status(503)
         .send(
-          availabilityPage(
-            [],
-            member.timezone ?? undefined,
-            "Availability could not be checked. No appointment was reserved.",
+          sampleHoldRecoveryPage(
+            null,
+            "Your receipt could not be checked. Inspect your current receipts again before trying a new request.",
           ),
         );
     }

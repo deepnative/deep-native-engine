@@ -75,6 +75,7 @@ export function availabilityStore(pool: Pool): AvailabilityStore {
            AND NOT EXISTS (
              SELECT 1 FROM synthetic_slot_holds held
              WHERE held.slot_id=s.id AND held.state='held'
+               AND held.expires_at>CURRENT_TIMESTAMP
            )
            AND primary_staff.kind='staff'
            AND primary_staff.revoked_at IS NULL

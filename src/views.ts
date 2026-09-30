@@ -46,6 +46,7 @@ import type { PracticeHistory, PracticeSource } from "./practice.ts";
 import type { OwnedEvidence } from "./evidence.ts";
 import type { LocalAiChoice } from "./local-ai-consent.ts";
 import { localSlotTime, type AvailableSlot } from "./availability.ts";
+import type { MemberHoldSnapshot, SampleHoldReceipt } from "./slot-holds.ts";
 import type { EventPreview, EventPreviewDetail } from "./events.ts";
 import type {
   AssignmentReadiness,
@@ -219,12 +220,55 @@ export function availabilityPage(
   slots: AvailableSlot[],
   timezone?: string,
   error?: string,
+  holds?: {
+    csrf: string;
+    requestIds: Record<string, string>;
+    snapshot: MemberHoldSnapshot;
+  },
 ) {
   const zone = timezone?.trim() || "";
   const display = zone ? localSlotTime(new Date(), zone) : null;
+  const slotForm = (slot: AvailableSlot) => {
+    const grants =
+      holds?.snapshot.grants.filter(
+        (grant) =>
+          grant.category ===
+          (slot.serviceType === "coaching"
+            ? "coach_minutes"
+            : "review_minutes"),
+      ) ?? [];
+    if (!holds || !grants.length)
+      return "<p>No matching current test allowance has 60 available minutes. No allowance is created here.</p>";
+    return `<form method="post" action="/availability/holds">${hidden(holds.csrf)}<input type="hidden" name="slotId" value="${escape(slot.id)}"><input type="hidden" name="requestId" value="${escape(holds.requestIds[slot.id]!)}"><label for="grant-${escape(slot.id)}">Explicit test allowance</label><select id="grant-${escape(slot.id)}" name="grantId">${grants.map((grant, index) => `<option value="${escape(grant.id)}">${escape(grant.category)} · test allowance ${index + 1}</option>`).join("")}</select><button type="submit">Reserve sample hold</button></form>`;
+  };
   return page(
     "Optional service availability",
-    `<nav class="breadcrumb"><a href="/learn">← Your learning path</a></nav><section class="error-page"><p class="eyebrow">PRIVATE LOCAL PREVIEW · NO BOOKINGS</p><h1>Optional service availability</h1><p>This page shows sample appointment windows only. No booking, qualified service, allowance or payment is connected.</p>${error ? `<div class="notice" role="alert"><p>${escape(error)}</p></div>` : ""}${display ? `<p>Times shown for ${escape(zone)}. Each window also shows its exact UTC time.</p>` : '<p>Choose a valid time zone in your <a href="/learn">profile form</a> to see local appointment times.</p>'}${slots.length && display ? `<ul>${slots.map((slot) => `<li><strong>${escape(DOMAINS[slot.domain as Domain] ?? slot.domain)} · ${escape(slot.serviceType)}</strong><br><time datetime="${slot.startsAt.toISOString()}">${escape(localSlotTime(slot.startsAt, zone) ?? slot.startsAt.toISOString())}</time> to <time datetime="${slot.endsAt.toISOString()}">${escape(localSlotTime(slot.endsAt, zone) ?? slot.endsAt.toISOString())}</time> · UTC ${slot.startsAt.toISOString()} to ${slot.endsAt.toISOString()} · sample window, not bookable</li>`).join("")}</ul>` : '<p role="status">No sample windows can be shown right now. Your shared learning path remains available.</p>'}<p>Availability may change. A listed window is never a reservation; the optional service is not open for requests.</p><a href="/learn">Continue shared learning</a></section>`,
+    `<nav class="breadcrumb"><a href="/learn">← Your learning path</a></nav><section class="error-page"><p class="eyebrow">PRIVATE LOCAL PREVIEW · NO BOOKINGS</p><h1>Optional service availability</h1><p>This page shows sample appointment windows only. Real expert capacity, paid access, provider notification, calendar/email delivery, cancellation and service fulfillment are unavailable.</p><p>A sample hold reserves 60 explicitly seeded test minutes for at most 10 minutes and always ends at least one second before the window starts. This test-only deadline creates no commercial cancellation or no-show term.</p>${error ? `<div class="notice" role="alert"><p>${escape(error)}</p></div>` : ""}${display ? `<p>Times shown for ${escape(zone)}. Each window also shows its exact UTC time.</p>` : '<p>Choose a valid time zone in your <a href="/learn">profile form</a> to see local appointment times.</p>'}${slots.length && display ? `<ul>${slots.map((slot) => `<li><strong>${escape(DOMAINS[slot.domain as Domain] ?? slot.domain)} · ${escape(slot.serviceType)}</strong><br><time datetime="${slot.startsAt.toISOString()}">${escape(localSlotTime(slot.startsAt, zone) ?? slot.startsAt.toISOString())}</time> to <time datetime="${slot.endsAt.toISOString()}">${escape(localSlotTime(slot.endsAt, zone) ?? slot.endsAt.toISOString())}</time> · UTC ${slot.startsAt.toISOString()} to ${slot.endsAt.toISOString()} · sample window, not bookable${slotForm(slot)}</li>`).join("")}</ul>` : '<p role="status">No sample windows can be shown right now. Your shared learning path remains available.</p>'}<h2>Your private sample receipts</h2>${holds?.snapshot.receipts.length ? `<ul>${holds.snapshot.receipts.map((item) => `<li><a href="/availability/holds/${escape(item.id)}">Sample hold receipt · ${escape(item.state)} · ${item.startsAt.toISOString()}</a></li>`).join("")}</ul>` : "<p>No sample hold receipts are currently visible for your session.</p>"}<p>Availability may change. A listed window is never a reservation. Background, interests and shared learning membership grant no service minutes.</p><a href="/learn">Continue shared learning</a></section>`,
+  );
+}
+
+export function sampleHoldReceiptPage(
+  receipt: SampleHoldReceipt,
+  timezone?: string,
+) {
+  const local = timezone ? localSlotTime(receipt.startsAt, timezone) : null;
+  const zone = local ? timezone! : "UTC";
+  const windowLabel = local
+    ? "Member-local window"
+    : "UTC display window (no valid member time zone)";
+  return page(
+    "Your sample hold receipt",
+    `<section class="reading"><p class="eyebrow">SAMPLE HOLD — NOT A BOOKING</p><h1>Your sample hold receipt</h1><dl><dt>State</dt><dd>${escape(receipt.state)}</dd><dt>Sample service</dt><dd>${escape(DOMAINS[receipt.domain as Domain] ?? receipt.domain)} · ${escape(receipt.serviceType)}</dd><dt>Slot</dt><dd>${escape(receipt.slotId)}</dd><dt>Exact UTC window</dt><dd>${receipt.startsAt.toISOString()} to ${receipt.endsAt.toISOString()}</dd><dt>${windowLabel}</dt><dd>${escape(localSlotTime(receipt.startsAt, zone)!)} to ${escape(localSlotTime(receipt.endsAt, zone)!)}</dd><dt>Reserved test quantity</dt><dd>${receipt.quantity} minutes</dd><dt>Test-only deadline</dt><dd>${receipt.expiresAt.toISOString()} · ${escape(localSlotTime(receipt.expiresAt, zone)!)}</dd></dl><p>${receipt.state === "expired" ? "This temporary hold has expired. Reserved units return only while the original test grant and member access remain current; otherwise those units stay expired." : "This temporary hold lasts at most 10 minutes and ends before the sample window starts. Reload this receipt to inspect its current state."}</p><p>Real expert capacity, paid access, provider notification, calendar/email delivery, cancellation and service fulfillment are unavailable. This is no commercial cancellation or no-show term.</p><p><a href="/availability/holds/${escape(receipt.id)}">Reload this receipt</a> · <a href="/availability">Inspect your current sample receipts</a></p></section>`,
+  );
+}
+
+export function sampleHoldRecoveryPage(
+  requestId: string | null,
+  message: string,
+) {
+  return page(
+    "Inspect your sample hold",
+    `<section class="error-page"><p class="eyebrow">SAMPLE HOLD — NOT A BOOKING</p><h1>Inspect your sample hold</h1><p role="alert">${escape(message)}</p>${requestId ? `<p><a href="/availability/holds/${escape(requestId)}">Inspect this request's receipt</a></p>` : ""}<p><a href="/availability">Inspect your current sample receipts</a> before trying a new request.</p></section>`,
   );
 }
 export function tailoredReviewUnavailablePage(
