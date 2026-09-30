@@ -19,7 +19,7 @@ const sections = {
     CASE WHEN withdrawn_at IS NULL THEN 'saved' ELSE 'withdrawn' END AS state,
     withdrawn_at AS "withdrawnAt"`,
     "exercises WHERE learner_id=$1",
-    "lesson_id,lesson_version",
+    "lesson_id,lesson_version,goal_slot",
     true,
   ),
   lessonActivity: section(
@@ -151,7 +151,7 @@ const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
 type Key = (string | number)[];
 type Cursor = [
-  version: 1,
+  version: 2,
   section: number,
   key: Key,
   page: number,
@@ -159,7 +159,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v11";
+  version: "local-member-records-v12";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   page: {
@@ -216,13 +216,13 @@ export function memberExportStore(
       if (
         !Array.isArray(data) ||
         data.length !== 5 ||
-        data[0] !== 1 ||
+        data[0] !== 2 ||
         !Number.isInteger(data[1]) ||
         data[1] < 0 ||
         data[1] >= entries.length ||
         !Array.isArray(data[2]) ||
         data[2].length < 1 ||
-        data[2].length > 2 ||
+        data[2].length > 3 ||
         !data[2].every((key: unknown) =>
           typeof key === "string"
             ? key.length <= 160
@@ -273,7 +273,7 @@ export function memberExportStore(
           );
           const payload: MemberExportPayload = {
             kind: "ready",
-            version: "local-member-records-v11",
+            version: "local-member-records-v12",
             profile: owner.rows[0],
             records,
             page: {
@@ -340,7 +340,7 @@ export function memberExportStore(
               }
               const { _key, ...record } = row;
               const next = encode(
-                [1, index, _key, payload.page.number + 1, expires],
+                [2, index, _key, payload.page.number + 1, expires],
                 token,
               );
               const previous = payload.page.nextCursor;

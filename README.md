@@ -6,7 +6,7 @@ Deep Native Engine helps curious learners, IT practitioners and professionals in
 
 - **Find a starting point.** Choose whether you want to explore AI, use it at work or build something. Your goal and background shape a simple learning path that you can change later.
 - **Learn by doing.** Work through a short lesson on giving AI a clear instruction, then practise with invented examples. Browse sample lessons and compare your own response with the source material.
-- **Keep track of your work.** Save an exercise draft, mark it complete through self-assessment, and revisit your private learning activity. You can also plan milestones and keep sample assignments or evidence.
+- **Keep track of your work.** Save an exercise draft, mark it complete through self-assessment, and revisit your private learning activity. Switching goals keeps your earlier practice attached to its original direction. You can also plan milestones and keep sample assignments or evidence.
 - **Explore ways to participate.** Try local previews of learning circles and events, and draft a contribution. Optional career planning stays private and unsent.
 
 This is a **local learning preview**, not a launched service. Lessons and participation examples are synthetic. There is no live AI provider, community discussion, qualified assessment, real booking or payment flow. Use invented or sample information only. See the [product direction](assets/docs/PRODUCT-DIRECTION.md) for the wider vision and the [project board](https://github.com/orgs/deepnative/projects/1/views/1) for work still in progress.

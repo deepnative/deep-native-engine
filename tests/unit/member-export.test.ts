@@ -88,7 +88,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v11",
+      version: "local-member-records-v12",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -205,25 +205,25 @@ it("binds continuation to the session and process key, rejecting tampering and e
   });
 });
 it("rejects malformed or obsolete authenticated cursor fields before connecting", async () => {
-  const valid = [1, 0, ["key"], 2, Date.now() + 60000];
+  const valid = [2, 0, ["key"], 2, Date.now() + 60000];
   const candidates: unknown[] = [
     null,
     [],
-    [2, ...valid.slice(1)],
-    [1, -1, ...valid.slice(2)],
-    [1, 17, ...valid.slice(2)],
-    [1, 0.1, ...valid.slice(2)],
-    [1, 0, null, 2, valid[4]],
-    [1, 0, [], 2, valid[4]],
-    [1, 0, ["a", "b", "c"], 2, valid[4]],
-    [1, 0, ["x".repeat(161)], 2, valid[4]],
-    [1, 0, [{}], 2, valid[4]],
-    [1, 0, [-1], 2, valid[4]],
-    [1, 0, [1.2], 2, valid[4]],
-    [1, 0, ["key"], 1, valid[4]],
-    [1, 0, ["key"], 2.5, valid[4]],
-    [1, 0, ["key"], 2, 0],
-    [1, 0, ["key"], 2, "future"],
+    [1, ...valid.slice(1)],
+    [2, -1, ...valid.slice(2)],
+    [2, 17, ...valid.slice(2)],
+    [2, 0.1, ...valid.slice(2)],
+    [2, 0, null, 2, valid[4]],
+    [2, 0, [], 2, valid[4]],
+    [2, 0, ["a", "b", "c", "d"], 2, valid[4]],
+    [2, 0, ["x".repeat(161)], 2, valid[4]],
+    [2, 0, [{}], 2, valid[4]],
+    [2, 0, [-1], 2, valid[4]],
+    [2, 0, [1.2], 2, valid[4]],
+    [2, 0, ["key"], 1, valid[4]],
+    [2, 0, ["key"], 2.5, valid[4]],
+    [2, 0, ["key"], 2, 0],
+    [2, 0, ["key"], 2, "future"],
   ];
   const fake = fakePool({ id: "member-1" });
   const exporter = memberExportStore(fake.pool, secret);
@@ -241,7 +241,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
   expect(
     await exporter.exportOwned(
       "owner",
-      signed([1, 0, ["lesson", 1], 2, Date.now() + 60000]),
+      signed([2, 0, ["lesson", 1], 2, Date.now() + 60000]),
     ),
   ).toMatchObject({ kind: "ready" });
 });

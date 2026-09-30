@@ -422,9 +422,9 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
         // committed withdrawal. Row locks also cover direct concurrent updates.
         const records = (
           await client.query<WorkspaceRow>(
-            `SELECT lesson_id,lesson_version,instruction,verification,completed_at,withdrawn_at
+            `SELECT lesson_id,lesson_version,goal_at_start,instruction,verification,completed_at,withdrawn_at
              FROM exercises WHERE workspace_id=$1
-             ORDER BY lesson_id,lesson_version FOR SHARE`,
+             ORDER BY lesson_id,lesson_version,goal_slot FOR SHARE`,
             [workspaceId],
           )
         ).rows;

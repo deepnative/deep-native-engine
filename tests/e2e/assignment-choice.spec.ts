@@ -148,7 +148,9 @@ test("[L33] professional sees a domain match only after observed foundation prac
   await page.getByRole("button", { name: "Save my direction" }).click();
   await expect(choices).toContainText("no longer available");
   await expect(choices).not.toContainText(title);
-  await expect(page.getByText("Completed · self-assessed")).toBeVisible();
+  await expect(
+    page.getByRole("progressbar", { name: "Exercises completed" }),
+  ).toHaveAttribute("value", "0");
 });
 
 test("[L34] technical learner's self-report and retired content cannot bypass eligibility", async ({

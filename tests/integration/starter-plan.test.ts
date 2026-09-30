@@ -75,7 +75,7 @@ it("advances only the owner's saved exercise and keeps an earlier goal historica
   });
   const changed = (await plan(owner.token)).text;
   expect(changed).toContain("Turn meeting notes into next steps");
-  expect(changed).toContain("earlier goal");
+  expect(changed).toContain('value="0" max="1"');
   expect(changed).not.toContain("completed for your current goal");
-  expect(changed).not.toContain("Next session: try the sample exercise");
+  expect(changed).toContain("Next session: try the sample exercise");
 });

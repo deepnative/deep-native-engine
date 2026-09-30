@@ -53,6 +53,7 @@ import {
   assignmentWriteRecoveryPage,
   assignmentReflectionRecoveryPage,
   exerciseWriteRecoveryPage,
+  starterRecordPage,
   assignmentReadinessPage,
   availabilityPage,
   sampleHoldReceiptPage,
@@ -186,9 +187,15 @@ function attemptedReflection(body: unknown) {
     intention: value("intention"),
   };
 }
-function currentStarter(rows: ExerciseHistory[]): Exercise | undefined {
+function currentStarter(
+  rows: ExerciseHistory[],
+  goal: Learner["goal"],
+): Exercise | undefined {
   const row = rows.find(
-    (item) => item.lessonId === LESSON.id && item.version === LESSON.version,
+    (item) =>
+      item.lessonId === LESSON.id &&
+      item.version === LESSON.version &&
+      item.goalAtStart === goal,
   );
   return row
     ? {
@@ -2588,7 +2595,12 @@ export function app(
       res.locals.token as string,
       (rows) =>
         privateProgressPage(
-          activityItems(currentStarter(rows), lessons, memberAttempts, rows),
+          activityItems(
+            currentStarter(rows, member.goal),
+            lessons,
+            memberAttempts,
+            rows,
+          ),
           reports,
           res.locals.csrf as string,
         ),
@@ -3606,24 +3618,46 @@ export function app(
         );
       return;
     }
+    const goal = req.query.goal;
+    if (
+      goal !== undefined &&
+      (typeof goal !== "string" ||
+        !["everyday", "work", "build", "unattributed"].includes(goal) ||
+        version === null)
+    ) {
+      res
+        .status(404)
+        .send(
+          errorPage(
+            "Exercise version unavailable",
+            "Open your private activity to find an exact retained record.",
+          ),
+        );
+      return;
+    }
     const html = await store.withExerciseRead(
       res.locals.token as string,
-      (rows) =>
-        version !== null &&
-        !rows.some(
-          (row) =>
-            row.lessonId === LESSON.id &&
-            row.version === version &&
-            (version === LESSON.version || row.completedAt !== null),
-        )
-          ? null
-          : lesson(
-              member,
-              currentStarter(rows),
-              res.locals.csrf as string,
-              [],
-              rows,
-            ),
+      (rows) => {
+        if (version !== null) {
+          const matches = rows.filter(
+            (row) =>
+              row.lessonId === LESSON.id &&
+              row.version === version &&
+              (goal === undefined ||
+                (row.goalAtStart ?? "unattributed") === goal),
+          );
+          return matches.length === 1
+            ? starterRecordPage(matches[0]!, res.locals.csrf as string)
+            : null;
+        }
+        return lesson(
+          member,
+          currentStarter(rows, member.goal),
+          res.locals.csrf as string,
+          [],
+          rows,
+        );
+      },
     );
     if (html === null) {
       res
@@ -3647,14 +3681,15 @@ export function app(
     const form = req.body as Fields;
     if (
       form.lesson_id !== LESSON.id ||
-      form.lesson_version !== String(LESSON.version)
+      form.lesson_version !== String(LESSON.version) ||
+      form.goal !== member.goal
     ) {
       res
         .status(409)
         .send(
           errorPage(
             "Exercise form out of date",
-            "Open the current lesson before saving. An older form cannot be moved to a new version.",
+            "Open the current lesson before saving. An older form cannot be moved to a new version or a different goal.",
           ),
         );
       return;
@@ -3664,7 +3699,7 @@ export function app(
       const html = await store.withExerciseRead(
         res.locals.token as string,
         (rows) =>
-          currentStarter(rows)?.withdrawn_at
+          currentStarter(rows, member.goal)?.withdrawn_at
             ? null
             : lesson(
                 member,
@@ -3689,7 +3724,21 @@ export function app(
       return;
     }
     try {
-      const outcome = await store.save(member.id, input);
+      const outcome = await store.save(member.id, {
+        ...input,
+        goal: member.goal,
+      });
+      if (outcome === "stale-goal" || outcome === "unavailable") {
+        res
+          .status(409)
+          .send(
+            errorPage(
+              "Exercise form out of date",
+              "Your direction or session changed. Open your learning path and the current lesson before saving.",
+            ),
+          );
+        return;
+      }
       if (outcome === "withdrawn") {
         res
           .status(409)
@@ -3707,11 +3756,12 @@ export function app(
         recovery = await store.withExerciseRead(
           res.locals.token as string,
           (rows) =>
-            currentStarter(rows)?.withdrawn_at
+            currentStarter(rows, member.goal)?.withdrawn_at
               ? null
               : exerciseWriteRecoveryPage(
                   input.instruction,
                   input.verification,
+                  member.goal,
                 ),
         );
       } catch {
@@ -3752,7 +3802,12 @@ export function app(
     const fields = req.body as Fields;
     if (
       fields.confirm !== "yes" ||
-      Object.keys(fields).some((key) => key !== "csrf" && key !== "confirm")
+      Object.keys(fields).some(
+        (key) => key !== "csrf" && key !== "confirm" && key !== "goal",
+      ) ||
+      (fields.goal !== undefined &&
+        (typeof fields.goal !== "string" ||
+          !["everyday", "work", "build", "unattributed"].includes(fields.goal)))
     ) {
       res
         .status(422)
@@ -3770,6 +3825,7 @@ export function app(
         res.locals.token as string,
         lessonId,
         parsedVersion,
+        fields.goal as import("./store.ts").ExerciseGoal | undefined,
       );
     } catch {
       res

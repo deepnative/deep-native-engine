@@ -70,23 +70,8 @@ it("passes untrusted answers as bound parameters and scopes versioned reads and 
     null,
   ]);
   expect(await db.progress("owned")).toBeUndefined();
-  const answer = "'; DROP TABLE learners;--";
-  await db.save("owned", {
-    instruction: answer,
-    verification: "check",
-    complete: true,
-  });
-  expect(p.query.mock.calls[2]![1]).toEqual([
-    "owned",
-    "clear-instructions",
-    1,
-    answer,
-    "check",
-    true,
-  ]);
-  expect(p.query.mock.calls[2]![0]).not.toContain(answer);
   await db.remove("owned");
-  expect(p.query.mock.calls[3]![1]).toEqual(["owned"]);
+  expect(p.query.mock.calls[2]![1]).toEqual(["owned"]);
 });
 it("binds member and exact lesson version for observed reading and explicit state changes", async () => {
   const p = pool(),
@@ -193,14 +178,6 @@ it("saves profile changes by the session-derived learner and preserves the pract
     null,
     null,
   ]);
-  await db.save("owned", {
-    instruction: "sample",
-    verification: "check",
-    complete: false,
-  });
-  expect(p.query.mock.calls[3]![0]).toContain(
-    "goal_at_start=COALESCE(exercises.goal_at_start",
-  );
 });
 it("applies the transactional migration and surfaces database failures to the caller", async () => {
   const p = pool();
@@ -209,13 +186,7 @@ it("applies the transactional migration and surfaces database failures to the ca
   expect(p.query.mock.calls[0]![0]).toContain("ON DELETE CASCADE");
   expect(p.query.mock.calls[0]![0]).toContain("adapter_jobs");
   p.query.mockRejectedValueOnce(new Error("offline"));
-  await expect(
-    store(p.value).save("a", {
-      instruction: "",
-      verification: "",
-      complete: false,
-    }),
-  ).rejects.toThrow("offline");
+  await expect(store(p.value).remove("a")).rejects.toThrow("offline");
 });
 it("pins only a currently published assignment version to a session-owned learner", async () => {
   const p = pool(),
@@ -312,6 +283,9 @@ function exercisePool(
     expired?: boolean;
     failAt?: string;
     rollbackFails?: boolean;
+    saveCount?: number;
+    goal?: string;
+    missingLearner?: boolean;
   } = {},
 ) {
   const query = vi.fn(async (sql: string) => {
@@ -326,6 +300,21 @@ function exercisePool(
       };
     if (sql.startsWith("SELECT id FROM workspaces"))
       return { rows: options.workspace === false ? [] : [{ id: "owned" }] };
+    if (sql.startsWith("SELECT goal FROM learners"))
+      return {
+        rows: options.missingLearner
+          ? []
+          : [{ goal: options.goal ?? "everyday" }],
+      };
+    if (sql.startsWith("INSERT INTO exercises"))
+      return { rows: [], rowCount: options.saveCount ?? 1 };
+    if (sql.startsWith("SELECT withdrawn_at"))
+      return {
+        rows:
+          options.existing === false
+            ? []
+            : [{ withdrawn_at: options.withdrawn ? new Date() : null }],
+      };
     if (sql.startsWith("SELECT completed_at"))
       return {
         rows:
@@ -333,6 +322,7 @@ function exercisePool(
             ? []
             : [
                 {
+                  goal_slot: "everyday",
                   completed_at:
                     options.completed === false ? null : new Date("2026-01-01"),
                   withdrawn_at: options.withdrawn
@@ -471,31 +461,57 @@ it("rolls back exercise callback/query/commit failures and discards a failed rol
   ).rejects.toThrow("connection unavailable");
 });
 
-it("distinguishes saved, immutable completion and withdrawn exercise save outcomes", async () => {
-  const p = pool(),
-    db = store(p.value);
-  p.query.mockResolvedValueOnce({ rows: [], rowCount: 1 });
-  expect(
-    await db.save("owned", {
-      instruction: "sample",
-      verification: "check",
+it.each([
+  [{}, "saved"],
+  [{ saveCount: 0 }, "unchanged"],
+  [{ saveCount: 0, existing: false }, "unchanged"],
+  [{ saveCount: 0, withdrawn: true }, "withdrawn"],
+  [{ principal: false }, "unavailable"],
+  [{ workspace: false }, "unavailable"],
+  [{ expired: true }, "unavailable"],
+  [{ missingLearner: true }, "unavailable"],
+  [{ goal: "work" }, "stale-goal"],
+] as const)(
+  "saves only the locked matching goal and reports %j",
+  async (options, outcome) => {
+    const p = exercisePool(options);
+    const input = {
+      instruction: "'; DROP TABLE learners;--",
+      verification: "Invented check",
       complete: true,
-    }),
-  ).toBe("saved");
-  for (const rows of [
-    [],
-    [{ withdrawn_at: null }],
-    [{ withdrawn_at: new Date() }],
-  ]) {
-    p.query
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
-      .mockResolvedValueOnce({ rows });
-    expect(
-      await db.save("owned", {
-        instruction: "stale",
-        verification: "stale",
-        complete: false,
-      }),
-    ).toBe(rows[0]?.withdrawn_at ? "withdrawn" : "unchanged");
-  }
+      goal: "everyday" as const,
+    };
+    expect(await store(p.value).save("owned", input)).toBe(outcome);
+    const insert = p.query.mock.calls.find(([sql]) =>
+      sql.startsWith("INSERT INTO exercises"),
+    );
+    if (outcome !== "unavailable" && outcome !== "stale-goal") {
+      expect(insert).toBeDefined();
+      expect(insert![0]).not.toContain(input.instruction);
+      expect(p.query).toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO exercises"),
+        [
+          "owned",
+          "clear-instructions",
+          1,
+          input.instruction,
+          input.verification,
+          true,
+          "everyday",
+        ],
+      );
+    }
+  },
+);
+it("rejects a forged goal slot before opening a withdrawal transaction", async () => {
+  const p = exercisePool();
+  expect(
+    await store(p.value).withdrawExercise(
+      "owner",
+      "clear-instructions",
+      1,
+      "other" as "work",
+    ),
+  ).toBe("unavailable");
+  expect(p.connect).not.toHaveBeenCalled();
 });

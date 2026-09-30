@@ -1869,6 +1869,15 @@ it("backfills and safely reruns authorization migration over populated learning 
         "utf8",
       ),
     );
+    await client.query(
+      await readFile(
+        new URL(
+          "../../migrations/048-goal-scoped-starter.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     const migrated = store(client as unknown as Pool);
     await expect(migrated.session(activeToken)).resolves.toMatchObject({
       kind: "active",
@@ -2403,7 +2412,7 @@ it("keeps synthetic assignment submissions immutable across private revisions an
   expect(ownedExport).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v11",
+      version: "local-member-records-v12",
       records: {
         assignmentSubmissions: [
           { attemptId: id, sequence: 1, response: firstText },
@@ -5131,9 +5140,9 @@ it("enforces relational constraints and parameterizes hostile content", async ()
       learner.id,
     ]),
   ).rejects.toMatchObject({ code: "23514" });
-  await expect(
-    db.save(randomBytes(16).toString("hex"), input),
-  ).rejects.toThrow();
+  await expect(db.save(randomBytes(16).toString("hex"), input)).resolves.toBe(
+    "unavailable",
+  );
   await expect(
     db.save(learner.id, { ...input, instruction: "a".repeat(2001) }),
   ).rejects.toMatchObject({ code: "23514" });
@@ -5287,7 +5296,7 @@ it("attributes deterministic adapter jobs only to an active member and keeps ide
   expect(await memberExportStore(pool).exportOwned(owner.token)).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v11",
+      version: "local-member-records-v12",
       records: { adapterJobs: [{ id: first.id, mode: "test" }] },
     },
   });
@@ -6302,13 +6311,21 @@ it("reads mixed starter versions for owner progress without exposing withdrawn w
   expect(
     progress?.map((item) => [item.version, item.state, item.href]),
   ).toEqual([
-    [1, "Self-reported complete", "/lesson?version=1#starter-version-1"],
+    [
+      1,
+      "Self-reported complete",
+      "/lesson?version=1&goal=everyday#starter-version-1-everyday",
+    ],
     [
       2,
       "Self-reported complete; text withdrawn",
-      "/lesson?version=2#starter-version-2",
+      "/lesson?version=2&goal=work#starter-version-2-work",
     ],
-    [3, "Self-reported complete", "/lesson?version=3#starter-version-3"],
+    [
+      3,
+      "Self-reported complete",
+      "/lesson?version=3&goal=build#starter-version-3-build",
+    ],
   ]);
   expect(JSON.stringify(progress)).not.toContain("Older invented words");
   expect(await db.withExerciseRead(other.token, (rows) => rows)).toEqual([]);
@@ -6582,30 +6599,24 @@ it.each(["save-first", "withdraw-first"] as const)(
     const owner = await member();
     await db.save(owner.learner.id, input);
     if (order === "save-first") {
-      const client = await pool.connect();
+      const first = controlledExercise("SELECT goal FROM learners");
+      const saving = first.controlled.save(owner.learner.id, {
+        ...input,
+        instruction: "Stale text",
+      });
       let withdrawal: Promise<string> | undefined;
       try {
-        await client.query("BEGIN");
-        expect(
-          await store(client as unknown as Pool).save(owner.learner.id, {
-            ...input,
-            instruction: "Stale text",
-          }),
-        ).toBe("unchanged");
+        await first.reached.wait;
         withdrawal = db.withdrawExercise(owner.token, "clear-instructions", 1);
         expect(
-          (
-            await blockingPids(
-              "SELECT completed_at,withdrawn_at FROM exercises",
-            )
-          ).length,
+          (await blockingPids("SELECT id FROM workspaces")).length,
         ).toBeGreaterThan(0);
-        await client.query("COMMIT");
+        first.resume.release();
+        expect(await saving).toBe("unchanged");
         expect(await withdrawal).toBe("withdrawn");
       } finally {
-        await client.query("ROLLBACK");
-        await Promise.allSettled(withdrawal ? [withdrawal] : []);
-        client.release();
+        first.resume.release();
+        await Promise.allSettled([saving, ...(withdrawal ? [withdrawal] : [])]);
       }
     } else {
       const first = controlledExercise("UPDATE exercises SET instruction=NULL");
@@ -6622,7 +6633,7 @@ it.each(["save-first", "withdraw-first"] as const)(
           instruction: "Stale text",
         });
         expect(
-          (await blockingPids("INSERT INTO exercises")).length,
+          (await blockingPids("SELECT id FROM workspaces")).length,
         ).toBeGreaterThan(0);
         first.resume.release();
         expect(await withdrawal).toBe("withdrawn");

@@ -150,16 +150,18 @@ test("[L84] three learner backgrounds can copy an uncertain exercise write and i
         await page.keyboard.press("Enter");
         const saved = await popupPromise;
         await saved.waitForLoadState();
-        await expect(saved).toHaveURL(/\/lesson$/);
-        await expect(saved.getByLabel("Your instruction to AI")).toHaveValue(
-          priorInstruction,
+        await expect(saved).toHaveURL(
+          new RegExp(`/lesson\\?version=1&goal=${goal}$`),
         );
         await expect(
-          saved.getByLabel("How will you check the result?"),
-        ).toHaveValue(priorVerification);
+          saved.getByText(priorInstruction, { exact: true }),
+        ).toBeVisible();
+        await expect(
+          saved.getByText(priorVerification, { exact: true }),
+        ).toBeVisible();
         await expect(
           saved.getByRole("button", { name: "Complete exercise" }),
-        ).toBeVisible();
+        ).toHaveCount(0);
         await expect(
           page.getByRole("heading", { name: "Save outcome unknown" }),
         ).toBeVisible();

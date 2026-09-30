@@ -95,15 +95,17 @@ test("[L89] retained starter versions remain private, exact and text-free after 
     });
     await expect(exactLink).toHaveAttribute(
       "href",
-      "/lesson?version=2#starter-version-2",
+      `/lesson?version=2&goal=${goal}#starter-version-2-${goal}`,
     );
     await tabTo(page, exactLink);
     await page.keyboard.press("Enter");
-    await expect(page).toHaveURL(/\/lesson\?version=2#starter-version-2$/);
-    await expect(page.locator("#starter-version-2")).toContainText(
+    await expect(page).toHaveURL(
+      new RegExp(`/lesson\\?version=2&goal=${goal}#starter-version-2-${goal}$`),
+    );
+    await expect(page.locator(`#starter-version-2-${goal}`)).toContainText(
       "Saved exercise text withdrawn",
     );
-    await expect(page.locator("#starter-version-2")).not.toContainText(
+    await expect(page.locator(`#starter-version-2-${goal}`)).not.toContainText(
       "Version two invented private words",
     );
     await page.goto("/progress");
@@ -111,8 +113,10 @@ test("[L89] retained starter versions remain private, exact and text-free after 
     await third
       .getByRole("link", { name: "Open this private activity" })
       .click();
-    await expect(page).toHaveURL(/\/lesson\?version=3#starter-version-3$/);
-    await expect(page.locator("#starter-version-3")).toContainText(
+    await expect(page).toHaveURL(
+      new RegExp(`/lesson\\?version=3&goal=${goal}#starter-version-3-${goal}$`),
+    );
+    await expect(page.locator(`#starter-version-3-${goal}`)).toContainText(
       "Version three invented private words",
     );
     await page.goto("/learn");
