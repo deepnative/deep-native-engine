@@ -27,7 +27,7 @@ it("keeps attempts disabled unless a real store is wired", async () => {
 });
 
 it("reads only the hashed owner session and preserves missing results", async () => {
-  const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 0 });
+  let listed: { id: string }[] = [];
   const detailQuery = vi.fn(async (statement: string, params?: unknown[]) => {
     if (statement.includes("FROM principals"))
       return {
@@ -39,16 +39,19 @@ it("reads only the hashed owner session and preserves missing results", async ()
       return { rows: [{ valid: true }] };
     if (statement.includes("FROM assignment_attempts a"))
       return {
-        rows: params?.[1] === "owned" ? [{ id: "owned", revision: 2 }] : [],
+        rows: statement.includes('AS "submissionHistory"')
+          ? listed
+          : params?.[1] === "owned"
+            ? [{ id: "owned", revision: 2 }]
+            : [],
       };
     return { rows: [] };
   });
   const connect = vi.fn(async () => ({ query: detailQuery, release: vi.fn() }));
-  const attempts = attemptStore({ query, connect } as unknown as Pool);
+  const attempts = attemptStore({ connect } as unknown as Pool);
   const credential = "a".repeat(64);
   expect(await attempts.list(credential)).toEqual([]);
   expect(await attempts.detail(credential, "attempt-id")).toBeNull();
-  expect(query.mock.calls[0]![1][0]).toBe(hash(credential));
   expect(
     detailQuery.mock.calls.find(([sql]) =>
       sql.includes("FROM principals"),
@@ -58,7 +61,7 @@ it("reads only the hashed owner session and preserves missing results", async ()
     id: "owned",
     revision: 2,
   });
-  query.mockResolvedValueOnce({ rows: [{ id: "owned" }] });
+  listed = [{ id: "owned" }];
   expect(await attempts.list(credential)).toEqual([{ id: "owned" }]);
 });
 
@@ -561,3 +564,17 @@ it("keeps a connection failure as an unconfirmed write error", async () => {
     "Connection unavailable",
   );
 });
+
+it.each([
+  ["revoked principal", { principal: false }],
+  ["deleting workspace", { workspace: false }],
+  ["expired after read", { current: false }],
+] as const)(
+  "distinguishes denied history from an empty history for %s",
+  async (_reason, options) => {
+    const db = detailPool(options);
+    expect(await attemptStore(db.pool).list("owner")).toBeNull();
+    expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+    expect(db.release).toHaveBeenCalledWith(undefined);
+  },
+);

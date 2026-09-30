@@ -2280,7 +2280,7 @@ it("pins one private assignment attempt, serializes drafts and preserves history
   expect(ids[0]).toMatch(/^[a-f0-9-]{36}$/);
   expect(ids[0]).toBe(ids[1]);
   const id = ids[0]!;
-  expect((await attempts.list(owner.token)).map((entry) => entry.id)).toEqual([
+  expect((await attempts.list(owner.token))!.map((entry) => entry.id)).toEqual([
     id,
   ]);
   expect(await attempts.list(outsider.token)).toEqual([]);

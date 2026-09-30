@@ -1,4 +1,8 @@
 import { randomBytes } from "node:crypto";
+import request from "supertest";
+import { app } from "../../src/app.ts";
+import { COOKIE } from "../../src/session.ts";
+import { withLoopback } from "../support/loopback-server.ts";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { attemptStore } from "../../src/attempts.ts";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -254,4 +258,149 @@ it.each(
     );
     expect(await item.retained()).toEqual(before);
   },
+);
+
+it("withholds private assignment history from a deleting workspace at the store and route", async () => {
+  const item = await fixture("revise");
+  const before = await item.retained();
+  await pool.query(
+    "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+    [item.owner],
+  );
+  expect.soft(await attempts.list(item.token)).toBeNull();
+  const response = await withLoopback(
+    app(db, {
+      origin: "http://127.0.0.1:3000",
+      secret: "synthetic-attempt-list-secret",
+      attempts,
+    }),
+    (server) =>
+      request(server)
+        .get("/assignments/attempts")
+        .set("Host", "127.0.0.1:3000")
+        .set("Cookie", `${COOKIE}=${item.token}`),
+  );
+  expect.soft(response.status).toBe(403);
+  expect.soft(response.text).not.toContain("Invented expiry assignment");
+  expect.soft(response.text).not.toContain(item.id);
+  expect(await item.retained()).toEqual(before);
+});
+
+it("withholds assignment history after session expiry during a database read wait", async () => {
+  const item = await fixture("revise");
+  const before = await item.retained();
+  await pool.query(
+    "UPDATE principals SET expires_at=clock_timestamp()+interval '2 seconds' WHERE id=$1",
+    [item.owner],
+  );
+  const holder = await pool.connect();
+  let pending: ReturnType<typeof attempts.list> | undefined;
+  try {
+    await holder.query("BEGIN");
+    const pid = (await holder.query("SELECT pg_backend_pid() AS pid")).rows[0]
+      .pid;
+    await holder.query(
+      "LOCK TABLE assignment_attempts IN ACCESS EXCLUSIVE MODE",
+    );
+    pending = attempts.list(item.token);
+    await expect
+      .poll(
+        async () =>
+          (
+            await pool.query(
+              `SELECT 1 FROM pg_stat_activity waiter CROSS JOIN principals p
+       WHERE p.id=$2 AND waiter.state='active' AND waiter.wait_event_type='Lock'
+         AND $1::integer=ANY(pg_blocking_pids(waiter.pid))
+         AND waiter.xact_start<p.expires_at AND p.expires_at<=clock_timestamp()`,
+              [pid, item.owner],
+            )
+          ).rowCount,
+        { timeout: 4_000, interval: 20 },
+      )
+      .toBe(1);
+    await holder.query("COMMIT");
+    expect(await pending).toBeNull();
+    expect(await item.retained()).toEqual(before);
+  } finally {
+    await holder.query("ROLLBACK");
+    await Promise.allSettled(pending ? [pending] : []);
+    holder.release();
+  }
+}, 10_000);
+
+it("retains active owner metadata across repeat reads while isolating another member and rejecting revoked or expired owners", async () => {
+  const item = await fixture("revise");
+  const before = await item.retained();
+  const list = await attempts.list(item.token);
+  expect(list).toMatchObject([
+    { id: item.id, submissionCount: 1, submissionHistory: [{ sequence: 1 }] },
+  ]);
+  expect(await attempts.list(item.token)).toEqual(list);
+  const outsider = randomBytes(32).toString("hex");
+  await db.create(outsider, { background: "professional", goal: "work" });
+  expect(await attempts.list(outsider)).toEqual([]);
+  await pool.query(
+    "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+    [item.owner],
+  );
+  expect(await attempts.list(item.token)).toBeNull();
+  await pool.query(
+    "UPDATE principals SET revoked_at=NULL,expires_at=clock_timestamp() WHERE id=$1",
+    [item.owner],
+  );
+  expect(await attempts.list(item.token)).toBeNull();
+  expect(await item.retained()).toEqual(before);
+});
+
+it.each(["revocation", "deletion", "valid"] as const)(
+  "serializes assignment history behind a concurrent %s transaction",
+  async (change) => {
+    const item = await fixture("revise");
+    const before = await item.retained();
+    const holder = await pool.connect();
+    let pending: ReturnType<typeof attempts.list> | undefined;
+    try {
+      await holder.query("BEGIN");
+      const pid = (await holder.query("SELECT pg_backend_pid() AS pid")).rows[0]
+        .pid;
+      if (change === "revocation")
+        await holder.query(
+          "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+          [item.owner],
+        );
+      else if (change === "deletion")
+        await holder.query(
+          "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+          [item.owner],
+        );
+      else
+        await holder.query(
+          "SELECT id FROM workspaces WHERE owner_principal_id=$1 FOR UPDATE",
+          [item.owner],
+        );
+      pending = attempts.list(item.token);
+      await expect
+        .poll(
+          async () =>
+            (
+              await pool.query(
+                "SELECT 1 FROM pg_stat_activity WHERE state='active' AND wait_event_type='Lock' AND $1::integer=ANY(pg_blocking_pids(pid))",
+                [pid],
+              )
+            ).rowCount,
+          { timeout: 4_000, interval: 20 },
+        )
+        .toBe(1);
+      await holder.query("COMMIT");
+      if (change === "valid")
+        expect(await pending).toMatchObject([{ id: item.id }]);
+      else expect(await pending).toBeNull();
+      expect(await item.retained()).toEqual(before);
+    } finally {
+      await holder.query("ROLLBACK");
+      await Promise.allSettled(pending ? [pending] : []);
+      holder.release();
+    }
+  },
+  10_000,
 );
