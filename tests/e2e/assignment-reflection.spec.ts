@@ -142,7 +142,7 @@ test("[L97] three backgrounds reflect on an exact rubric, revise, compare, expor
         .fill("Add an invented verification step.");
       await reflection
         .getByLabel(
-          "I used only invented or sample information for this self-reflection.",
+          "This self-reflection contains only invented or sample information.",
         )
         .check();
       await reflection
@@ -287,7 +287,7 @@ test("[L98] stale, forged, outsider and expired reflection writes preserve priva
       .fill("Current private evidence");
     await ownerReflection
       .getByLabel(
-        "I used only invented or sample information for this self-reflection.",
+        "This self-reflection contains only invented or sample information.",
       )
       .check();
     await ownerReflection
@@ -301,7 +301,7 @@ test("[L98] stale, forged, outsider and expired reflection writes preserve priva
       .fill("Unsaved competing evidence <copy>");
     await staleReflection
       .getByLabel(
-        "I used only invented or sample information for this self-reflection.",
+        "This self-reflection contains only invented or sample information.",
       )
       .check();
     await staleReflection

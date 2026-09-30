@@ -2980,9 +2980,11 @@ export function app(
       res
         .status(409)
         .send(
-          errorPage(
-            "Attempt unchanged",
-            "Open one of your own saved attempts.",
+          assignmentWriteRecoveryPage(
+            "Attempt unavailable",
+            "The attempt or session is no longer available. Copy your response before returning to your learning path.",
+            response,
+            id,
           ),
         );
       return;
