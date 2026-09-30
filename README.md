@@ -1,10 +1,19 @@
 # Deep Native Engine
 
-An AI learning and participation ecosystem for IT practitioners, professionals in other fields, and anyone who wants to learn, apply AI and contribute with others. See [the product direction](assets/docs/PRODUCT-DIRECTION.md) for audiences, shared learning paths and optional coaching services. The first local learning slice is implemented; the full roadmap remains in progress. The [GitHub project](https://github.com/orgs/deepnative/projects/1/views/1) and [master roadmap](https://github.com/deepnative/deep-native-engine/issues/1) track delivery.
+Deep Native Engine helps curious learners, IT practitioners and professionals in other fields learn to use AI in practical ways. You can start without coding or a career plan: choose a direction, try a small exercise and decide what to learn next.
+
+## What you can do in the current preview
+
+- **Find a starting point.** Choose whether you want to explore AI, use it at work or build something. Your goal and background shape a simple learning path that you can change later.
+- **Learn by doing.** Work through a short lesson on giving AI a clear instruction, then practise with invented examples. Browse sample lessons and compare your own response with the source material.
+- **Keep track of your work.** Save an exercise draft, mark it complete through self-assessment, and revisit your private learning activity. You can also plan milestones and keep sample assignments or evidence.
+- **Explore ways to participate.** Try local previews of learning circles and events, and draft a contribution. Optional career planning stays private and unsent.
+
+This is a **local learning preview**, not a launched service. Lessons and participation examples are synthetic. There is no live AI provider, community discussion, qualified assessment, real booking or payment flow. Use invented or sample information only. See the [product direction](assets/docs/PRODUCT-DIRECTION.md) for the wider vision and the [project board](https://github.com/orgs/deepnative/projects/1/views/1) for work still in progress.
 
 ## Run the local learning preview
 
-Choose a goal, practise a beginner-friendly AI instruction, save a draft and complete a self-assessed exercise. Examples support curious learners, non-IT professionals and IT practitioners. Work persists in local PostgreSQL and is private to its browser session; use invented data only.
+Your preview work is stored in local PostgreSQL and accessed through your browser session. Use it on your own computer with sample data.
 
 Prerequisites: Node 24 (`.nvmrc`), Git, Make, Python 3.11+, Docker/Compose with a running daemon.
 
@@ -16,7 +25,7 @@ make dev
 
 Open `http://127.0.0.1:3000`. Setup installs locked dependencies, Chromium, the local database and the pre-push hook. It preserves an existing `.env`. See [verification and troubleshooting](assets/docs/workflows/VERIFICATION.md).
 
-The shared gate enforces >=99% unit statements, branches, functions and lines, >=99% documented slice journeys, and 100% critical journeys and required test passes. It runs real PostgreSQL integration and desktop/mobile Chromium tests. [Scope and acceptance](assets/docs/INITIAL-LEARNING-SLICE.md) explain the remaining full-MVP work. Production accounts, qualified review, community, live AI and payments are not yet available.
+The [quality gates](assets/docs/context/QUALITY-GATES.md) and [scope and acceptance](assets/docs/INITIAL-LEARNING-SLICE.md) explain what is tested in this preview and what remains for the full MVP.
 
 ## Team setup
 
