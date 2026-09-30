@@ -1,8 +1,16 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 async function tabTo(page: Page, target: Locator) {
+  // macOS WebKit uses Option+Tab to include links in keyboard traversal when
+  // the host's full keyboard-navigation preference is off. Linux WebKit and
+  // the other engines use Tab. Keep this a real keyboard traversal.
+  const tabKey =
+    process.platform === "darwin" &&
+    page.context().browser()?.browserType().name() === "webkit"
+      ? "Alt+Tab"
+      : "Tab";
   for (let step = 0; step < 80; step += 1) {
-    await page.keyboard.press("Tab");
+    await page.keyboard.press(tabKey);
     if (
       await target.evaluate((element) => element === document.activeElement)
     ) {

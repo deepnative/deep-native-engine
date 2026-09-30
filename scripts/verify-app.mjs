@@ -15,6 +15,7 @@ import {
   assertUnitResults,
   assertCoverage,
   assertJourneys,
+  assertCrossBrowserJourney,
   assertProvisionalReleaseJourneys,
   requireGate,
 } from "./quality-gates.mjs";
@@ -205,6 +206,7 @@ try {
     "integration-results.json",
     "integration-unhandled.json",
     "e2e-results.json",
+    "e2e-cross-browser-results.json",
     "e2e-provisional-results.json",
     "application-verification.json",
   ])
@@ -278,6 +280,13 @@ try {
   report.journeys = assertJourneys(
     JSON.parse(readFileSync("tests/e2e/scenarios.json", "utf8")),
     read("e2e-results.json"),
+  );
+  run("npm", ["run", "test:e2e:cross-browser"], env);
+  stage = "local cross-browser keyboard journey evidence";
+  report.crossBrowserKeyboardJourney = assertCrossBrowserJourney(
+    JSON.parse(readFileSync("tests/e2e/cross-browser-scenarios.json", "utf8")),
+    JSON.parse(readFileSync("tests/e2e/scenarios.json", "utf8")),
+    read("e2e-cross-browser-results.json"),
   );
   stage = "provisional test database setup";
   provisionalName = `dne_test_${randomBytes(16).toString("hex")}`;
