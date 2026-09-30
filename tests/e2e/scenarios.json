@@ -849,6 +849,15 @@
       "expected": "Only the owner can release the sample hold; rollback and uncertain response preserve inspectable recovery; one terminal released receipt and immutable release event conserve units; an old replay cannot release a new hold; revoked sessions reveal or mutate no receipt; explicit sample-only wording and accessible action work on desktop and mobile",
       "issues": [29, 385],
       "critical": true
+    },
+    {
+      "id": "L95",
+      "actor": "General learner with an accepted local deletion marker",
+      "preconditions": "Private local preview with saved practice and a persisted deletion marker older than the recovery grace period; desktop and mobile Chromium",
+      "steps": "Seed the already accepted pending marker after a local interruption, wait for bounded recovery, then replay the old browser cookie against the learning path",
+      "expected": "Background recovery removes the member and saved practice without a live initiating session; the stale cookie cannot reopen private work and the browser offers a fresh start without claiming hosted or backup erasure",
+      "issues": [40, 42, 242],
+      "critical": true
     }
   ],
   "fullMvp": [

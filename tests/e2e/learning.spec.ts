@@ -921,6 +921,51 @@ test("[L09] deleting the preview removes owned records and invalidates the old c
     page.getByRole("button", { name: "Start my learning path" }),
   ).toBeVisible();
 });
+test("[L95] an accepted pending local deletion finishes without the old browser session", async ({
+  page,
+  context,
+}) => {
+  await begin(page);
+  await fill(page);
+  await page.getByRole("button", { name: "Save draft" }).click();
+  const old = await session(context);
+  // The real confirmation and partial-object failure are exercised against
+  // PostgreSQL/object storage by the integration test. This browser fixture
+  // starts from that accepted durable marker after a simulated interruption.
+  await pool.query(
+    `UPDATE workspaces SET deleting_at=clock_timestamp()-INTERVAL '1 minute'
+     WHERE owner_principal_id=$1`,
+    [old.id],
+  );
+  await pool.query(
+    "UPDATE principals SET expires_at=clock_timestamp()-INTERVAL '1 second' WHERE id=$1",
+    [old.id],
+  );
+  await expect
+    .poll(
+      async () =>
+        (
+          await pool.query(
+            "SELECT count(*)::integer AS n FROM principals WHERE id=$1",
+            [old.id],
+          )
+        ).rows[0]?.n,
+      { timeout: 15_000 },
+    )
+    .toBe(0);
+  expect(
+    (
+      await pool.query("SELECT count(*) FROM exercises WHERE learner_id=$1", [
+        old.id,
+      ])
+    ).rows[0]?.count,
+  ).toBe("0");
+  await context.addCookies([old.cookie]);
+  await page.goto("/learn");
+  await expect(
+    page.getByRole("button", { name: "Start my learning path" }),
+  ).toBeVisible();
+});
 test("[L10] expired and forged sessions cannot recover private work and can restart", async ({
   page,
   context,

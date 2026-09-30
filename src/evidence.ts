@@ -1061,17 +1061,27 @@ export function evidenceStore(
       return true;
     },
     async removeWorkspace(token) {
-      if (!tokenPattern.test(token)) return;
+      if (!tokenPattern.test(token))
+        throw new Error("Member deletion authorization unavailable.");
       const client = await pool.connect();
       let workspaceId: string | undefined,
         released = false;
       try {
         await client.query("BEGIN");
+        const principalId = (
+          await client.query<{ id: string }>(
+            `SELECT id FROM principals
+             WHERE token_hash=$1 AND kind='member' AND revoked_at IS NULL
+               AND expires_at>clock_timestamp() FOR SHARE`,
+            [hash(token)],
+          )
+        ).rows[0]?.id;
+        if (!principalId)
+          throw new Error("Member deletion authorization unavailable.");
         workspaceId = (
           await client.query<{ id: string }>(
-            `SELECT w.id FROM workspaces w JOIN principals p ON p.id=w.owner_principal_id
-             WHERE p.token_hash=$1 AND p.kind='member' FOR UPDATE OF w`,
-            [hash(token)],
+            `SELECT id FROM workspaces WHERE owner_principal_id=$1 FOR UPDATE`,
+            [principalId],
           )
         ).rows[0]?.id;
         if (!workspaceId) {
@@ -1088,6 +1098,13 @@ export function evidenceStore(
            WHERE workspace_id=$1`,
           [workspaceId],
         );
+        const stillAuthorized = await client.query<{ id: string }>(
+          `SELECT id FROM principals WHERE id=$1 AND revoked_at IS NULL
+           AND expires_at>clock_timestamp()`,
+          [principalId],
+        );
+        if (!stillAuthorized.rows[0])
+          throw new Error("Member deletion authorization expired.");
         await client.query("COMMIT");
       } catch (error) {
         if (!(await rollback(client))) {

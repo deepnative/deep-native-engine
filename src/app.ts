@@ -3587,6 +3587,17 @@ export function app(
       res.status(413).json({ error: "invalid_evidence" });
       return;
     }
+    if (req.method === "POST" && req.path === "/delete") {
+      res
+        .status(503)
+        .send(
+          errorPage(
+            "Deletion status unconfirmed",
+            "We could not confirm completion. If the request was accepted, local cleanup will retry; this page is not a deletion receipt.",
+          ),
+        );
+      return;
+    }
     const write =
       req.method === "POST"
         ? attemptWritePath.exec(req.originalUrl.split("?")[0]!)

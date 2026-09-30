@@ -8,6 +8,7 @@ const doubles = vi.hoisted(() => ({
   migrate: vi.fn(),
   seed: vi.fn(),
   listen: vi.fn(),
+  recover: vi.fn(),
   pool: undefined as EventEmitter | undefined,
 }));
 vi.mock("pg", async () => {
@@ -33,6 +34,9 @@ vi.mock("../../src/catalog.ts", () => ({
   catalogStore: vi.fn(),
   seedDraftPack: doubles.seed,
 }));
+vi.mock("../../src/deletion-recovery.ts", () => ({
+  recoverPendingMemberDeletions: doubles.recover,
+}));
 import { evidenceCapabilityClock, start } from "../../src/runtime.ts";
 const env = {
   DNE_DATABASE_URL:
@@ -45,6 +49,12 @@ beforeEach(() => {
   doubles.end.mockResolvedValue(undefined);
   doubles.migrate.mockResolvedValue(undefined);
   doubles.seed.mockResolvedValue(12);
+  doubles.recover.mockResolvedValue({
+    examined: 0,
+    completed: 0,
+    failed: 0,
+    nextCursor: null,
+  });
 });
 it("controls only test evidence capabilities with a validated private clock file", () => {
   const root = mkdtempSync(join(tmpdir(), "dne-test-clock-"));
@@ -128,5 +138,64 @@ it("handles idle database errors without terminating or logging private connecti
     await running.close();
   } finally {
     log.mockRestore();
+  }
+});
+
+it("runs bounded deletion recovery without overlap and waits for it at shutdown", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    server();
+    let finish!: (value: {
+      examined: number;
+      completed: number;
+      failed: number;
+      nextCursor: string;
+    }) => void;
+    doubles.recover.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const running = await start(env);
+    expect(doubles.recover).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(doubles.recover).toHaveBeenCalledOnce();
+    const closing = running.close();
+    await Promise.resolve();
+    expect(doubles.end).not.toHaveBeenCalled();
+    finish({ examined: 1, completed: 0, failed: 1, nextCursor: "cursor" });
+    await closing;
+    expect(log).toHaveBeenCalledWith(
+      "A pending local deletion will be retried.",
+    );
+    expect(doubles.end).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(doubles.recover).toHaveBeenCalledOnce();
+  } finally {
+    log.mockRestore();
+    vi.useRealTimers();
+  }
+});
+
+it("retries a failed deletion scan without logging private errors", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    server();
+    doubles.recover.mockRejectedValueOnce(new Error("private storage path"));
+    const running = await start(env);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(doubles.recover).toHaveBeenCalledTimes(2);
+    expect(doubles.recover.mock.calls[1]?.[2]).toBeNull();
+    expect(log).toHaveBeenCalledWith(
+      "Pending local deletion recovery is unavailable.",
+    );
+    await running.close();
+  } finally {
+    log.mockRestore();
+    vi.useRealTimers();
   }
 });

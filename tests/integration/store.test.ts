@@ -4214,7 +4214,9 @@ it("serializes uploads with workspace deletion and rejects later uploads", async
   });
   await entered;
   const cleanup = evidence.removeWorkspace(owner.token);
-  const blockers = await blockingPids("SELECT w.id FROM workspaces w");
+  const blockers = await blockingPids(
+    "SELECT id FROM workspaces WHERE owner_principal_id",
+  );
   releaseWrite();
   expect(blockers).toContain(lockerPid);
   await expect(upload).resolves.toMatchObject({ kind: "created" });
