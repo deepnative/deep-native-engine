@@ -701,3 +701,502 @@ it("may settle an already-due incumbent before a denied contender but never leav
     ).rows,
   ).toEqual([{ available: 60, reserved: 0 }]);
 });
+
+it("withdraws an owner's active hold once, retains exact receipt fields, and frees the same sample slot for a new request", async () => {
+  const f = await fixture();
+  for (const background of ["explorer", "professional", "technical"] as const) {
+    const owner = await member(background);
+    const grantId = await grant(owner.id, `withdraw-${background}`),
+      requestId = randomUUID();
+    await memberHolds.request(owner.token, f.slotId, grantId, requestId);
+    const before = await memberHolds.get(owner.token, requestId);
+    const outcomes = await Promise.all([
+      memberHolds.withdraw(owner.token, requestId),
+      memberHolds.withdraw(owner.token, requestId),
+    ]);
+    expect(outcomes).toEqual([requestId, requestId]);
+    expect(await memberHolds.get(owner.token, requestId)).toEqual({
+      ...before,
+      state: "released",
+    });
+    expect((await memberHolds.snapshot(owner.token)).receipts).toEqual([
+      { ...before, state: "released" },
+    ]);
+    expect(
+      await memberHolds.request(owner.token, f.slotId, grantId, requestId),
+    ).toBe(requestId);
+    expect(await slots.list()).toHaveLength(1);
+    expect(
+      (
+        await pool.query(
+          "SELECT available,reserved,consumed,expired,quantity FROM synthetic_entitlement_grants WHERE id=$1",
+          [grantId],
+        )
+      ).rows,
+    ).toEqual([
+      { available: 60, reserved: 0, consumed: 0, expired: 0, quantity: 60 },
+    ]);
+    expect(
+      (
+        await pool.query(
+          "SELECT state,released_at,expired_at FROM synthetic_slot_holds WHERE member_id=$1",
+          [owner.id],
+        )
+      ).rows[0],
+    ).toMatchObject({
+      state: "released",
+      released_at: expect.any(Date),
+      expired_at: null,
+    });
+    expect(
+      (
+        await pool.query(
+          "SELECT operation FROM synthetic_entitlement_events WHERE member_id=$1 ORDER BY operation",
+          [owner.id],
+        )
+      ).rows,
+    ).toEqual([
+      { operation: "grant" },
+      { operation: "release" },
+      { operation: "reserve" },
+    ]);
+    await expect(
+      pool.query(
+        "UPDATE synthetic_entitlement_events SET quantity=0 WHERE member_id=$1 AND operation='release'",
+        [owner.id],
+      ),
+    ).rejects.toThrow("immutable");
+    const next = randomUUID();
+    await memberHolds.request(owner.token, f.slotId, grantId, next);
+    expect((await memberHolds.get(owner.token, next))!.state).toBe("held");
+    await memberHolds.withdraw(owner.token, next);
+  }
+});
+
+it("denies withdrawal by outsiders, staff, stale sessions, forged IDs and mismatched categories without disclosing or changing an owner hold", async () => {
+  const f = await fixture(),
+    owner = await member("explorer"),
+    other = await member("professional");
+  const grantId = await grant(owner.id, "withdraw-denials"),
+    requestId = randomUUID();
+  await memberHolds.request(owner.token, f.slotId, grantId, requestId);
+  const holdId = (
+    await pool.query(
+      "SELECT hold_id FROM synthetic_member_hold_receipts WHERE request_id=$1",
+      [requestId],
+    )
+  ).rows[0].hold_id;
+  for (const token of [
+    other.token,
+    f.admin.token,
+    f.operator.token,
+    f.coach.token,
+    "forged",
+  ]) {
+    await expect(memberHolds.withdraw(token, requestId)).rejects.toMatchObject({
+      code: "unavailable",
+    });
+    expect(await memberHolds.get(token, requestId)).toBeNull();
+  }
+  for (const id of [randomUUID(), holdId])
+    await expect(memberHolds.withdraw(owner.token, id)).rejects.toMatchObject({
+      code: "unavailable",
+    });
+  for (const kind of ["revoked_at", "expires_at"]) {
+    await pool.query(
+      `UPDATE principals SET ${kind}=clock_timestamp()-interval '1 second' WHERE id=$1`,
+      [owner.id],
+    );
+    await expect(
+      memberHolds.withdraw(owner.token, requestId),
+    ).rejects.toMatchObject({ code: "unavailable" });
+    expect(await memberHolds.get(owner.token, requestId)).toBeNull();
+    await pool.query(
+      kind === "revoked_at"
+        ? "UPDATE principals SET revoked_at=NULL WHERE id=$1"
+        : "UPDATE principals SET expires_at=clock_timestamp()+interval '1 day' WHERE id=$1",
+      [owner.id],
+    );
+  }
+  await pool.query(
+    "UPDATE synthetic_entitlement_grants SET category='review_minutes' WHERE id=$1",
+    [grantId],
+  );
+  await expect(
+    memberHolds.withdraw(owner.token, requestId),
+  ).rejects.toMatchObject({ code: "unavailable" });
+  await pool.query(
+    "UPDATE synthetic_entitlement_grants SET category='coach_minutes' WHERE id=$1",
+    [grantId],
+  );
+  expect((await memberHolds.get(owner.token, requestId))!.state).toBe("held");
+  expect(
+    (
+      await pool.query(
+        "SELECT operation FROM synthetic_entitlement_events WHERE operation='release'",
+      )
+    ).rowCount,
+  ).toBe(0);
+  expect(
+    (
+      await pool.query(
+        "SELECT available,reserved FROM synthetic_entitlement_grants WHERE id=$1",
+        [grantId],
+      )
+    ).rows,
+  ).toEqual([{ available: 0, reserved: 60 }]);
+  await pool.query("DELETE FROM principals WHERE id=$1", [owner.id]);
+  await expect(
+    memberHolds.withdraw(owner.token, requestId),
+  ).rejects.toMatchObject({ code: "unavailable" });
+  expect(await memberHolds.get(owner.token, requestId)).toBeNull();
+  expect(
+    (await pool.query("SELECT * FROM synthetic_member_hold_receipts")).rowCount,
+  ).toBe(0);
+});
+
+it("withdraws an active hold against a separately expired grant without reviving its units", async () => {
+  const f = await fixture(),
+    owner = await member("technical"),
+    grantId = await grant(owner.id, "withdraw-expired-grant"),
+    requestId = randomUUID();
+  await memberHolds.request(owner.token, f.slotId, grantId, requestId);
+  await pool.query(
+    "UPDATE synthetic_entitlement_grants SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+    [grantId],
+  );
+  await ledger.expire(owner.id, grantId, "expire-before-withdrawal");
+  expect(await memberHolds.withdraw(owner.token, requestId)).toBe(requestId);
+  expect(await memberHolds.withdraw(owner.token, requestId)).toBe(requestId);
+  expect((await memberHolds.get(owner.token, requestId))!.state).toBe(
+    "released",
+  );
+  expect(
+    (
+      await pool.query(
+        "SELECT available,reserved,expired,quantity FROM synthetic_entitlement_grants WHERE id=$1",
+        [grantId],
+      )
+    ).rows,
+  ).toEqual([{ available: 0, reserved: 0, expired: 60, quantity: 60 }]);
+  expect((await memberHolds.snapshot(owner.token)).grants).toEqual([]);
+});
+
+it("serializes due expiry, withdrawal and last-slot contenders into one terminal receipt and one replacement hold", async () => {
+  const f = await fixture(),
+    owner = await member("technical"),
+    other = await member("explorer"),
+    third = await member("professional");
+  const grantId = await grant(owner.id, "withdraw-expiry"),
+    otherGrant = await grant(other.id, "withdraw-contender"),
+    thirdGrant = await grant(third.id, "withdraw-third"),
+    requestId = randomUUID();
+  await memberHolds.request(owner.token, f.slotId, grantId, requestId);
+  await pool.query(
+    "UPDATE synthetic_slot_holds SET expires_at=clock_timestamp()-interval '1 second' WHERE member_id=$1",
+    [owner.id],
+  );
+  const results = await Promise.allSettled([
+    memberHolds.withdraw(owner.token, requestId),
+    memberHolds.get(owner.token, requestId),
+    memberHolds.request(other.token, f.slotId, otherGrant, randomUUID()),
+    memberHolds.request(third.token, f.slotId, thirdGrant, randomUUID()),
+  ]);
+  expect(results[0]).toMatchObject({ status: "fulfilled", value: requestId });
+  expect(results[1]).toMatchObject({
+    status: "fulfilled",
+    value: { state: "expired" },
+  });
+  expect(results.slice(2).filter((x) => x.status === "fulfilled")).toHaveLength(
+    1,
+  );
+  expect((await memberHolds.get(owner.token, requestId))!.state).toBe(
+    "expired",
+  );
+  expect(
+    (
+      await pool.query(
+        "SELECT * FROM synthetic_slot_holds WHERE slot_id=$1 AND state='held'",
+        [f.slotId],
+      )
+    ).rowCount,
+  ).toBe(1);
+  expect(
+    (
+      await pool.query(
+        "SELECT * FROM synthetic_entitlement_events WHERE member_id=$1 AND operation='release'",
+        [owner.id],
+      )
+    ).rowCount,
+  ).toBe(1);
+  expect(
+    (
+      await pool.query(
+        "SELECT available,reserved,expired FROM synthetic_entitlement_grants WHERE id=$1",
+        [grantId],
+      )
+    ).rows,
+  ).toEqual([{ available: 60, reserved: 0, expired: 0 }]);
+});
+
+it.each(["grant", "member", "revoked", "deadline"] as const)(
+  "rechecks %s after withdrawal waits for the slot lock",
+  async (kind) => {
+    const f = await fixture(),
+      owner = await member("professional"),
+      grantId = await grant(owner.id, "withdraw-wait"),
+      requestId = randomUUID();
+    await memberHolds.request(owner.token, f.slotId, grantId, requestId);
+    const lock = await pool.connect();
+    await lock.query("BEGIN");
+    await lock.query(
+      "SELECT id FROM expert_availability_slots WHERE id=$1 FOR UPDATE",
+      [f.slotId],
+    );
+    const pending = memberHolds.withdraw(owner.token, requestId).then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+    try {
+      await expect
+        .poll(
+          async () =>
+            Number(
+              (
+                await pool.query(
+                  "SELECT COUNT(*) FROM pg_stat_activity WHERE query LIKE 'SELECT withdraw_member_sample_hold(%' AND wait_event_type='Lock' AND datname=current_database() AND pid<>pg_backend_pid()",
+                )
+              ).rows[0].count,
+            ),
+          { timeout: 3000 },
+        )
+        .toBe(1);
+      if (kind === "grant")
+        await pool.query(
+          "UPDATE synthetic_entitlement_grants SET expires_at=clock_timestamp() WHERE id=$1",
+          [grantId],
+        );
+      else if (kind === "deadline")
+        await pool.query(
+          "UPDATE synthetic_slot_holds SET expires_at=clock_timestamp() WHERE member_id=$1",
+          [owner.id],
+        );
+      else
+        await pool.query(
+          kind === "member"
+            ? "UPDATE principals SET expires_at=clock_timestamp() WHERE id=$1"
+            : "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+          [owner.id],
+        );
+      await lock.query("COMMIT");
+      if (kind === "member" || kind === "revoked") {
+        expect(await pending).toMatchObject({ error: { code: "unavailable" } });
+        expect(await memberHolds.get(owner.token, requestId)).toBeNull();
+        expect(
+          (
+            await pool.query(
+              "SELECT available,reserved,expired FROM synthetic_entitlement_grants WHERE id=$1",
+              [grantId],
+            )
+          ).rows,
+        ).toEqual([{ available: 0, reserved: 60, expired: 0 }]);
+      } else {
+        expect(await pending).toEqual({ value: requestId });
+        expect((await memberHolds.get(owner.token, requestId))!.state).toBe(
+          kind === "deadline" ? "expired" : "released",
+        );
+        expect(
+          (
+            await pool.query(
+              "SELECT available,reserved,expired FROM synthetic_entitlement_grants WHERE id=$1",
+              [grantId],
+            )
+          ).rows,
+        ).toEqual([
+          {
+            available: kind === "grant" ? 0 : 60,
+            reserved: 0,
+            expired: kind === "grant" ? 60 : 0,
+          },
+        ]);
+      }
+    } finally {
+      await lock.query("ROLLBACK");
+      lock.release();
+      await pending;
+    }
+  },
+);
+
+it("rolls a withdrawal event failure back completely and recovers a committed withdrawal whose response was lost", async () => {
+  const f = await fixture(),
+    owner = await member("explorer"),
+    grantId = await grant(owner.id, "withdraw-fault"),
+    requestId = randomUUID();
+  await memberHolds.request(owner.token, f.slotId, grantId, requestId);
+  await pool.query(
+    "CREATE FUNCTION reject_test_withdrawal() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.operation='release' THEN RAISE EXCEPTION 'synthetic release event fault'; END IF; RETURN NEW; END $$",
+  );
+  await pool.query(
+    "CREATE TRIGGER reject_test_withdrawal BEFORE INSERT ON synthetic_entitlement_events FOR EACH ROW EXECUTE FUNCTION reject_test_withdrawal()",
+  );
+  try {
+    await expect(
+      memberHolds.withdraw(owner.token, requestId),
+    ).rejects.toMatchObject({ code: "uncertain" });
+    expect((await memberHolds.get(owner.token, requestId))!.state).toBe("held");
+    expect(await slots.list()).toEqual([]);
+    expect(
+      (await pool.query("SELECT state FROM synthetic_entitlement_reservations"))
+        .rows,
+    ).toEqual([{ state: "reserved" }]);
+    expect(
+      (
+        await pool.query(
+          "SELECT available,reserved FROM synthetic_entitlement_grants WHERE id=$1",
+          [grantId],
+        )
+      ).rows,
+    ).toEqual([{ available: 0, reserved: 60 }]);
+    expect(
+      (
+        await pool.query(
+          "SELECT * FROM synthetic_entitlement_events WHERE operation='release'",
+        )
+      ).rowCount,
+    ).toBe(0);
+  } finally {
+    await pool.query(
+      "DROP TRIGGER reject_test_withdrawal ON synthetic_entitlement_events",
+    );
+    await pool.query("DROP FUNCTION reject_test_withdrawal()");
+  }
+  const responseLoss = memberSlotHolds({
+    query: async (sql: string, values: unknown[]) => {
+      await pool.query(sql, values);
+      throw new Error("synthetic transport loss");
+    },
+  } as unknown as import("pg").Pool);
+  await expect(
+    responseLoss.withdraw(owner.token, requestId),
+  ).rejects.toMatchObject({ code: "uncertain" });
+  expect((await memberHolds.get(owner.token, requestId))!.state).toBe(
+    "released",
+  );
+  expect(await memberHolds.withdraw(owner.token, requestId)).toBe(requestId);
+  expect(
+    (
+      await pool.query(
+        "SELECT * FROM synthetic_entitlement_events WHERE operation='release'",
+      )
+    ).rowCount,
+  ).toBe(1);
+  expect(
+    (
+      await pool.query(
+        "SELECT available,reserved FROM synthetic_entitlement_grants WHERE id=$1",
+        [grantId],
+      )
+    ).rows,
+  ).toEqual([{ available: 60, reserved: 0 }]);
+});
+
+it("releases an active hold while two last-slot contenders wait, admitting exactly one new owner", async () => {
+  const f = await fixture(),
+    owner = await member("professional"),
+    b = await member("explorer"),
+    c = await member("technical");
+  const grantId = await grant(owner.id, "active-withdrawal-owner"),
+    gb = await grant(b.id, "active-withdrawal-b"),
+    gc = await grant(c.id, "active-withdrawal-c"),
+    requestId = randomUUID();
+  await memberHolds.request(owner.token, f.slotId, grantId, requestId);
+  const lock = await pool.connect();
+  await lock.query("BEGIN");
+  await lock.query(
+    "SELECT id FROM expert_availability_slots WHERE id=$1 FOR UPDATE",
+    [f.slotId],
+  );
+  const withdrawn = memberHolds.withdraw(owner.token, requestId);
+  let contenders: Promise<PromiseSettledResult<string>[]> | undefined;
+  try {
+    await expect
+      .poll(
+        async () =>
+          Number(
+            (
+              await pool.query(
+                "SELECT COUNT(*) FROM pg_stat_activity WHERE query LIKE 'SELECT withdraw_member_sample_hold(%' AND wait_event_type='Lock' AND datname=current_database() AND pid<>pg_backend_pid()",
+              )
+            ).rows[0].count,
+          ),
+        { timeout: 3000 },
+      )
+      .toBe(1);
+    contenders = Promise.allSettled([
+      memberHolds.request(b.token, f.slotId, gb, randomUUID()),
+      memberHolds.request(c.token, f.slotId, gc, randomUUID()),
+    ]);
+    await expect
+      .poll(
+        async () =>
+          Number(
+            (
+              await pool.query(
+                "SELECT COUNT(*) FROM pg_stat_activity WHERE query LIKE 'SELECT member_sample_hold(%' AND wait_event_type='Lock' AND datname=current_database() AND pid<>pg_backend_pid()",
+              )
+            ).rows[0].count,
+          ),
+        { timeout: 3000 },
+      )
+      .toBe(2);
+    await lock.query("COMMIT");
+    expect(await withdrawn).toBe(requestId);
+    expect(
+      (await contenders).filter((x) => x.status === "fulfilled"),
+    ).toHaveLength(1);
+    const receipt = await memberHolds.get(owner.token, requestId);
+    expect(receipt!.state).toBe("released");
+    expect(receipt!.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(
+      (
+        await pool.query(
+          "SELECT * FROM synthetic_slot_holds WHERE slot_id=$1 AND state='held'",
+          [f.slotId],
+        )
+      ).rowCount,
+    ).toBe(1);
+    expect(
+      (
+        await pool.query(
+          "SELECT * FROM synthetic_entitlement_events WHERE member_id=$1 AND operation='release'",
+          [owner.id],
+        )
+      ).rowCount,
+    ).toBe(1);
+    expect(
+      (
+        await pool.query(
+          "SELECT available,reserved FROM synthetic_entitlement_grants WHERE id=$1",
+          [grantId],
+        )
+      ).rows,
+    ).toEqual([{ available: 60, reserved: 0 }]);
+    expect(
+      (
+        await pool.query(
+          "SELECT available,reserved FROM synthetic_entitlement_grants WHERE id IN ($1,$2) ORDER BY available",
+          [gb, gc],
+        )
+      ).rows,
+    ).toEqual([
+      { available: 0, reserved: 60 },
+      { available: 60, reserved: 0 },
+    ]);
+  } finally {
+    await lock.query("ROLLBACK");
+    lock.release();
+    await withdrawn;
+    await contenders;
+  }
+});

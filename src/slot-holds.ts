@@ -132,7 +132,7 @@ export interface SampleHoldReceipt {
   startsAt: Date;
   endsAt: Date;
   expiresAt: Date;
-  state: "held" | "expired";
+  state: "held" | "expired" | "released";
   quantity: number;
 }
 export interface SampleHoldGrant {
@@ -144,6 +144,7 @@ export interface MemberHoldSnapshot {
   receipts: SampleHoldReceipt[];
 }
 export interface MemberSlotHolds {
+  withdraw(token: string, requestId: string): Promise<string>;
   snapshot(token: string): Promise<MemberHoldSnapshot>;
   get(token: string, requestId: string): Promise<SampleHoldReceipt | null>;
   request(
@@ -155,6 +156,9 @@ export interface MemberSlotHolds {
 }
 export function disabledMemberSlotHolds(): MemberSlotHolds {
   return {
+    withdraw: async () => {
+      throw new SlotHoldFailure("unavailable");
+    },
     snapshot: async () => ({ grants: [], receipts: [] }),
     get: async () => null,
     request: async () => {
@@ -195,6 +199,24 @@ export function memberSlotHolds(pool: Pool): MemberSlotHolds {
     return (await read()).rows;
   }
   return {
+    async withdraw(token, requestId) {
+      if (!validToken(token)) throw new SlotHoldFailure("invalid_request");
+      requireId(requestId);
+      try {
+        const result = await pool.query<{ id: string }>(
+          "SELECT withdraw_member_sample_hold($1,$2) AS id",
+          [hash(token), requestId],
+        );
+        if (!result.rows[0]) throw new Error("Missing sample receipt result");
+        return result.rows[0].id;
+      } catch (error) {
+        const code =
+          error && typeof error === "object" && "code" in error
+            ? String(error.code)
+            : "";
+        throw new SlotHoldFailure(codes[code] ?? "uncertain");
+      }
+    },
     async snapshot(token) {
       if (!validToken(token)) return { grants: [], receipts: [] };
       const own = await receipts(token, null);

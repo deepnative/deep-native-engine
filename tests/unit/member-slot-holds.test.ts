@@ -205,3 +205,75 @@ it("labels the receipt UTC fallback when a member removes or has no valid timezo
   expect(local).toContain("Member-local window");
   expect(local).not.toContain("no valid member time zone");
 });
+
+it("offers explicit withdrawal only on held receipts and keeps a released receipt with its original deadline", () => {
+  const held = sampleHoldReceiptPage(receipt, "UTC", "csrf-marker");
+  expect(held).toContain('method="post"');
+  expect(held).toContain(`/availability/holds/${id}/withdraw`);
+  expect(held).toContain('name="csrf" value="csrf-marker"');
+  expect(held).toContain("Withdraw sample hold");
+  expect(sampleHoldReceiptPage(receipt, "UTC")).not.toContain(
+    "Withdraw sample hold",
+  );
+  for (const state of ["released", "expired"] as const) {
+    const html = sampleHoldReceiptPage(
+      { ...receipt, state },
+      "UTC",
+      "csrf-marker",
+    );
+    expect(html).not.toContain("Withdraw sample hold");
+    expect(html).toContain(receipt.expiresAt.toISOString());
+    expect(html).toContain("units stay expired");
+    expect(html).toContain(`/availability/holds/${id}`);
+  }
+  expect(
+    sampleHoldReceiptPage(
+      { ...receipt, state: "released" },
+      "UTC",
+      "csrf-marker",
+    ),
+  ).toContain("You withdrew this sample hold");
+});
+
+it("uses only the authenticated token and receipt for withdrawal and preserves unknown-write recovery", async () => {
+  await expect(
+    disabledMemberSlotHolds().withdraw("token", id),
+  ).rejects.toMatchObject({ code: "unavailable" });
+  const query = vi.fn().mockResolvedValue({ rows: [{ id }] });
+  const api = memberSlotHolds({ query } as unknown as Pool);
+  for (const token of ["", " ", null as never])
+    await expect(api.withdraw(token, id)).rejects.toMatchObject({
+      code: "invalid_request",
+    });
+  await expect(api.withdraw("token", "bad")).rejects.toMatchObject({
+    code: "invalid_request",
+  });
+  expect(query).not.toHaveBeenCalled();
+  expect(await api.withdraw("token", id)).toBe(id);
+  expect(query).toHaveBeenCalledWith(
+    "SELECT withdraw_member_sample_hold($1,$2) AS id",
+    [hash("token"), id],
+  );
+  for (const [code, expected] of [
+    ["DN001", "invalid_request"],
+    ["DN002", "unavailable"],
+    ["08006", "uncertain"],
+  ]) {
+    query.mockRejectedValueOnce(
+      Object.assign(new Error("private failure"), { code }),
+    );
+    await expect(api.withdraw("token", id)).rejects.toMatchObject({
+      code: expected,
+    });
+  }
+  for (const error of [new Error("private failure"), null, "private failure"]) {
+    query.mockRejectedValueOnce(error);
+    await expect(api.withdraw("token", id)).rejects.toMatchObject({
+      code: "uncertain",
+    });
+  }
+  query.mockResolvedValueOnce({ rows: [] });
+  await expect(api.withdraw("token", id)).rejects.toMatchObject({
+    code: "uncertain",
+  });
+});

@@ -4318,6 +4318,7 @@ it("keeps member sample-hold request parameters, receipts and uncertain outcomes
     }),
     get: vi.fn<MemberSlotHolds["get"]>().mockResolvedValue(receipt),
     request: vi.fn<MemberSlotHolds["request"]>().mockResolvedValue(id),
+    withdraw: vi.fn<MemberSlotHolds["withdraw"]>().mockResolvedValue(id),
   };
   const db = storage();
   const availability = {
@@ -4434,6 +4435,49 @@ it("keeps member sample-hold request parameters, receipts and uncertain outcomes
   expect(
     (await agent.get("/availability").set("Host", host).expect(503)).text,
   ).toContain("Inspect your receipts again");
+  const withdraw = (extra: Record<string, unknown> = {}, target = id) =>
+    agent
+      .post(`/availability/holds/${target}/withdraw`)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...extra });
+  expect(shown.text).toContain("Withdraw sample hold");
+  expect((await withdraw().expect(303)).headers.location).toBe(
+    `/availability/holds/${id}`,
+  );
+  expect(holds.withdraw.mock.calls[0]![1]).toBe(id);
+  expect(holds.withdraw.mock.calls[0]![0]).not.toBe(member.id);
+  for (const extra of [
+    { memberId: "other" },
+    { category: "coach_minutes" },
+    { grantId: grant },
+    { requestId: id },
+  ])
+    await withdraw(extra).expect(422);
+  await withdraw({ csrf: "forged" }).expect(403);
+  expect(holds.withdraw).toHaveBeenCalledTimes(1);
+  holds.withdraw.mockRejectedValueOnce(new SlotHoldFailure("unavailable"));
+  expect((await withdraw().expect(409)).text).toContain(
+    "This withdrawal was not accepted",
+  );
+  holds.withdraw.mockRejectedValueOnce(new SlotHoldFailure("invalid_request"));
+  expect((await withdraw({}, "bad").expect(409)).text).not.toContain(
+    "Inspect this request's receipt",
+  );
+  for (const error of [
+    new SlotHoldFailure("uncertain"),
+    new Error("private withdrawal detail"),
+  ]) {
+    holds.withdraw.mockRejectedValueOnce(error);
+    const unknown = await withdraw().expect(503);
+    expect(unknown.text).toContain("Do not assume success or failure");
+    expect(unknown.text).toContain(`/availability/holds/${id}`);
+    expect(unknown.text).not.toContain("private withdrawal detail");
+  }
   db.session.mockResolvedValue({ kind: "expired" });
+  const writes = holds.withdraw.mock.calls.length;
+  await withdraw().expect(303);
+  expect(holds.withdraw).toHaveBeenCalledTimes(writes);
   await post(fields).expect(303);
 });
