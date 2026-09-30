@@ -495,6 +495,128 @@ async function circleMembershipRows(memberId: string) {
   ).rows;
 }
 
+it.each(["membership", "principal"] as const)(
+  "denies a circle leave that resumes after owner expiry during its %s-row lock wait",
+  async (lock) => {
+    const owner = await member();
+    expect(await circleStore(pool).join(owner.token, "everyday-ai")).toBe(
+      "joined",
+    );
+    const before = await circleMembershipRows(owner.learner.id);
+    const blocker = await pool.connect();
+    const waiter = await pool.connect();
+    let pending: Promise<boolean> | undefined;
+    try {
+      const blockerPid = (
+        await blocker.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+      ).rows[0]!.pid;
+      const waiterPid = (
+        await waiter.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+      ).rows[0]!.pid;
+      await pool.query(
+        "UPDATE principals SET expires_at=clock_timestamp()+interval '1 second' WHERE id=$1",
+        [owner.learner.id],
+      );
+      await blocker.query("BEGIN");
+      await blocker.query(
+        lock === "membership"
+          ? "SELECT 1 FROM preview_circle_memberships WHERE member_id=$1 FOR UPDATE"
+          : "SELECT id FROM principals WHERE id=$1 FOR UPDATE",
+        [owner.learner.id],
+      );
+      const borrowedPool = {
+        query: waiter.query.bind(waiter),
+        connect: async () => ({
+          query: waiter.query.bind(waiter),
+          release() {},
+        }),
+      } as unknown as Pool;
+      pending = circleStore(borrowedPool).leave(owner.token, "everyday-ai");
+      await waitForCircleJoinExpiry(
+        blockerPid,
+        waiterPid,
+        owner.learner.id,
+        lock === "membership"
+          ? "UPDATE preview_circle_memberships"
+          : "FOR SHARE OF p",
+      );
+      await blocker.query("COMMIT");
+      expect.soft(await pending).toBe(false);
+      expect.soft(await circleMembershipRows(owner.learner.id)).toEqual(before);
+    } finally {
+      await blocker.query("ROLLBACK");
+      await Promise.allSettled(pending ? [pending] : []);
+      blocker.release();
+      waiter.release();
+    }
+  },
+  10_000,
+);
+
+it("keeps a local circle membership unchanged for a deleting workspace or revoked owner", async () => {
+  const owner = await member();
+  const circles = circleStore(pool);
+  expect(await circles.join(owner.token, "everyday-ai")).toBe("joined");
+  const before = await circleMembershipRows(owner.learner.id);
+  await pool.query(
+    "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+    [owner.learner.id],
+  );
+  expect(await circles.leave(owner.token, "everyday-ai")).toBe(false);
+  expect(await circleMembershipRows(owner.learner.id)).toEqual(before);
+  await pool.query(
+    "UPDATE workspaces SET deleting_at=NULL WHERE owner_principal_id=$1",
+    [owner.learner.id],
+  );
+  await pool.query(
+    "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+    [owner.learner.id],
+  );
+  expect(await circles.leave(owner.token, "everyday-ai")).toBe(false);
+  expect(await circleMembershipRows(owner.learner.id)).toEqual(before);
+});
+
+it("orders a valid leave after a rejoin committed while its transaction waited to authorize", async () => {
+  const owner = await member();
+  const circles = circleStore(pool);
+  expect(await circles.join(owner.token, "everyday-ai")).toBe("joined");
+  let entered!: () => void;
+  let resume!: () => void;
+  const began = new Promise<void>((resolve) => (entered = resolve));
+  const proceed = new Promise<void>((resolve) => (resume = resolve));
+  const paused = wrappedPool((client) => {
+    const query = client.query.bind(client);
+    return {
+      query: (async (statement: string, values?: unknown[]) => {
+        const result = await query(statement, values);
+        if (statement === "BEGIN") {
+          entered();
+          await proceed;
+        }
+        return result;
+      }) as PoolClient["query"],
+      release: client.release.bind(client),
+    } as PoolClient;
+  });
+  const pending = circleStore(paused).leave(owner.token, "everyday-ai");
+  await began;
+  try {
+    expect(await circles.leave(owner.token, "everyday-ai")).toBe(true);
+    expect(await circles.join(owner.token, "everyday-ai")).toBe("joined");
+  } finally {
+    resume();
+  }
+  expect(await pending).toBe(true);
+  const row = (
+    await pool.query<{ ordered: boolean }>(
+      `SELECT left_at>=joined_at AS ordered FROM preview_circle_memberships
+       WHERE member_id=$1 AND circle_id='everyday-ai'`,
+      [owner.learner.id],
+    )
+  ).rows[0];
+  expect(row?.ordered).toBe(true);
+});
+
 it.each(["new", "active", "left"] as const)(
   "denies a local circle join with %s membership after expiry during the circle lock wait",
   async (state) => {

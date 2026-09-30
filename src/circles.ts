@@ -140,15 +140,59 @@ export function circleStore(pool: Pool): CircleStore {
     },
     async leave(token, id) {
       if (!CIRCLES.some((item) => item.id === id)) return false;
-      const result = await pool.query(
-        `UPDATE preview_circle_memberships m SET left_at=CURRENT_TIMESTAMP
-         FROM principals p WHERE p.id=m.member_id AND p.token_hash=$1
-           AND p.kind='member' AND p.revoked_at IS NULL
-           AND p.expires_at>CURRENT_TIMESTAMP AND m.circle_id=$2
-           AND m.left_at IS NULL`,
-        [hash(token), id],
-      );
-      return result.rowCount === 1;
+      const client = await pool.connect();
+      let released = false;
+      try {
+        await client.query("BEGIN");
+        const member = await client.query<{ id: string; expiresAt: string }>(
+          `SELECT p.id,p.expires_at::text AS "expiresAt"
+           FROM principals p JOIN learners l ON l.id=p.id
+           WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
+             AND p.expires_at>clock_timestamp() FOR SHARE OF p`,
+          [hash(token)],
+        );
+        if (!member.rows[0]) {
+          await client.query("ROLLBACK");
+          return false;
+        }
+        const memberId = member.rows[0].id;
+        const workspace = await client.query<{ id: string }>(
+          `SELECT id FROM workspaces
+           WHERE owner_principal_id=$1 AND deleting_at IS NULL FOR SHARE`,
+          [memberId],
+        );
+        if (!workspace.rows[0]) {
+          await client.query("ROLLBACK");
+          return false;
+        }
+        const result = await client.query(
+          `UPDATE preview_circle_memberships SET left_at=clock_timestamp()
+           WHERE member_id=$1 AND circle_id=$2 AND left_at IS NULL`,
+          [memberId, id],
+        );
+        // The membership-row wait can outlast a valid session. Keep the
+        // principal/workspace locks until the wall-clock check and commit.
+        const current = await client.query<{ valid: boolean }>(
+          "SELECT clock_timestamp() < $1::timestamptz AS valid",
+          [member.rows[0].expiresAt],
+        );
+        if (!current.rows[0]!.valid) {
+          await client.query("ROLLBACK");
+          return false;
+        }
+        await client.query("COMMIT");
+        return result.rowCount === 1;
+      } catch (error) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          client.release(error as Error);
+          released = true;
+        }
+        throw error;
+      } finally {
+        if (!released) client.release();
+      }
     },
   };
 }

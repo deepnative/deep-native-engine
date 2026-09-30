@@ -233,3 +233,86 @@ test("[L46] leaving removes own status; forged, expired and cross-origin request
   await page.goto("/circles");
   await expect(page).toHaveURL(/\/$/);
 });
+
+test("[L96] a circle leave waiting past session expiry keeps membership unchanged", async ({
+  page,
+  context,
+}) => {
+  await pool.query("TRUNCATE preview_circle_memberships");
+  await onboard(page, "explorer", "everyday");
+  await page.getByRole("button", { name: "Join Everyday AI practice" }).click();
+  await expect(page.getByText("You joined this local circle")).toBeVisible();
+  const cookie = (await context.cookies()).find(
+    (entry) => entry.name === "dne_preview",
+  )!;
+  const tokenHash = createHash("sha256").update(cookie.value).digest("hex");
+  const membership = async () =>
+    (
+      await pool.query(
+        `SELECT m.circle_id,m.joined_at::text,m.left_at::text
+         FROM preview_circle_memberships m JOIN principals p ON p.id=m.member_id
+         WHERE p.token_hash=$1`,
+        [tokenHash],
+      )
+    ).rows;
+  const before = await membership();
+  expect(before).toHaveLength(1);
+  const holder = await pool.connect();
+  let leaving: Promise<void> | undefined;
+  try {
+    await pool.query(
+      "UPDATE principals SET expires_at=clock_timestamp()+interval '2 seconds' WHERE token_hash=$1",
+      [tokenHash],
+    );
+    await holder.query("BEGIN");
+    await holder.query(
+      `SELECT 1 FROM preview_circle_memberships m
+       JOIN principals p ON p.id=m.member_id
+       WHERE p.token_hash=$1 FOR UPDATE OF m`,
+      [tokenHash],
+    );
+    const holderPid = (
+      await holder.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+    ).rows[0]!.pid;
+    leaving = Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().endsWith("/circles/everyday-ai/leave") &&
+          response.request().method() === "POST",
+      ),
+      page.getByRole("button", { name: "Leave Everyday AI practice" }).click(),
+    ]).then(([response]) => {
+      expect(response.status()).toBe(409);
+    });
+    await expect
+      .poll(
+        async () =>
+          (
+            await pool.query(
+              `SELECT 1 FROM pg_stat_activity waiter CROSS JOIN principals p
+               WHERE p.token_hash=$2 AND waiter.state='active'
+                 AND waiter.wait_event_type='Lock'
+                 AND $1::integer=ANY(pg_blocking_pids(waiter.pid))
+                 AND position('UPDATE preview_circle_memberships' in waiter.query)>0
+                 AND waiter.xact_start<p.expires_at
+                 AND p.expires_at<=clock_timestamp()`,
+              [holderPid, tokenHash],
+            )
+          ).rowCount,
+        { timeout: 7_000, intervals: [10, 20, 50] },
+      )
+      .toBe(1);
+    await holder.query("COMMIT");
+    await leaving;
+    await expect(
+      page.getByRole("heading", { name: "Membership unchanged" }),
+    ).toBeVisible();
+    expect(await membership()).toEqual(before);
+  } finally {
+    await holder.query("ROLLBACK");
+    await Promise.allSettled(leaving ? [leaving] : []);
+    holder.release();
+  }
+  await page.goto("/circles");
+  await expect(page).toHaveURL(/\/$/);
+});
