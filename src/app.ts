@@ -3370,11 +3370,23 @@ export function app(
       ? version
       : null;
   };
+  const careerDenied = (res: express.Response) =>
+    res
+      .status(403)
+      .send(
+        errorPage(
+          "Career planning unavailable",
+          "Your private career planning is unavailable. Return to your learning path.",
+        ),
+      );
   app.get("/career", async (_req, res) => {
     const member = res.locals.learner as Learner;
-    res.send(
-      careerPage(await career.snapshot(member.id), res.locals.csrf as string),
-    );
+    const snapshot = await career.snapshot(member.id);
+    if (!snapshot) {
+      careerDenied(res);
+      return;
+    }
+    res.send(careerPage(snapshot, res.locals.csrf as string));
   });
   app.post("/career/enable", async (req, res) => {
     const member = res.locals.learner as Learner;
@@ -3402,16 +3414,16 @@ export function app(
     const member = res.locals.learner as Learner;
     const parsed = parseCareerEntry(req.body as Fields);
     if (parsed.errors.length) {
-      res
-        .status(422)
-        .send(
-          careerPage(
-            await career.snapshot(member.id),
-            res.locals.csrf as string,
-            parsed.errors,
-            { entry: parsed.input },
-          ),
-        );
+      const snapshot = await career.snapshot(member.id);
+      if (!snapshot) {
+        careerDenied(res);
+        return;
+      }
+      res.status(422).send(
+        careerPage(snapshot, res.locals.csrf as string, parsed.errors, {
+          entry: parsed.input,
+        }),
+      );
       return;
     }
     if (!(await career.createEntry(member.id, parsed.input))) {
@@ -3430,16 +3442,17 @@ export function app(
     }
     const parsed = parseCareerEntry(req.body as Fields);
     if (parsed.errors.length) {
-      res
-        .status(422)
-        .send(
-          careerPage(
-            await career.snapshot(member.id),
-            res.locals.csrf as string,
-            parsed.errors,
-            { entry: parsed.input, editEntryId: id },
-          ),
-        );
+      const snapshot = await career.snapshot(member.id);
+      if (!snapshot) {
+        careerDenied(res);
+        return;
+      }
+      res.status(422).send(
+        careerPage(snapshot, res.locals.csrf as string, parsed.errors, {
+          entry: parsed.input,
+          editEntryId: id,
+        }),
+      );
       return;
     }
     if (!(await career.updateEntry(member.id, id, version, parsed.input))) {
@@ -3466,16 +3479,16 @@ export function app(
     const member = res.locals.learner as Learner;
     const parsed = parseCareerDraft(req.body as Fields);
     if (parsed.errors.length) {
-      res
-        .status(422)
-        .send(
-          careerPage(
-            await career.snapshot(member.id),
-            res.locals.csrf as string,
-            parsed.errors,
-            { professional: parsed.input },
-          ),
-        );
+      const snapshot = await career.snapshot(member.id);
+      if (!snapshot) {
+        careerDenied(res);
+        return;
+      }
+      res.status(422).send(
+        careerPage(snapshot, res.locals.csrf as string, parsed.errors, {
+          professional: parsed.input,
+        }),
+      );
       return;
     }
     if (!(await career.createDraft(member.id, parsed.input))) {
@@ -3494,16 +3507,17 @@ export function app(
     }
     const parsed = parseCareerDraft(req.body as Fields);
     if (parsed.errors.length) {
-      res
-        .status(422)
-        .send(
-          careerPage(
-            await career.snapshot(member.id),
-            res.locals.csrf as string,
-            parsed.errors,
-            { professional: parsed.input, editDraftId: id },
-          ),
-        );
+      const snapshot = await career.snapshot(member.id);
+      if (!snapshot) {
+        careerDenied(res);
+        return;
+      }
+      res.status(422).send(
+        careerPage(snapshot, res.locals.csrf as string, parsed.errors, {
+          professional: parsed.input,
+          editDraftId: id,
+        }),
+      );
       return;
     }
     if (!(await career.updateDraft(member.id, id, version, parsed.input))) {
