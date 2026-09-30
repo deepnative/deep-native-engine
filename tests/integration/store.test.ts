@@ -3270,9 +3270,9 @@ it("exports only current owner evidence and withholds unsafe or deleted source b
   if (clean.kind !== "created" || unsafe.kind !== "created") return;
   expect(await evidence.transitionQuarantine(clean.id, "clean")).toBe(true);
   expect(await evidence.transitionQuarantine(unsafe.id, "rejected")).toBe(true);
-  expect(await evidence.exportOwned(outsider.token)).toEqual({
+  expect(await evidence.exportOwned(outsider.token)).toMatchObject({
     kind: "ready",
-    version: "local-evidence-v1",
+    version: "local-evidence-v2",
     items: [],
   });
   const first = await evidence.exportOwned(owner.token);

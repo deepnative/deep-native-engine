@@ -216,9 +216,9 @@ it("withholds source export when its owner session expires during assembly", asy
 it("returns the unchanged source schema for a valid owner and excludes it from another member's export", async () => {
   const f = await fixture();
   const other = await member();
-  expect(await f.evidence.exportOwned(f.owner.token)).toEqual({
+  expect(await f.evidence.exportOwned(f.owner.token)).toMatchObject({
     kind: "ready",
-    version: "local-evidence-v1",
+    version: "local-evidence-v2",
     items: [
       {
         id: f.id,
@@ -235,9 +235,9 @@ it("returns the unchanged source schema for a valid owner and excludes it from a
       },
     ],
   });
-  expect(await f.evidence.exportOwned(other.token)).toEqual({
+  expect(await f.evidence.exportOwned(other.token)).toMatchObject({
     kind: "ready",
-    version: "local-evidence-v1",
+    version: "local-evidence-v2",
     items: [],
   });
 });
@@ -403,9 +403,9 @@ it.each(["storage failure", "size mismatch", "hash mismatch"] as const)(
       true,
     );
     expect(await f.evidence.remove(f.owner.token, f.id)).toBe(true);
-    expect(await f.evidence.exportOwned(f.owner.token)).toEqual({
+    expect(await f.evidence.exportOwned(f.owner.token)).toMatchObject({
       kind: "ready",
-      version: "local-evidence-v1",
+      version: "local-evidence-v2",
       items: [],
     });
   },

@@ -95,6 +95,25 @@ export function memberExportPage(
     <p><a href="/member/export">Start export again</a></p>`,
   );
 }
+export function evidenceExportPage(number: number, cursor?: string) {
+  const query =
+    cursor === undefined ? "" : `?cursor=${encodeURIComponent(cursor)}`;
+  return page(
+    "Download private evidence",
+    `<p><a href="/evidence">Back to private evidence</a></p>
+    <h1>Download private evidence</h1>
+    <p>Download every page to collect current sample metadata and clean source bytes encoded as base64. Each page is a live read, not one frozen snapshot. If samples or consent change during export, start again. Pending, rejected, infected and deleting source bytes, derivatives and hosted copies are excluded.</p>
+    <p>Each page contains at most 20 samples and 4 MiB of raw clean source data. JSON is larger because sources are encoded as base64. Continuation expires after 15 minutes. Access is checked again for every page and download.</p>
+    <h2>Page ${number}</h2>
+    <section data-evidence-export data-url="/api/evidence/export${escape(query)}">
+      <p>Download reads the current page again. The next link comes from that downloaded file.</p>
+      <button type="button">Download page ${number}</button>
+      <p role="status">Download this page to reveal the next step.</p>
+      <p><a data-export-next hidden>Next page</a></p>
+    </section><script type="module" src="/assets/evidence-export.js"></script>
+    <p><a href="/evidence/export">Start export again</a></p>`,
+  );
+}
 export function notice(errors: string[]) {
   return errors.length
     ? `<div class="notice" role="alert"><h2>Let's fix that</h2><ul>${errors.map((e) => `<li>${escape(e)}</li>`).join("")}</ul></div>`
@@ -737,7 +756,7 @@ export function evidencePage(
             })
             .join("")}</ul>`
         : "<p>No sample evidence saved yet. Add an invented text sample below.</p>"
-    }<h2>Export these preview samples</h2><p><a href="/api/evidence/export">Download my evidence JSON</a>. This includes current sample metadata and clean source bytes encoded as base64. Pending or blocked sample bytes, derivatives, assignments, milestones, career plans, billing and hosted copies are not included. The export stops at 20 samples or 4 MiB of clean source data; download or delete individual samples if you reach that limit.</p><h2>New private text sample</h2><form method="post" action="/evidence">${hidden(csrf)}<label for="evidence-name">Sample title</label><input id="evidence-name" name="name" maxlength="200" required value="${escape(attempted.name)}"><label for="evidence-sample">Invented text sample</label><textarea id="evidence-sample" name="sample" maxlength="4000" required>${escape(attempted.sample)}</textarea><label class="check"><input type="checkbox" name="rights_confirmed" value="yes" required><span>I created this invented sample and have the right to store it.</span></label><label class="check"><input type="checkbox" name="private_review_consent" value="yes" required><span>I explicitly allow this sample to be considered for private review if a safety check and authorized reviewer are later configured. I can revoke this consent.</span></label><button type="submit">Save private text sample</button></form></section>`,
+    }<h2>Export these preview samples</h2><p><a href="/evidence/export">Download my evidence JSON</a>. This includes current sample metadata and clean source bytes encoded as base64. Pending or blocked sample bytes, derivatives, assignments, milestones, career plans, billing and hosted copies are not included. Download every live page to collect the available samples. Each page contains at most 20 samples and 4 MiB of raw clean source data. These pages are not a frozen snapshot; start again if samples change.</p><h2>New private text sample</h2><form method="post" action="/evidence">${hidden(csrf)}<label for="evidence-name">Sample title</label><input id="evidence-name" name="name" maxlength="200" required value="${escape(attempted.name)}"><label for="evidence-sample">Invented text sample</label><textarea id="evidence-sample" name="sample" maxlength="4000" required>${escape(attempted.sample)}</textarea><label class="check"><input type="checkbox" name="rights_confirmed" value="yes" required><span>I created this invented sample and have the right to store it.</span></label><label class="check"><input type="checkbox" name="private_review_consent" value="yes" required><span>I explicitly allow this sample to be considered for private review if a safety check and authorized reviewer are later configured. I can revoke this consent.</span></label><button type="submit">Save private text sample</button></form></section>`,
   );
 }
 export function localAiControlPage(paused: boolean, csrf: string) {

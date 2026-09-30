@@ -1537,39 +1537,67 @@ it("accepts a member's confirmed usefulness choice and fails closed on stale, fo
   await post({ intent: "withdraw", confirm: "yes", revision: "1" }).expect(409);
   await post({ intent: "withdraw", confirm: "yes", revision: "0" }).expect(422);
 });
-it("serves only a bounded private evidence export and explains safe failures", async () => {
+it("serves owner evidence pages and denies malformed, expired or unavailable continuation safely", async () => {
   const files = evidenceStorage();
   const { agent } = await client(files);
   await agent.get("/api/evidence/export").set("Host", host).expect(403);
-  files.exportOwned.mockResolvedValueOnce({ kind: "limit" });
-  const limited = await agent
-    .get("/api/evidence/export")
-    .set("Host", host)
-    .expect(413);
-  expect(limited.body.message).toContain("20 samples and 4 MiB");
-  files.exportOwned.mockResolvedValueOnce({ kind: "unavailable" });
-  await agent
-    .get("/api/evidence/export")
-    .set("Host", host)
-    .expect(503, { error: "export_unavailable" });
-  files.exportOwned.mockResolvedValueOnce({
-    kind: "ready",
-    version: "local-evidence-v1",
+  for (const path of ["/api/evidence/export", "/evidence/export"]) {
+    await agent.get(`${path}?cursor=a&cursor=b`).set("Host", host).expect(403);
+    await agent.get(path).set("Host", host).expect(403);
+    files.exportOwned.mockResolvedValueOnce({ kind: "unavailable" });
+    const unavailable = await agent.get(path).set("Host", host).expect(503);
+    expect(unavailable.text).not.toContain("private database");
+  }
+  const result = {
+    kind: "ready" as const,
+    version: "local-evidence-v2" as const,
     items: [],
-  });
+    page: {
+      number: 2,
+      itemCount: 0,
+      sourceBytes: 0,
+      consistency: "live-pages" as const,
+      complete: true,
+      nextCursor: null,
+      nextHref: null,
+    },
+  };
+  files.exportOwned.mockResolvedValueOnce(result);
   const ready = await agent
-    .get("/api/evidence/export")
+    .get("/api/evidence/export?cursor=signed")
     .set("Host", host)
     .expect(200);
-  expect(ready.body).toEqual({
-    kind: "ready",
-    version: "local-evidence-v1",
-    items: [],
-  });
-  expect(ready.headers["cache-control"]).toBe("no-store");
-  expect(ready.headers["content-disposition"]).toContain(
-    "deep-native-evidence.json",
+  expect(ready.body).toEqual(result);
+  expect(files.exportOwned).toHaveBeenLastCalledWith(
+    expect.stringMatching(/^[a-f0-9]{64}$/),
+    "signed",
   );
+  expect(ready.headers["cache-control"]).toBe("no-store");
+  expect(ready.headers["referrer-policy"]).toBe("no-referrer");
+  expect(ready.headers["content-disposition"]).toContain(
+    "deep-native-evidence-page-2.json",
+  );
+  files.exportOwned.mockResolvedValueOnce(result);
+  const html = await agent
+    .get("/evidence/export?cursor=signed%26quoted")
+    .set("Host", host)
+    .expect(200);
+  expect(html.text).toContain(
+    'data-url="/api/evidence/export?cursor=signed%26quoted"',
+  );
+  expect(html.text).toContain("not one frozen snapshot");
+  expect(html.text).toContain("Download page 2");
+  expect(html.text).toContain("data-export-next hidden");
+  expect(html.text).not.toContain("sourceBase64");
+  files.exportOwned.mockResolvedValueOnce({
+    ...result,
+    page: { ...result.page, number: 1 },
+  });
+  const initial = await agent
+    .get("/evidence/export")
+    .set("Host", host)
+    .expect(200);
+  expect(initial.text).toContain('data-url="/api/evidence/export"');
 });
 it("serves only a bounded owner structured export and explains safe failures", async () => {
   const memberExport = {

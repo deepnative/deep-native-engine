@@ -85,6 +85,8 @@ function database(...results: unknown[]) {
       throw failure.error;
     }
     if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(statement)) return { rows: [] };
+    if (statement.includes("FROM workspaces WHERE owner_principal_id"))
+      return { rows: [{ id: evidenceId }] };
     const result = queued.shift();
     return { rows: result ? (Array.isArray(result) ? result : [result]) : [] };
   });
@@ -320,7 +322,7 @@ it("exports bounded owned clean bytes and only metadata for unsafe samples", asy
   );
   expect(result).toMatchObject({
     kind: "ready",
-    version: "local-evidence-v1",
+    version: "local-evidence-v2",
     items: [
       { id: evidenceId, sourceBase64: data.toString("base64") },
       { quarantineState: "pending", sourceBase64: null },
@@ -362,7 +364,7 @@ it("withholds assembled private source when its owner expires before export comm
   expect(db.query).toHaveBeenCalledWith("ROLLBACK");
   expect(db.query).not.toHaveBeenCalledWith("COMMIT");
 });
-it("denies invalid or expired export identities and fails closed at count and byte limits", async () => {
+it("denies invalid or expired export identities and corrupt source sizes", async () => {
   const invalid = database();
   await expect(
     evidenceStore(invalid.pool, objectStorage(), "secret").exportOwned("bad"),
@@ -385,19 +387,12 @@ it("denies invalid or expired export identities and fails closed at count and by
     sha256: "a".repeat(64),
     storageKey,
   };
-  const many = database(
-    { id: evidenceId },
-    Array.from({ length: 21 }, () => row),
-  );
-  await expect(
-    evidenceStore(many.pool, objectStorage(), "secret").exportOwned(token),
-  ).resolves.toEqual({ kind: "limit" });
   const large = database({ id: evidenceId }, [
     { ...row, byteSize: 5 * 1024 * 1024 },
   ]);
   await expect(
     evidenceStore(large.pool, objectStorage(), "secret").exportOwned(token),
-  ).resolves.toEqual({ kind: "limit" });
+  ).resolves.toEqual({ kind: "unavailable" });
 });
 it("withholds the entire export if a source is corrupt or storage fails", async () => {
   const row = {
