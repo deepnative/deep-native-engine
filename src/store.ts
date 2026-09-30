@@ -160,6 +160,7 @@ export async function migrate(pool: Pool) {
       "043-exercise-withdrawal.sql",
       "044-synthetic-settlement.sql",
       "045-member-sample-holds.sql",
+      "046-sample-hold-withdrawal.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

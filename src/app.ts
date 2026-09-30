@@ -946,6 +946,41 @@ export function app(
         );
     }
   });
+  app.post("/availability/holds/:requestId/withdraw", async (req, res) => {
+    const requestId = req.params.requestId as string;
+    const receiptId = /^[0-9a-f-]{36}$/i.test(requestId) ? requestId : null;
+    if (Object.keys(req.body ?? {}).some((key) => key !== "csrf")) {
+      res
+        .status(422)
+        .send(
+          sampleHoldRecoveryPage(
+            receiptId,
+            "This withdrawal form was not accepted. Inspect your receipt and use its current withdrawal action.",
+          ),
+        );
+      return;
+    }
+    try {
+      const id = await memberHolds.withdraw(
+        res.locals.token as string,
+        requestId,
+      );
+      res.redirect(303, `/availability/holds/${id}`);
+    } catch (error) {
+      const uncertain =
+        !(error instanceof SlotHoldFailure) || error.code === "uncertain";
+      res
+        .status(uncertain ? 503 : 409)
+        .send(
+          sampleHoldRecoveryPage(
+            receiptId,
+            uncertain
+              ? "The withdrawal outcome could not be confirmed. Do not assume success or failure; inspect this request's receipt before trying the withdrawal again."
+              : "This withdrawal was not accepted. Inspect your current receipt; it may already be settled or unavailable to this session.",
+          ),
+        );
+    }
+  });
   app.get("/availability/holds/:requestId", async (req, res) => {
     const member = res.locals.learner as Learner;
     try {
@@ -964,7 +999,13 @@ export function app(
           );
         return;
       }
-      res.send(sampleHoldReceiptPage(receipt, member.timezone ?? undefined));
+      res.send(
+        sampleHoldReceiptPage(
+          receipt,
+          member.timezone ?? undefined,
+          res.locals.csrf as string,
+        ),
+      );
     } catch {
       res
         .status(503)
