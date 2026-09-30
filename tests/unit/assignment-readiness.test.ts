@@ -36,6 +36,7 @@ function fake(
   owner = true,
   failAt = "",
   expires = false,
+  missing: "workspace" | "learner" | null = null,
 ) {
   const statements: string[] = [];
   let released: Error | boolean = false;
@@ -49,6 +50,19 @@ function fake(
             throw new Error("private db details");
           if (sql.includes("FROM principals p JOIN learners l"))
             return { rows: owner ? [{ id: "member-1" }] : [] };
+          if (
+            sql.startsWith("SELECT id FROM workspaces") ||
+            sql.startsWith("SELECT id FROM learners")
+          )
+            return {
+              rows:
+                (missing === "workspace" &&
+                  sql.startsWith("SELECT id FROM workspaces")) ||
+                (missing === "learner" &&
+                  sql.startsWith("SELECT id FROM learners"))
+                  ? []
+                  : [{ id: "member-1" }],
+            };
           if (sql.includes("FROM content_versions cv")) return { rows: items };
           if (sql.includes("FROM exercises"))
             return { rows: complete ? [{ completed_at: new Date() }] : [] };
@@ -532,3 +546,13 @@ it("prioritizes an unmet exercise or lesson and preserves authored order among e
     "exercise",
   ]);
 });
+
+it.each(["workspace", "learner"] as const)(
+  "denies a missing %s after principal lookup",
+  async (missing) => {
+    const f = fake([], [], false, true, "", false, missing);
+    expect(await assignmentReadinessStore(f.pool).list("token")).toBeNull();
+    expect(f.statements).not.toContain("COMMIT");
+    expect(f.released()).toBe(true);
+  },
+);

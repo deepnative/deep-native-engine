@@ -82,7 +82,7 @@ test("[F-BUILD-08-A] owner export excludes another member's private records", as
         profile: { id: string };
         records: { milestones: { milestoneTitle: string }[] };
       };
-      expect(payload.version).toBe("local-member-records-v11");
+      expect(payload.version).toBe("local-member-records-v12");
       expect(payload.profile.id).toBe(ownerId);
       expect(payload.records.milestones).toMatchObject([
         { milestoneTitle: ownerTitle },

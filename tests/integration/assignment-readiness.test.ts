@@ -454,3 +454,69 @@ it("finds a safe last unmet leaf in a large valid tree and removes the action af
     '"observed":"unavailable"',
   );
 }, 30000);
+
+import {
+  eligibleAssignments,
+  recommendLesson,
+} from "../../src/assignment-choice.ts";
+it.each([
+  "a-draft-b-complete",
+  "a-complete-b-draft",
+  "withdrawn-a-complete",
+] as const)(
+  "agrees across recommendation, preparation and start for %s",
+  async (state) => {
+    const owner = await member();
+    const answer = {
+      instruction: "Use invented details to plan a small event.",
+      verification: "Compare each step against the invented notes.",
+      complete: state !== "a-draft-b-complete",
+    };
+    await db.save(owner.id, answer);
+    if (state === "withdrawn-a-complete")
+      await db.withdrawExercise(
+        owner.token,
+        "clear-instructions",
+        1,
+        "everyday",
+      );
+    await pool.query("UPDATE learners SET goal='work' WHERE id=$1", [owner.id]);
+    await db.save(owner.id, {
+      ...answer,
+      complete: state === "a-draft-b-complete",
+    });
+    if (state === "a-draft-b-complete")
+      await pool.query("UPDATE learners SET goal='everyday' WHERE id=$1", [
+        owner.id,
+      ]);
+    const assignment = draft("SYN-895", "assignment", {
+      prerequisites: "LOCAL-FIRST-EXERCISE-COMPLETE",
+    });
+    const lesson = draft("SYN-896", "lesson", {
+      prerequisites: "LOCAL-FIRST-EXERCISE-COMPLETE",
+    });
+    await publish(assignment);
+    await publish(lesson);
+    const session = await db.session(owner.token);
+    if (session.kind !== "active") throw Error("No owner");
+    const progress = await db.progress(owner.id);
+    expect(progress?.completed_at).toBeNull();
+    expect(progress?.has_completed_version).toBe(true);
+    const source = await catalog.search({});
+    expect(
+      eligibleAssignments(source, session.learner, progress, []).map(
+        (item) => item.id,
+      ),
+    ).toContain(assignment.id);
+    expect(recommendLesson(source, session.learner, progress, [])?.id).toBe(
+      lesson.id,
+    );
+    const preparation = await readiness.get(owner.token, assignment.id, 1);
+    expect(preparation).toMatchObject({
+      eligible: true,
+      requirements: [{ satisfied: true, observed: "completed" }],
+    });
+    expect(await db.openLesson(owner.id, lesson.id, 1)).toBe(true);
+    expect(await db.chooseAssignment(owner.id, assignment.id, 1)).toBe(true);
+  },
+);

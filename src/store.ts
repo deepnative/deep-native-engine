@@ -13,7 +13,9 @@ export interface Learner extends Pick<LearnerProfile, "background" | "goal"> {
   timezone?: LearnerProfile["timezone"];
   weeklyMinutes?: LearnerProfile["weeklyMinutes"];
 }
+export type ExerciseGoal = LearnerProfile["goal"] | "unattributed";
 export interface Exercise {
+  has_completed_version?: boolean;
   instruction: string | null;
   verification: string | null;
   withdrawn_at?: Date | null;
@@ -31,7 +33,8 @@ export interface ExerciseHistory {
 }
 export type ExerciseWithdrawal =
   "withdrawn" | "already-withdrawn" | "unavailable";
-export type ExerciseSave = "saved" | "unchanged" | "withdrawn";
+export type ExerciseSave =
+  "saved" | "unchanged" | "withdrawn" | "stale-goal" | "unavailable";
 export interface AssignmentChoice {
   contentId: string;
   contentVersion: number;
@@ -75,6 +78,7 @@ export interface Store {
     token: string,
     lessonId: string,
     version: number,
+    goal?: ExerciseGoal,
   ): Promise<ExerciseWithdrawal>;
   lessonActivities(id: string): Promise<LessonActivity[]>;
   openLesson(id: string, contentId: string, version: number): Promise<boolean>;
@@ -105,7 +109,12 @@ export interface Store {
   ): Promise<boolean>;
   save(
     id: string,
-    input: { instruction: string; verification: string; complete: boolean },
+    input: {
+      instruction: string;
+      verification: string;
+      complete: boolean;
+      goal?: LearnerProfile["goal"];
+    },
   ): Promise<ExerciseSave>;
   remove(id: string): Promise<void>;
 }
@@ -162,6 +171,7 @@ export async function migrate(pool: Pool) {
       "045-member-sample-holds.sql",
       "046-sample-hold-withdrawal.sql",
       "047-assignment-self-reflections.sql",
+      "048-goal-scoped-starter.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
@@ -173,6 +183,7 @@ export function store(pool: Pool): Store {
     token: string,
     write: boolean,
     use: (client: PoolClient, memberId: string) => Promise<T>,
+    byId = false,
   ): Promise<T | null> {
     if (typeof token !== "string" || !token.trim()) return null;
     const client = await pool.connect();
@@ -182,9 +193,9 @@ export function store(pool: Pool): Store {
       await client.query("SET LOCAL lock_timeout='5s'");
       const principal = (
         await client.query<{ id: string; expires_at: Date }>(
-          `SELECT id,expires_at FROM principals WHERE token_hash=$1 AND kind='member'
+          `SELECT id,expires_at FROM principals WHERE ${byId ? "id" : "token_hash"}=$1 AND kind='member'
          AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE`,
-          [hash(token)],
+          [byId ? token : hash(token)],
         )
       ).rows[0];
       if (!principal) {
@@ -318,7 +329,12 @@ export function store(pool: Pool): Store {
     async progress(id, lessonId = LESSON.id, version = LESSON.version) {
       return (
         await pool.query<Exercise>(
-          "SELECT instruction,verification,completed_at,goal_at_start,withdrawn_at FROM exercises WHERE learner_id=$1 AND workspace_id=$1 AND lesson_id=$2 AND lesson_version=$3 FOR SHARE",
+          `SELECT instruction,verification,completed_at,goal_at_start,withdrawn_at,
+           EXISTS(SELECT 1 FROM exercises done WHERE done.learner_id=$1 AND done.workspace_id=$1
+             AND done.lesson_id=$2 AND done.lesson_version=$3 AND done.completed_at IS NOT NULL) AS has_completed_version
+           FROM exercises WHERE learner_id=$1 AND workspace_id=$1 AND lesson_id=$2 AND lesson_version=$3
+           ORDER BY (goal_at_start=(SELECT goal FROM learners WHERE id=$1)) DESC NULLS LAST,
+             completed_at DESC NULLS LAST,goal_slot LIMIT 1 FOR SHARE`,
           [id, lessonId, version],
         )
       ).rows[0];
@@ -333,7 +349,7 @@ export function store(pool: Pool): Store {
             `SELECT lesson_id AS "lessonId",lesson_version AS version,instruction,verification,
            completed_at AS "completedAt",withdrawn_at AS "withdrawnAt",goal_at_start AS "goalAtStart"
            FROM exercises WHERE learner_id=$1 AND workspace_id=$1
-           ORDER BY lesson_id,lesson_version FOR SHARE`,
+           ORDER BY lesson_id,lesson_version,goal_slot FOR SHARE`,
             [memberId],
           )
         ).rows;
@@ -341,13 +357,15 @@ export function store(pool: Pool): Store {
         return render(rows);
       });
     },
-    async withdrawExercise(token, lessonId, version) {
+    async withdrawExercise(token, lessonId, version, goal) {
       if (
         typeof lessonId !== "string" ||
         !/^[a-z][a-z0-9-]{0,79}$/.test(lessonId) ||
         !Number.isInteger(version) ||
         version < 1 ||
-        version > 2147483647
+        version > 2147483647 ||
+        (goal !== undefined &&
+          !["everyday", "work", "build", "unattributed"].includes(goal))
       )
         return "unavailable";
       return (
@@ -355,22 +373,26 @@ export function store(pool: Pool): Store {
           token,
           true,
           async (client, memberId) => {
-            const row = (
+            const matches = (
               await client.query<{
+                goal_slot: ExerciseGoal;
                 completed_at: Date | null;
                 withdrawn_at: Date | null;
               }>(
-                `SELECT completed_at,withdrawn_at FROM exercises
-           WHERE learner_id=$1 AND workspace_id=$1 AND lesson_id=$2 AND lesson_version=$3 FOR UPDATE`,
-                [memberId, lessonId, version],
+                `SELECT completed_at,withdrawn_at,goal_slot FROM exercises
+           WHERE learner_id=$1 AND workspace_id=$1 AND lesson_id=$2 AND lesson_version=$3
+             AND ($4::text IS NULL OR goal_slot=$4) ORDER BY goal_slot FOR UPDATE`,
+                [memberId, lessonId, version, goal ?? null],
               )
-            ).rows[0];
-            if (!row?.completed_at) return "unavailable";
+            ).rows;
+            if (matches.length !== 1) return "unavailable";
+            const row = matches[0]!;
+            if (!row.completed_at) return "unavailable";
             if (row.withdrawn_at) return "already-withdrawn";
             await client.query(
               `UPDATE exercises SET instruction=NULL,verification=NULL,withdrawn_at=clock_timestamp()
-           WHERE learner_id=$1 AND workspace_id=$1 AND lesson_id=$2 AND lesson_version=$3`,
-              [memberId, lessonId, version],
+           WHERE learner_id=$1 AND workspace_id=$1 AND lesson_id=$2 AND lesson_version=$3 AND goal_slot=$4`,
+              [memberId, lessonId, version, row.goal_slot],
             );
             return "withdrawn";
           },
@@ -538,29 +560,51 @@ export function store(pool: Pool): Store {
       return result.rowCount === 1;
     },
     async save(id, input) {
-      const result = await pool.query(
-        `INSERT INTO exercises(learner_id,workspace_id,lesson_id,lesson_version,instruction,verification,completed_at,goal_at_start)
-         VALUES($1,$1,$2,$3,$4,$5,CASE WHEN $6 THEN CURRENT_TIMESTAMP ELSE NULL END,
-                (SELECT goal FROM learners WHERE id=$1))
-      ON CONFLICT(learner_id,lesson_id,lesson_version) DO UPDATE SET instruction=EXCLUDED.instruction,verification=EXCLUDED.verification,completed_at=EXCLUDED.completed_at,goal_at_start=COALESCE(exercises.goal_at_start,EXCLUDED.goal_at_start) WHERE exercises.completed_at IS NULL AND exercises.withdrawn_at IS NULL RETURNING learner_id`,
-        [
+      return (
+        (await exerciseTransaction<ExerciseSave>(
           id,
-          LESSON.id,
-          LESSON.version,
-          input.instruction,
-          input.verification,
-          input.complete,
-        ],
+          true,
+          async (client, memberId) => {
+            // Principal -> workspace -> learner -> exercise. Profile updates acquire
+            // the learner row; a waiting save sees the committed current direction.
+            const learner = (
+              await client.query<{ goal: LearnerProfile["goal"] }>(
+                "SELECT goal FROM learners WHERE id=$1 FOR UPDATE",
+                [memberId],
+              )
+            ).rows[0];
+            if (!learner) return "unavailable";
+            if (input.goal !== undefined && input.goal !== learner.goal)
+              return "stale-goal";
+            const result = await client.query(
+              `INSERT INTO exercises(learner_id,workspace_id,lesson_id,lesson_version,instruction,verification,completed_at,goal_at_start)
+           VALUES($1,$1,$2,$3,$4,$5,CASE WHEN $6 THEN clock_timestamp() ELSE NULL END,$7)
+           ON CONFLICT(learner_id,lesson_id,lesson_version,goal_slot) DO UPDATE SET
+             instruction=EXCLUDED.instruction,verification=EXCLUDED.verification,completed_at=EXCLUDED.completed_at
+           WHERE exercises.completed_at IS NULL AND exercises.withdrawn_at IS NULL RETURNING learner_id`,
+              [
+                memberId,
+                LESSON.id,
+                LESSON.version,
+                input.instruction,
+                input.verification,
+                input.complete,
+                learner.goal,
+              ],
+            );
+            if (result.rowCount === 1) return "saved";
+            const existing = (
+              await client.query<{ withdrawn_at: Date | null }>(
+                `SELECT withdrawn_at FROM exercises WHERE learner_id=$1 AND workspace_id=$1
+           AND lesson_id=$2 AND lesson_version=$3 AND goal_slot=$4`,
+                [memberId, LESSON.id, LESSON.version, learner.goal],
+              )
+            ).rows[0];
+            return existing?.withdrawn_at ? "withdrawn" : "unchanged";
+          },
+          true,
+        )) ?? "unavailable"
       );
-      if (result.rowCount === 1) return "saved";
-      const existing = (
-        await pool.query<{ withdrawn_at: Date | null }>(
-          `SELECT withdrawn_at FROM exercises WHERE learner_id=$1 AND workspace_id=$1
-         AND lesson_id=$2 AND lesson_version=$3`,
-          [id, LESSON.id, LESSON.version],
-        )
-      ).rows[0];
-      return existing?.withdrawn_at ? "withdrawn" : "unchanged";
     },
     async remove(id) {
       await pool.query("DELETE FROM principals WHERE id=$1 AND kind='member'", [

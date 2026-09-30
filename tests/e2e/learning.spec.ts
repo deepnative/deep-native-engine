@@ -208,14 +208,14 @@ for (const [id, background, goal, extraName, extraValue] of [
     await page.getByRole("button", { name: "Save my direction" }).click();
     await expect(page).toHaveURL(/\/learn$/);
     await page.reload();
-    await page.getByRole("link", { name: "Continue exercise" }).click();
-    await expect(page.locator("#exercise-title")).toHaveText(originalTitle);
+    await page.getByRole("link", { name: "Open lesson" }).click();
+    await expect(page.locator("#exercise-title")).not.toHaveText(originalTitle);
+    await expect(page.getByLabel("Your instruction to AI")).toHaveValue("");
     await expect(
-      page.getByText("saved practice remains tied to your earlier goal"),
+      page.getByText("A sample draft that must retain its original context", {
+        exact: true,
+      }),
     ).toBeVisible();
-    await expect(page.getByLabel("Your instruction to AI")).toHaveValue(
-      "A sample draft that must retain its original context",
-    );
   });
 }
 test("[L29] exploratory learner revises a time-fitting plan without rewriting saved practice", async ({
@@ -251,12 +251,13 @@ test("[L29] exploratory learner revises a time-fitting plan without rewriting sa
   await expect(plan).toContainText("Turn meeting notes into next steps");
   await expect(plan.locator("li")).toHaveCount(3);
   await expect(plan).toContainText("America/Toronto");
-  await page.getByRole("link", { name: "Continue exercise" }).click();
-  await expect(page.getByLabel("Your instruction to AI")).toHaveValue(
-    "A sample draft for the community event",
-  );
+  await page.getByRole("link", { name: "Open lesson" }).click();
+  await expect(page.getByLabel("Your instruction to AI")).toHaveValue("");
+  await expect(
+    page.getByText("A sample draft for the community event", { exact: true }),
+  ).toBeVisible();
   await expect(page.locator("#exercise-title")).toHaveText(
-    "Plan a small community event",
+    "Turn meeting notes into next steps",
   );
 });
 
@@ -314,18 +315,12 @@ test("[L101] completed starter plan advances without attributing an earlier goal
   await page.getByRole("button", { name: "Save my direction" }).click();
   await expect(page).toHaveURL(/\/learn$/);
   await expect(plan).toContainText("Turn meeting notes into next steps");
-  await expect(
-    plan.getByRole("status").filter({ hasText: "earlier goal" }),
-  ).toContainText("earlier goal");
   await expect(plan).not.toContainText("completed for your current goal");
-  await expect(
-    plan.getByRole("link", { name: "Browse published sample library" }),
-  ).toHaveAttribute("href", "/library");
-  await plan
-    .getByRole("link", { name: "Browse published sample library" })
-    .focus();
+  await expect(plan).toContainText("Next session: try the sample exercise");
+  await page.getByRole("link", { name: "Open lesson" }).focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/library$/);
+  await expect(page).toHaveURL(/\/lesson$/);
+  await expect(page.getByLabel("Your instruction to AI")).toHaveValue("");
 });
 test("[L30] professional can correct an invalid time zone and retain a noncoding 30-minute plan", async ({
   page,
@@ -504,13 +499,13 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
           time_zone: "America/Toronto",
           weekly_minutes: 60,
         });
-        await page.getByRole("link", { name: "Continue exercise" }).click();
-        await expect(page.locator("#exercise-title")).toHaveText(originalTitle);
-        await expect(page.getByLabel("Your instruction to AI")).toHaveValue(
-          originalDraft,
+        await page.getByRole("link", { name: "Open lesson" }).click();
+        await expect(page.locator("#exercise-title")).not.toHaveText(
+          originalTitle,
         );
+        await expect(page.getByLabel("Your instruction to AI")).toHaveValue("");
         await expect(
-          page.getByText("saved practice remains tied to your earlier goal"),
+          page.getByText(originalDraft, { exact: true }),
         ).toBeVisible();
         expect(
           (
@@ -856,6 +851,7 @@ test("[L06] independent sessions cannot select another learner to read or overwr
         csrf,
         lesson_id: "clear-instructions",
         lesson_version: "1",
+        goal: "work",
         intent: "draft",
         instruction: "Own text",
         learner_id: a.id,
@@ -892,6 +888,7 @@ test("[L07] cross-origin and CSRF attacks cannot save or delete progress", async
         csrf: value!,
         lesson_id: "clear-instructions",
         lesson_version: "1",
+        goal: "everyday",
         intent: "complete",
         instruction,
         verification,
@@ -938,6 +935,7 @@ test("[L08] repeated or late submissions preserve the completed version", async 
       csrf,
       lesson_id: "clear-instructions",
       lesson_version: "1",
+      goal: "everyday",
       intent: "complete",
       instruction,
       verification,
@@ -950,6 +948,7 @@ test("[L08] repeated or late submissions preserve the completed version", async 
       csrf,
       lesson_id: "clear-instructions",
       lesson_version: "1",
+      goal: "everyday",
       intent: "draft",
       instruction: "Late draft",
     },

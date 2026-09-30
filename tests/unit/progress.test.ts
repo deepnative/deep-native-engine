@@ -118,9 +118,11 @@ it("shows each retained starter completion at its recorded version without withd
       },
     ],
   );
-  expect(items.map((item) => item.version)).toEqual([1, 2, 3]);
+  expect(items.map((item) => item.version)).toEqual([1, 2, 3, 5]);
   expect(items[0]?.state).toContain("text withdrawn");
-  expect(items[1]?.href).toBe("/lesson?version=2#starter-version-2");
+  expect(items[1]?.href).toBe(
+    "/lesson?version=2&goal=work#starter-version-2-work",
+  );
   expect(items[2]?.state).toContain("text withdrawn");
   const html = privateProgressPage(items);
   expect(html).not.toContain("Earlier invented instruction");

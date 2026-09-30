@@ -51,6 +51,7 @@ function postExercise(token: string, save: typeof db.save) {
         csrf: csrf(token, secret),
         lesson_id: "clear-instructions",
         lesson_version: "1",
+        goal: "everyday",
       }),
   );
 }
@@ -80,7 +81,7 @@ it("keeps attempted text available when save rejects before commit", async () =>
   expect(response.text).toContain("Attempted instruction");
   expect(response.text).toContain("Attempted way to check");
   expect(response.text).toContain("&lt;script&gt;bad()&lt;/script&gt;");
-  expect(response.text).toContain('href="/lesson"');
+  expect(response.text).toContain('href="/lesson?version=1&amp;goal=everyday"');
   expect(response.text).not.toContain("Your draft is saved");
   expect(response.text).not.toContain("Synthetic write fault");
   expect(await savedRow(id)).toMatchObject([

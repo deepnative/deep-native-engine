@@ -122,7 +122,8 @@ export function prerequisitesMet(
   if (!spec) return false;
   const path = new Set(seen).add(identity);
   return spec.all.every((atom) => {
-    if (atom.kind === "exercise") return Boolean(progress?.completed_at);
+    if (atom.kind === "exercise")
+      return Boolean(progress?.has_completed_version ?? progress?.completed_at);
     const source = catalog.find(
       (candidate) =>
         candidate.id === atom.id &&

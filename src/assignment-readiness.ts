@@ -204,11 +204,22 @@ export function assignmentReadinessStore(pool: Pool): AssignmentReadinessStore {
           JOIN workspaces w ON w.owner_principal_id=p.id
           WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
             AND p.expires_at>clock_timestamp() AND w.deleting_at IS NULL
-          FOR SHARE OF p,l,w`,
+          FOR SHARE OF p`,
             [hash(token)],
           )
         ).rows[0];
         if (!owner) return null;
+        // Match starter-save/deletion ordering: principal, workspace, learner.
+        const workspace = await client.query(
+          "SELECT id FROM workspaces WHERE id=$1 AND deleting_at IS NULL FOR SHARE",
+          [owner.id],
+        );
+        if (!workspace.rows[0]) return null;
+        const learner = await client.query(
+          "SELECT id FROM learners WHERE id=$1 FOR SHARE",
+          [owner.id],
+        );
+        if (!learner.rows[0]) return null;
         // Current local curated publication is the existing synthetic corpus
         // boundary. An ID prefix is not evidence of provenance. Never read or
         // expose draft, qualified-pending, retired or superseded source metadata.
@@ -234,7 +245,7 @@ export function assignmentReadinessStore(pool: Pool): AssignmentReadinessStore {
         ).rows;
         const progress = (
           await client.query<{ completed_at: Date | null }>(
-            `SELECT completed_at FROM exercises
+            `SELECT max(completed_at) AS completed_at FROM exercises
           WHERE learner_id=$1 AND workspace_id=$1 AND lesson_id='clear-instructions' AND lesson_version=1`,
             [owner.id],
           )

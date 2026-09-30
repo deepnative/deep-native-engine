@@ -80,7 +80,7 @@ test("[L86] three learner backgrounds withdraw completed starter text privately"
     const after = await page.request.get("/api/member/export");
     expect(after.status()).toBe(200);
     const exported = await after.json();
-    expect(exported.version).toBe("local-member-records-v11");
+    expect(exported.version).toBe("local-member-records-v12");
     expect(exported.records.exercises).toMatchObject([
       { instruction: null, verification: null, state: "withdrawn" },
     ]);
@@ -100,6 +100,7 @@ test("[L86] three learner backgrounds withdraw completed starter text privately"
         csrf,
         lesson_id: "clear-instructions",
         lesson_version: "1",
+        goal: goal!,
         intent: "complete",
         instruction,
         verification,

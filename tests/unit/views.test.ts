@@ -1720,7 +1720,7 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v11" as const,
+    version: "local-member-records-v12" as const,
     profile: { id: "owned" },
     records: { milestones: [{ title: "private <script>never show</script>" }] },
     page: {
@@ -1753,4 +1753,79 @@ it("explains live bounded export pages without embedding private records and off
   expect(partial).toContain("Next page");
   expect(partial).not.toContain('signed<&"');
   expect(partial).toContain("Start export again");
+});
+
+it("keeps prior and unattributed starter records out of current-goal completion", () => {
+  const learner = {
+    id: "member",
+    background: "explorer" as const,
+    goal: "work" as const,
+  };
+  for (const goal of ["everyday", null] as const) {
+    const html = dashboard(
+      learner,
+      {
+        instruction: "Earlier private answer",
+        verification: "Check",
+        completed_at: new Date("2026-09-01"),
+        goal_at_start: goal,
+      },
+      "csrf",
+    );
+    expect(html).toContain('value="0" max="1"');
+    expect(html).not.toContain("Earlier private answer");
+    expect(html).not.toContain("completed for your current goal");
+  }
+});
+import { starterRecordPage } from "../../src/views.ts";
+it("labels legacy and withdrawn exact history without editable forms or inferred goals", () => {
+  const row = {
+    lessonId: "clear-instructions",
+    version: 1,
+    instruction: null,
+    verification: null,
+    completedAt: null,
+    withdrawnAt: null,
+    goalAtStart: null,
+  };
+  const draft = starterRecordPage(row, "csrf");
+  expect(draft).toContain("Unattributed historical goal");
+  expect(draft).toContain("Draft saved; not completed");
+  expect(draft).not.toContain('action="/exercise"');
+  const completed = starterRecordPage(
+    {
+      ...row,
+      completedAt: new Date("2026-09-01"),
+      instruction: "Historical invented text",
+    },
+    "csrf",
+  );
+  expect(completed).toContain('name="goal" value="unattributed"');
+  expect(completed).toContain("Historical invented text");
+  const withdrawn = starterRecordPage(
+    {
+      ...row,
+      completedAt: new Date("2026-09-01"),
+      withdrawnAt: new Date("2026-09-02"),
+    },
+    "csrf",
+  );
+  expect(withdrawn).toContain("Saved exercise text withdrawn");
+  expect(withdrawn).not.toContain("Withdraw completed exercise text");
+});
+it("keeps an unattributed historical draft read-only beside fresh current-goal practice", () => {
+  const row = {
+    lessonId: "clear-instructions",
+    version: 1,
+    instruction: "Unattributed invented draft",
+    verification: null,
+    completedAt: null,
+    withdrawnAt: null,
+    goalAtStart: null,
+  };
+  const html = lesson(learner, undefined, "csrf", [], [row]);
+  expect(html).toContain("Unattributed historical goal");
+  expect(html).toContain("Unattributed invented draft");
+  expect(html).toContain('name="goal" value="everyday"');
+  expect(html).not.toContain('value="unattributed"');
 });

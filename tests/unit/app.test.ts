@@ -1010,7 +1010,10 @@ function storage() {
                 verification: saved.verification,
                 completedAt: saved.completed_at,
                 withdrawnAt: saved.withdrawn_at ?? null,
-                goalAtStart: saved.goal_at_start ?? null,
+                goalAtStart:
+                  saved.goal_at_start === undefined
+                    ? "everyday"
+                    : saved.goal_at_start,
               },
             ]
           : [],
@@ -1458,13 +1461,15 @@ it("pins retained starter links to owned versions and reports unavailable or fai
   expect(progress.text).toContain(
     "starter exercise · version 2 · Self-reported complete",
   );
-  expect(progress.text).toContain("/lesson?version=2#starter-version-2");
+  expect(progress.text).toContain(
+    "/lesson?version=2&amp;goal=work#starter-version-2-work",
+  );
   expect(progress.text).not.toContain("Earlier invented instruction");
   const exact = await agent
     .get("/lesson?version=2")
     .set("Host", host)
     .expect(200);
-  expect(exact.text).toContain('id="starter-version-2"');
+  expect(exact.text).toContain('id="starter-version-2-work"');
   expect(exact.text).toContain("Earlier invented instruction");
   for (const version of ["0", "no", "2147483648", "2&version=1", "3"]) {
     const missing = await agent
@@ -1486,8 +1491,9 @@ it("pins retained starter links to owned versions and reports unavailable or fai
   const draft = await agent
     .get("/lesson?version=3")
     .set("Host", host)
-    .expect(404);
-  expect(draft.text).not.toContain("Unfinished historical draft");
+    .expect(200);
+  expect(draft.text).toContain("Unfinished historical draft");
+  expect(draft.text).not.toContain('action="/exercise"');
   db.withExerciseRead = async () => null;
   const denied = await agent.get("/progress").set("Host", host).expect(403);
   expect(denied.text).not.toContain("Earlier invented instruction");
@@ -1627,7 +1633,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v11",
+          version: "local-member-records-v12",
           profile: { id: "owned" },
           records: { milestones: [] },
           page: {
@@ -1661,7 +1667,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v11",
+    version: "local-member-records-v12",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -2719,6 +2725,7 @@ it("retains invalid answers without claiming they were saved, then saves valid i
       csrf,
       lesson_id: LESSON.id,
       lesson_version: String(LESSON.version),
+      goal: "everyday",
       intent: "complete",
       instruction: "short",
     })
@@ -2739,6 +2746,7 @@ it("retains invalid answers without claiming they were saved, then saves valid i
       csrf,
       lesson_id: LESSON.id,
       lesson_version: String(LESSON.version),
+      goal: "everyday",
       intent: "draft",
       instruction: "My private draft",
       learner_id: "other",
@@ -3363,6 +3371,7 @@ it("reports unknown pages and storage failures without leaking secrets or claimi
       csrf,
       lesson_id: LESSON.id,
       lesson_version: String(LESSON.version),
+      goal: "everyday",
       intent: "draft",
       instruction: attemptedInstruction,
       verification: attemptedVerification,
@@ -3436,6 +3445,7 @@ it("requires a confirmed owned version to withdraw completed starter text", asyn
     expect.any(String),
     LESSON.id,
     1,
+    undefined,
   );
   db.withdrawExercise.mockResolvedValueOnce("already-withdrawn");
   await post("/exercise/clear-instructions/1/withdraw", {
@@ -3474,6 +3484,7 @@ it("never echoes stale exercise text after withdrawal, including validation and 
         csrf,
         lesson_id: LESSON.id,
         lesson_version: String(LESSON.version),
+        goal: "everyday",
         intent: "complete",
         instruction,
         verification,
@@ -4421,7 +4432,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v11" as const,
+    version: "local-member-records-v12" as const,
     profile: { id: "owned" },
     records: { milestones: [] },
     page: {
@@ -4661,4 +4672,92 @@ it("keeps member sample-hold request parameters, receipts and uncertain outcomes
   await withdraw().expect(303);
   expect(holds.withdraw).toHaveBeenCalledTimes(writes);
   await post(fields).expect(303);
+});
+
+it("requires exact retained goal identity and never offers another goal's editable form", async () => {
+  const { agent } = await client();
+  active();
+  const rows: ExerciseHistory[] = [
+    {
+      lessonId: LESSON.id,
+      version: 1,
+      instruction: "Everyday invented record",
+      verification: "Check sample",
+      completedAt: new Date("2026-09-01"),
+      withdrawnAt: null,
+      goalAtStart: "everyday",
+    },
+    {
+      lessonId: LESSON.id,
+      version: 1,
+      instruction: "Work invented record",
+      verification: "Check sample",
+      completedAt: null,
+      withdrawnAt: null,
+      goalAtStart: "work",
+    },
+    {
+      lessonId: LESSON.id,
+      version: 2,
+      instruction: "Unattributed legacy record",
+      verification: "Legacy check",
+      completedAt: new Date("2026-09-01"),
+      withdrawnAt: null,
+      goalAtStart: null,
+    },
+  ];
+  db.withExerciseRead = async (_token, render) => render(rows);
+  for (const path of [
+    "/lesson?goal=work",
+    "/lesson?version=1&goal=bad",
+    "/lesson?version=1&goal=work&goal=build",
+    "/lesson?version=1",
+    "/lesson?version=1&goal=build",
+  ]) {
+    expect((await agent.get(path).set("Host", host)).status).toBe(404);
+  }
+  for (const [version, goal, words] of [
+    [1, "work", "Work invented record"],
+    [2, "unattributed", "Unattributed legacy record"],
+  ]) {
+    const page = await agent
+      .get(`/lesson?version=${version}&goal=${goal}`)
+      .set("Host", host)
+      .expect(200);
+    expect(page.text).toContain(words);
+    expect(page.text).not.toContain('action="/exercise"');
+    expect(page.text).not.toContain("Everyday invented record");
+  }
+});
+it("recovers without echoing answers after a transactional stale-goal or unavailable save", async () => {
+  const { agent, csrf } = await client();
+  active();
+  for (const outcome of ["stale-goal", "unavailable"] as const) {
+    db.save.mockResolvedValueOnce(outcome);
+    const response = await agent
+      .post("/exercise")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf,
+        lesson_id: LESSON.id,
+        lesson_version: "1",
+        goal: "everyday",
+        intent: "draft",
+        instruction: "Private attempted text",
+      })
+      .expect(409);
+    expect(response.text).toContain("Exercise form out of date");
+    expect(response.text).not.toContain("Private attempted text");
+  }
+  for (const goal of ["bad", ["work", "build"]]) {
+    await agent
+      .post("/exercise/clear-instructions/1/withdraw")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, confirm: "yes", goal })
+      .expect(422);
+  }
 });
