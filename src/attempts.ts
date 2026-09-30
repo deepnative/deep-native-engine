@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Pool } from "pg";
+import type { Pool, QueryResultRow } from "pg";
 import { hash } from "./store.ts";
 
 export interface AssignmentAttempt {
@@ -70,6 +70,55 @@ const columns = `a.id,a.content_id AS "contentId",a.content_version AS "contentV
     AND ${eligible}),false) AS "currentEligible"`;
 
 export function attemptStore(pool: Pool): AttemptStore {
+  async function mutate<Row extends QueryResultRow>(
+    statement: string,
+    values: unknown[],
+  ) {
+    const client = await pool.connect();
+    let committed = false;
+    let releaseError: Error | undefined;
+    try {
+      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+      await client.query("SET LOCAL lock_timeout='5s'");
+      // Match owner export and deletion: principal, workspace, then attempt.
+      // The shared locks keep revocation and workspace deletion serialized.
+      const principal = (
+        await client.query<{ id: string; expiresAt: Date }>(
+          `SELECT id,expires_at AS "expiresAt" FROM principals
+           WHERE token_hash=$1 AND kind='member' AND revoked_at IS NULL
+             AND expires_at>clock_timestamp() FOR SHARE`,
+          [values[0]],
+        )
+      ).rows[0];
+      if (!principal) return null;
+      const workspace = await client.query(
+        `SELECT id FROM workspaces WHERE owner_principal_id=$1
+         AND deleting_at IS NULL FOR SHARE`,
+        [principal.id],
+      );
+      if (!workspace.rows[0]) return null;
+      const result = await client.query<Row>(statement, values);
+      // CURRENT_TIMESTAMP predates lock waits. Check wall time after every
+      // write, including insert conflicts and submission snapshot insertion.
+      const current = await client.query<{ valid: boolean }>(
+        "SELECT clock_timestamp() < $1::timestamptz AS valid",
+        [principal.expiresAt],
+      );
+      if (!current.rows[0]?.valid) return null;
+      await client.query("COMMIT");
+      committed = true;
+      return result;
+    } finally {
+      if (!committed) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          releaseError = new Error("Attempt mutation rollback failed");
+        }
+      }
+      client.release(releaseError);
+    }
+  }
   return {
     async list(token) {
       return (
@@ -106,7 +155,7 @@ export function attemptStore(pool: Pool): AttemptStore {
       );
     },
     async start(token) {
-      const result = await pool.query<{ id: string }>(
+      const result = await mutate<{ id: string }>(
         `INSERT INTO assignment_attempts(id,member_id,content_id,content_version,goal_at_start)
          SELECT $2,l.id,cv.id,cv.version,l.goal FROM principals p
          JOIN learners l ON l.id=p.id
@@ -117,10 +166,10 @@ export function attemptStore(pool: Pool): AttemptStore {
            SET id=assignment_attempts.id RETURNING id`,
         [hash(token), randomUUID()],
       );
-      return result.rows[0]?.id ?? null;
+      return result?.rows[0]?.id ?? null;
     },
     async save(token, id, revision, response) {
-      const result = await pool.query(
+      const result = await mutate(
         `UPDATE assignment_attempts a SET response=$4,revision=a.revision+1,
            saved_at=CURRENT_TIMESTAMP FROM principals p
          JOIN learners l ON l.id=p.id
@@ -131,10 +180,10 @@ export function attemptStore(pool: Pool): AttemptStore {
            AND a.content_version=cv.version AND ${eligible}`,
         [hash(token), id, revision, response],
       );
-      return result.rowCount === 1;
+      return result?.rowCount === 1;
     },
     async submit(token, id, revision) {
-      const result = await pool.query(
+      const result = await mutate(
         `WITH submitted AS (
          UPDATE assignment_attempts a SET submitted_at=CURRENT_TIMESTAMP,
            submission_count=a.submission_count+1
@@ -152,10 +201,10 @@ export function attemptStore(pool: Pool): AttemptStore {
          RETURNING attempt_id`,
         [hash(token), id, revision],
       );
-      return result.rowCount === 1;
+      return result?.rowCount === 1;
     },
     async revise(token, id) {
-      const result = await pool.query(
+      const result = await mutate(
         `UPDATE assignment_attempts a SET response='',saved_at=NULL,
            submitted_at=NULL,revision=a.revision+1
          FROM principals p JOIN learners l ON l.id=p.id
@@ -166,7 +215,7 @@ export function attemptStore(pool: Pool): AttemptStore {
            AND a.content_id=cv.id AND a.content_version=cv.version AND ${eligible}`,
         [hash(token), id],
       );
-      return result.rowCount === 1;
+      return result?.rowCount === 1;
     },
     async remove(token, id) {
       try {
