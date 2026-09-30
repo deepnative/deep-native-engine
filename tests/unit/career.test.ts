@@ -132,25 +132,6 @@ it("fails closed when optional career storage is not configured", async () => {
 it("binds owner IDs and content in private, versioned career queries", async () => {
   const query = vi.fn().mockResolvedValue({ rowCount: 0, rows: [] });
   const db = careerStore({ query } as unknown as Pool);
-  expect(await db.snapshot("member")).toEqual({
-    enabled: false,
-    entries: [],
-    drafts: [],
-  });
-  query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
-  query.mockResolvedValueOnce({
-    rowCount: 1,
-    rows: [{ id, ...entry, version: 1 }],
-  });
-  query.mockResolvedValueOnce({
-    rowCount: 1,
-    rows: [{ id, ...draft, approved: false, version: 1 }],
-  });
-  expect(await db.snapshot("member")).toMatchObject({
-    enabled: true,
-    entries: [{ id }],
-    drafts: [{ id }],
-  });
   query.mockResolvedValue({ rowCount: 1, rows: [] });
   expect(await db.enable("member")).toBe(true);
   expect(await db.createEntry("member", entry)).toBe(true);
@@ -181,3 +162,89 @@ it("binds owner IDs and content in private, versioned career queries", async () 
   query.mockResolvedValue({ rowCount: 0, rows: [] });
   expect(await db.approveDraft("member", id, 4)).toBe(false);
 });
+
+function snapshotFixture(
+  options: {
+    principal?: boolean;
+    workspace?: boolean;
+    enabled?: boolean;
+    current?: boolean;
+    missingCurrent?: boolean;
+    failRead?: boolean;
+    failRollback?: boolean;
+  } = {},
+) {
+  const query = vi.fn(async (sql: string) => {
+    if (sql === "ROLLBACK" && options.failRollback)
+      throw new Error("synthetic rollback failure");
+    if (sql.includes("FROM principals"))
+      return {
+        rows:
+          options.principal === false
+            ? []
+            : [{ expiresAt: new Date(2000000000000) }],
+      };
+    if (sql.includes("FROM workspaces"))
+      return { rows: options.workspace === false ? [] : [{ id: "workspace" }] };
+    if (sql.includes("FROM career_preferences"))
+      return { rowCount: options.enabled === false ? 0 : 1, rows: [] };
+    if (sql.includes("FROM career_entries")) {
+      if (options.failRead) throw new Error("synthetic read failure");
+      return { rows: [{ id, ...entry, version: 1 }] };
+    }
+    if (sql.includes("FROM career_drafts"))
+      return { rows: [{ id, ...draft, approved: false, version: 1 }] };
+    if (sql.includes("AS valid"))
+      return {
+        rows: options.missingCurrent
+          ? []
+          : [{ valid: options.current !== false }],
+      };
+    return { rows: [] };
+  });
+  const release = vi.fn();
+  const pool = { connect: async () => ({ query, release }) } as unknown as Pool;
+  return { db: careerStore(pool), query, release };
+}
+it("returns complete private career snapshots or a valid opted-out state", async () => {
+  const active = snapshotFixture();
+  expect(await active.db.snapshot("member")).toEqual({
+    enabled: true,
+    entries: [{ id, ...entry, version: 1 }],
+    drafts: [{ id, ...draft, approved: false, version: 1 }],
+  });
+  expect(active.release).toHaveBeenCalledWith(undefined);
+  const disabled = snapshotFixture({ enabled: false });
+  expect(await disabled.db.snapshot("member")).toEqual({
+    enabled: false,
+    entries: [],
+    drafts: [],
+  });
+});
+it.each([
+  { principal: false },
+  { workspace: false },
+  { current: false },
+  { enabled: false, current: false },
+  { missingCurrent: true },
+])(
+  "denies unavailable career authorization without a partial snapshot: %j",
+  async (options) => {
+    const fixture = snapshotFixture(options);
+    expect(await fixture.db.snapshot("member")).toBeNull();
+    expect(fixture.query).toHaveBeenCalledWith("ROLLBACK");
+    expect(fixture.release).toHaveBeenCalledWith(undefined);
+  },
+);
+it.each([false, true])(
+  "does not return partial private career data after a read fault (rollback fault: %s)",
+  async (failRollback) => {
+    const fixture = snapshotFixture({ failRead: true, failRollback });
+    await expect(fixture.db.snapshot("member")).rejects.toThrow(
+      "synthetic read failure",
+    );
+    expect(fixture.release).toHaveBeenCalledWith(
+      failRollback ? expect.any(Error) : undefined,
+    );
+  },
+);

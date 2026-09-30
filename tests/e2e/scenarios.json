@@ -359,9 +359,9 @@
       "id": "L40",
       "actor": "IT member and unrelated general learner",
       "preconditions": "Separate synthetic private sessions",
-      "steps": "Save an optional contract plan and renewal draft, attempt cross-member approval and forged CSRF",
-      "expected": "Neither another member nor a forged form can read or approve the private draft; no outbound path exists",
-      "issues": [107],
+      "steps": "Save an optional contract plan and renewal draft, attempt cross-member approval and forged CSRF, then revisit and reload career planning during workspace deletion",
+      "expected": "Neither another member nor a forged form can read or approve the private draft; deletion returns explicit denial without private entries or drafts or retained-row mutations; no outbound path exists",
+      "issues": [107, 42],
       "critical": true
     },
     {

@@ -31,7 +31,7 @@ export interface CareerSnapshot {
   drafts: CareerDraft[];
 }
 export interface CareerStore {
-  snapshot(memberId: string): Promise<CareerSnapshot>;
+  snapshot(memberId: string): Promise<CareerSnapshot | null>;
   enable(memberId: string): Promise<boolean>;
   disable(memberId: string): Promise<boolean>;
   createEntry(memberId: string, input: CareerEntryInput): Promise<boolean>;
@@ -129,25 +129,69 @@ export function careerStore(pool: Pool): CareerStore {
     (await pool.query(sql, values)).rowCount === 1;
   return {
     async snapshot(memberId) {
-      const enabled =
-        (
-          await pool.query(
-            "SELECT 1 FROM career_preferences WHERE member_id=$1",
+      const client = await pool.connect();
+      let committed = false;
+      let releaseError: Error | undefined;
+      try {
+        await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+        await client.query("SET LOCAL lock_timeout='5s'");
+        // Match deletion/export lock order and retain authorization while reading.
+        const principal = (
+          await client.query<{ expiresAt: Date }>(
+            `SELECT expires_at AS "expiresAt" FROM principals WHERE id=$1
+           AND kind='member' AND revoked_at IS NULL
+           AND expires_at>clock_timestamp() FOR SHARE`,
             [memberId],
           )
-        ).rowCount === 1;
-      if (!enabled) return { enabled: false, entries: [], drafts: [] };
-      const [entries, drafts] = await Promise.all([
-        pool.query<CareerEntry>(
-          `SELECT id,kind,title,note,next_action AS "nextAction",self_reported_outcome AS "selfReportedOutcome",version FROM career_entries WHERE member_id=$1 ORDER BY created_at DESC,id`,
+        ).rows[0];
+        if (!principal) return null;
+        const workspace = await client.query(
+          `SELECT id FROM workspaces WHERE owner_principal_id=$1
+           AND deleting_at IS NULL FOR SHARE`,
           [memberId],
-        ),
-        pool.query<CareerDraft>(
-          `SELECT id,kind,title,body,approved,version FROM career_drafts WHERE member_id=$1 ORDER BY created_at DESC,id`,
-          [memberId],
-        ),
-      ]);
-      return { enabled: true, entries: entries.rows, drafts: drafts.rows };
+        );
+        if (!workspace.rows[0]) return null;
+        const enabled =
+          (
+            await client.query(
+              "SELECT 1 FROM career_preferences WHERE member_id=$1",
+              [memberId],
+            )
+          ).rowCount === 1;
+        const snapshot: CareerSnapshot = { enabled, entries: [], drafts: [] };
+        if (enabled) {
+          snapshot.entries = (
+            await client.query<CareerEntry>(
+              `SELECT id,kind,title,note,next_action AS "nextAction",self_reported_outcome AS "selfReportedOutcome",version FROM career_entries WHERE member_id=$1 ORDER BY created_at DESC,id`,
+              [memberId],
+            )
+          ).rows;
+          snapshot.drafts = (
+            await client.query<CareerDraft>(
+              `SELECT id,kind,title,body,approved,version FROM career_drafts WHERE member_id=$1 ORDER BY created_at DESC,id`,
+              [memberId],
+            )
+          ).rows;
+        }
+        // Wall time includes waits on the principal, workspace and private reads.
+        const current = await client.query<{ valid: boolean }>(
+          "SELECT clock_timestamp() < $1::timestamptz AS valid",
+          [principal.expiresAt],
+        );
+        if (!current.rows[0]?.valid) return null;
+        await client.query("COMMIT");
+        committed = true;
+        return snapshot;
+      } finally {
+        if (!committed) {
+          try {
+            await client.query("ROLLBACK");
+          } catch {
+            releaseError = new Error("Career snapshot rollback failed");
+          }
+        }
+        client.release(releaseError);
+      }
     },
     enable: (memberId) =>
       changed(

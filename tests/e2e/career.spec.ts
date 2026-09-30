@@ -1,4 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
+import { COOKIE } from "../../src/session.ts";
+import { hash } from "../../src/store.ts";
+import { testPool } from "../support/database.ts";
+const pool = testPool();
+test.afterAll(async () => pool.end());
 
 const origin = "http://127.0.0.1:4317";
 
@@ -196,4 +201,44 @@ test("[L40] IT member's optional contract notes and renewal draft stay private",
     await other.close();
   }
   await expect(page.getByText("NO OUTREACH")).toBeVisible();
+  const session = (await page.context().cookies()).find(
+    (cookie) => cookie.name === COOKIE,
+  )!;
+  const owner = (
+    await pool.query("SELECT id FROM principals WHERE token_hash=$1", [
+      hash(session.value),
+    ])
+  ).rows[0].id;
+  const retained = async () => ({
+    entries: (
+      await pool.query(
+        "SELECT * FROM career_entries WHERE member_id=$1 ORDER BY id",
+        [owner],
+      )
+    ).rows,
+    drafts: (
+      await pool.query(
+        "SELECT * FROM career_drafts WHERE member_id=$1 ORDER BY id",
+        [owner],
+      )
+    ).rows,
+  });
+  const before = await retained();
+  await pool.query(
+    "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+    [owner],
+  );
+  for (let visit = 0; visit < 2; visit++) {
+    const response =
+      visit === 0 ? await page.goto("/career") : await page.reload();
+    expect(response?.status()).toBe(403);
+    await expect(
+      page.getByRole("heading", { name: "Career planning unavailable" }),
+    ).toBeVisible();
+    await expect(page.getByText("Invented support renewal")).toHaveCount(0);
+    await expect(page.getByText("Sample renewal note")).toHaveCount(0);
+    await expect(page.locator(".career-list")).toHaveCount(0);
+    await expect(page.getByText("records are off")).toHaveCount(0);
+  }
+  expect(await retained()).toEqual(before);
 });

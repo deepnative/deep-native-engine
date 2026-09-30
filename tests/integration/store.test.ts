@@ -1,5 +1,9 @@
 import { beforeAll, afterAll, beforeEach, afterEach, it, expect } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
+import request from "supertest";
+import { app } from "../../src/app.ts";
+import { COOKIE } from "../../src/session.ts";
+import { withLoopback } from "../support/loopback-server.ts";
 import { readFile } from "node:fs/promises";
 import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -724,6 +728,207 @@ it("denies a local circle join when revocation commits during its circle lock wa
   }
 });
 
+it("withholds private career records during workspace deletion at the store and route", async () => {
+  const owner = await member();
+  const career = careerStore(pool);
+  await career.enable(owner.learner.id);
+  await career.createEntry(owner.learner.id, {
+    kind: "career",
+    title: "Private invented career target",
+    note: "Private invented note",
+    nextAction: "Review invented examples",
+    selfReportedOutcome: "Private invented outcome",
+  });
+  await career.createDraft(owner.learner.id, {
+    kind: "proposal",
+    title: "Private invented career draft",
+    body: "Private invented draft details retained only for this fixture.",
+  });
+  const before = await career.snapshot(owner.learner.id);
+  const privateTexts = [
+    "Private invented career target",
+    "Private invented note",
+    "Private invented outcome",
+    "Private invented career draft",
+    "Private invented draft details",
+  ];
+  await withLoopback(
+    app(db, {
+      origin: "http://127.0.0.1:3000",
+      secret: "synthetic-career-secret",
+      career,
+    }),
+    async (server) => {
+      const agent = request.agent(server);
+      const active = await agent
+        .get("/career")
+        .set("Host", "127.0.0.1:3000")
+        .set("Cookie", `${COOKIE}=${owner.token}`)
+        .expect(200);
+      const csrf = active.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+      await pool.query(
+        "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+        [owner.learner.id],
+      );
+      expect.soft(await career.snapshot(owner.learner.id)).toBeNull();
+      const paths = [
+        "/career/entries",
+        `/career/entries/${before!.entries[0]!.id}/update`,
+        "/career/drafts",
+        `/career/drafts/${before!.drafts[0]!.id}/update`,
+      ];
+      const responses = [
+        await agent
+          .get("/career")
+          .set("Host", "127.0.0.1:3000")
+          .set("Cookie", `${COOKIE}=${owner.token}`),
+      ];
+      for (const path of paths)
+        responses.push(
+          await agent
+            .post(path)
+            .set("Host", "127.0.0.1:3000")
+            .set("Origin", "http://127.0.0.1:3000")
+            .set("Cookie", `${COOKIE}=${owner.token}`)
+            .type("form")
+            .send({ csrf, version: "1", title: "Private invalid input" }),
+        );
+      for (const response of responses) {
+        expect.soft(response.status).toBe(403);
+        expect.soft(response.text).toContain("Career planning unavailable");
+        for (const text of [...privateTexts, "Private invalid input"])
+          expect.soft(response.text).not.toContain(text);
+      }
+    },
+  );
+  await pool.query(
+    "UPDATE workspaces SET deleting_at=NULL WHERE owner_principal_id=$1",
+    [owner.learner.id],
+  );
+  expect(await career.snapshot(owner.learner.id)).toEqual(before);
+});
+
+it.each([
+  "revocation",
+  "deletion",
+  "valid",
+  "principal-expiry",
+  "workspace-expiry",
+  "read-expiry",
+] as const)(
+  "serializes private career reads and rechecks authorization after %s",
+  async (change) => {
+    const owner = await member();
+    const career = careerStore(pool);
+    await career.enable(owner.learner.id);
+    await career.createDraft(owner.learner.id, {
+      kind: "proposal",
+      title: "Invented locked draft",
+      body: "Invented private content for the concurrency fixture.",
+    });
+    const before = await career.snapshot(owner.learner.id);
+    const holder = await pool.connect();
+    let pending: ReturnType<typeof career.snapshot> | undefined;
+    const expires = change.endsWith("expiry");
+    try {
+      if (expires)
+        await pool.query(
+          "UPDATE principals SET expires_at=clock_timestamp()+interval '2 seconds' WHERE id=$1",
+          [owner.learner.id],
+        );
+      await holder.query("BEGIN");
+      const pid = (await holder.query("SELECT pg_backend_pid() AS pid")).rows[0]
+        .pid;
+      if (change === "revocation")
+        await holder.query(
+          "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+          [owner.learner.id],
+        );
+      else if (change === "deletion")
+        await holder.query(
+          "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+          [owner.learner.id],
+        );
+      else if (change === "principal-expiry")
+        await holder.query("SELECT id FROM principals WHERE id=$1 FOR UPDATE", [
+          owner.learner.id,
+        ]);
+      else if (change === "read-expiry")
+        await holder.query("LOCK TABLE career_drafts IN ACCESS EXCLUSIVE MODE");
+      else
+        await holder.query(
+          "SELECT id FROM workspaces WHERE owner_principal_id=$1 FOR UPDATE",
+          [owner.learner.id],
+        );
+      pending = career.snapshot(owner.learner.id);
+      await expect
+        .poll(
+          async () =>
+            (
+              await pool.query(
+                `SELECT 1 FROM pg_stat_activity waiter CROSS JOIN principals p
+         WHERE p.id=$2 AND waiter.state='active' AND waiter.wait_event_type='Lock'
+         AND $1::integer=ANY(pg_blocking_pids(waiter.pid))
+         AND (NOT $3::boolean OR (waiter.xact_start<p.expires_at AND p.expires_at<=clock_timestamp()))`,
+                [pid, owner.learner.id, expires],
+              )
+            ).rowCount,
+          { timeout: 4000, interval: 20 },
+        )
+        .toBe(1);
+      await holder.query("COMMIT");
+      expect(await pending).toEqual(change === "valid" ? before : null);
+      expect(
+        (
+          await pool.query(
+            "SELECT title,body FROM career_drafts WHERE member_id=$1",
+            [owner.learner.id],
+          )
+        ).rows,
+      ).toEqual([
+        {
+          title: "Invented locked draft",
+          body: "Invented private content for the concurrency fixture.",
+        },
+      ]);
+    } finally {
+      await holder.query("ROLLBACK");
+      await Promise.allSettled(pending ? [pending] : []);
+      holder.release();
+    }
+  },
+  10000,
+);
+
+it("keeps repeat career reads isolated and denies expired or revoked principals", async () => {
+  const owner = await member(),
+    outsider = await member();
+  const career = careerStore(pool);
+  await career.enable(owner.learner.id);
+  await career.createDraft(owner.learner.id, {
+    kind: "proposal",
+    title: "Invented owner draft",
+    body: "Invented private owner details for isolation.",
+  });
+  const before = await career.snapshot(owner.learner.id);
+  expect(await career.snapshot(owner.learner.id)).toEqual(before);
+  expect(await career.snapshot(outsider.learner.id)).toEqual({
+    enabled: false,
+    entries: [],
+    drafts: [],
+  });
+  await pool.query(
+    "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+    [owner.learner.id],
+  );
+  expect(await career.snapshot(owner.learner.id)).toBeNull();
+  await pool.query(
+    "UPDATE principals SET revoked_at=NULL,expires_at=clock_timestamp() WHERE id=$1",
+    [owner.learner.id],
+  );
+  expect(await career.snapshot(owner.learner.id)).toBeNull();
+});
+
 it("keeps optional career plans and draft approvals private, versioned and removable", async () => {
   const owner = await member();
   const outsider = await member();
@@ -762,8 +967,8 @@ it("keeps optional career plans and draft approvals private, versioned and remov
     entries: [],
     drafts: [],
   });
-  const entryId = own.entries[0]!.id;
-  const draftId = own.drafts[0]!.id;
+  const entryId = own!.entries[0]!.id;
+  const draftId = own!.drafts[0]!.id;
   expect(await career.updateEntry(outsider.learner.id, entryId, 1, entry)).toBe(
     false,
   );
@@ -782,7 +987,7 @@ it("keeps optional career plans and draft approvals private, versioned and remov
     }),
   ).toBe(true);
   own = await career.snapshot(owner.learner.id);
-  expect(own.drafts[0]).toMatchObject({ approved: false, version: 3 });
+  expect(own!.drafts[0]).toMatchObject({ approved: false, version: 3 });
   expect(await career.revokeDraft(owner.learner.id, draftId, 3)).toBe(false);
   expect(await career.approveDraft(owner.learner.id, draftId, 3)).toBe(true);
   expect(await career.revokeDraft(owner.learner.id, draftId, 4)).toBe(true);
@@ -816,11 +1021,7 @@ it("keeps optional career plans and draft approvals private, versioned and remov
     drafts: [],
   });
   await db.remove(owner.learner.id);
-  expect(await career.snapshot(owner.learner.id)).toEqual({
-    enabled: false,
-    entries: [],
-    drafts: [],
-  });
+  expect(await career.snapshot(owner.learner.id)).toBeNull();
 });
 it("keeps goal milestones private, rejects stale edits and cascades on member deletion", async () => {
   const owner = await member();

@@ -3,6 +3,7 @@ import request from "supertest";
 import type { Server } from "node:http";
 import { app } from "../../src/app.ts";
 import { disabledCareerStore, type CareerStore } from "../../src/career.ts";
+import { COOKIE } from "../../src/session.ts";
 import type { Store } from "../../src/store.ts";
 import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 
@@ -202,4 +203,54 @@ it("requires current member, deliberate opt-in, valid private content and versio
     nextAction: entry.next_action,
     selfReportedOutcome: entry.self_reported_outcome,
   });
+});
+
+it("denies career pages and every validation rerender after read authorization is lost", async () => {
+  const db = {
+    session: async () => ({
+      kind: "active",
+      learner: { id: "member", background: "explorer", goal: "everyday" },
+    }),
+  } as unknown as Store;
+  const career = {
+    ...disabledCareerStore(),
+    snapshot: vi.fn<CareerStore["snapshot"]>().mockResolvedValue(null),
+  };
+  server = await listenLoopback(app(db, { origin, secret: "secret", career }));
+  const agent = request.agent(server);
+  const cookie = `${COOKIE}=${"a".repeat(64)}`;
+  const denied = await agent
+    .get("/career")
+    .set("Host", host)
+    .set("Cookie", cookie)
+    .expect(403);
+  expect(denied.text).toContain("Career planning unavailable");
+  career.snapshot.mockResolvedValueOnce({
+    enabled: false,
+    entries: [],
+    drafts: [],
+  });
+  const page = await agent
+    .get("/career")
+    .set("Host", host)
+    .set("Cookie", cookie)
+    .expect(200);
+  const csrf = page.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  for (const path of [
+    "/career/entries",
+    `/career/entries/${id}/update`,
+    "/career/drafts",
+    `/career/drafts/${id}/update`,
+  ]) {
+    const response = await agent
+      .post(path)
+      .set("Host", host)
+      .set("Cookie", cookie)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, version: "1", title: "Private invalid input" })
+      .expect(403);
+    expect(response.text).toContain("Career planning unavailable");
+    expect(response.text).not.toContain("Private invalid input");
+  }
 });
