@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
 import { store } from "../../src/store.ts";
@@ -157,4 +157,104 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
       ])
     ).rowCount,
   ).toBe(0);
+});
+
+test("[L99] feedback save waiting past session expiry leaves the private note unchanged", async ({
+  page,
+  context,
+}) => {
+  await onboard(page, "explorer");
+  await page.goto("/workflow-feedback/WF-001");
+  await page
+    .getByLabel("Your private feedback on version 1")
+    .fill("Original invented private workflow note.");
+  await page
+    .getByLabel("I am saving private feedback using only invented text")
+    .check();
+  await page.getByRole("button", { name: "Save private feedback" }).click();
+  await expect(page.getByRole("status")).toContainText("saved privately");
+  const cookie = (await context.cookies()).find(
+    (entry) => entry.name === "dne_preview",
+  )!;
+  const tokenHash = createHash("sha256").update(cookie.value).digest("hex");
+  const original = (
+    await pool.query(
+      `SELECT f.note,f.revision FROM workflow_feedback f
+       JOIN principals p ON p.id=f.member_id
+       WHERE p.token_hash=$1 AND f.workflow_id='WF-001'`,
+      [tokenHash],
+    )
+  ).rows;
+  expect(original).toMatchObject([
+    { note: "Original invented private workflow note.", revision: 1 },
+  ]);
+  await pool.query(
+    "UPDATE principals SET expires_at=clock_timestamp()+interval '2 seconds' WHERE token_hash=$1",
+    [tokenHash],
+  );
+  const holder = await pool.connect();
+  let saving: Promise<void> | undefined;
+  try {
+    await holder.query("BEGIN");
+    await holder.query(
+      "SELECT 1 FROM principals WHERE token_hash=$1 FOR UPDATE",
+      [tokenHash],
+    );
+    const holderPid = (
+      await holder.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+    ).rows[0]!.pid;
+    await page
+      .getByLabel("Your private feedback on version 1")
+      .fill("Late invented replacement that must not save.");
+    await page
+      .getByLabel("I am saving private feedback using only invented text")
+      .check();
+    saving = Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().endsWith("/workflow-feedback/WF-001/save") &&
+          response.request().method() === "POST",
+      ),
+      page.getByRole("button", { name: "Save private feedback" }).click(),
+    ]).then(([response]) => {
+      expect(response.status()).toBe(409);
+    });
+    await expect
+      .poll(
+        async () =>
+          (
+            await pool.query(
+              `SELECT 1 FROM pg_stat_activity waiter CROSS JOIN principals p
+               WHERE p.token_hash=$2 AND waiter.state='active'
+                 AND waiter.wait_event_type='Lock'
+                 AND $1::integer=ANY(pg_blocking_pids(waiter.pid))
+                 AND waiter.xact_start<p.expires_at
+                 AND p.expires_at<=clock_timestamp()`,
+              [holderPid, tokenHash],
+            )
+          ).rowCount,
+        { timeout: 7_000, intervals: [10, 20, 50] },
+      )
+      .toBe(1);
+    await holder.query("COMMIT");
+    await saving;
+    await expect(
+      page.getByRole("heading", { name: "Feedback unchanged" }),
+    ).toBeVisible();
+    const retained = (
+      await pool.query(
+        `SELECT f.note,f.revision FROM workflow_feedback f
+         JOIN principals p ON p.id=f.member_id
+         WHERE p.token_hash=$1 AND f.workflow_id='WF-001'`,
+        [tokenHash],
+      )
+    ).rows;
+    expect(retained).toEqual(original);
+  } finally {
+    await holder.query("ROLLBACK");
+    await Promise.allSettled(saving ? [saving] : []);
+    holder.release();
+  }
+  await page.goto("/workflow-feedback/WF-001");
+  await expect(page).toHaveURL(origin + "/");
 });
