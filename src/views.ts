@@ -506,6 +506,13 @@ export function assignmentAttemptPage(
   error = "",
   unsaved?: string,
   conflict = false,
+  reflectionDraft?: {
+    sequence: number;
+    evidence: string;
+    gaps: string;
+    intention: string;
+    conflict?: boolean;
+  },
 ) {
   const url = `/assignments/attempts/${encodeURIComponent(item.id)}`;
   const prior = item.submissionCount ?? 0;
@@ -516,12 +523,34 @@ export function assignmentAttemptPage(
       ? `<label for="unsaved-attempt-response">Unsaved response to copy</label><textarea id="unsaved-attempt-response" rows="8" readonly>${escape(unsaved)}</textarea>`
       : `<pre class="content-text">${escape(item.response)}</pre>`;
   const history = item.submissions ?? [];
+  const reflectionFields = (
+    sequence: number,
+    evidence: string,
+    gaps: string,
+    intention: string,
+  ) =>
+    `<label for="reflection-evidence-${sequence}">Evidence I can point to</label><textarea id="reflection-evidence-${sequence}" name="evidence" maxlength="1000" rows="3">${escape(evidence)}</textarea><label for="reflection-gaps-${sequence}">Gaps or uncertainty</label><textarea id="reflection-gaps-${sequence}" name="gaps" maxlength="1000" rows="3">${escape(gaps)}</textarea><label for="reflection-intention-${sequence}">What I will change</label><textarea id="reflection-intention-${sequence}" name="intention" maxlength="1000" rows="3">${escape(intention)}</textarea>`;
+  const reflectionView = (entry: AssignmentSubmission) => {
+    const saved = entry.reflection;
+    const deleted = !saved && (entry.reflectionRevision ?? 0) > 0;
+    const draft =
+      reflectionDraft?.sequence === entry.sequence
+        ? reflectionDraft
+        : undefined;
+    const base = `${url}/reflections/${entry.sequence}`;
+    if (deleted)
+      return "<p>This private reflection was deleted. Its text is no longer retained.</p>";
+    if (draft?.conflict)
+      return `<p role="alert">This reflection was not saved. Copy your attempted text and reload the current version before trying again.</p>${reflectionFields(entry.sequence, draft.evidence, draft.gaps, draft.intention)}`;
+    const fields = draft ?? saved ?? { evidence: "", gaps: "", intention: "" };
+    return `<form method="post" action="${base}/save">${hidden(csrf)}<input type="hidden" name="reflection_revision" value="${entry.reflectionRevision ?? 0}">${reflectionFields(entry.sequence, fields.evidence, fields.gaps, fields.intention)}<label class="check"><input type="checkbox" name="sample_confirmed" value="yes" required><span>This self-reflection contains only invented or sample information.</span></label><button type="submit">Save private reflection for submission ${entry.sequence}</button></form>${saved ? `<form method="post" action="${base}/delete">${hidden(csrf)}<input type="hidden" name="reflection_revision" value="${entry.reflectionRevision ?? 0}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete this reflection without deleting submission ${entry.sequence}</span></label><button class="secondary" type="submit">Delete reflection ${entry.sequence}</button></form>` : ""}`;
+  };
   const compareLink =
     history.length >= 2
       ? `<p><a href="${url}/compare?from=${history[0]!.sequence}&amp;to=${history.at(-1)!.sequence}">Compare private submissions</a></p>`
       : "";
   const historyView = history.length
-    ? `<section aria-label="Private local submission history"><h2>Private local submission history</h2><ol>${history.map((entry) => `<li id="submission-${entry.sequence}"><strong>Submission ${entry.sequence}</strong> · ${escape(entry.submittedAt)}<pre class="content-text">${escape(entry.response)}</pre><p><a href="${url}/portfolio/${entry.sequence}" download>Download simulated portfolio statement for submission ${entry.sequence}</a></p></li>`).join("")}</ol>${compareLink}<p>These submitted versions and their portfolio statements are simulated, self-authored and unreviewed. Downloads contain only the selected immutable submission; they are not credentials or formal assessments. Deleting this attempt deletes every stored version; it cannot erase files you already downloaded.</p></section>`
+    ? `<section aria-label="Private local submission history"><h2>Private local submission history</h2><ol>${history.map((entry) => `<li id="submission-${entry.sequence}"><strong>Submission ${entry.sequence}</strong> · ${escape(entry.submittedAt)}<pre class="content-text">${escape(entry.response)}</pre><section aria-label="Reflection for submission ${entry.sequence}"><h3>Private self-reflection for submission ${entry.sequence}</h3><p>SELF-REPORTED · SIMULATED · UNREVIEWED. This note does not assess your work or go to a reviewer.</p>${entry.reflection?.intention && entry.sequence === prior && !item.submittedAt ? `<p>Earlier revision intention beside this draft: ${escape(entry.reflection.intention)}</p>` : ""}${reflectionView(entry)}</section><p><a href="${url}/portfolio/${entry.sequence}" download>Download simulated portfolio statement for submission ${entry.sequence}</a></p></li>`).join("")}</ol>${compareLink}<p>These submitted versions and their portfolio statements are simulated, self-authored and unreviewed. Downloads contain only the selected immutable submission; they are not credentials or formal assessments. Deleting this attempt deletes every stored version; it cannot erase files you already downloaded.</p></section>`
     : "";
   const revisionAction =
     item.currentEligible && item.submittedAt && prior < 10 && !conflict
@@ -531,7 +560,7 @@ export function assignmentAttemptPage(
         : "";
   return page(
     "Private assignment attempt",
-    `<section class="error-page"><p class="eyebrow">PRIVATE LOCAL PREVIEW · NO FORMAL REVIEW</p><h1>${escape(item.title)}</h1><p>Assignment version ${item.contentVersion} · goal when started: ${escape(item.goalAtStart)} · ${item.submittedAt ? "submitted locally" : prior > 0 ? (item.savedAt ? "private revision draft saved" : "private revision started") : item.savedAt ? "private draft saved" : "started only"}</p><p>This attempt stays pinned to its original assignment and rubric version. Submitting only records your own saved sample response; it does not send it to a reviewer or assess your skill.</p>${error ? `<div class="notice" role="alert"><p>${escape(error)}</p></div>` : ""}${!item.currentEligible && !item.submittedAt ? "<p>The assignment or your current direction changed. Your earlier work remains private and readable, but this version cannot be edited. Choose an available sample to start again.</p>" : ""}<h2>Your response</h2>${responseView}${conflict ? `<p>${unsaved !== undefined ? "Copy your unsaved text before reloading the saved attempt to reconcile it." : "Reload this attempt to check the current saved state before trying again."}</p>` : ""}${item.currentEligible && item.savedAt && !item.submittedAt && !conflict ? `<form method="post" action="${url}/submit">${hidden(csrf)}<input type="hidden" name="revision" value="${item.revision}"><input type="hidden" name="response_snapshot" value="${escape(item.response)}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Submit this saved version locally; no human review is connected.</span></label><button type="submit">Submit saved version locally</button></form>` : ""}${revisionAction}${historyView}<form method="post" action="${url}/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete this private attempt and all its submissions</span></label><button class="secondary" type="submit">Delete attempt</button></form><p><a href="/assignments/attempts">All private attempts</a> · <a href="/learn">Your learning path</a></p></section>${editable ? '<script type="module" src="/assets/attempt-save.js"></script>' : ""}`,
+    `<section class="error-page"><p class="eyebrow">PRIVATE LOCAL PREVIEW · NO FORMAL REVIEW</p><h1>${escape(item.title)}</h1><p>Assignment ${escape(item.contentId)} · Assignment version ${item.contentVersion} · goal when started: ${escape(item.goalAtStart)} · ${item.submittedAt ? "submitted locally" : prior > 0 ? (item.savedAt ? "private revision draft saved" : "private revision started") : item.savedAt ? "private draft saved" : "started only"}</p><p>This attempt stays pinned to its original assignment and rubric version. Submitting only records your own saved sample response; it does not send it to a reviewer or assess your skill.</p><section aria-label="Original assignment rubric"><h2>Original rubric</h2>${item.rubric ? `<p>Original rubric version ${item.rubricVersion}</p><pre class="content-text">${escape(item.rubric)}</pre>` : "<p>No rubric was retained for this assignment version. No criteria are inferred.</p>"}</section>${error ? `<div class="notice" role="alert"><p>${escape(error)}</p></div>` : ""}${!item.currentEligible && !item.submittedAt ? "<p>The assignment or your current direction changed. Your earlier work remains private and readable, but this version cannot be edited. Choose an available sample to start again.</p>" : ""}<h2>Your response</h2>${responseView}${conflict ? `<p>${unsaved !== undefined ? "Copy your unsaved text before reloading the saved attempt to reconcile it." : "Reload this attempt to check the current saved state before trying again."}</p>` : ""}${item.currentEligible && item.savedAt && !item.submittedAt && !conflict ? `<form method="post" action="${url}/submit">${hidden(csrf)}<input type="hidden" name="revision" value="${item.revision}"><input type="hidden" name="response_snapshot" value="${escape(item.response)}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Submit this saved version locally; no human review is connected.</span></label><button type="submit">Submit saved version locally</button></form>` : ""}${revisionAction}${historyView}<form method="post" action="${url}/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete this private attempt and all its submissions</span></label><button class="secondary" type="submit">Delete attempt</button></form><p><a href="/assignments/attempts">All private attempts</a> · <a href="/learn">Your learning path</a></p></section>${editable ? '<script type="module" src="/assets/attempt-save.js"></script>' : ""}`,
   );
 }
 export function assignmentPortfolioStatement(
@@ -579,6 +608,17 @@ export function assignmentWriteRecoveryPage(
   return page(
     title,
     `<section class="error-page"><p class="eyebrow">PRIVATE LOCAL PREVIEW · WRITE NOT CONFIRMED</p><h1>${escape(title)}</h1><div class="notice" role="alert"><p>${escape(message)}</p></div>${response ? `<label for="unsaved-attempt-response">Response to copy before leaving this page</label><textarea id="unsaved-attempt-response" rows="8" readonly>${escape(response)}</textarea>` : ""}<p><a href="/assignments/attempts/${encodeURIComponent(id)}">Reload this attempt</a> to check the saved version and submission state before trying again. This page does not send another write.</p><p><a href="/">Start a fresh preview session</a> if yours ended.</p></section>`,
+  );
+}
+export function assignmentReflectionRecoveryPage(
+  title: string,
+  message: string,
+  id: string,
+  values: { evidence: string; gaps: string; intention: string },
+) {
+  return page(
+    title,
+    `<section class="error-page"><p class="eyebrow">PRIVATE LOCAL PREVIEW · REFLECTION NOT CONFIRMED</p><h1>${escape(title)}</h1><div class="notice" role="alert"><p>${escape(message)}</p></div><p>Copy your attempted self-reflection before leaving this page. No new write is sent by reloading.</p><label for="copy-evidence">Evidence I can point to, to copy</label><textarea id="copy-evidence" rows="3" readonly>${escape(values.evidence)}</textarea><label for="copy-gaps">Gaps or uncertainty, to copy</label><textarea id="copy-gaps" rows="3" readonly>${escape(values.gaps)}</textarea><label for="copy-intention">What I will change, to copy</label><textarea id="copy-intention" rows="3" readonly>${escape(values.intention)}</textarea><p><a href="/assignments/attempts/${encodeURIComponent(id)}">Inspect the current saved attempt</a> before retrying.</p><p><a href="/">Start a fresh preview session</a> if yours ended.</p></section>`,
   );
 }
 function milestoneFields(prefix: string, value?: MilestoneInput) {

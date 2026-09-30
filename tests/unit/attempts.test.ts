@@ -1,6 +1,10 @@
 import { expect, it, vi } from "vitest";
 import type { Pool } from "pg";
-import { attemptStore, disabledAttemptStore } from "../../src/attempts.ts";
+import {
+  attemptStore,
+  disabledAttemptStore,
+  validReflectionInput,
+} from "../../src/attempts.ts";
 import { hash } from "../../src/store.ts";
 
 it("keeps attempts disabled unless a real store is wired", async () => {
@@ -12,25 +16,174 @@ it("keeps attempts disabled unless a real store is wired", async () => {
   expect(await disabled.submit("token", "id", 1)).toBe(false);
   expect(await disabled.revise("token", "id")).toBe(false);
   expect(await disabled.remove("token", "id")).toBe(false);
+  expect(
+    await disabled.saveReflection("token", "id", 1, 0, {
+      evidence: "Synthetic evidence",
+      gaps: "",
+      intention: "",
+    }),
+  ).toBe(false);
+  expect(await disabled.deleteReflection("token", "id", 1, 1)).toBe(false);
 });
 
 it("reads only the hashed owner session and preserves missing results", async () => {
   const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 0 });
-  const attempts = attemptStore({ query } as unknown as Pool);
+  const detailQuery = vi.fn(async (statement: string, params?: unknown[]) => {
+    if (statement.includes("FROM principals"))
+      return {
+        rows: [{ id: "member", expiresAt: new Date("2030-01-01") }],
+      };
+    if (statement.includes("FROM workspaces"))
+      return { rows: [{ id: "workspace" }] };
+    if (statement.startsWith("SELECT clock_timestamp()"))
+      return { rows: [{ valid: true }] };
+    if (statement.includes("FROM assignment_attempts a"))
+      return {
+        rows: params?.[1] === "owned" ? [{ id: "owned", revision: 2 }] : [],
+      };
+    return { rows: [] };
+  });
+  const connect = vi.fn(async () => ({ query: detailQuery, release: vi.fn() }));
+  const attempts = attemptStore({ query, connect } as unknown as Pool);
   const credential = "a".repeat(64);
   expect(await attempts.list(credential)).toEqual([]);
   expect(await attempts.detail(credential, "attempt-id")).toBeNull();
-  expect(query.mock.calls.map((call) => call[1][0])).toEqual([
-    hash(credential),
-    hash(credential),
-  ]);
-  query.mockResolvedValueOnce({ rows: [{ id: "owned", revision: 2 }] });
+  expect(query.mock.calls[0]![1][0]).toBe(hash(credential));
+  expect(
+    detailQuery.mock.calls.find(([sql]) =>
+      sql.includes("FROM principals"),
+    )?.[1],
+  ).toEqual([hash(credential)]);
   expect(await attempts.detail(credential, "owned")).toMatchObject({
     id: "owned",
     revision: 2,
   });
   query.mockResolvedValueOnce({ rows: [{ id: "owned" }] });
   expect(await attempts.list(credential)).toEqual([{ id: "owned" }]);
+});
+
+it("rejects invalid reflection fields before storage", () => {
+  expect(validReflectionInput({ evidence: " ", gaps: "", intention: "" })).toBe(
+    false,
+  );
+  expect(
+    validReflectionInput({
+      evidence: "x".repeat(1001),
+      gaps: "",
+      intention: "",
+    }),
+  ).toBe(false);
+  expect(
+    validReflectionInput({ evidence: "", gaps: "uncertain", intention: "" }),
+  ).toBe(true);
+  expect(validReflectionInput(null as never)).toBe(false);
+});
+
+function detailPool(
+  options: {
+    principal?: boolean;
+    workspace?: boolean;
+    attempt?: boolean;
+    current?: boolean;
+    rollbackFails?: boolean;
+    rejectOn?: string;
+  } = {},
+) {
+  const release = vi.fn();
+  const query = vi.fn(async (statement: string) => {
+    if (options.rejectOn && statement.includes(options.rejectOn))
+      throw Error("Synthetic read failure");
+    if (options.rollbackFails && statement === "ROLLBACK")
+      throw Error("Synthetic rollback failure");
+    if (statement.includes("FROM principals"))
+      return {
+        rows:
+          options.principal === false
+            ? []
+            : [{ id: "member", expiresAt: new Date("2030-01-01") }],
+      };
+    if (statement.includes("FROM workspaces"))
+      return { rows: options.workspace === false ? [] : [{ id: "workspace" }] };
+    if (statement.includes("FROM assignment_attempts a"))
+      return {
+        rows:
+          options.attempt === false
+            ? []
+            : [{ id: "owned", rubric: "Versioned rubric" }],
+      };
+    if (statement.includes("FROM assignment_submission_snapshots s"))
+      return {
+        rows: [
+          {
+            sequence: 1,
+            submittedAt: new Date("2026-09-30T00:01:00Z"),
+            reflection: null,
+            reflectionRevision: 0,
+          },
+        ],
+      };
+    if (statement.startsWith("SELECT clock_timestamp()"))
+      return { rows: [{ valid: options.current !== false }] };
+    return { rows: [] };
+  });
+  return {
+    pool: { connect: async () => ({ query, release }) } as unknown as Pool,
+    query,
+    release,
+  };
+}
+
+it.each([
+  ["revoked principal", { principal: false }],
+  ["deleted workspace", { workspace: false }],
+  ["foreign attempt", { attempt: false }],
+  ["expired after text lock", { current: false }],
+] as const)("withholds private detail for %s", async (_reason, options) => {
+  const db = detailPool(options);
+  expect(await attemptStore(db.pool).detail("owner", "attempt")).toBeNull();
+  expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+  expect(db.release).toHaveBeenCalledWith(undefined);
+});
+
+it("reads locked submission text only after current session check and commit", async () => {
+  const db = detailPool();
+  expect(await attemptStore(db.pool).detail("owner", "attempt")).toMatchObject({
+    id: "owned",
+    rubric: "Versioned rubric",
+    submissions: [
+      {
+        sequence: 1,
+        submittedAt: "2026-09-30T00:01:00.000Z",
+        reflection: null,
+        reflectionRevision: 0,
+      },
+    ],
+  });
+  const sql = db.query.mock.calls.map(([statement]) => statement);
+  expect(
+    sql.findIndex((statement) =>
+      statement.includes("FROM assignment_submission_reflections"),
+    ),
+  ).toBeLessThan(
+    sql.findIndex((statement) =>
+      statement.includes("FROM assignment_submission_snapshots s"),
+    ),
+  );
+  expect(sql.at(-1)).toBe("COMMIT");
+});
+
+it("drops an unsafe connection if private-detail rollback fails", async () => {
+  const db = detailPool({ principal: false, rollbackFails: true });
+  expect(await attemptStore(db.pool).detail("owner", "attempt")).toBeNull();
+  expect(db.release).toHaveBeenCalledWith(expect.any(Error));
+});
+
+it("never returns private detail after a database read failure", async () => {
+  const db = detailPool({ rejectOn: "FROM assignment_submission_snapshots s" });
+  await expect(
+    attemptStore(db.pool).detail("owner", "attempt"),
+  ).rejects.toThrow("Synthetic read failure");
+  expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
 });
 
 function transactionPool(
@@ -53,7 +206,8 @@ function transactionPool(
     if (
       statement.startsWith("INSERT INTO assignment_attempts") ||
       statement.startsWith("UPDATE assignment_attempts") ||
-      statement.startsWith("WITH submitted")
+      statement.startsWith("WITH submitted") ||
+      statement.startsWith("WITH owned")
     )
       return options.mutation === false
         ? { rows: [], rowCount: 0 }
@@ -92,6 +246,152 @@ it("confirms deletion only after the owning member's transaction commits", async
   expect(db.release).toHaveBeenCalledOnce();
   expect(db.release).toHaveBeenCalledWith(undefined);
 });
+
+const reflectionInput = {
+  evidence: "Invented evidence",
+  gaps: "",
+  intention: "Invented next step",
+};
+
+it.each([
+  [0, 0],
+  [11, 0],
+  [1.5, 0],
+  [1, -1],
+  [1, 1.5],
+  [1, 2147483647],
+])(
+  "rejects invalid reflection CAS target %s/%s before database access",
+  async (sequence, revision) => {
+    const db = transactionPool();
+    const attempts = attemptStore(db.pool);
+    expect(
+      await attempts.saveReflection(
+        "owner",
+        "attempt",
+        sequence,
+        revision,
+        reflectionInput,
+      ),
+    ).toBe(false);
+    expect(
+      await attempts.deleteReflection("owner", "attempt", sequence, revision),
+    ).toBe(false);
+    expect(db.connect).not.toHaveBeenCalled();
+  },
+);
+
+it("rejects empty, oversize and malformed reflection payloads before database access", async () => {
+  const db = transactionPool();
+  const attempts = attemptStore(db.pool);
+  for (const input of [
+    { evidence: " ", gaps: "", intention: "" },
+    { evidence: "x".repeat(1001), gaps: "", intention: "" },
+    { evidence: "valid", gaps: 3, intention: "" },
+    null,
+  ])
+    expect(
+      await attempts.saveReflection("owner", "attempt", 1, 0, input as never),
+    ).toBe(false);
+  expect(db.connect).not.toHaveBeenCalled();
+});
+
+it.each([0, 1])(
+  "confirms reflection save revision %i only after commit",
+  async (revision) => {
+    const db = transactionPool();
+    const originalQuery = db.query.getMockImplementation()!;
+    let acknowledge!: () => void;
+    const commit = new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    });
+    db.query.mockImplementation(async (statement, params) => {
+      if (statement === "COMMIT") await commit;
+      return originalQuery(statement, params);
+    });
+    const complete = vi.fn();
+    const pending = attemptStore(db.pool)
+      .saveReflection("owner", "attempt", 1, revision, reflectionInput)
+      .then(complete);
+    await vi.waitFor(() =>
+      expect(db.query.mock.calls.map(([sql]) => sql)).toContain("COMMIT"),
+    );
+    expect(complete).not.toHaveBeenCalled();
+    expect(
+      db.query.mock.calls.find(([sql]) => sql.startsWith("WITH owned"))?.[1],
+    ).toEqual(
+      revision === 0
+        ? [hash("owner"), "attempt", 1, ...Object.values(reflectionInput)]
+        : [
+            hash("owner"),
+            "attempt",
+            1,
+            ...Object.values(reflectionInput),
+            revision,
+          ],
+    );
+    acknowledge();
+    await pending;
+    expect(complete).toHaveBeenCalledWith(true);
+  },
+);
+
+it("confirms reflection deletion after commit and never accepts first-save token", async () => {
+  const db = transactionPool();
+  const attempts = attemptStore(db.pool);
+  expect(await attempts.deleteReflection("owner", "attempt", 1, 0)).toBe(false);
+  expect(await attempts.deleteReflection("owner", "attempt", 1, 1)).toBe(true);
+  expect(
+    db.query.mock.calls.find(([sql]) => sql.startsWith("WITH owned"))?.[1],
+  ).toEqual([hash("owner"), "attempt", 1, 1]);
+  expect(db.query.mock.calls.map(([sql]) => sql)).toContain("COMMIT");
+});
+
+it.each([
+  ["missing principal", { principal: false }],
+  ["missing workspace", { workspace: false }],
+  ["foreign or stale row", { mutation: false }],
+  ["expired after wait", { current: false }],
+] as const)(
+  "keeps reflection writes unconfirmed for %s",
+  async (_reason, options) => {
+    for (const operation of ["save", "delete"] as const) {
+      const db = transactionPool(options);
+      const attempts = attemptStore(db.pool);
+      const result =
+        operation === "save"
+          ? await attempts.saveReflection(
+              "owner",
+              "attempt",
+              1,
+              0,
+              reflectionInput,
+            )
+          : await attempts.deleteReflection("owner", "attempt", 1, 1);
+      expect(result).toBe(false);
+      expect(db.query.mock.calls.map(([sql]) => sql)).toContain(
+        "mutation" in options ? "COMMIT" : "ROLLBACK",
+      );
+    }
+  },
+);
+
+it.each(["WITH owned", "COMMIT"])(
+  "does not claim a reflection save after %s fails",
+  async (rejectOn) => {
+    const db = transactionPool({ rejectOn });
+    await expect(
+      attemptStore(db.pool).saveReflection(
+        "owner",
+        "attempt",
+        1,
+        0,
+        reflectionInput,
+      ),
+    ).rejects.toThrow();
+    expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+  },
+);
 
 it("keeps deletion unconfirmed while the commit acknowledgement is pending", async () => {
   const db = transactionPool();

@@ -316,7 +316,7 @@ test("[L51] a general learner can copy a failed save and recover without claimin
       [attemptId],
     );
     await pool.query(
-      "UPDATE principals SET expires_at=clock_timestamp()+interval '2 seconds' WHERE id=(SELECT member_id FROM assignment_attempts WHERE id=$1)",
+      "UPDATE principals SET expires_at=clock_timestamp()+interval '3.5 seconds' WHERE id=(SELECT member_id FROM assignment_attempts WHERE id=$1)",
       [attemptId],
     );
     saving = Promise.all([
@@ -338,12 +338,12 @@ test("[L51] a general learner can copy a failed save and recover without claimin
        WHERE p.id=(SELECT member_id FROM assignment_attempts WHERE id=$2)
          AND waiter.state='active' AND waiter.wait_event_type='Lock'
          AND $1::integer=ANY(pg_blocking_pids(waiter.pid))
-         AND position('UPDATE assignment_attempts' in waiter.query)>0
+         AND position('FROM assignment_attempts a' in waiter.query)>0
          AND waiter.xact_start<p.expires_at AND p.expires_at<=clock_timestamp()`,
               [holderPid, attemptId],
             )
           ).rowCount,
-        { timeout: 4_000, intervals: [10, 20, 50] },
+        { timeout: 6_000, intervals: [10, 20, 50] },
       )
       .toBe(1);
     await holder.query("COMMIT");
@@ -531,7 +531,7 @@ test("[L66] a member privately revises a submitted synthetic assignment without 
   await expect(history).toContainText(first);
   await expect(history).toContainText(second);
   const exported = await (await page.request.get("/api/member/export")).json();
-  expect(exported.version).toBe("local-member-records-v10");
+  expect(exported.version).toBe("local-member-records-v11");
   expect(exported.records.assignmentSubmissions).toMatchObject([
     { attemptId, sequence: 1, response: first },
     { attemptId, sequence: 2, response: second },

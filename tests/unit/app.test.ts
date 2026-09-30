@@ -1613,7 +1613,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v10",
+          version: "local-member-records-v11",
           profile: { id: "owned" },
           records: { milestones: [] },
           page: {
@@ -1647,7 +1647,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v10",
+    version: "local-member-records-v11",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -3759,6 +3759,8 @@ it("keeps synthetic assignment attempts private through start, validation, confl
     submit: vi.fn().mockResolvedValue(false),
     revise: vi.fn().mockResolvedValue(false),
     remove: vi.fn().mockResolvedValue(false),
+    saveReflection: vi.fn().mockResolvedValue(false),
+    deleteReflection: vi.fn().mockResolvedValue(false),
   };
   const agent = await managedAgent(
     app(db, { origin, secret: "secret", attempts }),
@@ -4023,6 +4025,8 @@ it("preserves attempted text and separates stale, ineligible, expired and uncert
     submit: vi.fn().mockResolvedValue(false),
     revise: vi.fn().mockResolvedValue(false),
     remove: vi.fn().mockResolvedValue(false),
+    saveReflection: vi.fn().mockResolvedValue(false),
+    deleteReflection: vi.fn().mockResolvedValue(false),
   };
   const agent = await managedAgent(
     app(db, { origin, secret: "secret", attempts }),
@@ -4159,6 +4163,158 @@ it("preserves attempted text and separates stale, ineligible, expired and uncert
   expect(invalidForm.text).toContain("A newer &lt;private&gt; response");
 });
 
+it("keeps assignment self-reflection saves, deletion and recovery tied to an owned submitted version", async () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const item = {
+    id,
+    contentId: "SYN-REF-UNIT",
+    contentVersion: 1,
+    title: "Invented reflection assignment",
+    rubric: "Original rubric",
+    rubricVersion: 1,
+    goalAtStart: "everyday",
+    response: "Draft",
+    revision: 2,
+    startedAt: new Date("2026-09-30T00:00:00Z"),
+    savedAt: null,
+    submittedAt: new Date("2026-09-30T00:01:00Z"),
+    currentPublished: true,
+    currentEligible: true,
+    submissions: [
+      {
+        sequence: 1,
+        response: "Submitted response",
+        submittedAt: "2026-09-30T00:01:00Z",
+        reflection: null,
+        reflectionRevision: 0,
+      },
+    ],
+  };
+  const db = storage();
+  const attempts = {
+    ...disabledAttemptStore(),
+    detail: vi.fn().mockResolvedValue(item),
+    saveReflection: vi.fn().mockResolvedValue(false),
+    deleteReflection: vi.fn().mockResolvedValue(false),
+  };
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", attempts }),
+  );
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const path = `/assignments/attempts/${id}/reflections/1`;
+  const values = {
+    evidence: "Attempted <private> evidence",
+    gaps: "Unknown",
+    intention: "Verify again",
+  };
+  const post = (action: string, fields: Record<string, string>) =>
+    agent
+      .post(`${path}/${action}`)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  const save = { ...values, reflection_revision: "0", sample_confirmed: "yes" };
+  await post("save", { ...save, evidence: "", gaps: "", intention: "" }).expect(
+    422,
+  );
+  await post("save", {
+    reflection_revision: "0",
+    sample_confirmed: "yes",
+  }).expect(422);
+  await post("save", { ...save, evidence: "x".repeat(1001) }).expect(422);
+  await post("save", { ...save, sample_confirmed: "no" }).expect(422);
+  await post("save", { ...save, reflection_revision: "-1" }).expect(422);
+  await post("save", {
+    ...save,
+    reflection_revision: "999999999999999999999",
+  }).expect(422);
+  const badId = await agent
+    .post("/assignments/attempts/invalid/reflections/1/save")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf, ...save })
+    .expect(404);
+  expect(badId.text).not.toContain("Original rubric");
+  await agent
+    .post(`/assignments/attempts/${id}/reflections/11/save`)
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf, ...save })
+    .expect(404);
+  attempts.detail.mockResolvedValueOnce(null);
+  await post("save", save).expect(404);
+  attempts.detail.mockResolvedValueOnce(item).mockResolvedValueOnce(null);
+  const unavailable = await post("save", save).expect(409);
+  expect(unavailable.text).toContain("Attempted &lt;private&gt; evidence");
+  expect(unavailable.text).not.toContain('name="reflection_revision"');
+  const conflict = await post("save", save).expect(409);
+  expect(conflict.text).toContain("Copy your attempted text");
+  expect(conflict.text).toContain("Attempted &lt;private&gt; evidence");
+  attempts.saveReflection.mockResolvedValueOnce(true);
+  await post("save", save).expect(303);
+  expect(attempts.saveReflection).toHaveBeenCalledWith(
+    expect.any(String),
+    id,
+    1,
+    0,
+    values,
+  );
+  const invalidCsrf = await post("save", { ...save, csrf: "invalid" }).expect(
+    403,
+  );
+  expect(invalidCsrf.text).toContain("Attempted &lt;private&gt; evidence");
+  db.session.mockResolvedValueOnce({ kind: "expired" });
+  const expired = await post("save", save).expect(401);
+  expect(expired.text).toContain("Attempted &lt;private&gt; evidence");
+  db.session.mockResolvedValueOnce({ kind: "new" });
+  const unavailableSession = await post("save", save).expect(401);
+  expect(unavailableSession.text).toContain("Session unavailable");
+  attempts.saveReflection.mockRejectedValueOnce(
+    new Error("secret storage failure"),
+  );
+  const uncertain = await post("save", save).expect(503);
+  expect(uncertain.text).toContain("Reflection outcome unknown");
+  expect(uncertain.text).toContain("Attempted &lt;private&gt; evidence");
+  expect(uncertain.text).not.toContain("secret storage failure");
+  await post("delete", { confirm: "no", reflection_revision: "1" }).expect(422);
+  await post("delete", { confirm: "yes", reflection_revision: "0" }).expect(
+    422,
+  );
+  await agent
+    .post("/assignments/attempts/invalid/reflections/1/delete")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf, confirm: "yes", reflection_revision: "1" })
+    .expect(404);
+  attempts.detail.mockResolvedValueOnce({ ...item, submissions: [] });
+  await post("delete", { confirm: "yes", reflection_revision: "1" }).expect(
+    404,
+  );
+  attempts.detail.mockResolvedValueOnce(item).mockResolvedValueOnce(null);
+  await post("delete", { confirm: "yes", reflection_revision: "1" }).expect(
+    409,
+  );
+  await post("delete", { confirm: "yes", reflection_revision: "1" }).expect(
+    409,
+  );
+  attempts.deleteReflection.mockResolvedValueOnce(true);
+  await post("delete", { confirm: "yes", reflection_revision: "1" }).expect(
+    303,
+  );
+  expect(attempts.deleteReflection).toHaveBeenCalledWith(
+    expect.any(String),
+    id,
+    1,
+    1,
+  );
+});
+
 it("downloads only the selected simulated portfolio snapshot with safe attachment metadata", async () => {
   const id = "11111111-1111-4111-8111-111111111111";
   const earlier = "Invented <private> first\nKeep this";
@@ -4240,7 +4396,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v10" as const,
+    version: "local-member-records-v11" as const,
     profile: { id: "owned" },
     records: { milestones: [] },
     page: {

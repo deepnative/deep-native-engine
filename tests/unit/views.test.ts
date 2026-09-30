@@ -1374,6 +1374,8 @@ it("renders private attempt states without treating a local submission as review
     contentId: "SYN-960",
     contentVersion: 1,
     title: "Invented <private> assignment",
+    rubric: null,
+    rubricVersion: null,
     goalAtStart: "everyday",
     response: "Safe <sample> text",
     revision: 1,
@@ -1601,10 +1603,88 @@ it("renders private attempt states without treating a local submission as review
   ).not.toContain("Revise privately");
 });
 
+it("shows an exact-version rubric and private reflection beside its submitted response", () => {
+  const item: AssignmentAttempt = {
+    id: "11111111-1111-4111-8111-111111111111",
+    contentId: "SYN-REFLECT",
+    contentVersion: 1,
+    title: "Invented assignment",
+    rubric: "Find evidence in the <original> brief",
+    rubricVersion: 1,
+    goalAtStart: "everyday",
+    response: "New draft",
+    revision: 3,
+    startedAt: new Date("2026-09-30T00:00:00Z"),
+    savedAt: null,
+    submittedAt: null,
+    submissionCount: 1,
+    submissions: [
+      {
+        sequence: 1,
+        response: "Original submitted response",
+        submittedAt: "2026-09-30T00:01:00Z",
+        reflectionRevision: 2,
+        reflection: {
+          evidence: "Evidence <here>",
+          gaps: "Unknown result",
+          intention: "Check the source again",
+          revision: 2,
+        },
+      },
+    ],
+    currentPublished: true,
+    currentEligible: true,
+  };
+  const html = assignmentAttemptPage(item, "csrf");
+  expect(html).toContain("SYN-REFLECT");
+  expect(html).toContain("rubric version 1");
+  expect(html).toContain("Find evidence in the &lt;original&gt; brief");
+  expect(html).toContain("Original submitted response");
+  expect(html).toContain("Evidence &lt;here&gt;");
+  expect(html).toContain("Check the source again");
+  expect(html).toContain("SELF-REPORTED · SIMULATED · UNREVIEWED");
+  expect(html).toContain('name="reflection_revision" value="2"');
+  expect(html).not.toContain("Evidence <here>");
+  const revisionDraft = assignmentAttemptPage(
+    { ...item, submissionCount: 1 },
+    "csrf",
+  );
+  expect(revisionDraft).toContain(
+    "Earlier revision intention beside this draft",
+  );
+  expect(
+    assignmentAttemptPage(
+      { ...item, submittedAt: new Date("2026-09-30T00:01:00Z") },
+      "csrf",
+    ),
+  ).not.toContain("Earlier revision intention beside this draft");
+  const deleted = assignmentAttemptPage(
+    {
+      ...item,
+      submissions: [
+        {
+          ...item.submissions![0]!,
+          reflection: null,
+          reflectionRevision: 3,
+        },
+      ],
+    },
+    "csrf",
+  );
+  expect(deleted).toContain("This private reflection was deleted");
+  expect(deleted).not.toContain("Evidence &lt;here&gt;");
+  expect(deleted).not.toContain("Save private reflection for submission 1");
+  const noRubric = assignmentAttemptPage(
+    { ...item, rubric: null, rubricVersion: null },
+    "csrf",
+  );
+  expect(noRubric).toContain("No rubric was retained");
+});
+
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v10" as const,
+    version: "local-member-records-v11" as const,
     profile: { id: "owned" },
     records: { milestones: [{ title: "private <script>never show</script>" }] },
     page: {

@@ -186,9 +186,9 @@ test("[F-ROADMAP-08-D] project-management learner submits a noncoding assignment
       await outsider.close();
     }
     await page.reload();
-    await expect(page.locator("pre.content-text").first()).toContainText(
-      response,
-    );
+    await expect(
+      page.locator("#submission-1 > pre.content-text"),
+    ).toContainText(response);
     await expect(
       page.getByText("NO FORMAL REVIEW", { exact: false }),
     ).toBeVisible();
