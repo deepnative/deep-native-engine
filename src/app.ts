@@ -51,6 +51,7 @@ import {
   assignmentComparisonPage,
   assignmentPortfolioStatement,
   assignmentWriteRecoveryPage,
+  assignmentReflectionRecoveryPage,
   exerciseWriteRecoveryPage,
   assignmentReadinessPage,
   availabilityPage,
@@ -144,6 +145,8 @@ import {
 } from "./slot-holds.ts";
 const attemptWritePath =
   /^\/assignments\/attempts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(save|submit|revise)$/i;
+const attemptReflectionWritePath =
+  /^\/assignments\/attempts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/reflections\/(?:[1-9]|10)\/(save|delete)$/i;
 const proposalEditPath = /^\/contribute\/([^/]+)\/edit$/;
 function proposalAttempt(body: unknown) {
   const fields = (body ?? {}) as Fields;
@@ -172,6 +175,16 @@ function attemptedResponse(body: unknown, action: string) {
         ? fields.response_snapshot
         : "";
   return typeof value === "string" ? value : "";
+}
+function attemptedReflection(body: unknown) {
+  const fields = (body ?? {}) as Fields;
+  const value = (name: string) =>
+    typeof fields[name] === "string" ? fields[name] : "";
+  return {
+    evidence: value("evidence"),
+    gaps: value("gaps"),
+    intention: value("intention"),
+  };
 }
 function currentStarter(rows: ExerciseHistory[]): Exercise | undefined {
   const row = rows.find(
@@ -289,6 +302,9 @@ export function app(
     res.locals.token = session;
     res.locals.csrf = csrf(session, options.secret);
     const write = attemptWritePath.exec(req.originalUrl.split("?")[0]!);
+    const reflectionWrite = attemptReflectionWritePath.exec(
+      req.originalUrl.split("?")[0]!,
+    );
     const proposalWrite = proposalEditPath.exec(req.originalUrl.split("?")[0]!);
     if (
       ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) &&
@@ -308,6 +324,19 @@ export function app(
               "This form was not accepted. Copy your response, reopen the attempt and use the refreshed form.",
               attemptedResponse(req.body, write[2]!),
               write[1]!,
+            ),
+          );
+        return;
+      }
+      if (req.get("origin") === options.origin && reflectionWrite) {
+        res
+          .status(403)
+          .send(
+            assignmentReflectionRecoveryPage(
+              "Form needs a refresh",
+              "This self-reflection form was not accepted. Copy your text, inspect the current attempt and use a refreshed form.",
+              reflectionWrite[1]!,
+              attemptedReflection(req.body),
             ),
           );
         return;
@@ -835,6 +864,10 @@ export function app(
           req.method === "POST"
             ? attemptWritePath.exec(req.originalUrl.split("?")[0]!)
             : null;
+        const reflectionWrite =
+          req.method === "POST"
+            ? attemptReflectionWritePath.exec(req.originalUrl.split("?")[0]!)
+            : null;
         const proposalWrite =
           req.method === "POST"
             ? proposalEditPath.exec(req.originalUrl.split("?")[0]!)
@@ -850,6 +883,21 @@ export function app(
                 "No write was accepted. Copy your response before starting a fresh preview session; the previous private attempt cannot be reopened from a new session.",
                 attemptedResponse(req.body, write[2]!),
                 write[1]!,
+              ),
+            );
+          return;
+        }
+        if (reflectionWrite) {
+          res
+            .status(401)
+            .send(
+              assignmentReflectionRecoveryPage(
+                session.kind === "expired"
+                  ? "Session expired"
+                  : "Session unavailable",
+                "No reflection write was accepted. Copy your text before starting a fresh preview session.",
+                reflectionWrite[1]!,
+                attemptedReflection(req.body),
               ),
             );
           return;
@@ -2652,6 +2700,17 @@ export function app(
       typeof value === "string" && /^\d+$/.test(value) ? Number(value) : 0;
     return Number.isSafeInteger(revision) && revision > 0 ? revision : null;
   };
+  const reflectionRevision = (value: unknown) => {
+    const revision =
+      typeof value === "string" && /^(?:0|[1-9]\d*)$/.test(value)
+        ? Number(value)
+        : null;
+    return revision !== null && Number.isSafeInteger(revision)
+      ? revision
+      : null;
+  };
+  const reflectionSequence = (value: string) =>
+    /^(?:[1-9]|10)$/.test(value) ? Number(value) : null;
   app.get("/assignments/attempts/:id", async (req, res) => {
     const id = req.params.id as string;
     const item = attemptId(id)
@@ -2680,6 +2739,157 @@ export function app(
     }
     res.send(assignmentAttemptPage(item, res.locals.csrf as string));
   });
+  app.post(
+    "/assignments/attempts/:id/reflections/:sequence/save",
+    async (req, res) => {
+      const id = req.params.id as string;
+      const sequence = reflectionSequence(req.params.sequence as string);
+      const item = attemptId(id)
+        ? await attempts.detail(res.locals.token as string, id)
+        : null;
+      const entry = item?.submissions?.find(
+        (candidate) => candidate.sequence === sequence,
+      );
+      const values = attemptedReflection(req.body);
+      if (!item || !entry || sequence === null) {
+        res
+          .status(404)
+          .send(
+            errorPage(
+              "Reflection unavailable",
+              "Open an owned submitted version from your private attempts.",
+            ),
+          );
+        return;
+      }
+      const fields = req.body as Fields;
+      const revision = reflectionRevision(fields.reflection_revision);
+      const validText =
+        Object.values(values).every((value) => value.length <= 1000) &&
+        Object.values(values).some((value) => value.trim().length > 0);
+      if (
+        revision === null ||
+        !validText ||
+        fields.sample_confirmed !== "yes"
+      ) {
+        res
+          .status(422)
+          .send(
+            assignmentAttemptPage(
+              item,
+              res.locals.csrf as string,
+              "Enter at least one self-reflection field, keep each field within 1,000 characters and confirm sample information. Nothing was saved.",
+              undefined,
+              false,
+              { sequence, ...values },
+            ),
+          );
+        return;
+      }
+      if (
+        !(await attempts.saveReflection(
+          res.locals.token as string,
+          id,
+          sequence,
+          revision,
+          values,
+        ))
+      ) {
+        const latest = await attempts.detail(res.locals.token as string, id);
+        if (!latest) {
+          res
+            .status(409)
+            .send(
+              assignmentReflectionRecoveryPage(
+                "Reflection unavailable",
+                "The attempt or session is no longer available. Copy your text before leaving.",
+                id,
+                values,
+              ),
+            );
+          return;
+        }
+        res
+          .status(409)
+          .send(
+            assignmentAttemptPage(
+              latest,
+              res.locals.csrf as string,
+              "This reflection changed in another tab or was deleted. Nothing was saved. Copy your attempted text, then reload the current state.",
+              undefined,
+              false,
+              { sequence, ...values, conflict: true },
+            ),
+          );
+        return;
+      }
+      res.redirect(303, `/assignments/attempts/${id}#submission-${sequence}`);
+    },
+  );
+  app.post(
+    "/assignments/attempts/:id/reflections/:sequence/delete",
+    async (req, res) => {
+      const id = req.params.id as string;
+      const sequence = reflectionSequence(req.params.sequence as string);
+      const item = attemptId(id)
+        ? await attempts.detail(res.locals.token as string, id)
+        : null;
+      const entry = item?.submissions?.find(
+        (candidate) => candidate.sequence === sequence,
+      );
+      if (!item || !entry || sequence === null) {
+        res
+          .status(404)
+          .send(
+            errorPage(
+              "Reflection unavailable",
+              "Open an owned submitted version from your private attempts.",
+            ),
+          );
+        return;
+      }
+      const fields = req.body as Fields;
+      const revision = reflectionRevision(fields.reflection_revision);
+      if (fields.confirm !== "yes" || revision === null || revision === 0) {
+        res
+          .status(422)
+          .send(
+            assignmentAttemptPage(
+              item,
+              res.locals.csrf as string,
+              "Confirm deletion of the current reflection version. Nothing was deleted.",
+            ),
+          );
+        return;
+      }
+      if (
+        !(await attempts.deleteReflection(
+          res.locals.token as string,
+          id,
+          sequence,
+          revision,
+        ))
+      ) {
+        const latest = await attempts.detail(res.locals.token as string, id);
+        res
+          .status(409)
+          .send(
+            latest
+              ? assignmentAttemptPage(
+                  latest,
+                  res.locals.csrf as string,
+                  "The reflection changed or was already deleted. Reload the current state before trying again.",
+                )
+              : errorPage(
+                  "Deletion not confirmed",
+                  "Inspect your private attempts to check whether the record remains.",
+                ),
+          );
+        return;
+      }
+      res.redirect(303, `/assignments/attempts/${id}#submission-${sequence}`);
+    },
+  );
   app.get("/assignments/attempts/:id/portfolio/:sequence", async (req, res) => {
     const id = req.params.id as string;
     const sequence = req.params.sequence as string;
@@ -3602,6 +3812,10 @@ export function app(
       req.method === "POST"
         ? attemptWritePath.exec(req.originalUrl.split("?")[0]!)
         : null;
+    const reflectionWrite =
+      req.method === "POST"
+        ? attemptReflectionWritePath.exec(req.originalUrl.split("?")[0]!)
+        : null;
     if (write) {
       res
         .status(503)
@@ -3615,6 +3829,19 @@ export function app(
             "The storage result could not be confirmed. Copy your response, then reload this attempt and check its current state before trying again.",
             attemptedResponse(req.body, write[2]!),
             write[1]!,
+          ),
+        );
+      return;
+    }
+    if (reflectionWrite) {
+      res
+        .status(503)
+        .send(
+          assignmentReflectionRecoveryPage(
+            "Reflection outcome unknown",
+            "The storage result could not be confirmed. Copy your text, then inspect the current saved attempt before trying again.",
+            reflectionWrite[1]!,
+            attemptedReflection(req.body),
           ),
         );
       return;

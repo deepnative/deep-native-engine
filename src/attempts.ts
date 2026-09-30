@@ -7,6 +7,8 @@ export interface AssignmentAttempt {
   contentId: string;
   contentVersion: number;
   title: string;
+  rubric: string | null;
+  rubricVersion: number | null;
   goalAtStart: string;
   response: string;
   revision: number;
@@ -23,10 +25,22 @@ export interface AssignmentSubmission {
   sequence: number;
   response: string;
   submittedAt: string;
+  reflection?: AssignmentReflection | null;
+  reflectionRevision?: number;
 }
+export interface AssignmentReflection {
+  evidence: string;
+  gaps: string;
+  intention: string;
+  revision: number;
+}
+export type AssignmentReflectionInput = Pick<
+  AssignmentReflection,
+  "evidence" | "gaps" | "intention"
+>;
 export type AssignmentAttemptListItem = Omit<
   AssignmentAttempt,
-  "response" | "submissions"
+  "response" | "submissions" | "rubric" | "rubricVersion"
 >;
 export interface AttemptStore {
   list(token: string): Promise<AssignmentAttemptListItem[]>;
@@ -41,6 +55,19 @@ export interface AttemptStore {
   submit(token: string, id: string, revision: number): Promise<boolean>;
   revise(token: string, id: string): Promise<boolean>;
   remove(token: string, id: string): Promise<boolean>;
+  saveReflection(
+    token: string,
+    id: string,
+    sequence: number,
+    expectedRevision: number,
+    input: AssignmentReflectionInput,
+  ): Promise<boolean>;
+  deleteReflection(
+    token: string,
+    id: string,
+    sequence: number,
+    expectedRevision: number,
+  ): Promise<boolean>;
 }
 export function disabledAttemptStore(): AttemptStore {
   return {
@@ -51,7 +78,32 @@ export function disabledAttemptStore(): AttemptStore {
     submit: async () => false,
     revise: async () => false,
     remove: async () => false,
+    saveReflection: async () => false,
+    deleteReflection: async () => false,
   };
+}
+
+export function validReflectionInput(
+  input: AssignmentReflectionInput,
+): boolean {
+  if (!input || typeof input !== "object") return false;
+  const fields = [input.evidence, input.gaps, input.intention];
+  return (
+    fields.every(
+      (field) => typeof field === "string" && field.length <= 1000,
+    ) && fields.some((field) => field.trim().length > 0)
+  );
+}
+
+function validReflectionTarget(sequence: number, expectedRevision: number) {
+  return (
+    Number.isSafeInteger(sequence) &&
+    sequence >= 1 &&
+    sequence <= 10 &&
+    Number.isSafeInteger(expectedRevision) &&
+    expectedRevision >= 0 &&
+    expectedRevision < 2147483647
+  );
 }
 
 const activeMember = `p.kind='member' AND p.token_hash=$1 AND p.revoked_at IS NULL
@@ -137,22 +189,83 @@ export function attemptStore(pool: Pool): AttemptStore {
       ).rows;
     },
     async detail(token, id) {
-      return (
-        (
-          await pool.query<AssignmentAttempt>(
-            `SELECT ${columns},a.response,COALESCE((SELECT jsonb_agg(
-              jsonb_build_object('sequence',s.sequence,'response',s.response,
-                'submittedAt',s.submitted_at) ORDER BY s.sequence)
-              FROM assignment_submission_snapshots s WHERE s.attempt_id=a.id),
-              '[]'::jsonb) AS submissions FROM assignment_attempts a
-         JOIN content_versions cv ON cv.id=a.content_id AND cv.version=a.content_version
-         JOIN learners l ON l.id=a.member_id JOIN principals p ON p.id=l.id
-         LEFT JOIN learner_assignment_choices ch ON ch.member_id=l.id
-         WHERE ${activeMember} AND a.id=$2`,
-            [hash(token), id],
+      const client = await pool.connect();
+      let committed = false;
+      let releaseError: Error | undefined;
+      try {
+        await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+        await client.query("SET LOCAL lock_timeout='5s'");
+        const principal = (
+          await client.query<{ id: string; expiresAt: Date }>(
+            `SELECT id,expires_at AS "expiresAt" FROM principals
+             WHERE token_hash=$1 AND kind='member' AND revoked_at IS NULL
+               AND expires_at>clock_timestamp() FOR SHARE`,
+            [hash(token)],
           )
-        ).rows[0] ?? null
-      );
+        ).rows[0];
+        if (!principal) return null;
+        const workspace = await client.query(
+          `SELECT id FROM workspaces WHERE owner_principal_id=$1
+           AND deleting_at IS NULL FOR SHARE`,
+          [principal.id],
+        );
+        if (!workspace.rows[0]) return null;
+        const attempt = (
+          await client.query<AssignmentAttempt>(
+            `SELECT ${columns},cv.rubric,
+              cv.rubric_version AS "rubricVersion",a.response
+             FROM assignment_attempts a
+             JOIN content_versions cv ON cv.id=a.content_id
+               AND cv.version=a.content_version
+             JOIN learners l ON l.id=a.member_id
+             LEFT JOIN learner_assignment_choices ch ON ch.member_id=l.id
+             WHERE a.member_id=$1 AND a.id=$2 FOR SHARE OF a`,
+            [principal.id, id],
+          )
+        ).rows[0];
+        if (!attempt) return null;
+        // Lock retained text before reading it. A concurrent deletion must
+        // either finish first or wait until this owner-only read commits.
+        await client.query(
+          `SELECT sequence FROM assignment_submission_reflections
+           WHERE attempt_id=$1 FOR SHARE`,
+          [id],
+        );
+        const submissions = await client.query<AssignmentSubmission>(
+          `SELECT s.sequence,s.response,s.submitted_at AS "submittedAt",
+             CASE WHEN r.deleted_at IS NULL AND r.revision IS NOT NULL THEN
+               jsonb_build_object('evidence',r.evidence,'gaps',r.gaps,
+                 'intention',r.intention,'revision',r.revision)
+             ELSE NULL END AS reflection,
+             COALESCE(r.revision,0) AS "reflectionRevision"
+           FROM assignment_submission_snapshots s
+           LEFT JOIN assignment_submission_reflections r
+             ON r.attempt_id=s.attempt_id AND r.sequence=s.sequence
+           WHERE s.attempt_id=$1 ORDER BY s.sequence`,
+          [id],
+        );
+        const current = await client.query<{ valid: boolean }>(
+          "SELECT clock_timestamp() < $1::timestamptz AS valid",
+          [principal.expiresAt],
+        );
+        if (!current.rows[0]?.valid) return null;
+        await client.query("COMMIT");
+        committed = true;
+        attempt.submissions = submissions.rows.map((entry) => ({
+          ...entry,
+          submittedAt: new Date(entry.submittedAt).toISOString(),
+        }));
+        return attempt;
+      } finally {
+        if (!committed) {
+          try {
+            await client.query("ROLLBACK");
+          } catch {
+            releaseError = new Error("Attempt detail rollback failed");
+          }
+        }
+        client.release(releaseError);
+      }
     },
     async start(token) {
       const result = await mutate<{ id: string }>(
@@ -214,6 +327,75 @@ export function attemptStore(pool: Pool): AttemptStore {
            AND a.submitted_at IS NOT NULL AND a.submission_count BETWEEN 1 AND 9
            AND a.content_id=cv.id AND a.content_version=cv.version AND ${eligible}`,
         [hash(token), id],
+      );
+      return result?.rowCount === 1;
+    },
+    async saveReflection(token, id, sequence, expectedRevision, input) {
+      if (
+        !validReflectionTarget(sequence, expectedRevision) ||
+        !validReflectionInput(input)
+      )
+        return false;
+      const values = [
+        hash(token),
+        id,
+        sequence,
+        input.evidence,
+        input.gaps,
+        input.intention,
+      ];
+      const owned = `WITH owned AS MATERIALIZED (
+        SELECT a.id FROM assignment_attempts a
+        JOIN assignment_submission_snapshots s ON s.attempt_id=a.id
+          AND s.sequence=$3
+        JOIN learners l ON l.id=a.member_id
+        JOIN principals p ON p.id=l.id
+        WHERE ${activeMember} AND a.id=$2 FOR SHARE OF a
+      )`;
+      const result =
+        expectedRevision === 0
+          ? await mutate(
+              `${owned}
+               INSERT INTO assignment_submission_reflections
+                 (attempt_id,sequence,evidence,gaps,intention)
+               SELECT id,$3,$4,$5,$6 FROM owned
+               ON CONFLICT DO NOTHING RETURNING revision`,
+              values,
+            )
+          : await mutate(
+              `${owned}
+               UPDATE assignment_submission_reflections r
+               SET evidence=$4,gaps=$5,intention=$6,
+                 revision=r.revision+1,updated_at=clock_timestamp()
+               FROM owned WHERE r.attempt_id=owned.id AND r.sequence=$3
+                 AND r.revision=$7 AND r.deleted_at IS NULL
+               RETURNING r.revision`,
+              [...values, expectedRevision],
+            );
+      return result?.rowCount === 1;
+    },
+    async deleteReflection(token, id, sequence, expectedRevision) {
+      if (
+        !validReflectionTarget(sequence, expectedRevision) ||
+        expectedRevision === 0
+      )
+        return false;
+      const result = await mutate(
+        `WITH owned AS MATERIALIZED (
+           SELECT a.id FROM assignment_attempts a
+           JOIN assignment_submission_snapshots s ON s.attempt_id=a.id
+             AND s.sequence=$3
+           JOIN learners l ON l.id=a.member_id
+           JOIN principals p ON p.id=l.id
+           WHERE ${activeMember} AND a.id=$2 FOR SHARE OF a
+         )
+         UPDATE assignment_submission_reflections r
+         SET evidence='',gaps='',intention='',deleted_at=clock_timestamp(),
+           revision=r.revision+1,updated_at=clock_timestamp()
+         FROM owned WHERE r.attempt_id=owned.id AND r.sequence=$3
+           AND r.revision=$4 AND r.deleted_at IS NULL
+         RETURNING r.revision`,
+        [hash(token), id, sequence, expectedRevision],
       );
       return result?.rowCount === 1;
     },

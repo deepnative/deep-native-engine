@@ -57,6 +57,19 @@ const sections = {
     WHERE a.member_id=$1 AND a.id=ANY($4::uuid[])`,
     "s.attempt_id,s.sequence",
   ),
+  assignmentReflections: section(
+    `r.attempt_id AS "attemptId",r.sequence,
+    a.content_id AS "contentId",a.content_version AS "contentVersion",
+    r.evidence,r.gaps,r.intention,r.revision,
+    'SELF-REPORTED · SIMULATED · UNREVIEWED' AS label,
+    r.created_at AS "createdAt",r.updated_at AS "updatedAt"`,
+    `assignment_submission_reflections r
+    JOIN assignment_attempts a ON a.id=r.attempt_id
+    WHERE a.member_id=$1 AND a.id=ANY($4::uuid[])
+      AND r.deleted_at IS NULL`,
+    "r.attempt_id,r.sequence",
+    true,
+  ),
   adapterJobs: section(
     `j.id,j.adapter,j.mode,j.status,j.attempt_count AS attempts,
     j.max_attempts AS "maxAttempts",j.safe_error AS "safeError",
@@ -146,7 +159,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v10";
+  version: "local-member-records-v11";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   page: {
@@ -260,7 +273,7 @@ export function memberExportStore(
           );
           const payload: MemberExportPayload = {
             kind: "ready",
-            version: "local-member-records-v10",
+            version: "local-member-records-v11",
             profile: owner.rows[0],
             records,
             page: {
@@ -288,14 +301,26 @@ export function memberExportStore(
               MAX_MEMBER_EXPORT_RECORDS - payload.page.recordCount + 1,
               JSON.stringify(key),
             ];
-            if (name === "assignmentSubmissions") {
+            if (
+              name === "assignmentSubmissions" ||
+              name === "assignmentReflections"
+            ) {
               // A continuation can start here, bypassing assignmentAttempts.
               // Await bounded parent locks FIRST, matching series deletion; do
               // not acquire child locks ahead of the parent via a joined lock.
+              const childTable =
+                name === "assignmentSubmissions"
+                  ? "assignment_submission_snapshots"
+                  : "assignment_submission_reflections";
+              const retained =
+                name === "assignmentReflections"
+                  ? "AND s.deleted_at IS NULL"
+                  : "";
               const parents = await client.query<{ id: string }>(
                 `SELECT a.id
                 FROM assignment_attempts a WHERE a.member_id=$1 AND EXISTS (
-                  SELECT 1 FROM assignment_submission_snapshots s WHERE s.attempt_id=a.id
+                  SELECT 1 FROM ${childTable} s WHERE s.attempt_id=a.id
+                    ${retained}
                     AND jsonb_build_array(s.attempt_id,s.sequence)>$3::jsonb)
                 ORDER BY a.id LIMIT $2 FOR SHARE OF a`,
                 values,

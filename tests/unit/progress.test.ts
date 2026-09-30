@@ -22,6 +22,8 @@ const attempt = (
   contentId: "sample-assignment",
   contentVersion: 3,
   title: "An invented project",
+  rubric: null,
+  rubricVersion: null,
   goalAtStart: "work",
   response: "",
   revision: 0,
