@@ -908,7 +908,7 @@
       "id": "L101",
       "actor": "General learner with 15 minutes per week and an independent learner",
       "preconditions": "Separate private local sessions; no saved starter exercise",
-      "steps": "Inspect initial plan, complete self-assessed starter exercise, reload plan, compare another learner, change the first learner's goal and reload",
+      "steps": "Inspect initial plan, complete self-assessed starter exercise, reload plan, compare another learner, change the first learner's goal and inspect the redirected plan",
       "expected": "Completed action is explicitly labelled with an accessible status and real next link, no repeated try instruction, other learner remains uncompleted, and earlier-goal practice is not attributed to the new goal",
       "issues": [397, 28],
       "critical": true

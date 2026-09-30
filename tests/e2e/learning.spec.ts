@@ -312,7 +312,7 @@ test("[L101] completed starter plan advances without attributing an earlier goal
   }
   await page.getByLabel("What would you like to do?").selectOption("work");
   await page.getByRole("button", { name: "Save my direction" }).click();
-  await page.reload();
+  await expect(page).toHaveURL(/\/learn$/);
   await expect(plan).toContainText("Turn meeting notes into next steps");
   await expect(
     plan.getByRole("status").filter({ hasText: "earlier goal" }),
