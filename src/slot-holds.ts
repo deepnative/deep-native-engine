@@ -11,8 +11,11 @@ export type SlotHoldFailureCode =
   | "idempotency_conflict";
 
 export class SlotHoldFailure extends Error {
-  constructor(readonly code: SlotHoldFailureCode) {
+  readonly code: SlotHoldFailureCode;
+
+  constructor(code: SlotHoldFailureCode) {
     super(`Synthetic slot hold: ${code}.`);
+    this.code = code;
   }
 }
 

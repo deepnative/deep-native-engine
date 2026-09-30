@@ -17,8 +17,11 @@ export type LedgerFailureCode =
   | "idempotency_conflict";
 
 export class LedgerFailure extends Error {
-  constructor(readonly code: LedgerFailureCode) {
+  readonly code: LedgerFailureCode;
+
+  constructor(code: LedgerFailureCode) {
     super(`Synthetic entitlement ledger: ${code}.`);
+    this.code = code;
   }
 }
 
