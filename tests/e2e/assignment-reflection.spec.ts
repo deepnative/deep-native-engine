@@ -150,6 +150,9 @@ test("[L97] three backgrounds reflect on an exact rubric, revise, compare, expor
           name: "Save private reflection for submission 1",
         })
         .click();
+      await expect(
+        reflection.getByRole("button", { name: "Delete reflection 1" }),
+      ).toBeVisible();
       await memberPage.reload();
       await expect(
         reflection.getByLabel("Evidence I can point to"),
