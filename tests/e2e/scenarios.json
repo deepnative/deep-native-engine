@@ -885,6 +885,15 @@
       "expected": "The current note is never silently overwritten; attempted text remains copyable; forged, unrelated, staff and expired requests expose no private rubric or reflection and create no false save",
       "issues": [38, 390],
       "critical": true
+    },
+    {
+      "id": "L99",
+      "actor": "Member saving an owned synthetic workflow note",
+      "preconditions": "An active local session and existing private versioned note; a separate PostgreSQL transaction holds the principal row across session expiry; desktop and mobile Chromium",
+      "steps": "Submit an edited note, observe its save waiting on the database lock until the session expires, release the lock, then inspect the response, durable note and expired browser session",
+      "expected": "The late save reports unchanged state, retains the original private text and revision, and the expired session cannot reopen the note",
+      "issues": [42],
+      "critical": true
     }
   ],
   "fullMvp": [

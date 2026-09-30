@@ -254,6 +254,13 @@ it("keeps workflow feedback owner-only and never claims a failed or stale write"
   await post("/workflow-feedback/WF-001/save", save).expect(409);
   feedback.save.mockResolvedValueOnce(true);
   await post("/workflow-feedback/WF-001/save", save).expect(303);
+  feedback.save.mockResolvedValueOnce("uncertain");
+  const unconfirmed = await post("/workflow-feedback/WF-001/save", save).expect(
+    503,
+  );
+  expect(unconfirmed.text).toContain("Feedback save unconfirmed");
+  expect(unconfirmed.text).toContain("check your current note");
+  expect(unconfirmed.text).not.toContain("Nothing was saved");
   expect(feedback.save).toHaveBeenCalledWith(
     expect.any(String),
     "WF-001",

@@ -164,3 +164,349 @@ it("shows retained historical versions without silently copying a note to the cu
     { workflowVersion: 1, note: "Current note" },
   ]);
 });
+
+async function waitUntil(check: () => Promise<boolean>, message: string) {
+  const deadline = performance.now() + 3000;
+  while (performance.now() < deadline) {
+    if (await check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(message);
+}
+
+it.each([
+  [0, "principal"],
+  [1, "principal"],
+  [0, "workspace"],
+  [1, "workspace"],
+  [0, "unique-key"],
+  [1, "feedback"],
+] as const)(
+  "rolls back revision %i feedback save when the session expires during an observed %s wait",
+  async (revision, boundary) => {
+    const owner = await member("professional");
+    if (revision === 1)
+      expect(
+        await feedback.save(
+          owner.token,
+          "WF-001",
+          1,
+          "Original invented note",
+          0,
+        ),
+      ).toBe(true);
+    await pool.query(
+      "UPDATE principals SET expires_at=clock_timestamp()+INTERVAL '1 second' WHERE id=$1",
+      [owner.id],
+    );
+    const blocker = await pool.connect();
+    const writer = await pool.connect();
+    const blockerPid = (await blocker.query("SELECT pg_backend_pid() AS pid"))
+      .rows[0].pid as number;
+    const writerPid = (await writer.query("SELECT pg_backend_pid() AS pid"))
+      .rows[0].pid as number;
+    const controlled = workflowFeedbackStore({
+      query: writer.query.bind(writer),
+      connect: async () => ({ query: writer.query.bind(writer), release() {} }),
+    } as unknown as import("pg").Pool);
+    let writing: ReturnType<typeof feedback.save> | undefined;
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        boundary === "principal"
+          ? "SELECT id FROM principals WHERE id=$1 FOR UPDATE"
+          : boundary === "workspace"
+            ? "SELECT id FROM workspaces WHERE owner_principal_id=$1 FOR UPDATE"
+            : boundary === "unique-key"
+              ? "INSERT INTO workflow_feedback(member_id,workflow_id,workflow_version,note) VALUES($1,'WF-001',1,'Uncommitted invented note')"
+              : "SELECT member_id FROM workflow_feedback WHERE member_id=$1 FOR UPDATE",
+        [owner.id],
+      );
+      writing = controlled.save(
+        owner.token,
+        "WF-001",
+        1,
+        "Late invented note",
+        revision,
+      );
+      await waitUntil(
+        async () =>
+          (
+            await pool.query(
+              "SELECT $1::integer=ANY(pg_blocking_pids($2::integer)) AS blocked",
+              [blockerPid, writerPid],
+            )
+          ).rows[0].blocked,
+        "Save never waited for the controlled lock",
+      );
+      await waitUntil(
+        async () =>
+          (
+            await pool.query(
+              "SELECT expires_at<=clock_timestamp() AS expired FROM principals WHERE id=$1",
+              [owner.id],
+            )
+          ).rows[0].expired,
+        "Session never expired during the wait",
+      );
+      // Rollback the competing insert so this save actually inserts after
+      // its unique-key wait, exercising the post-write expiry rollback.
+      await blocker.query(boundary === "unique-key" ? "ROLLBACK" : "COMMIT");
+      const result = await writing;
+      const retained = (
+        await pool.query(
+          "SELECT note,revision FROM workflow_feedback WHERE member_id=$1",
+          [owner.id],
+        )
+      ).rows;
+      expect({ result, retained }).toEqual({
+        result: false,
+        retained:
+          revision === 0
+            ? []
+            : [{ note: "Original invented note", revision: 1 }],
+      });
+    } finally {
+      await blocker.query("ROLLBACK");
+      if (writing) await Promise.allSettled([writing]);
+      blocker.release();
+      writer.release();
+    }
+  },
+  15_000,
+);
+
+it.each([0, 1])(
+  "denies revision %i saves after queued revocation or workspace deletion wins",
+  async (revision) => {
+    for (const boundary of ["revoked", "deleting"] as const) {
+      const owner = await member("explorer");
+      if (revision === 1)
+        expect(
+          await feedback.save(
+            owner.token,
+            "WF-001",
+            1,
+            "Original invented note",
+            0,
+          ),
+        ).toBe(true);
+      const blocker = await pool.connect();
+      const writer = await pool.connect();
+      const blockerPid = (await blocker.query("SELECT pg_backend_pid() AS pid"))
+        .rows[0].pid as number;
+      const writerPid = (await writer.query("SELECT pg_backend_pid() AS pid"))
+        .rows[0].pid as number;
+      const controlled = workflowFeedbackStore({
+        connect: async () => ({
+          query: writer.query.bind(writer),
+          release() {},
+        }),
+      } as unknown as import("pg").Pool);
+      let writing: ReturnType<typeof feedback.save> | undefined;
+      try {
+        await blocker.query("BEGIN");
+        await blocker.query(
+          boundary === "revoked"
+            ? "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1"
+            : "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+          [owner.id],
+        );
+        writing = controlled.save(
+          owner.token,
+          "WF-001",
+          1,
+          "Denied invented note",
+          revision,
+        );
+        await waitUntil(
+          async () =>
+            (
+              await pool.query(
+                "SELECT $1::integer=ANY(pg_blocking_pids($2::integer)) AS blocked",
+                [blockerPid, writerPid],
+              )
+            ).rows[0].blocked,
+          "Save did not wait for authorization boundary",
+        );
+        await blocker.query("COMMIT");
+        expect(await writing).toBe(false);
+        expect(
+          (
+            await pool.query(
+              "SELECT note,revision FROM workflow_feedback WHERE member_id=$1",
+              [owner.id],
+            )
+          ).rows,
+        ).toEqual(
+          revision === 0
+            ? []
+            : [{ note: "Original invented note", revision: 1 }],
+        );
+      } finally {
+        await blocker.query("ROLLBACK");
+        if (writing) await Promise.allSettled([writing]);
+        blocker.release();
+        writer.release();
+      }
+    }
+  },
+);
+
+it("retains feedback on save transport failures and releases authorization locks", async () => {
+  const owner = await member("technical");
+  expect(
+    await feedback.save(owner.token, "WF-001", 1, "Original invented note", 0),
+  ).toBe(true);
+  const client = await pool.connect();
+  const controlled = workflowFeedbackStore({
+    connect: async () => ({
+      async query(sql: string, values?: unknown[]) {
+        const result = await client.query(sql, values);
+        if (sql.startsWith("UPDATE workflow_feedback"))
+          throw new Error("Simulated post-write transport failure");
+        return result;
+      },
+      release() {},
+    }),
+  } as unknown as import("pg").Pool);
+  try {
+    expect(
+      await controlled.save(
+        owner.token,
+        "WF-001",
+        1,
+        "Failed invented note",
+        1,
+      ),
+    ).toBe(false);
+    expect(
+      (
+        await pool.query(
+          "SELECT note,revision FROM workflow_feedback WHERE member_id=$1",
+          [owner.id],
+        )
+      ).rows,
+    ).toEqual([{ note: "Original invented note", revision: 1 }]);
+    const probe = await pool.connect();
+    try {
+      await probe.query("BEGIN");
+      await probe.query("SET LOCAL lock_timeout='1s'");
+      await probe.query("SELECT id FROM principals WHERE id=$1 FOR UPDATE", [
+        owner.id,
+      ]);
+      await probe.query(
+        "SELECT id FROM workspaces WHERE owner_principal_id=$1 FOR UPDATE",
+        [owner.id],
+      );
+      await probe.query("ROLLBACK");
+    } finally {
+      await probe.query("ROLLBACK");
+      probe.release();
+    }
+  } finally {
+    client.release();
+  }
+});
+
+it("allows only one initial save and cannot correct another member's feedback", async () => {
+  const owner = await member("technical");
+  const other = await member("explorer");
+  expect(
+    (
+      await Promise.all([
+        feedback.save(owner.token, "WF-001", 1, "Invented first", 0),
+        feedback.save(owner.token, "WF-001", 1, "Invented second", 0),
+      ])
+    ).sort(),
+  ).toEqual([false, true]);
+  const retained = await feedback.list(owner.token);
+  expect(retained).toHaveLength(1);
+  expect(retained[0]?.revision).toBe(1);
+  expect(
+    await feedback.save(
+      other.token,
+      "WF-001",
+      1,
+      "Invented cross-member correction",
+      1,
+    ),
+  ).toBe(false);
+  expect(await feedback.list(other.token)).toEqual([]);
+  expect(await feedback.list(owner.token)).toEqual(retained);
+});
+
+it.each([
+  [0, "before"],
+  [1, "before"],
+  [0, "after"],
+  [1, "after"],
+] as const)(
+  "reports uncertainty for revision %i save when transport fails %s commit",
+  async (revision, timing) => {
+    const owner = await member("professional");
+    if (revision === 1) {
+      expect(
+        await feedback.save(
+          owner.token,
+          "WF-001",
+          1,
+          "Original invented note",
+          0,
+        ),
+      ).toBe(true);
+    }
+    const client = await pool.connect();
+    const controlled = workflowFeedbackStore({
+      connect: async () => ({
+        async query(sql: string, values?: unknown[]) {
+          if (sql === "COMMIT" && timing === "before")
+            throw new Error("Simulated commit transport failure");
+          const result = await client.query(sql, values);
+          if (sql === "COMMIT")
+            throw new Error("Simulated lost commit acknowledgement");
+          return result;
+        },
+        release() {},
+      }),
+    } as unknown as import("pg").Pool);
+    try {
+      const result = await controlled.save(
+        owner.token,
+        "WF-001",
+        1,
+        "Committed invented note",
+        revision,
+      );
+      const retained = (
+        await pool.query(
+          "SELECT note,revision FROM workflow_feedback WHERE member_id=$1",
+          [owner.id],
+        )
+      ).rows;
+      expect({ result, retained }).toEqual({
+        result: "uncertain",
+        retained:
+          timing === "after"
+            ? [{ note: "Committed invented note", revision: revision + 1 }]
+            : revision === 1
+              ? [{ note: "Original invented note", revision: 1 }]
+              : [],
+      });
+      expect(await feedback.list(owner.token)).toMatchObject(retained);
+      expect(
+        await feedback.save(
+          owner.token,
+          "WF-001",
+          1,
+          "Invented recovery attempt",
+          revision,
+        ),
+      ).toBe(timing === "before");
+      if (timing === "after")
+        expect(await feedback.list(owner.token)).toMatchObject(retained);
+    } finally {
+      client.release();
+    }
+  },
+);

@@ -42,22 +42,99 @@ it("keeps disabled feedback unavailable without implying persistence", async () 
   expect(await feedback.withdraw("owner", "WF-001", 1, 1)).toBe(false);
 });
 
-it("uses optimistic create and correction results without inventing a save", async () => {
-  const query = vi
-    .fn()
-    .mockResolvedValueOnce({ rows: [] })
-    .mockResolvedValueOnce({ rowCount: 1 })
-    .mockResolvedValueOnce({ rowCount: 0 })
-    .mockResolvedValueOnce({ rowCount: 1 })
-    .mockResolvedValueOnce({ rowCount: 0 });
-  const feedback = workflowFeedbackStore({ query } as unknown as Pool);
-  expect(await feedback.list("owner")).toEqual([]);
-  expect(await feedback.save("owner", "WF-001", 1, " First ", 0)).toBe(true);
-  expect(await feedback.save("owner", "WF-001", 1, "Replay", 0)).toBe(false);
-  expect(await feedback.save("owner", "WF-001", 1, "Correction", 1)).toBe(true);
-  expect(await feedback.save("owner", "WF-001", 1, "Stale", 1)).toBe(false);
-  expect(query).toHaveBeenCalledTimes(5);
-  expect(query.mock.calls[1]![1]).toContain("First");
+it("lists only returned feedback rows", async () => {
+  const query = vi.fn().mockResolvedValue({ rows: [] });
+  expect(
+    await workflowFeedbackStore({ query } as unknown as Pool).list("owner"),
+  ).toEqual([]);
+});
+
+it.each([0, 1])(
+  "saves revision %i only after current authorization and commits the write",
+  async (revision) => {
+    const db = withdrawalPool();
+    expect(
+      await workflowFeedbackStore(db.pool).save(
+        "owner",
+        "WF-001",
+        1,
+        " Invented ",
+        revision,
+      ),
+    ).toBe(true);
+    expect(db.query.mock.calls.map(([sql]) => sql)).toContain("COMMIT");
+    expect(db.release).toHaveBeenCalledWith(undefined);
+  },
+);
+
+it.each([
+  ["unavailable member", { principal: false }],
+  ["deleting workspace", { workspace: false }],
+  ["stale revision or replay", { saved: false }],
+  ["expiry after write", { current: false }],
+] as const)("rolls back feedback save for %s", async (_reason, options) => {
+  const db = withdrawalPool(options);
+  expect(
+    await workflowFeedbackStore(db.pool).save(
+      "owner",
+      "WF-001",
+      1,
+      "Invented",
+      1,
+    ),
+  ).toBe(false);
+  expect(db.query.mock.calls.map(([sql]) => sql)).not.toContain("COMMIT");
+  expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+  expect(db.release).toHaveBeenCalledWith(undefined);
+});
+
+it.each([
+  "INSERT INTO workflow_feedback",
+  "UPDATE workflow_feedback",
+  "COMMIT",
+])(
+  "reports feedback save %s failure without claiming confirmed success",
+  async (statement) => {
+    const db = withdrawalPool({ rejectOn: statement });
+    expect(
+      await workflowFeedbackStore(db.pool).save(
+        "owner",
+        "WF-001",
+        1,
+        "Invented",
+        statement.startsWith("INSERT") ? 0 : 1,
+      ),
+    ).toBe(statement === "COMMIT" ? "uncertain" : false);
+    expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+    expect(db.release).toHaveBeenCalledWith(undefined);
+  },
+);
+
+it("discards a feedback save connection when rollback fails", async () => {
+  const db = withdrawalPool({ saved: false, rollbackFails: true });
+  expect(
+    await workflowFeedbackStore(db.pool).save(
+      "owner",
+      "WF-001",
+      1,
+      "Invented",
+      0,
+    ),
+  ).toBe(false);
+  expect(db.release).toHaveBeenCalledWith(expect.any(Error));
+});
+
+it("denies a save when the database cannot connect", async () => {
+  const connect = vi.fn().mockRejectedValue(new Error("Unavailable"));
+  expect(
+    await workflowFeedbackStore({ connect } as unknown as Pool).save(
+      "owner",
+      "WF-001",
+      1,
+      "Invented",
+      0,
+    ),
+  ).toBe(false);
 });
 
 function withdrawalPool(
@@ -65,6 +142,7 @@ function withdrawalPool(
     principal?: boolean;
     workspace?: boolean;
     deleted?: boolean;
+    saved?: boolean;
     current?: boolean;
     rejectOn?: string;
     rollbackFails?: boolean;
@@ -85,6 +163,11 @@ function withdrawalPool(
       };
     if (statement.includes("FROM workspaces"))
       return { rows: options.workspace === false ? [] : [{ id: "workspace" }] };
+    if (
+      statement.startsWith("INSERT INTO workflow_feedback") ||
+      statement.startsWith("UPDATE workflow_feedback")
+    )
+      return { rowCount: options.saved === false ? 0 : 1 };
     if (statement.startsWith("DELETE FROM workflow_feedback"))
       return { rowCount: options.deleted === false ? 0 : 1 };
     if (statement.startsWith("SELECT clock_timestamp()"))

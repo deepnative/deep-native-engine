@@ -1870,15 +1870,25 @@ export function app(
         );
       return;
     }
-    if (
-      !(await workflowFeedback.save(
-        res.locals.token as string,
-        req.params.id as string,
-        version,
-        note,
-        revision,
-      ))
-    ) {
+    const saved = await workflowFeedback.save(
+      res.locals.token as string,
+      req.params.id as string,
+      version,
+      note,
+      revision,
+    );
+    if (saved === "uncertain") {
+      res
+        .status(503)
+        .send(
+          errorPage(
+            "Feedback save unconfirmed",
+            "We could not confirm whether your note was saved. Reopen the workflow and check your current note before trying again.",
+          ),
+        );
+      return;
+    }
+    if (!saved) {
       res
         .status(409)
         .send(
