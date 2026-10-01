@@ -14,7 +14,7 @@ export interface WorkflowFeedback {
 export type WorkflowFeedbackSaveResult = boolean | "uncertain";
 
 export interface WorkflowFeedbackStore {
-  list(token: string): Promise<WorkflowFeedback[]>;
+  list(token: string): Promise<WorkflowFeedback[] | null>;
   save(
     token: string,
     workflowId: string,
@@ -38,7 +38,7 @@ export function parseWorkflowFeedback(value: unknown): string | null {
 
 export function disabledWorkflowFeedbackStore(): WorkflowFeedbackStore {
   return {
-    list: async () => [],
+    list: async () => null,
     save: async () => false,
     withdraw: async () => false,
   };
@@ -47,19 +47,60 @@ export function disabledWorkflowFeedbackStore(): WorkflowFeedbackStore {
 export function workflowFeedbackStore(pool: Pool): WorkflowFeedbackStore {
   return {
     async list(token) {
-      return (
-        await pool.query<WorkflowFeedback>(
-          `SELECT f.workflow_id AS "workflowId",
-             f.workflow_version AS "workflowVersion",f.note,f.revision,
-             f.created_at AS "createdAt",f.updated_at AS "updatedAt"
-           FROM principals p JOIN learners l ON l.id=p.id
-           JOIN workflow_feedback f ON f.member_id=l.id
-           WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
-             AND p.expires_at>CURRENT_TIMESTAMP
-           ORDER BY f.workflow_id,f.workflow_version`,
-          [hash(token)],
-        )
-      ).rows;
+      try {
+        const client = await pool.connect();
+        let releaseError: Error | undefined;
+        let reports: WorkflowFeedback[];
+        try {
+          await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+          await client.query("SET LOCAL lock_timeout='5s'");
+          // Use the same principal -> workspace lock order as feedback writes
+          // and account deletion. Retained rows are private throughout deletion.
+          const principal = (
+            await client.query<{ id: string; expiresAt: Date }>(
+              `SELECT id,expires_at AS "expiresAt" FROM principals
+               WHERE token_hash=$1 AND kind='member' AND revoked_at IS NULL
+                 AND expires_at>clock_timestamp() FOR SHARE`,
+              [hash(token)],
+            )
+          ).rows[0];
+          if (!principal) return null;
+          const workspace = await client.query(
+            `SELECT id FROM workspaces WHERE owner_principal_id=$1
+             AND deleting_at IS NULL FOR SHARE`,
+            [principal.id],
+          );
+          if (!workspace.rows[0]) return null;
+          reports = (
+            await client.query<WorkflowFeedback>(
+              `SELECT workflow_id AS "workflowId",
+               workflow_version AS "workflowVersion",note,revision,
+               created_at AS "createdAt",updated_at AS "updatedAt"
+             FROM workflow_feedback WHERE member_id=$1
+             ORDER BY workflow_id,workflow_version`,
+              [principal.id],
+            )
+          ).rows;
+          // A lock or query wait may outlive the session; transaction time is
+          // insufficient even when revocation/deletion remain blocked.
+          const current = await client.query<{ valid: boolean }>(
+            "SELECT clock_timestamp() < $1::timestamptz AS valid",
+            [principal.expiresAt],
+          );
+          if (!current.rows[0]?.valid) return null;
+          await client.query("COMMIT");
+        } finally {
+          try {
+            await client.query("ROLLBACK");
+          } catch {
+            releaseError = new Error("Feedback read rollback failed");
+          }
+          client.release(releaseError);
+        }
+        return releaseError ? null : reports;
+      } catch {
+        return null;
+      }
     },
     async save(token, workflowId, workflowVersion, rawNote, expectedRevision) {
       const note = parseWorkflowFeedback(rawNote);

@@ -301,6 +301,17 @@ it("keeps workflow feedback owner-only and never claims a failed or stale write"
     confirm: "yes",
   }).expect(303);
   await agent.get("/workflow-feedback/WF-999").set("Host", host).expect(404);
+  for (const id of ["WF-001", "WF-999"]) {
+    feedback.list.mockResolvedValueOnce(null);
+    const denied = await agent
+      .get(`/workflow-feedback/${id}`)
+      .set("Host", host)
+      .expect(403);
+    expect(denied.text).toContain("Feedback unavailable");
+    expect(denied.text).not.toMatch(
+      /private &amp; invented|textarea|workflow_version|revision/,
+    );
+  }
   feedback.list.mockRejectedValueOnce(new Error("private database detail"));
   const failed = await agent
     .get("/workflow-feedback/WF-001")
