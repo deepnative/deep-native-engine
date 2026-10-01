@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { hash } from "./store.ts";
 
 export type SlotHoldFailureCode =
@@ -173,24 +173,33 @@ export function disabledMemberSlotHolds(): MemberSlotHolds {
 export function memberSlotHolds(pool: Pool): MemberSlotHolds {
   const validToken = (value: string) =>
     typeof value === "string" && !!value.trim();
-  async function receipts(token: string, requestId: string | null) {
-    const read = () =>
-      pool.query<SampleHoldReceipt>(
-        `SELECT r.request_id AS id,r.slot_id AS "slotId",r.domain,
+  function readReceipts(
+    client: Pool | PoolClient,
+    token: string,
+    requestId: string | null,
+  ) {
+    return client.query<SampleHoldReceipt>(
+      `SELECT r.request_id AS id,r.slot_id AS "slotId",r.domain,
         r.service_type AS "serviceType",r.starts_at AS "startsAt",
         r.ends_at AS "endsAt",h.expires_at AS "expiresAt",h.state,60 AS quantity
        FROM synthetic_member_hold_receipts r
        JOIN synthetic_slot_holds h ON h.id=r.hold_id
        JOIN principals p ON p.id=r.member_id
+       JOIN workspaces w ON w.owner_principal_id=p.id AND w.deleting_at IS NULL
        WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
          AND p.expires_at>clock_timestamp()
          AND ($2::uuid IS NULL OR r.request_id=$2)
        ORDER BY h.created_at DESC,r.request_id`,
-        [hash(token), requestId],
-      );
-    const initial = await read();
-    // One receipt per transaction: never hold several slot locks while waiting
-    // for a member lock held by a competing request on another slot.
+      [hash(token), requestId],
+    );
+  }
+  async function privateSnapshot(
+    token: string,
+    requestId: string | null,
+  ): Promise<MemberHoldSnapshot | null> {
+    // Settlement keeps its existing slot -> member lock order and commits one
+    // receipt at a time. Never acquire those locks inside the read transaction.
+    const initial = await readReceipts(pool, token, requestId);
     for (const item of initial.rows) {
       if (item.state === "held")
         await pool.query("SELECT settle_member_sample_holds($1,$2)", [
@@ -198,8 +207,70 @@ export function memberSlotHolds(pool: Pool): MemberSlotHolds {
           item.id,
         ]);
     }
-    // Recheck ownership and current session after any settlement waits.
-    return (await read()).rows;
+    const client = await pool.connect();
+    let commitStarted = false;
+    let releaseError: Error | undefined;
+    try {
+      await client.query("BEGIN");
+      const member = await client.query<{ id: string; expiresAt: string }>(
+        `SELECT p.id,p.expires_at::text AS "expiresAt"
+         FROM principals p JOIN learners l ON l.id=p.id
+         WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
+           AND p.expires_at>clock_timestamp() FOR SHARE OF p`,
+        [hash(token)],
+      );
+      if (!member.rows[0]) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      // Match deletion's principal -> owned workspace order. Both locks remain
+      // held through the receipt/grant reads, expiry check and commit.
+      const workspace = await client.query<{ id: string }>(
+        `SELECT id FROM workspaces
+         WHERE owner_principal_id=$1 AND deleting_at IS NULL FOR SHARE`,
+        [member.rows[0].id],
+      );
+      if (!workspace.rows[0]) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      const own = await readReceipts(client, token, requestId);
+      const grants =
+        requestId === null
+          ? await client.query<SampleHoldGrant>(
+              `SELECT g.id,g.category FROM synthetic_entitlement_grants g
+         JOIN principals p ON p.id=g.member_id
+         WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
+           AND p.expires_at>clock_timestamp() AND g.starts_at<=clock_timestamp()
+           AND g.expires_at>clock_timestamp() AND g.expired_at IS NULL
+           AND g.available>=60 AND g.category IN ('coach_minutes','review_minutes')
+         ORDER BY g.expires_at,g.id`,
+              [hash(token)],
+            )
+          : { rows: [] };
+      const current = await client.query<{ valid: boolean }>(
+        "SELECT clock_timestamp() < $1::timestamptz AS valid",
+        [member.rows[0].expiresAt],
+      );
+      if (!current.rows[0]!.valid) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      commitStarted = true;
+      await client.query("COMMIT");
+      return { grants: grants.rows, receipts: own.rows };
+    } catch (error) {
+      // Never release private results or replay an uncertain transaction.
+      if (commitStarted) releaseError = error as Error;
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        releaseError = error as Error;
+      }
+      throw error;
+    } finally {
+      client.release(releaseError);
+    }
   }
   return {
     async withdraw(token, requestId) {
@@ -222,22 +293,13 @@ export function memberSlotHolds(pool: Pool): MemberSlotHolds {
     },
     async snapshot(token) {
       if (!validToken(token)) return { grants: [], receipts: [] };
-      const own = await receipts(token, null);
-      const grants = await pool.query<SampleHoldGrant>(
-        `SELECT g.id,g.category FROM synthetic_entitlement_grants g
-         JOIN principals p ON p.id=g.member_id
-         WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
-           AND p.expires_at>clock_timestamp() AND g.starts_at<=clock_timestamp()
-           AND g.expires_at>clock_timestamp() AND g.expired_at IS NULL
-           AND g.available>=60 AND g.category IN ('coach_minutes','review_minutes')
-         ORDER BY g.expires_at,g.id`,
-        [hash(token)],
-      );
-      return { grants: grants.rows, receipts: own };
+      const snapshot = await privateSnapshot(token, null);
+      if (!snapshot) throw new SlotHoldFailure("unavailable");
+      return snapshot;
     },
     async get(token, requestId) {
       if (!validToken(token) || !uuid.test(requestId)) return null;
-      return (await receipts(token, requestId))[0] ?? null;
+      return (await privateSnapshot(token, requestId))?.receipts[0] ?? null;
     },
     async request(token, slotId, grantId, requestId) {
       if (!validToken(token)) throw new SlotHoldFailure("invalid_request");

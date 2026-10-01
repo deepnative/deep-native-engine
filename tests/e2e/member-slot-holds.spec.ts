@@ -240,6 +240,54 @@ test("[L93] members reserve only seeded sample minutes and recover private recei
           )
         ).rowCount,
       ).toBe(1);
+      // Keep both receipt and available grant while deletion awaits cleanup.
+      await pool.query(
+        "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+        [memberId],
+      );
+      for (const [path, status] of [
+        [`/availability/holds/${stableRequest}`, 404],
+        ["/availability", 403],
+      ] as const) {
+        expect((await page.goto(path))!.status()).toBe(status);
+        await expect(
+          page.getByRole("heading", {
+            name:
+              status === 404
+                ? "Inspect your sample hold"
+                : "Availability unavailable",
+          }),
+        ).toBeVisible();
+        for (const marker of [
+          stableRequest,
+          grantId,
+          slotId,
+          startsAt.toISOString(),
+          "Education · coaching",
+        ])
+          await expect(page.locator("body")).not.toContainText(marker);
+        await expect(
+          page.getByRole("button", { name: "Reserve sample hold" }),
+        ).toHaveCount(0);
+      }
+      expect((await otherPage.goto("/availability"))!.status()).toBe(200);
+      await expect(otherPage.locator("body")).not.toContainText(stableRequest);
+      expect(
+        (
+          await pool.query(
+            "SELECT request_id FROM synthetic_member_hold_receipts WHERE member_id=$1",
+            [memberId],
+          )
+        ).rows,
+      ).toEqual([{ request_id: stableRequest }]);
+      expect(
+        (
+          await pool.query(
+            "SELECT available,reserved,expired FROM synthetic_entitlement_grants WHERE id=$1",
+            [grantId],
+          )
+        ).rows,
+      ).toEqual([{ available: 60, reserved: 0, expired: 0 }]);
       await pool.query(
         "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
         [memberId],
