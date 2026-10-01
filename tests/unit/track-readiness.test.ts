@@ -109,7 +109,7 @@ it("defaults every track to preparation and denies private roster access", async
   expect(await disabled.registry("unknown")).toBeNull();
 });
 it("derives foundation and specialist states from published qualified content and registry data", async () => {
-  const query = vi.fn().mockResolvedValueOnce({
+  const lessons = {
     rows: [
       ...[1, 2, 3, 4, 5, 6].map((n) => ({
         id: `FND-00${n}`,
@@ -118,10 +118,23 @@ it("derives foundation and specialist states from published qualified content an
       })),
       { id: "SYN-010", goals: [], domains: ["education"] },
     ],
-  });
-  query.mockResolvedValueOnce({ rows: [evidence, backup] });
+  };
+  const experts = { rows: [evidence, backup] };
+  const query = vi
+    .fn()
+    .mockResolvedValueOnce(lessons)
+    .mockResolvedValueOnce(experts);
   const store = trackStore({ query } as unknown as Pool);
-  const result = await store.snapshot();
+  const snapshotAt = async (instant: Date) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(instant);
+    try {
+      return await store.snapshot();
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+  const result = await snapshotAt(now);
   expect(result.foundation.map((track) => track.state)).toEqual([
     "available",
     "available",
@@ -145,6 +158,17 @@ it("derives foundation and specialist states from published qualified content an
     state: "in preparation",
   });
   expect(query.mock.calls[0]?.[0]).toContain("requires_qualified_signoff=true");
+  query.mockResolvedValueOnce(lessons).mockResolvedValueOnce(experts);
+  const expired = await snapshotAt(evidence.endsAt);
+  expect(expired.specialties[1]).toEqual({
+    domain: "education",
+    serviceType: "formal-review",
+    state: "in preparation",
+    gaps: [
+      "Qualified reviewer coverage not verified",
+      "Deliverable service capacity not verified",
+    ],
+  });
 });
 it("never implies released foundation content from an incomplete six-lesson set", async () => {
   const query = vi.fn().mockResolvedValueOnce({
