@@ -836,9 +836,9 @@
       "id": "L93",
       "actor": "General learner, non-IT professional, IT member, unrelated member and staff",
       "preconditions": "Private local preview, explicit sample window and operator/test-only seeded matching 60-minute grant; no automatic allowance or provider",
-      "steps": "Check no-allowance denial, seed one test grant, reject forged member fields, recover an uncertain write via current receipt inspection, hold and reload, replay stable request, deny outsider/staff reads, expire and reload twice, revoke session",
-      "expected": "Each background requires an explicit matching grant; one private SAMPLE HOLD receipt and one reserve/release event persist; uncertain response never claims success/failure; only the owner sees exact times/state/deadline; expired units conserve and revoked sessions reveal no receipt; no qualified booking or live service is claimed",
-      "issues": [29, 294, 296, 385],
+      "steps": "Check no-allowance denial, seed one test grant, reject forged member fields, recover an uncertain write via current receipt inspection, hold and reload, replay stable request, deny outsider/staff reads, expire and reload twice, commit workspace deletion with retained receipt and grant, deny receipt and availability reads while another member remains unaffected, revoke session",
+      "expected": "Each background requires an explicit matching grant; one private SAMPLE HOLD receipt and one reserve/release event persist; uncertain response never claims success/failure; only the owner sees exact times/state/deadline; expired units conserve; pending deletion withholds retained receipt and grant details through generic 404/403 pages; revoked sessions reveal no receipt; no qualified booking or live service is claimed",
+      "issues": [29, 42, 294, 296, 385],
       "critical": true
     },
     {

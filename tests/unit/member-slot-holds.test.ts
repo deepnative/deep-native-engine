@@ -129,17 +129,44 @@ it("leaves disabled and invalid member requests without any database mutation", 
   expect(query).not.toHaveBeenCalled();
 });
 
+function privateReadClient(
+  options: {
+    member?: boolean;
+    workspace?: boolean;
+    current?: boolean;
+    receipts?: unknown[];
+  } = {},
+) {
+  const query = vi.fn(async (sql: string) => {
+    if (sql.includes("FOR SHARE OF p"))
+      return {
+        rows:
+          options.member === false
+            ? []
+            : [{ id: "member", expiresAt: "2027-10-02T00:00:00Z" }],
+      };
+    if (sql.includes("SELECT id FROM workspaces"))
+      return { rows: options.workspace === false ? [] : [{ id: "workspace" }] };
+    if (sql.includes("SELECT r.request_id"))
+      return { rows: options.receipts ?? [receipt] };
+    if (sql.includes("SELECT g.id,g.category"))
+      return { rows: [{ id: grant, category: "coach_minutes" }] };
+    if (sql.includes("AS valid"))
+      return { rows: [{ valid: options.current !== false }] };
+    return { rows: [] };
+  });
+  return { query, release: vi.fn() };
+}
+
 it("settles only the signed-in owner's exact receipts before returning current state and grants", async () => {
   const settled = { ...receipt, state: "expired" };
   const query = vi
     .fn()
     .mockResolvedValueOnce({ rows: [receipt, settled] })
-    .mockResolvedValueOnce({ rows: [] })
-    .mockResolvedValueOnce({ rows: [settled] })
-    .mockResolvedValueOnce({
-      rows: [{ id: grant, category: "coach_minutes" }],
-    });
-  const api = memberSlotHolds({ query } as unknown as Pool);
+    .mockResolvedValue({ rows: [] });
+  const client = privateReadClient({ receipts: [settled] });
+  const connect = vi.fn(async () => client);
+  const api = memberSlotHolds({ query, connect } as unknown as Pool);
   expect(await api.snapshot("token")).toEqual({
     grants: [{ id: grant, category: "coach_minutes" }],
     receipts: [settled],
@@ -149,13 +176,69 @@ it("settles only the signed-in owner's exact receipts before returning current s
     "SELECT settle_member_sample_holds($1,$2)",
     [hash("token"), id],
   ]);
-  expect(query.mock.calls[3]![1]).toEqual([hash("token")]);
-  query.mockReset().mockResolvedValue({ rows: [] });
-  expect(await api.get("token", id)).toBeNull();
-  expect(query.mock.calls[0]![1]).toEqual([hash("token"), id]);
-  query.mockReset().mockResolvedValue({ rows: [settled] });
+  expect(query).toHaveBeenCalledTimes(2);
+  expect(query.mock.invocationCallOrder[1]).toBeLessThan(
+    connect.mock.invocationCallOrder[0]!,
+  );
+  expect(client.release).toHaveBeenCalledWith(undefined);
   expect(await api.get("token", id)).toEqual(settled);
+  const empty = privateReadClient({ receipts: [] });
+  connect.mockResolvedValue(empty);
+  expect(await api.get("token", id)).toBeNull();
 });
+
+it.each(["member", "workspace", "current"] as const)(
+  "withholds private receipts and grants when %s authorization fails",
+  async (field) => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const client = privateReadClient({ [field]: false });
+    const api = memberSlotHolds({
+      query,
+      connect: async () => client,
+    } as unknown as Pool);
+    expect(await api.get("token", id)).toBeNull();
+    await expect(api.snapshot("token")).rejects.toMatchObject({
+      code: "unavailable",
+    });
+    expect(client.query).not.toHaveBeenCalledWith("COMMIT");
+    expect(client.query).toHaveBeenCalledWith("ROLLBACK");
+    expect(client.release).toHaveBeenCalledWith(undefined);
+  },
+);
+
+it.each(["read", "commit", "rollback"] as const)(
+  "withholds private results and avoids replay after a %s failure",
+  async (stage) => {
+    const client = privateReadClient();
+    const read = client.query.getMockImplementation()!;
+    const failure = new Error("synthetic private database detail");
+    client.query.mockImplementation(async (sql) => {
+      if (
+        (stage === "commit" && sql === "COMMIT") ||
+        (stage !== "commit" && sql.includes("SELECT r.request_id")) ||
+        (stage === "rollback" && sql === "ROLLBACK")
+      )
+        throw failure;
+      return read(sql);
+    });
+    const connect = vi.fn(async () => client);
+    const api = memberSlotHolds({
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+      connect,
+    } as unknown as Pool);
+    await expect(api.snapshot("token")).rejects.toBe(failure);
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(
+      client.query.mock.calls.filter(([sql]) =>
+        sql.includes("SELECT r.request_id"),
+      ),
+    ).toHaveLength(1);
+    expect(client.query).toHaveBeenCalledWith("ROLLBACK");
+    expect(client.release).toHaveBeenCalledWith(
+      stage === "read" ? undefined : failure,
+    );
+  },
+);
 
 it("passes only token-derived identity and stable request fields and keeps uncertain writes distinct", async () => {
   const query = vi.fn().mockResolvedValue({ rows: [{ id }] });

@@ -5,6 +5,11 @@ import { authorizationStore } from "../../src/authorization.ts";
 import { availabilityStore } from "../../src/availability.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { memberSlotHolds } from "../../src/slot-holds.ts";
+import request from "supertest";
+import type { Pool } from "pg";
+import { app } from "../../src/app.ts";
+import { COOKIE } from "../../src/session.ts";
+import { withLoopback } from "../support/loopback-server.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
@@ -1199,4 +1204,429 @@ it("releases an active hold while two last-slot contenders wait, admitting exact
     await withdrawn;
     await contenders;
   }
+});
+
+it.each(["held", "due", "released"] as const)(
+  "withholds retained %s sample receipts and grants after committed workspace deletion at store and HTTP boundaries",
+  async (state) => {
+    const f = await fixture(),
+      owner = await member("professional"),
+      other = await member("explorer");
+    const grantId = await grant(owner.id, "retained-receipt"),
+      requestId = randomUUID();
+    await memberHolds.request(owner.token, f.slotId, grantId, requestId);
+    if (state === "released")
+      await memberHolds.withdraw(owner.token, requestId);
+    const extraGrant = await grant(owner.id, "retained-available-grant");
+    const receipt = await memberHolds.get(owner.token, requestId);
+    expect(receipt).toMatchObject({
+      id: requestId,
+      state: state === "released" ? "released" : "held",
+    });
+    expect((await memberHolds.snapshot(owner.token)).grants).toContainEqual({
+      id: extraGrant,
+      category: "coach_minutes",
+    });
+    if (state === "due")
+      await pool.query(
+        "UPDATE synthetic_slot_holds SET expires_at=clock_timestamp()-interval '1 second' WHERE member_id=$1",
+        [owner.id],
+      );
+    const before = await retainedHoldRows(owner.id);
+    await pool.query(
+      "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+      [owner.id],
+    );
+    expect((await db.session(owner.token)).kind).toBe("active");
+    expect.soft(await memberHolds.get(owner.token, requestId)).toBeNull();
+    await expect
+      .soft(memberHolds.snapshot(owner.token))
+      .rejects.toMatchObject({ code: "unavailable" });
+    await withLoopback(
+      app(db, {
+        origin: "http://127.0.0.1:3000",
+        secret: "synthetic-hold-secret",
+        memberSlotHolds: memberHolds,
+        availability: slots,
+      }),
+      async (server) => {
+        for (const [path, status] of [
+          [`/availability/holds/${requestId}`, 404],
+          ["/availability", 403],
+        ] as const) {
+          const response = await request(server)
+            .get(path)
+            .set("Host", "127.0.0.1:3000")
+            .set("Cookie", `${COOKIE}=${owner.token}`);
+          expect.soft(response.status).toBe(status);
+          for (const marker of [
+            requestId,
+            extraGrant,
+            f.slotId,
+            receipt!.startsAt.toISOString(),
+            "Education · coaching",
+            "Your sample hold receipt",
+            "Reserved test quantity",
+          ])
+            expect.soft(response.text).not.toContain(marker);
+        }
+        const unaffected = await request(server)
+          .get("/availability")
+          .set("Host", "127.0.0.1:3000")
+          .set("Cookie", `${COOKIE}=${other.token}`);
+        expect(unaffected.status).toBe(200);
+        expect(unaffected.text).not.toContain(requestId);
+      },
+    );
+    expect(await memberHolds.get(other.token, requestId)).toBeNull();
+    expect(await memberHolds.snapshot(other.token)).toEqual({
+      grants: [],
+      receipts: [],
+    });
+    expect(await retainedHoldRows(owner.id)).toEqual(before);
+  },
+);
+
+async function retainedHoldRows(memberId: string) {
+  return (
+    await pool.query(
+      `SELECT
+    (SELECT jsonb_agg(to_jsonb(r) ORDER BY request_id) FROM synthetic_member_hold_receipts r WHERE member_id=$1) AS receipts,
+    (SELECT jsonb_agg(to_jsonb(h) ORDER BY id) FROM synthetic_slot_holds h WHERE member_id=$1) AS holds,
+    (SELECT jsonb_agg(to_jsonb(g) ORDER BY id) FROM synthetic_entitlement_grants g WHERE member_id=$1) AS grants,
+    (SELECT jsonb_agg(to_jsonb(e) ORDER BY id) FROM synthetic_entitlement_events e WHERE member_id=$1) AS events`,
+      [memberId],
+    )
+  ).rows;
+}
+
+async function heldReceipt() {
+  const f = await fixture(),
+    owner = await member("technical");
+  const grantId = await grant(owner.id, "private-read"),
+    requestId = randomUUID();
+  await memberHolds.request(owner.token, f.slotId, grantId, requestId);
+  return { ...f, owner, grantId, requestId };
+}
+const readKinds = ["get", "snapshot"] as const;
+type ReadKind = (typeof readKinds)[number];
+function privateRead(
+  api: ReturnType<typeof memberSlotHolds>,
+  kind: ReadKind,
+  token: string,
+  requestId: string,
+) {
+  return kind === "get" ? api.get(token, requestId) : api.snapshot(token);
+}
+async function deniedRead(
+  pending: ReturnType<typeof privateRead>,
+  kind: ReadKind,
+) {
+  if (kind === "get") expect(await pending).toBeNull();
+  else await expect(pending).rejects.toMatchObject({ code: "unavailable" });
+}
+async function blocksOn(pid: number, fragment: string) {
+  await expect
+    .poll(
+      async () =>
+        Number(
+          (
+            await pool.query(
+              `SELECT count(*) FROM pg_stat_activity WHERE datname=current_database()
+     AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid))
+     AND position($2 in query)>0`,
+              [pid, fragment],
+            )
+          ).rows[0].count,
+        ),
+      { timeout: 3000 },
+    )
+    .toBe(1);
+}
+
+it.each(
+  readKinds.flatMap((kind) =>
+    ["principal", "workspace"].map((lock) => ({ kind, lock })),
+  ),
+)(
+  "denies $kind when deletion commits during its $lock lock wait",
+  async ({ kind, lock }) => {
+    const f = await heldReceipt(),
+      before = await retainedHoldRows(f.owner.id);
+    const holder = await pool.connect();
+    let pending: ReturnType<typeof privateRead> | undefined;
+    try {
+      await holder.query("BEGIN");
+      const pid = (await holder.query("SELECT pg_backend_pid() AS pid")).rows[0]
+        .pid;
+      if (lock === "principal")
+        await holder.query("SELECT id FROM principals WHERE id=$1 FOR UPDATE", [
+          f.owner.id,
+        ]);
+      await holder.query(
+        "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+        [f.owner.id],
+      );
+      pending = privateRead(memberHolds, kind, f.owner.token, f.requestId);
+      // Attach rejection handling before releasing the lock.
+      const denial = deniedRead(pending, kind);
+      await blocksOn(
+        pid,
+        lock === "principal" ? "FOR SHARE OF p" : "SELECT id FROM workspaces",
+      );
+      await holder.query("COMMIT");
+      await denial;
+      expect(await retainedHoldRows(f.owner.id)).toEqual(before);
+    } finally {
+      await holder.query("ROLLBACK");
+      await Promise.allSettled(pending ? [pending] : []);
+      holder.release();
+    }
+  },
+);
+
+it.each(readKinds)(
+  "finishes a %s read before deletion waiting on its workspace lock",
+  async (kind) => {
+    const f = await heldReceipt();
+    const before = await privateRead(
+      memberHolds,
+      kind,
+      f.owner.token,
+      f.requestId,
+    );
+    let entered!: () => void, resume!: () => void;
+    const locked = new Promise<void>((resolve) => (entered = resolve)),
+      proceed = new Promise<void>((resolve) => (resume = resolve));
+    let readerPid = 0;
+    const paused = memberSlotHolds({
+      query: pool.query.bind(pool),
+      connect: async () => {
+        const client = await pool.connect();
+        return {
+          query: async (sql: string, values?: unknown[]) => {
+            const result = await client.query(sql, values);
+            if (
+              sql.includes(
+                kind === "get"
+                  ? "SELECT r.request_id"
+                  : "SELECT g.id,g.category",
+              )
+            ) {
+              readerPid = (await client.query("SELECT pg_backend_pid() AS pid"))
+                .rows[0].pid;
+              entered();
+              await proceed;
+            }
+            return result;
+          },
+          release: client.release.bind(client),
+        };
+      },
+    } as unknown as Pool);
+    const reading = privateRead(paused, kind, f.owner.token, f.requestId);
+    const deletion = await pool.connect();
+    let deleting: Promise<void> | undefined;
+    try {
+      await locked;
+      deleting = (async () => {
+        await deletion.query("BEGIN");
+        await deletion.query(
+          "SELECT id FROM principals WHERE id=$1 FOR SHARE",
+          [f.owner.id],
+        );
+        // Match the real deletion marker: shared principal authorization,
+        // then exclusive workspace ownership before publishing deleting_at.
+        await deletion.query(
+          "SELECT id FROM workspaces WHERE owner_principal_id=$1 FOR UPDATE",
+          [f.owner.id],
+        );
+        await deletion.query(
+          "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+          [f.owner.id],
+        );
+        await deletion.query("COMMIT");
+      })();
+      await blocksOn(readerPid, "SELECT id FROM workspaces");
+      expect(
+        (
+          await pool.query(
+            "SELECT deleting_at FROM workspaces WHERE owner_principal_id=$1",
+            [f.owner.id],
+          )
+        ).rows,
+      ).toEqual([{ deleting_at: null }]);
+      resume();
+      expect(await reading).toEqual(before);
+      await deleting;
+      await deniedRead(
+        privateRead(memberHolds, kind, f.owner.token, f.requestId),
+        kind,
+      );
+    } finally {
+      resume();
+      await Promise.allSettled([reading, ...(deleting ? [deleting] : [])]);
+      await deletion.query("ROLLBACK");
+      deletion.release();
+    }
+  },
+);
+
+it.each(
+  readKinds.flatMap((kind) =>
+    ["principal", "workspace"].map((lock) => ({ kind, lock })),
+  ),
+)(
+  "withholds $kind after session expiry during its $lock lock wait",
+  async ({ kind, lock }) => {
+    const f = await heldReceipt(),
+      before = await retainedHoldRows(f.owner.id);
+    const holder = await pool.connect(),
+      waiter = await pool.connect();
+    let pending: ReturnType<typeof privateRead> | undefined;
+    try {
+      const holderPid = (await holder.query("SELECT pg_backend_pid() AS pid"))
+        .rows[0].pid;
+      const waiterPid = (await waiter.query("SELECT pg_backend_pid() AS pid"))
+        .rows[0].pid;
+      await pool.query(
+        "UPDATE principals SET expires_at=clock_timestamp()+interval '1 second' WHERE id=$1",
+        [f.owner.id],
+      );
+      await holder.query("BEGIN");
+      await holder.query(
+        lock === "principal"
+          ? "SELECT id FROM principals WHERE id=$1 FOR UPDATE"
+          : "SELECT id FROM workspaces WHERE owner_principal_id=$1 FOR UPDATE",
+        [f.owner.id],
+      );
+      const borrowed = memberSlotHolds({
+        query: pool.query.bind(pool),
+        connect: async () => ({
+          query: waiter.query.bind(waiter),
+          release() {},
+        }),
+      } as unknown as Pool);
+      pending = privateRead(borrowed, kind, f.owner.token, f.requestId);
+      const denial = deniedRead(pending, kind);
+      await expect
+        .poll(
+          async () =>
+            (
+              await pool.query(
+                `SELECT
+         $1::integer=ANY(pg_blocking_pids(a.pid)) AS blocked,
+         a.xact_start<p.expires_at AS started_before_expiry,
+         p.expires_at<=clock_timestamp() AS expired
+         FROM pg_stat_activity a CROSS JOIN principals p WHERE a.pid=$2 AND p.id=$3 AND a.wait_event_type='Lock'`,
+                [holderPid, waiterPid, f.owner.id],
+              )
+            ).rows[0],
+          { timeout: 5000 },
+        )
+        .toEqual({ blocked: true, started_before_expiry: true, expired: true });
+      await holder.query("COMMIT");
+      await denial;
+      expect(await retainedHoldRows(f.owner.id)).toEqual(before);
+    } finally {
+      await holder.query("ROLLBACK");
+      await Promise.allSettled(pending ? [pending] : []);
+      holder.release();
+      waiter.release();
+    }
+  },
+  10000,
+);
+
+it.each(
+  readKinds.flatMap((kind) =>
+    ["read", "commit"].map((stage) => ({ kind, stage })),
+  ),
+)(
+  "withholds $kind after a $stage failure without replaying the read transaction",
+  async ({ kind, stage }) => {
+    const f = await heldReceipt(),
+      before = await retainedHoldRows(f.owner.id);
+    let reads = 0,
+      discarded: Error | undefined,
+      released = false;
+    const broken = memberSlotHolds({
+      query: pool.query.bind(pool),
+      connect: async () => {
+        const client = await pool.connect();
+        return {
+          query: async (sql: string, values?: unknown[]) => {
+            const result = await client.query(sql, values);
+            if (sql.includes("SELECT r.request_id")) {
+              reads++;
+              if (stage === "read")
+                throw new Error("Synthetic private read fault");
+            }
+            if (sql === "COMMIT" && stage === "commit")
+              throw new Error("Synthetic lost read commit reply");
+            return result;
+          },
+          release(error?: Error) {
+            released = true;
+            discarded = error;
+            client.release(error);
+          },
+        };
+      },
+    } as unknown as Pool);
+    await expect(
+      privateRead(broken, kind, f.owner.token, f.requestId),
+    ).rejects.toThrow(
+      stage === "read"
+        ? "Synthetic private read fault"
+        : "Synthetic lost read commit reply",
+    );
+    expect(reads).toBe(1);
+    expect(released).toBe(true);
+    expect(!!discarded).toBe(stage === "commit");
+    expect(await retainedHoldRows(f.owner.id)).toEqual(before);
+    expect(await memberHolds.get(f.owner.token, f.requestId)).toMatchObject({
+      id: f.requestId,
+      state: "held",
+    });
+  },
+);
+
+it("withholds receipts and grants for unavailable owners and never returns an outsider's receipt", async () => {
+  const f = await heldReceipt();
+  const other = await member("explorer");
+  const before = await retainedHoldRows(f.owner.id);
+  expect(await memberHolds.get(other.token, f.requestId)).toBeNull();
+  expect(await memberHolds.snapshot(other.token)).toEqual({
+    grants: [],
+    receipts: [],
+  });
+  for (const token of ["forged", f.admin.token]) {
+    expect(await memberHolds.get(token, f.requestId)).toBeNull();
+    await expect(memberHolds.snapshot(token)).rejects.toMatchObject({
+      code: "unavailable",
+    });
+  }
+  for (const change of [
+    "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+    "UPDATE principals SET revoked_at=NULL,expires_at=clock_timestamp() WHERE id=$1",
+  ]) {
+    await pool.query(change, [f.owner.id]);
+    expect(await memberHolds.get(f.owner.token, f.requestId)).toBeNull();
+    await expect(memberHolds.snapshot(f.owner.token)).rejects.toMatchObject({
+      code: "unavailable",
+    });
+  }
+  expect(await retainedHoldRows(f.owner.id)).toEqual(before);
+  await pool.query(
+    "UPDATE principals SET expires_at=clock_timestamp()+interval '1 day' WHERE id=$1",
+    [f.owner.id],
+  );
+  await pool.query("DELETE FROM workspaces WHERE owner_principal_id=$1", [
+    f.owner.id,
+  ]);
+  expect(await memberHolds.get(f.owner.token, f.requestId)).toBeNull();
+  await expect(memberHolds.snapshot(f.owner.token)).rejects.toMatchObject({
+    code: "unavailable",
+  });
 });

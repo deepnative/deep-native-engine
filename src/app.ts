@@ -935,6 +935,21 @@ export function app(
       availability.list(),
       memberHolds.snapshot(res.locals.token as string),
     ]);
+    if (
+      snapshot.status === "rejected" &&
+      snapshot.reason instanceof SlotHoldFailure &&
+      snapshot.reason.code === "unavailable"
+    ) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Availability unavailable",
+            "Sample availability and receipts are not available to this session.",
+          ),
+        );
+      return;
+    }
     const slots = windows.status === "fulfilled" ? windows.value : [];
     const failed =
       windows.status === "rejected" || snapshot.status === "rejected";

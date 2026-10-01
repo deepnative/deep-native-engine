@@ -4624,6 +4624,23 @@ it("keeps member sample-hold request parameters, receipts and uncertain outcomes
     .expect(503);
   expect(partial.text).toContain(`/availability/holds/${id}`);
   expect(partial.text).not.toContain("private slot failure");
+  holds.snapshot.mockRejectedValueOnce(new SlotHoldFailure("unavailable"));
+  const deniedSnapshot = await agent
+    .get("/availability")
+    .set("Host", host)
+    .expect(403);
+  expect(deniedSnapshot.text).toContain("Availability unavailable");
+  for (const marker of [
+    id,
+    slot,
+    grant,
+    receipt.startsAt.toISOString(),
+    "Sample hold receipt",
+  ])
+    expect(deniedSnapshot.text).not.toContain(marker);
+  holds.snapshot.mockRejectedValueOnce(new SlotHoldFailure("uncertain"));
+  await agent.get("/availability").set("Host", host).expect(503);
+
   expect(listing.text).toContain(`/availability/holds/${id}`);
   const fields = { slotId: slot, grantId: grant, requestId: id };
   expect((await post(fields).expect(303)).headers.location).toBe(
