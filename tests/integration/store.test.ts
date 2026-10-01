@@ -1023,6 +1023,326 @@ it("keeps optional career plans and draft approvals private, versioned and remov
   await db.remove(owner.learner.id);
   expect(await career.snapshot(owner.learner.id)).toBeNull();
 });
+const milestoneFixture: MilestoneInput = {
+  goalTitle: "Saved invented private goal",
+  milestoneTitle: "Saved invented private milestone",
+  evidenceNote: "Saved invented private evidence",
+  nextAction: "Saved invented private action",
+  reminderDate: null,
+  reminderTime: null,
+  reminderTimezone: null,
+  selfReportedComplete: false,
+};
+async function milestoneRows(memberId: string) {
+  return (
+    await pool.query(
+      "SELECT * FROM learning_milestones WHERE member_id=$1 ORDER BY id",
+      [memberId],
+    )
+  ).rows;
+}
+it("withholds private milestones and denies mutations during workspace deletion at HTTP and store boundaries", async () => {
+  const owner = await member();
+  const id = await db.createMilestone(owner.learner.id, milestoneFixture);
+  const before = await milestoneRows(owner.learner.id);
+  await withLoopback(
+    app(db, {
+      origin: "http://127.0.0.1:3000",
+      secret: "synthetic-milestone-secret",
+    }),
+    async (server) => {
+      const agent = request.agent(server);
+      const get = () =>
+        agent
+          .get("/milestones")
+          .set("Host", "127.0.0.1:3000")
+          .set("Cookie", `${COOKIE}=${owner.token}`);
+      const active = await get().expect(200);
+      expect(active.text).toContain(milestoneFixture.milestoneTitle);
+      const csrf = active.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+      await pool.query(
+        "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+        [owner.learner.id],
+      );
+      expect.soft(await db.milestones(owner.learner.id)).toBeNull();
+      const attempted = "Attempted invented private marker";
+      const form = {
+        csrf,
+        version: "1",
+        goal_title: attempted,
+        milestone_title: attempted,
+        evidence_note: attempted,
+        next_action: attempted,
+        sample_only: "yes",
+        confirm: "yes",
+      };
+      const responses = [await get()];
+      for (const [path, fields] of [
+        ["/milestones", { ...form, sample_only: "" }],
+        [`/milestones/${id}/update`, { ...form, sample_only: "" }],
+        ["/milestones", form],
+        [`/milestones/${id}/update`, form],
+        [`/milestones/${id}/delete`, form],
+      ] as const) {
+        responses.push(
+          await agent
+            .post(path)
+            .set("Host", "127.0.0.1:3000")
+            .set("Origin", "http://127.0.0.1:3000")
+            .set("Cookie", `${COOKIE}=${owner.token}`)
+            .type("form")
+            .send(fields),
+        );
+        expect.soft(await milestoneRows(owner.learner.id)).toEqual(before);
+      }
+      for (const response of responses) {
+        expect.soft(response.status).toBe(403);
+        for (const marker of [
+          milestoneFixture.goalTitle,
+          milestoneFixture.milestoneTitle,
+          milestoneFixture.evidenceNote!,
+          milestoneFixture.nextAction,
+          attempted,
+        ])
+          expect.soft(response.text).not.toContain(marker);
+        expect.soft(response.text).not.toContain("No milestones yet");
+      }
+    },
+  );
+});
+
+it("withholds private milestone HTTP content when the owner expires during a read lock wait", async () => {
+  const owner = await member();
+  await db.createMilestone(owner.learner.id, milestoneFixture);
+  const before = await milestoneRows(owner.learner.id);
+  await withLoopback(
+    app(db, {
+      origin: "http://127.0.0.1:3000",
+      secret: "synthetic-milestone-secret",
+    }),
+    async (server) => {
+      const holder = await pool.connect();
+      let pending: Promise<request.Response> | undefined;
+      try {
+        await pool.query(
+          "UPDATE principals SET expires_at=clock_timestamp()+interval '1 second' WHERE id=$1",
+          [owner.learner.id],
+        );
+        await holder.query("BEGIN");
+        await holder.query(
+          "LOCK TABLE learning_milestones IN ACCESS EXCLUSIVE MODE",
+        );
+        const pid = (await holder.query("SELECT pg_backend_pid() AS pid"))
+          .rows[0].pid;
+        pending = request(server)
+          .get("/milestones")
+          .set("Host", "127.0.0.1:3000")
+          .set("Cookie", `${COOKIE}=${owner.token}`)
+          .then((response) => response);
+        await expect
+          .poll(
+            async () =>
+              (
+                await pool.query(
+                  `SELECT 1 FROM pg_stat_activity waiter CROSS JOIN principals p
+        WHERE p.id=$2 AND waiter.datname=current_database() AND waiter.state='active' AND waiter.wait_event_type='Lock'
+        AND $1::integer=ANY(pg_blocking_pids(waiter.pid)) AND waiter.xact_start<p.expires_at AND p.expires_at<=clock_timestamp()`,
+                  [pid, owner.learner.id],
+                )
+              ).rowCount,
+            { timeout: 4000, interval: 20 },
+          )
+          .toBe(1);
+        await holder.query("COMMIT");
+        const response = await pending;
+        expect(response.status).toBe(403);
+        expect(response.text).toContain("Milestones unavailable");
+        expect(response.text).not.toContain(milestoneFixture.milestoneTitle);
+        expect(response.text).not.toContain(milestoneFixture.evidenceNote);
+        expect(await milestoneRows(owner.learner.id)).toEqual(before);
+      } finally {
+        await holder.query("ROLLBACK");
+        await Promise.allSettled(pending ? [pending] : []);
+        holder.release();
+      }
+    },
+  );
+}, 10000);
+type MilestoneOperation = "read" | "create" | "update" | "delete";
+function operateMilestone(
+  target: ReturnType<typeof store>,
+  operation: MilestoneOperation,
+  memberId: string,
+  id: string,
+) {
+  if (operation === "read") return target.milestones(memberId);
+  if (operation === "create")
+    return target.createMilestone(memberId, {
+      ...milestoneFixture,
+      milestoneTitle: "Attempted race creation",
+    });
+  if (operation === "update")
+    return target.updateMilestone(memberId, id, 1, {
+      ...milestoneFixture,
+      milestoneTitle: "Attempted race update",
+    });
+  return target.deleteMilestone(memberId, id, 1);
+}
+const milestoneOperations: MilestoneOperation[] = [
+  "read",
+  "create",
+  "update",
+  "delete",
+];
+it.each(
+  milestoneOperations.flatMap((operation) =>
+    [
+      "deletion",
+      "revocation",
+      "principal-expiry",
+      "workspace-expiry",
+      "record-expiry",
+    ].map((change) => ({ operation, change })),
+  ),
+)(
+  "denies milestone $operation when $change wins the lock race without changing retained rows",
+  async ({ operation, change }) => {
+    const owner = await member();
+    const id = (await db.createMilestone(
+      owner.learner.id,
+      milestoneFixture,
+    )) as string;
+    const before = await milestoneRows(owner.learner.id);
+    const holder = await pool.connect();
+    let pending: ReturnType<typeof operateMilestone> | undefined;
+    const expires = change.endsWith("expiry");
+    try {
+      if (expires)
+        await pool.query(
+          "UPDATE principals SET expires_at=clock_timestamp()+interval '1 second' WHERE id=$1",
+          [owner.learner.id],
+        );
+      await holder.query("BEGIN");
+      const pid = (await holder.query("SELECT pg_backend_pid() AS pid")).rows[0]
+        .pid;
+      if (change === "revocation")
+        await holder.query(
+          "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+          [owner.learner.id],
+        );
+      else if (change === "deletion")
+        await holder.query(
+          "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+          [owner.learner.id],
+        );
+      else if (change === "principal-expiry")
+        await holder.query("SELECT id FROM principals WHERE id=$1 FOR UPDATE", [
+          owner.learner.id,
+        ]);
+      else if (change === "workspace-expiry")
+        await holder.query("SELECT id FROM workspaces WHERE id=$1 FOR UPDATE", [
+          owner.learner.id,
+        ]);
+      else if (operation === "update" || operation === "delete")
+        await holder.query(
+          "SELECT id FROM learning_milestones WHERE id=$1 FOR UPDATE",
+          [id],
+        );
+      else
+        await holder.query(
+          "LOCK TABLE learning_milestones IN ACCESS EXCLUSIVE MODE",
+        );
+      pending = operateMilestone(db, operation, owner.learner.id, id);
+      await expect
+        .poll(
+          async () =>
+            (
+              await pool.query(
+                `SELECT 1 FROM pg_stat_activity waiter CROSS JOIN principals p
+        WHERE p.id=$2 AND waiter.datname=current_database() AND waiter.state='active' AND waiter.wait_event_type='Lock'
+        AND $1::integer=ANY(pg_blocking_pids(waiter.pid))
+        AND (NOT $3::boolean OR (waiter.xact_start<p.expires_at AND p.expires_at<=clock_timestamp()))`,
+                [pid, owner.learner.id, expires],
+              )
+            ).rowCount,
+          { timeout: 4000, interval: 20 },
+        )
+        .toBe(1);
+      await holder.query("COMMIT");
+      expect(await pending).toBeNull();
+      expect(await milestoneRows(owner.learner.id)).toEqual(before);
+    } finally {
+      await holder.query("ROLLBACK");
+      await Promise.allSettled(pending ? [pending] : []);
+      holder.release();
+    }
+  },
+  10000,
+);
+it.each(
+  milestoneOperations.flatMap((operation) =>
+    ["deletion", "revocation"].map((change) => ({ operation, change })),
+  ),
+)(
+  "finishes milestone $operation before a later $change and then denies repeat access",
+  async ({ operation, change }) => {
+    const owner = await member();
+    const id = (await db.createMilestone(
+      owner.learner.id,
+      milestoneFixture,
+    )) as string;
+    const fragment =
+      operation === "read"
+        ? "SELECT id,goal_title"
+        : operation === "create"
+          ? "INSERT INTO learning_milestones"
+          : operation === "update"
+            ? "UPDATE learning_milestones"
+            : "DELETE FROM learning_milestones";
+    const first = controlledExercise(fragment);
+    const pending = operateMilestone(
+      first.controlled,
+      operation,
+      owner.learner.id,
+      id,
+    );
+    let loss: Promise<unknown> | undefined;
+    try {
+      await first.reached.wait;
+      const sql =
+        change === "deletion"
+          ? "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1"
+          : "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1";
+      loss = pool.query(sql, [owner.learner.id]);
+      expect((await blockingPids(sql)).length).toBeGreaterThan(0);
+      first.resume.release();
+      const result = await pending;
+      if (operation === "read")
+        expect(result).toMatchObject([{ id, ...milestoneFixture }]);
+      else if (operation === "create")
+        expect(result).toMatch(/^[0-9a-f-]{36}$/);
+      else expect(result).toBe(true);
+      await loss;
+      const after = await milestoneRows(owner.learner.id);
+      expect(after).toHaveLength(
+        operation === "delete" ? 0 : operation === "create" ? 2 : 1,
+      );
+      if (operation === "update")
+        expect(after[0]).toMatchObject({
+          milestone_title: "Attempted race update",
+          version: 2,
+        });
+      expect(
+        await operateMilestone(db, operation, owner.learner.id, id),
+      ).toBeNull();
+      expect(await milestoneRows(owner.learner.id)).toEqual(after);
+    } finally {
+      first.resume.release();
+      await Promise.allSettled([pending, ...(loss ? [loss] : [])]);
+    }
+  },
+  10000,
+);
 it("keeps goal milestones private, rejects stale edits and cascades on member deletion", async () => {
   const owner = await member();
   const outsider = await member();
@@ -1042,18 +1362,24 @@ it("keeps goal milestones private, rejects stale edits and cascades on member de
   expect(await db.milestones(owner.learner.id)).toMatchObject([
     { id, ...input, version: 1 },
   ]);
-  expect(await db.updateMilestone(outsider.learner.id, id!, 1, input)).toBe(
-    false,
-  );
   expect(
-    await db.updateMilestone(owner.learner.id, id!, 1, {
+    await db.updateMilestone(outsider.learner.id, id as string, 1, input),
+  ).toBe(false);
+  expect(
+    await db.updateMilestone(owner.learner.id, id as string, 1, {
       ...input,
       selfReportedComplete: true,
     }),
   ).toBe(true);
-  expect(await db.updateMilestone(owner.learner.id, id!, 1, input)).toBe(false);
-  expect(await db.deleteMilestone(outsider.learner.id, id!, 2)).toBe(false);
-  expect(await db.deleteMilestone(owner.learner.id, id!, 1)).toBe(false);
+  expect(
+    await db.updateMilestone(owner.learner.id, id as string, 1, input),
+  ).toBe(false);
+  expect(await db.deleteMilestone(outsider.learner.id, id as string, 2)).toBe(
+    false,
+  );
+  expect(await db.deleteMilestone(owner.learner.id, id as string, 1)).toBe(
+    false,
+  );
   expect(await db.milestones(owner.learner.id)).toMatchObject([
     { id, version: 2, selfReportedComplete: true },
   ]);
@@ -1063,9 +1389,24 @@ it("keeps goal milestones private, rejects stale edits and cascades on member de
       [id],
     ),
   ).rejects.toThrow();
-  await db.remove(owner.learner.id);
+  expect(await db.deleteMilestone(owner.learner.id, id as string, 2)).toBe(
+    true,
+  );
+  expect(await db.deleteMilestone(owner.learner.id, id as string, 2)).toBe(
+    false,
+  );
+  expect(
+    await db.updateMilestone(owner.learner.id, id as string, 2, input),
+  ).toBe(false);
   expect(await db.milestones(owner.learner.id)).toEqual([]);
-  expect(await db.deleteMilestone(owner.learner.id, id!, 2)).toBe(false);
+  expect(await db.createMilestone(owner.learner.id, input)).toMatch(
+    /^[0-9a-f-]{36}$/,
+  );
+  await db.remove(owner.learner.id);
+  expect(await db.milestones(owner.learner.id)).toBeNull();
+  expect(
+    await db.deleteMilestone(owner.learner.id, id as string, 2),
+  ).toBeNull();
 });
 it("stores a private pinned choice only for a currently published assignment and removes it with the member", async () => {
   const first = await member();

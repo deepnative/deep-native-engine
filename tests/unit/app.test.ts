@@ -3623,7 +3623,7 @@ it("keeps private milestones local, validates edits and refuses stale or foreign
       .send({ csrf, ...values });
   await post("/milestones", { ...input, sample_only: "" }).expect(422);
   expect(db.createMilestone).not.toHaveBeenCalled();
-  db.createMilestone.mockResolvedValueOnce(null).mockResolvedValueOnce(id);
+  db.createMilestone.mockResolvedValueOnce(false).mockResolvedValueOnce(id);
   await post("/milestones", input).expect(409);
   await post("/milestones", input).expect(303);
   expect(db.createMilestone).toHaveBeenLastCalledWith(
@@ -3691,6 +3691,49 @@ it("keeps private milestones local, validates edits and refuses stale or foreign
   }).expect(303);
   expect(db.deleteMilestone).toHaveBeenLastCalledWith(member.id, id, 2);
   await post("/milestones", { ...input, csrf: "invalid" }).expect(403);
+});
+
+it("withholds saved and attempted milestone content on every unavailable route branch", async () => {
+  const { agent, csrf } = await client();
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.milestones.mockResolvedValue(null);
+  db.createMilestone.mockResolvedValue(null);
+  db.updateMilestone.mockResolvedValue(null);
+  db.deleteMilestone.mockResolvedValue(null);
+  const id = "a4ff1471-0226-4d5b-8677-99c0a94cdf40";
+  const marker = "Attempted synthetic private milestone";
+  const input = {
+    csrf,
+    version: "1",
+    goal_title: marker,
+    milestone_title: marker,
+    evidence_note: marker,
+    next_action: marker,
+    sample_only: "yes",
+    confirm: "yes",
+  };
+  const responses = [await agent.get("/milestones").set("Host", host)];
+  for (const [path, fields] of [
+    ["/milestones", { ...input, sample_only: "" }],
+    [`/milestones/${id}/update`, { ...input, sample_only: "" }],
+    ["/milestones", input],
+    [`/milestones/${id}/update`, input],
+    [`/milestones/${id}/delete`, input],
+  ] as const)
+    responses.push(
+      await agent
+        .post(path)
+        .set("Host", host)
+        .set("Origin", origin)
+        .type("form")
+        .send(fields),
+    );
+  for (const response of responses) {
+    expect(response.status).toBe(403);
+    expect(response.text).toContain("Milestones unavailable");
+    expect(response.text).not.toContain(marker);
+    expect(response.text).not.toContain("No milestones yet");
+  }
 });
 
 it("compares only two selected submissions from an owned private attempt", async () => {

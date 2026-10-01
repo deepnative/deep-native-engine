@@ -207,7 +207,7 @@ it("pins only a currently published assignment version to a session-owned learne
   expect(await db.chooseAssignment("member-1", "SYN-920", 2)).toBe(false);
 });
 it("keeps milestone reads and optimistic edits scoped to the owning member", async () => {
-  const p = pool(),
+  const p = milestonePool(),
     db = store(p.value);
   const input: MilestoneInput = {
     goalTitle: "Plan a local project",
@@ -220,15 +220,15 @@ it("keeps milestone reads and optimistic edits scoped to the owning member", asy
     selfReportedComplete: true,
   };
   expect(await db.milestones("member-a")).toEqual([]);
-  expect(p.query.mock.calls[0]![1]).toEqual(["member-a"]);
-  p.query.mockResolvedValueOnce({
+  expect(p.data.mock.calls[0]![1]).toEqual(["member-a"]);
+  p.data.mockResolvedValueOnce({
     rows: [{ id: "milestone-a", ...input, version: 1 }],
   });
   expect(await db.milestones("member-a")).toMatchObject([
     { id: "milestone-a", version: 1 },
   ]);
-  expect(await db.createMilestone("member-a", input)).toBeNull();
-  expect(p.query.mock.calls[2]![1]).toEqual([
+  expect(await db.createMilestone("member-a", input)).toBe(false);
+  expect(p.data.mock.calls[2]![1]).toEqual([
     "member-a",
     expect.any(String),
     input.goalTitle,
@@ -240,16 +240,16 @@ it("keeps milestone reads and optimistic edits scoped to the owning member", asy
     input.reminderTimezone,
     true,
   ]);
-  p.query.mockResolvedValueOnce({ rows: [{ id: "milestone-a" }] });
+  p.data.mockResolvedValueOnce({ rows: [{ id: "milestone-a" }] });
   expect(await db.createMilestone("member-a", input)).toBe("milestone-a");
-  p.query.mockResolvedValueOnce({ rowCount: 1 });
+  p.data.mockResolvedValueOnce({ rowCount: 1 });
   expect(await db.updateMilestone("member-a", "milestone-a", 1, input)).toBe(
     true,
   );
-  expect(p.query.mock.calls[4]![0]).toContain(
+  expect(p.data.mock.calls[4]![0]).toContain(
     "WHERE member_id=$1 AND id=$2 AND version=$3",
   );
-  expect(p.query.mock.calls[4]![1]).toEqual([
+  expect(p.data.mock.calls[4]![1]).toEqual([
     "member-a",
     "milestone-a",
     1,
@@ -262,14 +262,14 @@ it("keeps milestone reads and optimistic edits scoped to the owning member", asy
     input.reminderTimezone,
     true,
   ]);
-  p.query.mockResolvedValueOnce({ rowCount: 0 });
+  p.data.mockResolvedValueOnce({ rowCount: 0 });
   expect(await db.updateMilestone("member-b", "milestone-a", 1, input)).toBe(
     false,
   );
-  p.query.mockResolvedValueOnce({ rowCount: 1 });
+  p.data.mockResolvedValueOnce({ rowCount: 1 });
   expect(await db.deleteMilestone("member-a", "milestone-a", 2)).toBe(true);
-  expect(p.query.mock.calls[6]![1]).toEqual(["member-a", "milestone-a", 2]);
-  p.query.mockResolvedValueOnce({ rowCount: 0 });
+  expect(p.data.mock.calls[6]![1]).toEqual(["member-a", "milestone-a", 2]);
+  p.data.mockResolvedValueOnce({ rowCount: 0 });
   expect(await db.deleteMilestone("member-a", "milestone-a", 1)).toBe(false);
 });
 
@@ -358,6 +358,78 @@ function exercisePool(
     value: { query, connect } as unknown as Pool,
   };
 }
+
+const milestoneInput: MilestoneInput = {
+  goalTitle: "Invented goal",
+  milestoneTitle: "Invented milestone",
+  evidenceNote: "",
+  nextAction: "Compare samples",
+  reminderDate: null,
+  reminderTime: null,
+  reminderTimezone: null,
+  selfReportedComplete: false,
+};
+function milestonePool(options: Parameters<typeof exercisePool>[0] = {}) {
+  const p = exercisePool(options);
+  const normal = p.query.getMockImplementation()!;
+  const data = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
+  p.query.mockImplementation(async (sql: string, ...args: unknown[]) => {
+    if (sql.startsWith("SELECT id,expires_at") && options.principal !== false)
+      return {
+        rows: [
+          { id: (args[0] as string[])[0], expires_at: new Date("2035-01-01") },
+        ],
+      };
+    return sql.includes("learning_milestones")
+      ? data(sql, ...args)
+      : normal(sql);
+  });
+  return { ...p, data };
+}
+const milestoneOperations = [
+  (db: ReturnType<typeof store>, id: string) => db.milestones(id),
+  (db: ReturnType<typeof store>, id: string) =>
+    db.createMilestone(id, milestoneInput),
+  (db: ReturnType<typeof store>, id: string) =>
+    db.updateMilestone(id, "milestone-a", 1, milestoneInput),
+  (db: ReturnType<typeof store>, id: string) =>
+    db.deleteMilestone(id, "milestone-a", 1),
+];
+it.each(milestoneOperations)(
+  "denies milestone operations before private queries for unavailable principals and workspaces",
+  async (operate) => {
+    for (const options of [{ principal: false }, { workspace: false }]) {
+      const p = milestonePool(options);
+      expect(await operate(store(p.value), "owned")).toBeNull();
+      expect(p.data).not.toHaveBeenCalled();
+      expect(p.query).toHaveBeenLastCalledWith("ROLLBACK");
+      expect(p.release).toHaveBeenCalledWith(undefined);
+    }
+    const p = milestonePool();
+    expect(await operate(store(p.value), " ")).toBeNull();
+    expect(p.connect).not.toHaveBeenCalled();
+  },
+);
+it.each(milestoneOperations)(
+  "rolls back expired milestone results and preserves safe failure cleanup",
+  async (operate) => {
+    const expired = milestonePool({ expired: true });
+    expect(await operate(store(expired.value), "owned")).toBeNull();
+    expect(expired.data).toHaveBeenCalledOnce();
+    expect(expired.query).toHaveBeenLastCalledWith("ROLLBACK");
+    for (const rollbackFails of [false, true]) {
+      const p = milestonePool({ rollbackFails });
+      p.data.mockRejectedValueOnce(new Error("synthetic milestone failure"));
+      await expect(operate(store(p.value), "owned")).rejects.toThrow(
+        "synthetic milestone failure",
+      );
+      expect(p.query).toHaveBeenLastCalledWith("ROLLBACK");
+      expect(p.release).toHaveBeenCalledWith(
+        rollbackFails ? expect.any(Error) : undefined,
+      );
+    }
+  },
+);
 
 it.each([
   [{}, "withdrawn"],

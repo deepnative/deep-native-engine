@@ -3243,26 +3243,39 @@ export function app(
     }
     res.redirect(303, "/assignments/attempts");
   });
+  const milestoneDenied = (res: express.Response) =>
+    res
+      .status(403)
+      .send(
+        errorPage(
+          "Milestones unavailable",
+          "Your private milestones are unavailable. Return to your learning space.",
+        ),
+      );
   app.get("/milestones", async (_req, res) => {
     const member = res.locals.learner as Learner;
-    res.send(
-      milestonesPage(
-        member,
-        await store.milestones(member.id),
-        res.locals.csrf as string,
-      ),
-    );
+    const rows = await store.milestones(member.id);
+    if (rows === null) {
+      milestoneDenied(res);
+      return;
+    }
+    res.send(milestonesPage(member, rows, res.locals.csrf as string));
   });
   app.post("/milestones", async (req, res) => {
     const member = res.locals.learner as Learner;
     const parsed = parseMilestone(req.body as Fields, member.timezone);
     if (parsed.errors.length) {
+      const rows = await store.milestones(member.id);
+      if (rows === null) {
+        milestoneDenied(res);
+        return;
+      }
       res
         .status(422)
         .send(
           milestonesPage(
             member,
-            await store.milestones(member.id),
+            rows,
             res.locals.csrf as string,
             parsed.errors,
             parsed.input,
@@ -3270,7 +3283,12 @@ export function app(
         );
       return;
     }
-    if (!(await store.createMilestone(member.id, parsed.input))) {
+    const result = await store.createMilestone(member.id, parsed.input);
+    if (result === null) {
+      milestoneDenied(res);
+      return;
+    }
+    if (!result) {
       res
         .status(409)
         .send(
@@ -3304,12 +3322,17 @@ export function app(
     }
     const parsed = parseMilestone(req.body as Fields, member.timezone);
     if (parsed.errors.length) {
+      const rows = await store.milestones(member.id);
+      if (rows === null) {
+        milestoneDenied(res);
+        return;
+      }
       res
         .status(422)
         .send(
           milestonesPage(
             member,
-            await store.milestones(member.id),
+            rows,
             res.locals.csrf as string,
             parsed.errors,
             parsed.input,
@@ -3318,7 +3341,17 @@ export function app(
         );
       return;
     }
-    if (!(await store.updateMilestone(member.id, id, version, parsed.input))) {
+    const result = await store.updateMilestone(
+      member.id,
+      id,
+      version,
+      parsed.input,
+    );
+    if (result === null) {
+      milestoneDenied(res);
+      return;
+    }
+    if (!result) {
       res
         .status(409)
         .send(
@@ -3336,13 +3369,20 @@ export function app(
     const id = req.params.id as string;
     const fields = req.body as Fields;
     const version = Number(fields.version);
-    if (
+    const valid = !(
       fields.confirm !== "yes" ||
       !validMilestoneId(id) ||
       !Number.isSafeInteger(version) ||
-      version < 1 ||
-      !(await store.deleteMilestone(member.id, id, version))
-    ) {
+      version < 1
+    );
+    const result = valid
+      ? await store.deleteMilestone(member.id, id, version)
+      : false;
+    if (result === null) {
+      milestoneDenied(res);
+      return;
+    }
+    if (!result) {
       res
         .status(409)
         .send(
