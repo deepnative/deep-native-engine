@@ -314,9 +314,9 @@
       "id": "L35",
       "actor": "Exploratory general learner and another member",
       "preconditions": "Separate private local previews with no profile time zone",
-      "steps": "Reject a reminder without time zone, save a noncoding goal milestone, reload, inspect outsider isolation and revise learning direction",
-      "expected": "Only the owner sees the persisted milestone; no reminder is scheduled and a changed direction does not erase the original plan",
-      "issues": [36],
+      "steps": "Reject a reminder without time zone, save a noncoding goal milestone, reload, inspect outsider isolation, revise learning direction, then mark the workspace deleting and reload twice",
+      "expected": "Only the owner sees the persisted milestone; no reminder is scheduled and a changed direction does not erase the original plan; deletion denies with a content-free 403 while retained rows remain unchanged",
+      "issues": [36, 42],
       "critical": true
     },
     {

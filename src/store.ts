@@ -94,19 +94,23 @@ export interface Store {
     contentId: string,
     version: number,
   ): Promise<boolean>;
-  milestones(id: string): Promise<Milestone[]>;
-  createMilestone(id: string, input: MilestoneInput): Promise<string | null>;
+  // null denies access; empty reads and false mutations are authorized results.
+  milestones(id: string): Promise<Milestone[] | null>;
+  createMilestone(
+    id: string,
+    input: MilestoneInput,
+  ): Promise<string | false | null>;
   updateMilestone(
     id: string,
     milestoneId: string,
     version: number,
     input: MilestoneInput,
-  ): Promise<boolean>;
+  ): Promise<boolean | null>;
   deleteMilestone(
     id: string,
     milestoneId: string,
     version: number,
-  ): Promise<boolean>;
+  ): Promise<boolean | null>;
   save(
     id: string,
     input: {
@@ -493,9 +497,13 @@ export function store(pool: Pool): Store {
       return result.rowCount === 1;
     },
     async milestones(id) {
-      return (
-        await pool.query<Milestone>(
-          `SELECT id,goal_title AS "goalTitle",milestone_title AS "milestoneTitle",
+      return exerciseTransaction(
+        id,
+        false,
+        async (client, memberId) =>
+          (
+            await client.query<Milestone>(
+              `SELECT id,goal_title AS "goalTitle",milestone_title AS "milestoneTitle",
                   evidence_note AS "evidenceNote",next_action AS "nextAction",
                   to_char(reminder_date,'YYYY-MM-DD') AS "reminderDate",
                   to_char(reminder_time,'HH24:MI') AS "reminderTime",
@@ -503,61 +511,84 @@ export function store(pool: Pool): Store {
                   self_reported_complete AS "selfReportedComplete",
                   version,created_at AS "createdAt",updated_at AS "updatedAt"
            FROM learning_milestones WHERE member_id=$1 ORDER BY created_at DESC,id`,
-          [id],
-        )
-      ).rows;
+              [memberId],
+            )
+          ).rows,
+        true,
+      );
     },
     async createMilestone(id, input) {
-      const result = await pool.query<{ id: string }>(
-        `INSERT INTO learning_milestones(
+      return exerciseTransaction(
+        id,
+        true,
+        async (client, memberId) => {
+          const result = await client.query<{ id: string }>(
+            `INSERT INTO learning_milestones(
            id,member_id,goal_title,milestone_title,evidence_note,next_action,
            reminder_date,reminder_time,reminder_time_zone,self_reported_complete)
          SELECT $2,l.id,$3,$4,$5,$6,$7,$8,$9,$10 FROM learners l WHERE l.id=$1
          RETURNING id`,
-        [
-          id,
-          randomUUID(),
-          input.goalTitle,
-          input.milestoneTitle,
-          input.evidenceNote,
-          input.nextAction,
-          input.reminderDate,
-          input.reminderTime,
-          input.reminderTimezone,
-          input.selfReportedComplete,
-        ],
+            [
+              memberId,
+              randomUUID(),
+              input.goalTitle,
+              input.milestoneTitle,
+              input.evidenceNote,
+              input.nextAction,
+              input.reminderDate,
+              input.reminderTime,
+              input.reminderTimezone,
+              input.selfReportedComplete,
+            ],
+          );
+          return result.rows[0]?.id ?? false;
+        },
+        true,
       );
-      return result.rows[0]?.id ?? null;
     },
     async updateMilestone(id, milestoneId, version, input) {
-      const result = await pool.query(
-        `UPDATE learning_milestones SET goal_title=$4,milestone_title=$5,
+      return exerciseTransaction(
+        id,
+        true,
+        async (client, memberId) => {
+          const result = await client.query(
+            `UPDATE learning_milestones SET goal_title=$4,milestone_title=$5,
            evidence_note=$6,next_action=$7,reminder_date=$8,reminder_time=$9,
            reminder_time_zone=$10,self_reported_complete=$11,
            version=version+1,updated_at=CURRENT_TIMESTAMP
          WHERE member_id=$1 AND id=$2 AND version=$3`,
-        [
-          id,
-          milestoneId,
-          version,
-          input.goalTitle,
-          input.milestoneTitle,
-          input.evidenceNote,
-          input.nextAction,
-          input.reminderDate,
-          input.reminderTime,
-          input.reminderTimezone,
-          input.selfReportedComplete,
-        ],
+            [
+              memberId,
+              milestoneId,
+              version,
+              input.goalTitle,
+              input.milestoneTitle,
+              input.evidenceNote,
+              input.nextAction,
+              input.reminderDate,
+              input.reminderTime,
+              input.reminderTimezone,
+              input.selfReportedComplete,
+            ],
+          );
+          return result.rowCount === 1;
+        },
+        true,
       );
-      return result.rowCount === 1;
     },
     async deleteMilestone(id, milestoneId, version) {
-      const result = await pool.query(
-        `DELETE FROM learning_milestones WHERE member_id=$1 AND id=$2 AND version=$3`,
-        [id, milestoneId, version],
+      return exerciseTransaction(
+        id,
+        true,
+        async (client, memberId) => {
+          const result = await client.query(
+            `DELETE FROM learning_milestones WHERE member_id=$1 AND id=$2 AND version=$3`,
+            [memberId, milestoneId, version],
+          );
+          return result.rowCount === 1;
+        },
+        true,
       );
-      return result.rowCount === 1;
     },
     async save(id, input) {
       return (

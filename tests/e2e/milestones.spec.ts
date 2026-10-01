@@ -1,5 +1,11 @@
 import { test, expect, type Page } from "@playwright/test";
 
+import { COOKIE } from "../../src/session.ts";
+import { hash } from "../../src/store.ts";
+import { testPool } from "../support/database.ts";
+const pool = testPool();
+test.afterAll(async () => pool.end());
+
 const origin = "http://127.0.0.1:4317";
 
 async function onboard(
@@ -73,6 +79,38 @@ test("[L35] general learner saves a private noncoding milestone and revises dire
   await page.getByRole("button", { name: "Save my direction" }).click();
   await page.getByRole("link", { name: "Plan goals and milestones" }).click();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  const session = (await page.context().cookies()).find(
+    (cookie) => cookie.name === COOKIE,
+  )!;
+  const owner = (
+    await pool.query("SELECT id FROM principals WHERE token_hash=$1", [
+      hash(session.value),
+    ])
+  ).rows[0].id;
+  const retained = async () =>
+    (
+      await pool.query(
+        "SELECT * FROM learning_milestones WHERE member_id=$1 ORDER BY id",
+        [owner],
+      )
+    ).rows;
+  const before = await retained();
+  await pool.query(
+    "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+    [owner],
+  );
+  for (let visit = 0; visit < 2; visit++) {
+    const response =
+      visit === 0 ? await page.goto("/milestones") : await page.reload();
+    expect(response?.status()).toBe(403);
+    await expect(
+      page.getByRole("heading", { name: "Milestones unavailable" }),
+    ).toBeVisible();
+    await expect(page.getByText(title)).toHaveCount(0);
+    await expect(page.locator(".milestone-list")).toHaveCount(0);
+    await expect(page.getByText("No milestones yet")).toHaveCount(0);
+  }
+  expect(await retained()).toEqual(before);
 });
 
 test("[L36] professional's local reminder and edit survive reload while stale tabs fail", async ({
