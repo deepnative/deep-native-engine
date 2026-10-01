@@ -31,25 +31,120 @@ it("rejects invalid choices and revision tokens before any write", async () => {
   expect(query).not.toHaveBeenCalled();
 });
 
-it("returns accepted, stale and empty outcomes without implying a save", async () => {
-  const query = vi
-    .fn()
-    .mockResolvedValueOnce({ rows: [] })
-    .mockResolvedValueOnce({ rowCount: 1 })
-    .mockResolvedValueOnce({ rowCount: 0 })
-    .mockResolvedValueOnce({ rowCount: 1 })
-    .mockResolvedValueOnce({ rowCount: 0 })
-    .mockResolvedValueOnce({ rowCount: 1 });
-  const reports = usefulnessStore({ query } as unknown as Pool);
-  expect(await reports.list("unknown")).toEqual([]);
-  expect(await reports.save("owner", "SYN-971", 1, "helpful", 0)).toBe(true);
-  expect(await reports.save("owner", "SYN-971", 1, "helpful", 0)).toBe(false);
-  expect(await reports.save("owner", "SYN-971", 1, "not_yet", 1)).toBe(true);
-  expect(await reports.save("owner", "SYN-971", 1, "not_yet", 1)).toBe(false);
-  expect(await reports.withdraw("owner", "SYN-971", 1, 2)).toBe(true);
-  expect(query).toHaveBeenCalledTimes(6);
+function fixture(
+  options: {
+    principal?: boolean;
+    workspace?: boolean;
+    valid?: boolean | "missing";
+    changed?: boolean;
+    fault?: string;
+    rollbackFault?: boolean;
+  } = {},
+) {
+  const query = vi.fn(async (sql: string) => {
+    if (sql === "ROLLBACK" && options.rollbackFault)
+      throw new Error("rollback fault");
+    if (
+      options.fault &&
+      (options.fault === "COMMIT"
+        ? sql === "COMMIT"
+        : sql.includes(options.fault))
+    )
+      throw new Error("synthetic database fault");
+    if (sql.startsWith("SELECT id,expires_at"))
+      return {
+        rows:
+          options.principal === false
+            ? []
+            : [{ id: "owner-id", expiresAt: new Date() }],
+      };
+    if (sql.startsWith("SELECT id FROM workspaces"))
+      return {
+        rows: options.workspace === false ? [] : [{ id: "workspace-id" }],
+      };
+    if (sql.startsWith("SELECT clock_timestamp"))
+      return {
+        rows:
+          options.valid === "missing"
+            ? []
+            : [{ valid: options.valid !== false }],
+      };
+    return { rows: [], rowCount: options.changed === false ? 0 : 1 };
+  });
+  const release = vi.fn();
+  const connect = vi.fn(async () => ({ query, release }));
+  return {
+    reports: usefulnessStore({ query, connect } as unknown as Pool),
+    query,
+    release,
+    connect,
+  };
+}
+it("returns accepted and conflict results for creation, correction and withdrawal", async () => {
+  for (const changed of [true, false]) {
+    const f = fixture({ changed });
+    expect(await f.reports.list("unknown")).toEqual([]);
+    expect(await f.reports.save("owner", "SYN-971", 1, "helpful", 0)).toBe(
+      changed,
+    );
+    expect(await f.reports.save("owner", "SYN-971", 1, "not_yet", 1)).toBe(
+      changed,
+    );
+    expect(await f.reports.withdraw("owner", "SYN-971", 1, 2)).toBe(changed);
+    expect(f.release).toHaveBeenCalledTimes(3);
+    expect(f.release).toHaveBeenCalledWith(undefined);
+  }
   const disabled = disabledUsefulnessStore();
   expect(await disabled.list("owner")).toEqual([]);
-  expect(await disabled.save("owner", "SYN-971", 1, "helpful", 0)).toBe(false);
-  expect(await disabled.withdraw("owner", "SYN-971", 1, 1)).toBe(false);
+  expect(await disabled.save("owner", "SYN-971", 1, "helpful", 0)).toBeNull();
+  expect(await disabled.withdraw("owner", "SYN-971", 1, 1)).toBeNull();
+});
+it.each([
+  { principal: false },
+  { workspace: false },
+  { valid: false },
+  { valid: "missing" as const },
+])("rolls back authorization denial safely: %j", async (options) => {
+  const f = fixture(options);
+  expect(await f.reports.save("owner", "SYN-971", 1, "helpful", 0)).toBeNull();
+  expect(f.query).toHaveBeenCalledWith("ROLLBACK");
+  expect(f.query).not.toHaveBeenCalledWith("COMMIT");
+  expect(f.release).toHaveBeenCalledWith(undefined);
+});
+it.each([
+  "BEGIN",
+  "SET LOCAL",
+  "SELECT id,expires_at",
+  "SELECT id FROM workspaces",
+  "INSERT INTO",
+  "SELECT clock_timestamp",
+  "COMMIT",
+])("does not retry failed work at %s", async (fault) => {
+  const f = fixture({ fault });
+  await expect(
+    f.reports.save("owner", "SYN-971", 1, "helpful", 0),
+  ).rejects.toThrow("synthetic database fault");
+  expect(f.connect).toHaveBeenCalledTimes(1);
+  expect(f.query).toHaveBeenCalledWith("ROLLBACK");
+  expect(f.release).toHaveBeenCalledWith(
+    fault === "COMMIT" ? expect.any(Error) : undefined,
+  );
+});
+it.each([{ principal: false }, { fault: "INSERT INTO" }])(
+  "discards connection when rollback fails: %j",
+  async (options) => {
+    const f = fixture({ ...options, rollbackFault: true });
+    await expect(
+      f.reports.save("owner", "SYN-971", 1, "helpful", 0),
+    ).rejects.toThrow("Usefulness mutation rollback failed");
+    expect(f.release).toHaveBeenCalledWith(expect.any(Error));
+  },
+);
+it("propagates failed acquisition without retrying", async () => {
+  const connect = vi.fn().mockRejectedValue(new Error("pool unavailable"));
+  const reports = usefulnessStore({ connect } as unknown as Pool);
+  await expect(reports.withdraw("owner", "SYN-971", 1, 1)).rejects.toThrow(
+    "pool unavailable",
+  );
+  expect(connect).toHaveBeenCalledTimes(1);
 });

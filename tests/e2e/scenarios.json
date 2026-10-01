@@ -674,9 +674,9 @@
       "id": "L69",
       "actor": "Non-IT professional learner and unrelated member",
       "preconditions": "Private local preview with a current published invented lesson; no qualified curriculum or live analytics",
-      "steps": "Self-assess the lesson, report usefulness, correct the response, inspect the owner export and unrelated member denial, retire the lesson and withdraw the historical answer",
-      "expected": "Only the owner sees one exact-version self-report; correction is explicit, historical content cannot receive a new report, withdrawal removes the answer and no formal learning outcome or cross-deletion metric is claimed",
-      "issues": [121, 307],
+      "steps": "Self-assess the lesson, report usefulness, correct the response, inspect the owner export and unrelated member denial, submit a previously opened correction after workspace deletion begins, retire the lesson and withdraw the historical answer",
+      "expected": "Only the owner sees one exact-version self-report; correction is explicit, historical content cannot receive a new report, withdrawal removes the answer; pending deletion denies the stale form with 403 and leaves the private row unchanged, and no formal learning outcome or cross-deletion metric is claimed",
+      "issues": [121, 307, 42],
       "critical": true
     },
     {

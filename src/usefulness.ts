@@ -18,19 +18,19 @@ export interface UsefulnessStore {
     contentVersion: number,
     choice: UsefulnessChoice,
     expectedRevision: number,
-  ): Promise<boolean>;
+  ): Promise<boolean | null>;
   withdraw(
     token: string,
     contentId: string,
     contentVersion: number,
     expectedRevision: number,
-  ): Promise<boolean>;
+  ): Promise<boolean | null>;
 }
 export function disabledUsefulnessStore(): UsefulnessStore {
   return {
     list: async () => [],
-    save: async () => false,
-    withdraw: async () => false,
+    save: async () => null,
+    withdraw: async () => null,
   };
 }
 
@@ -49,6 +49,62 @@ const eligible = `FROM principals p
         AND newer.published_at IS NOT NULL)`;
 
 export function usefulnessStore(pool: Pool): UsefulnessStore {
+  // null denies authorization; false preserves an authorized eligibility/revision conflict.
+  const changed = async (
+    sql: string,
+    values: unknown[],
+  ): Promise<boolean | null> => {
+    const client = await pool.connect();
+    let committed = false;
+    let releaseError: Error | undefined;
+    const rollback = async () => {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        releaseError = new Error("Usefulness mutation rollback failed");
+        throw releaseError;
+      }
+    };
+    try {
+      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+      await client.query("SET LOCAL lock_timeout='5s'");
+      // Match deletion/revocation order before locking activity, content and report rows.
+      const principal = (
+        await client.query<{ id: string; expiresAt: Date }>(
+          `SELECT id,expires_at AS "expiresAt" FROM principals WHERE token_hash=$1
+         AND kind='member' AND revoked_at IS NULL
+         AND expires_at>clock_timestamp() FOR SHARE`,
+          [values[0]],
+        )
+      ).rows[0];
+      if (!principal) return null;
+      const workspace = await client.query(
+        `SELECT id FROM workspaces WHERE owner_principal_id=$1
+         AND deleting_at IS NULL FOR SHARE`,
+        [principal.id],
+      );
+      if (!workspace.rows[0]) return null;
+      const result = (await client.query(sql, values)).rowCount === 1;
+      // A row or unique-key wait can outlast the principal without changing its tuple.
+      const current = await client.query<{ valid: boolean }>(
+        "SELECT clock_timestamp() < $1::timestamptz AS valid",
+        [principal.expiresAt],
+      );
+      if (!current.rows[0]?.valid) return null;
+      // A lost COMMIT reply is uncertain: discard the connection and never replay it.
+      releaseError = new Error("Usefulness mutation commit outcome unknown");
+      await client.query("COMMIT");
+      committed = true;
+      releaseError = undefined;
+      return result;
+    } finally {
+      try {
+        if (!committed) await rollback();
+      } finally {
+        client.release(releaseError);
+      }
+    }
+  };
   return {
     async list(token) {
       return (
@@ -74,7 +130,7 @@ export function usefulnessStore(pool: Pool): UsefulnessStore {
       )
         return false;
       if (expectedRevision === 0) {
-        const result = await pool.query(
+        return changed(
           `WITH eligible AS MATERIALIZED (
              SELECT l.id AS member_id,a.content_id,a.content_version ${eligible}
              FOR SHARE OF p,l,a,cv
@@ -84,9 +140,8 @@ export function usefulnessStore(pool: Pool): UsefulnessStore {
            ON CONFLICT DO NOTHING RETURNING revision`,
           [hash(token), contentId, contentVersion, choice],
         );
-        return result.rowCount === 1;
       }
-      const result = await pool.query(
+      return changed(
         `WITH eligible AS MATERIALIZED (
            SELECT l.id AS member_id,a.content_id,a.content_version ${eligible}
            FOR SHARE OF p,l,a,cv
@@ -98,7 +153,6 @@ export function usefulnessStore(pool: Pool): UsefulnessStore {
            AND u.revision=$5 RETURNING u.revision`,
         [hash(token), contentId, contentVersion, choice, expectedRevision],
       );
-      return result.rowCount === 1;
     },
     async withdraw(token, contentId, contentVersion, expectedRevision) {
       if (
@@ -108,7 +162,7 @@ export function usefulnessStore(pool: Pool): UsefulnessStore {
         expectedRevision < 1
       )
         return false;
-      const result = await pool.query(
+      return changed(
         `DELETE FROM lesson_usefulness u USING principals p,learners l
          WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
            AND p.expires_at>CURRENT_TIMESTAMP AND l.id=p.id
@@ -116,7 +170,6 @@ export function usefulnessStore(pool: Pool): UsefulnessStore {
            AND u.revision=$4 RETURNING u.revision`,
         [hash(token), contentId, contentVersion, expectedRevision],
       );
-      return result.rowCount === 1;
     },
   };
 }

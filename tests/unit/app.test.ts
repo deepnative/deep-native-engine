@@ -1550,6 +1550,16 @@ it("accepts a member's confirmed usefulness choice and fails closed on stale, fo
     "helpful",
     0,
   );
+  usefulness.save.mockResolvedValueOnce(null);
+  const denied = await post({
+    intent: "save",
+    choice: "helpful",
+    confirm: "yes",
+  }).expect(403);
+  expect(denied.text).toContain("Usefulness response unavailable");
+  expect(denied.text).not.toContain("SYN-971");
+  usefulness.withdraw.mockResolvedValueOnce(null);
+  await post({ intent: "withdraw", confirm: "yes", revision: "1" }).expect(403);
   usefulness.save.mockResolvedValueOnce(false);
   const stale = await post({
     intent: "save",

@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
+import { hash } from "../../src/store.ts";
+import { COOKIE } from "../../src/session.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
@@ -99,6 +101,59 @@ test("[L69] a member privately reports, corrects and withdraws exact-version use
   expect(payload.records.lessonUsefulness).toMatchObject([
     { contentId: lessonId, contentVersion: 1, choice: "not_yet", revision: 2 },
   ]);
+  // Submit the already rendered correction after deletion is committed.
+  const cookie = (await page.context().cookies()).find(
+    (item) => item.name === COOKIE,
+  )!;
+  const ownerId = (
+    await pool.query("SELECT id FROM principals WHERE token_hash=$1", [
+      hash(cookie.value),
+    ])
+  ).rows[0].id;
+  const beforeDeletion = (
+    await pool.query("SELECT * FROM lesson_usefulness WHERE member_id=$1", [
+      ownerId,
+    ])
+  ).rows;
+  await activity.getByLabel("Your answer").selectOption("helpful");
+  await activity
+    .getByLabel("This is my own response about sample learning")
+    .check();
+  await pool.query(
+    "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+    [ownerId],
+  );
+  try {
+    const response = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/library/${lessonId}/usefulness`) &&
+        response.request().method() === "POST",
+    );
+    await activity
+      .getByRole("button", { name: "Correct my usefulness answer" })
+      .click();
+    expect((await response).status()).toBe(403);
+    await expect(
+      page.getByRole("heading", { name: "Usefulness response unavailable" }),
+    ).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(
+      "Invented practical step",
+    );
+    await expect(page.locator("body")).not.toContainText("Your current answer");
+    expect(
+      (
+        await pool.query("SELECT * FROM lesson_usefulness WHERE member_id=$1", [
+          ownerId,
+        ])
+      ).rows,
+    ).toEqual(beforeDeletion);
+  } finally {
+    await pool.query(
+      "UPDATE workspaces SET deleting_at=NULL WHERE owner_principal_id=$1",
+      [ownerId],
+    );
+  }
+  await page.goto("/progress");
   await expect(actors.catalog.retire(actors.editor, lessonId)).resolves.toBe(
     true,
   );
