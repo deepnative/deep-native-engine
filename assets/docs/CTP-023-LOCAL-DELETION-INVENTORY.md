@@ -2,6 +2,12 @@
 
 Scope: the synthetic local preview through migration 031. This inventory maps logical PostgreSQL rows and private object files, not physical WAL pages, hosted replicas, provider copies or backups. `/delete` first calls `evidence.removeWorkspace(token)`, which marks the workspace and evidence deleting, removes source/derivative object keys and deletes evidence rows; it then deletes the member principal through `store.remove(id)`. A failed object removal must prevent a successful account-deleted response so the operation can be reconciled and retried.
 
+## Pending-deletion lesson activity boundary (partial #42)
+
+A member deletion can commit the workspace `deleting_at` marker before object cleanup and principal removal finish. During that interval, retained `lesson_activity` is still owned by the member and should remain available to the deletion worker, but the member session must not disclose its private lesson IDs, versions or reading status. The library and other lesson-history consumers now withhold those rows with a generic denial when the owned workspace is deleting. Opening a lesson or posting reading progress cannot create or advance an activity row after the marker commits.
+
+The lesson operations reuse the existing principal-then-owned-workspace transaction lock order, recheck session expiry against database wall time after lock waits, and commit or roll back as one unit. Deletion-first requests deny; an activity operation that gets the locks first completes before deletion marks the workspace. A failed or uncertain transaction never retries a private write automatically or returns retained history. This guard does not remove retained rows, change publication or assessment rules, or replace the normal cascade on successful deletion. Rollback of the runtime change requires reverting the lesson read/write guards and denial mapping together after assessing renewed disclosure risk; no migration rollback is involved. Local synthetic tests do not prove hosted erasure or full-MVP acceptance.
+
 | Ownership path | Current local records | Expected deletion mechanism |
 | --- | --- | --- |
 | Member identity | `principals`, `learners`, `workspaces` | Delete member principal; both dependents cascade. |

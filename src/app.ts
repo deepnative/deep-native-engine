@@ -60,7 +60,13 @@ import {
   sampleHoldRecoveryPage,
   manualObservationPage,
 } from "./views.ts";
-import type { Store, Learner, Exercise, ExerciseHistory } from "./store.ts";
+import {
+  LessonActivityUnavailable,
+  type Store,
+  type Learner,
+  type Exercise,
+  type ExerciseHistory,
+} from "./store.ts";
 import { eligibleAssignments, recommendLesson } from "./assignment-choice.ts";
 import {
   validPrerequisiteSpec,
@@ -3971,6 +3977,19 @@ export function app(
       ),
   );
   const failure: ErrorRequestHandler = (error, req, res, _next) => {
+    if (error instanceof LessonActivityUnavailable) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            req.path === "/progress"
+              ? "Progress unavailable"
+              : "Lesson history unavailable",
+            "This private learning history is not available for the current session.",
+          ),
+        );
+      return;
+    }
     if ((error as { type?: string }).type === "entity.too.large") {
       res.status(413).json({ error: "invalid_evidence" });
       return;

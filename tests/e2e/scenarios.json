@@ -386,9 +386,9 @@
       "id": "L43",
       "actor": "Non-IT professional and IT learner with separate sessions",
       "preconditions": "Published synthetic lesson with a newer version and retirement transition",
-      "steps": "Open lesson in one session, attempt stale and cross-session actions, publish a new version and retire it",
-      "expected": "Another member has no private history, stale versions cannot advance, and prior history remains labelled unavailable",
-      "issues": [102],
+      "steps": "Open lesson in one session, attempt stale and cross-session actions, commit a deletion marker and deny private history/open/progress without changing retained rows, deny revoked and expired sessions, then publish a new version and retire it",
+      "expected": "Another member has no private history; deleting, revoked and expired members cannot read or advance retained lesson history; deletion leaves existing rows untouched; stale versions cannot advance, and prior history remains labelled unavailable",
+      "issues": [102, 42],
       "critical": true
     },
     {

@@ -142,7 +142,7 @@ it("shows blocked published matching work, updates from real activity and never 
   });
 });
 
-it("uses a repeatable snapshot when progress changes between eligibility and explanation reads", async () => {
+it("uses a repeatable snapshot against independent synthetic SQL progress writes", async () => {
   const owner = await member();
   const { source, assignment } = await fixtures();
   await db.openLesson(owner.id, source.id, 1);
@@ -155,9 +155,16 @@ it("uses a repeatable snapshot when progress changes between eligibility and exp
           const result = await client.query(sql, values);
           if (sql.includes("FROM content_versions cv") && !changed) {
             changed = true;
+            // Bypass the application workspace guard only in this fixture writer
+            // to exercise REPEATABLE READ independently of lock serialization.
             expect(
-              await db.advanceLesson(owner.id, source.id, 1, "start"),
-            ).toBe(true);
+              (
+                await pool.query(
+                  "UPDATE lesson_activity SET started_at=clock_timestamp() WHERE member_id=$1 AND content_id=$2 AND content_version=1",
+                  [owner.id, source.id],
+                )
+              ).rowCount,
+            ).toBe(1);
           }
           return result;
         },
@@ -179,6 +186,66 @@ it("uses a repeatable snapshot when progress changes between eligibility and exp
   expect((await readiness.get(owner.token, assignment.id, 1))?.eligible).toBe(
     true,
   );
+});
+
+it("serializes a lesson start after the current prerequisite snapshot releases its workspace", async () => {
+  const owner = await member();
+  const { source, assignment } = await fixtures();
+  await db.openLesson(owner.id, source.id, 1);
+  let writing: Promise<boolean> | undefined;
+  let blocked = false;
+  const concurrent = {
+    connect: async () => {
+      const client = await pool.connect();
+      return {
+        query: async (sql: string, values?: unknown[]) => {
+          const result = await client.query(sql, values);
+          if (sql.includes("FROM content_versions cv") && !writing) {
+            const pid = (await client.query("SELECT pg_backend_pid() AS pid"))
+              .rows[0].pid;
+            writing = db.advanceLesson(owner.id, source.id, 1, "start");
+            await expect
+              .poll(
+                async () =>
+                  Number(
+                    (
+                      await pool.query(
+                        `SELECT count(*) FROM pg_stat_activity WHERE datname=current_database()
+               AND $1::integer=ANY(pg_blocking_pids(pid)) AND position('SELECT id FROM workspaces' in query)>0`,
+                        [pid],
+                      )
+                    ).rows[0].count,
+                  ),
+                { timeout: 3000 },
+              )
+              .toBe(1);
+            blocked = true;
+          }
+          return result;
+        },
+        release: (error?: Error) => client.release(error),
+      };
+    },
+  } as unknown as Pool;
+  try {
+    expect(
+      await assignmentReadinessStore(concurrent).get(
+        owner.token,
+        assignment.id,
+        1,
+      ),
+    ).toMatchObject({
+      eligible: false,
+      requirements: [{ observed: "not-started", satisfied: false }],
+    });
+    expect(blocked).toBe(true);
+    expect(await writing).toBe(true);
+    expect((await readiness.get(owner.token, assignment.id, 1))?.eligible).toBe(
+      true,
+    );
+  } finally {
+    await Promise.allSettled(writing ? [writing] : []);
+  }
 });
 
 it("guides nested exact self-assessment and local-exercise dependencies without granting completion", async () => {
