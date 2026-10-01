@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "node --env-file-if-exists=.env --watch src/main.ts",
+    "sweep:synthetic-expiry": "node --env-file-if-exists=.env src/expiry-sweep-main.ts",
     "start": "node --env-file-if-exists=.env dist/main.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
