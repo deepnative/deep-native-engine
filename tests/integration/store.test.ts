@@ -7539,3 +7539,317 @@ it("denies a local circle join after expiry during its workspace lock wait", asy
   ).toBe("denied");
   expect(await circleMembershipRows(owner.learner.id)).toEqual([]);
 }, 10_000);
+
+it("withholds retained circle membership listings during deletion at the store and HTTP route", async () => {
+  const owner = await member();
+  const outsider = await member();
+  const circles = circleStore(pool);
+  expect(await circles.join(owner.token, "everyday-ai")).toBe("joined");
+  const before = await circleMembershipRows(owner.learner.id);
+  const active = await circles.list(owner.token);
+  expect(active?.[0]).toMatchObject({ joined: true, seatsRemaining: 3 });
+  expect(await circles.list(owner.token)).toEqual(active);
+  const other = await circles.list(outsider.token);
+  expect(other?.[0]).toMatchObject({ joined: false, seatsRemaining: 3 });
+  await pool.query(
+    "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+    [owner.learner.id],
+  );
+  expect.soft(await circles.list(owner.token)).toBeNull();
+  await withLoopback(
+    app(db, {
+      origin: "http://127.0.0.1:3000",
+      secret: "synthetic-circle-secret",
+      circles,
+    }),
+    async (server) => {
+      const response = await request(server)
+        .get("/circles")
+        .set("Host", "127.0.0.1:3000")
+        .set("Cookie", `${COOKIE}=${owner.token}`);
+      expect.soft(response.status).toBe(403);
+      expect.soft(response.text).toContain("Circles unavailable");
+      expect.soft(response.text).not.toContain("Everyday AI practice");
+      expect.soft(response.text).not.toContain("You joined this local circle");
+      const unaffected = await request(server)
+        .get("/circles")
+        .set("Host", "127.0.0.1:3000")
+        .set("Cookie", `${COOKIE}=${outsider.token}`);
+      expect(unaffected.status).toBe(200);
+      expect(unaffected.text).not.toContain("You joined this local circle");
+    },
+  );
+  expect(await circles.list(outsider.token)).toEqual(other);
+  expect(await circleMembershipRows(owner.learner.id)).toEqual(before);
+});
+
+it.each(["principal", "workspace"] as const)(
+  "denies a circle listing when deletion commits during its %s lock wait",
+  async (lock) => {
+    const owner = await member();
+    const circles = circleStore(pool);
+    expect(await circles.join(owner.token, "everyday-ai")).toBe("joined");
+    const before = await circleMembershipRows(owner.learner.id);
+    const holder = await pool.connect();
+    let pending: ReturnType<typeof circles.list> | undefined;
+    try {
+      await holder.query("BEGIN");
+      const pid = (await holder.query("SELECT pg_backend_pid() AS pid")).rows[0]
+        .pid;
+      if (lock === "principal")
+        await holder.query("SELECT id FROM principals WHERE id=$1 FOR UPDATE", [
+          owner.learner.id,
+        ]);
+      await holder.query(
+        "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+        [owner.learner.id],
+      );
+      pending = circles.list(owner.token);
+      expect(
+        await blockingPids(
+          lock === "principal" ? "FOR SHARE OF p" : "SELECT id FROM workspaces",
+        ),
+      ).toContain(pid);
+      await holder.query("COMMIT");
+      expect(await pending).toBeNull();
+      expect(await circleMembershipRows(owner.learner.id)).toEqual(before);
+    } finally {
+      await holder.query("ROLLBACK");
+      await Promise.allSettled(pending ? [pending] : []);
+      holder.release();
+    }
+  },
+);
+
+it.each(["principal", "workspace", "aggregate"] as const)(
+  "withholds a circle listing after expiry during its %s wait",
+  async (lock) => {
+    const owner = await member();
+    const circles = circleStore(pool);
+    expect(await circles.join(owner.token, "everyday-ai")).toBe("joined");
+    const before = await circleMembershipRows(owner.learner.id);
+    const holder = await pool.connect();
+    const waiter = await pool.connect();
+    let pending: ReturnType<typeof circles.list> | undefined;
+    try {
+      const holderPid = (await holder.query("SELECT pg_backend_pid() AS pid"))
+        .rows[0].pid;
+      const waiterPid = (await waiter.query("SELECT pg_backend_pid() AS pid"))
+        .rows[0].pid;
+      await pool.query(
+        "UPDATE principals SET expires_at=clock_timestamp()+interval '1 second' WHERE id=$1",
+        [owner.learner.id],
+      );
+      await holder.query("BEGIN");
+      if (lock === "aggregate")
+        await holder.query(
+          "LOCK TABLE preview_circle_memberships IN ACCESS EXCLUSIVE MODE",
+        );
+      else
+        await holder.query(
+          lock === "principal"
+            ? "SELECT id FROM principals WHERE id=$1 FOR UPDATE"
+            : "SELECT id FROM workspaces WHERE owner_principal_id=$1 FOR UPDATE",
+          [owner.learner.id],
+        );
+      const borrowed = {
+        connect: async () => ({
+          query: waiter.query.bind(waiter),
+          release() {},
+        }),
+      } as unknown as Pool;
+      pending = circleStore(borrowed).list(owner.token);
+      await waitForCircleJoinExpiry(
+        holderPid,
+        waiterPid,
+        owner.learner.id,
+        lock === "principal"
+          ? "FOR SHARE OF p"
+          : lock === "workspace"
+            ? "SELECT id FROM workspaces"
+            : "COUNT(*)",
+      );
+      await holder.query("COMMIT");
+      expect(await pending).toBeNull();
+      expect(await circleMembershipRows(owner.learner.id)).toEqual(before);
+    } finally {
+      await holder.query("ROLLBACK");
+      await Promise.allSettled(pending ? [pending] : []);
+      holder.release();
+      waiter.release();
+    }
+  },
+  10000,
+);
+
+it("orders a completed circle listing before deletion waiting on its authorization locks", async () => {
+  const owner = await member();
+  const circles = circleStore(pool);
+  expect(await circles.join(owner.token, "everyday-ai")).toBe("joined");
+  const before = await circles.list(owner.token);
+  let entered!: () => void;
+  let resume!: () => void;
+  const locked = new Promise<void>((resolve) => (entered = resolve));
+  const proceed = new Promise<void>((resolve) => (resume = resolve));
+  let listPid = 0;
+  const paused = wrappedPool((client) => {
+    const query = client.query.bind(client);
+    return {
+      query: (async (sql: string, values?: unknown[]) => {
+        const result = await query(sql, values);
+        if (sql.includes("COUNT(*)")) {
+          listPid = (await query("SELECT pg_backend_pid() AS pid")).rows[0].pid;
+          entered();
+          await proceed;
+        }
+        return result;
+      }) as PoolClient["query"],
+      release: client.release.bind(client),
+    } as PoolClient;
+  });
+  const listing = circleStore(paused).list(owner.token);
+  await locked;
+  const deletion = await pool.connect();
+  let deleting: Promise<void> | undefined;
+  try {
+    deleting = (async () => {
+      await deletion.query("BEGIN");
+      await deletion.query("SELECT id FROM principals WHERE id=$1 FOR UPDATE", [
+        owner.learner.id,
+      ]);
+      await deletion.query(
+        "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+        [owner.learner.id],
+      );
+      await deletion.query("COMMIT");
+    })();
+    expect(await blockingPids("SELECT id FROM principals")).toContain(listPid);
+    resume();
+    expect(await listing).toEqual(before);
+    await deleting;
+    expect(await circles.list(owner.token)).toBeNull();
+  } finally {
+    resume();
+    await Promise.allSettled([listing, ...(deleting ? [deleting] : [])]);
+    await deletion.query("ROLLBACK");
+    deletion.release();
+  }
+});
+
+it("denies unknown, revoked, expired and missing-workspace circle listings", async () => {
+  const owner = await member();
+  const circles = circleStore(pool);
+  expect(await circles.list("unknown")).toBeNull();
+  await pool.query(
+    "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+    [owner.learner.id],
+  );
+  expect(await circles.list(owner.token)).toBeNull();
+  await pool.query(
+    "UPDATE principals SET revoked_at=NULL, expires_at=clock_timestamp() WHERE id=$1",
+    [owner.learner.id],
+  );
+  expect(await circles.list(owner.token)).toBeNull();
+  const missing = await member();
+  await pool.query("DELETE FROM workspaces WHERE owner_principal_id=$1", [
+    missing.learner.id,
+  ]);
+  expect(await circles.list(missing.token)).toBeNull();
+});
+
+it("counts seats at the aggregate statement after a circle listing authorization wait", async () => {
+  const owner = await member();
+  const expiring = await member();
+  const circles = circleStore(pool);
+  expect(await circles.join(expiring.token, "everyday-ai")).toBe("joined");
+  const holder = await pool.connect();
+  const waiter = await pool.connect();
+  let pending: ReturnType<typeof circles.list> | undefined;
+  try {
+    const holderPid = (await holder.query("SELECT pg_backend_pid() AS pid"))
+      .rows[0].pid;
+    const waiterPid = (await waiter.query("SELECT pg_backend_pid() AS pid"))
+      .rows[0].pid;
+    await pool.query(
+      "UPDATE principals SET expires_at=clock_timestamp()+interval '1 second' WHERE id=$1",
+      [expiring.learner.id],
+    );
+    await holder.query("BEGIN");
+    await holder.query(
+      "SELECT id FROM workspaces WHERE owner_principal_id=$1 FOR UPDATE",
+      [owner.learner.id],
+    );
+    const borrowed = {
+      connect: async () => ({ query: waiter.query.bind(waiter), release() {} }),
+    } as unknown as Pool;
+    pending = circleStore(borrowed).list(owner.token);
+    await waitForCircleJoinExpiry(
+      holderPid,
+      waiterPid,
+      expiring.learner.id,
+      "SELECT id FROM workspaces",
+    );
+    await holder.query("COMMIT");
+    expect((await pending)?.[0]).toMatchObject({
+      joined: false,
+      seatsRemaining: 4,
+    });
+  } finally {
+    await holder.query("ROLLBACK");
+    await Promise.allSettled(pending ? [pending] : []);
+    holder.release();
+    waiter.release();
+  }
+}, 10000);
+
+it.each(["aggregate", "commit"] as const)(
+  "does not return a private circle listing or replay after a synthetic %s failure",
+  async (stage) => {
+    const owner = await member();
+    const circles = circleStore(pool);
+    expect(await circles.join(owner.token, "everyday-ai")).toBe("joined");
+    const before = await circleMembershipRows(owner.learner.id);
+    const client = await pool.connect();
+    let reads = 0;
+    let released = false;
+    let discarded: Error | undefined;
+    const broken = circleStore({
+      connect: async () => ({
+        async query(sql: string, values?: unknown[]) {
+          const result = await client.query(sql, values);
+          if (sql.includes("COUNT(*)")) {
+            reads++;
+            if (stage === "aggregate")
+              throw new Error("Synthetic circle read failure");
+          }
+          if (sql === "COMMIT" && stage === "commit")
+            throw new Error("Synthetic lost circle read commit reply");
+          return result;
+        },
+        release(error?: Error) {
+          released = true;
+          discarded = error;
+          client.release(error);
+        },
+      }),
+    } as unknown as Pool);
+    try {
+      await expect(broken.list(owner.token)).rejects.toThrow(
+        stage === "aggregate"
+          ? "Synthetic circle read failure"
+          : "Synthetic lost circle read commit reply",
+      );
+      expect(reads).toBe(1);
+      expect(released).toBe(true);
+      if (stage === "commit") expect(discarded).toBeInstanceOf(Error);
+      else expect(discarded).toBeUndefined();
+      expect(await circleMembershipRows(owner.learner.id)).toEqual(before);
+      expect((await circles.list(owner.token))?.[0]).toMatchObject({
+        joined: true,
+        seatsRemaining: 3,
+      });
+    } finally {
+      if (!released) client.release();
+    }
+  },
+);

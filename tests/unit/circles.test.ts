@@ -28,23 +28,104 @@ it("keeps the fixed local topics cross-audience and noncommercial", async () => 
   expect(await disabled.leave("token", "everyday-ai")).toBe(false);
 });
 
+function listPool({
+  member = true,
+  workspace = true,
+  validAtCompletion = true,
+  failure = "",
+  failRollback = false,
+} = {}) {
+  const error = new Error("synthetic list failure");
+  const query = vi.fn(async (sql: string) => {
+    if (
+      (failure === "begin" && sql === "BEGIN") ||
+      (failure === "principal" && sql.includes("SELECT p.id")) ||
+      (failure === "workspace" && sql.includes("SELECT id FROM workspaces")) ||
+      (failure === "aggregate" && sql.includes("COUNT(*)")) ||
+      (failure === "expiry" && sql.includes("SELECT clock_timestamp()")) ||
+      (failure === "commit" && sql === "COMMIT")
+    )
+      throw error;
+    if (failRollback && sql === "ROLLBACK")
+      throw new Error("rollback unavailable");
+    if (sql.includes("SELECT p.id"))
+      return {
+        rows: member
+          ? [{ id: "me", expiresAt: "2030-01-01 00:00:00.123456+00" }]
+          : [],
+      };
+    if (sql.includes("SELECT id FROM workspaces"))
+      return { rows: workspace ? [{ id: "owned-workspace" }] : [] };
+    if (sql.includes("COUNT(*)"))
+      return {
+        rows: [{ circle_id: "everyday-ai", member_count: 2, joined: true }],
+      };
+    if (sql.includes("SELECT clock_timestamp()"))
+      return { rows: [{ valid: validAtCompletion }] };
+    return { rows: [] };
+  });
+  const release = vi.fn();
+  const connect = vi.fn().mockResolvedValue({ query, release });
+  return {
+    pool: { connect } as unknown as Pool,
+    query,
+    release,
+    connect,
+    error,
+  };
+}
+
 it("lists only an active member's own state and aggregate seats", async () => {
-  const query = vi
-    .fn()
-    .mockResolvedValueOnce({ rows: [] })
-    .mockResolvedValueOnce({ rows: [{ id: "me" }] })
-    .mockResolvedValueOnce({
-      rows: [{ circle_id: "everyday-ai", member_count: 2, joined: true }],
-    });
-  const circles = circleStore({ query } as unknown as Pool);
-  expect(await circles.list("expired")).toBeNull();
-  const rows = await circles.list("member");
-  expect(rows).toMatchObject([
+  const active = listPool();
+  expect(await circleStore(active.pool).list("member")).toMatchObject([
     { id: "everyday-ai", joined: true, seatsRemaining: 2 },
     { id: "professional-work", joined: false, seatsRemaining: 4 },
     { id: "technical-practice", joined: false, seatsRemaining: 4 },
   ]);
-  expect(query.mock.calls[2]![0]).not.toContain("member_name");
+  expect(active.query.mock.calls.map(([sql]) => sql)).toContain("COMMIT");
+  expect(active.release).toHaveBeenCalledOnce();
+  expect(active.release).toHaveBeenCalledWith(undefined);
+});
+
+it.each([
+  { state: "missing principal", member: false },
+  { state: "deleting or missing owned workspace", workspace: false },
+  { state: "expired at completion", validAtCompletion: false },
+])("withholds a listing for $state", async (options) => {
+  const denied = listPool(options);
+  expect(await circleStore(denied.pool).list("member")).toBeNull();
+  const sql = denied.query.mock.calls.map(([statement]) => statement);
+  expect(sql).toContain("ROLLBACK");
+  expect(sql).not.toContain("COMMIT");
+  if (options.validAtCompletion !== false)
+    expect(sql.some((statement) => statement.includes("COUNT(*)"))).toBe(false);
+  expect(denied.release).toHaveBeenCalledOnce();
+});
+
+it.each(["begin", "principal", "workspace", "aggregate", "expiry", "commit"])(
+  "does not return a partial listing or replay after a %s failure",
+  async (failure) => {
+    const failed = listPool({ failure });
+    await expect(circleStore(failed.pool).list("member")).rejects.toBe(
+      failed.error,
+    );
+    expect(failed.connect).toHaveBeenCalledOnce();
+    expect(failed.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+    expect(failed.release).toHaveBeenCalledOnce();
+    expect(failed.release).toHaveBeenCalledWith(
+      failure === "commit" ? failed.error : undefined,
+    );
+  },
+);
+
+it("discards a failed listing connection when rollback is unavailable", async () => {
+  const failed = listPool({ failure: "aggregate", failRollback: true });
+  await expect(circleStore(failed.pool).list("member")).rejects.toBe(
+    failed.error,
+  );
+  expect(failed.release).toHaveBeenCalledOnce();
+  expect(failed.release).toHaveBeenCalledWith(failed.error);
+  expect(failed.connect).toHaveBeenCalledOnce();
 });
 
 function joinPool({

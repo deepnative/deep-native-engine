@@ -41,34 +41,80 @@ export function disabledCircleStore(): CircleStore {
 export function circleStore(pool: Pool): CircleStore {
   return {
     async list(token) {
-      const member = await pool.query<{ id: string }>(
-        `SELECT p.id FROM principals p JOIN learners l ON l.id=p.id
-         WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
-           AND p.expires_at>CURRENT_TIMESTAMP`,
-        [hash(token)],
-      );
-      if (!member.rows[0]) return null;
-      const result = await pool.query<{
-        circle_id: string;
-        member_count: number;
-        joined: boolean;
-      }>(
-        `SELECT circle_id,
-           COUNT(*) FILTER (WHERE left_at IS NULL AND p.revoked_at IS NULL
-             AND p.expires_at>CURRENT_TIMESTAMP)::integer AS member_count,
-           BOOL_OR(member_id=$1 AND left_at IS NULL) AS joined
-         FROM preview_circle_memberships m
-         JOIN principals p ON p.id=m.member_id GROUP BY circle_id`,
-        [member.rows[0].id],
-      );
-      return CIRCLES.map((circle) => {
-        const row = result.rows.find((value) => value.circle_id === circle.id);
-        return {
-          ...circle,
-          joined: row?.joined ?? false,
-          seatsRemaining: circle.capacity - (row?.member_count ?? 0),
-        };
-      });
+      const client = await pool.connect();
+      let commitStarted = false;
+      let releaseError: Error | undefined;
+      try {
+        await client.query("BEGIN");
+        const member = await client.query<{ id: string; expiresAt: string }>(
+          `SELECT p.id,p.expires_at::text AS "expiresAt"
+           FROM principals p JOIN learners l ON l.id=p.id
+           WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
+             AND p.expires_at>clock_timestamp() FOR SHARE OF p`,
+          [hash(token)],
+        );
+        if (!member.rows[0]) {
+          await client.query("ROLLBACK");
+          return null;
+        }
+        // Serialize with deletion in principal -> workspace order and retain
+        // both locks until the private membership listing has been read.
+        const workspace = await client.query<{ id: string }>(
+          `SELECT id FROM workspaces
+           WHERE owner_principal_id=$1 AND deleting_at IS NULL FOR SHARE`,
+          [member.rows[0].id],
+        );
+        if (!workspace.rows[0]) {
+          await client.query("ROLLBACK");
+          return null;
+        }
+        const result = await client.query<{
+          circle_id: string;
+          member_count: number;
+          joined: boolean;
+        }>(
+          `SELECT circle_id,
+             COUNT(*) FILTER (WHERE left_at IS NULL AND p.revoked_at IS NULL
+               AND p.expires_at>statement_timestamp())::integer AS member_count,
+             BOOL_OR(member_id=$1 AND left_at IS NULL) AS joined
+           FROM preview_circle_memberships m
+           JOIN principals p ON p.id=m.member_id GROUP BY circle_id`,
+          [member.rows[0].id],
+        );
+        // Authorization can expire during any lock/read wait, even if no
+        // principal tuple was changed. Use database wall time before release.
+        const current = await client.query<{ valid: boolean }>(
+          "SELECT clock_timestamp() < $1::timestamptz AS valid",
+          [member.rows[0].expiresAt],
+        );
+        if (!current.rows[0]!.valid) {
+          await client.query("ROLLBACK");
+          return null;
+        }
+        commitStarted = true;
+        await client.query("COMMIT");
+        return CIRCLES.map((circle) => {
+          const row = result.rows.find(
+            (value) => value.circle_id === circle.id,
+          );
+          return {
+            ...circle,
+            joined: row?.joined ?? false,
+            seatsRemaining: circle.capacity - (row?.member_count ?? 0),
+          };
+        });
+      } catch (error) {
+        // An uncertain COMMIT must not release private results or be replayed.
+        if (commitStarted) releaseError = error as Error;
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          releaseError = error as Error;
+        }
+        throw error;
+      } finally {
+        client.release(releaseError);
+      }
     },
     async join(token, id) {
       const circle = CIRCLES.find((item) => item.id === id);

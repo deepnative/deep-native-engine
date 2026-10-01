@@ -413,8 +413,8 @@
       "id": "L46",
       "actor": "Member leaving a local circle, then deleting workspace, expired or forged sessions",
       "preconditions": "Active local membership with a valid browser session",
-      "steps": "Leave, try cross-origin rejoin, submit an open valid form during workspace deletion, expire session and replay unknown credential",
-      "expected": "Own status is removed; pending deletion returns a generic 404 without changing retained membership; cross-origin writes and expired or forged sessions are denied",
+      "steps": "Join, start pending deletion and revisit the listing, restore the fixture, leave, try cross-origin rejoin, submit an open valid form during workspace deletion, expire session and replay unknown credential",
+      "expected": "Pending deletion withholds retained membership in a generic 403 listing; leaving removes own status; a pending-deletion join returns generic 404 without changing retained membership; cross-origin writes and expired or forged sessions are denied",
       "issues": [37, 42],
       "critical": true
     },

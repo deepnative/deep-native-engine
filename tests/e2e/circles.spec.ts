@@ -122,7 +122,7 @@ test("[L45] the last seat has one winner and joining grants no cohort content", 
   }
 });
 
-test("[L46] leaving removes own status; deleting, forged, expired and cross-origin requests cannot restore it", async ({
+test("[L46] deletion withholds own membership listing; leaving, forged, expired and cross-origin requests cannot restore it", async ({
   page,
   context,
 }) => {
@@ -131,6 +131,47 @@ test("[L46] leaving removes own status; deleting, forged, expired and cross-orig
   await page
     .getByRole("button", { name: "Join Clearer professional work" })
     .click();
+  await expect(page.getByText("You joined this local circle")).toBeVisible();
+  const activeCookie = (await context.cookies()).find(
+    (entry) => entry.name === "dne_preview",
+  )!;
+  const activeHash = createHash("sha256")
+    .update(activeCookie.value)
+    .digest("hex");
+  const retainedMembership = async () =>
+    (
+      await pool.query(
+        `SELECT m.circle_id,m.joined_at::text,m.left_at::text
+     FROM preview_circle_memberships m JOIN principals p ON p.id=m.member_id
+     WHERE p.token_hash=$1`,
+        [activeHash],
+      )
+    ).rows;
+  const retained = await retainedMembership();
+  expect(retained).toHaveLength(1);
+  expect(retained[0].left_at).toBeNull();
+  await pool.query(
+    `UPDATE workspaces SET deleting_at=clock_timestamp()
+    WHERE owner_principal_id IN (SELECT id FROM principals WHERE token_hash=$1)`,
+    [activeHash],
+  );
+  const deniedListing = await page.goto("/circles");
+  expect(deniedListing?.status()).toBe(403);
+  await expect(
+    page.getByRole("heading", { name: "Circles unavailable" }),
+  ).toBeVisible();
+  await expect(page.getByText("You joined this local circle")).toHaveCount(0);
+  await expect(
+    page.getByText("Clearer professional work", { exact: true }),
+  ).toHaveCount(0);
+  expect(await retainedMembership()).toEqual(retained);
+  // Restore this fixture to exercise the distinct leave/rejoin boundaries.
+  await pool.query(
+    `UPDATE workspaces SET deleting_at=NULL
+    WHERE owner_principal_id IN (SELECT id FROM principals WHERE token_hash=$1)`,
+    [activeHash],
+  );
+  await page.goto("/circles");
   await page
     .getByRole("button", { name: "Leave Clearer professional work" })
     .click();
