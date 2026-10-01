@@ -2667,6 +2667,17 @@ export function app(
             contentVersion,
             revision,
           );
+    if (saved === null) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Usefulness response unavailable",
+            "This private action is not available.",
+          ),
+        );
+      return;
+    }
     if (!saved) {
       res
         .status(409)
