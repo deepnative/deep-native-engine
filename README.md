@@ -2,6 +2,8 @@
 
 Deep Native Engine helps curious learners, IT practitioners and professionals in other fields learn to use AI in practical ways. You can start without coding or a career plan: choose a direction, try a small exercise and decide what to learn next.
 
+[Explore the product introduction](https://deepnative.github.io/deep-native-engine/) for the current experience, who it serves and how to get started.
+
 ## What you can do in the current preview
 
 - **Find a starting point.** Choose whether you want to explore AI, use it at work or build something. Your goal and background shape a simple learning path that you can change later.

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Deep Native Engine">
+  <rect width="64" height="64" rx="14" fill="#123e42"/>
+  <g fill="#b9decf" transform="translate(32 32) rotate(-23)">
+    <path d="M0 0C-7-11-8-21 0-26 8-21 7-11 0 0Z"/>
+    <path d="M0 0C-7-11-8-21 0-26 8-21 7-11 0 0Z" transform="rotate(120)"/>
+    <path d="M0 0C-7-11-8-21 0-26 8-21 7-11 0 0Z" transform="rotate(240)"/>
+  </g>
+</svg>
