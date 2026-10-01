@@ -147,6 +147,32 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
     .getByLabel("I am saving private feedback using only invented text")
     .check();
   await page.getByRole("button", { name: "Save private feedback" }).click();
+  // Model the retained-row phase of deletion before the existing purge flow.
+  await pool.query(
+    "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+    [ownerId],
+  );
+  const denied = await page.reload();
+  expect(denied?.status()).toBe(403);
+  await expect(
+    page.getByRole("heading", { name: "Feedback unavailable" }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Your private feedback on version 1"),
+  ).toHaveCount(0);
+  await expect(page.getByText(note, { exact: true })).toHaveCount(0);
+  expect(
+    (
+      await pool.query(
+        "SELECT note FROM workflow_feedback WHERE member_id=$1",
+        [ownerId],
+      )
+    ).rows,
+  ).toEqual([{ note }]);
+  await pool.query(
+    "UPDATE workspaces SET deleting_at=NULL WHERE owner_principal_id=$1",
+    [ownerId],
+  );
   await page.goto("/learn");
   await page.getByLabel("Delete my local preview").check();
   await page.getByRole("button", { name: "Delete this preview" }).click();

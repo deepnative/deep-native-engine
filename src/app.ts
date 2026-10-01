@@ -1840,6 +1840,17 @@ export function app(
       workflowBundle(id),
       workflowFeedback.list(res.locals.token as string),
     ]);
+    if (reports === null) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Feedback unavailable",
+            "Your private feedback is unavailable.",
+          ),
+        );
+      return;
+    }
     const own = reports.filter((report) => report.workflowId === id);
     if (!item && own.length === 0) {
       res

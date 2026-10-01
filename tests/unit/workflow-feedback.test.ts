@@ -35,7 +35,7 @@ it("rejects invalid, unknown and stale workflow versions without a database writ
 
 it("keeps disabled feedback unavailable without implying persistence", async () => {
   const feedback = disabledWorkflowFeedbackStore();
-  expect(await feedback.list("owner")).toEqual([]);
+  expect(await feedback.list("owner")).toBeNull();
   expect(await feedback.save("owner", "WF-001", 1, "Invented note", 0)).toBe(
     false,
   );
@@ -43,10 +43,37 @@ it("keeps disabled feedback unavailable without implying persistence", async () 
 });
 
 it("lists only returned feedback rows", async () => {
-  const query = vi.fn().mockResolvedValue({ rows: [] });
+  const db = withdrawalPool();
+  expect(await workflowFeedbackStore(db.pool).list("owner")).toEqual([]);
+  expect(db.release).toHaveBeenCalledWith(undefined);
+});
+
+it.each([
+  { principal: false },
+  { workspace: false },
+  { current: false },
+  { rejectOn: "SELECT workflow_id" },
+  { rejectOn: "COMMIT" },
+  { principal: false, rollbackFails: true },
+  { rollbackFails: true },
+])(
+  "withholds feedback when authorization or storage fails: %j",
+  async (options) => {
+    const db = withdrawalPool(options);
+    expect(await workflowFeedbackStore(db.pool).list("owner")).toBeNull();
+    expect(db.release).toHaveBeenCalledWith(
+      options.rollbackFails ? expect.any(Error) : undefined,
+    );
+  },
+);
+
+it("withholds feedback when connection acquisition fails", async () => {
+  const connect = vi
+    .fn()
+    .mockRejectedValue(new Error("Private database detail"));
   expect(
-    await workflowFeedbackStore({ query } as unknown as Pool).list("owner"),
-  ).toEqual([]);
+    await workflowFeedbackStore({ connect } as unknown as Pool).list("owner"),
+  ).toBeNull();
 });
 
 it.each([0, 1])(

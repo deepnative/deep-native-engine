@@ -692,9 +692,9 @@
       "id": "L71",
       "actor": "General learner, unrelated professional member and reviewer",
       "preconditions": "Three public file-backed synthetic workflow drafts and separate private local sessions",
-      "steps": "Open a public draft, save and correct private exact-version feedback, reject stale replay and forged CSRF, inspect owner export and other-member/reviewer denial, withdraw and delete the preview",
-      "expected": "Only the active owner sees or changes a bounded private self-report; public draft/download and another member reveal no note, stale writes fail, withdrawal and deletion erase the retained note, and no qualified review or publication is claimed",
-      "issues": [115, 311],
+      "steps": "Open a public draft, save and correct private exact-version feedback, reject stale replay and forged CSRF, inspect owner export and other-member/reviewer denial, withdraw, reload while deletion is pending with retained rows, and delete the preview",
+      "expected": "Only the active owner of a nondeleting workspace sees or changes a bounded private self-report; public draft/download and another member reveal no note, pending deletion returns a content-free denial without an editable form, stale writes fail, withdrawal and deletion erase the retained note, and no qualified review or publication is claimed",
+      "issues": [42, 115, 311],
       "critical": true
     },
     {
