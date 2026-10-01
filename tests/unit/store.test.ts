@@ -109,7 +109,7 @@ it("binds member and exact lesson version for observed reading and explicit stat
   ]);
 });
 it("saves profile changes by the session-derived learner and preserves the practice goal", async () => {
-  const p = pool(),
+  const p = exercisePool(),
     db = store(p.value);
   await db.create("private-token", {
     background: "professional",
@@ -146,7 +146,11 @@ it("saves profile changes by the session-derived learner and preserves the pract
     timezone: "UTC",
     weeklyMinutes: 60,
   });
-  expect(p.query.mock.calls[1]![1]).toEqual([
+  expect(
+    p.query.mock.calls.find(([sql]) =>
+      String(sql).startsWith("UPDATE learners"),
+    )![1],
+  ).toEqual([
     "owned",
     "professional",
     "work",
@@ -167,7 +171,11 @@ it("saves profile changes by the session-derived learner and preserves the pract
     experience: null,
     exploratory: false,
   });
-  expect(p.query.mock.calls[2]![1]).toEqual([
+  expect(
+    p.query.mock.calls.filter(([sql]) =>
+      String(sql).startsWith("UPDATE learners"),
+    )[1]![1],
+  ).toEqual([
     "owned",
     "explorer",
     "everyday",
@@ -179,6 +187,48 @@ it("saves profile changes by the session-derived learner and preserves the pract
     null,
     null,
   ]);
+});
+it("denies profile changes without current ownership and never reports an uncertain commit as success", async () => {
+  const input = {
+    background: "explorer",
+    goal: "everyday",
+    backgroundTags: [],
+    domainTags: [],
+    itRoles: [],
+    experience: null,
+    exploratory: false,
+  } as const;
+  for (const options of [
+    { principal: false },
+    { workspace: false },
+    { expired: true },
+  ]) {
+    const p = exercisePool(options);
+    expect(
+      await store(p.value).updateProfile("owned", {
+        ...input,
+        backgroundTags: [],
+        domainTags: [],
+        itRoles: [],
+      }),
+    ).toBe(false);
+    expect(p.query).toHaveBeenCalledWith("ROLLBACK");
+    expect(p.query).not.toHaveBeenCalledWith("COMMIT");
+  }
+  const p = exercisePool({ failAt: "COMMIT" });
+  await expect(
+    store(p.value).updateProfile("owned", {
+      ...input,
+      backgroundTags: [],
+      domainTags: [],
+      itRoles: [],
+    }),
+  ).rejects.toThrow("synthetic failure");
+  expect(
+    p.query.mock.calls.filter(([sql]) =>
+      String(sql).startsWith("UPDATE learners"),
+    ),
+  ).toHaveLength(1);
 });
 it("applies the transactional migration and surfaces database failures to the caller", async () => {
   const p = pool();
@@ -289,7 +339,7 @@ function exercisePool(
     missingLearner?: boolean;
   } = {},
 ) {
-  const query = vi.fn(async (sql: string) => {
+  const query = vi.fn(async (sql: string, _values?: unknown[]) => {
     if (sql === options.failAt || (sql === "ROLLBACK" && options.rollbackFails))
       throw new Error("synthetic failure");
     if (sql.startsWith("SELECT id,expires_at"))

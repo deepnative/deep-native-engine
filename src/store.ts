@@ -69,7 +69,7 @@ export interface Store {
     profile: Pick<LearnerProfile, "background" | "goal"> &
       Partial<LearnerProfile>,
   ): Promise<void>;
-  updateProfile(id: string, profile: LearnerProfile): Promise<void>;
+  updateProfile(id: string, profile: LearnerProfile): Promise<boolean>;
   progress(
     id: string,
     lessonId?: string,
@@ -317,22 +317,32 @@ export function store(pool: Pool): Store {
       );
     },
     async updateProfile(id, profile) {
-      await pool.query(
-        `UPDATE learners SET background=$2,goal=$3,background_tags=$4,
+      return (
+        (await exerciseTransaction(
+          id,
+          true,
+          async (client, memberId) => {
+            const result = await client.query(
+              `UPDATE learners SET background=$2,goal=$3,background_tags=$4,
           domain_tags=$5,it_roles=$6,experience=$7,exploratory=$8,
           time_zone=$9,weekly_minutes=$10 WHERE id=$1`,
-        [
-          id,
-          profile.background,
-          profile.goal,
-          profile.backgroundTags,
-          profile.domainTags,
-          profile.itRoles,
-          profile.experience,
-          profile.exploratory,
-          profile.timezone ?? null,
-          profile.weeklyMinutes ?? null,
-        ],
+              [
+                memberId,
+                profile.background,
+                profile.goal,
+                profile.backgroundTags,
+                profile.domainTags,
+                profile.itRoles,
+                profile.experience,
+                profile.exploratory,
+                profile.timezone ?? null,
+                profile.weeklyMinutes ?? null,
+              ],
+            );
+            return result.rowCount === 1;
+          },
+          true,
+        )) === true
       );
     },
     async progress(id, lessonId = LESSON.id, version = LESSON.version) {
