@@ -429,7 +429,7 @@ async function waitForCircleJoinExpiry(
 async function circleJoinExpiringAtLock(
   token: string,
   expiringMemberId: string,
-  lock: "circle" | "principal" | "membership",
+  lock: "circle" | "principal" | "workspace" | "membership",
 ) {
   const blocker = await pool.connect();
   const waiter = await pool.connect();
@@ -456,6 +456,11 @@ async function circleJoinExpiringAtLock(
       await blocker.query("SELECT id FROM principals WHERE id=$1 FOR UPDATE", [
         expiringMemberId,
       ]);
+    } else if (lock === "workspace") {
+      await blocker.query(
+        "SELECT id FROM workspaces WHERE owner_principal_id=$1 FOR UPDATE",
+        [expiringMemberId],
+      );
     } else {
       await blocker.query(
         "SELECT 1 FROM preview_circle_memberships WHERE member_id=$1 FOR UPDATE",
@@ -477,7 +482,9 @@ async function circleJoinExpiringAtLock(
         ? "pg_advisory_xact_lock"
         : lock === "principal"
           ? "FOR UPDATE OF p"
-          : "INSERT INTO preview_circle_memberships",
+          : lock === "workspace"
+            ? "SELECT id FROM workspaces"
+            : "INSERT INTO preview_circle_memberships",
     );
     await blocker.query("COMMIT");
     return await pending;
@@ -7322,3 +7329,213 @@ it.each(["delete", "revoke", "deletion-marker"] as const)(
     }
   },
 );
+
+it.each(["new", "active", "left"] as const)(
+  "denies a previously opened circle join with %s membership once workspace deletion begins",
+  async (state) => {
+    const owner = await member();
+    const outsider = await member();
+    const circles = circleStore(pool);
+    if (state !== "new")
+      expect(await circles.join(owner.token, "everyday-ai")).toBe("joined");
+    if (state === "left")
+      expect(await circles.leave(owner.token, "everyday-ai")).toBe(true);
+    const before = await circleMembershipRows(owner.learner.id);
+    await withLoopback(
+      app(db, {
+        origin: "http://127.0.0.1:3000",
+        secret: "synthetic-circle-secret",
+        circles,
+      }),
+      async (server) => {
+        const agent = request.agent(server);
+        const form = await agent
+          .get("/circles")
+          .set("Host", "127.0.0.1:3000")
+          .set("Cookie", `${COOKIE}=${owner.token}`)
+          .expect(200);
+        const csrf = form.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+        await pool.query(
+          "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+          [owner.learner.id],
+        );
+        const result = await agent
+          .post("/circles/everyday-ai/join")
+          .set("Host", "127.0.0.1:3000")
+          .set("Origin", "http://127.0.0.1:3000")
+          .set("Cookie", `${COOKIE}=${owner.token}`)
+          .type("form")
+          .send({ csrf });
+        expect.soft(result.status).toBe(404);
+        expect.soft(result.text).toContain("Circle unavailable");
+        expect.soft(result.text).not.toContain("Everyday AI practice");
+        expect
+          .soft(await circleMembershipRows(owner.learner.id))
+          .toEqual(before);
+        expect
+          .soft(await circles.join(owner.token, "everyday-ai"))
+          .toBe("denied");
+        expect
+          .soft(await circleMembershipRows(owner.learner.id))
+          .toEqual(before);
+        expect(await circles.join(outsider.token, "everyday-ai")).toBe(
+          "joined",
+        );
+        expect(await circleMembershipRows(owner.learner.id)).toEqual(before);
+      },
+    );
+  },
+);
+
+it.each(["principal", "workspace"] as const)(
+  "denies a circle join when deletion commits during its %s lock wait",
+  async (lock) => {
+    const owner = await member();
+    const holder = await pool.connect();
+    let pending: Promise<string> | undefined;
+    try {
+      await holder.query("BEGIN");
+      const pid = (
+        await holder.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+      ).rows[0]!.pid;
+      if (lock === "principal")
+        await holder.query("SELECT id FROM principals WHERE id=$1 FOR UPDATE", [
+          owner.learner.id,
+        ]);
+      await holder.query(
+        "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+        [owner.learner.id],
+      );
+      pending = circleStore(pool).join(owner.token, "everyday-ai");
+      expect(
+        await blockingPids(
+          lock === "principal"
+            ? "FOR UPDATE OF p"
+            : "SELECT id FROM workspaces",
+        ),
+      ).toContain(pid);
+      await holder.query("COMMIT");
+      expect(await pending).toBe("denied");
+      expect(await circleMembershipRows(owner.learner.id)).toEqual([]);
+    } finally {
+      await holder.query("ROLLBACK");
+      await Promise.allSettled(pending ? [pending] : []);
+      holder.release();
+    }
+  },
+);
+
+it("orders a completed circle join before deletion waiting on its authorization locks", async () => {
+  const owner = await member();
+  let entered!: () => void;
+  let resume!: () => void;
+  const locked = new Promise<void>((resolve) => (entered = resolve));
+  const proceed = new Promise<void>((resolve) => (resume = resolve));
+  let joinPid = 0;
+  const paused = wrappedPool((client) => {
+    const query = client.query.bind(client);
+    return {
+      query: (async (sql: string, values?: unknown[]) => {
+        const result = await query(sql, values);
+        if (sql.includes("SELECT id FROM workspaces")) {
+          joinPid = (
+            await query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+          ).rows[0]!.pid;
+          entered();
+          await proceed;
+        }
+        return result;
+      }) as PoolClient["query"],
+      release: client.release.bind(client),
+    } as PoolClient;
+  });
+  const joining = circleStore(paused).join(owner.token, "everyday-ai");
+  await locked;
+  const deletion = await pool.connect();
+  let deleting: Promise<void> | undefined;
+  try {
+    deleting = (async () => {
+      await deletion.query("BEGIN");
+      await deletion.query("SELECT id FROM principals WHERE id=$1 FOR UPDATE", [
+        owner.learner.id,
+      ]);
+      await deletion.query(
+        "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+        [owner.learner.id],
+      );
+      await deletion.query("COMMIT");
+    })();
+    expect(await blockingPids("SELECT id FROM principals")).toContain(joinPid);
+    resume();
+    expect(await joining).toBe("joined");
+    await deleting;
+    const before = await circleMembershipRows(owner.learner.id);
+    expect(before).toHaveLength(1);
+    expect(await circleStore(pool).join(owner.token, "everyday-ai")).toBe(
+      "denied",
+    );
+    expect(await circleMembershipRows(owner.learner.id)).toEqual(before);
+  } finally {
+    resume();
+    await Promise.allSettled([joining, ...(deleting ? [deleting] : [])]);
+    await deletion.query("ROLLBACK");
+    deletion.release();
+  }
+});
+
+it.each(["write", "commit"] as const)(
+  "does not replay a circle join after a synthetic %s failure",
+  async (stage) => {
+    const owner = await member();
+    const client = await pool.connect();
+    let writes = 0;
+    let released = false;
+    let discarded: Error | undefined;
+    const broken = circleStore({
+      connect: async () => ({
+        async query(sql: string, values?: unknown[]) {
+          const result = await client.query(sql, values);
+          if (sql.includes("INSERT INTO preview_circle_memberships")) {
+            writes++;
+            if (stage === "write")
+              throw new Error("Synthetic circle write failure");
+          }
+          if (sql === "COMMIT" && stage === "commit")
+            throw new Error("Synthetic lost circle commit reply");
+          return result;
+        },
+        release(error?: Error) {
+          released = true;
+          discarded = error;
+          client.release(error);
+        },
+      }),
+    } as unknown as Pool);
+    try {
+      await expect(broken.join(owner.token, "everyday-ai")).rejects.toThrow(
+        stage === "write"
+          ? "Synthetic circle write failure"
+          : "Synthetic lost circle commit reply",
+      );
+      expect(writes).toBe(1);
+      const before = await circleMembershipRows(owner.learner.id);
+      expect(before).toHaveLength(stage === "write" ? 0 : 1);
+      if (stage === "commit") expect(discarded).toBeInstanceOf(Error);
+      expect(await circleStore(pool).join(owner.token, "everyday-ai")).toBe(
+        "joined",
+      );
+      if (stage === "commit")
+        expect(await circleMembershipRows(owner.learner.id)).toEqual(before);
+    } finally {
+      if (!released) client.release();
+    }
+  },
+);
+
+it("denies a local circle join after expiry during its workspace lock wait", async () => {
+  const owner = await member();
+  expect(
+    await circleJoinExpiringAtLock(owner.token, owner.learner.id, "workspace"),
+  ).toBe("denied");
+  expect(await circleMembershipRows(owner.learner.id)).toEqual([]);
+}, 10_000);

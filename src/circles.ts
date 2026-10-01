@@ -74,6 +74,8 @@ export function circleStore(pool: Pool): CircleStore {
       const circle = CIRCLES.find((item) => item.id === id);
       if (!circle) return "denied";
       const client = await pool.connect();
+      let commitStarted = false;
+      let releaseError: Error | undefined;
       try {
         await client.query("BEGIN");
         await client.query(
@@ -88,10 +90,21 @@ export function circleStore(pool: Pool): CircleStore {
           [hash(token)],
         );
         if (!member.rows[0]) {
-          await client.query("COMMIT");
+          await client.query("ROLLBACK");
           return "denied";
         }
         const memberId = member.rows[0].id;
+        // Keep deletion/revocation order after the circle lock. The workspace
+        // lock also prevents deletion from starting before this join commits.
+        const workspace = await client.query<{ id: string }>(
+          `SELECT id FROM workspaces
+           WHERE owner_principal_id=$1 AND deleting_at IS NULL FOR SHARE`,
+          [memberId],
+        );
+        if (!workspace.rows[0]) {
+          await client.query("ROLLBACK");
+          return "denied";
+        }
         const existing = await client.query(
           `SELECT 1 FROM preview_circle_memberships
            WHERE circle_id=$1 AND member_id=$2 AND left_at IS NULL`,
@@ -118,8 +131,8 @@ export function circleStore(pool: Pool): CircleStore {
             );
           }
         }
-        // A principal or membership row wait can outlast authorization even
-        // after the circle lock. Keep both locks and check wall time again
+        // A principal, workspace or membership wait can outlast authorization.
+        // Keep authorization locks and check wall time again
         // before acknowledging a repeated join or committing a write.
         const current = await client.query<{ valid: boolean }>(
           "SELECT clock_timestamp() < $1::timestamptz AS valid",
@@ -129,13 +142,20 @@ export function circleStore(pool: Pool): CircleStore {
           await client.query("ROLLBACK");
           return "denied";
         }
+        // A lost COMMIT acknowledgement is uncertain; discard and never replay.
+        commitStarted = true;
         await client.query("COMMIT");
         return result;
       } catch (error) {
-        await client.query("ROLLBACK");
+        if (commitStarted) releaseError = error as Error;
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          releaseError = error as Error;
+        }
         throw error;
       } finally {
-        client.release();
+        client.release(releaseError);
       }
     },
     async leave(token, id) {

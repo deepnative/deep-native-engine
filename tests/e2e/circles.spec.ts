@@ -122,7 +122,7 @@ test("[L45] the last seat has one winner and joining grants no cohort content", 
   }
 });
 
-test("[L46] leaving removes own status; forged, expired and cross-origin requests cannot restore it", async ({
+test("[L46] leaving removes own status; deleting, forged, expired and cross-origin requests cannot restore it", async ({
   page,
   context,
 }) => {
@@ -158,6 +158,42 @@ test("[L46] leaving removes own status; forged, expired and cross-origin request
       )
     ).rows;
   const before = await membership();
+  await pool.query(
+    `UPDATE workspaces SET deleting_at=clock_timestamp()
+     WHERE owner_principal_id IN (SELECT id FROM principals WHERE token_hash=$1)`,
+    [tokenHash],
+  );
+  const [deletingResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/circles/professional-work/join") &&
+        response.request().method() === "POST",
+    ),
+    page
+      .getByRole("button", { name: "Join Clearer professional work" })
+      .click(),
+  ]);
+  expect(deletingResponse.status()).toBe(404);
+  await expect(
+    page.getByRole("heading", { name: "Circle unavailable" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Your membership was not changed.", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Clearer professional work", { exact: true }),
+  ).toHaveCount(0);
+  expect(await membership()).toEqual(before);
+  // Restore only this synthetic fixture to exercise the distinct expiry boundary below.
+  await pool.query(
+    `UPDATE workspaces SET deleting_at=NULL
+     WHERE owner_principal_id IN (SELECT id FROM principals WHERE token_hash=$1)`,
+    [tokenHash],
+  );
+  await page.goto("/circles");
+  await expect(
+    page.getByRole("button", { name: "Join Clearer professional work" }),
+  ).toBeVisible();
   const holder = await pool.connect();
   let joining: Promise<void> | undefined;
   try {

@@ -49,12 +49,23 @@ it("lists only an active member's own state and aggregate seats", async () => {
 
 function joinPool({
   member = true,
+  workspace = true,
+  failWorkspace = false,
+  failRollback = false,
+  failCommit = false,
   existing = false,
   count = 0,
   failInsert = false,
   validAtCompletion = true,
 } = {}) {
   const query = vi.fn(async (sql: string) => {
+    if (sql === "ROLLBACK" && failRollback)
+      throw new Error("rollback unavailable");
+    if (sql === "COMMIT" && failCommit) throw new Error("commit unavailable");
+    if (sql.includes("SELECT id FROM workspaces")) {
+      if (failWorkspace) throw new Error("workspace read failed");
+      return { rows: workspace ? [{ id: "workspace-id" }] : [] };
+    }
     if (sql.includes("SELECT p.id"))
       return {
         rows: member
@@ -86,7 +97,7 @@ it("denies unknown or expired joins and preserves idempotent membership", async 
   expect(await circleStore(expired.pool).join("token", "everyday-ai")).toBe(
     "denied",
   );
-  expect(expired.query.mock.calls.map((call) => call[0])).toContain("COMMIT");
+  expect(expired.query.mock.calls.map((call) => call[0])).toContain("ROLLBACK");
   expect(expired.release).toHaveBeenCalledOnce();
   const existing = joinPool({ existing: true });
   expect(await circleStore(existing.pool).join("token", "everyday-ai")).toBe(
@@ -223,3 +234,64 @@ it("rolls back a leave that expires during its membership wait or fails to write
   expect(unavailableRollback.release).toHaveBeenCalledOnce();
   expect(unavailableRollback.release.mock.calls[0]![0]).toBeInstanceOf(Error);
 });
+
+it("denies a missing or deleting owned workspace before inspecting or changing membership", async () => {
+  const missing = joinPool({ workspace: false });
+  expect(await circleStore(missing.pool).join("token", "everyday-ai")).toBe(
+    "denied",
+  );
+  const sql = missing.query.mock.calls.map(([statement]) => statement);
+  expect(sql).toContain("ROLLBACK");
+  expect(sql).not.toContain("COMMIT");
+  expect(
+    sql.some((statement) => statement.includes("preview_circle_memberships")),
+  ).toBe(false);
+  expect(missing.release).toHaveBeenCalledOnce();
+});
+it.each([
+  {
+    failure: "workspace",
+    failWorkspace: true,
+    failInsert: false,
+    failRollback: false,
+    failCommit: false,
+    discard: false,
+    message: "workspace read failed",
+  },
+  {
+    failure: "rollback",
+    failWorkspace: false,
+    failInsert: true,
+    failRollback: true,
+    failCommit: false,
+    discard: true,
+    message: "write failed",
+  },
+  {
+    failure: "commit",
+    failWorkspace: false,
+    failInsert: false,
+    failRollback: false,
+    failCommit: true,
+    discard: true,
+    message: "commit unavailable",
+  },
+])(
+  "preserves a $failure failure and never retries a circle mutation",
+  async (options) => {
+    const failed = joinPool(options);
+    await expect(
+      circleStore(failed.pool).join("token", "everyday-ai"),
+    ).rejects.toThrow(options.message);
+    expect(failed.connect).toHaveBeenCalledOnce();
+    expect(failed.release).toHaveBeenCalledOnce();
+    expect(
+      failed.query.mock.calls.filter(([sql]) =>
+        sql.includes("INSERT INTO preview_circle_memberships"),
+      ),
+    ).toHaveLength(options.failWorkspace ? 0 : 1);
+    if (options.discard)
+      expect(failed.release.mock.calls[0]![0]).toBeInstanceOf(Error);
+    else expect(failed.release.mock.calls[0]![0]).toBeUndefined();
+  },
+);
