@@ -228,6 +228,26 @@ test("[L40] IT member's optional contract notes and renewal draft stay private",
     "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
     [owner],
   );
+  const retainedDraft = page
+    .locator(".career-list li")
+    .filter({ hasText: "Sample renewal note" });
+  await retainedDraft
+    .getByLabel(/Approve this exact private draft version/)
+    .check();
+  const approval = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(action!) &&
+      response.request().method() === "POST",
+  );
+  await retainedDraft
+    .getByRole("button", { name: "Approve private draft" })
+    .click();
+  expect((await approval).status()).toBe(403);
+  await expect(
+    page.getByRole("heading", { name: "Career planning unavailable" }),
+  ).toBeVisible();
+  await expect(page.getByText("Sample renewal note")).toHaveCount(0);
+  expect(await retained()).toEqual(before);
   for (let visit = 0; visit < 2; visit++) {
     const response =
       visit === 0 ? await page.goto("/career") : await page.reload();

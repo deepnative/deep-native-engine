@@ -254,3 +254,50 @@ it("denies career pages and every validation rerender after read authorization i
     expect(response.text).not.toContain("Private invalid input");
   }
 });
+
+it("returns a content-free 403 for each otherwise-valid denied career mutation", async () => {
+  const db = {
+    session: async () => ({
+      kind: "active",
+      learner: { id: "member", background: "explorer", goal: "everyday" },
+    }),
+  } as unknown as Store;
+  const career = disabledCareerStore();
+  server = await listenLoopback(app(db, { origin, secret: "secret", career }));
+  const agent = request.agent(server);
+  const page = await agent
+    .get("/career")
+    .set("Host", host)
+    .set("Cookie", `${COOKIE}=${"a".repeat(64)}`)
+    .expect(200);
+  const csrf = page.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  const actions: [string, Record<string, string>][] = [
+    ["/career/enable", { confirm: "yes" }],
+    ["/career/disable", { confirm: "yes" }],
+    ["/career/entries", entry],
+    [`/career/entries/${id}/update`, { ...entry, version: "1" }],
+    [`/career/entries/${id}/delete`, { confirm: "yes", version: "1" }],
+    ["/career/drafts", draft],
+    [`/career/drafts/${id}/update`, { ...draft, version: "1" }],
+    ...["approve", "revoke", "delete"].map(
+      (action) =>
+        [
+          `/career/drafts/${id}/${action}`,
+          { confirm: "yes", version: "1" },
+        ] as [string, Record<string, string>],
+    ),
+  ];
+  for (const [path, fields] of actions) {
+    const response = await agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .set("Cookie", `${COOKIE}=${"a".repeat(64)}`)
+      .type("form")
+      .send({ csrf, ...fields })
+      .expect(403);
+    expect(response.text).toContain("Career planning unavailable");
+    expect(response.text).not.toContain(entry.title);
+    expect(response.text).not.toContain(draft.body);
+  }
+});
