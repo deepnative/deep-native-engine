@@ -3439,26 +3439,33 @@ export function app(
     }
     res.send(careerPage(snapshot, res.locals.csrf as string));
   });
+  const careerChanged = (res: express.Response, result: boolean | null) => {
+    if (result === null) {
+      careerDenied(res);
+      return false;
+    }
+    if (!result) {
+      careerConflict(res);
+      return false;
+    }
+    return true;
+  };
   app.post("/career/enable", async (req, res) => {
     const member = res.locals.learner as Learner;
-    if (
-      (req.body as Fields).confirm !== "yes" ||
-      !(await career.enable(member.id))
-    ) {
+    if ((req.body as Fields).confirm !== "yes") {
       careerConflict(res);
       return;
     }
+    if (!careerChanged(res, await career.enable(member.id))) return;
     res.redirect(303, "/career");
   });
   app.post("/career/disable", async (req, res) => {
     const member = res.locals.learner as Learner;
-    if (
-      (req.body as Fields).confirm !== "yes" ||
-      !(await career.disable(member.id))
-    ) {
+    if ((req.body as Fields).confirm !== "yes") {
       careerConflict(res);
       return;
     }
+    if (!careerChanged(res, await career.disable(member.id))) return;
     res.redirect(303, "/career");
   });
   app.post("/career/entries", async (req, res) => {
@@ -3477,10 +3484,8 @@ export function app(
       );
       return;
     }
-    if (!(await career.createEntry(member.id, parsed.input))) {
-      careerConflict(res);
+    if (!careerChanged(res, await career.createEntry(member.id, parsed.input)))
       return;
-    }
     res.redirect(303, "/career");
   });
   app.post("/career/entries/:id/update", async (req, res) => {
@@ -3506,24 +3511,25 @@ export function app(
       );
       return;
     }
-    if (!(await career.updateEntry(member.id, id, version, parsed.input))) {
-      careerConflict(res);
+    if (
+      !careerChanged(
+        res,
+        await career.updateEntry(member.id, id, version, parsed.input),
+      )
+    )
       return;
-    }
     res.redirect(303, "/career");
   });
   app.post("/career/entries/:id/delete", async (req, res) => {
     const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
-    if (
-      (req.body as Fields).confirm !== "yes" ||
-      version === null ||
-      !(await career.deleteEntry(member.id, id, version))
-    ) {
+    if ((req.body as Fields).confirm !== "yes" || version === null) {
       careerConflict(res);
       return;
     }
+    if (!careerChanged(res, await career.deleteEntry(member.id, id, version)))
+      return;
     res.redirect(303, "/career");
   });
   app.post("/career/drafts", async (req, res) => {
@@ -3542,10 +3548,8 @@ export function app(
       );
       return;
     }
-    if (!(await career.createDraft(member.id, parsed.input))) {
-      careerConflict(res);
+    if (!careerChanged(res, await career.createDraft(member.id, parsed.input)))
       return;
-    }
     res.redirect(303, "/career");
   });
   app.post("/career/drafts/:id/update", async (req, res) => {
@@ -3571,52 +3575,49 @@ export function app(
       );
       return;
     }
-    if (!(await career.updateDraft(member.id, id, version, parsed.input))) {
-      careerConflict(res);
+    if (
+      !careerChanged(
+        res,
+        await career.updateDraft(member.id, id, version, parsed.input),
+      )
+    )
       return;
-    }
     res.redirect(303, "/career");
   });
   app.post("/career/drafts/:id/approve", async (req, res) => {
     const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
-    if (
-      (req.body as Fields).confirm !== "yes" ||
-      version === null ||
-      !(await career.approveDraft(member.id, id, version))
-    ) {
+    if ((req.body as Fields).confirm !== "yes" || version === null) {
       careerConflict(res);
       return;
     }
+    if (!careerChanged(res, await career.approveDraft(member.id, id, version)))
+      return;
     res.redirect(303, "/career");
   });
   app.post("/career/drafts/:id/revoke", async (req, res) => {
     const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
-    if (
-      (req.body as Fields).confirm !== "yes" ||
-      version === null ||
-      !(await career.revokeDraft(member.id, id, version))
-    ) {
+    if ((req.body as Fields).confirm !== "yes" || version === null) {
       careerConflict(res);
       return;
     }
+    if (!careerChanged(res, await career.revokeDraft(member.id, id, version)))
+      return;
     res.redirect(303, "/career");
   });
   app.post("/career/drafts/:id/delete", async (req, res) => {
     const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
-    if (
-      (req.body as Fields).confirm !== "yes" ||
-      version === null ||
-      !(await career.deleteDraft(member.id, id, version))
-    ) {
+    if ((req.body as Fields).confirm !== "yes" || version === null) {
       careerConflict(res);
       return;
     }
+    if (!careerChanged(res, await career.deleteDraft(member.id, id, version)))
+      return;
     res.redirect(303, "/career");
   });
   app.post("/profile", async (req, res) => {

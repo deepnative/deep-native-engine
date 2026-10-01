@@ -117,22 +117,20 @@ it("fails closed when optional career storage is not configured", async () => {
     entries: [],
     drafts: [],
   });
-  expect(await disabled.enable("member")).toBe(false);
-  expect(await disabled.disable("member")).toBe(false);
-  expect(await disabled.createEntry("member", entry)).toBe(false);
-  expect(await disabled.updateEntry("member", id, 1, entry)).toBe(false);
-  expect(await disabled.deleteEntry("member", id, 1)).toBe(false);
-  expect(await disabled.createDraft("member", draft)).toBe(false);
-  expect(await disabled.updateDraft("member", id, 1, draft)).toBe(false);
-  expect(await disabled.approveDraft("member", id, 1)).toBe(false);
-  expect(await disabled.revokeDraft("member", id, 1)).toBe(false);
-  expect(await disabled.deleteDraft("member", id, 1)).toBe(false);
+  expect(await disabled.enable("member")).toBeNull();
+  expect(await disabled.disable("member")).toBeNull();
+  expect(await disabled.createEntry("member", entry)).toBeNull();
+  expect(await disabled.updateEntry("member", id, 1, entry)).toBeNull();
+  expect(await disabled.deleteEntry("member", id, 1)).toBeNull();
+  expect(await disabled.createDraft("member", draft)).toBeNull();
+  expect(await disabled.updateDraft("member", id, 1, draft)).toBeNull();
+  expect(await disabled.approveDraft("member", id, 1)).toBeNull();
+  expect(await disabled.revokeDraft("member", id, 1)).toBeNull();
+  expect(await disabled.deleteDraft("member", id, 1)).toBeNull();
 });
 
 it("binds owner IDs and content in private, versioned career queries", async () => {
-  const query = vi.fn().mockResolvedValue({ rowCount: 0, rows: [] });
-  const db = careerStore({ query } as unknown as Pool);
-  query.mockResolvedValue({ rowCount: 1, rows: [] });
+  const { db, query, options } = mutationFixture();
   expect(await db.enable("member")).toBe(true);
   expect(await db.createEntry("member", entry)).toBe(true);
   expect(await db.updateEntry("member", id, 1, entry)).toBe(true);
@@ -143,7 +141,7 @@ it("binds owner IDs and content in private, versioned career queries", async () 
   expect(await db.revokeDraft("member", id, 2)).toBe(true);
   expect(await db.deleteDraft("member", id, 3)).toBe(true);
   expect(await db.disable("member")).toBe(true);
-  const calls = query.mock.calls as [string, unknown[]][];
+  const calls = query.mock.calls as unknown as [string, unknown[]][];
   expect(
     calls.filter(([sql]) => sql.includes("UPDATE career_drafts")),
   ).toHaveLength(3);
@@ -159,7 +157,7 @@ it("binds owner IDs and content in private, versioned career queries", async () 
         sql.includes("career_entries") && values?.includes(entry.note),
     ),
   ).toBe(true);
-  query.mockResolvedValue({ rowCount: 0, rows: [] });
+  options.changed = false;
   expect(await db.approveDraft("member", id, 4)).toBe(false);
 });
 
@@ -246,5 +244,111 @@ it.each([false, true])(
     expect(fixture.release).toHaveBeenCalledWith(
       failRollback ? expect.any(Error) : undefined,
     );
+  },
+);
+
+function mutationFixture(
+  options: {
+    principal?: boolean;
+    workspace?: boolean;
+    current?: boolean;
+    missingCurrent?: boolean;
+    changed?: boolean;
+    fault?: string;
+    rollbackFault?: boolean;
+  } = {},
+) {
+  const query = vi.fn(async (sql: string) => {
+    if (sql === "ROLLBACK" && options.rollbackFault)
+      throw new Error("synthetic rollback fault");
+    if (
+      options.fault &&
+      (options.fault === "COMMIT"
+        ? sql === "COMMIT"
+        : sql.includes(options.fault))
+    )
+      throw new Error("synthetic database fault");
+    if (sql.includes("FROM principals"))
+      return {
+        rows:
+          options.principal === false
+            ? []
+            : [{ expiresAt: new Date(2000000000000) }],
+      };
+    if (sql.includes("FROM workspaces"))
+      return { rows: options.workspace === false ? [] : [{ id: "workspace" }] };
+    if (sql.includes("AS valid"))
+      return {
+        rows: options.missingCurrent
+          ? []
+          : [{ valid: options.current !== false }],
+      };
+    return { rowCount: options.changed === false ? 0 : 1, rows: [] };
+  });
+  const release = vi.fn();
+  return {
+    options,
+    query,
+    release,
+    db: careerStore({
+      connect: async () => ({ query, release }),
+    } as unknown as Pool),
+  };
+}
+it.each([
+  { principal: false },
+  { workspace: false },
+  { current: false },
+  { missingCurrent: true },
+])(
+  "rolls back denied career mutations instead of reporting an authorized conflict: %j",
+  async (options) => {
+    const fixture = mutationFixture(options);
+    expect(await fixture.db.approveDraft("member", id, 1)).toBeNull();
+    expect(fixture.query).toHaveBeenCalledWith("ROLLBACK");
+    expect(fixture.query).not.toHaveBeenCalledWith("COMMIT");
+    expect(fixture.release).toHaveBeenCalledWith(undefined);
+    if (options.principal === false || options.workspace === false)
+      expect(
+        fixture.query.mock.calls.some(([sql]) =>
+          sql.startsWith("UPDATE career_drafts"),
+        ),
+      ).toBe(false);
+  },
+);
+it.each([
+  "BEGIN",
+  "SET LOCAL",
+  "FROM principals",
+  "FROM workspaces",
+  "UPDATE career_drafts",
+  "AS valid",
+  "COMMIT",
+])(
+  "propagates %s failure without blind mutation retry and releases the connection",
+  async (fault) => {
+    const fixture = mutationFixture({ fault });
+    await expect(fixture.db.approveDraft("member", id, 1)).rejects.toThrow(
+      "synthetic database fault",
+    );
+    expect(fixture.query).toHaveBeenCalledWith("ROLLBACK");
+    expect(
+      fixture.query.mock.calls.filter(([sql]) =>
+        fault === "COMMIT" ? sql === "COMMIT" : sql.includes(fault),
+      ),
+    ).toHaveLength(1);
+    expect(fixture.release).toHaveBeenCalledWith(
+      fault === "COMMIT" ? expect.any(Error) : undefined,
+    );
+  },
+);
+it.each([{ principal: false }, { fault: "UPDATE career_drafts" }])(
+  "discards a connection whose career rollback fails: %j",
+  async (options) => {
+    const fixture = mutationFixture({ ...options, rollbackFault: true });
+    await expect(fixture.db.approveDraft("member", id, 1)).rejects.toThrow(
+      "Career mutation rollback failed",
+    );
+    expect(fixture.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );

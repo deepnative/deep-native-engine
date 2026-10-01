@@ -32,26 +32,48 @@ export interface CareerSnapshot {
 }
 export interface CareerStore {
   snapshot(memberId: string): Promise<CareerSnapshot | null>;
-  enable(memberId: string): Promise<boolean>;
-  disable(memberId: string): Promise<boolean>;
-  createEntry(memberId: string, input: CareerEntryInput): Promise<boolean>;
+  enable(memberId: string): Promise<boolean | null>;
+  disable(memberId: string): Promise<boolean | null>;
+  createEntry(
+    memberId: string,
+    input: CareerEntryInput,
+  ): Promise<boolean | null>;
   updateEntry(
     memberId: string,
     id: string,
     version: number,
     input: CareerEntryInput,
-  ): Promise<boolean>;
-  deleteEntry(memberId: string, id: string, version: number): Promise<boolean>;
-  createDraft(memberId: string, input: CareerDraftInput): Promise<boolean>;
+  ): Promise<boolean | null>;
+  deleteEntry(
+    memberId: string,
+    id: string,
+    version: number,
+  ): Promise<boolean | null>;
+  createDraft(
+    memberId: string,
+    input: CareerDraftInput,
+  ): Promise<boolean | null>;
   updateDraft(
     memberId: string,
     id: string,
     version: number,
     input: CareerDraftInput,
-  ): Promise<boolean>;
-  approveDraft(memberId: string, id: string, version: number): Promise<boolean>;
-  revokeDraft(memberId: string, id: string, version: number): Promise<boolean>;
-  deleteDraft(memberId: string, id: string, version: number): Promise<boolean>;
+  ): Promise<boolean | null>;
+  approveDraft(
+    memberId: string,
+    id: string,
+    version: number,
+  ): Promise<boolean | null>;
+  revokeDraft(
+    memberId: string,
+    id: string,
+    version: number,
+  ): Promise<boolean | null>;
+  deleteDraft(
+    memberId: string,
+    id: string,
+    version: number,
+  ): Promise<boolean | null>;
 }
 const field = (fields: Fields, key: string) =>
   typeof fields[key] === "string" ? fields[key].trim() : "";
@@ -112,21 +134,75 @@ export function parseCareerDraft(fields: Fields): {
 export function disabledCareerStore(): CareerStore {
   return {
     snapshot: async () => ({ enabled: false, entries: [], drafts: [] }),
-    enable: async () => false,
-    disable: async () => false,
-    createEntry: async () => false,
-    updateEntry: async () => false,
-    deleteEntry: async () => false,
-    createDraft: async () => false,
-    updateDraft: async () => false,
-    approveDraft: async () => false,
-    revokeDraft: async () => false,
-    deleteDraft: async () => false,
+    enable: async () => null,
+    disable: async () => null,
+    createEntry: async () => null,
+    updateEntry: async () => null,
+    deleteEntry: async () => null,
+    createDraft: async () => null,
+    updateDraft: async () => null,
+    approveDraft: async () => null,
+    revokeDraft: async () => null,
+    deleteDraft: async () => null,
   };
 }
 export function careerStore(pool: Pool): CareerStore {
-  const changed = async (sql: string, values: unknown[]) =>
-    (await pool.query(sql, values)).rowCount === 1;
+  // null denies authorization; false preserves an authorized version/no-change conflict.
+  const changed = async (
+    sql: string,
+    values: unknown[],
+  ): Promise<boolean | null> => {
+    const client = await pool.connect();
+    let committed = false;
+    let releaseError: Error | undefined;
+    const rollback = async () => {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        releaseError = new Error("Career mutation rollback failed");
+        throw releaseError;
+      }
+    };
+    try {
+      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+      await client.query("SET LOCAL lock_timeout='5s'");
+      // Keep the deletion/revocation order: principal, workspace, career rows.
+      const principal = (
+        await client.query<{ expiresAt: Date }>(
+          `SELECT expires_at AS "expiresAt" FROM principals WHERE id=$1
+         AND kind='member' AND revoked_at IS NULL
+         AND expires_at>clock_timestamp() FOR SHARE`,
+          [values[0]],
+        )
+      ).rows[0];
+      if (!principal) return null;
+      const workspace = await client.query(
+        `SELECT id FROM workspaces WHERE owner_principal_id=$1
+         AND deleting_at IS NULL FOR SHARE`,
+        [values[0]],
+      );
+      if (!workspace.rows[0]) return null;
+      const result = (await client.query(sql, values)).rowCount === 1;
+      // A row/unique-key wait may outlast the principal, even without tuple changes.
+      const current = await client.query<{ valid: boolean }>(
+        "SELECT clock_timestamp() < $1::timestamptz AS valid",
+        [principal.expiresAt],
+      );
+      if (!current.rows[0]?.valid) return null;
+      // If COMMIT loses its reply, discard the connection and report uncertainty.
+      releaseError = new Error("Career mutation commit outcome unknown");
+      await client.query("COMMIT");
+      committed = true;
+      releaseError = undefined;
+      return result;
+    } finally {
+      try {
+        if (!committed) await rollback();
+      } finally {
+        client.release(releaseError);
+      }
+    }
+  };
   return {
     async snapshot(memberId) {
       const client = await pool.connect();
