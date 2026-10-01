@@ -1,6 +1,6 @@
 # CTP-011: synthetic entitlement ledger and completion settlement
 
-This bounded slice implements an internal PostgreSQL accounting core for **synthetic test grants only**. It is not called by any route, offer, job or payment flow, and no live member can obtain or spend service units through it. The historical coaching allowances remain hypotheses. Foundation learning and local circle participation do not create ledger grants.
+This bounded slice implements an internal PostgreSQL accounting core for **synthetic test grants only**. It is not called by any application route, offer, hosted job or payment flow, and no live member can obtain or spend service units through it. The historical coaching allowances remain hypotheses. Foundation learning and local circle participation do not create ledger grants.
 
 ## Contract and boundaries
 
@@ -10,7 +10,17 @@ A reservation is settled in full, exactly once, by consume or release. Repeating
 
 An internal `adjust` operation supports only a **decrease** of currently available synthetic units before the grant expires. It never increases a grant, touches held or consumed units, changes the original quantity, or substitutes another category. The debited units move to a distinct nonnegative `adjusted` balance. The grant row lock serializes this writeoff against reservations and expiry, while an exact-key replay returns the original grant and a changed request conflicts. A failed event insert rolls the balance back. This models an invented fixture correction only: there is no staff API, correction authority, refund policy, positive adjustment or live grant.
 
-This is an internal foundation for future approved entitlements, not an entitlement policy. No automatic grants or expiry job, policy-approved adjustment, production annual reconciliation, funded minutes, live review/support/AI settlement, staff booking, invoice, paid offer or browser journey are attached. Those areas remain on [CTP-011 #27](https://github.com/deepnative/deep-native-engine/issues/27) and its dependencies, particularly the foundation access decision in [#95](https://github.com/deepnative/deep-native-engine/issues/95). The synthetic deletion behavior must be re-evaluated against approved financial retention terms before live paid records exist.
+This is an internal foundation for future approved entitlements, not an entitlement policy. No automatic grants or scheduled expiry job, policy-approved adjustment, production annual reconciliation, funded minutes, live review/support/AI settlement, staff booking, invoice, paid offer or browser journey are attached. Those areas remain on [CTP-011 #27](https://github.com/deepnative/deep-native-engine/issues/27) and its dependencies, particularly the foundation access decision in [#95](https://github.com/deepnative/deep-native-engine/issues/95). The synthetic deletion behavior must be re-evaluated against approved financial retention terms before live paid records exist.
+
+## Local synthetic-expiry sweep
+
+For isolated local-preview PostgreSQL fixtures, an operator can run `npm run sweep:synthetic-expiry -- --limit 100`. The limit must be between 1 and 500. Configure the existing local/test app mode and loopback database connection before running it; the same isolation guard rejects live mode and non-loopback databases. This is an explicit one-shot command, not a hosted scheduler, member action, automatic grant policy or production entitlement process.
+
+A run selects at most the limit of due, unexpired synthetic grants in stable expiry-time and grant-ID order, then invokes the ledger's atomic `expire` operation with a stable key for each grant. At the exact expiry boundary, available units expire once; held units remain reserved and follow the established late consume/release rules. Repeated or concurrent runs cannot append duplicate expiry events. A grant already expired manually, removed with its member, or made ineligible before the row lock is acquired is skipped safely. This command cannot borrow another member's grant or substitute one unit category for another.
+
+The command reports only aggregate `processed`, `skipped` and `moreDue` values, without member IDs, grant IDs, keys or private content. Run it again when `moreDue` is true. A database or write failure exits nonzero and reports failed status; grants committed earlier in the batch stay committed. Re-run the same command after fixing the cause to complete the remaining due grants. Never treat a failed or partial run as full success, and do not paste raw database diagnostics into issue comments.
+
+To stop or roll back this local exercise, stop invoking the command and inspect the synthetic event/balance invariants. Immutable events are not edited or deleted to manufacture a reversal. Reset only an isolated synthetic test database or prepare a separately reviewed compensating migration if fixture cleanup is required. Do not drop or rewrite genuine paid records; a live expiry policy, retention plan and deployment decision remain open on [#27](https://github.com/deepnative/deep-native-engine/issues/27).
 
 ## Invented completion bridge
 

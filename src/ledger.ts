@@ -25,6 +25,25 @@ export class LedgerFailure extends Error {
   }
 }
 
+// Only eligibility failures observed under the expiry row lock are benign.
+// An unavailable database must never be mistaken for a deleted grant.
+class ExpirySkipped extends LedgerFailure {}
+
+export interface ExpirySweepResult {
+  processed: number;
+  skipped: number;
+  moreDue: boolean;
+}
+export class ExpirySweepFailure extends Error {
+  readonly processed: number;
+  readonly skipped: number;
+  constructor(processed: number, skipped: number) {
+    super("Synthetic expiry sweep failed; committed work is safe to retry.");
+    this.processed = processed;
+    this.skipped = skipped;
+  }
+}
+
 const categories: readonly LedgerCategory[] = [
   "coach_minutes",
   "review_minutes",
@@ -166,6 +185,7 @@ export interface SyntheticLedger {
     key: string,
   ): Promise<string>;
   expire(memberId: string, grantId: string, key: string): Promise<string>;
+  sweepExpired(limit: number): Promise<ExpirySweepResult>;
   // Synthetic writeoff only: quantity is removed from available, never added.
   adjust(
     memberId: string,
@@ -237,6 +257,8 @@ export function syntheticLedger(
       await client.query("ROLLBACK").catch(() => {
         broken = true;
       });
+      if (broken && error instanceof ExpirySkipped)
+        throw new LedgerFailure("unavailable");
       throw error instanceof LedgerFailure
         ? error
         : new LedgerFailure("unavailable");
@@ -305,7 +327,7 @@ export function syntheticLedger(
     );
   }
 
-  return {
+  const ledger: SyntheticLedger = {
     async grant(memberId, category, quantity, key, window) {
       requireId(memberId);
       if (!categories.includes(category))
@@ -526,6 +548,43 @@ export function syntheticLedger(
         },
       );
     },
+    async sweepExpired(limit) {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500)
+        throw new LedgerFailure("invalid_request");
+      let processed = 0;
+      let skipped = 0;
+      try {
+        const candidates = await pool.query<{ id: string; member_id: string }>(
+          `SELECT id,member_id FROM synthetic_entitlement_grants
+           WHERE expired_at IS NULL AND expires_at <= $1
+           ORDER BY expires_at,id LIMIT $2`,
+          [now(), limit],
+        );
+        for (const candidate of candidates.rows) {
+          try {
+            // Each grant commits independently. Keep this key stable across
+            // operators, batches and retries after partial completion.
+            await ledger.expire(
+              candidate.member_id,
+              candidate.id,
+              `synthetic-expiry:${candidate.id}`,
+            );
+            processed += 1;
+          } catch (error) {
+            if (!(error instanceof ExpirySkipped)) throw error;
+            skipped += 1;
+          }
+        }
+        const remaining = await pool.query(
+          `SELECT 1 FROM synthetic_entitlement_grants
+           WHERE expired_at IS NULL AND expires_at <= $1 LIMIT 1`,
+          [now()],
+        );
+        return { processed, skipped, moreDue: remaining.rows.length > 0 };
+      } catch {
+        throw new ExpirySweepFailure(processed, skipped);
+      }
+    },
     async expire(memberId, grantId, key) {
       requireId(memberId);
       requireId(grantId);
@@ -544,12 +603,12 @@ export function syntheticLedger(
               [grantId, memberId],
             )
           ).rows[0];
-          if (!grant) throw new LedgerFailure("unavailable");
+          if (!grant) throw new ExpirySkipped("unavailable");
           const current = now();
           if (current < grant.expires_at)
-            throw new LedgerFailure("unavailable");
+            throw new ExpirySkipped("unavailable");
           if (grant.expired_at !== null)
-            throw new LedgerFailure("already_settled");
+            throw new ExpirySkipped("already_settled");
           await client.query(
             `UPDATE synthetic_entitlement_grants SET expired=expired+available,
            available=0,expired_at=$2 WHERE id=$1`,
@@ -565,4 +624,5 @@ export function syntheticLedger(
       );
     },
   };
+  return ledger;
 }
