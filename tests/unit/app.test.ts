@@ -2,7 +2,11 @@ import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import request from "supertest";
 import { createServer, type Server } from "node:http";
 import { app } from "../../src/app.ts";
-import type { Store, ExerciseHistory } from "../../src/store.ts";
+import {
+  LessonActivityUnavailable,
+  type Store,
+  type ExerciseHistory,
+} from "../../src/store.ts";
 import { LESSON } from "../../src/content.ts";
 import {
   disabledAuthorizationStore,
@@ -4841,4 +4845,64 @@ it("recovers without echoing answers after a transactional stale-goal or unavail
       .send({ csrf, confirm: "yes", goal })
       .expect(422);
   }
+});
+it("withholds private lesson history consistently across every consumer and keeps storage failures distinct", async () => {
+  const catalog = catalogMock();
+  const item = {
+    id: "SYN-105",
+    version: 2,
+    kind: "lesson" as const,
+    origin: "curated" as const,
+    title: "Private synthetic title",
+    body: "Sample text",
+    owner: "Editor",
+    sources: "Invented",
+    rights: "Owned",
+    goals: [],
+    backgrounds: [],
+    domains: [],
+    prerequisites: "",
+    rubric: null,
+    rubricVersion: null,
+    state: "published" as const,
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date(),
+    publishedAt: new Date(),
+  };
+  catalog.published.mockResolvedValue(item);
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", catalog }),
+  );
+  const welcome = await agent.get("/").set("Host", host).expect(200);
+  const csrf = welcome.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  active();
+  db.lessonActivities.mockRejectedValue(new LessonActivityUnavailable());
+  for (const path of ["/library", "/library/SYN-105", "/learn", "/progress"]) {
+    const response = await agent.get(path).set("Host", host).expect(403);
+    expect(response.text).toContain(
+      path === "/progress"
+        ? "Progress unavailable"
+        : "Lesson history unavailable",
+    );
+    expect(response.text).not.toContain(item.title);
+    expect(response.text).not.toContain(item.id);
+  }
+  for (const path of ["/assignments/select", "/profile"]) {
+    const response = await agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf })
+      .expect(403);
+    expect(response.text).toContain("Lesson history unavailable");
+  }
+  expect(db.chooseAssignment).not.toHaveBeenCalled();
+  expect(db.updateProfile).not.toHaveBeenCalled();
+  db.lessonActivities.mockRejectedValue(
+    new Error("Private synthetic database detail"),
+  );
+  const failed = await agent.get("/library").set("Host", host).expect(503);
+  expect(failed.text).not.toContain("Private synthetic database detail");
+  expect(failed.text).toContain("could not confirm");
 });

@@ -1,3 +1,5 @@
+import { COOKIE } from "../../src/session.ts";
+import { hash } from "../../src/store.ts";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -152,6 +154,79 @@ test("[L43] professional and IT sessions keep versioned activity private through
       form: { csrf: "wrong", content_version: "1", intent: "start" },
     });
     expect(forged.status()).toBe(403);
+    const session = (await page.context().cookies()).find(
+      (cookie) => cookie.name === COOKIE,
+    )!;
+    const owner = (
+      await pool.query("SELECT id FROM principals WHERE token_hash=$1", [
+        hash(session.value),
+      ])
+    ).rows[0].id;
+    const retained = async () =>
+      (
+        await pool.query(
+          "SELECT * FROM lesson_activity WHERE member_id=$1 ORDER BY content_id,content_version",
+          [owner],
+        )
+      ).rows;
+    const before = await retained();
+    await pool.query(
+      "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE id=$1",
+      [owner],
+    );
+    const denied = await page.goto("/library");
+    expect(denied!.status()).toBe(403);
+    await expect(
+      page.getByRole("heading", { name: "Lesson history unavailable" }),
+    ).toBeVisible();
+    await expect(page.getByText(id, { exact: false })).toHaveCount(0);
+    await expect(
+      page.getByText("Opened in reader", { exact: false }),
+    ).toHaveCount(0);
+    const deniedOpen = await page.goto(`/library/${id}`);
+    expect(deniedOpen!.status()).toBe(409);
+    await expect(
+      page.getByRole("heading", { name: `Invented learning sample ${id}` }),
+    ).toHaveCount(0);
+    const deniedWrite = await page.request.post(`/library/${id}/progress`, {
+      headers: { Origin: origin },
+      form: { csrf, content_version: "1", intent: "start" },
+    });
+    expect(deniedWrite.status()).toBe(409);
+    expect(await retained()).toEqual(before);
+    await otherPage.reload();
+    await expect(
+      otherPage.getByText("No sample lesson has been opened"),
+    ).toBeVisible();
+    for (const state of ["revoked", "expired"]) {
+      await pool.query("UPDATE workspaces SET deleting_at=NULL WHERE id=$1", [
+        owner,
+      ]);
+      await pool.query(
+        "UPDATE principals SET revoked_at=NULL,expires_at=clock_timestamp()+interval '1 day' WHERE id=$1",
+        [owner],
+      );
+      await pool.query(
+        state === "revoked"
+          ? "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1"
+          : "UPDATE principals SET expires_at=clock_timestamp() WHERE id=$1",
+        [owner],
+      );
+      const response = await page.request.get("/library", { maxRedirects: 0 });
+      expect(response.status()).toBe(303);
+      expect(await response.text()).not.toContain(id);
+      const write = await page.request.post(`/library/${id}/progress`, {
+        headers: { Origin: origin },
+        form: { csrf, content_version: "1", intent: "start" },
+        maxRedirects: 0,
+      });
+      expect(write.status()).toBe(303);
+      expect(await retained()).toEqual(before);
+    }
+    await pool.query(
+      "UPDATE principals SET revoked_at=NULL,expires_at=clock_timestamp()+interval '1 day' WHERE id=$1",
+      [owner],
+    );
     await publish(2);
     const stale = await page.request.post(`/library/${id}/progress`, {
       headers: { Origin: origin },

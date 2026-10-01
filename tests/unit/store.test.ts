@@ -1,6 +1,12 @@
 import { it, expect, vi } from "vitest";
 import type { Pool } from "pg";
-import { store, hash, migrate } from "../../src/store.ts";
+import {
+  store,
+  hash,
+  migrate,
+  LessonActivityUnavailable,
+  type Store,
+} from "../../src/store.ts";
 import type { MilestoneInput } from "../../src/milestones.ts";
 function pool() {
   const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
@@ -74,33 +80,28 @@ it("passes untrusted answers as bound parameters and scopes versioned reads and 
   expect(p.query.mock.calls[2]![1]).toEqual(["owned"]);
 });
 it("binds member and exact lesson version for observed reading and explicit state changes", async () => {
-  const p = pool(),
+  const p = lessonPool(),
     db = store(p.value);
-  p.query.mockResolvedValueOnce({
+  p.data.mockResolvedValueOnce({
     rows: [{ contentId: "SYN-100", contentVersion: 2, available: false }],
   });
   expect(await db.lessonActivities("member-a")).toMatchObject([
     { contentId: "SYN-100", available: false },
   ]);
-  expect(p.query.mock.calls[0]![1]).toEqual(["member-a"]);
-  p.query.mockResolvedValueOnce({ rowCount: 1 });
+  expect(p.data.mock.calls[0]![1]).toEqual(["member-a"]);
+  p.data.mockResolvedValueOnce({ rowCount: 1 });
   expect(await db.openLesson("member-a", "SYN-100", 2)).toBe(true);
-  expect(p.query.mock.calls[1]![1]).toEqual(["member-a", "SYN-100", 2]);
-  p.query.mockResolvedValueOnce({ rowCount: 0 });
+  expect(p.data.mock.calls[1]![1]).toEqual(["member-a", "SYN-100", 2]);
+  p.data.mockResolvedValueOnce({ rowCount: 0 });
   expect(await db.openLesson("member-a", "SYN-100", 1)).toBe(false);
-  p.query.mockResolvedValueOnce({ rowCount: 1 });
+  p.data.mockResolvedValueOnce({ rowCount: 1 });
   expect(await db.advanceLesson("member-a", "SYN-100", 2, "start")).toBe(true);
-  expect(p.query.mock.calls[3]![1]).toEqual([
-    "member-a",
-    "SYN-100",
-    2,
-    "start",
-  ]);
-  p.query.mockResolvedValueOnce({ rowCount: 0 });
+  expect(p.data.mock.calls[3]![1]).toEqual(["member-a", "SYN-100", 2, "start"]);
+  p.data.mockResolvedValueOnce({ rowCount: 0 });
   expect(await db.advanceLesson("member-b", "SYN-100", 2, "complete")).toBe(
     false,
   );
-  expect(p.query.mock.calls[4]![1]).toEqual([
+  expect(p.data.mock.calls[4]![1]).toEqual([
     "member-b",
     "SYN-100",
     2,
@@ -587,3 +588,85 @@ it("rejects a forged goal slot before opening a withdrawal transaction", async (
   ).toBe("unavailable");
   expect(p.connect).not.toHaveBeenCalled();
 });
+function lessonPool(options: Parameters<typeof exercisePool>[0] = {}) {
+  const p = exercisePool(options),
+    normal = p.query.getMockImplementation()!;
+  const data = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
+  p.query.mockImplementation(async (sql: string, ...args: unknown[]) => {
+    if (sql.startsWith("SELECT id,expires_at") && options.principal !== false)
+      return {
+        rows: [
+          { id: (args[0] as string[])[0], expires_at: new Date("2035-01-01") },
+        ],
+      };
+    if (
+      sql.includes("FROM lesson_activity a") ||
+      sql.startsWith("INSERT INTO lesson_activity") ||
+      sql.startsWith("UPDATE lesson_activity")
+    )
+      return data(sql, ...args);
+    return normal(sql);
+  });
+  return { ...p, data };
+}
+const lessonOperations = [
+  { kind: "read", act: (db: Store, id: string) => db.lessonActivities(id) },
+  {
+    kind: "open",
+    act: (db: Store, id: string) => db.openLesson(id, "SYN-100", 1),
+  },
+  {
+    kind: "advance",
+    act: (db: Store, id: string) => db.advanceLesson(id, "SYN-100", 1, "start"),
+  },
+];
+it.each(lessonOperations)(
+  "denies $kind for unavailable authorization without querying lesson activity",
+  async ({ kind, act }) => {
+    for (const options of [{ principal: false }, { workspace: false }]) {
+      const p = lessonPool(options),
+        pending = act(store(p.value), "owned");
+      if (kind === "read")
+        await expect(pending).rejects.toThrow(LessonActivityUnavailable);
+      else expect(await pending).toBe(false);
+      expect(p.data).not.toHaveBeenCalled();
+      expect(p.query).toHaveBeenLastCalledWith("ROLLBACK");
+    }
+    const p = lessonPool(),
+      pending = act(store(p.value), " ");
+    if (kind === "read")
+      await expect(pending).rejects.toThrow(LessonActivityUnavailable);
+    else expect(await pending).toBe(false);
+    expect(p.connect).not.toHaveBeenCalled();
+  },
+);
+it.each(lessonOperations)(
+  "withholds expired $kind and propagates storage failures without retry",
+  async ({ kind, act }) => {
+    const expired = lessonPool({ expired: true }),
+      pending = act(store(expired.value), "owned");
+    if (kind === "read")
+      await expect(pending).rejects.toThrow(LessonActivityUnavailable);
+    else expect(await pending).toBe(false);
+    expect(expired.data).toHaveBeenCalledOnce();
+    expect(expired.query).toHaveBeenLastCalledWith("ROLLBACK");
+    for (const rollbackFails of [false, true]) {
+      const p = lessonPool({ rollbackFails });
+      p.data.mockRejectedValueOnce(new Error("private synthetic detail"));
+      await expect(act(store(p.value), "owned")).rejects.toThrow(
+        "private synthetic detail",
+      );
+      expect(p.connect).toHaveBeenCalledOnce();
+      expect(p.data).toHaveBeenCalledOnce();
+      expect(p.release).toHaveBeenCalledWith(
+        rollbackFails ? expect.any(Error) : undefined,
+      );
+    }
+    const commit = lessonPool({ failAt: "COMMIT" });
+    await expect(act(store(commit.value), "owned")).rejects.toThrow(
+      "synthetic failure",
+    );
+    expect(commit.data).toHaveBeenCalledOnce();
+    expect(commit.query).toHaveBeenLastCalledWith("ROLLBACK");
+  },
+);

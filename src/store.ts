@@ -39,6 +39,11 @@ export interface AssignmentChoice {
   contentId: string;
   contentVersion: number;
 }
+export class LessonActivityUnavailable extends Error {
+  constructor() {
+    super("Lesson history unavailable");
+  }
+}
 export interface LessonActivity {
   contentId: string;
   contentVersion: number;
@@ -404,9 +409,13 @@ export function store(pool: Pool): Store {
       );
     },
     async lessonActivities(id) {
-      return (
-        await pool.query<LessonActivity>(
-          `SELECT a.content_id AS "contentId",a.content_version AS "contentVersion",
+      const activities = await exerciseTransaction(
+        id,
+        false,
+        async (client, memberId) =>
+          (
+            await client.query<LessonActivity>(
+              `SELECT a.content_id AS "contentId",a.content_version AS "contentVersion",
                   cv.title,
                   a.opened_at AS "openedAt",a.started_at AS "startedAt",
                   a.self_assessed_at AS "selfAssessedAt",
@@ -429,13 +438,22 @@ export function store(pool: Pool): Store {
            LEFT JOIN content_versions cv ON cv.id=a.content_id AND cv.version=a.content_version
            WHERE a.member_id=$1
            ORDER BY a.opened_at DESC,a.content_id,a.content_version DESC`,
-          [id],
-        )
-      ).rows;
+              [memberId],
+            )
+          ).rows,
+        true,
+      );
+      if (activities === null) throw new LessonActivityUnavailable();
+      return activities;
     },
     async openLesson(id, contentId, version) {
-      const result = await pool.query(
-        `INSERT INTO lesson_activity(member_id,content_id,content_version)
+      return (
+        (await exerciseTransaction(
+          id,
+          true,
+          async (client, memberId) => {
+            const result = await client.query(
+              `INSERT INTO lesson_activity(member_id,content_id,content_version)
          SELECT l.id,cv.id,cv.version FROM learners l
          JOIN content_versions cv ON cv.id=$2 AND cv.version=$3
          WHERE l.id=$1 AND cv.kind='lesson' AND cv.state='published'
@@ -444,13 +462,22 @@ export function store(pool: Pool): Store {
              WHERE newer.id=cv.id AND newer.published_at IS NOT NULL AND newer.version>cv.version)
          ON CONFLICT(member_id,content_id,content_version) DO UPDATE
            SET opened_at=lesson_activity.opened_at`,
-        [id, contentId, version],
+              [memberId, contentId, version],
+            );
+            return result.rowCount === 1;
+          },
+          true,
+        )) ?? false
       );
-      return result.rowCount === 1;
     },
     async advanceLesson(id, contentId, version, action) {
-      const result = await pool.query(
-        `UPDATE lesson_activity a SET
+      return (
+        (await exerciseTransaction(
+          id,
+          true,
+          async (client, memberId) => {
+            const result = await client.query(
+              `UPDATE lesson_activity a SET
            started_at=CASE WHEN $4='start' THEN COALESCE(a.started_at,CURRENT_TIMESTAMP)
                            ELSE a.started_at END,
            self_assessed_at=CASE WHEN $4='complete' THEN COALESCE(a.self_assessed_at,CURRENT_TIMESTAMP)
@@ -463,9 +490,13 @@ export function store(pool: Pool): Store {
                AND member_content_eligible(a.member_id,cv.id,cv.version)
                AND NOT EXISTS(SELECT 1 FROM content_versions newer
                  WHERE newer.id=cv.id AND newer.published_at IS NOT NULL AND newer.version>cv.version))`,
-        [id, contentId, version, action],
+              [memberId, contentId, version, action],
+            );
+            return result.rowCount === 1;
+          },
+          true,
+        )) ?? false
       );
-      return result.rowCount === 1;
     },
     async assignmentChoice(id) {
       return (
