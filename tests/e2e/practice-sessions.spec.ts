@@ -90,7 +90,14 @@ async function respond(page: Page, response: string) {
       "I used only invented or sample information and want to save this response.",
     )
     .check();
+  const savedResponses = page.locator("[data-practice-response]");
+  const expectedPairs = (await savedResponses.count()) + 1;
   await page.getByRole("button", { name: "Save response and compare" }).click();
+  await expect(savedResponses).toHaveCount(expectedPairs);
+  await expect(page.locator("[data-practice-comparison]")).toHaveCount(
+    expectedPairs,
+  );
+  await expect(savedResponses.last()).toHaveText(response);
 }
 async function changeGoal(page: Page, goal: (typeof audiences)[number][1]) {
   await page.goto("/learn");
