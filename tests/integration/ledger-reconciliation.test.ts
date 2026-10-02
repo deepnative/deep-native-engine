@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { migrate, store } from "../../src/store.ts";
@@ -909,3 +910,52 @@ it.each(["query", "commit", "rollback"] as const)(
     );
   },
 );
+
+it("reapplies the event-grant index migration without rewriting history or another member's balance", async () => {
+  const f = await fixture(),
+    other = await fixture("study_requests", 2);
+  const before = (
+    await pool.query("SELECT * FROM synthetic_entitlement_events ORDER BY id")
+  ).rows;
+  const migration = await readFile(
+    new URL(
+      "../../migrations/052-ledger-event-grant-index.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  await pool.query(
+    "DROP INDEX IF EXISTS synthetic_entitlement_events_grant_idx",
+  );
+  await pool.query(migration);
+  await pool.query(migration);
+  expect(
+    (await pool.query("SELECT * FROM synthetic_entitlement_events ORDER BY id"))
+      .rows,
+  ).toEqual(before);
+  await expect(
+    pool.query("DELETE FROM synthetic_entitlement_events WHERE member_id=$1", [
+      f.owner.id,
+    ]),
+  ).rejects.toThrow("immutable");
+  await db.remove(f.owner.id);
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*)::text AS total FROM synthetic_entitlement_events WHERE member_id=$1",
+        [f.owner.id],
+      )
+    ).rows[0],
+  ).toEqual({ total: "0" });
+  expect(
+    (
+      await pool.query(
+        "SELECT * FROM synthetic_entitlement_events WHERE member_id=$1 ORDER BY id",
+        [other.owner.id],
+      )
+    ).rows,
+  ).toEqual(before.filter((row) => row.member_id === other.owner.id));
+  expect(
+    category(await snapshot(other.operator.token), "study_requests").observed,
+  ).toMatchObject({ grants: 1, events: 1, granted: 2, available: 2 });
+});
