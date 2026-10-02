@@ -1735,7 +1735,22 @@ it("keeps consented member samples private through moderation, withdrawal and de
   expect(await proposals.submit(first.token, id!, false, 1)).toBe("denied");
   expect(await proposals.submit(other.token, id!, true, 1)).toBe("denied");
   expect(await proposals.submit(first.token, id!, true, 1)).toBe("submitted");
-  expect(await proposals.submit(first.token, id!, true, 1)).toBe("denied");
+  const beforeReplay = (
+    await pool.query("SELECT * FROM member_proposals WHERE id=$1", [id])
+  ).rows[0];
+  expect(beforeReplay).toMatchObject({
+    revision: 1,
+    rights_attested_revision: 1,
+    rights_attested_at: expect.any(Date),
+    submitted_at: expect.any(Date),
+  });
+  expect(await proposals.submit(first.token, id!, true, 1)).toBe("replayed");
+  expect(await proposals.submit(first.token, id!, false, 1)).toBe("denied");
+  expect(await proposals.submit(first.token, id!, true, 2)).toBe("conflict");
+  expect(
+    (await pool.query("SELECT * FROM member_proposals WHERE id=$1", [id]))
+      .rows[0],
+  ).toEqual(beforeReplay);
   expect(await proposals.moderationQueue(reviewerToken)).toBeNull();
   expect((await proposals.moderationQueue(moderatorToken))?.[0]).toMatchObject({
     id,
@@ -1838,7 +1853,22 @@ it("binds a private workflow improvement to its current version and redacts it o
   );
   expect(await proposals.moderationQueue(moderatorToken)).toEqual([]);
   expect(await proposals.submit(owner.token, id!, true, 1)).toBe("submitted");
-  expect(await proposals.submit(owner.token, id!, true, 1)).toBe("denied");
+  const beforeReplay = (
+    await pool.query("SELECT * FROM member_proposals WHERE id=$1", [id])
+  ).rows[0];
+  expect(beforeReplay).toMatchObject({
+    revision: 1,
+    rights_attested_revision: 1,
+    rights_attested_at: expect.any(Date),
+    submitted_at: expect.any(Date),
+  });
+  expect(await proposals.submit(owner.token, id!, true, 1)).toBe("replayed");
+  expect(await proposals.submit(owner.token, id!, false, 1)).toBe("denied");
+  expect(await proposals.submit(owner.token, id!, true, 2)).toBe("conflict");
+  expect(
+    (await pool.query("SELECT * FROM member_proposals WHERE id=$1", [id]))
+      .rows[0],
+  ).toEqual(beforeReplay);
   expect(await proposals.moderationQueue(moderatorToken)).toMatchObject([
     { id, workflowId: "WF-001", workflowVersion: 1, state: "submitted" },
   ]);
