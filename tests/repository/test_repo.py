@@ -778,5 +778,209 @@ class RepositoryFixture(unittest.TestCase):
         self.assertIn("console-restored", result)
 
 
+class PagesRevisionSelection(unittest.TestCase):
+    """Execute the real pre-checkout selector; fake only the gh API transport."""
+
+    SHA = "a" * 40
+    OTHER_SHA = "b" * 40
+    REPO = "deepnative/deep-native-engine"
+    PREFIX = f"repos/{REPO}"
+    WORKFLOW = ".github/workflows/repository-checks.yml"
+    MAIN = f"{PREFIX}/commits/main"
+    WORKFLOW_API = f"{PREFIX}/actions/workflows/repository-checks.yml"
+    EXACT = f"{PREFIX}/actions/runs/600"
+    LIST = f"{WORKFLOW_API}/runs?branch=main&event=push&status=success&head_sha={SHA}&per_page=100"
+
+    def fixtures(self):
+        identity = {"id": 7, "full_name": self.REPO}
+        run = {"id": 600, "workflow_id": 42, "path": self.WORKFLOW,
+               "event": "push", "head_branch": "main", "head_sha": self.SHA,
+               "run_attempt": 1, "status": "completed", "conclusion": "success",
+               "repository": identity, "head_repository": dict(identity)}
+        return {self.MAIN: {"sha": self.SHA},
+                self.WORKFLOW_API: {"id": 42, "path": self.WORKFLOW, "state": "active"},
+                self.EXACT: run, self.LIST: {"total_count": 0, "workflow_runs": []}}
+
+    def execute(self, fixtures=None, **overrides):
+        import textwrap
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workflow = (SOURCE / ".github/workflows/product-pages.yml").read_text()
+            step = workflow.split("      - name: Select the verified current main revision\n", 1)[1]
+            body = step.split("        run: |\n", 1)[1].split("      - name: Check out the verified revision\n", 1)[0]
+            (root / "selector.sh").write_text(textwrap.dedent(body))
+            (root / "fixtures.json").write_text(json.dumps(fixtures or self.fixtures()))
+            # No network or real token: endpoint-specific responses, with jq support
+            # only for the original selector's fail-first reproduction.
+            fake = root / "gh"
+            fake.write_text("#!" + sys.executable + "\n" + textwrap.dedent('''\
+                import json, os, sys
+                from pathlib import Path
+                root = Path(os.environ["DNE_FAKE_ROOT"])
+                args = sys.argv[1:]
+                endpoint = next((v for v in args if v.startswith("repos/")), "unknown")
+                with (root / "calls.jsonl").open("a") as out:
+                    out.write(json.dumps(args) + "\\n")
+                fixtures = json.loads((root / "fixtures.json").read_text())
+                state_path = root / "counts.json"
+                counts = json.loads(state_path.read_text()) if state_path.exists() else {}
+                index = counts.get(endpoint, 0)
+                counts[endpoint] = index + 1
+                state_path.write_text(json.dumps(counts))
+                if endpoint not in fixtures:
+                    print("unexpected fake endpoint", file=sys.stderr)
+                    sys.exit(9)
+                value = fixtures[endpoint]
+                if isinstance(value, list):
+                    value = value[min(index, len(value) - 1)]
+                if isinstance(value, dict) and "__error__" in value:
+                    print(value["__error__"], file=sys.stderr)
+                    sys.exit(1)
+                if "--jq" in args:
+                    query = args[args.index("--jq") + 1]
+                    if query == ".sha":
+                        print(value["sha"])
+                    else:
+                        print(len([r for r in value["workflow_runs"]
+                                   if r.get("head_sha") == "a" * 40 and r.get("conclusion") == "success"]))
+                else:
+                    print(value if isinstance(value, str) else json.dumps(value))
+            '''))
+            fake.chmod(0o755)
+            env = dict(os.environ)
+            for key in ("GH_TOKEN", "GH_AUTH_TOKEN", "GITHUB_TOKEN"):
+                env.pop(key, None)
+            env.update(PATH=str(root) + os.pathsep + env["PATH"], DNE_FAKE_ROOT=str(root),
+                       GH_TOKEN="synthetic-no-real-credential", GITHUB_OUTPUT=str(root / "output"),
+                       DNE_REPOSITORY=self.REPO, DNE_REPOSITORY_ID="7", DNE_EVENT_SHA=self.SHA,
+                       DNE_EVENT_NAME="workflow_run", DNE_EVENT_RUN_ID="600", DNE_EVENT_ATTEMPT="1")
+            env.update(overrides)
+            result = subprocess.run(["bash", str(root / "selector.sh")], env=env,
+                                    text=True, capture_output=True, timeout=15)
+            output = (root / "output").read_text() if (root / "output").exists() else ""
+            calls = [json.loads(line) for line in (root / "calls.jsonl").read_text().splitlines()] if (root / "calls.jsonl").exists() else []
+            return result, output, calls
+
+    def assert_denied(self, fixtures=None, **env):
+        result, output, calls = self.execute(fixtures, **env)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(output, "")
+        self.assertNotIn("synthetic-private-api-response", result.stdout + result.stderr)
+        self.assertNotIn("synthetic-no-real-credential", result.stdout + result.stderr)
+        return calls
+
+    def test_successful_exact_event_does_not_need_refreshed_run_list(self):
+        result, output, calls = self.execute()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(output, f"sha={self.SHA}\neligible=true\n")
+        self.assertTrue(any(self.EXACT in call for call in calls))
+        self.assertFalse(any(self.LIST in call for call in calls))
+
+    def test_stale_event_skips_without_reading_verification(self):
+        result, output, calls = self.execute(DNE_EVENT_SHA=self.OTHER_SHA)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(output, "eligible=false\n")
+        self.assertEqual(len(calls), 1)
+
+    def test_changed_main_during_verification_skips_without_emitting_sha(self):
+        data = self.fixtures()
+        data[self.MAIN] = [{"sha": self.SHA}, {"sha": self.OTHER_SHA}]
+        result, output, _ = self.execute(data)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(output, "eligible=false\n")
+
+    def test_event_run_identity_and_result_must_all_match(self):
+        import copy
+        for field, value in [("id", 601), ("id", True), ("workflow_id", 43),
+                             ("path", ".github/workflows/other.yml"), ("path", self.WORKFLOW + "@other"),
+                             ("event", "pull_request"), ("head_branch", "feature"),
+                             ("head_sha", self.OTHER_SHA), ("run_attempt", 2), ("run_attempt", True),
+                             ("status", "in_progress"), ("conclusion", "failure"),
+                             ("conclusion", "cancelled"), ("conclusion", "skipped"),
+                             ("conclusion", "neutral"), ("conclusion", None),
+                             ("repository", {"id": 8, "full_name": self.REPO}),
+                             ("repository", {"id": 7, "full_name": "other/repo"}),
+                             ("head_repository", {"id": 8, "full_name": "other/repo"}),
+                             ("head_repository", None)]:
+            with self.subTest(field=field, value=value):
+                data = copy.deepcopy(self.fixtures());data[self.EXACT][field] = value
+                self.assert_denied(data)
+        for field in self.fixtures()[self.EXACT]:
+            with self.subTest(missing=field):
+                data = self.fixtures();del data[self.EXACT][field]
+                self.assert_denied(data)
+
+    def test_documented_run_path_main_ref_and_later_matching_attempt(self):
+        data = self.fixtures();data[self.EXACT]["path"] += "@main"
+        data[self.EXACT]["run_attempt"] = 2
+        result, output, _ = self.execute(data, DNE_EVENT_ATTEMPT="2")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(output, f"sha={self.SHA}\neligible=true\n")
+
+    def test_workflow_identity_must_resolve_to_active_expected_path(self):
+        for value in [{"id": True, "path": self.WORKFLOW, "state": "active"},
+                      {"id": 42, "path": ".github/workflows/other.yml", "state": "active"},
+                      {"id": 42, "path": self.WORKFLOW, "state": "disabled_manually"}, {}, None]:
+            with self.subTest(value=value):
+                data = self.fixtures();data[self.WORKFLOW_API] = value
+                self.assert_denied(data)
+
+    def test_api_uncertainty_and_malformed_responses_fail_closed_privately(self):
+        for endpoint in [self.MAIN, self.WORKFLOW_API, self.EXACT]:
+            for value in [{"__error__": "synthetic-private-api-response"},
+                          "synthetic-private-api-response", "null", "[]", {}]:
+                with self.subTest(endpoint=endpoint, value=value):
+                    data = self.fixtures();data[endpoint] = value
+                    self.assert_denied(data)
+        data = self.fixtures();data[self.MAIN] = [{"sha": self.SHA}, {"__error__": "synthetic-private-api-response"}]
+        self.assert_denied(data)
+
+    def test_invalid_event_metadata_never_selects_a_revision(self):
+        for field, value in [("DNE_EVENT_NAME", "pull_request"), ("DNE_EVENT_RUN_ID", ""),
+                             ("DNE_EVENT_RUN_ID", "600/attempts/1"), ("DNE_EVENT_ATTEMPT", "0"),
+                             ("DNE_EVENT_ATTEMPT", ""), ("DNE_REPOSITORY_ID", ""),
+                             ("DNE_REPOSITORY_ID", "-1"), ("DNE_REPOSITORY", "../other/repo"),
+                             ("DNE_EVENT_SHA", "bad\neligible=true"), ("DNE_EVENT_SHA", "")]:
+            with self.subTest(field=field, value=value):
+                self.assert_denied(**{field: value})
+
+    def test_manual_dispatch_independently_checks_exact_successful_current_run(self):
+        data = self.fixtures();data[self.LIST] = {"total_count": 1, "workflow_runs": [dict(data[self.EXACT])]}
+        result, output, calls = self.execute(data, DNE_EVENT_NAME="workflow_dispatch", DNE_EVENT_RUN_ID="", DNE_EVENT_ATTEMPT="")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(output, f"sha={self.SHA}\neligible=true\n")
+        self.assertTrue(any(self.LIST in call for call in calls))
+        self.assertTrue(any(self.EXACT in call for call in calls))
+        data[self.EXACT]["conclusion"] = "failure"
+        self.assert_denied(data, DNE_EVENT_NAME="workflow_dispatch")
+
+    def test_manual_dispatch_exact_lookup_cannot_trust_only_the_list(self):
+        for field, value in [("id", 601), ("run_attempt", 2), ("workflow_id", 43),
+                             ("head_repository", None), ("status", "in_progress")]:
+            with self.subTest(field=field):
+                data = self.fixtures()
+                data[self.LIST] = {"workflow_runs": [dict(data[self.EXACT])]}
+                data[self.EXACT] = dict(data[self.EXACT], **{field: value})
+                self.assert_denied(data, DNE_EVENT_NAME="workflow_dispatch")
+
+    def test_manual_dispatch_missing_or_wrong_list_evidence_cannot_publish(self):
+        for value in [{"total_count": 0, "workflow_runs": []}, {}, None,
+                      {"workflow_runs": "wrong"}, {"workflow_runs": [{"id": 600}]},
+                      {"workflow_runs": [{"id": 600, "head_sha": self.SHA, "conclusion": "success"}]},
+                      {"__error__": "synthetic-private-api-response"}]:
+            with self.subTest(value=value):
+                data = self.fixtures();data[self.LIST] = value
+                self.assert_denied(data, DNE_EVENT_NAME="workflow_dispatch")
+
+    def test_manual_dispatch_stale_list_and_changed_main_cannot_publish(self):
+        data = self.fixtures();data[self.LIST] = {"workflow_runs": [dict(data[self.EXACT], head_sha=self.OTHER_SHA)]}
+        self.assert_denied(data, DNE_EVENT_NAME="workflow_dispatch")
+        data = self.fixtures();data[self.LIST] = {"workflow_runs": [data[self.EXACT]]}
+        data[self.MAIN] = [{"sha": self.SHA}, {"sha": self.OTHER_SHA}]
+        result, output, _ = self.execute(data, DNE_EVENT_NAME="workflow_dispatch")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(output, "eligible=false\n")
+
+
 if __name__ == "__main__":
     unittest.main()
