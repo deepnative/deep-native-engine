@@ -1,0 +1,1018 @@
+import {
+  createHmac,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
+import type { Pool, PoolClient } from "pg";
+import { hash } from "./store.ts";
+
+export interface SupportPage<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+export type SupportRead<T> =
+  { kind: "ready"; value: T } | { kind: "denied" | "unavailable" };
+export interface SupportReceipt {
+  requestId: string;
+  receivedAt: Date;
+  acknowledgedAt: Date | null;
+  resolvedAt: Date | null;
+  withdrawnAt: Date | null;
+  coverageState: "unverified";
+}
+export interface SupportRequestSummary extends SupportReceipt {
+  subject: string | null;
+}
+export interface SupportMemberReply {
+  id: string;
+  body: string;
+  createdAt: Date;
+  attribution: "Synthetic operator";
+}
+export interface SupportMemberDetail extends SupportRequestSummary {
+  body: string | null;
+  replies: SupportPage<SupportMemberReply>;
+}
+export interface SupportOperatorSummary extends SupportRequestSummary {
+  grantId: string;
+}
+export interface SupportOperatorMessage extends SupportMemberReply {
+  kind: "reply" | "internal-note";
+}
+export interface SupportOperatorDetail extends SupportOperatorSummary {
+  body: string;
+  messages: SupportPage<SupportOperatorMessage>;
+}
+export interface SupportMutationReceipt {
+  requestId: string;
+  eventId: string;
+  occurredAt: Date;
+  messageId: string | null;
+}
+export type SupportTransition =
+  | { kind: "applied" | "replayed"; receipt: SupportMutationReceipt }
+  | { kind: "denied" | "withdrawn" | "conflict" | "unavailable" };
+export type SupportMessageTransition =
+  SupportTransition | { kind: "invalid"; field: "body" };
+export interface SupportOperatorScope {
+  requestId: string;
+  grantId: string;
+}
+export interface SupportGrantInput {
+  idempotencyKey: string;
+  requestId: string;
+  staffId: string;
+  role: "operator" | "platform_admin";
+  startsAt: Date;
+  expiresAt: Date;
+}
+export interface SupportRequestStore {
+  create(
+    token: string,
+    input: { idempotencyKey: string; subject: string; body: string },
+  ): Promise<
+    | { kind: "created" | "replayed"; receipt: SupportReceipt }
+    | { kind: "invalid"; field: "subject" | "body" | "idempotencyKey" }
+    | { kind: "denied" | "withdrawn" | "conflict" | "unavailable" }
+  >;
+  receipt(
+    token: string,
+    intakeKey: string,
+  ): Promise<
+    | { kind: "found"; receipt: SupportReceipt }
+    | { kind: "missing" | "denied" | "unavailable" }
+  >;
+  ownerHistory(
+    token: string,
+    after?: string,
+  ): Promise<SupportRead<SupportPage<SupportRequestSummary>>>;
+  memberDetail(
+    token: string,
+    requestId: string,
+    after?: string,
+  ): Promise<SupportRead<SupportMemberDetail>>;
+  operatorWorklist(
+    token: string,
+    after?: string,
+  ): Promise<SupportRead<SupportPage<SupportOperatorSummary>>>;
+  operatorDetail(
+    token: string,
+    scope: SupportOperatorScope,
+    after?: string,
+  ): Promise<SupportRead<SupportOperatorDetail> | { kind: "withdrawn" }>;
+  acknowledge(
+    token: string,
+    scope: SupportOperatorScope,
+    key: string,
+  ): Promise<SupportTransition>;
+  reply(
+    token: string,
+    scope: SupportOperatorScope,
+    key: string,
+    body: string,
+  ): Promise<SupportMessageTransition>;
+  note(
+    token: string,
+    scope: SupportOperatorScope,
+    key: string,
+    body: string,
+  ): Promise<SupportMessageTransition>;
+  resolve(
+    token: string,
+    scope: SupportOperatorScope,
+    key: string,
+  ): Promise<SupportTransition>;
+  withdraw(
+    token: string,
+    requestId: string,
+  ): Promise<{
+    kind: "withdrawn" | "already-withdrawn" | "denied" | "unavailable";
+  }>;
+  grant(
+    token: string,
+    input: SupportGrantInput,
+  ): Promise<
+    | { kind: "created" | "replayed"; grantId: string }
+    | { kind: "denied" | "withdrawn" | "conflict" | "unavailable" }
+  >;
+  revoke(
+    token: string,
+    grantId: string,
+  ): Promise<{
+    kind: "revoked" | "already-revoked" | "denied" | "unavailable";
+  }>;
+}
+export function disabledSupportRequestStore(): SupportRequestStore {
+  const denied = async () => ({ kind: "denied" as const });
+  return {
+    create: denied,
+    receipt: denied,
+    ownerHistory: denied,
+    memberDetail: denied,
+    operatorWorklist: denied,
+    operatorDetail: denied,
+    acknowledge: denied,
+    reply: denied,
+    note: denied,
+    resolve: denied,
+    withdraw: denied,
+    grant: denied,
+    revoke: denied,
+  };
+}
+export function supportTextValid(value: unknown, max: number): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= max &&
+    value.trim().length > 0 &&
+    !/[\0\uD800-\uDFFF]/u.test(value)
+  );
+}
+const purpose = "support-request-local-v1";
+const uuid =
+  /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
+const receiptColumns = `r.id AS "requestId",r.received_at AS "receivedAt",r.acknowledged_at AS "acknowledgedAt",
+ r.resolved_at AS "resolvedAt",r.withdrawn_at AS "withdrawnAt",r.coverage_state AS "coverageState"`;
+const metadataColumns = `${receiptColumns},r.member_id AS "memberId",r.workspace_id AS "workspaceId"`;
+const at = (column: string) =>
+  `to_char(${column} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "cursorAt"`;
+type Candidate = {
+  requestId: string;
+  memberId: string;
+  workspaceId: string;
+  grantId: string;
+  cursorAt: string;
+};
+type RequestMeta = SupportReceipt & { memberId: string; workspaceId: string };
+type GrantRow = {
+  id: string;
+  requestId: string;
+  staffId: string;
+  role: string;
+  purpose: string;
+  startsAt: Date;
+  expiresAt: Date;
+  revokedAt: Date | null;
+  active: boolean;
+  grantedBy: string;
+  idempotencyKey: string;
+};
+const grantColumns = `id,request_id AS "requestId",staff_id AS "staffId",staff_role AS role,purpose,
+ starts_at AS "startsAt",expires_at AS "expiresAt",revoked_at AS "revokedAt",granted_by AS "grantedBy",idempotency_key AS "idempotencyKey",
+ (revoked_at IS NULL AND starts_at<=clock_timestamp() AND expires_at>clock_timestamp()) AS active`;
+type Context = {
+  client: PoolClient;
+  actor: { id: string; kind: string };
+  tokenHash: string;
+  deadlines: Date[];
+};
+type Cursor = [string, string, "reply" | "internal-note" | "", number];
+class SupportFailure extends Error {
+  readonly kind: "denied" | "unavailable";
+  constructor(kind: "denied" | "unavailable") {
+    super(kind);
+    this.kind = kind;
+  }
+}
+function requireAccess(
+  condition: unknown,
+  kind: "denied" | "unavailable" = "denied",
+): asserts condition {
+  if (!condition) throw new SupportFailure(kind);
+}
+function receipt(row: SupportReceipt): SupportReceipt {
+  return {
+    requestId: row.requestId,
+    receivedAt: row.receivedAt,
+    acknowledgedAt: row.acknowledgedAt,
+    resolvedAt: row.resolvedAt,
+    withdrawnAt: row.withdrawnAt,
+    coverageState: row.coverageState,
+  };
+}
+function validScope(scope: SupportOperatorScope): boolean {
+  return uuid.test(scope.requestId) && uuid.test(scope.grantId);
+}
+export function supportRequestStore(
+  pool: Pool,
+  cursorSecret: Buffer = randomBytes(32),
+): SupportRequestStore {
+  function signature(body: string, token: string, scope: string): string {
+    return createHmac("sha256", cursorSecret)
+      .update(hash(token))
+      .update("\0")
+      .update(scope)
+      .update("\0")
+      .update(body)
+      .digest("base64url");
+  }
+  function cursor(
+    after: string | undefined,
+    token: string,
+    scope: string,
+  ): Cursor | null {
+    if (after === undefined) return null;
+    requireAccess(after.length <= 1024);
+    const parts = /^([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/.exec(after);
+    requireAccess(
+      parts &&
+        timingSafeEqual(
+          Buffer.from(parts[2]!),
+          Buffer.from(signature(parts[1]!, token, scope)),
+        ),
+    );
+    let data: unknown;
+    try {
+      data = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8"));
+    } catch {
+      throw new SupportFailure("denied");
+    }
+    requireAccess(
+      Array.isArray(data) &&
+        data.length === 4 &&
+        typeof data[0] === "string" &&
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(data[0]) &&
+        Number.isFinite(Date.parse(data[0])) &&
+        new Date(data[0]).toISOString() === data[0].slice(0, 23) + "Z" &&
+        typeof data[1] === "string" &&
+        uuid.test(data[1]) &&
+        ["", "reply", "internal-note"].includes(data[2]) &&
+        Number.isSafeInteger(data[3]) &&
+        data[3] > Date.now(),
+    );
+    return data as Cursor;
+  }
+  function page<T extends { cursorAt: string }>(
+    rows: T[],
+    token: string,
+    scope: string,
+    previous: Cursor | null,
+    key: (row: T) => [string, "reply" | "internal-note" | ""],
+  ): { rows: T[]; nextCursor: string | null } {
+    const emitted = rows.slice(0, 20);
+    if (rows.length <= 20) return { rows: emitted, nextCursor: null };
+    const last = emitted[19]!,
+      [id, kind] = key(last);
+    const body = Buffer.from(
+      JSON.stringify([
+        last.cursorAt,
+        id,
+        kind,
+        previous?.[3] ?? Date.now() + 900000,
+      ]),
+    ).toString("base64url");
+    return {
+      rows: emitted,
+      nextCursor: `${body}.${signature(body, token, scope)}`,
+    };
+  }
+  async function run<T>(
+    token: string,
+    use: (ctx: Context) => Promise<T>,
+  ): Promise<T | { kind: "denied" | "unavailable" }> {
+    if (typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token))
+      return { kind: "denied" };
+    let client: PoolClient | undefined, releaseError: Error | undefined;
+    try {
+      client = await pool.connect();
+      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+      await client.query("SET LOCAL lock_timeout='5s'");
+      await client.query("SET LOCAL statement_timeout='5s'");
+      const tokenHash = hash(token);
+      // Discovery contains identifiers only. Authorization follows canonical locks.
+      const actor = (
+        await client.query<{ id: string; kind: string }>(
+          "SELECT id,kind FROM principals WHERE token_hash=$1",
+          [tokenHash],
+        )
+      ).rows[0];
+      requireAccess(actor);
+      const ctx = { client, actor, tokenHash, deadlines: [] as Date[] };
+      const result = await use(ctx);
+      const current = (
+        await client.query<{ valid: boolean }>(
+          "SELECT bool_and(deadline>clock_timestamp()) AS valid FROM unnest($1::timestamptz[]) AS times(deadline)",
+          [ctx.deadlines],
+        )
+      ).rows[0];
+      requireAccess(current?.valid);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      if (client) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          releaseError = new Error("Support rollback failed");
+        }
+      }
+      return {
+        kind: error instanceof SupportFailure ? error.kind : "unavailable",
+      };
+    } finally {
+      client?.release(releaseError);
+    }
+  }
+  async function principals(
+    ctx: Context,
+    owners: string[],
+    staff: string[] = [],
+    write = false,
+  ): Promise<Map<string, { expiresAt: Date; active: boolean }>> {
+    const ids = Array.from(new Set([ctx.actor.id, ...owners, ...staff])).sort();
+    const rows = (
+      await ctx.client.query<{
+        id: string;
+        kind: string;
+        tokenHash: string;
+        expiresAt: Date;
+        active: boolean;
+      }>(
+        `SELECT id,kind,token_hash AS "tokenHash",expires_at AS "expiresAt",
+       (revoked_at IS NULL AND expires_at>clock_timestamp()) AS active
+       FROM principals WHERE id=ANY($1::uuid[]) ORDER BY id FOR ${write ? "UPDATE" : "SHARE"}`,
+        [ids],
+      )
+    ).rows;
+    const found = new Map(rows.map((row) => [row.id, row]));
+    const actor = found.get(ctx.actor.id);
+    requireAccess(
+      rows.length === ids.length &&
+        actor?.active &&
+        actor.tokenHash === ctx.tokenHash &&
+        actor.kind === ctx.actor.kind &&
+        owners.every((id) => found.get(id)!.kind === "member") &&
+        staff.every((id) => found.get(id)!.kind === "staff"),
+    );
+    ctx.deadlines.push(actor.expiresAt);
+    return found;
+  }
+  async function profiles(
+    ctx: Context,
+    ids: string[],
+  ): Promise<Map<string, string>> {
+    const rows = (
+      await ctx.client.query<{ id: string; role: string }>(
+        "SELECT principal_id AS id,role FROM staff_profiles WHERE principal_id=ANY($1::uuid[]) ORDER BY principal_id FOR SHARE",
+        [Array.from(new Set(ids)).sort()],
+      )
+    ).rows;
+    return new Map(rows.map((row) => [row.id, row.role]));
+  }
+  async function workspaces(
+    ctx: Context,
+    candidates: { workspaceId: string; memberId: string }[],
+    write: boolean,
+  ): Promise<void> {
+    const ids = Array.from(
+      new Set(candidates.map((c) => c.workspaceId)),
+    ).sort();
+    const rows = (
+      await ctx.client.query<{
+        id: string;
+        memberId: string;
+        deletingAt: Date | null;
+      }>(
+        `SELECT id,owner_principal_id AS "memberId",deleting_at AS "deletingAt" FROM workspaces
+       WHERE id=ANY($1::uuid[]) ORDER BY id FOR ${write ? "UPDATE" : "SHARE"}`,
+        [ids],
+      )
+    ).rows;
+    requireAccess(
+      candidates.every((c) =>
+        rows.some(
+          (r) =>
+            r.id === c.workspaceId &&
+            r.memberId === c.memberId &&
+            !r.deletingAt,
+        ),
+      ),
+    );
+  }
+  async function owner(ctx: Context, write: boolean): Promise<void> {
+    requireAccess(ctx.actor.kind === "member");
+    await principals(ctx, [ctx.actor.id]);
+    await workspaces(
+      ctx,
+      [{ workspaceId: ctx.actor.id, memberId: ctx.actor.id }],
+      write,
+    );
+  }
+  async function requests(
+    ctx: Context,
+    ids: string[],
+    write: boolean,
+    memberId: string | null = null,
+  ): Promise<RequestMeta[]> {
+    return (
+      await ctx.client.query<RequestMeta>(
+        `SELECT ${metadataColumns} FROM support_requests r WHERE r.id=ANY($1::uuid[]) AND ($2::uuid IS NULL OR r.member_id=$2) ORDER BY r.id FOR ${write ? "UPDATE" : "SHARE"} OF r`,
+        [ids.slice().sort(), memberId],
+      )
+    ).rows;
+  }
+  async function ownRequest(
+    ctx: Context,
+    id: string,
+    write: boolean,
+  ): Promise<RequestMeta> {
+    await owner(ctx, write);
+    const rows = await requests(ctx, [id], write, ctx.actor.id);
+    const row = rows[0];
+    requireAccess(
+      row && row.memberId === ctx.actor.id && row.workspaceId === ctx.actor.id,
+    );
+    return row;
+  }
+  async function grantRows(
+    ctx: Context,
+    ids: string[],
+    write = false,
+  ): Promise<GrantRow[]> {
+    return (
+      await ctx.client.query<GrantRow>(
+        `SELECT ${grantColumns} FROM support_request_grants WHERE id=ANY($1::uuid[]) ORDER BY id FOR ${write ? "UPDATE" : "SHARE"}`,
+        [ids.slice().sort()],
+      )
+    ).rows;
+  }
+  async function discover(
+    ctx: Context,
+    scope: SupportOperatorScope,
+  ): Promise<Candidate> {
+    requireAccess(ctx.actor.kind === "staff");
+    const row = (
+      await ctx.client.query<Candidate>(
+        `SELECT r.id AS "requestId",r.member_id AS "memberId",r.workspace_id AS "workspaceId",g.id AS "grantId"
+       FROM support_requests r JOIN support_request_grants g ON g.request_id=r.id
+       WHERE r.id=$1 AND g.id=$2 AND g.staff_id=$3`,
+        [scope.requestId, scope.grantId, ctx.actor.id],
+      )
+    ).rows[0];
+    requireAccess(row);
+    return row;
+  }
+  async function staffScope(
+    ctx: Context,
+    candidates: Candidate[],
+    write: boolean,
+    list = false,
+  ): Promise<RequestMeta[]> {
+    requireAccess(ctx.actor.kind === "staff");
+    await principals(
+      ctx,
+      candidates.map((c) => c.memberId),
+      [ctx.actor.id],
+    );
+    const roles = await profiles(ctx, [ctx.actor.id]),
+      role = roles.get(ctx.actor.id);
+    requireAccess(role === "operator" || role === "platform_admin");
+    const grants = await grantRows(
+      ctx,
+      candidates.map((c) => c.grantId),
+    );
+    requireAccess(
+      candidates.every((c) =>
+        grants.some(
+          (g) =>
+            g.id === c.grantId &&
+            g.requestId === c.requestId &&
+            g.staffId === ctx.actor.id &&
+            g.role === role &&
+            g.purpose === purpose &&
+            g.active,
+        ),
+      ),
+      list ? "unavailable" : "denied",
+    );
+    ctx.deadlines.push(...grants.map((g) => g.expiresAt));
+    await workspaces(ctx, candidates, write);
+    const rows = await requests(
+      ctx,
+      candidates.map((c) => c.requestId),
+      write,
+    );
+    requireAccess(
+      candidates.every((c) =>
+        rows.some(
+          (r) =>
+            r.requestId === c.requestId &&
+            r.memberId === c.memberId &&
+            r.workspaceId === c.workspaceId &&
+            (!list || !r.withdrawnAt),
+        ),
+      ),
+      list ? "unavailable" : "denied",
+    );
+    return rows;
+  }
+  async function content(
+    ctx: Context,
+    id: string,
+  ): Promise<SupportRequestSummary & { body: string | null }> {
+    return (
+      await ctx.client.query<SupportRequestSummary & { body: string | null }>(
+        `SELECT ${receiptColumns},r.subject,r.body FROM support_requests r WHERE r.id=$1`,
+        [id],
+      )
+    ).rows[0]!;
+  }
+  async function event(
+    ctx: Context,
+    requestId: string,
+    action: string,
+    grantId: string | null = null,
+    messageId: string | null = null,
+  ): Promise<SupportMutationReceipt> {
+    return (
+      await ctx.client.query<SupportMutationReceipt>(
+        `INSERT INTO support_request_events(id,request_id,actor_id,grant_id,action,message_id)
+       VALUES($1,$2,$3,$4,$5,$6) RETURNING request_id AS "requestId",id AS "eventId",occurred_at AS "occurredAt",message_id AS "messageId"`,
+        [randomUUID(), requestId, ctx.actor.id, grantId, action, messageId],
+      )
+    ).rows[0]!;
+  }
+  async function messages(
+    ctx: Context,
+    id: string,
+    staff: boolean,
+    token: string,
+    scope: string,
+    after: Cursor | null,
+  ): Promise<SupportPage<SupportOperatorMessage>> {
+    // Parent locks make immutable children stable; members query replies only.
+    const rows = (
+      await ctx.client.query<SupportOperatorMessage & { cursorAt: string }>(
+        `SELECT id,body,created_at AS "createdAt",kind,'Synthetic operator'::text AS attribution,${at("created_at")}
+       FROM (SELECT id,body,created_at,'reply'::text AS kind FROM support_request_replies WHERE request_id=$1
+       ${staff ? "UNION ALL SELECT id,body,created_at,'internal-note'::text AS kind FROM support_request_notes WHERE request_id=$1" : ""}) messages
+       WHERE ($2::timestamptz IS NULL OR (created_at,id,kind)<($2::timestamptz,$3::uuid,$4::text))
+       ORDER BY created_at DESC,id DESC,kind DESC LIMIT 21`,
+        [id, after?.[0] ?? null, after?.[1] ?? null, after?.[2] ?? ""],
+      )
+    ).rows;
+    const selected = page(rows, token, scope, after, (r) => [r.id, r.kind]);
+    return {
+      items: selected.rows.map(({ cursorAt: _at, ...row }) => row),
+      nextCursor: selected.nextCursor,
+    };
+  }
+  async function transition(
+    token: string,
+    scope: SupportOperatorScope,
+    key: string,
+    action: "acknowledged" | "replied" | "noted" | "resolved",
+    body?: string,
+  ): Promise<SupportTransition> {
+    if (!validScope(scope) || !uuid.test(key)) return { kind: "denied" };
+    return run<SupportTransition>(token, async (ctx) => {
+      const candidate = await discover(ctx, scope);
+      const row = (await staffScope(ctx, [candidate], true))[0]!;
+      if (row.withdrawnAt) return { kind: "withdrawn" };
+      const existing = (
+        await ctx.client.query<SupportMutationReceipt>(
+          `SELECT request_id AS "requestId",event_id AS "eventId",message_id AS "messageId",occurred_at AS "occurredAt"
+         FROM support_request_mutations WHERE request_id=$1 AND actor_id=$2 AND action=$3 AND idempotency_key=$4`,
+          [scope.requestId, ctx.actor.id, action, key],
+        )
+      ).rows[0];
+      if (row.resolvedAt)
+        return action === "resolved" && existing
+          ? { kind: "replayed", receipt: existing }
+          : { kind: "conflict" };
+      if (existing) {
+        if (body !== undefined) {
+          const saved = (
+            await ctx.client.query<{ body: string }>(
+              `SELECT body FROM ${action === "noted" ? "support_request_notes" : "support_request_replies"} WHERE id=$1 AND request_id=$2`,
+              [existing.messageId, scope.requestId],
+            )
+          ).rows[0];
+          if (saved?.body !== body) return { kind: "conflict" };
+        }
+        return { kind: "replayed", receipt: existing };
+      }
+      if (action === "acknowledged" && row.acknowledgedAt)
+        return { kind: "conflict" };
+      let messageId: string | null = null;
+      if (action === "replied" || action === "noted") {
+        messageId = randomUUID();
+        await ctx.client.query(
+          `INSERT INTO ${action === "noted" ? "support_request_notes" : "support_request_replies"}(id,request_id,actor_id,body) VALUES($1,$2,$3,$4)`,
+          [messageId, scope.requestId, ctx.actor.id, body],
+        );
+      } else {
+        const prefix = action === "acknowledged" ? "acknowledged" : "resolved";
+        await ctx.client.query(
+          `UPDATE support_requests SET ${prefix}_by=$2,${prefix}_at=clock_timestamp() WHERE id=$1`,
+          [scope.requestId, ctx.actor.id],
+        );
+      }
+      const receipt = await event(
+        ctx,
+        scope.requestId,
+        action,
+        scope.grantId,
+        messageId,
+      );
+      await ctx.client.query(
+        `INSERT INTO support_request_mutations(request_id,actor_id,action,idempotency_key,event_id,message_id,occurred_at) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          scope.requestId,
+          ctx.actor.id,
+          action,
+          key,
+          receipt.eventId,
+          receipt.messageId,
+          receipt.occurredAt,
+        ],
+      );
+      return { kind: "applied", receipt };
+    });
+  }
+  return {
+    async create(token, input) {
+      for (const field of ["idempotencyKey", "subject", "body"] as const) {
+        if (
+          field === "idempotencyKey"
+            ? !uuid.test(input[field])
+            : !supportTextValid(input[field], field === "subject" ? 120 : 2000)
+        )
+          return { kind: "invalid", field };
+      }
+      return run(token, async (ctx) => {
+        await owner(ctx, true);
+        const existing = (
+          await ctx.client.query<
+            SupportRequestSummary & { body: string | null }
+          >(
+            `SELECT ${receiptColumns},r.subject,r.body FROM support_requests r WHERE r.member_id=$1 AND r.intake_key=$2 FOR UPDATE OF r`,
+            [ctx.actor.id, input.idempotencyKey],
+          )
+        ).rows[0];
+        if (existing?.withdrawnAt) return { kind: "withdrawn" as const };
+        if (existing?.resolvedAt) return { kind: "conflict" as const };
+        if (existing)
+          return existing.subject === input.subject &&
+            existing.body === input.body
+            ? { kind: "replayed" as const, receipt: receipt(existing) }
+            : { kind: "conflict" as const };
+        const id = randomUUID();
+        const saved = (
+          await ctx.client.query<SupportReceipt>(
+            `INSERT INTO support_requests(id,member_id,workspace_id,intake_key,subject,body) VALUES($1,$2,$2,$3,$4,$5)
+           RETURNING id AS "requestId",received_at AS "receivedAt",acknowledged_at AS "acknowledgedAt",resolved_at AS "resolvedAt",withdrawn_at AS "withdrawnAt",coverage_state AS "coverageState"`,
+            [id, ctx.actor.id, input.idempotencyKey, input.subject, input.body],
+          )
+        ).rows[0]!;
+        await event(ctx, id, "received");
+        return { kind: "created" as const, receipt: saved };
+      });
+    },
+    async receipt(token, key) {
+      if (!uuid.test(key)) return { kind: "denied" };
+      return run(token, async (ctx) => {
+        await owner(ctx, false);
+        const row = (
+          await ctx.client.query<SupportReceipt>(
+            `SELECT ${receiptColumns} FROM support_requests r WHERE r.member_id=$1 AND r.intake_key=$2 FOR SHARE OF r`,
+            [ctx.actor.id, key],
+          )
+        ).rows[0];
+        return row
+          ? { kind: "found" as const, receipt: receipt(row) }
+          : { kind: "missing" as const };
+      });
+    },
+    async ownerHistory(token, after) {
+      return run(token, async (ctx) => {
+        const scope = "owner-history",
+          previous = cursor(after, token, scope);
+        await owner(ctx, false);
+        const rows = (
+          await ctx.client.query<SupportRequestSummary & { cursorAt: string }>(
+            `SELECT ${receiptColumns},r.subject,${at("r.received_at")} FROM support_requests r
+           WHERE r.member_id=$1 AND ($2::timestamptz IS NULL OR (r.received_at,r.id)<($2::timestamptz,$3::uuid))
+           ORDER BY r.received_at DESC,r.id DESC LIMIT 21 FOR SHARE OF r`,
+            [ctx.actor.id, previous?.[0] ?? null, previous?.[1] ?? null],
+          )
+        ).rows;
+        const selected = page(rows, token, scope, previous, (r) => [
+          r.requestId,
+          "",
+        ]);
+        if (previous) requireAccess(previous[3] > Date.now());
+        return {
+          kind: "ready" as const,
+          value: {
+            items: selected.rows.map(({ cursorAt: _at, ...row }) => row),
+            nextCursor: selected.nextCursor,
+          },
+        };
+      });
+    },
+    async memberDetail(token, id, after) {
+      if (!uuid.test(id)) return { kind: "denied" };
+      return run(token, async (ctx) => {
+        const scope = `member:${id}`,
+          previous = cursor(after, token, scope);
+        const row = await ownRequest(ctx, id, false);
+        const detail = await content(ctx, id);
+        const replies = row.withdrawnAt
+          ? { items: [], nextCursor: null }
+          : await messages(ctx, id, false, token, scope, previous);
+        if (previous) requireAccess(previous[3] > Date.now());
+        return {
+          kind: "ready" as const,
+          value: {
+            ...detail,
+            replies: {
+              ...replies,
+              items: replies.items.map(({ kind: _kind, ...reply }) => reply),
+            },
+          },
+        };
+      });
+    },
+    async operatorWorklist(token, after) {
+      return run(token, async (ctx) => {
+        const scope = "operator-worklist",
+          previous = cursor(after, token, scope);
+        requireAccess(ctx.actor.kind === "staff");
+        const candidates = (
+          await ctx.client.query<Candidate>(
+            `SELECT r.id AS "requestId",r.member_id AS "memberId",r.workspace_id AS "workspaceId",selected.id AS "grantId",${at("r.received_at")}
+           FROM support_requests r JOIN workspaces w ON w.id=r.workspace_id AND w.deleting_at IS NULL
+           JOIN LATERAL (SELECT g.id FROM support_request_grants g JOIN staff_profiles p ON p.principal_id=g.staff_id AND p.role=g.staff_role
+             WHERE g.request_id=r.id AND g.staff_id=$1 AND g.purpose=$4 AND g.revoked_at IS NULL
+             AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp() ORDER BY g.id LIMIT 1) selected ON TRUE
+           WHERE r.withdrawn_at IS NULL AND ($2::timestamptz IS NULL OR (r.received_at,r.id)<($2::timestamptz,$3::uuid))
+           ORDER BY r.received_at DESC,r.id DESC LIMIT 21`,
+            [
+              ctx.actor.id,
+              previous?.[0] ?? null,
+              previous?.[1] ?? null,
+              purpose,
+            ],
+          )
+        ).rows;
+        await staffScope(ctx, candidates, false, true);
+        const selected = page(candidates, token, scope, previous, (r) => [
+          r.requestId,
+          "",
+        ]);
+        const items: SupportOperatorSummary[] = [];
+        for (const candidate of selected.rows) {
+          const row = await content(ctx, candidate.requestId);
+          items.push({
+            ...receipt(row),
+            subject: row.subject,
+            grantId: candidate.grantId,
+          });
+          await event(
+            ctx,
+            candidate.requestId,
+            "worklist-read",
+            candidate.grantId,
+          );
+        }
+        if (previous) requireAccess(previous[3] > Date.now());
+        return {
+          kind: "ready" as const,
+          value: { items, nextCursor: selected.nextCursor },
+        };
+      });
+    },
+    async operatorDetail(token, input, after) {
+      if (!validScope(input)) return { kind: "denied" };
+      return run(token, async (ctx) => {
+        const scope = `operator:${input.requestId}:${input.grantId}`,
+          previous = cursor(after, token, scope);
+        const candidate = await discover(ctx, input);
+        const row = (await staffScope(ctx, [candidate], false))[0]!;
+        if (row.withdrawnAt) return { kind: "withdrawn" as const };
+        const detail = await content(ctx, row.requestId);
+        const result = await messages(
+          ctx,
+          row.requestId,
+          true,
+          token,
+          scope,
+          previous,
+        );
+        await event(ctx, row.requestId, "detail-read", input.grantId);
+        if (previous) requireAccess(previous[3] > Date.now());
+        return {
+          kind: "ready" as const,
+          value: {
+            ...detail,
+            body: detail.body!,
+            grantId: input.grantId,
+            messages: result,
+          },
+        };
+      });
+    },
+    acknowledge: (token, scope, key) =>
+      transition(token, scope, key, "acknowledged"),
+    resolve: (token, scope, key) => transition(token, scope, key, "resolved"),
+    async reply(token, scope, key, body) {
+      return supportTextValid(body, 2000)
+        ? transition(token, scope, key, "replied", body)
+        : { kind: "invalid", field: "body" };
+    },
+    async note(token, scope, key, body) {
+      return supportTextValid(body, 2000)
+        ? transition(token, scope, key, "noted", body)
+        : { kind: "invalid", field: "body" };
+    },
+    async withdraw(token, id) {
+      if (!uuid.test(id)) return { kind: "denied" };
+      return run(token, async (ctx) => {
+        const row = await ownRequest(ctx, id, true);
+        if (row.withdrawnAt) return { kind: "already-withdrawn" as const };
+        await ctx.client.query(
+          "DELETE FROM support_request_notes WHERE request_id=$1",
+          [id],
+        );
+        await ctx.client.query(
+          "DELETE FROM support_request_replies WHERE request_id=$1",
+          [id],
+        );
+        await ctx.client.query(
+          "DELETE FROM support_request_mutations WHERE request_id=$1",
+          [id],
+        );
+        await ctx.client.query(
+          "UPDATE support_requests SET subject=NULL,body=NULL,withdrawn_at=clock_timestamp() WHERE id=$1",
+          [id],
+        );
+        await event(ctx, id, "withdrawn");
+        return { kind: "withdrawn" as const };
+      });
+    },
+    async grant(token, input) {
+      if (
+        ![input.requestId, input.staffId, input.idempotencyKey].every((v) =>
+          uuid.test(v),
+        ) ||
+        !["operator", "platform_admin"].includes(input.role) ||
+        !(input.startsAt instanceof Date) ||
+        !(input.expiresAt instanceof Date) ||
+        !Number.isFinite(input.startsAt.valueOf()) ||
+        !Number.isFinite(input.expiresAt.valueOf()) ||
+        input.expiresAt <= input.startsAt
+      )
+        return { kind: "denied" };
+      return run(token, async (ctx) => {
+        requireAccess(ctx.actor.kind === "staff");
+        const discovered = (
+          await ctx.client.query<{ memberId: string; workspaceId: string }>(
+            'SELECT member_id AS "memberId",workspace_id AS "workspaceId" FROM support_requests WHERE id=$1',
+            [input.requestId],
+          )
+        ).rows[0];
+        requireAccess(discovered);
+        // Lock the administrator exclusively before discovering its absent
+        // idempotency slot, including retries targeting different requests.
+        const people = await principals(
+          ctx,
+          [discovered.memberId],
+          [ctx.actor.id, input.staffId],
+          true,
+        );
+        const roles = await profiles(ctx, [ctx.actor.id, input.staffId]);
+        requireAccess(
+          roles.get(ctx.actor.id) === "platform_admin" &&
+            roles.get(input.staffId) === input.role &&
+            people.get(input.staffId)!.active,
+        );
+        ctx.deadlines.push(
+          people.get(input.staffId)!.expiresAt,
+          input.expiresAt,
+        );
+        const existing = (
+          await ctx.client.query<GrantRow>(
+            `SELECT ${grantColumns} FROM support_request_grants WHERE granted_by=$1 AND idempotency_key=$2 ORDER BY id FOR UPDATE`,
+            [ctx.actor.id, input.idempotencyKey],
+          )
+        ).rows[0];
+        await workspaces(ctx, [discovered], true);
+        const row = (await requests(ctx, [input.requestId], true))[0];
+        requireAccess(
+          row &&
+            row.memberId === discovered.memberId &&
+            row.workspaceId === discovered.workspaceId,
+        );
+        if (row.withdrawnAt) return { kind: "withdrawn" as const };
+        if (existing)
+          return existing.requestId === input.requestId &&
+            existing.staffId === input.staffId &&
+            existing.role === input.role &&
+            existing.startsAt.valueOf() === input.startsAt.valueOf() &&
+            existing.expiresAt.valueOf() === input.expiresAt.valueOf() &&
+            !existing.revokedAt
+            ? { kind: "replayed" as const, grantId: existing.id }
+            : { kind: "conflict" as const };
+        const id = randomUUID();
+        await ctx.client.query(
+          `INSERT INTO support_request_grants(id,request_id,staff_id,staff_role,starts_at,expires_at,granted_by,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            id,
+            input.requestId,
+            input.staffId,
+            input.role,
+            input.startsAt,
+            input.expiresAt,
+            ctx.actor.id,
+            input.idempotencyKey,
+          ],
+        );
+        await event(ctx, input.requestId, "grant-created", id);
+        return { kind: "created" as const, grantId: id };
+      });
+    },
+    async revoke(token, id) {
+      if (!uuid.test(id)) return { kind: "denied" };
+      return run(token, async (ctx) => {
+        requireAccess(ctx.actor.kind === "staff");
+        const discovered = (
+          await ctx.client.query<Candidate & { staffId: string }>(
+            `SELECT g.request_id AS "requestId",g.staff_id AS "staffId",r.member_id AS "memberId",r.workspace_id AS "workspaceId"
+           FROM support_request_grants g JOIN support_requests r ON r.id=g.request_id WHERE g.id=$1`,
+            [id],
+          )
+        ).rows[0];
+        requireAccess(discovered);
+        await principals(
+          ctx,
+          [discovered.memberId],
+          [ctx.actor.id, discovered.staffId],
+        );
+        const roles = await profiles(ctx, [ctx.actor.id, discovered.staffId]);
+        requireAccess(roles.get(ctx.actor.id) === "platform_admin");
+        const grant = (await grantRows(ctx, [id], true))[0];
+        requireAccess(
+          grant &&
+            grant.requestId === discovered.requestId &&
+            grant.staffId === discovered.staffId,
+        );
+        await workspaces(ctx, [discovered], true);
+        const row = (await requests(ctx, [discovered.requestId], true))[0];
+        requireAccess(
+          row &&
+            row.memberId === discovered.memberId &&
+            row.workspaceId === discovered.workspaceId,
+        );
+        if (grant.revokedAt) return { kind: "already-revoked" as const };
+        await ctx.client.query(
+          "UPDATE support_request_grants SET revoked_at=clock_timestamp() WHERE id=$1",
+          [id],
+        );
+        await event(ctx, discovered.requestId, "grant-revoked", id);
+        return { kind: "revoked" as const };
+      });
+    },
+  };
+}

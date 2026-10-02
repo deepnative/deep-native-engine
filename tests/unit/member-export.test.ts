@@ -88,7 +88,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v13",
+      version: "local-member-records-v14",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -211,7 +211,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    [2, 19, ...valid.slice(2)],
+    [2, 21, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -444,5 +444,91 @@ it("exports owned practice pairs after parent locks even when continuation start
     expect(parent).toBeLessThan(child);
     expect(calls[child]!.values![3]).toEqual(["owned-session"]);
     expect(calls.at(-2)?.sql).toBe("COMMIT");
+  }
+});
+
+it("exports member support receipts and visible replies without querying internal notes", async () => {
+  const fake = fakePool({ id: "member-1" }, (sql) =>
+    sql.includes("FROM support_requests WHERE")
+      ? [
+          {
+            id: "request",
+            subject: "Invented subject",
+            body: "Invented request",
+          },
+        ]
+      : sql.startsWith("SELECT r.id FROM support_requests r")
+        ? [{ id: "request" }]
+        : sql.includes("FROM support_request_replies e")
+          ? [
+              {
+                id: "reply",
+                requestId: "request",
+                body: "Visible sample reply",
+              },
+            ]
+          : [],
+  );
+  expect(await memberExportStore(fake.pool).exportOwned("owner")).toMatchObject(
+    {
+      kind: "ready",
+      payload: {
+        version: "local-member-records-v14",
+        records: {
+          supportRequests: [
+            { subject: "Invented subject", body: "Invented request" },
+          ],
+          supportReplies: [{ body: "Visible sample reply" }],
+        },
+      },
+    },
+  );
+  expect(fake.statements.join("\n")).not.toMatch(
+    /support_request_(notes|grants|events|mutations)/,
+  );
+});
+
+it("locks owned support parents before direct reply continuation and withholds text on lock failure", async () => {
+  const continuation = signed([
+    2,
+    20,
+    ["prior", "prior-reply"],
+    2,
+    Date.now() + 60000,
+  ]);
+  for (const failAt of [undefined, "SELECT r.id FROM support_requests r"]) {
+    const fake = fakePool(
+      { id: "member-1" },
+      (sql) =>
+        sql.startsWith("SELECT r.id FROM support_requests r")
+          ? [{ id: "owned-request" }]
+          : sql.includes("FROM support_request_replies e")
+            ? [{ _key: ["z-request", "z-reply"], body: "Visible sample" }]
+            : [],
+      failAt,
+    );
+    const result = await memberExportStore(fake.pool, secret).exportOwned(
+      "owner",
+      continuation,
+    );
+    if (failAt) {
+      expect(result).toEqual({ kind: "unavailable" });
+      expect(fake.statements).not.toContain("COMMIT");
+    } else {
+      expect(result).toMatchObject({
+        kind: "ready",
+        payload: { records: { supportReplies: [{ body: "Visible sample" }] } },
+      });
+      const parent = fake.statements.findIndex((sql) =>
+        sql.startsWith("SELECT r.id FROM support_requests r"),
+      );
+      const child = fake.statements.findIndex(
+        (sql) =>
+          sql.includes('AS "_key"') &&
+          sql.includes("FROM support_request_replies e"),
+      );
+      expect(parent).toBeGreaterThan(-1);
+      expect(parent).toBeLessThan(child);
+    }
   }
 });

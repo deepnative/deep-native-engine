@@ -21,7 +21,8 @@
     "test:e2e:provisional": "playwright test --config playwright.provisional.config.ts",
     "test:e2e:full": "playwright test --config playwright.full.config.ts",
     "verify:app": "node scripts/verify-app.mjs",
-    "verify:full-e2e": "node scripts/verify-full-release.mjs"
+    "verify:full-e2e": "node scripts/verify-full-release.mjs",
+    "support:local-admin": "node --env-file-if-exists=.env src/support-admin-main.ts"
   },
   "dependencies": {
     "cookie-parser": "1.4.7",

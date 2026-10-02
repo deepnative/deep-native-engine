@@ -19,6 +19,7 @@ import { metricsStore } from "./metrics.ts";
 import { attemptStore } from "./attempts.ts";
 import { practiceStore } from "./practice.ts";
 import { practiceSessionStore } from "./practice-sessions.ts";
+import { supportRequestStore } from "./support-requests.ts";
 import { memberExportStore } from "./member-export.ts";
 import { usefulnessStore } from "./usefulness.ts";
 import { workflowFeedbackStore } from "./workflow-feedback.ts";
@@ -78,6 +79,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       attempts: attemptStore(pool),
       practice: practiceStore(pool),
       practiceSessions: practiceSessionStore(pool),
+      supportRequests: supportRequestStore(pool),
       memberExport: memberExportStore(pool),
       usefulness: usefulnessStore(pool),
       workflowFeedback: workflowFeedbackStore(pool),

@@ -164,6 +164,24 @@ const sections = {
     WHERE s.member_id=$1 AND s.withdrawn_at IS NULL AND s.id=ANY($4::uuid[])`,
     "e.session_id,e.sequence",
   ),
+  // Support sections append after indices 17/18; existing cursor v2 keeps its meaning.
+  supportRequests: section(
+    `id,subject,body,received_at AS "receivedAt",
+    acknowledged_at AS "acknowledgedAt",resolved_at AS "resolvedAt",
+    withdrawn_at AS "withdrawnAt",coverage_state AS "coverageState",
+    CASE WHEN withdrawn_at IS NOT NULL THEN 'withdrawn'
+      WHEN resolved_at IS NOT NULL THEN 'resolved' ELSE 'open' END AS state`,
+    "support_requests WHERE member_id=$1",
+    "id",
+    true,
+  ),
+  supportReplies: section(
+    `e.id,e.request_id AS "requestId",e.body,e.created_at AS "createdAt",
+    'Synthetic operator' AS attribution`,
+    `support_request_replies e JOIN support_requests r ON r.id=e.request_id
+    WHERE r.member_id=$1 AND r.withdrawn_at IS NULL AND r.id=ANY($4::uuid[])`,
+    "e.request_id,e.id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -177,7 +195,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v13";
+  version: "local-member-records-v14";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   page: {
@@ -291,7 +309,7 @@ export function memberExportStore(
           );
           const payload: MemberExportPayload = {
             kind: "ready",
-            version: "local-member-records-v13",
+            version: "local-member-records-v14",
             profile: owner.rows[0],
             records,
             page: {
@@ -354,6 +372,19 @@ export function memberExportStore(
                   SELECT 1 FROM private_practice_exchanges e WHERE e.session_id=s.id
                     AND jsonb_build_array(e.session_id,e.sequence)>$3::jsonb)
                 ORDER BY s.id LIMIT $2 FOR SHARE OF s`,
+                values,
+              );
+              values.push(parents.rows.map((row) => row.id));
+            }
+            if (name === "supportReplies") {
+              // Direct continuation may bypass receipts. Lock parents first,
+              // matching withdrawal's request-before-messages order.
+              const parents = await client.query<{ id: string }>(
+                `SELECT r.id FROM support_requests r
+                WHERE r.member_id=$1 AND r.withdrawn_at IS NULL AND EXISTS (
+                  SELECT 1 FROM support_request_replies e WHERE e.request_id=r.id
+                    AND jsonb_build_array(e.request_id,e.id)>$3::jsonb)
+                ORDER BY r.id LIMIT $2 FOR SHARE OF r`,
                 values,
               );
               values.push(parents.rows.map((row) => row.id));
