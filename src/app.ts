@@ -5,6 +5,11 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { COOKIE, COOKIE_OPTIONS, token, csrf, validCsrf } from "./session.ts";
 import {
+  disabledSupportRequestStore,
+  type SupportRequestStore,
+} from "./support-requests.ts";
+import { mountSupportRequestRoutes } from "./support-request-routes.ts";
+import {
   profileStart,
   profileEdit,
   submission,
@@ -242,6 +247,7 @@ export function app(
     attempts?: AttemptStore;
     practice?: PracticeStore;
     practiceSessions?: PracticeSessionStore;
+    supportRequests?: SupportRequestStore;
     usefulness?: UsefulnessStore;
     workflowFeedback?: WorkflowFeedbackStore;
     memberExport?: MemberExportStore;
@@ -318,6 +324,10 @@ export function app(
   app.use(
     "/api/evidence",
     express.raw({ type: "*/*", limit: MAX_EVIDENCE_BYTES }),
+  );
+  app.use(
+    ["/support", "/operator/support"],
+    express.urlencoded({ extended: false, limit: "32kb" }),
   );
   app.use(express.urlencoded({ extended: false, limit: "16kb" }));
   app.use(cookieParser());
@@ -871,6 +881,7 @@ export function app(
       "/library",
       "/practice",
       "/practice-sessions",
+      "/support",
       "/assignments",
       "/milestones",
       "/career",
@@ -946,6 +957,10 @@ export function app(
       res.locals.learner = session.learner;
       next();
     },
+  );
+  mountSupportRequestRoutes(
+    app,
+    options.supportRequests ?? disabledSupportRequestStore(),
   );
   app.get("/availability", async (_req, res) => {
     const member = res.locals.learner as Learner;

@@ -8,6 +8,7 @@ import {
   type ExerciseHistory,
 } from "../../src/store.ts";
 import { LESSON } from "../../src/content.ts";
+import { disabledSupportRequestStore } from "../../src/support-requests.ts";
 import {
   disabledAuthorizationStore,
   type AuthorizationStore,
@@ -1658,7 +1659,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v13",
+          version: "local-member-records-v14",
           profile: { id: "owned" },
           records: { milestones: [] },
           page: {
@@ -1692,7 +1693,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v13",
+    version: "local-member-records-v14",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -4527,7 +4528,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v13" as const,
+    version: "local-member-records-v14" as const,
     profile: { id: "owned" },
     records: { milestones: [] },
     page: {
@@ -4932,4 +4933,38 @@ it("withholds private lesson history consistently across every consumer and keep
   const failed = await agent.get("/library").set("Host", host).expect(503);
   expect(failed.text).not.toContain("Private synthetic database detail");
   expect(failed.text).toContain("could not confirm");
+});
+
+it("mounts private support with member authentication and separate exact-granted operator authorization", async () => {
+  const db = storage(),
+    support = disabledSupportRequestStore();
+  const history = vi.fn().mockResolvedValue({
+    kind: "ready",
+    value: { items: [], nextCursor: null },
+  });
+  const worklist = vi.fn().mockResolvedValue({ kind: "denied" });
+  const agent = await managedAgent(
+    app(db, {
+      origin,
+      secret: "secret",
+      supportRequests: {
+        ...support,
+        ownerHistory: history,
+        operatorWorklist: worklist,
+      },
+    }),
+  );
+  await agent.get("/").set("Host", host).expect(200);
+  await agent.get("/support/new").set("Host", host).expect(303);
+  expect(history).not.toHaveBeenCalled();
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const intake = await agent.get("/support/new").set("Host", host).expect(200);
+  expect(intake.text).toContain("Send private sample request");
+  await agent.get("/support").set("Host", host).expect(200);
+  expect(history).toHaveBeenCalledOnce();
+  const home = await agent.get("/learn").set("Host", host).expect(200);
+  expect(home.text).toContain('href="/support"');
+  db.session.mockResolvedValue({ kind: "new" });
+  await agent.get("/operator/support").set("Host", host).expect(403);
+  expect(worklist).toHaveBeenCalledOnce();
 });

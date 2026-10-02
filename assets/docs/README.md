@@ -2,6 +2,7 @@
 
 Start with [the current product direction](PRODUCT-DIRECTION.md): the AI learning and participation ecosystem for IT, other professionals and general learners. It supersedes contractor-only assumptions in historical source.
 
+- [Private sample support](PRIVATE-SAMPLE-SUPPORT.md): owner intake/receipts, exact local operator grants, separate internal notes and replies, withdrawal/export and the trusted setup runbook.
 - [Initial learning slice](INITIAL-LEARNING-SLICE.md): acceptance, architecture, privacy and outstanding scope.
 - [CTP-008 private starter plan](CTP-008-PRIVATE-PLAN.md): local goal, experience and weekly-time suggestions, profile revision and remaining live-access gates.
 - [CTP-009 private assignment choice](CTP-009-ASSIGNMENT-CHOICE.md): eligible published samples, exact saved version, conservative prerequisites and honest stale-choice recovery.

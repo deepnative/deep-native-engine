@@ -179,6 +179,82 @@ async function seedOwned(
   );
   track("private_practice_sessions", "member_id", id);
   track("private_practice_exchanges", "session_id", practiceSessionId);
+  const supportRequestId = randomUUID(),
+    supportGrantId = randomUUID(),
+    supportReplyId = randomUUID(),
+    supportEventId = randomUUID();
+  await pool.query(
+    `INSERT INTO support_requests(id,member_id,workspace_id,intake_key,subject,body)
+     VALUES($1,$2,$2,$3,$4,$5)`,
+    [
+      supportRequestId,
+      id,
+      randomUUID(),
+      `${marker} support`,
+      `${marker} private request`,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO support_request_grants(id,request_id,staff_id,staff_role,starts_at,expires_at,granted_by,idempotency_key)
+     VALUES($1,$2,$3,'operator',clock_timestamp()-interval '1 second',clock_timestamp()+interval '1 day',$4,$5)`,
+    [
+      supportGrantId,
+      supportRequestId,
+      staff.operatorId,
+      staff.adminId,
+      randomUUID(),
+    ],
+  );
+  await pool.query(
+    `INSERT INTO support_request_replies(id,request_id,actor_id,body) VALUES($1,$2,$3,$4)`,
+    [
+      supportReplyId,
+      supportRequestId,
+      staff.operatorId,
+      `${marker} visible support reply`,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO support_request_notes(id,request_id,actor_id,body) VALUES($1,$2,$3,$4)`,
+    [
+      randomUUID(),
+      supportRequestId,
+      staff.operatorId,
+      `${marker} internal support note`,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO support_request_events(id,request_id,actor_id,grant_id,action,message_id)
+     VALUES($1,$2,$3,$4,'replied',$5)`,
+    [
+      supportEventId,
+      supportRequestId,
+      staff.operatorId,
+      supportGrantId,
+      supportReplyId,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO support_request_mutations(request_id,actor_id,action,idempotency_key,event_id,message_id,occurred_at)
+     VALUES($1,$2,'replied',$3,$4,$5,clock_timestamp())`,
+    [
+      supportRequestId,
+      staff.operatorId,
+      randomUUID(),
+      supportEventId,
+      supportReplyId,
+    ],
+  );
+  track("support_requests", "member_id", id);
+  for (const table of [
+    "support_request_grants",
+    "support_request_replies",
+    "support_request_notes",
+    "support_request_events",
+    "support_request_mutations",
+  ])
+    track(table, "request_id", supportRequestId);
+
   await pool.query(
     "INSERT INTO content_assessments(id,member_id,content_id,content_version,rubric_version,reviewer_id,result) VALUES($1,$2,'ZDL-002',1,1,$3,$4)",
     [randomUUID(), id, staff.reviewerId, `${marker} simulated assessment`],
