@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { migrate, store } from "../../src/store.ts";
 import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
 import { syntheticLedger, type LedgerCategory } from "../../src/ledger.ts";
@@ -634,28 +634,36 @@ it.each([
     expect(category(result, name).observed.completions).toBe(1);
   },
 );
-it("keeps aggregate arithmetic exact beyond a 32-bit integer without returning source records", async () => {
-  const f = await fixture();
-  await pool.query(
-    `WITH seeded AS (
+describe("large retained ledger snapshot", () => {
+  let f: Awaited<ReturnType<typeof fixture>>;
+  // Prepare the retained dataset under the existing hook deadline. The actual
+  // authorized snapshot and every assertion retain the default 5-second test
+  // deadline; production statements independently remain bounded to 5 seconds.
+  beforeEach(async () => {
+    f = await fixture();
+    await pool.query(
+      `WITH seeded AS (
     INSERT INTO synthetic_entitlement_grants(id,member_id,category,quantity,available,starts_at,expires_at)
     SELECT gen_random_uuid(),$1,'study_requests',100000,100000,$2::timestamptz,$3::timestamptz FROM generate_series(1,22000)
     RETURNING id,member_id,quantity
   ) INSERT INTO synthetic_entitlement_events(id,member_id,grant_id,operation,quantity,idempotency_key,request_fingerprint,result_id)
     SELECT gen_random_uuid(),member_id,id,'grant',quantity,id::text,repeat('a',64),id FROM seeded`,
-    [f.owner.id, window.startsAt, window.expiresAt],
-  );
-  const result = await snapshot(f.operator.token),
-    row = category(result, "study_requests");
-  expect(row.observed).toMatchObject({
-    grants: 22000,
-    events: 22000,
-    granted: 2200000000,
-    available: 2200000000,
+      [f.owner.id, window.startsAt, window.expiresAt],
+    );
   });
-  expect(row.reconciliation.status).toBe("consistent");
-  expect(result.categories).toHaveLength(5);
-  expect(JSON.stringify(result).length).toBeLessThan(5000);
+  it("keeps aggregate arithmetic exact beyond a 32-bit integer without returning source records", async () => {
+    const result = await snapshot(f.operator.token),
+      row = category(result, "study_requests");
+    expect(row.observed).toMatchObject({
+      grants: 22000,
+      events: 22000,
+      granted: 2200000000,
+      available: 2200000000,
+    });
+    expect(row.reconciliation.status).toBe("consistent");
+    expect(result.categories).toHaveLength(5);
+    expect(JSON.stringify(result).length).toBeLessThan(5000);
+  });
 });
 it.each(["settlement", "adjustment", "expiry", "deletion"] as const)(
   "keeps one established statement snapshot during concurrent %s",
