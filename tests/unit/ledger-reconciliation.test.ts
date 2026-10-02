@@ -306,6 +306,7 @@ it.each([
   "BEGIN",
   "SET LOCAL lock",
   "SET LOCAL statement",
+  "SET LOCAL enable_nestloop",
   "SELECT id",
   "SELECT role",
   "WITH",

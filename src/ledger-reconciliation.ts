@@ -333,6 +333,11 @@ export function ledgerReconciliationStore(
           )
         ).rows[0];
         if (!profile) throw new AccessDenied();
+        // Retained-table statistics can still describe a pre-import empty
+        // ledger after member erasure. Discourage quadratic nested-loop joins
+        // for this full-ledger aggregate only; SET LOCAL resets at transaction
+        // end and leaves the preceding indexed authorization reads unchanged.
+        await client.query("SET LOCAL enable_nestloop=off");
         // This is the only ledger read: its one statement snapshot covers every
         // table and every category, even while a writer or deletion commits.
         const report = snapshot(

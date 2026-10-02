@@ -17,6 +17,7 @@ import { careerStore } from "./career.ts";
 import { circleStore } from "./circles.ts";
 import { metricsStore } from "./metrics.ts";
 import { ledgerReconciliationStore } from "./ledger-reconciliation.ts";
+import { memberTestUnitsStore } from "./member-test-units.ts";
 import { attemptStore } from "./attempts.ts";
 import { practiceStore } from "./practice.ts";
 import { practiceSessionStore } from "./practice-sessions.ts";
@@ -78,6 +79,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       circles: circleStore(pool),
       metrics: metricsStore(pool),
       ledgerReconciliation: ledgerReconciliationStore(pool),
+      memberTestUnits: memberTestUnitsStore(pool),
       attempts: attemptStore(pool),
       practice: practiceStore(pool),
       practiceSessions: practiceSessionStore(pool),

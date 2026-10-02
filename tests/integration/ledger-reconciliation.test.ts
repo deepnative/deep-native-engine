@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { migrate, store } from "../../src/store.ts";
@@ -634,37 +635,51 @@ it.each([
     expect(category(result, name).observed.completions).toBe(1);
   },
 );
-describe("large retained ledger snapshot", () => {
-  let f: Awaited<ReturnType<typeof fixture>>;
-  // Prepare the retained dataset under the existing hook deadline. The actual
-  // authorized snapshot and every assertion retain the default 5-second test
-  // deadline; production statements independently remain bounded to 5 seconds.
-  beforeEach(async () => {
-    f = await fixture();
-    await pool.query(
-      `WITH seeded AS (
+describe.each(["fresh", "after member erasure"] as const)(
+  "large retained ledger snapshot %s",
+  (history) => {
+    let f: Awaited<ReturnType<typeof fixture>>;
+    // Prepare the retained dataset under the existing hook deadline. The actual
+    // authorized snapshot and every assertion retain the default 5-second test
+    // deadline; production statements independently remain bounded to 5 seconds.
+    beforeEach(async () => {
+      async function seed(ownerId: string) {
+        await pool.query(
+          `WITH seeded AS (
     INSERT INTO synthetic_entitlement_grants(id,member_id,category,quantity,available,starts_at,expires_at)
     SELECT gen_random_uuid(),$1,'study_requests',100000,100000,$2::timestamptz,$3::timestamptz FROM generate_series(1,22000)
     RETURNING id,member_id,quantity
   ) INSERT INTO synthetic_entitlement_events(id,member_id,grant_id,operation,quantity,idempotency_key,request_fingerprint,result_id)
     SELECT gen_random_uuid(),member_id,id,'grant',quantity,id::text,repeat('a',64),id FROM seeded`,
-      [f.owner.id, window.startsAt, window.expiresAt],
-    );
-  });
-  it("keeps aggregate arithmetic exact beyond a 32-bit integer without returning source records", async () => {
-    const result = await snapshot(f.operator.token),
-      row = category(result, "study_requests");
-    expect(row.observed).toMatchObject({
-      grants: 22000,
-      events: 22000,
-      granted: 2200000000,
-      available: 2200000000,
+          [ownerId, window.startsAt, window.expiresAt],
+        );
+      }
+      if (history === "after member erasure") {
+        const retired = await member();
+        await seed(retired.id);
+        await db.remove(retired.id);
+        await pool.query(
+          "ANALYZE synthetic_entitlement_grants; ANALYZE synthetic_entitlement_events",
+        );
+      }
+      f = await fixture();
+      await seed(f.owner.id);
     });
-    expect(row.reconciliation.status).toBe("consistent");
-    expect(result.categories).toHaveLength(5);
-    expect(JSON.stringify(result).length).toBeLessThan(5000);
-  });
-});
+    it("keeps aggregate arithmetic exact beyond a 32-bit integer without returning source records", async () => {
+      const result = await snapshot(f.operator.token),
+        row = category(result, "study_requests");
+      expect(row.observed).toMatchObject({
+        grants: 22000,
+        events: 22000,
+        granted: 2200000000,
+        available: 2200000000,
+      });
+      expect(row.reconciliation.status).toBe("consistent");
+      expect(result.categories).toHaveLength(5);
+      expect(JSON.stringify(result).length).toBeLessThan(5000);
+    });
+  },
+);
 it.each(["settlement", "adjustment", "expiry", "deletion"] as const)(
   "keeps one established statement snapshot during concurrent %s",
   async (change) => {
@@ -895,3 +910,52 @@ it.each(["query", "commit", "rollback"] as const)(
     );
   },
 );
+
+it("reapplies the event-grant index migration without rewriting history or another member's balance", async () => {
+  const f = await fixture(),
+    other = await fixture("study_requests", 2);
+  const before = (
+    await pool.query("SELECT * FROM synthetic_entitlement_events ORDER BY id")
+  ).rows;
+  const migration = await readFile(
+    new URL(
+      "../../migrations/052-ledger-event-grant-index.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  await pool.query(
+    "DROP INDEX IF EXISTS synthetic_entitlement_events_grant_idx",
+  );
+  await pool.query(migration);
+  await pool.query(migration);
+  expect(
+    (await pool.query("SELECT * FROM synthetic_entitlement_events ORDER BY id"))
+      .rows,
+  ).toEqual(before);
+  await expect(
+    pool.query("DELETE FROM synthetic_entitlement_events WHERE member_id=$1", [
+      f.owner.id,
+    ]),
+  ).rejects.toThrow("immutable");
+  await db.remove(f.owner.id);
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*)::text AS total FROM synthetic_entitlement_events WHERE member_id=$1",
+        [f.owner.id],
+      )
+    ).rows[0],
+  ).toEqual({ total: "0" });
+  expect(
+    (
+      await pool.query(
+        "SELECT * FROM synthetic_entitlement_events WHERE member_id=$1 ORDER BY id",
+        [other.owner.id],
+      )
+    ).rows,
+  ).toEqual(before.filter((row) => row.member_id === other.owner.id));
+  expect(
+    category(await snapshot(other.operator.token), "study_requests").observed,
+  ).toMatchObject({ grants: 1, events: 1, granted: 2, available: 2 });
+});
