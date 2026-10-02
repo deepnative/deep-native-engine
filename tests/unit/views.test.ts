@@ -1835,3 +1835,43 @@ it("keeps an unattributed historical draft read-only beside fresh current-goal p
   expect(html).toContain('name="goal" value="everyday"');
   expect(html).not.toContain('value="unattributed"');
 });
+
+it("distinguishes metered local test units and blocks repeat dispatch of terminal receipts", () => {
+  const choices = [
+    {
+      evidenceId: "sample",
+      name: "Invented.txt",
+      revisionNumber: 1,
+      receiptId: "receipt",
+      grantedAt: new Date(),
+      withdrawnAt: null,
+      jobs: [
+        {
+          id: "pending",
+          status: "pending",
+          testUnitState: "reserved" as const,
+        },
+        {
+          id: "consumed",
+          status: "succeeded",
+          testUnitState: "consumed" as const,
+        },
+        {
+          id: "released",
+          status: "exhausted",
+          testUnitState: "released" as const,
+        },
+      ],
+    },
+  ];
+  const html = localAiConsentPage(choices, "csrf");
+  expect(html).toContain("Use one local test request");
+  expect(html).toContain("Run local test request");
+  expect(html).toContain("consumed");
+  expect(html).toContain("released");
+  expect(html).not.toContain('action="/evidence/local-ai/consumed/run"');
+  expect(html).not.toContain('action="/evidence/local-ai/released/run"');
+  const paused = localAiConsentPage(choices, "csrf", [], "paused");
+  expect(paused).not.toContain("Use one local test request</button>");
+  expect(paused).not.toContain("Run local test request</button>");
+});

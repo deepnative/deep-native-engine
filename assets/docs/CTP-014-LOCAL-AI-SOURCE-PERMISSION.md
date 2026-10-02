@@ -20,7 +20,7 @@ Previously created duplicate jobs remain intact: any unresolved row prevents ano
 
 ## Deletion and rollback
 
-The local receipt and its linked jobs are removed when the owning evidence or workspace is deleted. Withdrawal retains a content-free historical receipt while the source remains, and prevents future dispatch; it cannot recall an already completed local computation. Migration 039 adds local-only receipt linkage and can be rolled back only after dependent jobs and receipts have been removed. Evidence files remain in the existing private object store and are never copied to job metadata.
+Legacy unmetered jobs are removed when the owning evidence or workspace is deleted. Explicit metered test requests introduced by [#437](https://github.com/deepnative/deep-native-engine/issues/437) retain their content-free job/reservation linkage: never-claimed jobs release once subject to expiry; dispatched uncertain jobs stay held; completed jobs remain consumed. Their removed receipt link becomes null. Full member deletion removes the owned accounting history as well. Withdrawal retains a content-free historical receipt while the source remains, and prevents future dispatch; it cannot recall an already completed local computation. Migration 039 adds local-only receipt linkage. Once migration 053 has metered history, do not drop either migration or return to old workers; use the non-destructive local pause procedure in [the request guide](PRIVATE-LOCAL-AI-TEST-REQUESTS.md). Evidence files remain in the existing private object store and are never copied to job metadata.
 
 ## Acceptance evidence
 

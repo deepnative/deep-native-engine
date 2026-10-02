@@ -195,64 +195,78 @@ export interface SyntheticLedger {
   ): Promise<string>;
 }
 
+type EventChange = (
+  client: PoolClient,
+  eventId: string,
+) => Promise<EventResult>;
+type ApplyEvent = (
+  key: string,
+  input: EventInput,
+  change: EventChange,
+) => Promise<string>;
+
+// Caller owns the connection transaction. No connection acquisition or nested
+// BEGIN/COMMIT occurs here; pool and atomic member-job paths share event rules.
+async function applyEvent(
+  client: PoolClient,
+  key: string,
+  input: EventInput,
+  change: EventChange,
+) {
+  requireKey(key);
+  const fingerprint = createHash("sha256")
+    .update(JSON.stringify(input))
+    .digest("hex");
+  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+    key,
+  ]);
+  const previous = (
+    await client.query<ExistingEvent>(
+      "SELECT request_fingerprint,result_id FROM synthetic_entitlement_events WHERE idempotency_key=$1",
+      [key],
+    )
+  ).rows[0];
+  if (previous) {
+    if (previous.request_fingerprint !== fingerprint)
+      throw new LedgerFailure("idempotency_conflict");
+    return previous.result_id;
+  }
+  const eventId = randomUUID();
+  const result = await change(client, eventId);
+  await client.query(
+    `INSERT INTO synthetic_entitlement_events
+    (id,member_id,grant_id,reservation_id,operation,quantity,idempotency_key,request_fingerprint,result_id)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      eventId,
+      input.memberId,
+      result.grantId,
+      result.reservationId,
+      input.operation,
+      result.quantity,
+      key,
+      fingerprint,
+      result.resultId,
+    ],
+  );
+  return result.resultId;
+}
+
 export function syntheticLedger(
   pool: Pool,
   now: () => Date = () => new Date(),
 ): SyntheticLedger {
-  async function apply(
-    key: string,
-    input: EventInput,
-    change: (client: PoolClient, eventId: string) => Promise<EventResult>,
-  ) {
+  const apply: ApplyEvent = async (key, input, change) => {
     requireKey(key);
-    const fingerprint = createHash("sha256")
-      .update(JSON.stringify(input))
-      .digest("hex");
     const client = await pool.connect().catch(() => {
       throw new LedgerFailure("unavailable");
     });
     let broken = false;
     try {
       await client.query("BEGIN");
-      // Serialize same-key retries before reading the event. Grant row locks
-      // below serialize different-key reservations against the same balance.
-      await client.query(
-        "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
-        [key],
-      );
-      const previous = (
-        await client.query<ExistingEvent>(
-          "SELECT request_fingerprint,result_id FROM synthetic_entitlement_events WHERE idempotency_key=$1",
-          [key],
-        )
-      ).rows[0];
-      if (previous) {
-        if (previous.request_fingerprint !== fingerprint)
-          throw new LedgerFailure("idempotency_conflict");
-        await client.query("COMMIT");
-        return previous.result_id;
-      }
-      const eventId = randomUUID();
-      const result = await change(client, eventId);
-      await client.query(
-        `INSERT INTO synthetic_entitlement_events
-         (id,member_id,grant_id,reservation_id,operation,quantity,
-          idempotency_key,request_fingerprint,result_id)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [
-          eventId,
-          input.memberId,
-          result.grantId,
-          result.reservationId,
-          input.operation,
-          result.quantity,
-          key,
-          fingerprint,
-          result.resultId,
-        ],
-      );
+      const result = await applyEvent(client, key, input, change);
       await client.query("COMMIT");
-      return result.resultId;
+      return result;
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {
         broken = true;
@@ -265,8 +279,28 @@ export function syntheticLedger(
     } finally {
       client.release(broken);
     }
-  }
+  };
+  return ledgerOperations(pool, apply, now);
+}
 
+// Internal atomic job boundary; not a route or an independently committed ledger.
+export function syntheticLedgerOnConnection(client: PoolClient, jobId: string) {
+  requireId(jobId);
+  const ledger = ledgerOperations(
+    client,
+    (key, input, change) => applyEvent(client, key, input, change),
+    () => new Date(),
+    jobId,
+  );
+  return { reserve: ledger.reserve, consume: ledger.consume };
+}
+
+function ledgerOperations(
+  pool: Pick<Pool, "query">,
+  apply: ApplyEvent,
+  now: () => Date,
+  jobId?: string,
+): SyntheticLedger {
   async function settle(
     operation: "consume" | "release",
     memberId: string,
@@ -294,29 +328,41 @@ export function syntheticLedger(
              AND NOT EXISTS (
                SELECT 1 FROM synthetic_slot_holds h WHERE h.reservation_id=r.id
              )
+             AND NOT EXISTS (
+               SELECT 1 FROM local_ai_test_unit_jobs b
+               WHERE b.reservation_id=r.id AND b.job_id IS DISTINCT FROM $3::uuid
+             )
            FOR UPDATE OF r,g`,
-            [reservationId, memberId],
+            [reservationId, memberId, jobId ?? null],
           )
         ).rows[0];
         if (!row) throw new LedgerFailure("unavailable");
         if (row.state !== "reserved")
           throw new LedgerFailure("already_settled");
-        const expired = row.expired_at !== null || now() >= row.expires_at;
-        await client.query(
-          operation === "consume"
-            ? `UPDATE synthetic_entitlement_grants SET reserved=reserved-$2,
-             consumed=consumed+$2 WHERE id=$1`
-            : expired
-              ? `UPDATE synthetic_entitlement_grants SET reserved=reserved-$2,
-                 expired=expired+$2 WHERE id=$1`
-              : `UPDATE synthetic_entitlement_grants SET reserved=reserved-$2,
-                 available=available+$2 WHERE id=$1`,
-          [row.grant_id, row.quantity],
-        );
-        await client.query(
-          "UPDATE synthetic_entitlement_reservations SET state=$2 WHERE id=$1",
-          [reservationId, operation === "consume" ? "consumed" : "released"],
-        );
+        const linked = (
+          await client.query<{ job_id: string }>(
+            "SELECT job_id FROM local_ai_test_unit_jobs WHERE reservation_id=$1",
+            [reservationId],
+          )
+        ).rows[0];
+        if (linked ? linked.job_id !== jobId : jobId !== undefined)
+          throw new LedgerFailure("unavailable");
+        if (operation === "release") {
+          await client.query(
+            "SELECT release_synthetic_reservation_balance($1,$2,$3,NULL)",
+            [reservationId, memberId, now()],
+          );
+        } else {
+          await client.query(
+            `UPDATE synthetic_entitlement_grants SET reserved=reserved-$2,
+            consumed=consumed+$2 WHERE id=$1`,
+            [row.grant_id, row.quantity],
+          );
+          await client.query(
+            "UPDATE synthetic_entitlement_reservations SET state=$2 WHERE id=$1",
+            [reservationId, "consumed"],
+          );
+        }
         return {
           resultId: reservationId,
           grantId: row.grant_id,
@@ -444,6 +490,7 @@ export function syntheticLedger(
                  AND NOT EXISTS (
                    SELECT 1 FROM synthetic_slot_holds h WHERE h.reservation_id=r.id
                  )
+                 AND NOT EXISTS (SELECT 1 FROM local_ai_test_unit_jobs b WHERE b.reservation_id=r.id)
                FOR UPDATE OF r,g`,
               [reservationId, memberId],
             )
@@ -452,6 +499,15 @@ export function syntheticLedger(
             !row ||
             row.category !== completion.category ||
             row.quantity !== quantity
+          )
+            throw new LedgerFailure("unavailable");
+          if (
+            (
+              await client.query(
+                "SELECT 1 FROM local_ai_test_unit_jobs WHERE reservation_id=$1",
+                [reservationId],
+              )
+            ).rows[0]
           )
             throw new LedgerFailure("unavailable");
           if (row.state !== "reserved")

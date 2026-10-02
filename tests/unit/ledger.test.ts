@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
-import type { Pool } from "pg";
-import { LedgerFailure, syntheticLedger } from "../../src/ledger.ts";
+import type { Pool, PoolClient } from "pg";
+import {
+  LedgerFailure,
+  syntheticLedger,
+  syntheticLedgerOnConnection,
+} from "../../src/ledger.ts";
 
 const member = "00000000-0000-4000-8000-000000000001";
 const grant = "00000000-0000-4000-8000-000000000002";
@@ -18,6 +22,8 @@ function database(
   now = () => new Date("2026-01-31T00:00:00.000Z"),
 ) {
   const query = vi.fn(async (sql: string, _params?: unknown[]) => {
+    if (sql.includes("SELECT job_id FROM local_ai_test_unit_jobs"))
+      return { rows: rows.link ? [{ job_id: rows.link }] : [] };
     if (sql.includes("SELECT request_fingerprint"))
       return { rows: rows.event ? [rows.event] : [] };
     if (sql.includes("SELECT 1 FROM learners"))
@@ -210,7 +216,7 @@ it("consumes or releases only an unsettled owned reservation", async () => {
         String(sql).includes(
           operation === "consume"
             ? "consumed=consumed+$2"
-            : "available=available+$2",
+            : "release_synthetic_reservation_balance",
         ),
       ),
     ).toBe(true);
@@ -284,15 +290,20 @@ it("expires a late release while a late consume still settles reserved units", a
   const late = database({ expiresAt: end }, () => end);
   await late.ledger.release(member, reservation, "release-after-end");
   expect(
-    late.query.mock.calls.some(([sql]) =>
-      String(sql).includes("expired=expired+$2"),
+    late.query.mock.calls.some(
+      ([sql, params]) =>
+        String(sql).includes("release_synthetic_reservation_balance") &&
+        params?.[2] === end,
     ),
   ).toBe(true);
   const stamped = database({ expiredAt: end });
   await stamped.ledger.release(member, reservation, "release-after-sweep");
   expect(
-    stamped.query.mock.calls.some(([sql]) =>
-      String(sql).includes("expired=expired+$2"),
+    stamped.query.mock.calls.some(
+      ([sql, params]) =>
+        String(sql).includes("release_synthetic_reservation_balance") &&
+        params?.[0] === reservation &&
+        params?.[1] === member,
     ),
   ).toBe(true);
   await late.ledger.consume(member, reservation, "consume-after-end");
@@ -368,4 +379,34 @@ it("preserves a safe ledger failure when rollback fails and discards the connect
   ).rejects.toEqual(new LedgerFailure("insufficient"));
   expect(db.client.release).toHaveBeenCalledOnce();
   expect(db.client.release).toHaveBeenCalledWith(true);
+});
+
+it("connection-bound settlement participates in the caller transaction and refuses a foreign job link", async () => {
+  const db = database();
+  const jobId = "00000000-0000-4000-8000-000000000004";
+  const query = vi.fn(async (sql: string, params?: unknown[]) => {
+    if (sql.includes("SELECT job_id FROM local_ai_test_unit_jobs"))
+      return { rows: [{ job_id: jobId }] };
+    return db.query(sql, params);
+  });
+  const scoped = syntheticLedgerOnConnection(
+    { query } as unknown as PoolClient,
+    jobId,
+  );
+  await scoped.reserve(member, grant, 1, "caller-reserve");
+  await scoped.consume(member, reservation, "caller-consume");
+  expect(db.connect).not.toHaveBeenCalled();
+  expect(db.client.release).not.toHaveBeenCalled();
+  expect(
+    query.mock.calls.some(([sql]) =>
+      ["BEGIN", "COMMIT", "ROLLBACK"].includes(sql),
+    ),
+  ).toBe(false);
+  const foreign = database({ link: jobId });
+  await expect(
+    foreign.ledger.consume(member, reservation, "ordinary-consume"),
+  ).rejects.toThrow();
+  expect(() =>
+    syntheticLedgerOnConnection({ query } as unknown as PoolClient, "invalid"),
+  ).toThrow();
 });

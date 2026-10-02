@@ -1,6 +1,6 @@
 # Private member test-unit summary evidence
 
-Issue [#435](https://github.com/deepnative/deep-native-engine/issues/435) adds a read-only private current summary and JSON download. Parents #199, #34, #27 and broader export #42 remain open. No grant policy, provider, payment, qualified capacity or publication approval changed.
+Issue [#435](https://github.com/deepnative/deep-native-engine/issues/435) adds a read-only private current summary and JSON download. Parents #199, #34, #27 and the broader privacy/state matrix #42 remain open. No grant policy, provider, payment, qualified capacity or publication approval changed.
 
 ## Behavioral evidence before the exact-commit gate
 

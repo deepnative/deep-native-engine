@@ -4,6 +4,7 @@ import { it, expect, vi } from "vitest";
 import {
   localAiConsentStore,
   disabledLocalAiConsentStore,
+  LOCAL_AI_TEST_UNIT_POLICY,
   LOCAL_AI_PURPOSE,
   LOCAL_AI_STATEMENT_VERSION,
 } from "../../src/local-ai-consent.ts";
@@ -74,6 +75,19 @@ const adapterResult = {
 };
 function setup(
   options: {
+    metered?: boolean;
+    metering?: Record<string, unknown>;
+    noGrant?: boolean;
+    budgetDeadline?: "claim" | "before" | "after";
+    queueDeadline?: "session" | "grant";
+    beforeSettlement?: "session" | "lease";
+    concurrentCollision?: boolean;
+    legacyClient?: boolean;
+    finalDeadline?: "session" | "lease";
+    releaseFailure?: boolean;
+    listenerFailure?: boolean;
+    connectionError?: boolean;
+    listedJobs?: Array<Record<string, unknown>>;
     source?: Record<string, unknown>;
     receipt?: Record<string, unknown>;
     job?: Record<string, unknown>;
@@ -91,11 +105,113 @@ function setup(
     phase2Paused?: boolean;
   } = {},
 ) {
-  const s = { ...source, ...options.source },
-    r = { ...receipt, ...options.receipt },
-    j = { ...job, ...options.job };
+  const owner = options.metered
+    ? "00000000-0000-4000-8000-000000000004"
+    : "member";
+  const grantId = "00000000-0000-4000-8000-000000000005";
+  const reservationId = "00000000-0000-4000-8000-000000000006";
+  const s = { ...source, owner_principal_id: owner, ...options.source },
+    r = { ...receipt, member_id: owner, ...options.receipt },
+    j = {
+      ...job,
+      member_id: owner,
+      ...(options.metered
+        ? {
+            request_fingerprint: requestFingerprint({
+              receiptId: rid,
+              evidenceId: id,
+              revision: 1,
+              digest: source.sha256,
+              purpose: LOCAL_AI_PURPOSE,
+              statement: LOCAL_AI_STATEMENT_VERSION,
+              model: "deterministic-local-v1",
+              mode: "test",
+              testUnitPolicy: LOCAL_AI_TEST_UNIT_POLICY,
+            }),
+          }
+        : {}),
+      ...options.job,
+    };
+  let settled = false;
+  let linkInserted = false,
+    outputReady = false,
+    priorReads = 0;
+  let listener: (() => void) | undefined;
   let commits = 0;
   const query = vi.fn(async (sql: string, args: unknown[] = []) => {
+    if (sql.startsWith("SELECT 1 FROM local_ai_test_unit_jobs b"))
+      return {
+        rows:
+          options.budgetDeadline === "claim" ||
+          (options.budgetDeadline === "before" && outputReady) ||
+          (options.budgetDeadline === "after" && settled)
+            ? []
+            : [{}],
+      };
+    if (sql.includes("INSERT INTO local_ai_test_unit_jobs"))
+      linkInserted = true;
+    if (
+      sql.includes("UPDATE synthetic_entitlement_grants SET reserved=reserved")
+    )
+      settled = true;
+    if (options.connectionError && sql === "BEGIN") listener?.();
+    if (
+      sql.includes(
+        "SELECT id FROM synthetic_entitlement_grants WHERE member_id",
+      )
+    )
+      return { rows: options.noGrant ? [] : [{ id: grantId }] };
+    if (sql.includes("SELECT g.available,g.starts_at"))
+      return {
+        rows: [
+          {
+            available: 1,
+            starts_at: new Date("2020-01-01"),
+            expires_at: new Date("2100-01-01"),
+            expired_at: null,
+          },
+        ],
+      };
+    if (
+      sql.includes("SELECT policy,reservation_id FROM local_ai_test_unit_jobs")
+    )
+      return {
+        rows: options.metered
+          ? [
+              {
+                policy: LOCAL_AI_TEST_UNIT_POLICY,
+                reservation_id: reservationId,
+                ...options.metering,
+              },
+            ]
+          : [],
+      };
+    if (sql.includes("SELECT r.grant_id,r.quantity"))
+      return {
+        rows: [
+          {
+            grant_id: grantId,
+            quantity: 1,
+            state: "reserved",
+            expires_at: new Date("2100-01-01"),
+            expired_at: null,
+          },
+        ],
+      };
+    if (sql.includes("SELECT job_id FROM local_ai_test_unit_jobs"))
+      return { rows: options.metered ? [{ job_id: jid }] : [] };
+    if (sql.includes("SELECT 1 FROM synthetic_entitlement_grants"))
+      return {
+        rows: options.queueDeadline === "grant" && linkInserted ? [] : [{}],
+      };
+    if (sql.includes("SELECT 1 FROM adapter_jobs WHERE"))
+      return {
+        rows:
+          (options.finalDeadline === "lease" && settled) ||
+          (options.beforeSettlement === "lease" && outputReady)
+            ? []
+            : [{}],
+      };
     if (options.fail && sql.includes(options.fail))
       throw Error("private synthetic database detail");
     if (sql === "ROLLBACK" && options.broken) throw Error("rollback detail");
@@ -119,9 +235,12 @@ function setup(
         rows:
           options.missing === "principal" ||
           options.active === false ||
+          (options.finalDeadline === "session" && settled) ||
+          (options.queueDeadline === "session" && linkInserted) ||
+          (options.beforeSettlement === "session" && outputReady) ||
           (options.phase2Denied && commits > 0)
             ? []
-            : [{ id: "member" }],
+            : [{ id: owner }],
       };
     if (sql.includes("SELECT id FROM workspaces"))
       return {
@@ -159,14 +278,23 @@ function setup(
                   : j,
               ],
       };
-    if (sql.includes("SELECT id,status FROM adapter_jobs"))
-      return { rows: [{ id: jid, status: j.status }] };
+    if (sql.includes("SELECT j.id,j.status,b.policy"))
+      return { rows: options.listedJobs ?? [{ id: jid, status: j.status }] };
     if (sql.includes("SELECT id FROM adapter_jobs"))
       return { rows: options.unresolved ? [{ id: jid }] : [] };
     if (sql.includes("INSERT INTO adapter_jobs"))
       return { rows: options.insertion === false ? [] : [{ id: jid }] };
-    if (sql.includes("SELECT * FROM adapter_jobs"))
-      return { rows: options.missing === "collision" ? [] : [j] };
+    if (sql.includes("SELECT * FROM adapter_jobs")) {
+      priorReads++;
+      return {
+        rows:
+          options.concurrentCollision && priorReads === 1
+            ? []
+            : options.missing === "collision"
+              ? []
+              : [j],
+      };
+    }
     if (sql.includes("SET status='running'")) {
       j.status = "running";
       j.attempt_token = args[1] as null;
@@ -174,10 +302,26 @@ function setup(
     }
     return { rows: [] };
   });
-  const release = vi.fn();
-  const connect = vi.fn(async () => ({ query, release }));
+  const release = vi.fn(() => {
+    if (options.releaseFailure) throw Error("Invented handback error");
+  });
+  const on = vi.fn((_event: string, callback: () => void) => {
+    listener = callback;
+  });
+  const removeListener = vi.fn(() => {
+    if (options.listenerFailure) throw Error("Invented listener failure");
+  });
+  const connect = vi.fn(async () => ({
+    query,
+    release,
+    on: options.legacyClient ? undefined : on,
+    removeListener: options.legacyClient ? undefined : removeListener,
+  }));
   const get = vi.fn(async () => options.bytes ?? data);
-  const execute = vi.fn(async () => adapterResult);
+  const execute = vi.fn(async () => {
+    outputReady = true;
+    return adapterResult;
+  });
   const registry = {
     mode: "test",
     adapter: vi.fn(() => ({ kind: "ai", mode: "test", execute })),
@@ -187,7 +331,17 @@ function setup(
     { get, put: vi.fn(), remove: vi.fn() },
     registry,
   );
-  return { service, query, release, connect, get, execute, registry };
+  return {
+    service,
+    query,
+    release,
+    connect,
+    get,
+    execute,
+    registry,
+    on,
+    removeListener,
+  };
 }
 it("disabled and forged live registries never access sources or adapters", async () => {
   for (const service of [
@@ -202,6 +356,9 @@ it("disabled and forged live registries never access sources or adapters", async
     expect(await service.grant("x", id)).toEqual({ kind: "denied" });
     expect(await service.withdraw("x", rid)).toBe(false);
     expect(await service.enqueue("x", rid, "key")).toEqual({ kind: "denied" });
+    expect(await service.enqueueMetered("x", rid, "key")).toEqual({
+      kind: "denied",
+    });
     expect(await service.run("x", jid)).toEqual({ kind: "denied" });
   }
 });
@@ -485,7 +642,7 @@ it("sanitizes storage/transaction failures and discards broken clients without e
   for (const fail of ["BEGIN", "COMMIT", "SELECT * FROM evidence_objects"]) {
     const f = setup({ fail });
     expect(await f.service.grant("member", id)).toEqual({ kind: "denied" });
-    expect(f.release).toHaveBeenCalledWith(false);
+    expect(f.release).toHaveBeenCalledWith(fail === "COMMIT");
   }
   const broken = setup({ fail: "BEGIN", broken: true });
   expect(await broken.service.grant("member", id)).toEqual({ kind: "denied" });
@@ -561,3 +718,235 @@ it("pause denies queue and claim, and preserves a held second-phase attempt", as
     ),
   ).toHaveLength(1);
 });
+
+it("metered enqueue reserves one unit in the caller transaction before reporting the queued job", async () => {
+  const f = setup({ metered: true, missing: "collision" });
+  expect(
+    await f.service.enqueueMetered("member", rid, "private-test-key"),
+  ).toEqual({ kind: "queued", jobId: jid });
+  expect(f.query.mock.calls.filter(([sql]) => sql === "BEGIN")).toHaveLength(1);
+  expect(f.query.mock.calls.filter(([sql]) => sql === "COMMIT")).toHaveLength(
+    1,
+  );
+  expect(
+    f.query.mock.calls.filter(([sql]) =>
+      sql.includes("INSERT INTO synthetic_entitlement_events"),
+    ),
+  ).toHaveLength(1);
+  expect(f.execute).not.toHaveBeenCalled();
+});
+it("metered enqueue refuses an absent grant without inserting a job or event", async () => {
+  const f = setup({ metered: true, noGrant: true, missing: "collision" });
+  expect(
+    await f.service.enqueueMetered("member", rid, "private-test-key"),
+  ).toEqual({ kind: "denied" });
+  expect(
+    f.query.mock.calls.some(([sql]) =>
+      sql.includes("INSERT INTO adapter_jobs"),
+    ),
+  ).toBe(false);
+  expect(f.execute).not.toHaveBeenCalled();
+});
+it("metered queue replay is free while an unmetered contract conflicts", async () => {
+  const f = setup({ metered: true, unresolved: true });
+  expect(
+    await f.service.enqueueMetered("member", rid, "private-test-key"),
+  ).toEqual({ kind: "queued", jobId: jid });
+  expect(await f.service.enqueue("member", rid, "private-test-key")).toEqual({
+    kind: "conflict",
+  });
+  expect(
+    f.query.mock.calls.some(([sql]) =>
+      sql.includes("INSERT INTO synthetic_entitlement_events"),
+    ),
+  ).toBe(false);
+});
+it("metered completion settles the held reservation and records no provider text", async () => {
+  const f = setup({ metered: true });
+  expect(await f.service.run("member", jid)).toEqual({
+    kind: "completed",
+    jobId: jid,
+    status: "succeeded",
+  });
+  expect(f.execute).toHaveBeenCalledTimes(1);
+  expect(
+    f.query.mock.calls.filter(([sql]) =>
+      sql.includes("INSERT INTO synthetic_entitlement_events"),
+    ),
+  ).toHaveLength(1);
+  expect(JSON.stringify(f.query.mock.calls)).not.toContain(
+    "Simulated computation",
+  );
+});
+it.each(["session", "lease"] as const)(
+  "a final %s deadline failure rolls back settlement without forgetting the durable claim",
+  async (finalDeadline) => {
+    const f = setup({ metered: true, finalDeadline });
+    expect(await f.service.run("member", jid)).toEqual({ kind: "unavailable" });
+    expect(f.execute).toHaveBeenCalledTimes(1);
+    expect(f.query.mock.calls.filter(([sql]) => sql === "COMMIT")).toHaveLength(
+      1,
+    );
+    expect(
+      f.query.mock.calls.filter(([sql]) => sql === "ROLLBACK"),
+    ).toHaveLength(1);
+  },
+);
+it.each([{ policy: "forged" }, { reservation_id: "not-a-reservation" }])(
+  "rejects malformed metering provenance before dispatch: %j",
+  async (metering) => {
+    const f = setup({ metered: true, metering });
+    expect(await f.service.run("member", jid)).toEqual({ kind: "denied" });
+    expect(f.execute).not.toHaveBeenCalled();
+  },
+);
+it("invalid metered provider output remains unresolved instead of enabling an unmetered retry", async () => {
+  const f = setup({ metered: true });
+  f.execute.mockResolvedValue({ kind: "invalid" } as never);
+  expect(await f.service.run("member", jid)).toEqual({
+    kind: "unavailable",
+    jobId: jid,
+    status: "needs_reconciliation",
+  });
+  expect(
+    f.query.mock.calls.some(([sql]) =>
+      sql.includes("INSERT INTO synthetic_entitlement_events"),
+    ),
+  ).toBe(false);
+});
+it.each([
+  { releaseFailure: true },
+  { listenerFailure: true },
+  { connectionError: true },
+])(
+  "contains checked-out client faults without success or a private error: %j",
+  async (options) => {
+    const f = setup(options);
+    expect(await f.service.grant("member", id)).toEqual({ kind: "denied" });
+    expect(f.release).toHaveBeenCalledTimes(1);
+    expect(f.removeListener).toHaveBeenCalledTimes(1);
+  },
+);
+it("receipt projection includes only validated local test states", async () => {
+  const f = setup({
+    listedJobs: [
+      {
+        id: jid,
+        status: "pending",
+        policy: LOCAL_AI_TEST_UNIT_POLICY,
+        test_unit_state: "reserved",
+      },
+      {
+        id: jid,
+        status: "succeeded",
+        policy: LOCAL_AI_TEST_UNIT_POLICY,
+        test_unit_state: "consumed",
+      },
+      {
+        id: jid,
+        status: "exhausted",
+        policy: LOCAL_AI_TEST_UNIT_POLICY,
+        test_unit_state: "released",
+      },
+      {
+        id: jid,
+        status: "pending",
+        policy: "forged",
+        test_unit_state: "reserved",
+      },
+      {
+        id: jid,
+        status: "pending",
+        policy: LOCAL_AI_TEST_UNIT_POLICY,
+        test_unit_state: "private-secret",
+      },
+    ],
+  });
+  expect((await f.service.list("member"))[0]!.jobs).toEqual([
+    { id: jid, status: "pending", testUnitState: "reserved" },
+    { id: jid, status: "succeeded", testUnitState: "consumed" },
+    { id: jid, status: "exhausted", testUnitState: "released" },
+    { id: jid, status: "pending" },
+    { id: jid, status: "pending" },
+  ]);
+});
+
+it.each(["session", "grant"] as const)(
+  "queue rolls back the new job and hold when its %s deadline passes",
+  async (queueDeadline) => {
+    const f = setup({ metered: true, missing: "collision", queueDeadline });
+    expect(
+      await f.service.enqueueMetered("member", rid, "private-key"),
+    ).toEqual({ kind: "denied" });
+    expect(f.query.mock.calls.some(([sql]) => sql === "ROLLBACK")).toBe(true);
+    expect(f.query.mock.calls.some(([sql]) => sql === "COMMIT")).toBe(false);
+    expect(f.execute).not.toHaveBeenCalled();
+  },
+);
+it.each(["session", "lease"] as const)(
+  "expired %s before settlement retains reconciliation without consuming a unit",
+  async (beforeSettlement) => {
+    const f = setup({ metered: true, beforeSettlement });
+    expect(await f.service.run("member", jid)).toEqual({
+      kind: "unavailable",
+      jobId: jid,
+      status: "needs_reconciliation",
+    });
+    expect(
+      f.query.mock.calls.some(([sql]) =>
+        sql.includes("UPDATE synthetic_entitlement_grants SET reserved"),
+      ),
+    ).toBe(false);
+  },
+);
+it("unmetered legacy enqueue creates a job without touching the ledger and accepts a non-emitter test connection", async () => {
+  const f = setup({ missing: "collision", legacyClient: true });
+  expect(await f.service.enqueue("member", rid, "legacy-key")).toEqual({
+    kind: "queued",
+    jobId: jid,
+  });
+  expect(
+    f.query.mock.calls.some(([sql]) => sql.includes("synthetic_entitlement")),
+  ).toBe(false);
+});
+it.each([
+  {},
+  { local_ai_receipt_id: "foreign" },
+  { member_id: "foreign" },
+  { request_fingerprint: "changed" },
+])(
+  "a concurrent idempotency winner is revalidated before queue success: %j",
+  async (job) => {
+    const f = setup({ concurrentCollision: true, insertion: false, job });
+    expect(await f.service.enqueue("member", rid, "shared-key")).toEqual(
+      Object.keys(job).length
+        ? { kind: "conflict" }
+        : { kind: "queued", jobId: jid },
+    );
+    expect(f.execute).not.toHaveBeenCalled();
+  },
+);
+it("a missing linked reservation state is withheld from the receipt projection", async () => {
+  const f = setup({
+    listedJobs: [
+      { id: jid, status: "pending", policy: LOCAL_AI_TEST_UNIT_POLICY },
+    ],
+  });
+  expect((await f.service.list("member"))[0]!.jobs).toEqual([
+    { id: jid, status: "pending" },
+  ]);
+});
+
+it.each(["claim", "before", "after"] as const)(
+  "a metered grant deadline at %s cannot publish success or a new charge",
+  async (budgetDeadline) => {
+    const f = setup({ metered: true, budgetDeadline });
+    const result = await f.service.run("member", jid);
+    expect(result.kind).toBe(
+      budgetDeadline === "claim" ? "denied" : "unavailable",
+    );
+    expect(f.execute).toHaveBeenCalledTimes(budgetDeadline === "claim" ? 0 : 1);
+    if (budgetDeadline === "after")
+      expect(f.query.mock.calls.some(([sql]) => sql === "ROLLBACK")).toBe(true);
+  },
+);

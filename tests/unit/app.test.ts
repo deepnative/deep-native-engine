@@ -1107,6 +1107,9 @@ it("requires explicit member confirmation and current local AI permission at eve
     enqueue: vi
       .fn<LocalAiConsentStore["enqueue"]>()
       .mockResolvedValue({ kind: "denied" }),
+    enqueueMetered: vi
+      .fn<LocalAiConsentStore["enqueueMetered"]>()
+      .mockResolvedValue({ kind: "denied" }),
     run: vi
       .fn<LocalAiConsentStore["run"]>()
       .mockResolvedValue({ kind: "denied" }),
@@ -1163,6 +1166,33 @@ it("requires explicit member confirmation and current local AI permission at eve
     expect.any(String),
     "receipt-id",
     "receipt-id",
+  );
+  await post("/evidence/local-ai/receipt-id/queue-metered").expect(422);
+  await post("/evidence/local-ai/receipt-id/queue-metered", {
+    confirm: "yes",
+  }).expect(422);
+  expect(localAiConsent.enqueueMetered).not.toHaveBeenCalled();
+  await post("/evidence/local-ai/receipt-id/queue-metered", {
+    confirm: "yes",
+    key: "private-key",
+  }).expect(403);
+  localAiConsent.enqueueMetered.mockResolvedValueOnce({ kind: "conflict" });
+  await post("/evidence/local-ai/receipt-id/queue-metered", {
+    confirm: "yes",
+    key: "private-key",
+  }).expect(409);
+  localAiConsent.enqueueMetered.mockResolvedValueOnce({
+    kind: "queued",
+    jobId: "job-id",
+  });
+  await post("/evidence/local-ai/receipt-id/queue-metered", {
+    confirm: "yes",
+    key: "private-key",
+  }).expect(303);
+  expect(localAiConsent.enqueueMetered).toHaveBeenLastCalledWith(
+    expect.any(String),
+    "receipt-id",
+    "private-key",
   );
   await post("/evidence/local-ai/job-id/run").expect(403);
   localAiConsent.run.mockResolvedValueOnce({ kind: "unavailable" });

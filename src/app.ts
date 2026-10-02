@@ -1430,6 +1430,37 @@ export function app(
     }
     res.redirect(303, "/evidence/local-ai");
   });
+  app.post("/evidence/local-ai/:receiptId/queue-metered", async (req, res) => {
+    const fields = req.body as Fields;
+    if (fields.confirm !== "yes" || typeof fields.key !== "string") {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Confirmation needed",
+            "Confirm use of one existing local test request before continuing.",
+          ),
+        );
+      return;
+    }
+    const outcome = await localAiConsent.enqueueMetered(
+      res.locals.token as string,
+      req.params.receiptId as string,
+      fields.key,
+    );
+    if (outcome.kind !== "queued") {
+      res
+        .status(outcome.kind === "conflict" ? 409 : 403)
+        .send(
+          errorPage(
+            "Local test request unavailable",
+            "Check current permission, the local pause state and your existing test units. No allowance was granted and no live provider was contacted.",
+          ),
+        );
+      return;
+    }
+    res.redirect(303, "/evidence/local-ai");
+  });
   app.post("/evidence/local-ai/:jobId/run", async (req, res) => {
     const outcome = await localAiConsent.run(
       res.locals.token as string,
