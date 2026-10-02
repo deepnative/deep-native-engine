@@ -77,7 +77,7 @@ test("[L80] members correct a private draft and submit only the confirmed revisi
           .check();
         await page.getByRole("button", { name: "Save private draft" }).click();
         const id = new URL(page.url()).pathname.split("/").at(-1)!;
-        await expect(page.getByText("Saved revision 1")).toBeVisible();
+        await expect(page.getByText(/^Saved revision 1\./)).toBeVisible();
         const staleTab = await member.newPage();
         await staleTab.goto("/contribute/" + id);
         const staleCsrf = await staleTab
@@ -93,7 +93,7 @@ test("[L80] members correct a private draft and submit only the confirmed revisi
           .getByLabel("Sources and rights notes")
           .fill("Corrected original invented source note.");
         await page.getByRole("button", { name: "Save corrections" }).click();
-        await expect(page.getByText("Saved revision 2")).toBeVisible();
+        await expect(page.getByText(/^Saved revision 2\./)).toBeVisible();
         await page.reload();
         await expect(
           page.getByRole("heading", { name: correctedTitle }),
