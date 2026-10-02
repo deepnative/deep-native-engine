@@ -14,7 +14,12 @@ export interface WorkflowReference {
 }
 
 export type ProposalState =
-  "draft" | "submitted" | "quarantined" | "rejected" | "withdrawn";
+  | "draft"
+  | "submitted"
+  | "changes_requested"
+  | "quarantined"
+  | "rejected"
+  | "withdrawn";
 export interface Proposal {
   id: string;
   title: string | null;
@@ -27,6 +32,15 @@ export interface Proposal {
   createdAt: Date;
   submittedAt: Date | null;
 }
+export interface OwnerProposal extends Proposal {
+  feedback: {
+    text: string;
+    reviewedRevision: number;
+    requestedAt: Date;
+  } | null;
+  rightsAttestedRevision: number | null;
+  rightsAttestedAt: Date | null;
+}
 export interface ProposalStore {
   createDraft(
     token: string,
@@ -35,7 +49,12 @@ export interface ProposalStore {
     workflow?: WorkflowReference,
   ): Promise<string | null>;
   owned(token: string): Promise<Proposal[]>;
-  preview(token: string, id: string): Promise<Proposal | null>;
+  preview(token: string, id: string): Promise<OwnerProposal | null>;
+  requestChanges(
+    token: string,
+    id: string,
+    input: { expectedRevision: number; feedback: string },
+  ): Promise<"requested" | "replayed" | "conflict" | "denied" | "invalid">;
   editDraft(
     token: string,
     id: string,
@@ -47,7 +66,7 @@ export interface ProposalStore {
     id: string,
     rightsConfirmed: boolean,
     expectedRevision: number,
-  ): Promise<"submitted" | "conflict" | "denied">;
+  ): Promise<"submitted" | "replayed" | "conflict" | "denied">;
   withdraw(token: string, id: string): Promise<boolean>;
   moderationQueue(token: string): Promise<Proposal[] | null>;
   moderationPage(
@@ -85,6 +104,7 @@ export function disabledProposalStore(): ProposalStore {
     createDraft: async () => null,
     owned: async () => [],
     preview: async () => null,
+    requestChanges: async () => "denied",
     editDraft: async () => "denied",
     submit: async () => "denied",
     withdraw: async () => false,
@@ -96,6 +116,30 @@ export function disabledProposalStore(): ProposalStore {
 const columns = `mp.id,mp.title,mp.body,mp.sources,mp.state,mp.revision,
  mp.workflow_id AS "workflowId",mp.workflow_version AS "workflowVersion",
  mp.created_at AS "createdAt",mp.submitted_at AS "submittedAt"`;
+const ownerColumns = `${columns},mp.change_feedback AS "feedbackText",
+ mp.change_feedback_revision AS "feedbackRevision",mp.changes_requested_at AS "feedbackRequestedAt",
+ mp.rights_attested_revision AS "rightsAttestedRevision",mp.rights_attested_at AS "rightsAttestedAt"`;
+interface OwnerRow extends Proposal {
+  feedbackText: string | null;
+  feedbackRevision: number | null;
+  feedbackRequestedAt: Date | null;
+  rightsAttestedRevision: number | null;
+  rightsAttestedAt: Date | null;
+}
+function projection(row: Proposal): Proposal {
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    sources: row.sources,
+    workflowId: row.workflowId,
+    workflowVersion: row.workflowVersion,
+    state: row.state,
+    revision: row.revision,
+    createdAt: row.createdAt,
+    submittedAt: row.submittedAt,
+  };
+}
 const member = `p.token_hash=$1 AND p.kind='member'
  AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP`;
 interface ModerationActor {
@@ -106,6 +150,9 @@ interface ModerationActor {
 interface ModerationProposal extends Proposal {
   workspace_id: string;
   member_id: string;
+  feedback_matches?: boolean;
+  feedback_revision?: number | null;
+  decision_actor_id?: string | null;
 }
 export function proposalStore(
   pool: Pool,
@@ -152,14 +199,17 @@ export function proposalStore(
     token: string,
     id: string,
     denied: T,
-    use: (client: PoolClient, row: Proposal) => Promise<T>,
+    use: (client: PoolClient, row: OwnerRow) => Promise<T>,
+    read = false,
   ): Promise<T> {
     if (!proposalIdPattern.test(id)) return denied;
     const client = await pool.connect();
     let releaseError: Error | undefined;
+    let commitAttempted = false;
     try {
       await client.query("BEGIN");
       await client.query("SET LOCAL lock_timeout='5s'");
+      await client.query("SET LOCAL statement_timeout='5s'");
       // Match deletion/moderation ordering. Authorization remains locked until
       // commit; row locking makes revision checks and state changes atomic.
       const principal = (
@@ -183,9 +233,9 @@ export function proposalStore(
         return denied;
       }
       const row = (
-        await client.query<Proposal>(
-          `SELECT ${columns} FROM member_proposals mp
-           WHERE mp.member_id=$1 AND mp.id=$2 FOR UPDATE`,
+        await client.query<OwnerRow>(
+          `SELECT ${ownerColumns} FROM member_proposals mp
+           WHERE mp.member_id=$1 AND mp.id=$2 FOR ${read ? "SHARE" : "UPDATE"}`,
           [principal.id, id],
         )
       ).rows[0];
@@ -202,9 +252,12 @@ export function proposalStore(
         await client.query("ROLLBACK");
         return denied;
       }
+      commitAttempted = true;
       await client.query("COMMIT");
       return result;
     } catch (error) {
+      if (commitAttempted)
+        releaseError = new Error("Proposal commit outcome unconfirmed");
       try {
         await client.query("ROLLBACK");
       } catch {
@@ -226,13 +279,17 @@ export function proposalStore(
     client: PoolClient,
     actor: ModerationActor,
     row: ModerationProposal,
-    action: "proposal_read" | "proposal_quarantined" | "proposal_rejected",
+    action:
+      | "proposal_read"
+      | "proposal_quarantined"
+      | "proposal_rejected"
+      | "proposal_changes_requested",
     next: ProposalState,
   ) {
     await client.query(
       `INSERT INTO proposal_audit(actor_id,actor_role,workspace_id,member_id,
-         proposal_id,action,old_state,new_state,occurred_at)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,clock_timestamp())`,
+         proposal_id,action,old_state,new_state,reviewed_revision,occurred_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,clock_timestamp())`,
       [
         actor.id,
         actor.role,
@@ -242,6 +299,7 @@ export function proposalStore(
         action,
         row.state,
         next,
+        row.revision,
       ],
     );
   }
@@ -257,11 +315,15 @@ export function proposalStore(
       nextCursor: string | null,
     ) => Promise<T>,
     cursor?: unknown,
+    change?: { expectedRevision: number; feedback: string },
   ): Promise<T> {
     const client = await pool.connect();
     let releaseError: Error | undefined;
+    let commitAttempted = false;
     try {
       await client.query("BEGIN");
+      await client.query("SET LOCAL lock_timeout='5s'");
+      await client.query("SET LOCAL statement_timeout='5s'");
       // Lock order: staff principal, profile, member principals, workspaces,
       // proposals. Member principal locks precede both deletion cascades.
       const principal = (
@@ -297,6 +359,9 @@ export function proposalStore(
       // permanently hide a later eligible proposal during deletion recovery.
       // A concurrently withdrawn/deleted candidate is excluded, never replaced
       // with an unlocked row beyond this invocation's ordered 100-row window.
+      const states = change
+        ? ["submitted", "changes_requested"]
+        : ["submitted", "quarantined"];
       const candidates = (
         await client.query<{
           id: string;
@@ -305,11 +370,11 @@ export function proposalStore(
         }>(
           `SELECT mp.id,mp.member_id,mp.submitted_at::text FROM member_proposals mp
          JOIN workspaces w ON w.owner_principal_id=mp.member_id
-         WHERE w.deleting_at IS NULL AND mp.state IN ('submitted','quarantined')
+         WHERE w.deleting_at IS NULL AND mp.state=ANY($4::text[])
            AND ($1::uuid IS NULL OR mp.id=$1)
            AND ($2::timestamptz IS NULL OR (mp.submitted_at,mp.id)>($2::timestamptz,$3::uuid))
          ORDER BY mp.submitted_at,mp.id LIMIT 100`,
-          [id, after?.submittedAt ?? null, after?.id ?? null],
+          [id, after?.submittedAt ?? null, after?.id ?? null, states],
         )
       ).rows;
       const members = candidates.map((row) => row.member_id);
@@ -331,11 +396,16 @@ export function proposalStore(
            SELECT mp.*,w.id AS workspace_id FROM member_proposals mp
            JOIN workspaces w ON w.owner_principal_id=mp.member_id
            WHERE mp.id=ANY($1::uuid[]) AND w.id=ANY($2::uuid[])
-             AND mp.state IN ('submitted','quarantined')
+             AND mp.state=ANY($3::text[])
            ORDER BY mp.id FOR UPDATE OF mp
-         ) SELECT ${columns},mp.workspace_id,mp.member_id FROM locked mp
+         ) SELECT ${columns},mp.workspace_id,mp.member_id${change ? ",mp.change_feedback=$4 AS feedback_matches,mp.change_feedback_revision AS feedback_revision,mp.moderated_by AS decision_actor_id" : ""} FROM locked mp
          ORDER BY mp.submitted_at,mp.id`,
-          [candidates.map((row) => row.id), workspaces.map((row) => row.id)],
+          [
+            candidates.map((row) => row.id),
+            workspaces.map((row) => row.id),
+            states,
+            ...(change ? [change.feedback] : []),
+          ],
         )
       ).rows;
       // Advance past the candidate boundary even if it was withdrawn/deleted
@@ -362,9 +432,12 @@ export function proposalStore(
         await client.query("ROLLBACK");
         return denied;
       }
+      commitAttempted = true;
       await client.query("COMMIT");
       return result;
     } catch (error) {
+      if (commitAttempted)
+        releaseError = new Error("Proposal commit outcome unconfirmed");
       try {
         await client.query("ROLLBACK");
       } catch {
@@ -388,10 +461,7 @@ export function proposalStore(
         for (const row of rows)
           await audit(client, actor, row, "proposal_read", row.state);
         return {
-          items: rows.map(
-            ({ workspace_id: _workspace, member_id: _member, ...proposal }) =>
-              proposal,
-          ),
+          items: rows.map(projection),
           nextCursor,
         };
       },
@@ -434,16 +504,73 @@ export function proposalStore(
          WHERE ${member} ORDER BY mp.created_at DESC`,
         [hash(token)],
       );
-      return result.rows;
+      return result.rows.map(projection);
     },
     async preview(token, id) {
-      const result = await pool.query<Proposal>(
-        `SELECT ${columns} FROM member_proposals mp
-         JOIN principals p ON p.id=mp.member_id
-         WHERE ${member} AND mp.id=$2`,
-        [hash(token), id],
+      return withOwner<OwnerProposal | null>(
+        token,
+        id,
+        null,
+        async (_client, row) => ({
+          ...projection(row),
+          feedback:
+            row.feedbackText === null
+              ? null
+              : {
+                  text: row.feedbackText,
+                  reviewedRevision: row.feedbackRevision!,
+                  requestedAt: row.feedbackRequestedAt!,
+                },
+          rightsAttestedRevision: row.rightsAttestedRevision,
+          rightsAttestedAt: row.rightsAttestedAt,
+        }),
+        true,
       );
-      return result.rows[0] ?? null;
+    },
+    async requestChanges(token, id, input) {
+      if (!proposalIdPattern.test(id)) return "denied";
+      if (
+        !validRevision(input.expectedRevision) ||
+        typeof input.feedback !== "string" ||
+        input.feedback.trim().length === 0 ||
+        input.feedback.length > 1000 ||
+        /[\0\uD800-\uDFFF]/u.test(input.feedback)
+      )
+        return "invalid";
+      return withModerator<"requested" | "replayed" | "conflict" | "denied">(
+        token,
+        id,
+        "denied",
+        async (client, actor, rows) => {
+          const row = rows[0];
+          if (!row || row.revision !== input.expectedRevision)
+            return "conflict";
+          if (row.state === "changes_requested")
+            return row.feedback_matches &&
+              row.feedback_revision === input.expectedRevision &&
+              row.decision_actor_id === actor.id
+              ? "replayed"
+              : "conflict";
+          if (row.state !== "submitted") return "conflict";
+          await client.query(
+            `UPDATE member_proposals SET state='changes_requested',
+          change_feedback=$2,change_feedback_revision=revision,changes_requested_at=clock_timestamp(),
+          rights_attested_at=NULL,rights_attested_revision=NULL,
+          moderated_by=$3,moderated_at=clock_timestamp() WHERE id=$1`,
+            [id, input.feedback, actor.id],
+          );
+          await audit(
+            client,
+            actor,
+            row,
+            "proposal_changes_requested",
+            "changes_requested",
+          );
+          return "requested";
+        },
+        undefined,
+        input,
+      );
     },
     async editDraft(token, id, value, expectedRevision) {
       if (!validRevision(expectedRevision) || !validProposal(value))
@@ -453,15 +580,18 @@ export function proposalStore(
         id,
         "denied",
         async (client, row) => {
-          if (row.state !== "draft" || !(await currentWorkflow(row)))
+          if (
+            !["draft", "changes_requested"].includes(row.state) ||
+            !(await currentWorkflow(row))
+          )
             return "denied";
           if (row.revision !== expectedRevision || row.revision === 2147483647)
             return "conflict";
-          // Keep owner/reference/attestations immutable; replace current text
+          // Keep owner/reference/sample attestation immutable; replace current text
           // in place without retaining prior-text history.
           await client.query(
             `UPDATE member_proposals SET title=$2,body=$3,sources=$4,
-             revision=revision+1 WHERE id=$1`,
+             revision=revision+1,rights_attested_at=NULL,rights_attested_revision=NULL WHERE id=$1`,
             [id, value.title, value.body, value.sources],
           );
           return "saved";
@@ -470,17 +600,30 @@ export function proposalStore(
     },
     async submit(token, id, rightsConfirmed, expectedRevision) {
       if (!rightsConfirmed || !validRevision(expectedRevision)) return "denied";
-      return withOwner<"submitted" | "conflict" | "denied">(
+      return withOwner<"submitted" | "replayed" | "conflict" | "denied">(
         token,
         id,
         "denied",
         async (client, row) => {
-          if (row.state !== "draft" || !(await currentWorkflow(row)))
+          if (
+            !["draft", "changes_requested", "submitted"].includes(row.state) ||
+            !(await currentWorkflow(row))
+          )
             return "denied";
           if (row.revision !== expectedRevision) return "conflict";
+          if (row.state === "submitted")
+            return row.rightsAttestedRevision === expectedRevision
+              ? "replayed"
+              : "denied";
+          if (
+            row.state === "changes_requested" &&
+            (row.feedbackRevision === null ||
+              row.revision <= row.feedbackRevision)
+          )
+            return "conflict";
           await client.query(
             `UPDATE member_proposals SET state='submitted',
-             rights_attested_at=clock_timestamp(),submitted_at=clock_timestamp()
+             rights_attested_revision=revision,rights_attested_at=clock_timestamp(),submitted_at=clock_timestamp()
              WHERE id=$1`,
             [id],
           );
@@ -490,11 +633,16 @@ export function proposalStore(
     },
     async withdraw(token, id) {
       return withOwner(token, id, false, async (client, row) => {
-        if (!["draft", "submitted", "quarantined"].includes(row.state))
+        if (
+          !["draft", "changes_requested", "submitted", "quarantined"].includes(
+            row.state,
+          )
+        )
           return false;
         await client.query(
           `UPDATE member_proposals SET state='withdrawn',title=NULL,body=NULL,
            sources=NULL,workflow_id=NULL,workflow_version=NULL,
+           change_feedback=NULL,change_feedback_revision=NULL,changes_requested_at=NULL,
            withdrawn_at=clock_timestamp() WHERE id=$1`,
           [id],
         );
@@ -519,6 +667,9 @@ export function proposalStore(
              sources=CASE WHEN $2='rejected' THEN NULL ELSE sources END,
              workflow_id=CASE WHEN $2='rejected' THEN NULL ELSE workflow_id END,
              workflow_version=CASE WHEN $2='rejected' THEN NULL ELSE workflow_version END,
+             change_feedback=CASE WHEN $2='rejected' THEN NULL ELSE change_feedback END,
+             change_feedback_revision=CASE WHEN $2='rejected' THEN NULL ELSE change_feedback_revision END,
+             changes_requested_at=CASE WHEN $2='rejected' THEN NULL ELSE changes_requested_at END,
              moderated_by=$3,moderated_at=clock_timestamp() WHERE id=$1`,
           [row.id, next, actor.id],
         );

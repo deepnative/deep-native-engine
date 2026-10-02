@@ -144,6 +144,7 @@ it.each(["moderator", "platform_admin"] as const)(
           "old_state",
           "new_state",
           "occurred_at",
+          "reviewed_revision",
         ].sort(),
       );
       expect(event).toMatchObject({
@@ -738,10 +739,8 @@ it("withholds proposals whose actual owning workspace has been deleted", async (
   expect(await proposals.moderationQueue(f.token)).toEqual([]);
   expect(await proposals.moderate(f.token, f.id, "reject")).toBe(false);
   expect(await events()).toEqual([]);
-  expect(await proposals.preview(f.owner.token, f.id)).toMatchObject({
-    state: "submitted",
-    ...f.value,
-  });
+  // Owner feedback reads now require the same non-deleting workspace boundary.
+  expect(await proposals.preview(f.owner.token, f.id)).toBeNull();
 });
 
 it.each(["deleting", "absent"] as const)(

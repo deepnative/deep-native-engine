@@ -12,7 +12,7 @@ Subject limits are 120 UTF-16 units; request/note/reply limits are 2,000. Accept
 
 History/worklists/message lists have keyset pages of 20 plus lookahead. Member message pages query only replies; internal notes do not affect member counts, timestamps, ordering or cursors. Operator pages show explicit visibility labels. Multi-owner worklists discover only bounded metadata, lock every participating principal in stable order before downstream locks, and fail the whole page if authorization changes. They do not fill gaps with unbounded queries. Protected reads/transition success require content-free audit and final database-clock expiry checks before commit.
 
-Structured export `local-member-records-v14` appends `supportRequests` and `supportReplies` at cursor-v2 indices 19 and 20. Earlier section meanings remain unchanged. Member export excludes internal notes, staff identity/grants/events and mutation receipts. Direct reply continuation locks owned request parents before text projection. Each live page remains bounded by 100 records and 256 KiB; collect every page and restart if data changes.
+The support slice introduced structured export `local-member-records-v14`, which appends `supportRequests` and `supportReplies` at cursor-v2 indices 19 and 20. Earlier section meanings remain unchanged. Member export excludes internal notes, staff identity/grants/events and mutation receipts. Direct reply continuation locks owned request parents before text projection. Each live page remains bounded by 100 records and 256 KiB; collect every page and restart if data changes.
 
 ## Trusted local operator setup
 
@@ -56,3 +56,5 @@ L106–L110 add five critical local browser scenarios, each with IT, non-IT prof
 Before data exists, revert the additive application/schema together. Once populated, disable new intake/operator mutations while retaining owner history/export/withdrawal/account deletion. Revoke operator grants using current administrator authority. Do not drop tables, restore withdrawn text or use an old binary that omits support export/deletion as a complete rollback.
 
 Parents #195/#39 stay open for named operator/backup, approved Toronto hours/holidays/scope/escalation, live allowance/terms and production retention. Private local interaction does not certify those decisions or authorize deployment.
+
+The [private proposal revision flow](PRIVATE-PROPOSAL-REVISIONS.md) advances the current export payload to `local-member-records-v15`; support section fields, cursor positions and privacy boundaries remain the same.

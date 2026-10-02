@@ -41,7 +41,7 @@ import type { ContentVersion } from "../../src/catalog.ts";
 import type { Milestone } from "../../src/store.ts";
 import type { CareerSnapshot } from "../../src/career.ts";
 import type { ExpertRecord } from "../../src/track-readiness.ts";
-import type { Proposal } from "../../src/proposals.ts";
+import type { OwnerProposal } from "../../src/proposals.ts";
 import { workflowBundle } from "../../src/workflow-registry.ts";
 import { profileEdit } from "../../src/validation.ts";
 const learner = {
@@ -364,7 +364,10 @@ it("shows a private workflow improvement with an exact version and a stale-safe 
   expect(form).toContain('name="workflow_id" value="WF-001"');
   expect(form).toContain('name="workflow_version" value="1"');
   expect(form).toContain("no public reuse rights are granted");
-  const proposal: Proposal = {
+  const proposal: OwnerProposal = {
+    feedback: null,
+    rightsAttestedRevision: null,
+    rightsAttestedAt: null,
     id: "sample",
     revision: 1,
     title: "Invented improvement",
@@ -747,7 +750,10 @@ it("renders private goals, unsent reminders and escaped editable milestone notes
   ).toContain("Edit this milestone");
 });
 it("escapes private proposal text and never renders a publish action", () => {
-  const item: Proposal = {
+  const item: OwnerProposal = {
+    feedback: null,
+    rightsAttestedRevision: null,
+    rightsAttestedAt: null,
     id: "test-id",
     revision: 3,
     title: "<sample>",
@@ -1720,7 +1726,7 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v14" as const,
+    version: "local-member-records-v15" as const,
     profile: { id: "owned" },
     records: { milestones: [{ title: "private <script>never show</script>" }] },
     page: {
