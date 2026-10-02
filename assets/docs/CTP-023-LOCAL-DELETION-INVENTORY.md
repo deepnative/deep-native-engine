@@ -14,6 +14,14 @@ A retained valid member session can outlive the committed workspace deletion mar
 
 Ordinary active members retain profile editing, including the prior-goal history and fresh starter-practice behavior; a submitted foreign member ID cannot choose the update target. Database failure or uncertain commit never reports success or automatically retries the write. This is a narrow private-preview write boundary, not a global session-middleware change, a retention-policy decision, or proof of hosted erasure. Rollback requires reverting the profile transaction and route denial mapping together after reviewing the renewed post-deletion write risk; no schema migration is added.
 
+## Pending-deletion assignment selection boundary (#422, partial #42)
+
+Assignment selection now uses the existing principal → owned nondeleting workspace → choice/content transaction order. A retained session whose preflight finished before deletion cannot insert a choice, replace its exact assignment version, or advance chosen_at after deletion obtains the boundary first. The same guard denies a principal revoked before its lock is obtained and rolls back both inserts and conflict updates when database wall time passes session expiry during a workspace or choice write wait. Selection that obtains the canonical locks first can commit before deletion or revocation proceeds.
+
+Session identity remains the only owner selector. Existing publication, version, audience and prerequisite SQL stays in force; an authorization denial returns generic 403, while an ordinary unavailable content choice remains 409. Sessions already invalid when the request begins keep the sign-in response. Database errors and uncertain commits return generic 503 without automatic write replay; reloading reads the actual durable choice. Failed rollback discards the connection. No retained choice rows are removed to hide the race, and successful account deletion still uses the existing cascade.
+
+The real PostgreSQL/HTTP regression pauses after preflight and covers new and replacement choices, both lock orderings, expiry during workspace and choice waits, all three learner backgrounds, forged owner IDs, changed eligibility/publication and uncertain commit recovery. The existing L32 browser journey adds stale-form denial and expiry while a choice update waits on desktop and mobile Chromium. This is private synthetic evidence, separate from full-MVP acceptance and hosted erasure. Rollback requires reverting the selection transaction and HTTP denial mapping together after assessing renewed late-write risk; no schema migration is involved.
+
 | Ownership path | Current local records | Expected deletion mechanism |
 | --- | --- | --- |
 | Member identity | `principals`, `learners`, `workspaces` | Delete member principal; both dependents cascade. |

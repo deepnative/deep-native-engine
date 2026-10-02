@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import type { AddressInfo } from "node:net";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,7 @@ const doubles = vi.hoisted(() => ({
   migrate: vi.fn(),
   seed: vi.fn(),
   listen: vi.fn(),
+  app: vi.fn(),
   recover: vi.fn(),
   pool: undefined as EventEmitter | undefined,
 }));
@@ -28,7 +30,7 @@ vi.mock("../../src/store.ts", () => ({
   store: vi.fn(),
 }));
 vi.mock("../../src/app.ts", () => ({
-  app: () => ({ listen: doubles.listen }),
+  app: doubles.app,
 }));
 vi.mock("../../src/catalog.ts", () => ({
   catalogStore: vi.fn(),
@@ -46,6 +48,7 @@ const env = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  doubles.app.mockImplementation(() => ({ listen: doubles.listen }));
   doubles.end.mockResolvedValue(undefined);
   doubles.migrate.mockResolvedValue(undefined);
   doubles.seed.mockResolvedValue(12);
@@ -82,20 +85,39 @@ it("controls only test evidence capabilities with a validated private clock file
   }
 });
 function server(error?: Error) {
-  const emitter = new EventEmitter();
-  const close = vi.fn((cb: (error?: Error) => void) => cb(error));
+  const address = vi.fn<() => AddressInfo | string | null>().mockReturnValue({
+    address: "127.0.0.1",
+    family: "IPv4",
+    port: 4567,
+  });
+  const emitter = Object.assign(new EventEmitter(), {
+    address,
+    listening: false,
+  });
+  const close = vi.fn((cb: (error?: Error) => void) => {
+    emitter.listening = false;
+    cb(error);
+  });
   doubles.listen.mockImplementation(() => {
-    queueMicrotask(() => emitter.emit("listening"));
+    queueMicrotask(() => {
+      emitter.listening = true;
+      emitter.emit("listening");
+    });
     return Object.assign(emitter, { close });
   });
-  return { emitter, close };
+  return { emitter, close, address };
 }
+
 it("starts after migration and closes both listener and pool", async () => {
   const s = server();
   const running = await start(env);
   expect(doubles.migrate).toHaveBeenCalledOnce();
   expect(doubles.seed).toHaveBeenCalledOnce();
   expect(doubles.listen).toHaveBeenCalledWith(4567, "127.0.0.1");
+  expect(running).toMatchObject({
+    port: 4567,
+    origin: "http://127.0.0.1:4567",
+  });
   await running.close();
   expect(s.close).toHaveBeenCalledOnce();
   expect(doubles.end).toHaveBeenCalledOnce();
@@ -198,4 +220,79 @@ it("retries a failed deletion scan without logging private errors", async () => 
     log.mockRestore();
     vi.useRealTimers();
   }
+});
+
+it("publishes the actual OS-assigned origin to request options before starting recovery", async () => {
+  const s = server();
+  s.address.mockReturnValue({
+    address: "127.0.0.1",
+    family: "IPv4",
+    port: 54321,
+  });
+  let optionsAtRecovery: { port: number; origin: string } | undefined;
+  doubles.recover.mockImplementationOnce(async () => {
+    const options = doubles.app.mock.calls[0]![1] as {
+      port: number;
+      origin: string;
+    };
+    optionsAtRecovery = { port: options.port, origin: options.origin };
+    return { examined: 0, completed: 0, failed: 0, nextCursor: null };
+  });
+  const running = await start({ ...env, DNE_PORT: "0" });
+  try {
+    expect(doubles.listen).toHaveBeenCalledExactlyOnceWith(0, "127.0.0.1");
+    expect(doubles.recover).toHaveBeenCalledOnce();
+    expect(optionsAtRecovery).toEqual({
+      port: 54321,
+      origin: "http://127.0.0.1:54321",
+    });
+    expect(running).toMatchObject({
+      port: 54321,
+      origin: "http://127.0.0.1:54321",
+    });
+  } finally {
+    await running.close();
+  }
+});
+it("preserves normalized origin checks for the configured default HTTP port", async () => {
+  const s = server();
+  s.address.mockReturnValue({ address: "127.0.0.1", family: "IPv4", port: 80 });
+  const running = await start({ ...env, DNE_PORT: "80" });
+  try {
+    expect(doubles.listen).toHaveBeenCalledExactlyOnceWith(80, "127.0.0.1");
+    expect(running.origin).toBe("http://127.0.0.1");
+    expect(doubles.app.mock.calls[0]![1]).toMatchObject({
+      origin: "http://127.0.0.1",
+    });
+  } finally {
+    await running.close();
+  }
+});
+it.each([
+  null,
+  "unexpected socket path",
+  { address: "127.0.0.1", family: "IPv4", port: 0 },
+])(
+  "closes the bound listener and pool before rejecting an unusable TCP address %j",
+  async (address) => {
+    const s = server();
+    s.address.mockReturnValue(address);
+    await expect(start({ ...env, DNE_PORT: "0" })).rejects.toThrow(
+      "no bound TCP address",
+    );
+    expect(s.close).toHaveBeenCalledOnce();
+    expect(s.emitter.listening).toBe(false);
+    expect(doubles.end).toHaveBeenCalledOnce();
+    expect(doubles.recover).not.toHaveBeenCalled();
+  },
+);
+it("still ends the pool if listener cleanup fails after a bound startup failure", async () => {
+  const s = server(new Error("listener cleanup failed"));
+  s.address.mockImplementationOnce(() => {
+    throw new Error("address inspection failed");
+  });
+  await expect(start(env)).rejects.toThrow("listener cleanup failed");
+  expect(s.close).toHaveBeenCalledOnce();
+  expect(doubles.end).toHaveBeenCalledOnce();
+  expect(doubles.recover).not.toHaveBeenCalled();
 });

@@ -98,7 +98,7 @@ export interface Store {
     id: string,
     contentId: string,
     version: number,
-  ): Promise<boolean>;
+  ): Promise<boolean | null>;
   // null denies access; empty reads and false mutations are authorized results.
   milestones(id: string): Promise<Milestone[] | null>;
   createMilestone(
@@ -520,22 +520,29 @@ export function store(pool: Pool): Store {
       );
     },
     async chooseAssignment(id, contentId, version) {
-      const result = await pool.query(
-        `INSERT INTO learner_assignment_choices(member_id,content_id,content_version)
-         SELECT l.id,cv.id,cv.version FROM learners l
-         JOIN content_versions cv ON cv.id=$2 AND cv.version=$3
-         WHERE l.id=$1 AND cv.kind='assignment' AND cv.state='published'
-           AND member_content_eligible(l.id,cv.id,cv.version)
-           AND NOT EXISTS(
-             SELECT 1 FROM content_versions newer WHERE newer.id=cv.id
-               AND newer.published_at IS NOT NULL AND newer.version>cv.version
-           )
-         ON CONFLICT(member_id) DO UPDATE SET
-           content_id=EXCLUDED.content_id,content_version=EXCLUDED.content_version,
-           chosen_at=CURRENT_TIMESTAMP`,
-        [id, contentId, version],
+      return exerciseTransaction(
+        id,
+        true,
+        async (client, memberId) => {
+          const result = await client.query(
+            `INSERT INTO learner_assignment_choices(member_id,content_id,content_version)
+             SELECT l.id,cv.id,cv.version FROM learners l
+             JOIN content_versions cv ON cv.id=$2 AND cv.version=$3
+             WHERE l.id=$1 AND cv.kind='assignment' AND cv.state='published'
+               AND member_content_eligible(l.id,cv.id,cv.version)
+               AND NOT EXISTS(
+                 SELECT 1 FROM content_versions newer WHERE newer.id=cv.id
+                   AND newer.published_at IS NOT NULL AND newer.version>cv.version
+               )
+             ON CONFLICT(member_id) DO UPDATE SET
+               content_id=EXCLUDED.content_id,content_version=EXCLUDED.content_version,
+               chosen_at=CURRENT_TIMESTAMP`,
+            [memberId, contentId, version],
+          );
+          return result.rowCount === 1;
+        },
+        true,
       );
-      return result.rowCount === 1;
     },
     async milestones(id) {
       return exerciseTransaction(

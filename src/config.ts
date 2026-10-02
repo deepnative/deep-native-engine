@@ -39,7 +39,12 @@ export function config(env: NodeJS.ProcessEnv) {
     );
   validateDatabaseIsolation(mode, url);
   const port = Number(env.DNE_PORT ?? 3000);
-  if (!Number.isInteger(port) || port < 1 || port > 65535)
+  const ephemeralTestPort = mode === "test" && env.DNE_PORT === "0";
+  if (
+    !Number.isInteger(port) ||
+    port > 65535 ||
+    (port < 1 && !ephemeralTestPort)
+  )
     throw new Error("DNE_PORT must be a valid port.");
   if (env.DNE_PRIVATE_STORAGE_ROOT === "")
     throw new Error("DNE_PRIVATE_STORAGE_ROOT must name a private directory.");

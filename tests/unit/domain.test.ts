@@ -83,6 +83,54 @@ describe("local-only configuration", () => {
   ])("rejects missing, malformed or remote/overridden targets %j", (env) =>
     expect(() => config(env)).toThrow(),
   );
+  it("allows an explicit OS-assigned port only for an isolated loopback test database", () => {
+    expect(
+      config({
+        DNE_DATABASE_URL:
+          "postgresql://127.0.0.1/dne_test_0123456789abcdef0123456789abcdef",
+        DNE_APP_MODE: "test",
+        DNE_PORT: "0",
+      }),
+    ).toMatchObject({ mode: "test", port: 0 });
+    for (const env of [
+      { DNE_DATABASE_URL: database, DNE_APP_MODE: "test" },
+      { DNE_DATABASE_URL: database, DNE_APP_MODE: "demo" },
+      { DNE_DATABASE_URL: database, DNE_APP_MODE: "live" },
+      {
+        DNE_DATABASE_URL:
+          "postgresql://remote.invalid/dne_test_0123456789abcdef0123456789abcdef",
+        DNE_APP_MODE: "test",
+      },
+      {
+        DNE_DATABASE_URL: "postgresql://127.0.0.1/dne_test_shared",
+        DNE_APP_MODE: "test",
+      },
+    ])
+      expect(() => config({ ...env, DNE_PORT: "0" })).toThrow();
+  });
+  it.each([
+    "",
+    " ",
+    "00",
+    "-0",
+    "0.0",
+    "0e0",
+    "0x0",
+    " 0",
+    "-1",
+    "65536",
+    "1.5",
+    "oops",
+  ])("rejects a nonliteral zero or invalid test port %j", (port) =>
+    expect(() =>
+      config({
+        DNE_DATABASE_URL:
+          "postgresql://127.0.0.1/dne_test_0123456789abcdef0123456789abcdef",
+        DNE_APP_MODE: "test",
+        DNE_PORT: port,
+      }),
+    ).toThrow("DNE_PORT must be a valid port."),
+  );
   it.each(["0", "-1", "65536", "1.5", "oops", ""])(
     "rejects invalid port %s",
     (port) =>

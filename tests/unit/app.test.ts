@@ -3627,6 +3627,18 @@ it("selects only an eligible published assignment for the active member and reje
   await post({ content_version: "1.5" }).expect(409);
   await post({ content_id: "SYN-999" }).expect(409);
   expect(db.chooseAssignment).not.toHaveBeenCalled();
+  db.chooseAssignment.mockResolvedValueOnce(null);
+  const denied = await post({}).expect(403);
+  expect(denied.headers.location).toBeUndefined();
+  expect(denied.text).toContain("This private action is not available.");
+  expect(denied.text).not.toContain(item.title);
+  db.chooseAssignment.mockRejectedValueOnce(
+    new Error("PRIVATE SYNTHETIC selection failure"),
+  );
+  const failure = await post({}).expect(503);
+  expect(failure.headers.location).toBeUndefined();
+  expect(failure.text).not.toContain("PRIVATE SYNTHETIC");
+  expect(failure.text).not.toContain(item.title);
   db.chooseAssignment.mockResolvedValueOnce(false);
   await post({}).expect(409);
   db.chooseAssignment.mockResolvedValueOnce(true);

@@ -287,9 +287,9 @@
       "id": "L32",
       "actor": "Exploratory general learner and another member",
       "preconditions": "One published, unqualified-signoff-free synthetic noncoding assignment",
-      "steps": "Read the published sample, choose it, reload, and compare an independent member's path",
-      "expected": "The exact choice persists privately; the other member has no chosen assignment",
-      "issues": [33],
+      "steps": "Read the published sample, choose it, reload, and compare an independent member's path; resubmit the rendered choice while its row is locked until database-time session expiry, then submit the other member's stale form after a committed deletion marker",
+      "expected": "The exact choice persists privately; the other member has no chosen assignment; expiry during the choice write and a committed deletion marker return generic denial with unchanged choice rows and timestamps on desktop and mobile",
+      "issues": [33, 422],
       "critical": true
     },
     {

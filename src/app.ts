@@ -2727,11 +2727,23 @@ export function app(
       progress,
       activity,
     );
-    if (
-      !Number.isSafeInteger(version) ||
-      !options.some((item) => item.id === id && item.version === version) ||
-      !(await store.chooseAssignment(member.id, id, version))
-    ) {
+    const selected =
+      Number.isSafeInteger(version) &&
+      options.some((item) => item.id === id && item.version === version)
+        ? await store.chooseAssignment(member.id, id, version)
+        : false;
+    if (selected === null) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Assignment choice unavailable",
+            "This private action is not available.",
+          ),
+        );
+      return;
+    }
+    if (!selected) {
       res
         .status(409)
         .send(
