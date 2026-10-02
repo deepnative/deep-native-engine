@@ -451,6 +451,57 @@ class RepositoryFixture(unittest.TestCase):
                     gate.validate_scope(self.root, gate.repository_files(self.root))
                 path.unlink()
 
+    def test_product_site_accepts_only_the_reviewed_static_assets(self):
+        gate.validate(self.root)
+        for name in ("site/extra.js", "site/tracker.html", "site/images/remote.svg"):
+            with self.subTest(name=name):
+                path = self.root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("unexpected site asset")
+                with self.assertRaisesRegex(gate.GateError, "Outside verified"):
+                    gate.validate(self.root)
+                path.unlink()
+        for name in (".github/workflows/product-pages.yml", "site/index.html", "site/styles.css", "site/favicon.svg"):
+            with self.subTest(missing=name):
+                path = self.root / name
+                original = path.read_bytes()
+                path.unlink()
+                try:
+                    with self.assertRaisesRegex(gate.GateError, "Missing file or unsupported symlink"):
+                        gate.validate(self.root)
+                finally:
+                    path.write_bytes(original)
+
+    def test_product_site_rejects_executable_html_and_resource_embeds(self):
+        page = self.root / "site/index.html"
+        original = page.read_text()
+        for payload in (
+            '<script src="https://example.invalid/track.js"></script>',
+            '<a href="#preview" onclick="sendData()">Preview</a>',
+            '<img src="https://example.invalid/pixel" alt="">',
+            '<form action="https://example.invalid/collect"><input name="email"></form>',
+            '<meta http-equiv="refresh" content="0;url=https://example.invalid">',
+        ):
+            with self.subTest(payload=payload):
+                page.write_text(original.replace("</body>", payload + "</body>"))
+                with self.assertRaisesRegex(gate.GateError, "Unsafe product site"):
+                    gate.validate(self.root)
+        page.write_text(original)
+
+    def test_product_site_rejects_svg_script_and_css_remote_resources(self):
+        icon = self.root / "site/favicon.svg"
+        original_icon = icon.read_text()
+        icon.write_text(original_icon.replace("</svg>", '<script>alert(1)</script></svg>'))
+        with self.assertRaisesRegex(gate.GateError, "Unsafe product site"):
+            gate.validate(self.root)
+        icon.write_text(original_icon)
+        css = self.root / "site/styles.css"
+        original_css = css.read_text()
+        css.write_text(original_css + '\n@import "https://example.invalid/track.css";\n')
+        with self.assertRaisesRegex(gate.GateError, "Unsafe product site"):
+            gate.validate(self.root)
+        css.write_text(original_css)
+
     def test_plan_workbook_is_narrowly_allowed_and_rejects_external_relationships(self):
         workbook = self.root / gate.PLAN_WORKBOOK
         self.assertTrue(workbook.is_file())

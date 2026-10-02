@@ -14,6 +14,7 @@ import tomllib
 import unittest
 import zipfile
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from html.parser import HTMLParser
 from xml.etree import ElementTree
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +37,9 @@ SETUP_FILES = {
     ".githooks/pre-push", ".github/pull_request_template.md",
     ".github/ISSUE_TEMPLATE/delivery.md", ".github/workflows/repository-checks.yml",
     "docs/planning/README.md", "scripts/repo.py", "tests/repository/test_repo.py",
+}
+PRODUCT_SITE_FILES = {
+    ".github/workflows/product-pages.yml", "site/index.html", "site/styles.css", "site/favicon.svg",
 }
 
 APP_FILES = {
@@ -106,10 +110,11 @@ def repository_files(root):
 def validate_scope(root, files):
     require(SETUP_FILES <= set(files), "Required setup files missing: " + str(sorted(SETUP_FILES - set(files))))
     require(APP_FILES <= set(files), "Required application gate files missing: " + str(sorted(APP_FILES - set(files))))
+    require(PRODUCT_SITE_FILES <= set(files), "Required product site files missing: " + str(sorted(PRODUCT_SITE_FILES - set(files))))
     for name in files:
         p = Path(name)
         allowed = (
-            name in SETUP_FILES or name in APP_FILES
+            name in SETUP_FILES or name in APP_FILES or name in PRODUCT_SITE_FILES
             or (p.is_relative_to(Path("src")) and p.suffix == ".ts")
             or (p.is_relative_to(Path("public")) and p.suffix == ".css")
             or (p.parent == Path("migrations") and p.suffix == ".sql")
@@ -124,6 +129,71 @@ def validate_scope(root, files):
         require(allowed, f"Outside verified repository/application scope: {diagnostic_ref(name)}. Extend the reviewed gate before adding a new executable source type.")
         require((root / p).is_file() and not (root / p).is_symlink(), f"Missing file or unsupported symlink: {diagnostic_ref(name)}")
         require((root / p).resolve().is_relative_to(root.resolve()), f"Path escapes repository: {diagnostic_ref(name)}")
+
+
+class ProductSiteHTML(HTMLParser):
+    """The public introduction has navigation and local assets, but no active content."""
+
+    TAGS = {"html", "head", "meta", "title", "link", "body", "a", "div", "span", "header",
+            "nav", "main", "section", "h1", "h2", "h3", "p", "em", "strong", "small",
+            "article", "details", "summary", "ol", "li", "footer", "br", "i", "b"}
+    ATTRS = {"class", "id", "role", "lang", "aria-hidden", "aria-label", "aria-labelledby",
+             "href", "rel", "type", "name", "property", "content", "charset"}
+
+    def handle_starttag(self, tag, attrs):
+        require(tag in self.TAGS, "Unsafe product site HTML element")
+        keys = [key for key, _ in attrs]
+        require(len(keys) == len(set(keys)) and all(key in self.ATTRS and value is not None
+                for key, value in attrs), "Unsafe product site HTML attribute")
+        values = dict(attrs)
+        require(("href" not in values or tag in {"a", "link"}) and
+                ("rel" not in values or tag == "link") and
+                ("type" not in values or tag == "link"), "Unsafe product site HTML attribute")
+        if tag == "link":
+            require((values.get("rel"), values.get("href")) in {
+                ("icon", "./favicon.svg"), ("stylesheet", "./styles.css")},
+                "Unsafe product site resource link")
+        if tag == "a":
+            href = values.get("href", "")
+            url = urlsplit(href)
+            require((href.startswith("#") and len(href) > 1) or
+                    (url.scheme == "https" and url.netloc == "github.com" and
+                     url.path.startswith("/deepnative/deep-native-engine")) or
+                    (url.scheme == "mailto" and url.path == "info@deepnative.io"),
+                    "Unsafe product site navigation link")
+
+    handle_startendtag = handle_starttag
+
+    def handle_decl(self, declaration):
+        require(declaration.lower() == "doctype html", "Unsafe product site HTML declaration")
+
+    def handle_pi(self, data):
+        require(False, "Unsafe product site HTML instruction")
+
+
+def validate_product_site(root):
+    """Keep the Pages publication local, static and free of collection surfaces."""
+    message = "Unsafe product site asset"
+    page = ProductSiteHTML()
+    page.feed((root / "site/index.html").read_text(encoding="utf-8"))
+    page.close()
+    css = (root / "site/styles.css").read_text(encoding="utf-8")
+    require(not re.search(r"@import\b|@font-face\b|url\s*\(|image-set\s*\(|expression\s*\(|"
+                          r"-moz-binding\s*:|(?<![-\w])behavior\s*:|/\*|\\", css, re.IGNORECASE), message)
+    svg = (root / "site/favicon.svg").read_text(encoding="utf-8")
+    require("<!" not in svg and "<?" not in svg, message)
+    try:
+        icon = ElementTree.fromstring(svg)
+    except ElementTree.ParseError:
+        require(False, message)
+    namespace = "{http://www.w3.org/2000/svg}"
+    require(icon.tag == namespace + "svg", message)
+    allowed = {"svg", "rect", "g", "path"}
+    attributes = {"viewBox", "role", "aria-label", "width", "height", "rx", "fill", "transform", "d"}
+    for element in icon.iter():
+        require(element.tag in {namespace + tag for tag in allowed} and
+                all(key in attributes and not re.search(r"url\s*\(|javascript:|data:", value, re.IGNORECASE)
+                    for key, value in element.attrib.items()), message)
 
 
 def validate_secret_markers(root, files):
@@ -458,6 +528,7 @@ def validate_event_previews(root):
 def validate(root):
     files = repository_files(root)
     validate_scope(root, files)
+    validate_product_site(root)
     scanned = validate_secret_markers(root, files)
     validate_archive(root)
     if PLAN_WORKBOOK.as_posix() in files:
