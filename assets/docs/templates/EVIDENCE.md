@@ -19,3 +19,15 @@ For application work, record unit raw covered/total counts for each metric and m
 - Rollback and operational implications:
 - Follow-ups and decision (ready for review, blocked, accepted; who decided):
 - Next bounded issue or owner decision, why next, dependencies/claim status, and recommended lead model/starting effort plus applicable design/review settings (recommendation only):
+
+## Completed milestone demo
+
+- Product slice/milestone or documentation/tooling artifact shown:
+- Demonstrated revision / date and timezone / environment and provider state:
+- Direct preview access and restart instructions (availability/lifetime):
+- Main user journey: actions taken and actual observed outcomes:
+- Useful screenshot/video/artifact links (invented data; no credentials/private files):
+- Dedicated preview fixture/resources; confirm no active gate database/server was used:
+- Changed README capabilities, or not applicable for documentation/tooling:
+- Limitations / unavailable-access blocker, owner and next action:
+- Parent/qualified/full-MVP/deployment state (distinct from this demo):

@@ -69,6 +69,8 @@ Reconcile labels, assignees and project Status using the coordination workflow. 
 
 Every completed, partial, blocked or paused handoff names **one next bounded action** with a live issue link and why it is the next priority, or a specific owner decision when no issue is ready. Check dependencies and active claims before recommending it; state any blocker and owner. Include the recommended lead model and starting reasoning effort from current labels/policy, plus separate design/review settings when relevant. This is a plan for the next handoff, not a claim, model switch or authorization to execute that issue.
 
+After a product slice or milestone completes on verified main, demonstrate the actual changed behavior using [the milestone demo procedure](MILESTONE-DEMOS.md). Provide access, a short main-user-journey walkthrough, revision/date/environment/provider state and limitations; include captures when useful. Update the product README for newly delivered user capabilities without dumping the backlog. Documentation/tooling milestones show their changed artifact or procedure. Use a dedicated invented-data preview, never a running gate's database/server. Report unavailable access with its blocker, owner and next action. A child demo does not complete its broad parent. Preserve the required verification, prompt guarded merge, main CI, cleanup and next-action/model handoff; this requirement grants no deployment authority.
+
 Model review, CI, deployment, provider verification, expert readiness, legal clearance, customer demand, and commercial launch are separate outcomes. A live launch requires its own recorded go/no-go decision.
 
 ## Configuration references
