@@ -33,22 +33,135 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DNE_REPOSITORY: ${{ github.repository }}
+          DNE_REPOSITORY_ID: ${{ github.repository_id }}
+          DNE_EVENT_NAME: ${{ github.event_name }}
+          DNE_EVENT_RUN_ID: ${{ github.event.workflow_run.id }}
+          DNE_EVENT_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           DNE_EVENT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
-          set -euo pipefail
-          main_sha=$(gh api "repos/$DNE_REPOSITORY/commits/main" --jq '.sha')
-          if [ "$DNE_EVENT_SHA" != "$main_sha" ]; then
-            echo 'A newer main revision exists; this publication is skipped.'
-            echo 'eligible=false' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          verified=$(gh api "repos/$DNE_REPOSITORY/actions/workflows/repository-checks.yml/runs?branch=main&event=push&status=success&head_sha=$main_sha&per_page=100" --jq ".workflow_runs | map(select(.head_sha == \"$main_sha\" and .conclusion == \"success\")) | length")
-          if [ "$verified" -eq 0 ]; then
-            echo 'Current main has no successful repository verification.'
-            exit 1
-          fi
-          echo "sha=$main_sha" >> "$GITHUB_OUTPUT"
-          echo 'eligible=true' >> "$GITHUB_OUTPUT"
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+
+          ERROR = 'Cannot verify current main; inspect the completed Repository checks run and API access.'
+          WORKFLOW_PATH = '.github/workflows/repository-checks.yml'
+
+
+          def positive_id(value):
+              return type(value) is int and value > 0
+
+
+          def env_id(name):
+              value = os.environ.get(name, '')
+              if not re.fullmatch(r'[1-9][0-9]*', value):
+                  raise ValueError()
+              return int(value)
+
+
+          def api(endpoint):
+              result = subprocess.run(
+                  ['gh', 'api', '--method', 'GET', '-H', 'Accept: application/vnd.github+json',
+                   '-H', 'X-GitHub-Api-Version: 2026-03-10', endpoint],
+                  capture_output=True, text=True, timeout=20, check=True,
+              )
+              return json.loads(result.stdout)
+
+
+          def main_revision(repository):
+              value = api(f'repos/{repository}/commits/main')
+              sha = value.get('sha') if isinstance(value, dict) else None
+              if not isinstance(sha, str) or not re.fullmatch(r'[0-9a-f]{40}', sha):
+                  raise ValueError()
+              return sha
+
+
+          def same_repository(value, repository, repository_id):
+              return (isinstance(value, dict) and positive_id(value.get('id'))
+                      and value['id'] == repository_id and value.get('full_name') == repository)
+
+
+          def verified_run(value, repository, repository_id, workflow_id, sha):
+              return (isinstance(value, dict) and positive_id(value.get('id'))
+                      and positive_id(value.get('run_attempt'))
+                      and positive_id(value.get('workflow_id')) and value['workflow_id'] == workflow_id
+                      and value.get('path') in (WORKFLOW_PATH, WORKFLOW_PATH + '@main')
+                      and value.get('event') == 'push' and value.get('head_branch') == 'main'
+                      and value.get('head_sha') == sha and value.get('status') == 'completed'
+                      and value.get('conclusion') == 'success'
+                      and same_repository(value.get('repository'), repository, repository_id)
+                      and same_repository(value.get('head_repository'), repository, repository_id))
+
+
+          def emit(sha=None):
+              with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+                  if sha is not None:
+                      output.write(f'sha={sha}\neligible=true\n')
+                  else:
+                      output.write('eligible=false\n')
+              if sha is None:
+                  print('A newer main revision exists; this publication is skipped.')
+
+
+          def select():
+              repository = os.environ.get('DNE_REPOSITORY', '')
+              if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*', repository):
+                  raise ValueError()
+              repository_id = env_id('DNE_REPOSITORY_ID')
+              event = os.environ.get('DNE_EVENT_NAME', '')
+              if event not in ('workflow_run', 'workflow_dispatch'):
+                  raise ValueError()
+              event_sha = os.environ.get('DNE_EVENT_SHA', '')
+              if not re.fullmatch(r'[0-9a-f]{40}', event_sha):
+                  raise ValueError()
+              run_id = env_id('DNE_EVENT_RUN_ID') if event == 'workflow_run' else None
+              attempt = env_id('DNE_EVENT_ATTEMPT') if event == 'workflow_run' else None
+              sha = main_revision(repository)
+              if event_sha != sha:
+                  emit()
+                  return
+              workflow = api(f'repos/{repository}/actions/workflows/repository-checks.yml')
+              if (not isinstance(workflow, dict) or not positive_id(workflow.get('id'))
+                      or workflow.get('path') != WORKFLOW_PATH or workflow.get('state') != 'active'):
+                  raise ValueError()
+              workflow_id = workflow['id']
+              if event == 'workflow_run':
+                  # Compare the attempt too: a later rerun is not evidence for this event.
+                  run = api(f'repos/{repository}/actions/runs/{run_id}')
+                  if (not verified_run(run, repository, repository_id, workflow_id, sha)
+                          or run['id'] != run_id or run['run_attempt'] != attempt):
+                      raise ValueError()
+              else:
+                  listing = api(f'repos/{repository}/actions/workflows/repository-checks.yml/runs'
+                                f'?branch=main&event=push&status=success&head_sha={sha}&per_page=100')
+                  runs = listing.get('workflow_runs') if isinstance(listing, dict) else None
+                  if not isinstance(runs, list) or len(runs) > 100:
+                      raise ValueError()
+                  for candidate in runs:
+                      if not verified_run(candidate, repository, repository_id, workflow_id, sha):
+                          continue
+                      run = api(f'repos/{repository}/actions/runs/{candidate["id"]}')
+                      if (verified_run(run, repository, repository_id, workflow_id, sha)
+                              and run['id'] == candidate['id'] and run['run_attempt'] == candidate['run_attempt']):
+                          break
+                  else:
+                      raise ValueError()
+              # Do not emit a SHA if main changed during the verification lookups.
+              if main_revision(repository) != sha:
+                  emit()
+                  return
+              emit(sha)
+
+
+          try:
+              select()
+          except Exception:
+              # API output and exception details may contain sensitive data. Never print them.
+              print(ERROR, file=sys.stderr)
+              sys.exit(1)
+          PY
       - name: Check out the verified revision
         if: steps.revision.outputs.eligible == 'true'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
