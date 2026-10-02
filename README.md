@@ -7,7 +7,7 @@ Deep Native Engine helps curious learners, IT practitioners and professionals in
 ## What you can do in the current preview
 
 - **Find a starting point.** Choose whether you want to explore AI, use it at work or build something. Your goal and background shape a simple learning path that you can change later.
-- **Learn by doing.** Work through a short lesson on giving AI a clear instruction, then practise with invented examples. Browse sample lessons and compare your own response with the source material.
+- **Learn by doing.** Work through a short lesson on giving AI a clear instruction, then practise with invented examples. Browse sample lessons and compare your own response with the source material. Opt into a private sample practice conversation, revisit up to 15 response/comparison pairs, export your history or withdraw its text. Comparisons are deterministic prompts, not AI or qualified assessment.
 - **Keep track of your work.** Save an exercise draft, mark it complete through self-assessment, and revisit your private learning activity. Switching goals keeps your earlier practice attached to its original direction. You can also plan milestones and keep sample assignments or evidence.
 - **Explore ways to participate.** Try local previews of learning circles and events, and draft a contribution. Optional career planning stays private and unsent.
 

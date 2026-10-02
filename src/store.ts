@@ -181,6 +181,7 @@ export async function migrate(pool: Pool) {
       "046-sample-hold-withdrawal.sql",
       "047-assignment-self-reflections.sql",
       "048-goal-scoped-starter.sql",
+      "049-private-practice-sessions.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

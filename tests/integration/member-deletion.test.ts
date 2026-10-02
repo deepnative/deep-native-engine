@@ -162,6 +162,23 @@ async function seedOwned(
     [id, `${marker} practice`],
   );
   track("private_practice", "member_id", id);
+  const practiceSessionId = randomUUID();
+  await pool.query(
+    `INSERT INTO private_practice_sessions(id,member_id,content_id,content_version,goal_at_start,prompt_version)
+     VALUES($1,$2,'ZDL-001',1,'everyday','practice-v1')`,
+    [practiceSessionId, id],
+  );
+  await pool.query(
+    `INSERT INTO private_practice_exchanges(session_id,sequence,response,comparison,source_excerpt)
+     VALUES($1,1,$2,$3,'Synthetic only')`,
+    [
+      practiceSessionId,
+      `${marker} practice session response`,
+      `${marker} local comparison`,
+    ],
+  );
+  track("private_practice_sessions", "member_id", id);
+  track("private_practice_exchanges", "session_id", practiceSessionId);
   await pool.query(
     "INSERT INTO content_assessments(id,member_id,content_id,content_version,rubric_version,reviewer_id,result) VALUES($1,$2,'ZDL-002',1,1,$3,$4)",
     [randomUUID(), id, staff.reviewerId, `${marker} simulated assessment`],
