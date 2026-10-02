@@ -116,11 +116,26 @@ test("[L74] member submits and withdraws a version-pinned private workflow impro
       .getByRole("button", { name: "Submit to private moderation" })
       .click();
     await expect(page.getByText("PRIVATE SAMPLE · SUBMITTED")).toBeVisible();
+    const beforeReplay = (
+      await pool.query("SELECT * FROM member_proposals WHERE id=$1", [id])
+    ).rows[0];
+    expect(beforeReplay).toMatchObject({
+      revision: 1,
+      rights_attested_revision: 1,
+      rights_attested_at: expect.any(Date),
+      submitted_at: expect.any(Date),
+    });
     const replay = await context.request.post(`/contribute/${id}/submit`, {
       headers: { origin },
       form: { csrf, rights_confirmed: "yes", revision: "1" },
+      maxRedirects: 0,
     });
-    expect(replay.status()).toBe(409);
+    expect(replay.status()).toBe(303);
+    expect(replay.headers().location).toBe(`/contribute/${id}`);
+    expect(
+      (await pool.query("SELECT * FROM member_proposals WHERE id=$1", [id]))
+        .rows[0],
+    ).toEqual(beforeReplay);
     const moderatorPage = await moderator.newPage();
     await moderatorPage.goto("/moderate/proposals");
     const queueItem = moderatorPage

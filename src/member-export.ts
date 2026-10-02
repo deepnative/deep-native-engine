@@ -119,7 +119,11 @@ const sections = {
   proposals: section(
     `id,title,body,sources,state,revision,
     workflow_id AS "workflowId",workflow_version AS "workflowVersion",
-    created_at AS "createdAt",submitted_at AS "submittedAt",withdrawn_at AS "withdrawnAt"`,
+    created_at AS "createdAt",submitted_at AS "submittedAt",withdrawn_at AS "withdrawnAt",
+    rights_attested_revision AS "rightsAttestedRevision",rights_attested_at AS "rightsAttestedAt",
+    CASE WHEN change_feedback IS NULL THEN NULL ELSE jsonb_build_object(
+      'text',change_feedback,'reviewedRevision',change_feedback_revision,
+      'requestedAt',changes_requested_at) END AS feedback`,
     "member_proposals WHERE member_id=$1",
     "id",
     true,
@@ -195,7 +199,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v14";
+  version: "local-member-records-v15";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   page: {
@@ -309,7 +313,7 @@ export function memberExportStore(
           );
           const payload: MemberExportPayload = {
             kind: "ready",
-            version: "local-member-records-v14",
+            version: "local-member-records-v15",
             profile: owner.rows[0],
             records,
             page: {

@@ -29,7 +29,7 @@ import { COACHING_OFFERS } from "./offers.ts";
 import type { ContentVersion } from "./catalog.ts";
 import { effectivePrerequisiteSpec } from "./prerequisites.ts";
 import type { ExpertRecord, TrackSnapshot } from "./track-readiness.ts";
-import type { Proposal } from "./proposals.ts";
+import type { Proposal, OwnerProposal } from "./proposals.ts";
 import type { WorkflowBundle } from "./workflow-registry.ts";
 import type { WorkflowFeedback } from "./workflow-feedback.ts";
 import type { ManualObservation } from "./manual-observations.ts";
@@ -314,21 +314,31 @@ export function proposalListPage(
 ) {
   return page(
     "Your sample proposals",
-    `<section class="error-page"><p class="eyebrow">PRIVATE LOCAL PREVIEW · SAMPLE INFORMATION ONLY</p><h1>Your sample proposals</h1><p class="lead">Draft an original example. A submitted sample stays in a private moderation queue. No contribution license, publication, expert assessment or public sharing is enabled.</p><ul>${items.map((item) => `<li><a href="/contribute/${escape(item.id)}">${escape(item.title ?? "Redacted proposal")}</a> · ${escape(item.state)}</li>`).join("")}</ul>${items.length ? "" : "<p>No sample proposals yet.</p>"}<h2>${workflow ? `Private improvement for ${escape(workflow.id)} version ${workflow.version}` : "New private draft"}</h2><form method="post" action="/contribute">${hidden(csrf)}${workflow ? `<input type="hidden" name="workflow_id" value="${escape(workflow.id)}"><input type="hidden" name="workflow_version" value="${workflow.version}"><p>Reference: ${escape(workflow.title)} · version ${workflow.version}. This is only a private proposal; no public reuse rights are granted.</p>` : ""}<label for="proposal-title">Title</label><input id="proposal-title" name="title" maxlength="160" required><label for="proposal-body">Original sample</label><textarea id="proposal-body" name="body" maxlength="4000" required></textarea><label for="proposal-sources">Sources and rights notes</label><textarea id="proposal-sources" name="sources" maxlength="1000" required></textarea><label class="check"><input type="checkbox" name="sample_confirmed" value="yes" required><span>I used only invented or sample information and understand this is private.</span></label><button type="submit">Save private draft</button></form><p><a href="/learn">Return to learning</a></p></section>`,
+    `<section class="error-page"><p class="eyebrow">PRIVATE LOCAL PREVIEW · SAMPLE INFORMATION ONLY</p><h1>Your sample proposals</h1><p class="lead">Draft an original example. A submitted sample stays in a private moderation queue. No contribution license, publication, expert assessment or public sharing is enabled.</p><ul>${items.map((item) => `<li><a href="/contribute/${escape(item.id)}">${escape(item.title ?? "Redacted proposal")}</a> · ${escape(item.state.replaceAll("_", " "))}</li>`).join("")}</ul>${items.length ? "" : "<p>No sample proposals yet.</p>"}<h2>${workflow ? `Private improvement for ${escape(workflow.id)} version ${workflow.version}` : "New private draft"}</h2><form method="post" action="/contribute">${hidden(csrf)}${workflow ? `<input type="hidden" name="workflow_id" value="${escape(workflow.id)}"><input type="hidden" name="workflow_version" value="${workflow.version}"><p>Reference: ${escape(workflow.title)} · version ${workflow.version}. This is only a private proposal; no public reuse rights are granted.</p>` : ""}<label for="proposal-title">Title</label><input id="proposal-title" name="title" maxlength="160" required><label for="proposal-body">Original sample</label><textarea id="proposal-body" name="body" maxlength="4000" required></textarea><label for="proposal-sources">Sources and rights notes</label><textarea id="proposal-sources" name="sources" maxlength="1000" required></textarea><label class="check"><input type="checkbox" name="sample_confirmed" value="yes" required><span>I used only invented or sample information and understand this is private.</span></label><button type="submit">Save private draft</button></form><p><a href="/learn">Return to learning</a></p></section>`,
   );
 }
 export function proposalPreviewPage(
-  item: Proposal,
+  item: OwnerProposal,
   csrf: string,
   referenceCurrent = true,
 ) {
-  const canSubmit = item.state === "draft" && referenceCurrent;
-  const canWithdraw = ["draft", "submitted", "quarantined"].includes(
-    item.state,
-  );
+  const editable = item.state === "draft" || item.state === "changes_requested";
+  const canEdit = editable && referenceCurrent;
+  const canSubmit =
+    canEdit &&
+    (item.state === "draft" ||
+      (item.feedback !== null &&
+        item.revision > item.feedback.reviewedRevision));
+  const canWithdraw = [
+    "draft",
+    "changes_requested",
+    "submitted",
+    "quarantined",
+  ].includes(item.state);
+  const feedback = canWithdraw ? item.feedback : null;
   return page(
     "Private proposal",
-    `<section class="error-page"><p class="eyebrow">PRIVATE SAMPLE · ${escape(item.state.toUpperCase())}</p><h1>${escape(item.title ?? "Redacted proposal")}</h1><p class="lead">This is not published or licensed for public reuse.</p>${item.workflowId ? `<p>Workflow reference: ${escape(item.workflowId)} version ${item.workflowVersion}</p>` : ""}${!referenceCurrent && item.state === "draft" ? '<p role="status">This workflow version is no longer current. You can read or withdraw this private draft, but start a new version-pinned proposal before submitting.</p>' : ""}${item.body ? `<h2>Sample</h2><p>${escape(item.body)}</p><h2>Sources and rights notes</h2><p>${escape(item.sources!)}</p>` : "<p>The proposal text has been removed.</p>"}${canSubmit ? `<p>Saved revision ${item.revision}. Corrections stay private until you submit this exact revision.</p>${proposalEditForm(item.id, csrf, item.revision, { title: item.title!, body: item.body!, sources: item.sources! })}<form method="post" action="/contribute/${escape(item.id)}/submit">${hidden(csrf)}<input type="hidden" name="revision" value="${item.revision}"><label class="check"><input type="checkbox" name="rights_confirmed" value="yes" required><span>I created this sample or have the rights to submit it for private moderation. No public license is granted.</span></label><button type="submit">Submit to private moderation</button></form>` : ""}${canWithdraw ? `<form method="post" action="/contribute/${escape(item.id)}/withdraw">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Remove the proposal text and stop moderation.</span></label><button type="submit">Withdraw and redact</button></form>` : ""}<p><a href="/contribute">Your sample proposals</a></p></section>`,
+    `<section class="error-page"><p class="eyebrow">PRIVATE SAMPLE · ${escape(item.state.toUpperCase().replaceAll("_", " "))}</p><h1>${escape(item.title ?? "Redacted proposal")}</h1><p class="lead">This is not published or licensed for public reuse.</p>${item.workflowId ? `<p>Workflow reference: ${escape(item.workflowId)} version ${item.workflowVersion}</p>` : ""}${!referenceCurrent && editable ? '<p role="status">This workflow version is no longer current. You can read or withdraw this private proposal, but start a new version-pinned proposal before editing or submitting.</p>' : ""}${item.body ? `<h2>Sample</h2><p class="content-text" data-proposal-body>${escape(item.body)}</p><h2>Sources and rights notes</h2><p class="content-text">${escape(item.sources!)}</p>` : "<p>The proposal text has been removed.</p>"}${feedback ? `<section aria-label="Private requested changes"><h2>${item.state === "changes_requested" ? "Changes requested" : "Prior-cycle requested changes"}</h2><p>Private local feedback on revision ${feedback.reviewedRevision}, requested <time datetime="${feedback.requestedAt.toISOString()}">${feedback.requestedAt.toISOString()}</time>. This is not approval or qualified assessment.</p><p class="content-text" data-proposal-feedback>${escape(feedback.text)}</p><p>Only the current requested changes are retained. A later request replaces this feedback.</p></section>` : ""}${canEdit ? `<p>Saved revision ${item.revision}. Corrections stay private until you submit this exact revision.</p>${proposalEditForm(item.id, csrf, item.revision, { title: item.title!, body: item.body!, sources: item.sources! })}` : ""}${canEdit && !canSubmit ? '<p role="status">Save a correction after the reviewed revision before resubmitting. Then confirm rights again for the corrected revision.</p>' : ""}${canSubmit ? `<form method="post" action="/contribute/${escape(item.id)}/submit">${hidden(csrf)}<input type="hidden" name="revision" value="${item.revision}"><label class="check"><input type="checkbox" name="rights_confirmed" value="yes" required><span>I created this sample or have the rights to submit it for private moderation. No public license is granted.</span></label><p>Confirm rights now for saved revision ${item.revision}; an earlier confirmation does not cover corrected text.</p><button type="submit">${item.state === "changes_requested" ? "Resubmit to private moderation" : "Submit to private moderation"}</button></form>` : ""}${item.rightsAttestedRevision !== null && item.rightsAttestedAt !== null ? `<p>Rights confirmed for revision ${item.rightsAttestedRevision} at <time datetime="${item.rightsAttestedAt.toISOString()}">${item.rightsAttestedAt.toISOString()}</time>.</p>` : ""}${item.state === "quarantined" ? '<p role="status">This proposal is quarantined. Editing and resubmission are unavailable; you can still withdraw it.</p>' : ""}${canWithdraw ? `<form method="post" action="/contribute/${escape(item.id)}/withdraw">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Remove the proposal text and stop moderation.</span></label><button type="submit">Withdraw and redact</button></form>` : ""}<p><a href="/contribute">Your sample proposals</a></p></section>`,
   );
 }
 type ProposalEditFields = { title: string; body: string; sources: string };
@@ -364,6 +374,22 @@ export function proposalEditRecoveryPage(
     `<section class="error-page"><p class="eyebrow">PRIVATE SAMPLE · ${status}</p><h1>${title}</h1><div class="notice" role="alert"><p>${escape(message)}</p></div>${revision !== undefined ? `<p>You were changing saved revision ${revision}. Check these fields and try again. A changed draft will require you to review the current preview first.</p>${proposalEditForm(id, csrf, revision, bounded)}` : `<p>Copy your attempted text before opening the current preview. This page does not retry the write.</p><label for="unsaved-proposal-title">Attempted title</label><input id="unsaved-proposal-title" readonly value="${escape(bounded.title)}"><label for="unsaved-proposal-body">Attempted sample</label><textarea id="unsaved-proposal-body" readonly>${escape(bounded.body)}</textarea><label for="unsaved-proposal-sources">Attempted sources and rights notes</label><textarea id="unsaved-proposal-sources" readonly>${escape(bounded.sources)}</textarea>`}<p><a href="/contribute/${escape(id)}">Open the current private preview</a> to check the saved revision and submission state.</p></section>`,
   );
 }
+export function proposalSubmissionRecoveryPage(id: string) {
+  return page(
+    "Proposal submission outcome unknown",
+    `<section class="error-page"><h1>Proposal submission outcome unknown</h1><p role="alert">Submission could not be confirmed. Inspect the current state and rights revision before trying again. Nothing is retried automatically.</p><p><a href="/contribute/${escape(id)}">Open the current private preview</a></p></section>`,
+  );
+}
+export function proposalChangesRecoveryPage(
+  message: string,
+  attempted: string,
+  outcomeUnknown = false,
+) {
+  return page(
+    outcomeUnknown ? "Change request outcome unknown" : "Changes not requested",
+    `<section class="error-page"><h1>${outcomeUnknown ? "Change request outcome unknown" : "Changes not requested"}</h1><p role="alert">${escape(message)}</p><p>Copy your attempted feedback before reopening the private moderation queue. This page does not retry the decision. A missing queue item does not confirm which action occurred.</p><label for="attempted-feedback">Attempted member-visible feedback</label><textarea id="attempted-feedback" readonly>${escape(attempted.slice(0, 1000))}</textarea><p><a href="/moderate/proposals">Open the current moderation queue</a></p></section>`,
+  );
+}
 export function moderationPage(
   items: Proposal[],
   csrf: string,
@@ -376,7 +402,7 @@ export function moderationPage(
   const entries = items
     .map(
       (item) =>
-        `<li><strong>${escape(item.title!)}</strong> · ${escape(item.state)}${item.workflowId ? `<p>Workflow reference: ${escape(item.workflowId)} version ${item.workflowVersion}</p>` : ""}<p>Submitted (UTC): <time datetime="${item.submittedAt!.toISOString()}">${item.submittedAt!.toISOString()}</time> · Elapsed: ${Math.max(0, Math.floor((now.getTime() - item.submittedAt!.getTime()) / 60_000))} minutes</p><p>${escape(item.body!)}</p><p>Sources: ${escape(item.sources!)}</p>${item.state === "submitted" ? `<form method="post" action="/moderate/proposals/${escape(item.id)}/quarantine">${hidden(csrf)}<button type="submit">Quarantine for review</button></form>` : ""}<form method="post" action="/moderate/proposals/${escape(item.id)}/reject">${hidden(csrf)}<button type="submit">Reject and redact</button></form></li>`,
+        `<li data-proposal-id="${escape(item.id)}"><strong>${escape(item.title!)}</strong> · ${escape(item.state)}${item.workflowId ? `<p>Workflow reference: ${escape(item.workflowId)} version ${item.workflowVersion}</p>` : ""}<p>Submitted (UTC): <time datetime="${item.submittedAt!.toISOString()}">${item.submittedAt!.toISOString()}</time> · Elapsed: ${Math.max(0, Math.floor((now.getTime() - item.submittedAt!.getTime()) / 60_000))} minutes</p><p>${escape(item.body!)}</p><p>Sources: ${escape(item.sources!)}</p>${item.state === "submitted" ? `<form method="post" action="/moderate/proposals/${escape(item.id)}/request-changes">${hidden(csrf)}<input type="hidden" name="revision" value="${item.revision}"><p>Reviewing submitted revision ${item.revision}.</p><label for="changes-${escape(item.id)}">Member-visible requested changes (up to 1,000 characters)</label><textarea id="changes-${escape(item.id)}" name="feedback" maxlength="1000" required></textarea><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Send these invented requested changes privately to the proposal owner.</span></label><button type="submit">Request changes</button></form><form method="post" action="/moderate/proposals/${escape(item.id)}/quarantine">${hidden(csrf)}<button type="submit">Quarantine for review</button></form>` : ""}<form method="post" action="/moderate/proposals/${escape(item.id)}/reject">${hidden(csrf)}<button type="submit">Reject and redact</button></form></li>`,
     )
     .join("");
   const empty = items.length
@@ -398,7 +424,7 @@ export function moderationPage(
     : "";
   return page(
     "Private proposal moderation",
-    `<section class="error-page"><p class="eyebrow">MODERATOR ONLY · NO PUBLICATION</p><h1>Private proposal moderation</h1><p class="lead">Review submitted sample text in quarantine. You can quarantine or reject and redact it. Approval and publication are unavailable while licensing policy is pending. This private synthetic worklist has no response-time promise. Elapsed age is as of page load.</p><ul>${entries}</ul>${empty}<nav aria-label="Moderation pages">${next}${back}</nav>${navigation.continued ? "<p>This worklist can change while you browse. Return to start to check earlier submissions.</p>" : ""}</section>`,
+    `<section class="error-page"><p class="eyebrow">MODERATOR ONLY · NO PUBLICATION</p><h1>Private proposal moderation</h1><p class="lead">Review submitted sample text in quarantine. You can request private changes to a submitted revision, quarantine it, or reject and redact it. Approval and publication are unavailable while licensing policy is pending. This private synthetic worklist has no response-time promise. Elapsed age is as of page load.</p><ul>${entries}</ul>${empty}<nav aria-label="Moderation pages">${next}${back}</nav>${navigation.continued ? "<p>This worklist can change while you browse. Return to start to check earlier submissions.</p>" : ""}</section>`,
   );
 }
 export function offerHypothesesPage() {

@@ -11,7 +11,7 @@ Deep Native Engine helps curious learners, IT practitioners and professionals in
 - **Keep track of your work.** Save an exercise draft, mark it complete through self-assessment, and revisit your private learning activity. Switching goals keeps your earlier practice attached to its original direction. You can also plan milestones and keep sample assignments or evidence.
 - **Try private sample support.** Submit an invented request, follow its receipt and read explicitly shared local operator replies. Withdraw the request text or include retained replies in your private export. This is a local demonstration with unverified coverage and no response deadline; see [operator setup](assets/docs/PRIVATE-SAMPLE-SUPPORT.md).
 - **Inspect local synthetic accounting.** Operators can view observed unit balances and structural discrepancies without exposing member details. This does not verify payments or qualified service capacity; see [the report guide](assets/docs/PRIVATE-SYNTHETIC-LEDGER-RECONCILIATION.md).
-- **Explore ways to participate.** Try local previews of learning circles and events, and draft a contribution. Optional career planning stays private and unsent.
+- **Explore ways to participate.** Try local previews of learning circles and events. Draft a private contribution, revise it using explicit moderator feedback, and confirm rights again before resubmitting. Optional career planning stays private and unsent.
 
 This is a **local learning preview**, not a launched service. Lessons and participation examples are synthetic. There is no live AI provider, community discussion, qualified assessment, real booking or payment flow. Use invented or sample information only. See the [product direction](assets/docs/PRODUCT-DIRECTION.md) for the wider vision and the [project board](https://github.com/orgs/deepnative/projects/1/views/1) for work still in progress.
 
@@ -35,11 +35,11 @@ The [quality gates](assets/docs/context/QUALITY-GATES.md) and [scope and accepta
 
 Read [AGENTS.md](AGENTS.md) and the [team workflow](assets/docs/workflows/TEAM-WORKFLOW.md) before taking an issue. Codex discovers the repo-local skills and custom agents when this repository is opened as a trusted project; reload the project after adding them if needed. Use the same written workflow in other assistants.
 
-| Task | Skill | Suggested role |
-| --- | --- | --- |
-| Clarify scope and acceptance | `$dne-plan-issue` | `dne-planner` |
-| Deliver an authorized slice | `$dne-deliver-issue` | `dne-builder` or `dne-critical-builder` |
-| Review changes and evidence | `$dne-review-change` | `dne-reviewer` |
-| Validate and hand off work | `$dne-handoff` | `dne-verifier` |
+| Task                         | Skill                | Suggested role                          |
+| ---------------------------- | -------------------- | --------------------------------------- |
+| Clarify scope and acceptance | `$dne-plan-issue`    | `dne-planner`                           |
+| Deliver an authorized slice  | `$dne-deliver-issue` | `dne-builder` or `dne-critical-builder` |
+| Review changes and evidence  | `$dne-review-change` | `dne-reviewer`                          |
+| Validate and hand off work   | `$dne-handoff`       | `dne-verifier`                          |
 
 The [documentation index](assets/docs/README.md) includes the original context, model recommendations, templates, and workflow. Shared instructions make the process reproducible; model outputs still require review and tests. Delivery includes merging accepted changes to `main` and verifying the resulting CI.

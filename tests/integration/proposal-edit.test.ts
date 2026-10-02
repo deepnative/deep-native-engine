@@ -69,7 +69,7 @@ it("exports only current revision, keeps unsent drafts out of moderation, then s
   expect(exported).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v14",
+      version: "local-member-records-v15",
       records: {
         proposals: [{ id: f.id, ...corrected, revision: 2, state: "draft" }],
       },
@@ -556,7 +556,10 @@ it("times out a blocked save without changes, releases its transaction, and perm
       [f.id],
     );
     pending = proposals.editDraft(f.token, f.id, corrected, 1);
-    await expect(pending).rejects.toMatchObject({ code: "55P03" });
+    // Both unchanged five-second bounds can cancel this actual row wait.
+    await expect(pending).rejects.toMatchObject({
+      code: expect.stringMatching(/^(55P03|57014)$/),
+    });
     await blocker.query("ROLLBACK");
     expect(await proposals.preview(f.token, f.id)).toMatchObject({
       ...original,

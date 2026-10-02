@@ -51,6 +51,8 @@ import {
   proposalListPage,
   proposalPreviewPage,
   proposalEditRecoveryPage,
+  proposalChangesRecoveryPage,
+  proposalSubmissionRecoveryPage,
   moderationPage,
   milestonesPage,
   careerPage,
@@ -173,6 +175,11 @@ const attemptWritePath =
 const attemptReflectionWritePath =
   /^\/assignments\/attempts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/reflections\/(?:[1-9]|10)\/(save|delete)$/i;
 const proposalEditPath = /^\/contribute\/([^/]+)\/edit$/;
+const proposalChangesPath = /^\/moderate\/proposals\/([^/]+)\/request-changes$/;
+function proposalFeedback(body: unknown) {
+  const value = (body as Fields | undefined)?.feedback;
+  return typeof value === "string" ? value.slice(0, 1000) : "";
+}
 function proposalAttempt(body: unknown) {
   const fields = (body ?? {}) as Fields;
   const text = (name: string, max: number) =>
@@ -189,7 +196,9 @@ function proposalRevision(value: unknown): number | undefined {
   if (typeof value !== "string" || !/^[1-9][0-9]*$/.test(value))
     return undefined;
   const revision = Number(value);
-  return Number.isSafeInteger(revision) ? revision : undefined;
+  return Number.isSafeInteger(revision) && revision <= 2147483647
+    ? revision
+    : undefined;
 }
 function attemptedResponse(body: unknown, action: string) {
   const fields = (body ?? {}) as Fields;
@@ -337,6 +346,10 @@ export function app(
     ["/support", "/operator/support"],
     express.urlencoded({ extended: false, limit: "32kb" }),
   );
+  app.use(
+    "/contribute",
+    express.urlencoded({ extended: false, limit: "64kb" }),
+  );
   app.use(express.urlencoded({ extended: false, limit: "16kb" }));
   app.use(cookieParser());
   app.use((req, res, next) => {
@@ -392,6 +405,20 @@ export function app(
               res.locals.csrf as string,
               "This form was not accepted. Copy your attempted text, then open the current private preview and use a refreshed form.",
               proposalAttempt(req.body),
+            ),
+          );
+        return;
+      }
+      if (
+        req.get("origin") === options.origin &&
+        proposalChangesPath.test(req.path)
+      ) {
+        res
+          .status(403)
+          .send(
+            proposalChangesRecoveryPage(
+              "This form was not accepted. Reopen the queue and use a refreshed form before deciding.",
+              proposalFeedback(req.body),
             ),
           );
         return;
@@ -596,6 +623,77 @@ export function app(
         continued: continuation !== undefined,
       }),
     );
+  });
+  app.post("/moderate/proposals/:id/request-changes", async (req, res) => {
+    const fields = (req.body ?? {}) as Fields;
+    const revision = proposalRevision(fields.revision);
+    const attempted = proposalFeedback(fields);
+    if (
+      Object.keys(req.query).length ||
+      Object.keys(fields).some(
+        (key) => !["csrf", "revision", "feedback", "confirm"].includes(key),
+      ) ||
+      revision === undefined ||
+      fields.confirm !== "yes" ||
+      typeof fields.feedback !== "string" ||
+      fields.feedback.length > 1000 ||
+      !fields.feedback.trim() ||
+      /[\0\uD800-\uDFFF]/u.test(fields.feedback)
+    ) {
+      res
+        .status(422)
+        .send(
+          proposalChangesRecoveryPage(
+            "Use one valid submitted revision, 1–1,000 characters of sample feedback and explicit confirmation. No changes were requested.",
+            attempted,
+          ),
+        );
+      return;
+    }
+    let result: Awaited<ReturnType<ProposalStore["requestChanges"]>>;
+    try {
+      result = await proposals.requestChanges(
+        res.locals.token as string,
+        req.params.id as string,
+        { expectedRevision: revision, feedback: fields.feedback },
+      );
+    } catch {
+      res
+        .status(503)
+        .send(
+          proposalChangesRecoveryPage(
+            "The decision could not be confirmed. Inspect the current queue before any further action.",
+            attempted,
+            true,
+          ),
+        );
+      return;
+    }
+    if (result === "requested" || result === "replayed") {
+      res.redirect(303, "/moderate/proposals");
+      return;
+    }
+    if (result === "denied") {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Moderation unavailable",
+            "Current moderator access to this submitted revision is required.",
+          ),
+        );
+      return;
+    }
+    res
+      .status(result === "invalid" ? 422 : 409)
+      .send(
+        proposalChangesRecoveryPage(
+          result === "invalid"
+            ? "The feedback or revision was not accepted. No changes were requested."
+            : "The submitted revision or decision changed. Nothing new was saved. Reopen the queue before deciding.",
+          attempted,
+        ),
+      );
   });
   app.post("/moderate/proposals/:id/:action", async (req, res) => {
     const action = req.params.action;
@@ -1649,7 +1747,32 @@ export function app(
     );
   });
   app.post("/contribute", async (req, res) => {
-    const fields = req.body as Fields;
+    const fields = (req.body ?? {}) as Fields;
+    if (
+      Object.keys(req.query).length ||
+      Object.keys(fields).some(
+        (key) =>
+          ![
+            "csrf",
+            "title",
+            "body",
+            "sources",
+            "sample_confirmed",
+            "workflow_id",
+            "workflow_version",
+          ].includes(key),
+      )
+    ) {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Proposal not saved",
+            "Use only the contribution form fields. Nothing was saved.",
+          ),
+        );
+      return;
+    }
     const value = (name: string) =>
       typeof fields[name] === "string" ? (fields[name] as string) : "";
     const workflow =
@@ -1713,7 +1836,9 @@ export function app(
     const attempted = proposalAttempt(fields);
     const revision = proposalRevision(fields.revision);
     const permitted = new Set(["csrf", "revision", "title", "body", "sources"]);
-    const malformed = Object.keys(fields).some((key) => !permitted.has(key));
+    const malformed =
+      Object.keys(req.query).length > 0 ||
+      Object.keys(fields).some((key) => !permitted.has(key));
     const textValid = [
       [fields.title, 160],
       [fields.body, 4000],
@@ -1722,7 +1847,8 @@ export function app(
       ([value, max]) =>
         typeof value === "string" &&
         value.trim().length > 0 &&
-        value.length <= (max as number),
+        value.length <= (max as number) &&
+        !/[\0\uD800-\uDFFF]/u.test(value),
     );
     if (revision === undefined || malformed || !textValid) {
       res
@@ -1771,7 +1897,7 @@ export function app(
         .send(
           errorPage(
             "Proposal unavailable",
-            "Only an active owner can correct a current private draft.",
+            "Only an active owner can correct an eligible current private proposal.",
           ),
         );
       return;
@@ -1793,6 +1919,7 @@ export function app(
     const fields = (req.body ?? {}) as Fields;
     const revision = proposalRevision(fields.revision);
     if (
+      Object.keys(req.query).length > 0 ||
       revision === undefined ||
       Object.keys(fields).some(
         (key) => !["csrf", "revision", "rights_confirmed"].includes(key),
@@ -1812,13 +1939,21 @@ export function app(
         );
       return;
     }
-    const result = await proposals.submit(
-      res.locals.token as string,
-      req.params.id as string,
-      fields.rights_confirmed === "yes",
-      revision,
-    );
-    if (result !== "submitted") {
+    let result: Awaited<ReturnType<ProposalStore["submit"]>>;
+    try {
+      result = await proposals.submit(
+        res.locals.token as string,
+        req.params.id as string,
+        fields.rights_confirmed === "yes",
+        revision,
+      );
+    } catch {
+      res
+        .status(503)
+        .send(proposalSubmissionRecoveryPage(req.params.id as string));
+      return;
+    }
+    if (result !== "submitted" && result !== "replayed") {
       res
         .status(409)
         .send(
@@ -1836,8 +1971,11 @@ export function app(
     res.redirect(303, `/contribute/${req.params.id}`);
   });
   app.post("/contribute/:id/withdraw", async (req, res) => {
+    const fields = (req.body ?? {}) as Fields;
     if (
-      req.body.confirm !== "yes" ||
+      Object.keys(req.query).length > 0 ||
+      Object.keys(fields).some((key) => !["csrf", "confirm"].includes(key)) ||
+      fields.confirm !== "yes" ||
       !(await proposals.withdraw(
         res.locals.token as string,
         req.params.id as string,

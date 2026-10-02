@@ -44,6 +44,12 @@ it("fails closed when proposal storage is unavailable", async () => {
   expect(await disabled.createDraft("member", value, true)).toBeNull();
   expect(await disabled.owned("member")).toEqual([]);
   expect(await disabled.preview("member", draft.id)).toBeNull();
+  expect(
+    await disabled.requestChanges("staff", draft.id, {
+      expectedRevision: 1,
+      feedback: "Sample correction",
+    }),
+  ).toBe("denied");
   expect(await disabled.editDraft("member", draft.id, value, 1)).toBe("denied");
   expect(await disabled.submit("member", draft.id, true, 1)).toBe("denied");
   expect(await disabled.withdraw("member", draft.id)).toBe(false);
@@ -76,8 +82,6 @@ it("bounds member reads and creation to their current owner", async () => {
   expect(await store.createDraft("member", value, true)).toBe(draft.id);
   expect(await store.createDraft("unknown", value, true)).toBeNull();
   expect(await store.owned("member")).toEqual([draft]);
-  expect(await store.preview("member", draft.id)).toEqual(draft);
-  expect(await store.preview("other", draft.id)).toBeNull();
 });
 it("rejects forged or stale workflow references at creation", async () => {
   const query = vi.fn().mockResolvedValue({ rows: [{ id: draft.id }] });
@@ -104,7 +108,15 @@ function ownerFixture(
   options: {
     principal?: boolean;
     workspace?: boolean;
-    row?: Proposal | null;
+    row?:
+      | (Proposal & {
+          feedbackText?: string | null;
+          feedbackRevision?: number | null;
+          feedbackRequestedAt?: Date | null;
+          rightsAttestedRevision?: number | null;
+          rightsAttestedAt?: Date | null;
+        })
+      | null;
     expired?: boolean;
     failure?: string;
     rollbackFails?: boolean;
@@ -130,7 +142,21 @@ function ownerFixture(
     if (sql.startsWith("SELECT id FROM workspaces"))
       return { rows: options.workspace === false ? [] : [{ id: "workspace" }] };
     if (sql.startsWith("SELECT mp.id"))
-      return { rows: options.row === null ? [] : [options.row ?? draft] };
+      return {
+        rows:
+          options.row === null
+            ? []
+            : [
+                {
+                  feedbackText: null,
+                  feedbackRevision: null,
+                  feedbackRequestedAt: null,
+                  rightsAttestedRevision: null,
+                  rightsAttestedAt: null,
+                  ...(options.row ?? draft),
+                },
+              ],
+      };
     if (sql.startsWith("SELECT clock_timestamp()"))
       return { rows: [{ valid: !options.expired }] };
     return { rows: [], rowCount: 1 };
@@ -258,7 +284,13 @@ it.each(["BEGIN", "write", "COMMIT"])(
       f.store.editDraft("member", draft.id, value, 1),
     ).rejects.toThrow("Synthetic mutation failure");
     expect(f.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
-    expect(f.release).toHaveBeenCalledWith(undefined);
+    expect(f.release).toHaveBeenCalledWith(
+      failure === "COMMIT"
+        ? expect.objectContaining({
+            message: "Proposal commit outcome unconfirmed",
+          })
+        : undefined,
+    );
   },
 );
 it("discards a mutation connection when rollback fails", async () => {
@@ -278,7 +310,11 @@ function moderationFixture(
     principal?: boolean;
     profile?: boolean;
     expired?: boolean;
-    rows?: Proposal[];
+    rows?: (Proposal & {
+      feedback_matches?: boolean;
+      feedback_revision?: number | null;
+      decision_actor_id?: string | null;
+    })[];
     failure?: string;
     rollbackFails?: boolean;
   } = {},
@@ -334,6 +370,19 @@ function moderationFixture(
   };
 }
 
+it("returns a submitted revision to its owner with a content-free changes decision", async () => {
+  const f = moderationFixture();
+  expect(
+    await f.store.requestChanges("staff", draft.id, {
+      expectedRevision: 1,
+      feedback: "Clarify the invented example.",
+    }),
+  ).toBe("requested");
+  expect(f.history.map((row) => row[5])).toEqual([
+    "proposal_changes_requested",
+  ]);
+});
+
 it("commits one content-free event for each returned private proposal without exposing ownership metadata", async () => {
   const f = moderationFixture();
   expect(await f.store.moderationQueue("staff")).toEqual([
@@ -349,6 +398,7 @@ it("commits one content-free event for each returned private proposal without ex
       "proposal_read",
       "submitted",
       "submitted",
+      1,
     ],
   ]);
   expect(f.query.mock.calls.at(-1)?.[0]).toBe("COMMIT");
@@ -397,7 +447,13 @@ it.each(["BEGIN", "audit", "COMMIT"])(
       "Synthetic transaction failure",
     );
     expect(f.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
-    expect(f.release).toHaveBeenCalledWith(undefined);
+    expect(f.release).toHaveBeenCalledWith(
+      failure === "COMMIT"
+        ? expect.objectContaining({
+            message: "Proposal commit outcome unconfirmed",
+          })
+        : undefined,
+    );
   },
 );
 it("discards a connection when audit and rollback both fail", async () => {
@@ -480,4 +536,240 @@ it("accepts only the issuing actor and session's intact continuation in the same
     items: [{ ...draft, state: "submitted" }],
   });
   expect(f.history).toHaveLength(2);
+});
+
+it("returns only owner feedback and consent fields after the locked preview commits", async () => {
+  const requestedAt = new Date("2026-10-02T12:00:00Z");
+  const f = ownerFixture({
+    row: {
+      ...draft,
+      state: "changes_requested",
+      feedbackText: "Private feedback",
+      feedbackRevision: 1,
+      feedbackRequestedAt: requestedAt,
+    },
+  });
+  expect(await f.store.preview("member", draft.id)).toEqual({
+    ...draft,
+    feedback: { text: "Private feedback", reviewedRevision: 1, requestedAt },
+    state: "changes_requested",
+    rightsAttestedRevision: null,
+    rightsAttestedAt: null,
+  });
+  expect(f.query.mock.calls.at(-1)?.[0]).toBe("COMMIT");
+  expect(await ownerFixture().store.preview("member", draft.id)).toEqual({
+    ...draft,
+    feedback: null,
+    rightsAttestedRevision: null,
+    rightsAttestedAt: null,
+  });
+  for (const options of [
+    { principal: false },
+    { workspace: false },
+    { row: null },
+    { expired: true },
+  ])
+    expect(
+      await ownerFixture(options).store.preview("member", draft.id),
+    ).toBeNull();
+  const invalid = ownerFixture();
+  expect(await invalid.store.preview("member", "invalid")).toBeNull();
+  expect(invalid.connect).not.toHaveBeenCalled();
+});
+
+it.each([
+  "",
+  " \n\t",
+  "x".repeat(1001),
+  "\0",
+  "\ud800",
+  "\udc00",
+  ["one", "two"],
+  undefined,
+])(
+  "rejects invalid member-visible feedback without a transaction: %j",
+  async (feedback) => {
+    const f = moderationFixture();
+    expect(
+      await f.store.requestChanges("staff", draft.id, {
+        expectedRevision: 1,
+        feedback: feedback as string,
+      }),
+    ).toBe("invalid");
+    expect(f.query).not.toHaveBeenCalled();
+  },
+);
+it("accepts full UTF-16 feedback and preserves exact input bytes", async () => {
+  for (const feedback of [
+    "汉".repeat(1000),
+    "😀".repeat(500),
+    "  Original sample feedback\n",
+  ]) {
+    const f = moderationFixture();
+    expect(
+      await f.store.requestChanges("staff", draft.id, {
+        expectedRevision: 1,
+        feedback,
+      }),
+    ).toBe("requested");
+    const update = f.query.mock.calls.find(([sql]) =>
+      sql.startsWith("UPDATE member_proposals"),
+    );
+    expect(update?.[1]?.[1]).toBe(feedback);
+    expect(JSON.stringify(f.history)).not.toContain(feedback.trim());
+  }
+});
+it("denies malformed IDs and revisions without database access", async () => {
+  const f = moderationFixture();
+  expect(
+    await f.store.requestChanges("staff", "bad", {
+      expectedRevision: 1,
+      feedback: "Sample",
+    }),
+  ).toBe("denied");
+  expect(
+    await f.store.requestChanges("staff", draft.id, {
+      expectedRevision: 0,
+      feedback: "Sample",
+    }),
+  ).toBe("invalid");
+  expect(f.query).not.toHaveBeenCalled();
+});
+it.each([{ principal: false }, { profile: false }, { expired: true }])(
+  "requires current staff authorization even for changes: %o",
+  async (options) => {
+    const f = moderationFixture(options);
+    expect(
+      await f.store.requestChanges("staff", draft.id, {
+        expectedRevision: 1,
+        feedback: "Sample",
+      }),
+    ).toBe("denied");
+    expect(f.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
+  },
+);
+it.each([
+  { rows: [], result: "conflict" },
+  {
+    rows: [{ ...draft, state: "submitted" as const, revision: 2 }],
+    result: "conflict",
+  },
+  { rows: [{ ...draft, state: "quarantined" as const }], result: "conflict" },
+  {
+    rows: [
+      {
+        ...draft,
+        state: "changes_requested" as const,
+        feedback_matches: true,
+        feedback_revision: 1,
+        decision_actor_id: "actor",
+      },
+    ],
+    result: "replayed",
+  },
+  {
+    rows: [
+      {
+        ...draft,
+        state: "changes_requested" as const,
+        feedback_matches: false,
+        feedback_revision: 1,
+        decision_actor_id: "actor",
+      },
+    ],
+    result: "conflict",
+  },
+  {
+    rows: [
+      {
+        ...draft,
+        state: "changes_requested" as const,
+        feedback_matches: true,
+        feedback_revision: 2,
+        decision_actor_id: "actor",
+      },
+    ],
+    result: "conflict",
+  },
+  {
+    rows: [
+      {
+        ...draft,
+        state: "changes_requested" as const,
+        feedback_matches: true,
+        feedback_revision: 1,
+        decision_actor_id: "other",
+      },
+    ],
+    result: "conflict",
+  },
+])(
+  "distinguishes exact authorized request replay from conflicting decisions: %o",
+  async ({ rows, result }) => {
+    const f = moderationFixture({ rows });
+    expect(
+      await f.store.requestChanges("staff", draft.id, {
+        expectedRevision: 1,
+        feedback: "Sample",
+      }),
+    ).toBe(result);
+    expect(f.history).toEqual([]);
+    expect(f.query.mock.calls.some(([sql]) => sql.startsWith("UPDATE"))).toBe(
+      false,
+    );
+  },
+);
+it("requires an edited returned revision and exact fresh rights for resubmission/replay", async () => {
+  const returned = {
+    ...draft,
+    state: "changes_requested" as const,
+    feedbackText: "Change",
+    feedbackRevision: 1,
+  };
+  for (const row of [returned, { ...returned, feedbackRevision: null }])
+    expect(
+      await ownerFixture({ row }).store.submit("member", draft.id, true, 1),
+    ).toBe("conflict");
+  const edit = ownerFixture({ row: returned });
+  expect(await edit.store.editDraft("member", draft.id, value, 1)).toBe(
+    "saved",
+  );
+  const revised = ownerFixture({ row: { ...returned, revision: 2 } });
+  expect(await revised.store.submit("member", draft.id, true, 2)).toBe(
+    "submitted",
+  );
+  const submitted = ownerFixture({
+    row: {
+      ...draft,
+      state: "submitted",
+      revision: 2,
+      rightsAttestedRevision: 2,
+      rightsAttestedAt: new Date(),
+    },
+  });
+  expect(await submitted.store.submit("member", draft.id, true, 2)).toBe(
+    "replayed",
+  );
+  expect(await submitted.store.submit("member", draft.id, true, 1)).toBe(
+    "conflict",
+  );
+  expect(
+    submitted.query.mock.calls.some(([sql]) => sql.startsWith("UPDATE")),
+  ).toBe(false);
+});
+it("never returns owner feedback or extra database columns through a moderation projection", async () => {
+  const privateRow = {
+    ...draft,
+    state: "submitted" as const,
+    feedback: "Private text",
+    rightsAttestedAt: new Date(),
+    feedback_matches: true,
+    feedback_revision: 1,
+    decision_actor_id: "actor",
+  };
+  const page = await moderationFixture({
+    rows: [privateRow],
+  }).store.moderationPage("staff");
+  expect(page?.items).toEqual([{ ...draft, state: "submitted" }]);
+  expect(JSON.stringify(page)).not.toContain("Private text");
 });
