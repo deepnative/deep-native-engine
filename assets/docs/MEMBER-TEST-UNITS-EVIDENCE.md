@@ -23,3 +23,13 @@ Rollback removes the runtime reader, page/download routes and availability link;
 ## Delivery evidence
 
 The exact-commit full gate, pre-push, PR CI, expected-head merge, resulting-main CI and branch cleanup must pass before issue Done. Their revision-specific results will be recorded on #435. Focused checks above do not establish that delivery, deployment, commercial launch or full-MVP acceptance.
+
+## Required CI failure and report repair
+
+Original branch CI run `37033748610` attempt 1 failed on source `488fa11`: the existing 22,000-record ledger reconciliation test exceeded its unchanged five-second deadline. Original PR CI `37033805232` attempt 1 passed. Both outcomes remain recorded; the passing run does not erase the failure.
+
+A fresh cold database executed the aggregate in about 35 ms. Normal member deletion, statistics refresh and a new 22,000-record import reproduced a dangerous stale-cardinality nested-loop plan: roughly 35 seconds and 241,989,000 rejected join pairs. No application catalog edits were needed for that reproduction. This establishes a real planner-sensitive defect consistent with the timeout; the original runner's query plan was not captured, so its precise cause is not asserted.
+
+The extended real PostgreSQL regression retains the original fresh case and adds the erased-member history. Before the source correction, the new case failed at the unchanged five-second test deadline. The report transaction now discourages nested-loop plans only after its indexed authorization checks, using `SET LOCAL enable_nestloop=off`; transaction completion resets the setting. No server setting, time limit, arithmetic validation, snapshot boundary, dataset size or retry rule changes. The corrected retained-churn execution plan completed in about 59 ms. All 49 reconciliation integration cases passed, including existing concurrent writer, deletion, revocation, timeout and uncertain-acknowledgement cases. The unit failure matrix also covers failure to set the report planner option.
+
+This is a bounded planner workaround, documented by [PostgreSQL 18](https://www.postgresql.org/docs/18/runtime-config-query.html); it does not make arbitrarily large ledgers fit the query deadline. Fresh exact-commit and pre-push gates plus new original CI remain required before merge and closeout.
