@@ -146,6 +146,24 @@ const sections = {
     "preview_circle_memberships WHERE member_id=$1",
     "circle_id",
   ),
+  // Append new sections: cursor v2's existing section indices stay stable.
+  practiceSessions: section(
+    `id,content_id AS "contentId",content_version AS "contentVersion",
+    goal_at_start AS "goalAtStart",prompt_version AS "promptVersion",
+    created_at AS "createdAt",withdrawn_at AS "withdrawnAt",
+    CASE WHEN withdrawn_at IS NULL THEN 'active' ELSE 'withdrawn' END AS state`,
+    "private_practice_sessions WHERE member_id=$1",
+    "id",
+    true,
+  ),
+  practiceExchanges: section(
+    `e.session_id AS "sessionId",e.sequence,e.response,e.comparison,
+    e.source_excerpt AS "sourceExcerpt",e.accepted_at AS "acceptedAt"`,
+    `private_practice_exchanges e
+    JOIN private_practice_sessions s ON s.id=e.session_id
+    WHERE s.member_id=$1 AND s.withdrawn_at IS NULL AND s.id=ANY($4::uuid[])`,
+    "e.session_id,e.sequence",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -159,7 +177,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v12";
+  version: "local-member-records-v13";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   page: {
@@ -273,7 +291,7 @@ export function memberExportStore(
           );
           const payload: MemberExportPayload = {
             kind: "ready",
-            version: "local-member-records-v12",
+            version: "local-member-records-v13",
             profile: owner.rows[0],
             records,
             page: {
@@ -323,6 +341,19 @@ export function memberExportStore(
                     ${retained}
                     AND jsonb_build_array(s.attempt_id,s.sequence)>$3::jsonb)
                 ORDER BY a.id LIMIT $2 FOR SHARE OF a`,
+                values,
+              );
+              values.push(parents.rows.map((row) => row.id));
+            }
+            if (name === "practiceExchanges") {
+              // Continuation may skip practiceSessions. Lock owned parents before
+              // reading response-derived bytes, matching session withdrawal.
+              const parents = await client.query<{ id: string }>(
+                `SELECT s.id FROM private_practice_sessions s
+                WHERE s.member_id=$1 AND s.withdrawn_at IS NULL AND EXISTS (
+                  SELECT 1 FROM private_practice_exchanges e WHERE e.session_id=s.id
+                    AND jsonb_build_array(e.session_id,e.sequence)>$3::jsonb)
+                ORDER BY s.id LIMIT $2 FOR SHARE OF s`,
                 values,
               );
               values.push(parents.rows.map((row) => row.id));

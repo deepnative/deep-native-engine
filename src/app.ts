@@ -34,6 +34,10 @@ import {
   studyReflectionPage,
   privatePracticePage,
   privatePracticeHistoryPage,
+  practiceSessionStartPage,
+  practiceSessionHistoryPage,
+  practiceSessionPage,
+  practiceSessionRecoveryPage,
   staffLibraryPage,
   trackReadinessPage,
   tailoredReviewRequestPage,
@@ -121,6 +125,10 @@ import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
 import { compareResponses } from "./attempt-compare.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
 import { disabledPracticeStore, type PracticeStore } from "./practice.ts";
+import {
+  disabledPracticeSessionStore,
+  type PracticeSessionStore,
+} from "./practice-sessions.ts";
 import {
   disabledUsefulnessStore,
   type UsefulnessChoice,
@@ -233,6 +241,7 @@ export function app(
     metrics?: MetricsStore;
     attempts?: AttemptStore;
     practice?: PracticeStore;
+    practiceSessions?: PracticeSessionStore;
     usefulness?: UsefulnessStore;
     workflowFeedback?: WorkflowFeedbackStore;
     memberExport?: MemberExportStore;
@@ -262,6 +271,8 @@ export function app(
   const metrics = options.metrics ?? disabledMetricsStore();
   const attempts = options.attempts ?? disabledAttemptStore();
   const practice = options.practice ?? disabledPracticeStore();
+  const practiceSessions =
+    options.practiceSessions ?? disabledPracticeSessionStore();
   const usefulness = options.usefulness ?? disabledUsefulnessStore();
   const workflowFeedback =
     options.workflowFeedback ?? disabledWorkflowFeedbackStore();
@@ -859,6 +870,7 @@ export function app(
       "/delete",
       "/library",
       "/practice",
+      "/practice-sessions",
       "/assignments",
       "/milestones",
       "/career",
@@ -2053,6 +2065,218 @@ export function app(
           )
         : undefined;
     res.send(contentPreview(item, false, res.locals.csrf as string, activity));
+  });
+  app.get("/library/:id/practice-session", async (req, res) => {
+    const source = await practiceSessions.source(
+      res.locals.token as string,
+      req.params.id as string,
+    );
+    if (!source) {
+      res
+        .status(404)
+        .send(
+          practiceSessionRecoveryPage(
+            "Practice source unavailable",
+            "This source is not currently eligible for your goal. Retained sessions remain in your private history.",
+          ),
+        );
+      return;
+    }
+    res.send(practiceSessionStartPage(source, res.locals.csrf as string));
+  });
+  app.post("/library/:id/practice-session/start", async (req, res) => {
+    const fields = (req.body ?? {}) as Fields;
+    const version = Number(fields.content_version);
+    if (
+      typeof fields.csrf !== "string" ||
+      Object.keys(fields).some(
+        (key) =>
+          ![
+            "csrf",
+            "content_version",
+            "goal",
+            "prompt_version",
+            "synthetic",
+          ].includes(key),
+      ) ||
+      typeof fields.content_version !== "string" ||
+      !/^[1-9][0-9]*$/.test(fields.content_version) ||
+      !Number.isSafeInteger(version) ||
+      version > 2_147_483_647 ||
+      typeof fields.goal !== "string" ||
+      !Object.hasOwn(GOALS, fields.goal) ||
+      typeof fields.prompt_version !== "string" ||
+      fields.prompt_version.length === 0 ||
+      fields.prompt_version.length > 80 ||
+      fields.synthetic !== "yes"
+    ) {
+      res
+        .status(422)
+        .send(
+          practiceSessionRecoveryPage(
+            "Confirm sample practice",
+            "Open an eligible source and confirm invented or sample-only practice using its exact version, goal and prompt.",
+          ),
+        );
+      return;
+    }
+    const result = await practiceSessions.start(res.locals.token as string, {
+      contentId: req.params.id as string,
+      contentVersion: version,
+      goal: fields.goal as keyof typeof GOALS,
+      promptVersion: fields.prompt_version,
+    });
+    if (!("sessionId" in result)) {
+      res
+        .status(409)
+        .send(
+          practiceSessionRecoveryPage(
+            "Session not started",
+            "This exact practice slot is unavailable or withdrawn. Inspect saved history before opening a current eligible source.",
+          ),
+        );
+      return;
+    }
+    res.redirect(
+      303,
+      `/practice-sessions/${encodeURIComponent(result.sessionId)}`,
+    );
+  });
+  app.get("/practice-sessions", async (req, res) => {
+    if (
+      Object.keys(req.query).some((key) => key !== "after") ||
+      (req.query.after !== undefined && typeof req.query.after !== "string")
+    ) {
+      res
+        .status(400)
+        .send(
+          practiceSessionRecoveryPage(
+            "History page unavailable",
+            "Open private session history from its first page.",
+          ),
+        );
+      return;
+    }
+    const result = await practiceSessions.history(
+      res.locals.token as string,
+      req.query.after as string | undefined,
+    );
+    if (!result) {
+      res
+        .status(404)
+        .send(
+          practiceSessionRecoveryPage(
+            "History page unavailable",
+            "This private history page is unavailable. Open the first page using your current member session.",
+          ),
+        );
+      return;
+    }
+    res.send(practiceSessionHistoryPage(result));
+  });
+  app.get("/practice-sessions/:sessionId", async (req, res) => {
+    const detail = await practiceSessions.detail(
+      res.locals.token as string,
+      req.params.sessionId as string,
+    );
+    if (!detail) {
+      res
+        .status(404)
+        .send(
+          practiceSessionRecoveryPage(
+            "Practice session unavailable",
+            "No owned practice session is available at this address.",
+          ),
+        );
+      return;
+    }
+    res.send(practiceSessionPage(detail, res.locals.csrf as string));
+  });
+  app.post("/practice-sessions/:sessionId/responses", async (req, res) => {
+    const fields = (req.body ?? {}) as Fields;
+    const expectedSequence = Number(fields.expected_sequence);
+    if (
+      typeof fields.csrf !== "string" ||
+      Object.keys(fields).some(
+        (key) =>
+          !["csrf", "expected_sequence", "response", "synthetic"].includes(key),
+      ) ||
+      typeof fields.expected_sequence !== "string" ||
+      !/^[1-9][0-9]*$/.test(fields.expected_sequence) ||
+      !Number.isSafeInteger(expectedSequence) ||
+      expectedSequence > 16 ||
+      typeof fields.response !== "string" ||
+      !fields.response.trim() ||
+      fields.response.length > 1000 ||
+      fields.synthetic !== "yes"
+    ) {
+      res
+        .status(422)
+        .send(
+          practiceSessionRecoveryPage(
+            "Response not accepted",
+            "Write 1 to 1,000 characters using only invented or sample information, confirm saving, and use the next sequence from the saved session.",
+          ),
+        );
+      return;
+    }
+    const result = await practiceSessions.append(
+      res.locals.token as string,
+      req.params.sessionId as string,
+      { expectedSequence, response: fields.response },
+    );
+    if (result !== "saved" && result !== "replayed") {
+      res
+        .status(409)
+        .send(
+          practiceSessionRecoveryPage(
+            "Response not accepted",
+            "The session or sequence is unavailable, changed, full or withdrawn. Inspect its saved history before trying again; no comparison is generated on this page.",
+          ),
+        );
+      return;
+    }
+    res.redirect(
+      303,
+      `/practice-sessions/${encodeURIComponent(req.params.sessionId as string)}`,
+    );
+  });
+  app.post("/practice-sessions/:sessionId/withdraw", async (req, res) => {
+    const fields = (req.body ?? {}) as Fields;
+    if (
+      typeof fields.csrf !== "string" ||
+      fields.confirm !== "yes" ||
+      Object.keys(fields).some((key) => key !== "csrf" && key !== "confirm")
+    ) {
+      res
+        .status(422)
+        .send(
+          practiceSessionRecoveryPage(
+            "Confirm session withdrawal",
+            "Open the exact saved session and confirm removal of all its response, comparison and source-excerpt text.",
+          ),
+        );
+      return;
+    }
+    const result = await practiceSessions.withdraw(
+      res.locals.token as string,
+      req.params.sessionId as string,
+    );
+    if (result === "unavailable") {
+      res
+        .status(404)
+        .send(
+          practiceSessionRecoveryPage(
+            "Practice session unavailable",
+            "No owned practice session is available at this address.",
+          ),
+        );
+      return;
+    }
+    res.redirect(
+      303,
+      `/practice-sessions/${encodeURIComponent(req.params.sessionId as string)}`,
+    );
   });
   app.get("/practice", async (_req, res) => {
     res.send(

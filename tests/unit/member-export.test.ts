@@ -88,7 +88,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v12",
+      version: "local-member-records-v13",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -211,7 +211,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    [2, 17, ...valid.slice(2)],
+    [2, 19, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -261,6 +261,7 @@ it("withholds records on receipt, parent-lock, connection or commit failure", as
   for (const failAt of [
     "FROM local_ai_receipts",
     "FROM assignment_attempts a",
+    "SELECT s.id FROM private_practice_sessions",
     "COMMIT",
   ]) {
     const fake = fakePool({ id: "member-1" }, () => [], failAt);
@@ -377,4 +378,71 @@ it("accepts the exact serialized UTF-8 page byte cap and rejects one additional 
   expect(exact.payload.page.complete).toBe(false);
   instruction += "x";
   expect(await exporter.exportOwned("owner")).toEqual({ kind: "limit" });
+});
+
+it("exports owned practice pairs after parent locks even when continuation starts inside exchanges", async () => {
+  for (const continuation of [
+    undefined,
+    signed([2, 18, ["prior", 1], 2, Date.now() + 60000]),
+  ]) {
+    const calls: { sql: string; values: unknown[] | undefined }[] = [];
+    const fake = fakePool({ id: "member-1" }, (sql) =>
+      sql.startsWith("SELECT s.id")
+        ? [{ id: "owned-session" }]
+        : sql.includes("FROM private_practice_exchanges e") &&
+            sql.includes('AS "_key"')
+          ? [
+              {
+                _key: ["z-session", 2],
+                sessionId: "owned-session",
+                sequence: 2,
+                response: "Invented response",
+                comparison: "Simulated comparison",
+                sourceExcerpt: "Exact sample",
+              },
+            ]
+          : [],
+    );
+    const original = fake.pool.connect.bind(fake.pool);
+    const pool = {
+      connect: async () => {
+        const client = await original();
+        return {
+          query: (sql: string, values?: unknown[]) => {
+            calls.push({ sql, values });
+            return client.query(sql, values);
+          },
+          release: client.release.bind(client),
+        };
+      },
+    } as unknown as Pool;
+    expect(
+      await memberExportStore(pool, secret).exportOwned("owner", continuation),
+    ).toMatchObject({
+      kind: "ready",
+      payload: {
+        records: {
+          practiceExchanges: [
+            {
+              sessionId: "owned-session",
+              sequence: 2,
+              response: "Invented response",
+            },
+          ],
+        },
+      },
+    });
+    const parent = calls.findIndex((call) =>
+      call.sql.startsWith("SELECT s.id"),
+    );
+    const child = calls.findIndex(
+      (call) =>
+        call.sql.includes('AS "_key"') &&
+        call.sql.includes("FROM private_practice_exchanges e"),
+    );
+    expect(parent).toBeGreaterThan(-1);
+    expect(parent).toBeLessThan(child);
+    expect(calls[child]!.values![3]).toEqual(["owned-session"]);
+    expect(calls.at(-2)?.sql).toBe("COMMIT");
+  }
 });
