@@ -755,9 +755,9 @@
       "id": "L78",
       "actor": "General, non-IT professional and IT members editing private profiles",
       "preconditions": "Three independent synthetic member sessions with saved choices and original-goal practice, plus an unrelated member; desktop or mobile Chromium and isolated PostgreSQL",
-      "steps": "Change goal and domain interest, clear an optional choice, revise weekly time, enter an invalid time zone, submit, inspect the accessible error, unchanged saved plan and unrelated member, then correct only the time zone and reload the profile and original practice",
-      "expected": "The 422 page preserves all safe attempted controls and identifies the time zone through a keyboard-operable field link and associated error; no invalid write, false plan update or cross-member disclosure occurs, and correction alone saves every intended choice while original practice retains its version and starting goal",
-      "issues": [109, 28, 347],
+      "steps": "Change goal and domain interest, clear an optional choice, revise weekly time, enter an invalid time zone, submit, inspect the accessible error, unchanged saved plan and unrelated member, then correct only the time zone and reload the profile and original practice; submit an already rendered direction change after workspace deletion commits",
+      "expected": "The 422 page preserves all safe attempted controls and identifies the time zone through a keyboard-operable field link and associated error; no invalid write, false plan update or cross-member disclosure occurs, and correction alone saves every intended choice while original practice retains its version and starting goal; pending deletion returns a content-free 403 without changing any retained profile or goal-history row",
+      "issues": [109, 28, 347, 418],
       "critical": true
     },
     {

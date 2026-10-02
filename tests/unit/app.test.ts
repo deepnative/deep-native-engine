@@ -1008,7 +1008,7 @@ function storage() {
   return {
     session: vi.fn<Store["session"]>().mockResolvedValue({ kind: "new" }),
     create: vi.fn<Store["create"]>().mockResolvedValue(undefined),
-    updateProfile: vi.fn<Store["updateProfile"]>().mockResolvedValue(undefined),
+    updateProfile: vi.fn<Store["updateProfile"]>().mockResolvedValue(true),
     progress,
     withExerciseRead: async <T>(
       _token: string,
@@ -2715,6 +2715,21 @@ it("lets an active member revise their direction without selecting another owner
       timezone: "America/Toronto",
     }),
   );
+});
+it("returns a content-free denial when profile authorization changes after middleware", async () => {
+  const { agent, csrf } = await client();
+  active();
+  db.updateProfile.mockResolvedValueOnce(false);
+  const denied = await agent
+    .post("/profile")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf, background: "professional", goal: "work", timezone: "UTC" })
+    .expect(403);
+  expect(denied.text).toContain("Profile unavailable");
+  expect(denied.text).not.toContain("owned");
+  expect(denied.headers.location).toBeUndefined();
 });
 it.each(["/learn", "/lesson", "/exercise", "/profile", "/delete"])(
   "sends unauthenticated visitors away from %s",

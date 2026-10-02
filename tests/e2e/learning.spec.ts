@@ -519,6 +519,51 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
           goal_at_start: startingGoal,
           instruction: originalDraft,
         });
+
+        await page.goto("/learn");
+        const retainedProfile = await saved();
+        const retainedHistory = (
+          await pool.query(
+            "SELECT * FROM exercises WHERE learner_id=$1 ORDER BY goal_slot",
+            [member.id],
+          )
+        ).rows;
+        await page
+          .getByLabel("What would you like to do?")
+          .selectOption(startingGoal);
+        await pool.query(
+          "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE id=$1",
+          [member.id],
+        );
+        const deniedResponse = page.waitForResponse(
+          (response) =>
+            response.url().endsWith("/profile") &&
+            response.request().method() === "POST",
+        );
+        await page.getByRole("button", { name: "Save my direction" }).click();
+        expect((await deniedResponse).status()).toBe(403);
+        await expect(
+          page.getByRole("heading", { name: "Profile unavailable" }),
+        ).toBeVisible();
+        await expect(
+          page.getByText(originalDraft, { exact: true }),
+        ).toHaveCount(0);
+        await expect(
+          page.getByRole("button", { name: "Save my direction" }),
+        ).toHaveCount(0);
+        expect(await saved()).toEqual(retainedProfile);
+        expect(
+          (
+            await pool.query(
+              "SELECT * FROM exercises WHERE learner_id=$1 ORDER BY goal_slot",
+              [member.id],
+            )
+          ).rows,
+        ).toEqual(retainedHistory);
+        await unrelatedPage.reload();
+        await expect(
+          unrelatedPage.getByLabel("What would you like to do?"),
+        ).toHaveValue("everyday");
       } finally {
         await context.close();
       }

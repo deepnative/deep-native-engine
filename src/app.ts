@@ -3692,7 +3692,17 @@ export function app(
         );
       return;
     }
-    await store.updateProfile(member.id, edit.input);
+    if (!(await store.updateProfile(member.id, edit.input))) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Profile unavailable",
+            "This profile cannot be changed by this session.",
+          ),
+        );
+      return;
+    }
     res.redirect(303, "/learn");
   });
   app.get("/lesson", async (req, res) => {
