@@ -2,7 +2,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Server } from "node:http";
+import { createServer, type Server } from "node:http";
+import { once } from "node:events";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import { app } from "../../src/app.ts";
@@ -553,7 +554,7 @@ it("resumes an accepted local deletion after restart even when its session has e
 
   const running = await start({
     DNE_DATABASE_URL: process.env.DNE_TEST_DATABASE_URL,
-    DNE_PORT: String(40_000 + Math.floor(Math.random() * 10_000)),
+    DNE_PORT: "0",
     DNE_APP_MODE: "test",
     DNE_PRIVATE_STORAGE_ROOT: storageRoot,
   });
@@ -835,4 +836,65 @@ it("converges when recovery overlaps the original confirmed deletion", async () 
     await count({ table: "principals", column: "id", value: owner.id }),
   ).toBe(0);
   await expect(files.get(key)).rejects.toThrow();
+});
+
+it("binds an OS-assigned port beside an occupied listener and validates its actual Host and Origin", async () => {
+  const occupied = createServer((_req, res) =>
+    res.end("owned test listener"),
+  ).listen(0, "127.0.0.1");
+  await once(occupied, "listening");
+  const occupiedAddress = occupied.address();
+  if (!occupiedAddress || typeof occupiedAddress === "string")
+    throw Error("Missing owned test listener");
+  const startup = {
+    DNE_DATABASE_URL: process.env.DNE_TEST_DATABASE_URL,
+    DNE_APP_MODE: "test",
+    DNE_PRIVATE_STORAGE_ROOT: storageRoot,
+  };
+  let running: Awaited<ReturnType<typeof start>> | undefined;
+  try {
+    await expect(
+      start({ ...startup, DNE_PORT: String(occupiedAddress.port) }),
+    ).rejects.toMatchObject({ code: "EADDRINUSE" });
+    await request(occupied).get("/").expect(200, "owned test listener");
+    running = await start({ ...startup, DNE_PORT: "0" });
+    const address = running.server.address();
+    if (!address || typeof address === "string")
+      throw Error("Missing application address");
+    expect(address.port).toBeGreaterThan(0);
+    expect(address.port).not.toBe(occupiedAddress.port);
+    const actualOrigin = new URL("http://127.0.0.1:" + address.port).origin;
+    expect(running.origin).toBe(actualOrigin);
+    expect(running.port).toBe(address.port);
+    const agent = request.agent(actualOrigin);
+    const entry = await agent.get("/").expect(200);
+    const formToken = entry.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+    const form = {
+      csrf: formToken,
+      background: "explorer",
+      goal: "everyday",
+      synthetic: "yes",
+    };
+    await agent.get("/").set("Host", "forged.invalid").expect(403);
+    await agent
+      .post("/start")
+      .set("Origin", "http://forged.invalid")
+      .type("form")
+      .send(form)
+      .expect(403);
+    await agent
+      .post("/start")
+      .set("Origin", actualOrigin)
+      .type("form")
+      .send(form)
+      .expect(303)
+      .expect("Location", "/learn");
+    await request(occupied).get("/").expect(200, "owned test listener");
+  } finally {
+    try {
+      await running?.close();
+    } finally {
+      await closeLoopback(occupied);
+    }
+  }
 });

@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import type { Server } from "node:http";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.ts";
@@ -59,11 +60,12 @@ export async function start(env: NodeJS.ProcessEnv) {
   pool.on("error", () =>
     console.error("Database connection interrupted; retry the request."),
   );
+  let ownedServer: Server | undefined;
   try {
     await migrate(pool);
     await seedDraftPack(pool);
     const objects = fileObjectStorage(settings.privateStorageRoot);
-    const server = app(store(pool), {
+    const options = {
       ...settings,
       authorization: authorizationStore(pool),
       catalog: catalogStore(pool),
@@ -98,11 +100,20 @@ export async function start(env: NodeJS.ProcessEnv) {
           env.DNE_TEST_EVIDENCE_CLOCK,
         ),
       ),
-    }).listen(settings.port, "127.0.0.1");
+    };
+    const server = app(store(pool), options).listen(settings.port, "127.0.0.1");
+    ownedServer = server;
     await new Promise<void>((resolve, reject) => {
       server.once("listening", resolve);
       server.once("error", reject);
     });
+    const address = server.address();
+    if (!address || typeof address === "string" || address.port < 1)
+      throw new Error("The local listener has no bound TCP address.");
+    // app() reads this shared options object for every Host/Origin check.
+    // Publish the bound address synchronously before recovery or another await.
+    options.port = address.port;
+    options.origin = new URL("http://127.0.0.1:" + address.port).origin;
     let cursor: string | null = null;
     let activeRecovery: Promise<void> | undefined;
     const recover = () => {
@@ -129,6 +140,8 @@ export async function start(env: NodeJS.ProcessEnv) {
     recover();
     return {
       server,
+      port: options.port,
+      origin: options.origin,
       close: async () => {
         clearInterval(recoveryTimer);
         try {
@@ -142,7 +155,16 @@ export async function start(env: NodeJS.ProcessEnv) {
       },
     };
   } catch (error) {
-    await pool.end();
+    try {
+      if (ownedServer?.listening)
+        await new Promise<void>((resolve, reject) =>
+          ownedServer!.close((failure) =>
+            failure ? reject(failure) : resolve(),
+          ),
+        );
+    } finally {
+      await pool.end();
+    }
     throw error;
   }
 }

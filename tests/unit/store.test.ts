@@ -250,12 +250,15 @@ it("pins only a currently published assignment version to a session-owned learne
     contentId: "SYN-920",
     contentVersion: 1,
   });
-  p.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
-  expect(await db.chooseAssignment("member-1", "SYN-920", 1)).toBe(true);
-  expect(p.query.mock.calls[2]![0]).toContain("state='published'");
-  expect(p.query.mock.calls[2]![1]).toEqual(["member-1", "SYN-920", 1]);
-  p.query.mockResolvedValueOnce({ rowCount: 0, rows: [] });
-  expect(await db.chooseAssignment("member-1", "SYN-920", 2)).toBe(false);
+  const choice = choicePool(),
+    selecting = store(choice.value);
+  expect(await selecting.chooseAssignment("member-1", "SYN-920", 1)).toBe(true);
+  expect(choice.data.mock.calls[0]![0]).toContain("state='published'");
+  expect(choice.data.mock.calls[0]![1]).toEqual(["member-1", "SYN-920", 1]);
+  choice.data.mockResolvedValueOnce({ rowCount: 0, rows: [] });
+  expect(await selecting.chooseAssignment("member-1", "SYN-920", 2)).toBe(
+    false,
+  );
 });
 it("keeps milestone reads and optimistic edits scoped to the owning member", async () => {
   const p = milestonePool(),
@@ -718,5 +721,63 @@ it.each(lessonOperations)(
     );
     expect(commit.data).toHaveBeenCalledOnce();
     expect(commit.query).toHaveBeenLastCalledWith("ROLLBACK");
+  },
+);
+
+function choicePool(options: Parameters<typeof exercisePool>[0] = {}) {
+  const p = exercisePool(options),
+    normal = p.query.getMockImplementation()!;
+  const data = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
+  p.query.mockImplementation(async (sql: string, ...args: unknown[]) => {
+    if (sql.startsWith("SELECT id,expires_at") && options.principal !== false)
+      return {
+        rows: [
+          { id: (args[0] as string[])[0], expires_at: new Date("2035-01-01") },
+        ],
+      };
+    return sql.startsWith("INSERT INTO learner_assignment_choices")
+      ? data(sql, ...args)
+      : normal(sql);
+  });
+  return { ...p, data };
+}
+it.each([{ principal: false }, { workspace: false }, { expired: true }])(
+  "denies selection and rolls back every choice change for %j",
+  async (options) => {
+    const p = choicePool(options);
+    expect(
+      await store(p.value).chooseAssignment("owned", "SYN-920", 2),
+    ).toBeNull();
+    expect(p.data).toHaveBeenCalledTimes("expired" in options ? 1 : 0);
+    expect(p.query).toHaveBeenLastCalledWith("ROLLBACK");
+    expect(p.query).not.toHaveBeenCalledWith("COMMIT");
+    expect(p.release).toHaveBeenCalledExactlyOnceWith(undefined);
+  },
+);
+it("rejects missing selection ownership before connecting", async () => {
+  const p = choicePool();
+  expect(await store(p.value).chooseAssignment(" ", "SYN-920", 2)).toBeNull();
+  expect(p.connect).not.toHaveBeenCalled();
+});
+it.each([false, true])(
+  "propagates selection write and uncertain commit failures without replay, discarding failed rollback: %s",
+  async (rollbackFails) => {
+    for (const stage of ["write", "commit"]) {
+      const p = choicePool({
+        rollbackFails,
+        ...(stage === "commit" ? { failAt: "COMMIT" } : {}),
+      });
+      if (stage === "write")
+        p.data.mockRejectedValueOnce(new Error("synthetic failure"));
+      await expect(
+        store(p.value).chooseAssignment("owned", "SYN-920", 2),
+      ).rejects.toThrow("synthetic failure");
+      expect(p.connect).toHaveBeenCalledOnce();
+      expect(p.data).toHaveBeenCalledOnce();
+      expect(p.query).toHaveBeenLastCalledWith("ROLLBACK");
+      expect(p.release).toHaveBeenCalledExactlyOnceWith(
+        rollbackFails ? expect.any(Error) : undefined,
+      );
+    }
   },
 );

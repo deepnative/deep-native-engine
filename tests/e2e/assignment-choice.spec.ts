@@ -3,6 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
+import { hash } from "../../src/store.ts";
 
 const pool = testPool();
 test.afterAll(async () => pool.end());
@@ -97,6 +98,116 @@ test("[L32] explorer chooses a private, published noncoding sample and reloads i
         name: "Choose a practice assignment",
       }),
     ).not.toContainText("Your chosen sample");
+    const ownerToken = (await page.context().cookies()).find(
+      (cookie) => cookie.name === "dne_preview",
+    )!.value;
+    const ownerId = (
+      await pool.query("SELECT id FROM principals WHERE token_hash=$1", [
+        hash(ownerToken),
+      ])
+    ).rows[0].id as string;
+    const before = (
+      await pool.query(
+        "SELECT * FROM learner_assignment_choices WHERE member_id=$1",
+        [ownerId],
+      )
+    ).rows;
+    expect(before).toHaveLength(1);
+    expect(before[0]).toMatchObject({ content_id: id, content_version: 1 });
+    const blocker = await pool.connect();
+    let clicking: Promise<void> | undefined;
+    try {
+      await pool.query(
+        "UPDATE principals SET expires_at=clock_timestamp()+INTERVAL '2 seconds' WHERE id=$1",
+        [ownerId],
+      );
+      const blockerPid = (await blocker.query("SELECT pg_backend_pid() AS pid"))
+        .rows[0].pid as number;
+      await blocker.query("BEGIN");
+      await blocker.query(
+        "SELECT member_id FROM learner_assignment_choices WHERE member_id=$1 FOR UPDATE",
+        [ownerId],
+      );
+      const response = page.waitForResponse(
+        (res) =>
+          res.url().endsWith("/assignments/select") &&
+          res.request().method() === "POST",
+      );
+      clicking = choices
+        .getByRole("button", { name: `Choose ${title}` })
+        .click();
+      await expect
+        .poll(
+          async () =>
+            (
+              await pool.query(
+                "SELECT count(*)::int AS count FROM pg_stat_activity WHERE datname=current_database() AND state='active' AND wait_event_type='Lock' AND position('INSERT INTO learner_assignment_choices' in query)>0 AND $1=ANY(pg_blocking_pids(pid))",
+                [blockerPid],
+              )
+            ).rows[0].count,
+          { intervals: [20], timeout: 3000 },
+        )
+        .toBe(1);
+      await expect
+        .poll(
+          async () =>
+            (
+              await pool.query(
+                "SELECT expires_at<=clock_timestamp() AS expired FROM principals WHERE id=$1",
+                [ownerId],
+              )
+            ).rows[0].expired,
+          { intervals: [20], timeout: 3000 },
+        )
+        .toBe(true);
+      await blocker.query("COMMIT");
+      await clicking;
+      expect((await response).status()).toBe(403);
+      await expect(
+        page.getByRole("heading", { name: "Assignment choice unavailable" }),
+      ).toBeVisible();
+      await expect(page.getByText(title, { exact: false })).toHaveCount(0);
+      expect(
+        (
+          await pool.query(
+            "SELECT * FROM learner_assignment_choices WHERE member_id=$1",
+            [ownerId],
+          )
+        ).rows,
+      ).toEqual(before);
+    } finally {
+      await blocker.query("ROLLBACK");
+      await Promise.allSettled(clicking ? [clicking] : []);
+      blocker.release();
+    }
+    const otherToken = (await other.cookies()).find(
+      (cookie) => cookie.name === "dne_preview",
+    )!.value;
+    const otherId = (
+      await pool.query("SELECT id FROM principals WHERE token_hash=$1", [
+        hash(otherToken),
+      ])
+    ).rows[0].id as string;
+    await pool.query(
+      "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE id=$1",
+      [otherId],
+    );
+    const denied = anotherPage.waitForResponse(
+      (res) =>
+        res.url().endsWith("/assignments/select") &&
+        res.request().method() === "POST",
+    );
+    await anotherPage.getByRole("button", { name: `Choose ${title}` }).click();
+    expect((await denied).status()).toBe(403);
+    await expect(anotherPage.getByText(title, { exact: false })).toHaveCount(0);
+    expect(
+      (
+        await pool.query(
+          "SELECT * FROM learner_assignment_choices WHERE member_id=$1",
+          [otherId],
+        )
+      ).rows,
+    ).toEqual([]);
   } finally {
     await other.close();
   }
