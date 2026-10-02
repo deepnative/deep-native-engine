@@ -129,6 +129,11 @@ import { eventPreviewDetail, listEventPreviews } from "./events.ts";
 import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
 import { compareResponses } from "./attempt-compare.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
+import {
+  disabledLedgerReconciliationStore,
+  type LedgerReconciliationStore,
+} from "./ledger-reconciliation.ts";
+import { registerLedgerReconciliationRoutes } from "./ledger-reconciliation-routes.ts";
 import { disabledPracticeStore, type PracticeStore } from "./practice.ts";
 import {
   disabledPracticeSessionStore,
@@ -244,6 +249,7 @@ export function app(
     career?: CareerStore;
     circles?: CircleStore;
     metrics?: MetricsStore;
+    ledgerReconciliation?: LedgerReconciliationStore;
     attempts?: AttemptStore;
     practice?: PracticeStore;
     practiceSessions?: PracticeSessionStore;
@@ -275,6 +281,8 @@ export function app(
   const career = options.career ?? disabledCareerStore();
   const circles = options.circles ?? disabledCircleStore();
   const metrics = options.metrics ?? disabledMetricsStore();
+  const ledgerReconciliation =
+    options.ledgerReconciliation ?? disabledLedgerReconciliationStore();
   const attempts = options.attempts ?? disabledAttemptStore();
   const practice = options.practice ?? disabledPracticeStore();
   const practiceSessions =
@@ -405,6 +413,7 @@ export function app(
   app.get("/readiness/tracks", async (_req, res) =>
     res.send(trackReadinessPage(await tracks.snapshot())),
   );
+  registerLedgerReconciliationRoutes(app, ledgerReconciliation, mode);
   app.get("/operator/experts", async (_req, res) => {
     const records = await tracks.registry(res.locals.token as string);
     if (!records) {
