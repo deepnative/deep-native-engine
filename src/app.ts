@@ -136,6 +136,11 @@ import {
   type LedgerReconciliationStore,
 } from "./ledger-reconciliation.ts";
 import { registerLedgerReconciliationRoutes } from "./ledger-reconciliation-routes.ts";
+import {
+  disabledMemberTestUnitsStore,
+  type MemberTestUnitsStore,
+} from "./member-test-units.ts";
+import { registerMemberTestUnitsRoutes } from "./member-test-units-routes.ts";
 import { disabledPracticeStore, type PracticeStore } from "./practice.ts";
 import {
   disabledPracticeSessionStore,
@@ -259,6 +264,7 @@ export function app(
     circles?: CircleStore;
     metrics?: MetricsStore;
     ledgerReconciliation?: LedgerReconciliationStore;
+    memberTestUnits?: MemberTestUnitsStore;
     attempts?: AttemptStore;
     practice?: PracticeStore;
     practiceSessions?: PracticeSessionStore;
@@ -441,6 +447,11 @@ export function app(
     res.send(trackReadinessPage(await tracks.snapshot())),
   );
   registerLedgerReconciliationRoutes(app, ledgerReconciliation, mode);
+  registerMemberTestUnitsRoutes(
+    app,
+    options.memberTestUnits ?? disabledMemberTestUnitsStore(),
+    mode,
+  );
   app.get("/operator/experts", async (_req, res) => {
     const records = await tracks.registry(res.locals.token as string);
     if (!records) {
