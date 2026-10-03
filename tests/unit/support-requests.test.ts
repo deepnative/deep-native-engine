@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import type { Pool } from "pg";
 import { afterEach, expect, it, vi } from "vitest";
 import { hash } from "../../src/store.ts";
@@ -121,7 +122,11 @@ function fixture(
       };
     if (sql.includes("FROM workspaces\n"))
       return { rows: [{ id: owner, memberId: owner, deletingAt: null }] };
-    if (sql.includes("JOIN LATERAL")) return { rows: [candidate] };
+    if (
+      sql.includes("JOIN LATERAL") &&
+      !sql.includes("FROM support_time_grants")
+    )
+      return { rows: [candidate] };
     if (sql.startsWith("SELECT g.request_id"))
       return { rows: [{ ...candidate, staffId: operator }] };
     if (sql.startsWith("SELECT member_id"))
@@ -159,7 +164,10 @@ function fixture(
     if (sql.startsWith("INSERT INTO support_requests(")) return { rows: [row] };
     if (sql.startsWith("INSERT INTO support_request_events"))
       return { rows: [{ ...mutation, messageId: values[5] }] };
-    if (sql.includes("bool_and(deadline")) return { rows: [{ valid: true }] };
+    if (sql.includes("bool_and(deadline"))
+      return {
+        rows: [{ valid: true, observedAt: date, remainingMs: "99999999" }],
+      };
     return { rows: [] };
   });
   const release = vi.fn(),
@@ -372,7 +380,9 @@ it("requires stable principal, workspace and ownership records", async () => {
     expect(
       await fixture({
         override: (sql) =>
-          sql.includes("WHERE r.id=ANY") ? record : undefined,
+          sql.includes("FROM support_requests r WHERE r.id=ANY")
+            ? record
+            : undefined,
       }).use.memberDetail(token, requestId),
     ).toEqual({ kind: "denied" });
   expect(await fixture({ actor: "operator" }).use.ownerHistory(token)).toEqual({
@@ -491,7 +501,7 @@ it("requires current staff kind, profile, precise grant and unchanged request sc
     { workspaceId: operator },
   ]) {
     const override: Override = (sql) =>
-      sql.includes("WHERE r.id=ANY")
+      sql.includes("FROM support_requests r WHERE r.id=ANY")
         ? change === null
           ? []
           : [{ ...row, ...change }]
@@ -504,7 +514,7 @@ it("requires current staff kind, profile, precise grant and unchanged request sc
     ).toEqual({ kind: "denied" });
   }
   const withdrawn: Override = (sql) =>
-    sql.includes("WHERE r.id=ANY")
+    sql.includes("FROM support_requests r WHERE r.id=ANY")
       ? [{ ...row, withdrawnAt: date }]
       : undefined;
   expect(
@@ -537,7 +547,7 @@ it("honors terminal precedence and exact per-action replay", async () => {
       const f = fixture({
         actor: "operator",
         override: (sql) =>
-          sql.includes("WHERE r.id=ANY")
+          sql.includes("FROM support_requests r WHERE r.id=ANY")
             ? [{ ...row, [state]: date }]
             : sql.includes("FROM support_request_mutations WHERE")
               ? [mutation]
@@ -556,7 +566,7 @@ it("honors terminal precedence and exact per-action replay", async () => {
     await fixture({
       actor: "operator",
       override: (sql) =>
-        sql.includes("WHERE r.id=ANY")
+        sql.includes("FROM support_requests r WHERE r.id=ANY")
           ? [{ ...row, resolvedAt: date }]
           : undefined,
     }).use.resolve(token, scope, key),
@@ -565,7 +575,7 @@ it("honors terminal precedence and exact per-action replay", async () => {
     await fixture({
       actor: "operator",
       override: (sql) =>
-        sql.includes("WHERE r.id=ANY")
+        sql.includes("FROM support_requests r WHERE r.id=ANY")
           ? [{ ...row, acknowledgedAt: date }]
           : undefined,
     }).use.acknowledge(token, scope, key),
@@ -586,7 +596,7 @@ it("honors terminal precedence and exact per-action replay", async () => {
 it("returns empty withdrawn member detail and keeps repeated withdrawal stable", async () => {
   const f = fixture({
     override: (sql) =>
-      sql.includes("WHERE r.id=ANY")
+      sql.includes("FROM support_requests r WHERE r.id=ANY")
         ? [{ ...row, withdrawnAt: date }]
         : sql.includes("r.subject,r.body FROM")
           ? [{ ...detail, subject: null, body: null, withdrawnAt: date }]
@@ -666,18 +676,19 @@ it("paginates every projection at twenty without exposing internal-note metadata
   const override: Override = (sql) =>
     sql.includes("FROM (SELECT id,body")
       ? messages
-      : sql.includes("JOIN LATERAL")
+      : sql.includes("JOIN LATERAL") &&
+          !sql.includes("FROM support_time_grants")
         ? candidates
         : sql.includes("FROM support_request_grants WHERE id=ANY")
           ? candidates.map((c) => ({ ...grant, requestId: c.requestId }))
-          : sql.includes("WHERE r.id=ANY")
+          : sql.includes("FROM support_requests r WHERE r.id=ANY")
             ? candidates.map((c) => ({ ...row, requestId: c.requestId }))
             : sql.includes("r.subject,") && sql.includes('AS "cursorAt"')
               ? histories
               : undefined;
   // Direct detail uses its own request while worklist has twenty-one candidates.
   const detailOverride: Override = (sql, values) =>
-    sql.includes("WHERE r.id=ANY")
+    sql.includes("FROM support_requests r WHERE r.id=ANY")
       ? [row]
       : sql.includes("FROM support_request_grants WHERE id=ANY")
         ? [grant]
@@ -736,7 +747,10 @@ it("paginates every projection at twenty without exposing internal-note metadata
   expect(JSON.stringify(member)).not.toContain('"kind":"reply"');
   const empty = fixture({
     actor: "operator",
-    override: (sql) => (sql.includes("JOIN LATERAL") ? [] : undefined),
+    override: (sql) =>
+      sql.includes("JOIN LATERAL") && !sql.includes("FROM support_time_grants")
+        ? []
+        : undefined,
   });
   expect(await empty.use.operatorWorklist(token)).toEqual({
     kind: "ready",
@@ -824,7 +838,10 @@ it("authorizes grant administration from current real staff roles and refuses sc
   ]) {
     const f = fixture({
       actor: "admin",
-      override: (sql) => (sql.includes("WHERE r.id=ANY") ? record : undefined),
+      override: (sql) =>
+        sql.includes("FROM support_requests r WHERE r.id=ANY")
+          ? record
+          : undefined,
     });
     expect(await f.use.grant(token, grantInput)).toEqual({ kind: "denied" });
     expect(await f.use.revoke(token, grantId)).toEqual({ kind: "denied" });
@@ -833,7 +850,7 @@ it("authorizes grant administration from current real staff roles and refuses sc
     await fixture({
       actor: "admin",
       override: (sql) =>
-        sql.includes("WHERE r.id=ANY")
+        sql.includes("FROM support_requests r WHERE r.id=ANY")
           ? [{ ...row, withdrawnAt: date }]
           : undefined,
     }).use.grant(token, grantInput),
@@ -886,4 +903,379 @@ it("authorizes grant administration from current real staff roles and refuses sc
           : undefined,
     }).use.revoke(token, grantId),
   ).toEqual({ kind: "already-revoked" });
+});
+
+function connectedFixture(change?: Override) {
+  const timeGrant = {
+    ...grant,
+    id: id(21),
+    purpose: "support-time-local-v1",
+    allocationId: id(20),
+  };
+  return fixture({
+    actor: "operator",
+    override: (sql, values) => {
+      const custom = change?.(sql, values);
+      if (custom !== undefined) return custom;
+      if (sql.startsWith('SELECT r.id AS "requestId",selected.id'))
+        return [
+          {
+            requestId,
+            grantId: timeGrant.id,
+            allocationId: timeGrant.allocationId,
+          },
+        ];
+      if (sql.includes("FROM support_time_grants WHERE id=ANY"))
+        return [timeGrant];
+      if (sql.includes("FROM support_time_allocations WHERE id=ANY"))
+        return [{ id: id(20), requestId, memberId: owner }];
+      if (sql.includes("FROM support_time_allocations a LEFT JOIN"))
+        return [
+          {
+            allocationId: id(20),
+            ceiling: 120,
+            state: "allocated",
+            held: 120,
+            consumed: 0,
+            released: 0,
+            supportMinutes: 0,
+            preparationMinutes: 0,
+          },
+        ];
+      return undefined;
+    },
+  });
+}
+it("returns allocation-specific quantities and one common observed context with exact grant navigation", async () => {
+  const f = connectedFixture(),
+    result = await f.use.operatorDetail(token, scope);
+  expect(result).toMatchObject({
+    kind: "ready",
+    value: {
+      operatorContext: {
+        observedAt: date,
+        elapsedSeconds: 0,
+        grantStartsAt: date,
+        grantExpiresAt: future,
+        allowedActions: ["acknowledge", "note", "reply", "resolve"],
+      },
+      authorizedEffort: {
+        allocationId: id(20),
+        grantId: id(21),
+        requestId,
+        ceiling: 120,
+        held: 120,
+        consumed: 0,
+        released: 0,
+      },
+    },
+  });
+  expect(
+    f.query.mock.calls.some(([sql]) =>
+      sql.startsWith("INSERT INTO support_time"),
+    ),
+  ).toBe(false);
+  expect(await connectedFixture().use.operatorWorklist(token)).toMatchObject({
+    kind: "ready",
+    value: { items: [{ authorizedEffort: { allocationId: id(20) } }] },
+  });
+});
+it.each([
+  ["revoked", { active: false }],
+  ["foreign staff", { staffId: admin }],
+  ["wrong request", { requestId: id(88) }],
+  ["wrong allocation", { allocationId: id(88) }],
+  ["wrong role", { role: "platform_admin" }],
+  ["wrong purpose", { purpose: "support-request-local-v1" }],
+  ["missing grant", null],
+] as const)(
+  "withholds the combined result when a discovered time grant is %s",
+  async (_name, change) => {
+    const f = connectedFixture((sql) =>
+      sql.includes("FROM support_time_grants WHERE id=ANY")
+        ? change === null
+          ? []
+          : [
+              {
+                ...grant,
+                id: id(21),
+                purpose: "support-time-local-v1",
+                allocationId: id(20),
+                ...change,
+              },
+            ]
+        : undefined,
+    );
+    expect(await f.use.operatorDetail(token, scope)).toEqual({
+      kind: "unavailable",
+    });
+    expect(
+      f.query.mock.calls.some(([sql]) => sql.includes("r.subject,r.body")),
+    ).toBe(false);
+  },
+);
+it.each([
+  ["missing", null],
+  ["foreign request", { requestId: id(88) }],
+  ["foreign member", { memberId: admin }],
+  ["changed ID", { id: id(88) }],
+] as const)(
+  "withholds an association whose allocation is %s",
+  async (_name, change) => {
+    expect(
+      await connectedFixture((sql) =>
+        sql.includes("FROM support_time_allocations WHERE id=ANY")
+          ? change === null
+            ? []
+            : [{ id: id(20), requestId, memberId: owner, ...change }]
+          : undefined,
+      ).use.operatorDetail(token, scope),
+    ).toEqual({ kind: "unavailable" });
+  },
+);
+it("denies revoked source membership even while the request and exact grants remain", async () => {
+  const f = connectedFixture((sql, values) =>
+    sql.includes("FROM principals WHERE id=ANY")
+      ? (values[0] as string[]).map((id) => ({
+          id,
+          kind: id === owner ? "member" : "staff",
+          active: id !== owner,
+          expiresAt: future,
+          tokenHash: hash(token),
+        }))
+      : undefined,
+  );
+  expect(await f.use.operatorDetail(token, scope)).toEqual({ kind: "denied" });
+});
+it.each([null, false, "not-a-number"])(
+  "withholds an invalid final permission observation (%s)",
+  async (value) => {
+    expect(
+      await connectedFixture((sql) =>
+        sql.startsWith("WITH instant AS MATERIALIZED")
+          ? value === null
+            ? []
+            : [{ valid: value !== false, remainingMs: value, observedAt: date }]
+          : undefined,
+      ).use.operatorDetail(token, scope),
+    ).toEqual({ kind: "denied" });
+  },
+);
+it.each([
+  "COMMIT",
+  "WITH instant AS MATERIALIZED",
+  "FROM support_time_allocations a LEFT JOIN",
+])("contains private query errors at the %s boundary", async (stage) => {
+  const f = connectedFixture();
+  const original = f.query.getMockImplementation()!;
+  f.query.mockImplementation(async (sql, values) => {
+    if (sql.includes(stage)) throw Error("Private invented diagnostic");
+    return original(sql, values);
+  });
+  expect(await f.use.operatorDetail(token, scope)).toEqual({
+    kind: "unavailable",
+  });
+});
+it("withholds connection handback failure rather than acknowledging a successful read", async () => {
+  const f = connectedFixture();
+  f.release.mockImplementation(() => {
+    throw Error("Private lost handback");
+  });
+  expect(await f.use.operatorDetail(token, scope)).toEqual({
+    kind: "unavailable",
+  });
+});
+it("does not advertise new request actions after acknowledgement or resolution", async () => {
+  for (const [changes, actions] of [
+    [{ acknowledgedAt: date }, ["note", "reply", "resolve"]],
+    [{ resolvedAt: date }, []],
+  ] as const) {
+    expect(
+      await connectedFixture((sql) =>
+        sql.includes("r.subject,r.body FROM support_requests")
+          ? [{ ...detail, ...changes }]
+          : undefined,
+      ).use.operatorDetail(token, scope),
+    ).toMatchObject({
+      kind: "ready",
+      value: { operatorContext: { allowedActions: actions } },
+    });
+  }
+});
+it("returns an empty authorized worklist without fabricating grant or effort context", async () => {
+  const f = fixture({
+    actor: "operator",
+    override: (sql) => (sql.includes("JOIN LATERAL") ? [] : undefined),
+  });
+  expect(await f.use.operatorWorklist(token)).toEqual({
+    kind: "ready",
+    value: { items: [], nextCursor: null },
+  });
+});
+it("bounds stalled connection acquisition and discards only its late owned connection", async () => {
+  vi.useFakeTimers();
+  let resolve!: (value: unknown) => void;
+  const release = vi.fn(),
+    connect = vi.fn(
+      () =>
+        new Promise((r) => {
+          resolve = r;
+        }),
+    ),
+    use = supportRequestStore({ connect } as unknown as Pool);
+  try {
+    const pending = use.operatorDetail(token, scope);
+    await vi.advanceTimersByTimeAsync(3001);
+    expect(await pending).toEqual({ kind: "unavailable" });
+    resolve({ release });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(release).toHaveBeenCalledOnce();
+    expect(release.mock.calls[0]![0].message).toBe(
+      "Support acquisition expired",
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.each(["permission-lifetime", "whole-operation"] as const)(
+  "withholds a late committed result after its %s bound",
+  async (bound) => {
+    let clock = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => clock);
+    const f = connectedFixture((sql) => {
+      if (sql.startsWith("WITH instant AS MATERIALIZED"))
+        return [
+          {
+            valid: true,
+            observedAt: date,
+            remainingMs: bound === "permission-lifetime" ? "10" : "99999999",
+          },
+        ];
+      if (sql === "COMMIT")
+        clock = bound === "permission-lifetime" ? 11 : 10001;
+      return undefined;
+    });
+    expect(await f.use.operatorDetail(token, scope)).toEqual({
+      kind: bound === "permission-lifetime" ? "denied" : "unavailable",
+    });
+  },
+);
+it("requires a separate exact request grant even for a platform administrator's mutation", async () => {
+  const f = fixture({
+    actor: "admin",
+    override: (sql) =>
+      sql.includes("FROM support_request_grants WHERE id=ANY")
+        ? [{ ...grant, staffId: admin, role: "platform_admin" }]
+        : undefined,
+  });
+  expect(await f.use.acknowledge(token, scope, key)).toMatchObject({
+    kind: "applied",
+  });
+});
+
+it.each([
+  "BEGIN",
+  "SET LOCAL",
+  "WITH instant AS MATERIALIZED",
+  "COMMIT",
+  "ROLLBACK",
+])(
+  "bounds a connected driver that withholds the %s reply and discards its uncertain connection",
+  async (stage) => {
+    vi.useFakeTimers();
+    const started = Date.now();
+    vi.spyOn(performance, "now").mockImplementation(() => Date.now() - started);
+    const f = connectedFixture(),
+      original = f.query.getMockImplementation()!;
+    f.query.mockImplementation(async (sql, values) => {
+      if (sql.startsWith(stage)) return new Promise<never>(() => {});
+      if (
+        stage === "ROLLBACK" &&
+        sql.startsWith("WITH instant AS MATERIALIZED")
+      )
+        throw Error("Invented private driver error");
+      return original(sql, values);
+    });
+    try {
+      let settled = false;
+      const pending = f.use.operatorDetail(token, scope).then((value) => {
+        settled = true;
+        return value;
+      });
+      await vi.advanceTimersByTimeAsync(5001);
+      expect(settled).toBe(true);
+      expect(await pending).toEqual({ kind: "unavailable" });
+      expect(f.query.mock.calls.some(([sql]) => sql.startsWith(stage))).toBe(
+        true,
+      );
+      expect(f.release).toHaveBeenCalledOnce();
+      expect(f.release.mock.calls[0]![0]).toBeInstanceOf(Error);
+      if (stage !== "ROLLBACK")
+        expect(f.query.mock.calls.some(([sql]) => sql === "ROLLBACK")).toBe(
+          false,
+        );
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+it("caps cumulative connected query waits at ten seconds instead of granting each a fresh operation budget", async () => {
+  vi.useFakeTimers();
+  const started = Date.now();
+  vi.spyOn(performance, "now").mockImplementation(() => Date.now() - started);
+  const f = connectedFixture(),
+    original = f.query.getMockImplementation()!;
+  let releasedAt = -1;
+  f.release.mockImplementation(() => {
+    releasedAt = Date.now() - started;
+  });
+  f.query.mockImplementation(async (sql, values) => {
+    if (
+      sql === "BEGIN ISOLATION LEVEL READ COMMITTED" ||
+      sql === "SET LOCAL lock_timeout='5s'"
+    )
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+    if (sql === "SET LOCAL statement_timeout='5s'")
+      return new Promise<never>(() => {});
+    return original(sql, values);
+  });
+  try {
+    let settled = false;
+    const pending = f.use.operatorDetail(token, scope).then((value) => {
+      settled = true;
+      return value;
+    });
+    await vi.advanceTimersByTimeAsync(10001);
+    expect(settled).toBe(true);
+    expect(await pending).toEqual({ kind: "unavailable" });
+    expect(releasedAt).toBe(10000);
+    expect(f.release).toHaveBeenCalledOnce();
+    expect(
+      f.query.mock.calls.some(
+        ([sql]) => sql === "COMMIT" || sql === "ROLLBACK",
+      ),
+    ).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("discards a connection when event-loop delay exhausts the operation budget before BEGIN", async () => {
+  let clock = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => clock);
+  const f = connectedFixture(),
+    original = f.connect.getMockImplementation()!;
+  f.connect.mockImplementation(async () => {
+    const value = await original();
+    clock = 10001;
+    return value;
+  });
+  expect(await f.use.operatorDetail(token, scope)).toEqual({
+    kind: "unavailable",
+  });
+  expect(f.query).not.toHaveBeenCalled();
+  expect(f.release).toHaveBeenCalledOnce();
+  expect(f.release.mock.calls[0]![0]).toBeInstanceOf(Error);
 });

@@ -31,6 +31,13 @@ const operator: SupportOperatorDetail = {
   body: member.body!,
   grantId: "grant",
   messages: { items: [], nextCursor: null },
+  operatorContext: {
+    observedAt: date,
+    elapsedSeconds: 0,
+    grantStartsAt: date,
+    grantExpiresAt: new Date("2100-01-01"),
+    allowedActions: ["acknowledge", "note", "reply", "resolve"],
+  },
 };
 const keys = {
   acknowledge: "ack-key",
@@ -320,4 +327,58 @@ it("makes uncertain intake recovery read-only, retains its exact receipt key, an
   expect(error).toContain("&lt;message&gt;");
   expect(error).toContain("&lt;label&gt;");
   expect(error).toContain("after=&quot;");
+});
+
+it("shows calendar observation and exact request scope without exposing absent effort", () => {
+  const html = supportOperatorDetailPage(
+    {
+      ...operator,
+      operatorContext: { ...operator.operatorContext, elapsedSeconds: 123 },
+    },
+    "csrf",
+    keys,
+  );
+  expect(html).toContain(
+    "123 seconds at this observation; not a staffed or business-day SLA",
+  );
+  expect(html).toContain("Current request grant");
+  expect(html).toContain("No separately authorized test effort shown");
+  expect(html).not.toContain("/operator/support-time/");
+});
+it("links one separately authorized allocation with quantities and escaped exact identifiers on both pages", () => {
+  const value = {
+    ...operator,
+    authorizedEffort: {
+      ...minutes,
+      requestId: id,
+      grantId: 'grant"',
+      allocationId: 'allocation<"',
+    },
+  };
+  for (const html of [
+    supportOperatorDetailPage(value, "csrf", keys),
+    supportOperatorWorklistPage({ items: [value], nextCursor: null }),
+  ]) {
+    expect(html).toContain("Allocation-specific test effort");
+    expect(html).toContain(
+      "20 support test minutes held; 0 consumed; 0 released",
+    );
+    expect(html).toContain("?allocation=allocation%3C%22&amp;grant=grant%22");
+    expect(html).toContain("allocation&lt;&quot;");
+    expect(html).not.toContain("Begin support test effort");
+    expect(html).not.toContain("Record support test effort");
+  }
+});
+it("presents resolved permission context without advertising further request actions", () => {
+  const html = supportOperatorDetailPage(
+    {
+      ...operator,
+      resolvedAt: date,
+      operatorContext: { ...operator.operatorContext, allowedActions: [] },
+    },
+    "csrf",
+    keys,
+  );
+  expect(html).toContain("None; request resolved");
+  expect(html).not.toContain("Save internal note");
 });

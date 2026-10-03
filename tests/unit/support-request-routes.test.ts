@@ -33,6 +33,13 @@ const operator: SupportOperatorDetail = {
   body: member.body!,
   grantId,
   messages: { items: [], nextCursor: null },
+  operatorContext: {
+    observedAt: date,
+    elapsedSeconds: 0,
+    grantStartsAt: date,
+    grantExpiresAt: new Date("2100-01-01"),
+    allowedActions: ["acknowledge", "note", "reply", "resolve"],
+  },
 };
 const mutation = {
   requestId: id,
