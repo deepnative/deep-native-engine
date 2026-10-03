@@ -510,3 +510,18 @@ it("normalizes the default HTTP port for origin checks", () => {
     }).origin,
   ).toBe("http://127.0.0.1");
 });
+
+it("defaults private support-time writes to enabled and accepts a deliberate rollback pause", () => {
+  expect(config({ DNE_DATABASE_URL: database }).supportTimeWrites).toBe(true);
+  expect(
+    config({ DNE_DATABASE_URL: database, DNE_SUPPORT_TIME_WRITES: "enabled" })
+      .supportTimeWrites,
+  ).toBe(true);
+  expect(
+    config({ DNE_DATABASE_URL: database, DNE_SUPPORT_TIME_WRITES: "disabled" })
+      .supportTimeWrites,
+  ).toBe(false);
+  expect(() =>
+    config({ DNE_DATABASE_URL: database, DNE_SUPPORT_TIME_WRITES: "maybe" }),
+  ).toThrow("DNE_SUPPORT_TIME_WRITES must be enabled or disabled.");
+});

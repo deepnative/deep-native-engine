@@ -186,6 +186,7 @@ export async function migrate(pool: Pool) {
       "051-proposal-feedback.sql",
       "052-ledger-event-grant-index.sql",
       "053-local-ai-test-unit-jobs.sql",
+      "054-support-test-time.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

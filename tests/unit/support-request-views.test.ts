@@ -12,6 +12,7 @@ import type {
   SupportMemberDetail,
   SupportOperatorDetail,
 } from "../../src/support-requests.ts";
+import type { SupportTimeReceipt } from "../../src/support-time.ts";
 const date = new Date("2026-10-02T12:00:00Z"),
   id = "11111111-1111-4111-8111-111111111111";
 const member: SupportMemberDetail = {
@@ -37,6 +38,57 @@ const keys = {
   note: "note-key",
   resolve: "resolve-key",
 };
+const minutes: SupportTimeReceipt = {
+  allocationId: "allocation",
+  ceiling: 20,
+  state: "allocated",
+  held: 20,
+  consumed: 0,
+  released: 0,
+  supportMinutes: 0,
+  preparationMinutes: 0,
+};
+it("offers an explicit bounded allocation only for available time support and eligible request states", () => {
+  const available = supportMemberDetailPage(member, "csrf", null);
+  expect(available).toContain("Hold support test minutes");
+  expect(available).toContain('min="1" max="120" step="1" required');
+  expect(available).toContain('name="confirm" value="yes" required');
+  for (const state of ["completed", "cancelled"] as const)
+    expect(
+      supportMemberDetailPage(member, "csrf", { ...minutes, state }),
+    ).toContain("Hold support test minutes");
+  for (const html of [
+    supportMemberDetailPage(member, "csrf"),
+    supportMemberDetailPage({ ...member, resolvedAt: date }, "csrf", null),
+    supportMemberDetailPage({ ...member, withdrawnAt: date }, "csrf", null),
+  ])
+    expect(html).not.toContain("Hold support test minutes");
+});
+it.each(["allocated", "begun", "needs_reconciliation"] as const)(
+  "shows the saved %s hold and offers cancellation only while unstarted",
+  (state) => {
+    const html = supportMemberDetailPage(member, "csrf", { ...minutes, state });
+    expect(html).toContain("20 support test minutes held");
+    expect(html).not.toContain("Hold support test minutes");
+    expect(html.includes(`/time/allocation/cancel`)).toBe(
+      state === "allocated",
+    );
+    expect(html).toContain("not paid staff time or a service promise");
+  },
+);
+it("preserves quantities while write pause or withdrawal removes minute mutation controls", () => {
+  for (const html of [
+    supportMemberDetailPage(member, "csrf", minutes, false),
+    supportMemberDetailPage({ ...member, withdrawnAt: date }, "csrf", minutes),
+  ]) {
+    expect(html).toContain("20 support test minutes held");
+    expect(html).not.toContain("/time/allocation/cancel");
+    expect(html).not.toContain("Hold support test minutes");
+  }
+  expect(supportMemberDetailPage(member, "csrf", null, false)).not.toContain(
+    "Hold support test minutes",
+  );
+});
 it("makes intake deliberate, bounded and honest before any request exists", () => {
   const html = supportIntakePage("csrf", "receipt-key");
   expect(html).toContain('action="/support"');

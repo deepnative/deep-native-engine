@@ -465,7 +465,9 @@ test("[L109] all three audiences privately withdraw open or resolved requests an
         `INTERNAL_WITHDRAW_${background}`,
       );
       const csrf = await page.locator('[name="csrf"]').inputValue();
-      await page.getByRole("checkbox").check();
+      await page
+        .getByRole("checkbox", { name: "Withdraw this request and" })
+        .check();
       await page.getByRole("button", { name: "Withdraw request text" }).focus();
       await page.keyboard.press("Enter");
       await expect(page.getByRole("status")).toContainText(
@@ -510,7 +512,9 @@ test("[L109] all three audiences privately withdraw open or resolved requests an
       await expect(
         page.getByText("Open; no resolution recorded", { exact: true }),
       ).toBeVisible();
-      await page.getByRole("checkbox").check();
+      await page
+        .getByRole("checkbox", { name: "Withdraw this request and" })
+        .check();
       await page.getByRole("button", { name: "Withdraw request text" }).click();
       await expect(page.getByRole("status")).toContainText(
         "content-free receipt remains",

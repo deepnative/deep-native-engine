@@ -1726,7 +1726,7 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v15" as const,
+    version: "local-member-records-v16" as const,
     profile: { id: "owned" },
     records: { milestones: [{ title: "private <script>never show</script>" }] },
     page: {

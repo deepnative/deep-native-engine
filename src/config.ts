@@ -59,7 +59,11 @@ export function config(env: NodeJS.ProcessEnv) {
     privateStorageRoot.startsWith(`${publicRoot}${sep}`)
   )
     throw new Error("Private evidence storage cannot be served publicly.");
+  const supportTimeWrites = env.DNE_SUPPORT_TIME_WRITES ?? "enabled";
+  if (!["enabled", "disabled"].includes(supportTimeWrites))
+    throw Error("DNE_SUPPORT_TIME_WRITES must be enabled or disabled.");
   return {
+    supportTimeWrites: supportTimeWrites === "enabled",
     databaseUrl,
     port,
     origin: new URL(`http://127.0.0.1:${port}`).origin,

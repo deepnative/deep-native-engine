@@ -24,10 +24,13 @@ function database(
     category?: string;
     quantity?: number;
     referenceUsed?: boolean;
+    supportLinked?: boolean;
     event?: { request_fingerprint: string; result_id: string };
   } = {},
 ) {
   const query = vi.fn(async (sql: string, _params?: unknown[]) => {
+    if (sql.startsWith("SELECT 1 FROM support_time_units"))
+      return { rows: options.supportLinked ? [{}] : [] };
     if (sql.includes("SELECT request_fingerprint"))
       return { rows: options.event ? [options.event] : [] };
     if (sql.includes("SELECT 1 FROM synthetic_entitlement_settlements"))
@@ -56,6 +59,23 @@ function database(
     ledger: syntheticLedger({ connect } as unknown as Pool),
   };
 }
+it("refuses formal completion of a reservation already belonging to a support allocation", async () => {
+  const db = database({ supportLinked: true });
+  await expect(
+    db.ledger.settleCompletion(
+      member,
+      reservation,
+      "foreign-domain",
+      completion,
+    ),
+  ).rejects.toEqual(new LedgerFailure("unavailable"));
+  expect(
+    db.query.mock.calls.some(([sql]) =>
+      sql.includes("INSERT INTO synthetic_entitlement_settlements"),
+    ),
+  ).toBe(false);
+  expect(db.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
+});
 
 it("rejects incomplete, non-synthetic and non-whole completion payloads before connecting", async () => {
   const db = database();

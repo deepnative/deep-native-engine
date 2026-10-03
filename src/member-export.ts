@@ -186,6 +186,27 @@ const sections = {
     WHERE r.member_id=$1 AND r.withdrawn_at IS NULL AND r.id=ANY($4::uuid[])`,
     "e.request_id,e.id",
   ),
+  // Append after the existing support sections; cursor v2 indices remain stable.
+  supportTimeAllocations: section(
+    `a.id,a.request_id AS "requestId",a.policy,a.ceiling,a.state,
+    a.created_at AS "createdAt",a.begun_at AS "begunAt",a.settled_at AS "settledAt",
+    CASE WHEN a.begun_by IS NULL THEN NULL ELSE 'Synthetic operator' END AS attribution,
+    (SELECT count(*)::integer FROM support_time_units u JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id WHERE u.allocation_id=a.id AND r.state='reserved') AS held,
+    (SELECT count(*)::integer FROM support_time_units u JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id WHERE u.allocation_id=a.id AND r.state='consumed') AS consumed,
+    (SELECT count(*)::integer FROM support_time_units u JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id WHERE u.allocation_id=a.id AND r.state='released') AS released`,
+    "support_time_allocations a WHERE a.member_id=$1",
+    "a.id",
+    true,
+  ),
+  supportTimeEntries: section(
+    `e.allocation_id AS "allocationId",a.request_id AS "requestId",
+    e.support_start AS "supportStart",e.support_end AS "supportEnd",
+    e.preparation_start AS "preparationStart",e.preparation_end AS "preparationEnd",
+    e.support_minutes AS "supportMinutes",e.preparation_minutes AS "preparationMinutes",
+    e.created_at AS "createdAt",'Synthetic operator' AS attribution`,
+    "support_time_entries e JOIN support_time_allocations a ON a.id=e.allocation_id WHERE a.member_id=$1",
+    "e.allocation_id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -199,7 +220,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v15";
+  version: "local-member-records-v16";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   page: {
@@ -313,7 +334,7 @@ export function memberExportStore(
           );
           const payload: MemberExportPayload = {
             kind: "ready",
-            version: "local-member-records-v15",
+            version: "local-member-records-v16",
             profile: owner.rows[0],
             records,
             page: {

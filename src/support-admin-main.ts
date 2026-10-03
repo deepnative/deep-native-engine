@@ -17,7 +17,7 @@ try {
     !bootstrap &&
     !(
       args.length === 2 &&
-      ["grant", "revoke"].includes(args[0]!) &&
+      ["grant", "revoke", "time-grant", "time-revoke"].includes(args[0]!) &&
       /^[a-zA-Z0-9_-]+\.json$/.test(args[1]!)
     )
   )
@@ -102,45 +102,62 @@ try {
       admin = await privateJson("admin.json");
     if (typeof admin.token !== "string" || !/^[a-f0-9]{64}$/.test(admin.token))
       throw Error("Private credentials unavailable.");
-    const support = supportRequestStore(pool);
-    if (args[0] === "grant") {
+    const support = supportRequestStore(pool, undefined, {
+      timeWrites: settings.supportTimeWrites,
+    });
+    if (args[0] === "grant" || args[0] === "time-grant") {
+      const timeGrant = args[0] === "time-grant";
       const staff = await privateJson("operator.json");
       if (
         Object.keys(input).some(
           (key) =>
-            !["requestId", "idempotencyKey", "startsAt", "expiresAt"].includes(
-              key,
-            ),
+            ![
+              "requestId",
+              "idempotencyKey",
+              "startsAt",
+              "expiresAt",
+              ...(timeGrant ? ["allocationId"] : []),
+            ].includes(key),
         ) ||
         typeof input.requestId !== "string" ||
         typeof input.idempotencyKey !== "string" ||
         typeof input.startsAt !== "string" ||
         typeof input.expiresAt !== "string" ||
-        typeof staff.id !== "string"
+        typeof staff.id !== "string" ||
+        (timeGrant && typeof input.allocationId !== "string")
       )
         throw Error("Invalid grant instruction.");
-      const granted = await support.grant(admin.token, {
+      const grantInput = {
         requestId: input.requestId,
         idempotencyKey: input.idempotencyKey,
         staffId: staff.id,
-        role: "operator",
+        role: "operator" as const,
         startsAt: new Date(input.startsAt),
         expiresAt: new Date(input.expiresAt),
-      });
+      };
+      const granted = timeGrant
+        ? await support.time!.grant(admin.token, {
+            ...grantInput,
+            allocationId: input.allocationId as string,
+          })
+        : await support.grant(admin.token, grantInput);
       if (granted.kind !== "created" && granted.kind !== "replayed")
         throw Error("Grant not confirmed.");
       result = {
         status: "complete",
-        action: "grant",
+        action: args[0],
         grantId: granted.grantId,
       };
     } else {
       if (Object.keys(input).length !== 1 || typeof input.grantId !== "string")
         throw Error("Invalid revocation instruction.");
-      const revoked = await support.revoke(admin.token, input.grantId);
+      const revoked =
+        args[0] === "time-revoke"
+          ? await support.time!.revoke(admin.token, input.grantId)
+          : await support.revoke(admin.token, input.grantId);
       if (revoked.kind !== "revoked" && revoked.kind !== "already-revoked")
         throw Error("Revocation not confirmed.");
-      result = { status: "complete", action: "revoke" };
+      result = { status: "complete", action: args[0] };
     }
   }
 } catch {
