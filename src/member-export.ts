@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { hash } from "./store.ts";
 
 export const MAX_MEMBER_EXPORT_RECORDS = 100;
@@ -235,6 +235,45 @@ const sections = {
     "circle_id,generation",
     true,
   ),
+  // Append after v17's indices 0–26. Historical IDs only correlate owned
+  // records; internal replay, source and staff fields are never selected.
+  testUnitGrants: section(
+    `g.id,g.category,g.quantity,g.available,g.reserved,g.consumed,g.expired,g.adjusted,
+    g.created_at AS "createdAt",g.starts_at AS "startsAt",g.expires_at AS "expiresAt",
+    g.expired_at AS "expiredAt"`,
+    "synthetic_entitlement_grants g WHERE g.member_id=$1",
+    "g.id",
+  ),
+  testUnitReservations: section(
+    `r.id,r.grant_id AS "grantId",g.category,r.quantity,r.state,r.created_at AS "createdAt"`,
+    `synthetic_entitlement_reservations r
+    JOIN synthetic_entitlement_grants g ON g.id=r.grant_id
+    WHERE g.member_id=$1`,
+    "r.id",
+  ),
+  testUnitEvents: section(
+    `e.id,e.grant_id AS "grantId",e.reservation_id AS "reservationId",
+    g.category,e.operation,e.quantity,e.created_at AS "createdAt"`,
+    `synthetic_entitlement_events e
+    JOIN synthetic_entitlement_grants g ON g.id=e.grant_id
+    LEFT JOIN synthetic_entitlement_reservations r ON r.id=e.reservation_id
+    WHERE e.member_id=$1 AND g.member_id=$1
+      AND (e.reservation_id IS NULL OR r.grant_id=g.id)`,
+    "e.id",
+  ),
+  testUnitSettlements: section(
+    `s.id,s.grant_id AS "grantId",s.reservation_id AS "reservationId",s.category,s.quantity,
+    s.delivered_minutes AS "deliveredMinutes",s.preparation_minutes AS "preparationMinutes",
+    s.created_at AS "createdAt"`,
+    `synthetic_entitlement_settlements s
+    JOIN synthetic_entitlement_grants g ON g.id=s.grant_id
+    JOIN synthetic_entitlement_reservations r ON r.id=s.reservation_id AND r.grant_id=g.id
+    JOIN synthetic_entitlement_events e ON e.id=s.id AND e.grant_id=g.id
+      AND e.reservation_id=r.id AND e.member_id=s.member_id
+      AND e.operation='consume' AND e.quantity=s.quantity
+    WHERE s.member_id=$1 AND g.member_id=$1 AND s.category=g.category`,
+    "s.id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -248,9 +287,15 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v17";
+  version: "local-member-records-v18";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
+  testUnitHistory: {
+    scope: "private-local-test-units";
+    snapshotStartedAt: Date;
+    observedAt: Date;
+    availableMeaning: "stored-counter-not-usable-balance";
+  };
   page: {
     number: number;
     recordCount: number;
@@ -334,172 +379,313 @@ export function memberExportStore(
         continuation === undefined ? undefined : decode(continuation, token);
       if (cursor === null) return { kind: "denied" };
       const expires = cursor?.[4] ?? Date.now() + MEMBER_EXPORT_CURSOR_TTL_MS;
-      try {
-        const client = await pool.connect();
-        try {
-          await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
-          // Match the runtime's five-second statement bound for lock acquisition,
-          // including callers that supply a pool without runtime configuration.
-          await client.query("SET LOCAL lock_timeout='5s'");
-          await client.query("SET LOCAL statement_timeout='5s'");
-          // Keep revocation state and the deletion marker stable through COMMIT;
-          // metadata-only changes remain a repeatable snapshot; text rows lock below.
-          const owner = await client.query<Record<string, unknown>>(
-            `SELECT l.id,l.background,l.goal,l.background_tags AS "backgroundTags",
-              l.domain_tags AS "domainTags",l.it_roles AS "itRoles",l.experience,
-              l.exploratory,l.time_zone AS "timeZone",l.weekly_minutes AS "weeklyMinutes"
-              FROM principals p JOIN learners l ON l.id=p.id
-              JOIN workspaces w ON w.owner_principal_id=p.id
-              WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
-                AND p.expires_at>clock_timestamp() AND w.deleting_at IS NULL
-              FOR SHARE OF p,w`,
-            [hash(token)],
-          );
-          if (!owner.rows[0]) return { kind: "denied" };
-          const memberId = owner.rows[0].id;
-          const records: MemberExportPayload["records"] = Object.fromEntries(
-            entries.map(([name]) => [name, []]),
-          );
-          const payload: MemberExportPayload = {
-            kind: "ready",
-            version: "local-member-records-v17",
-            profile: owner.rows[0],
-            records,
-            page: {
-              number: cursor?.[3] ?? 1,
-              recordCount: 0,
-              consistency: "live-pages",
-              complete: true,
-              nextCursor: null,
-            },
-          };
+      const started = performance.now();
+      let client: PoolClient | undefined, releaseError: Error | undefined;
+      let result: MemberExport;
+      let queryExpired = false,
+        committed = false,
+        checkedAt = 0,
+        remaining = 0;
+      const readPage = async (client: PoolClient): Promise<MemberExport> => {
+        await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+        // Match the runtime's five-second statement bound for lock acquisition,
+        // including callers that supply a pool without runtime configuration.
+        await client.query("SET LOCAL lock_timeout='5s'");
+        await client.query("SET LOCAL statement_timeout='5s'");
+        // Keep revocation state and the deletion marker stable through COMMIT;
+        // metadata-only changes remain a repeatable snapshot; text rows lock below.
+        await client.query("SELECT set_config('transaction_timeout',$1,true)", [
+          `${Math.max(1, Math.floor(10000 - (performance.now() - started)))}ms`,
+        ]);
+        // Lock the member first, then the workspace, matching erasure/withdrawal.
+        const principal = await client.query(
+          "SELECT id FROM principals WHERE token_hash=$1 AND kind='member' AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE",
+          [hash(token)],
+        );
+        if (!principal.rows[0]) return { kind: "denied" };
+        const owner = await client.query<Record<string, unknown>>(
+          `SELECT l.id,l.background,l.goal,l.background_tags AS "backgroundTags",
+            l.domain_tags AS "domainTags",l.it_roles AS "itRoles",l.experience,
+            l.exploratory,l.time_zone AS "timeZone",l.weekly_minutes AS "weeklyMinutes"
+            FROM principals p JOIN learners l ON l.id=p.id
+            JOIN workspaces w ON w.owner_principal_id=p.id
+            WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
+              AND p.expires_at>clock_timestamp() AND w.deleting_at IS NULL
+            FOR SHARE OF w`,
+          [hash(token)],
+        );
+        if (!owner.rows[0]) return { kind: "denied" };
+        const memberId = owner.rows[0].id;
+        const records: MemberExportPayload["records"] = Object.fromEntries(
+          entries.map(([name]) => [name, []]),
+        );
+        const payload: MemberExportPayload = {
+          kind: "ready",
+          version: "local-member-records-v18",
+          profile: owner.rows[0],
+          records,
+          testUnitHistory: {
+            scope: "private-local-test-units",
+            snapshotStartedAt: new Date(0),
+            observedAt: new Date(0),
+            availableMeaning: "stored-counter-not-usable-balance",
+          },
+          page: {
+            number: cursor?.[3] ?? 1,
+            recordCount: 0,
+            consistency: "live-pages",
+            complete: true,
+            nextCursor: null,
+          },
+        };
+        if (
+          Buffer.byteLength(JSON.stringify(payload)) > MAX_MEMBER_EXPORT_BYTES
+        )
+          return { kind: "limit" };
+        let more = false;
+        pages: for (
+          let index = cursor?.[1] ?? 0;
+          index < entries.length;
+          index++
+        ) {
+          const [name, sql] = entries[index]!;
+          const key = index === cursor?.[1] ? cursor[2] : [];
+          const values: unknown[] = [
+            memberId,
+            MAX_MEMBER_EXPORT_RECORDS - payload.page.recordCount + 1,
+            JSON.stringify(key),
+          ];
           if (
-            Buffer.byteLength(JSON.stringify(payload)) > MAX_MEMBER_EXPORT_BYTES
-          )
-            return { kind: "limit" };
-          let more = false;
-          pages: for (
-            let index = cursor?.[1] ?? 0;
-            index < entries.length;
-            index++
+            name === "assignmentSubmissions" ||
+            name === "assignmentReflections"
           ) {
-            const [name, sql] = entries[index]!;
-            const key = index === cursor?.[1] ? cursor[2] : [];
-            const values: unknown[] = [
-              memberId,
-              MAX_MEMBER_EXPORT_RECORDS - payload.page.recordCount + 1,
-              JSON.stringify(key),
-            ];
-            if (
-              name === "assignmentSubmissions" ||
+            // A continuation can start here, bypassing assignmentAttempts.
+            // Await bounded parent locks FIRST, matching series deletion; do
+            // not acquire child locks ahead of the parent via a joined lock.
+            const childTable =
+              name === "assignmentSubmissions"
+                ? "assignment_submission_snapshots"
+                : "assignment_submission_reflections";
+            const retained =
               name === "assignmentReflections"
+                ? "AND s.deleted_at IS NULL"
+                : "";
+            const parents = await client.query<{ id: string }>(
+              `SELECT a.id
+              FROM assignment_attempts a WHERE a.member_id=$1 AND EXISTS (
+                SELECT 1 FROM ${childTable} s WHERE s.attempt_id=a.id
+                  ${retained}
+                  AND jsonb_build_array(s.attempt_id,s.sequence)>$3::jsonb)
+              ORDER BY a.id LIMIT $2 FOR SHARE OF a`,
+              values,
+            );
+            values.push(parents.rows.map((row) => row.id));
+          }
+          if (name === "practiceExchanges") {
+            // Continuation may skip practiceSessions. Lock owned parents before
+            // reading response-derived bytes, matching session withdrawal.
+            const parents = await client.query<{ id: string }>(
+              `SELECT s.id FROM private_practice_sessions s
+              WHERE s.member_id=$1 AND s.withdrawn_at IS NULL AND EXISTS (
+                SELECT 1 FROM private_practice_exchanges e WHERE e.session_id=s.id
+                  AND jsonb_build_array(e.session_id,e.sequence)>$3::jsonb)
+              ORDER BY s.id LIMIT $2 FOR SHARE OF s`,
+              values,
+            );
+            values.push(parents.rows.map((row) => row.id));
+          }
+          if (name === "supportReplies") {
+            // Direct continuation may bypass receipts. Lock parents first,
+            // matching withdrawal's request-before-messages order.
+            const parents = await client.query<{ id: string }>(
+              `SELECT r.id FROM support_requests r
+              WHERE r.member_id=$1 AND r.withdrawn_at IS NULL AND EXISTS (
+                SELECT 1 FROM support_request_replies e WHERE e.request_id=r.id
+                  AND jsonb_build_array(e.request_id,e.id)>$3::jsonb)
+              ORDER BY r.id LIMIT $2 FOR SHARE OF r`,
+              values,
+            );
+            values.push(parents.rows.map((row) => row.id));
+          }
+          const rows = (
+            await client.query<{ _key: Key; [key: string]: unknown }>(
+              sql,
+              values,
+            )
+          ).rows;
+          for (const row of rows) {
+            if (payload.page.recordCount === MAX_MEMBER_EXPORT_RECORDS) {
+              more = true;
+              break pages;
+            }
+            const { _key, ...record } = row;
+            const next = encode(
+              [2, index, _key, payload.page.number + 1, expires],
+              token,
+            );
+            const previous = payload.page.nextCursor;
+            records[name]!.push(record);
+            payload.page.recordCount++;
+            payload.page.complete = false;
+            payload.page.nextCursor = next;
+            if (
+              Buffer.byteLength(JSON.stringify(payload)) >
+              MAX_MEMBER_EXPORT_BYTES
             ) {
-              // A continuation can start here, bypassing assignmentAttempts.
-              // Await bounded parent locks FIRST, matching series deletion; do
-              // not acquire child locks ahead of the parent via a joined lock.
-              const childTable =
-                name === "assignmentSubmissions"
-                  ? "assignment_submission_snapshots"
-                  : "assignment_submission_reflections";
-              const retained =
-                name === "assignmentReflections"
-                  ? "AND s.deleted_at IS NULL"
-                  : "";
-              const parents = await client.query<{ id: string }>(
-                `SELECT a.id
-                FROM assignment_attempts a WHERE a.member_id=$1 AND EXISTS (
-                  SELECT 1 FROM ${childTable} s WHERE s.attempt_id=a.id
-                    ${retained}
-                    AND jsonb_build_array(s.attempt_id,s.sequence)>$3::jsonb)
-                ORDER BY a.id LIMIT $2 FOR SHARE OF a`,
-                values,
-              );
-              values.push(parents.rows.map((row) => row.id));
+              records[name]!.pop();
+              payload.page.recordCount--;
+              payload.page.nextCursor = previous;
+              if (payload.page.recordCount === 0) return { kind: "limit" };
+              more = true;
+              break pages;
             }
-            if (name === "practiceExchanges") {
-              // Continuation may skip practiceSessions. Lock owned parents before
-              // reading response-derived bytes, matching session withdrawal.
-              const parents = await client.query<{ id: string }>(
-                `SELECT s.id FROM private_practice_sessions s
-                WHERE s.member_id=$1 AND s.withdrawn_at IS NULL AND EXISTS (
-                  SELECT 1 FROM private_practice_exchanges e WHERE e.session_id=s.id
-                    AND jsonb_build_array(e.session_id,e.sequence)>$3::jsonb)
-                ORDER BY s.id LIMIT $2 FOR SHARE OF s`,
-                values,
-              );
-              values.push(parents.rows.map((row) => row.id));
-            }
-            if (name === "supportReplies") {
-              // Direct continuation may bypass receipts. Lock parents first,
-              // matching withdrawal's request-before-messages order.
-              const parents = await client.query<{ id: string }>(
-                `SELECT r.id FROM support_requests r
-                WHERE r.member_id=$1 AND r.withdrawn_at IS NULL AND EXISTS (
-                  SELECT 1 FROM support_request_replies e WHERE e.request_id=r.id
-                    AND jsonb_build_array(e.request_id,e.id)>$3::jsonb)
-                ORDER BY r.id LIMIT $2 FOR SHARE OF r`,
-                values,
-              );
-              values.push(parents.rows.map((row) => row.id));
-            }
-            const rows = (
-              await client.query<{ _key: Key; [key: string]: unknown }>(
-                sql,
-                values,
-              )
-            ).rows;
-            for (const row of rows) {
-              if (payload.page.recordCount === MAX_MEMBER_EXPORT_RECORDS) {
-                more = true;
-                break pages;
+          }
+        }
+        payload.page.complete = !more;
+        if (!more) payload.page.nextCursor = null;
+        return { kind: "ready", payload };
+      };
+      try {
+        let acquisitionExpired = false;
+        let acquisitionTimer: ReturnType<typeof setTimeout> | undefined;
+        let connection: PoolClient;
+        try {
+          connection = await Promise.race([
+            pool.connect().then((value) => {
+              if (acquisitionExpired) {
+                value.release(new Error("Member export acquisition expired"));
+                throw Error("Member export unavailable");
               }
-              const { _key, ...record } = row;
-              const next = encode(
-                [2, index, _key, payload.page.number + 1, expires],
-                token,
-              );
-              const previous = payload.page.nextCursor;
-              records[name]!.push(record);
-              payload.page.recordCount++;
-              payload.page.complete = false;
-              payload.page.nextCursor = next;
+              return value;
+            }),
+            new Promise<never>((_, reject) => {
+              acquisitionTimer = setTimeout(() => {
+                acquisitionExpired = true;
+                reject(Error("Member export unavailable"));
+              }, 3000);
+            }),
+          ]);
+        } finally {
+          clearTimeout(acquisitionTimer);
+        }
+        if (performance.now() - started >= 3000) {
+          connection.release(new Error("Member export acquisition expired"));
+          throw Error("Member export unavailable");
+        }
+        client = Object.create(connection) as PoolClient;
+        // SQL deadlines do not cover a withheld driver BEGIN/COMMIT reply.
+        // Every query shares the same operation budget; uncertain connections
+        // are discarded without queuing rollback behind the stalled query.
+        client.query = (async (sql: string, values?: unknown[]) => {
+          const queryStarted = performance.now();
+          const budget = Math.min(5000, 10000 - (queryStarted - started));
+          if (budget <= 0) {
+            queryExpired = true;
+            throw Error("Member export unavailable");
+          }
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            const value = await Promise.race([
+              connection.query(sql, values),
+              new Promise<never>((_, reject) => {
+                timer = setTimeout(() => {
+                  queryExpired = true;
+                  reject(Error("Member export unavailable"));
+                }, budget);
+              }),
+            ]);
+            if (performance.now() - queryStarted >= budget) {
+              queryExpired = true;
+              throw Error("Member export unavailable");
+            }
+            return value;
+          } finally {
+            clearTimeout(timer);
+          }
+        }) as PoolClient["query"];
+        client.release = (error) => connection.release(error);
+        result = await readPage(client);
+        if (result.kind === "ready") {
+          if (expires <= Date.now()) {
+            result = { kind: "denied" };
+          } else {
+            checkedAt = performance.now();
+            const current = (
+              await client.query<{
+                id: string;
+                observedAt: Date;
+                snapshotStartedAt: Date;
+                remainingMs: string;
+              }>(
+                `WITH instant AS MATERIALIZED (SELECT clock_timestamp() AS observed_at)
+              SELECT p.id,t.observed_at AS "observedAt",transaction_timestamp() AS "snapshotStartedAt",
+                EXTRACT(EPOCH FROM (LEAST(p.expires_at,$2::timestamptz)-t.observed_at))*1000 AS "remainingMs"
+              FROM principals p CROSS JOIN instant t
+              WHERE p.id=$1 AND p.kind='member' AND p.revoked_at IS NULL
+                AND p.expires_at>t.observed_at AND $2::timestamptz>t.observed_at`,
+                [result.payload.profile.id, new Date(expires)],
+              )
+            ).rows[0];
+            remaining = Number(current?.remainingMs);
+            if (
+              !current ||
+              !Number.isFinite(remaining) ||
+              remaining <= performance.now() - checkedAt
+            ) {
+              result = { kind: "denied" };
+            } else if (
+              !(current.observedAt instanceof Date) ||
+              !(current.snapshotStartedAt instanceof Date) ||
+              !Number.isFinite(+current.observedAt) ||
+              !Number.isFinite(+current.snapshotStartedAt) ||
+              +current.snapshotStartedAt > +current.observedAt
+            ) {
+              throw Error("Member export unavailable");
+            } else {
+              result.payload.testUnitHistory.observedAt = current.observedAt;
+              result.payload.testUnitHistory.snapshotStartedAt =
+                current.snapshotStartedAt;
               if (
-                Buffer.byteLength(JSON.stringify(payload)) >
+                Buffer.byteLength(JSON.stringify(result.payload)) >
                 MAX_MEMBER_EXPORT_BYTES
               ) {
-                records[name]!.pop();
-                payload.page.recordCount--;
-                payload.page.nextCursor = previous;
-                if (payload.page.recordCount === 0) return { kind: "limit" };
-                more = true;
-                break pages;
+                result = { kind: "limit" };
+              } else {
+                await client.query("COMMIT");
+                committed = true;
               }
             }
           }
-          payload.page.complete = !more;
-          if (!more) payload.page.nextCursor = null;
-          if (expires <= Date.now()) return { kind: "denied" };
-          // CURRENT_TIMESTAMP is frozen at BEGIN; assembly may outlive a session.
-          const current = await client.query(
-            "SELECT id FROM principals WHERE id=$1 AND expires_at>clock_timestamp()",
-            [memberId],
-          );
-          if (!current.rows[0]) return { kind: "denied" };
-          await client.query("COMMIT");
-          return { kind: "ready", payload };
-        } finally {
-          let rollbackError: Error | undefined;
+        }
+      } catch {
+        result = { kind: "unavailable" };
+        releaseError = new Error("Member export outcome unavailable");
+      } finally {
+        if (client && !committed && !queryExpired) {
           try {
             await client.query("ROLLBACK");
           } catch {
-            // A failed rollback may leave authorization locks on a live client.
-            rollbackError = new Error("Member export rollback failed");
+            releaseError = new Error("Member export rollback failed");
+            result = { kind: "unavailable" };
           }
-          client.release(rollbackError);
         }
-      } catch {
-        return { kind: "unavailable" };
+        try {
+          client?.release(
+            queryExpired
+              ? new Error("Member export query expired")
+              : releaseError,
+          );
+        } catch {
+          result = { kind: "unavailable" };
+        }
       }
+      if (result.kind === "ready") {
+        if (!committed || performance.now() - started >= 10000)
+          return { kind: "unavailable" };
+        if (remaining <= performance.now() - checkedAt || expires <= Date.now())
+          return { kind: "denied" };
+      }
+      return result;
     },
   };
 }

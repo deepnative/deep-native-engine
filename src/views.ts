@@ -91,6 +91,7 @@ export function memberExportPage(
     `<p><a href="/learn">Back to your learning space</a></p>
     <h1>Download private preview records</h1>
     <p>Download every page to collect the retained structured records. Each page is a live read, not one frozen snapshot. If records change during the export, start again. This excludes evidence bytes, audit, billing, provider and backup copies.</p>
+    <p>Your retained local test-unit history includes grants, holds, events and recorded settlements, including expired and released units. Available quantities are stored counters, not current usable balances or paid allowances. Each downloaded page includes its database observation time.</p>
     <p>Each page contains at most 100 records and 256 KiB. Continuation expires after 15 minutes or a server restart. Access is checked again for every page and download.</p>
     <h2>Page ${payload.page.number}</h2>
     <section data-member-export data-url="/api/member/export${escape(query)}">

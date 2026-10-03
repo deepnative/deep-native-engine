@@ -1726,7 +1726,13 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v17" as const,
+    version: "local-member-records-v18" as const,
+    testUnitHistory: {
+      scope: "private-local-test-units" as const,
+      snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
+      observedAt: new Date("2026-10-03T00:00:01Z"),
+      availableMeaning: "stored-counter-not-usable-balance" as const,
+    },
     profile: { id: "owned" },
     records: { milestones: [{ title: "private <script>never show</script>" }] },
     page: {
@@ -1739,6 +1745,8 @@ it("explains live bounded export pages without embedding private records and off
   };
   const complete = memberExportPage(payload);
   expect(complete).toContain("live read, not one frozen snapshot");
+  expect(complete).toContain("including expired and released units");
+  expect(complete).toContain("stored counters, not current usable balances");
   expect(complete).toContain("Download this page to reveal the next step");
   expect(complete).toContain('data-url="/api/member/export"');
   expect(complete).toContain("data-export-next hidden");

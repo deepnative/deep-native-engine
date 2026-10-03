@@ -30,6 +30,19 @@ function fakePool(
           sql.startsWith("SELECT id FROM principals")
         )
           return { rows: owner ? [owner] : [] };
+        if (sql.startsWith("WITH instant"))
+          return {
+            rows: owner
+              ? [
+                  {
+                    id: owner.id,
+                    observedAt: new Date(),
+                    snapshotStartedAt: new Date(),
+                    remainingMs: "60000",
+                  },
+                ]
+              : [],
+          };
         const all = rows(sql).map((row, index) => ({
           _key: [String(index).padStart(5, "0")],
           ...row,
@@ -88,7 +101,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v17",
+      version: "local-member-records-v18",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -211,7 +224,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    [2, 27, ...valid.slice(2)],
+    [2, 31, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -279,7 +292,7 @@ it("withholds records on receipt, parent-lock, connection or commit failure", as
   ).toEqual({ kind: "unavailable" });
   const fake = fakePool(null, () => [], "ROLLBACK");
   expect(await memberExportStore(fake.pool).exportOwned("x")).toEqual({
-    kind: "denied",
+    kind: "unavailable",
   });
   expect(fake.wasDestroyed()).toBe(true);
 });
@@ -443,7 +456,7 @@ it("exports owned practice pairs after parent locks even when continuation start
     expect(parent).toBeGreaterThan(-1);
     expect(parent).toBeLessThan(child);
     expect(calls[child]!.values![3]).toEqual(["owned-session"]);
-    expect(calls.at(-2)?.sql).toBe("COMMIT");
+    expect(calls.at(-1)?.sql).toBe("COMMIT");
   }
 });
 
@@ -473,7 +486,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v17",
+        version: "local-member-records-v18",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -577,6 +590,37 @@ it("continues from appended circle sections at indices 23-26 without moving lega
     expect(value).toMatchObject({
       kind: "ready",
       payload: { records: { [name]: [{ id: "retained-own-record" }] } },
+    });
+  }
+});
+
+it("accepts every legacy section index and appends retained unit history at indices 27-30", async () => {
+  const empty = memberExportStore(fakePool({ id: "member-1" }).pool, secret);
+  for (let index = 0; index <= 30; index++)
+    expect(
+      await empty.exportOwned(
+        "owner",
+        signed([2, index, ["key"], 2, Date.now() + 60000]),
+      ),
+    ).toMatchObject({ kind: "ready" });
+  for (const [index, name, table] of [
+    [27, "testUnitGrants", "synthetic_entitlement_grants g"],
+    [28, "testUnitReservations", "synthetic_entitlement_reservations r"],
+    [29, "testUnitEvents", "synthetic_entitlement_events e"],
+    [30, "testUnitSettlements", "synthetic_entitlement_settlements s"],
+  ] as const) {
+    const fake = fakePool({ id: "member-1" }, (sql) =>
+      sql.includes(`FROM ${table}`)
+        ? [{ _key: ["z-owned"], id: "retained-owned" }]
+        : [],
+    );
+    const value = await memberExportStore(fake.pool, secret).exportOwned(
+      "owner",
+      signed([2, index, ["key"], 2, Date.now() + 60000]),
+    );
+    expect(value).toMatchObject({
+      kind: "ready",
+      payload: { records: { [name]: [{ id: "retained-owned" }] } },
     });
   }
 });

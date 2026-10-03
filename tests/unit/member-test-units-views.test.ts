@@ -67,6 +67,10 @@ it("shows separate observed quantities and earliest affected times without a mix
   expect(html).toContain(
     "contains no historical ledger or private learning content",
   );
+  expect(html).toContain(
+    'href="/member/export">Download retained test-unit history',
+  );
+  expect(html).toContain("stored counters differ from current usable balances");
   expect(html).not.toContain("Total credits");
   expect(html).toContain("0</span> sessions");
   expect(html).toContain("0</span> requests");
