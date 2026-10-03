@@ -207,6 +207,34 @@ const sections = {
     "support_time_entries e JOIN support_time_allocations a ON a.id=e.allocation_id WHERE a.member_id=$1",
     "e.allocation_id",
   ),
+  // Append after v16's index 22; existing cursor v2 section indices do not move.
+  circleChoices: section(
+    `id,circle_id AS "circleId",generation,policy_version AS "policyVersion",
+    chosen_at AS "chosenAt",revoked_at AS "revokedAt"`,
+    "preview_circle_choices WHERE member_id=$1",
+    "id",
+    true,
+  ),
+  circlePosts: section(
+    `id,circle_id AS "circleId",choice_id AS "choiceId",body,state,revision,
+    CASE WHEN root_id IS NULL THEN 'question' ELSE 'reply' END AS kind,
+    created_at AS "createdAt",changed_at AS "changedAt",withdrawn_at AS "withdrawnAt"`,
+    "preview_circle_posts WHERE member_id=$1",
+    "id",
+    true,
+  ),
+  circleReports: section(
+    `id,circle_id AS "circleId",category,created_at AS "createdAt",'retained' AS state`,
+    "preview_circle_reports WHERE member_id=$1",
+    "id",
+    true,
+  ),
+  circleMembershipHistory: section(
+    `circle_id AS "circleId",generation,joined_at AS "joinedAt",left_at AS "leftAt"`,
+    "preview_circle_membership_history WHERE member_id=$1",
+    "circle_id,generation",
+    true,
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -220,7 +248,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v16";
+  version: "local-member-records-v17";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   page: {
@@ -334,7 +362,7 @@ export function memberExportStore(
           );
           const payload: MemberExportPayload = {
             kind: "ready",
-            version: "local-member-records-v16",
+            version: "local-member-records-v17",
             profile: owner.rows[0],
             records,
             page: {

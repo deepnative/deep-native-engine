@@ -1692,7 +1692,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v16",
+          version: "local-member-records-v17",
           profile: { id: "owned" },
           records: { milestones: [] },
           page: {
@@ -1726,7 +1726,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v16",
+    version: "local-member-records-v17",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -4561,7 +4561,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v16" as const,
+    version: "local-member-records-v17" as const,
     profile: { id: "owned" },
     records: { milestones: [] },
     page: {

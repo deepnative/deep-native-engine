@@ -126,6 +126,11 @@ import {
   parseWorkflowFeedback,
   type WorkflowFeedbackStore,
 } from "./workflow-feedback.ts";
+import { registerCircleDiscussion } from "./circle-discussion-routes.ts";
+import {
+  disabledCircleDiscussionStore,
+  type CircleDiscussionStore,
+} from "./circle-discussion.ts";
 import { disabledCircleStore, type CircleStore } from "./circles.ts";
 import { eventPreviewDetail, listEventPreviews } from "./events.ts";
 import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
@@ -262,6 +267,8 @@ export function app(
     proposals?: ProposalStore;
     career?: CareerStore;
     circles?: CircleStore;
+    circleDiscussion?: CircleDiscussionStore;
+    circleDiscussionEnabled?: boolean;
     metrics?: MetricsStore;
     ledgerReconciliation?: LedgerReconciliationStore;
     memberTestUnits?: MemberTestUnitsStore;
@@ -1675,6 +1682,10 @@ export function app(
     }
     res.redirect(303, "/evidence");
   });
+  registerCircleDiscussion(
+    app,
+    options.circleDiscussion ?? disabledCircleDiscussionStore(),
+  );
   app.get("/circles", async (_req, res) => {
     const items = await circles.list(res.locals.token as string);
     if (!items) {
@@ -1688,6 +1699,7 @@ export function app(
         items,
         (res.locals.learner as Learner).goal,
         res.locals.csrf as string,
+        options.circleDiscussionEnabled ?? false,
       ),
     );
   });

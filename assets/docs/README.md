@@ -11,6 +11,7 @@ Start with [the current product direction](PRODUCT-DIRECTION.md): the AI learnin
 - [CTP-009 synthetic lesson reader](CTP-009-SYNTHETIC-READER.md): accessible sample text and private opened, started and self-assessed activity pinned to an exact published version.
 - [CTP-018 private goals and milestones](CTP-018-PRIVATE-MILESTONES.md): member-owned planning, evidence notes, versioned edits and local-only reminders.
 - [CTP-018 optional career planning](CTP-018-OPTIONAL-CAREER.md): opt-in private records, self-reported outcomes and versioned member approval of unsent drafts.
+- [Local circle discussion](LOCAL-CIRCLE-DISCUSSION.md) and [scoped acceptance evidence](LOCAL-CIRCLE-DISCUSSION-EVIDENCE.md): separate invented-data sharing, questions and replies, scoped report moderation, withdrawal, recovery and retained private history.
 - [CTP-020 local event discovery](CTP-020-EVENT-DISCOVERY.md): versioned synthetic previews, exact-date time zones, unavailable stale versions, no enrollment and Git rollback.
 - [Deterministic adapters and configuration](CTP-004-DETERMINISTIC-ADAPTERS.md): demo/test/live isolation, synthetic fixtures, honest readiness and durable failed jobs.
 - [Workspace authorization and staff grants](CTP-005-WORKSPACE-AUTHORIZATION.md): server-derived identity, owned workspaces, expiring assignments, support audit and cohort isolation.

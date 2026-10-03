@@ -37,8 +37,18 @@ test("[L44] three learning backgrounds can opt into a suitable local topic witho
     await expect(item).toContainText("You joined this local circle");
     await expect(page.getByText("NO LIVE COMMUNITY")).toBeVisible();
     await expect(
-      page.getByText(/No discussion, clinic, expert, recording/),
+      page.getByText(/New discussion sharing is paused/),
     ).toBeVisible();
+    await expect(
+      page.getByText(
+        /No clinic, expert, recording or shared member evidence is enabled/,
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", {
+        name: /Choose invented discussion sharing|Read circle questions/,
+      }),
+    ).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: /buy|purchase|book/i }),
     ).toHaveCount(0);

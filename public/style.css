@@ -691,3 +691,15 @@ footer span {
   font: inherit;
   line-height: 1.65;
 }
+
+/* Discussion has several destination/recovery links; wrap them before they
+   enlarge the mobile layout viewport and displace pointer targets. */
+.circle-discussion-nav {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 10px;
+}
+.circle-discussion-nav a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

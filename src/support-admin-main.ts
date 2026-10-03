@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { config } from "./config.ts";
 import { migrate } from "./store.ts";
 import { authorizationStore } from "./authorization.ts";
+import { circleDiscussionStore } from "./circle-discussion.ts";
 import { supportRequestStore } from "./support-requests.ts";
 
 let pool: Pool | undefined;
@@ -12,17 +13,46 @@ let failed = false;
 let result: Record<string, unknown> = { status: "failed" };
 try {
   const args = process.argv.slice(2);
-  const bootstrap = args.length === 1 && args[0] === "bootstrap";
+  const circleBootstrap = args.length === 1 && args[0] === "circle-bootstrap";
+  const bootstrap =
+    args.length === 1 && (args[0] === "bootstrap" || circleBootstrap);
+  const circleCommand = [
+    "circle-bootstrap",
+    "circle-grant",
+    "circle-revoke",
+  ].includes(args[0] ?? "");
+  const identities = circleBootstrap
+    ? ([
+        ["admin.json", "platform_admin"],
+        ["moderator.json", "moderator"],
+      ] as const)
+    : ([
+        ["admin.json", "platform_admin"],
+        ["operator.json", "operator"],
+      ] as const);
   if (
     !bootstrap &&
     !(
       args.length === 2 &&
-      ["grant", "revoke", "time-grant", "time-revoke"].includes(args[0]!) &&
+      [
+        "grant",
+        "revoke",
+        "time-grant",
+        "time-revoke",
+        "circle-grant",
+        "circle-revoke",
+      ].includes(args[0]!) &&
       /^[a-zA-Z0-9_-]+\.json$/.test(args[1]!)
     )
   )
     throw Error("Invalid local support command.");
   const settings = config(process.env);
+  if (
+    circleCommand &&
+    args[0] !== "circle-revoke" &&
+    !settings.circleDiscussion
+  )
+    throw Error("Circle sandbox sharing is disabled.");
   const root = join(settings.privateStorageRoot, "support-admin");
   await mkdir(root, { recursive: true, mode: 0o700 });
   const directory = await lstat(root);
@@ -52,7 +82,7 @@ try {
     return value as Record<string, unknown>;
   }
   if (bootstrap) {
-    for (const name of ["admin.json", "operator.json"]) {
+    for (const [name] of identities) {
       try {
         await lstat(join(root, name));
       } catch (error) {
@@ -75,10 +105,7 @@ try {
   if (bootstrap) {
     const auth = authorizationStore(pool),
       expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-    for (const [name, role] of [
-      ["admin.json", "platform_admin"],
-      ["operator.json", "operator"],
-    ] as const) {
+    for (const [name, role] of identities) {
       const token = randomBytes(32).toString("hex");
       const id = await auth.provisionStaff(token, role, expiresAt);
       await writeFile(
@@ -94,7 +121,7 @@ try {
     }
     result = {
       status: "complete",
-      action: "bootstrap",
+      action: args[0],
       expiresAt: expiresAt.toISOString(),
     };
   } else {
@@ -105,7 +132,59 @@ try {
     const support = supportRequestStore(pool, undefined, {
       timeWrites: settings.supportTimeWrites,
     });
-    if (args[0] === "grant" || args[0] === "time-grant") {
+    if (args[0] === "circle-grant" || args[0] === "circle-revoke") {
+      if (typeof input.circleId !== "string")
+        throw Error("Invalid circle instruction.");
+      const circles = circleDiscussionStore(
+        pool,
+        settings.secret,
+        settings.circleDiscussion,
+      );
+      if (args[0] === "circle-grant") {
+        if (
+          Object.keys(input).some(
+            (key) => !["circleId", "idempotencyKey", "expiresAt"].includes(key),
+          ) ||
+          typeof input.idempotencyKey !== "string" ||
+          typeof input.expiresAt !== "string"
+        )
+          throw Error("Invalid circle grant instruction.");
+        const staff = await privateJson("moderator.json");
+        if (typeof staff.id !== "string")
+          throw Error("Private moderator credentials unavailable.");
+        const granted = await circles.grantModerator(
+          admin.token,
+          staff.id,
+          input.circleId,
+          input.idempotencyKey,
+          new Date(input.expiresAt),
+        );
+        if (granted.kind !== "ready")
+          throw Error("Circle grant not confirmed.");
+        result = {
+          status: "complete",
+          action: args[0],
+          grantId: granted.value.id,
+        };
+      } else {
+        if (
+          Object.keys(input).length !== 2 ||
+          typeof input.grantId !== "string"
+        )
+          throw Error("Invalid circle revocation instruction.");
+        if (
+          (
+            await circles.revokeModerator(
+              admin.token,
+              input.circleId,
+              input.grantId,
+            )
+          ).kind !== "ready"
+        )
+          throw Error("Circle revocation not confirmed.");
+        result = { status: "complete", action: args[0] };
+      }
+    } else if (args[0] === "grant" || args[0] === "time-grant") {
       const timeGrant = args[0] === "time-grant";
       const staff = await privateJson("operator.json");
       if (

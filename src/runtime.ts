@@ -14,6 +14,7 @@ import { catalogStore, seedDraftPack } from "./catalog.ts";
 import { trackStore } from "./track-readiness.ts";
 import { proposalStore } from "./proposals.ts";
 import { careerStore } from "./career.ts";
+import { circleDiscussionStore } from "./circle-discussion.ts";
 import { circleStore } from "./circles.ts";
 import { metricsStore } from "./metrics.ts";
 import { ledgerReconciliationStore } from "./ledger-reconciliation.ts";
@@ -77,6 +78,12 @@ export async function start(env: NodeJS.ProcessEnv) {
       proposals: proposalStore(pool),
       career: careerStore(pool),
       circles: circleStore(pool),
+      circleDiscussionEnabled: settings.circleDiscussion,
+      circleDiscussion: circleDiscussionStore(
+        pool,
+        settings.secret,
+        settings.circleDiscussion,
+      ),
       metrics: metricsStore(pool),
       ledgerReconciliation: ledgerReconciliationStore(pool),
       memberTestUnits: memberTestUnitsStore(pool),
