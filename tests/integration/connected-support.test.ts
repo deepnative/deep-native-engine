@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { writeFileSync } from "node:fs";
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { migrate, store } from "../../src/store.ts";
 import { authorizationStore } from "../../src/authorization.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
@@ -324,142 +324,166 @@ it("shows current request actions and a single newest grant-specific receipt acr
   ])
     expect(html).not.toContain(control);
 });
-// This case creates 106 requests and 22 maximum-size allocations through real
-// application APIs. Its fixture budget is separate from the unchanged 5s SQL/lock
-// and 10s operation deadlines, asserted below on every measured read.
-it("keeps more than one hundred request receipts ordered and cursor-bound without effort fanout", async () => {
-  const f = await fixture();
-  await timeGrant(f);
-  const ids = [f.scope.requestId];
-  await ledger.grant(f.memberId, "support_minutes", 2520, randomUUID(), {
-    startsAt: f.startsAt.toISOString(),
-    expiresAt: f.expiresAt.toISOString(),
-  });
-  for (let n = 0; n < 105; n++) {
-    const created = await support.create(f.token, {
-      idempotencyKey: randomUUID(),
-      subject: `Invented page ${n}`,
-      body: "Invented pagination request",
-    });
-    if (!("receipt" in created)) throw Error("Missing page fixture");
-    ids.push(created.receipt.requestId);
-    const g = await support.grant(f.admin, {
-      requestId: created.receipt.requestId,
-      staffId: f.staffId,
-      role: "operator",
-      startsAt: f.startsAt,
-      expiresAt: f.expiresAt,
-      idempotencyKey: randomUUID(),
-    });
-    expect(g.kind).toBe("created");
-    if (n >= 84) {
-      const allocation = await support.time!.allocate(
-        f.token,
-        created.receipt.requestId,
-        randomUUID(),
-        120,
-      );
-      if (!("receipt" in allocation))
-        throw Error("Missing maximum page allocation");
-      await timeGrant({
-        ...f,
-        scope: {
-          requestId: created.receipt.requestId,
-          grantId: "unused-request-grant",
-        },
-        allocationId: allocation.receipt.allocationId,
-      });
-    }
-  }
-  const measured = controlled(),
-    durations: number[] = [];
-  const seen: string[] = [];
-  let cursor: string | undefined, firstCursor: string | undefined;
-  do {
+// Seed the unchanged maximum-data fixture in a separate 30s setup hook.
+// The measured read/assertion phase uses the default 5s test limit; each service
+// read still has the unchanged 5s SQL/lock and 10s operation deadlines.
+describe("maximum connected support history", () => {
+  let f: Awaited<ReturnType<typeof fixture>>;
+  let ids: string[];
+  let fixturePreparationMs: number;
+  beforeEach(async () => {
+    writeFileSync(
+      "artifacts/connected-support-bounds.json",
+      JSON.stringify({ status: "preparing", phase: "fixture" }),
+    );
     const started = performance.now();
-    const result = await measured.use.operatorWorklist(f.operator, cursor);
-    durations.push(performance.now() - started);
-    if (result.kind !== "ready") throw Error("Missing bounded page");
-    expect(result.value.items.length).toBeLessThanOrEqual(20);
-    expect(
-      new Set(
-        result.value.items.map((r) => r.operatorContext.observedAt.valueOf()),
-      ).size,
-    ).toBe(1);
-    for (const r of result.value.items) {
-      seen.push(r.requestId);
-      if (r.authorizedEffort) {
-        expect(r.authorizedEffort).toMatchObject({
-          held: 120,
-          ceiling: 120,
-          consumed: 0,
-          released: 0,
+    f = await fixture();
+    await timeGrant(f);
+    ids = [f.scope.requestId];
+    await ledger.grant(f.memberId, "support_minutes", 2520, randomUUID(), {
+      startsAt: f.startsAt.toISOString(),
+      expiresAt: f.expiresAt.toISOString(),
+    });
+    for (let n = 0; n < 105; n++) {
+      const created = await support.create(f.token, {
+        idempotencyKey: randomUUID(),
+        subject: `Invented page ${n}`,
+        body: "Invented pagination request",
+      });
+      if (!("receipt" in created)) throw Error("Missing page fixture");
+      ids.push(created.receipt.requestId);
+      const g = await support.grant(f.admin, {
+        requestId: created.receipt.requestId,
+        staffId: f.staffId,
+        role: "operator",
+        startsAt: f.startsAt,
+        expiresAt: f.expiresAt,
+        idempotencyKey: randomUUID(),
+      });
+      expect(g.kind).toBe("created");
+      if (n >= 84) {
+        const allocation = await support.time!.allocate(
+          f.token,
+          created.receipt.requestId,
+          randomUUID(),
+          120,
+        );
+        if (!("receipt" in allocation))
+          throw Error("Missing maximum page allocation");
+        await timeGrant({
+          ...f,
+          scope: {
+            requestId: created.receipt.requestId,
+            grantId: "unused-request-grant",
+          },
+          allocationId: allocation.receipt.allocationId,
         });
       }
     }
-    firstCursor ??= result.value.nextCursor ?? undefined;
-    cursor = result.value.nextCursor ?? undefined;
-  } while (cursor);
-  const ordered = (
-    await pool.query(
-      "SELECT id FROM support_requests ORDER BY received_at DESC,id DESC",
-    )
-  ).rows.map((r) => r.id);
-  expect(seen).toEqual(ordered);
-  expect(new Set(seen).size).toBe(106);
-  expect(seen).toHaveLength(ids.length);
-  expect(Math.max(...durations)).toBeLessThan(10000);
-  const bounded = measured.state.counts.filter(
-    (q) => q.sql.includes("WHERE id=ANY") || q.sql.includes("WHERE r.id=ANY"),
-  );
-  expect(Math.max(...bounded.map((q) => q.ids))).toBeLessThanOrEqual(21);
-  expect(
-    Math.max(
-      ...measured.state.counts
-        .filter((q) =>
-          q.sql.startsWith('SELECT r.id AS "requestId",r.member_id'),
-        )
-        .map((q) => q.rows),
-    ),
-  ).toBe(21);
-  const discovery = measured.state.counts.find((q) =>
-    q.sql.startsWith('SELECT r.id AS "requestId",selected.id'),
-  )!;
-  expect(discovery.rows).toBe(21);
-  const explain = (
-    await pool.query(
-      "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT g.id,g.allocation_id FROM support_time_grants g JOIN staff_profiles p ON p.principal_id=g.staff_id AND p.role=g.staff_role WHERE g.request_id=$1 AND g.staff_id=$2 AND g.purpose='support-time-local-v1' AND g.revoked_at IS NULL AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp() ORDER BY g.created_at DESC,g.id DESC LIMIT 1",
-      [seen[0], f.staffId],
-    )
-  ).rows[0]["QUERY PLAN"][0];
-  expect(explain.Plan["Actual Rows"]).toBe(1);
-  expect(explain["Execution Time"]).toBeLessThan(5000);
-  writeFileSync(
-    "artifacts/connected-support-bounds.json",
-    JSON.stringify(
-      {
-        scope: "invented-local-connected-support",
-        requestRows: 106,
-        maximumSelectedCeiling: 120,
-        maximumRequestCandidates: 21,
-        maximumEffortCandidates: discovery.rows,
-        maximumPageMs: Math.max(...durations),
-        pages: durations.length,
-        explainExecutionMs: explain["Execution Time"],
-        plan: explain.Plan,
-      },
-      null,
-      2,
-    ),
-  );
-  expect(firstCursor).toBeDefined();
-  expect(
-    await support.operatorWorklist(f.operator, firstCursor! + "x"),
-  ).toEqual({ kind: "denied" });
-  expect(await support.operatorWorklist(f.admin, firstCursor!)).toEqual({
-    kind: "denied",
+
+    fixturePreparationMs = performance.now() - started;
+    writeFileSync(
+      "artifacts/connected-support-bounds.json",
+      JSON.stringify({
+        status: "prepared",
+        fixturePreparationMs,
+        requestRows: ids.length,
+      }),
+    );
+  }, 30000);
+  it("keeps more than one hundred request receipts ordered and cursor-bound without effort fanout", async () => {
+    const measured = controlled(),
+      durations: number[] = [];
+    const seen: string[] = [];
+    let cursor: string | undefined, firstCursor: string | undefined;
+    do {
+      const started = performance.now();
+      const result = await measured.use.operatorWorklist(f.operator, cursor);
+      durations.push(performance.now() - started);
+      if (result.kind !== "ready") throw Error("Missing bounded page");
+      expect(result.value.items.length).toBeLessThanOrEqual(20);
+      expect(
+        new Set(
+          result.value.items.map((r) => r.operatorContext.observedAt.valueOf()),
+        ).size,
+      ).toBe(1);
+      for (const r of result.value.items) {
+        seen.push(r.requestId);
+        if (r.authorizedEffort) {
+          expect(r.authorizedEffort).toMatchObject({
+            held: 120,
+            ceiling: 120,
+            consumed: 0,
+            released: 0,
+          });
+        }
+      }
+      firstCursor ??= result.value.nextCursor ?? undefined;
+      cursor = result.value.nextCursor ?? undefined;
+    } while (cursor);
+    const ordered = (
+      await pool.query(
+        "SELECT id FROM support_requests ORDER BY received_at DESC,id DESC",
+      )
+    ).rows.map((r) => r.id);
+    expect(seen).toEqual(ordered);
+    expect(new Set(seen).size).toBe(106);
+    expect(seen).toHaveLength(ids.length);
+    expect(Math.max(...durations)).toBeLessThan(10000);
+    const bounded = measured.state.counts.filter(
+      (q) => q.sql.includes("WHERE id=ANY") || q.sql.includes("WHERE r.id=ANY"),
+    );
+    expect(Math.max(...bounded.map((q) => q.ids))).toBeLessThanOrEqual(21);
+    expect(
+      Math.max(
+        ...measured.state.counts
+          .filter((q) =>
+            q.sql.startsWith('SELECT r.id AS "requestId",r.member_id'),
+          )
+          .map((q) => q.rows),
+      ),
+    ).toBe(21);
+    const discovery = measured.state.counts.find((q) =>
+      q.sql.startsWith('SELECT r.id AS "requestId",selected.id'),
+    )!;
+    expect(discovery.rows).toBe(21);
+    const explain = (
+      await pool.query(
+        "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT g.id,g.allocation_id FROM support_time_grants g JOIN staff_profiles p ON p.principal_id=g.staff_id AND p.role=g.staff_role WHERE g.request_id=$1 AND g.staff_id=$2 AND g.purpose='support-time-local-v1' AND g.revoked_at IS NULL AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp() ORDER BY g.created_at DESC,g.id DESC LIMIT 1",
+        [seen[0], f.staffId],
+      )
+    ).rows[0]["QUERY PLAN"][0];
+    expect(explain.Plan["Actual Rows"]).toBe(1);
+    expect(explain["Execution Time"]).toBeLessThan(5000);
+    writeFileSync(
+      "artifacts/connected-support-bounds.json",
+      JSON.stringify(
+        {
+          scope: "invented-local-connected-support",
+          fixturePreparationMs,
+          fixtureRequestRows: ids.length,
+          requestRows: 106,
+          maximumSelectedCeiling: 120,
+          maximumRequestCandidates: 21,
+          maximumEffortCandidates: discovery.rows,
+          maximumPageMs: Math.max(...durations),
+          pages: durations.length,
+          explainExecutionMs: explain["Execution Time"],
+          plan: explain.Plan,
+        },
+        null,
+        2,
+      ),
+    );
+    expect(firstCursor).toBeDefined();
+    expect(
+      await support.operatorWorklist(f.operator, firstCursor! + "x"),
+    ).toEqual({ kind: "denied" });
+    expect(await support.operatorWorklist(f.admin, firstCursor!)).toEqual({
+      kind: "denied",
+    });
   });
-}, 30000);
+});
 function latch() {
   let release!: () => void;
   const wait = new Promise<void>((resolve) => {
