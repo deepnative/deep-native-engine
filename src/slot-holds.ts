@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Pool, PoolClient } from "pg";
+import type { Pool, PoolClient, QueryResultRow } from "pg";
 import { hash } from "./store.ts";
 
 export type SlotHoldFailureCode =
@@ -197,80 +197,223 @@ export function memberSlotHolds(pool: Pool): MemberSlotHolds {
     token: string,
     requestId: string | null,
   ): Promise<MemberHoldSnapshot | null> {
-    // Settlement keeps its existing slot -> member lock order and commits one
-    // receipt at a time. Never acquire those locks inside the read transaction.
-    const initial = await readReceipts(pool, token, requestId);
-    for (const item of initial.rows) {
-      if (item.state === "held")
-        await pool.query("SELECT settle_member_sample_holds($1,$2)", [
-          hash(token),
-          item.id,
-        ]);
-    }
-    const client = await pool.connect();
-    let commitStarted = false;
-    let releaseError: Error | undefined;
-    try {
-      await client.query("BEGIN");
-      const member = await client.query<{ id: string; expiresAt: string }>(
-        `SELECT p.id,p.expires_at::text AS "expiresAt"
-         FROM principals p JOIN learners l ON l.id=p.id
-         WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
-           AND p.expires_at>clock_timestamp() FOR SHARE OF p`,
-        [hash(token)],
+    const started = performance.now();
+    const operationDeadline = started + 10000;
+    let authorityDeadline = Infinity;
+    let client: PoolClient | undefined;
+    let queryUncertain = false,
+      authorityDenied = false,
+      transactionOpen = false,
+      commitIssued = false;
+    let result: MemberHoldSnapshot | null = null;
+    let outcomeError: unknown,
+      failed = false;
+    const unavailable = () => new SlotHoldFailure("unavailable");
+    async function bounded<T>(
+      operation: () => Promise<T>,
+      maximum: number,
+    ): Promise<T> {
+      const entered = performance.now();
+      const allowance = Math.min(
+        maximum,
+        operationDeadline - entered,
+        authorityDeadline - entered,
       );
-      if (!member.rows[0]) {
-        await client.query("ROLLBACK");
-        return null;
+      const authorityLimited =
+        Number.isFinite(authorityDeadline) &&
+        authorityDeadline - entered <=
+          Math.min(maximum, operationDeadline - entered);
+      if (!Number.isFinite(allowance) || allowance <= 0) {
+        queryUncertain = true;
+        authorityDenied = authorityLimited;
+        throw unavailable();
       }
-      // Match deletion's principal -> owned workspace order. Both locks remain
-      // held through the receipt/grant reads, expiry check and commit.
-      const workspace = await client.query<{ id: string }>(
-        `SELECT id FROM workspaces
-         WHERE owner_principal_id=$1 AND deleting_at IS NULL FOR SHARE`,
-        [member.rows[0].id],
-      );
-      if (!workspace.rows[0]) {
-        await client.query("ROLLBACK");
-        return null;
-      }
-      const own = await readReceipts(client, token, requestId);
-      const grants =
-        requestId === null
-          ? await client.query<SampleHoldGrant>(
-              `SELECT g.id,g.category FROM synthetic_entitlement_grants g
-         JOIN principals p ON p.id=g.member_id
-         WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
-           AND p.expires_at>clock_timestamp() AND g.starts_at<=clock_timestamp()
-           AND g.expires_at>clock_timestamp() AND g.expired_at IS NULL
-           AND g.available>=60 AND g.category IN ('coach_minutes','review_minutes')
-         ORDER BY g.expires_at,g.id`,
-              [hash(token)],
-            )
-          : { rows: [] };
-      const current = await client.query<{ valid: boolean }>(
-        "SELECT clock_timestamp() < $1::timestamptz AS valid",
-        [member.rows[0].expiresAt],
-      );
-      if (!current.rows[0]!.valid) {
-        await client.query("ROLLBACK");
-        return null;
-      }
-      commitStarted = true;
-      await client.query("COMMIT");
-      return { grants: grants.rows, receipts: own.rows };
-    } catch (error) {
-      // Never release private results or replay an uncertain transaction.
-      if (commitStarted) releaseError = error as Error;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await client.query("ROLLBACK");
-      } catch {
-        releaseError = error as Error;
+        const value = await Promise.race([
+          Promise.resolve().then(operation),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              queryUncertain = true;
+              authorityDenied = authorityLimited;
+              reject(unavailable());
+            }, allowance);
+          }),
+        ]);
+        if (performance.now() - entered >= allowance) {
+          queryUncertain = true;
+          authorityDenied = authorityLimited;
+          throw unavailable();
+        }
+        return value;
+      } finally {
+        clearTimeout(timer);
       }
-      throw error;
-    } finally {
-      client.release(releaseError);
     }
+    const query = <T extends QueryResultRow = QueryResultRow>(
+      sql: string,
+      values?: unknown[],
+    ) => bounded(() => client!.query<T>(sql, values), 5000);
+    async function observe() {
+      const entered = performance.now();
+      const current = (
+        await query<{
+          observedAt: Date;
+          remainingMs: string;
+          valid: boolean;
+        }>(
+          `WITH instant AS MATERIALIZED (SELECT clock_timestamp() AS observed_at)
+        SELECT t.observed_at AS "observedAt",
+          EXTRACT(EPOCH FROM (p.expires_at-t.observed_at))*1000 AS "remainingMs",
+          p.expires_at>t.observed_at AS valid
+        FROM principals p JOIN learners l ON l.id=p.id
+        JOIN workspaces w ON w.owner_principal_id=p.id AND w.deleting_at IS NULL
+        CROSS JOIN instant t
+        WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
+          AND p.expires_at>t.observed_at`,
+          [hash(token)],
+        )
+      ).rows[0];
+      if (!current) return false;
+      const remaining = Number(current.remainingMs);
+      if (
+        current.valid !== true ||
+        typeof current.remainingMs !== "string" ||
+        !current.remainingMs.trim() ||
+        !Number.isFinite(remaining) ||
+        !(current.observedAt instanceof Date) ||
+        !Number.isFinite(+current.observedAt)
+      )
+        throw unavailable();
+      // Subtract the whole query/driver round trip conservatively. A later
+      // observation can shorten, never extend, the operation's DB lifetime.
+      authorityDeadline = Math.min(authorityDeadline, entered + remaining);
+      return authorityDeadline > performance.now();
+    }
+    try {
+      let acquisitionExpired = false,
+        acquired: PoolClient | undefined;
+      const connecting = () =>
+        pool.connect().then((value) => {
+          if (acquisitionExpired) {
+            try {
+              value.release(unavailable());
+            } catch {
+              /* Already unavailable. */
+            }
+            throw unavailable();
+          }
+          acquired = value;
+          return value;
+        });
+      try {
+        client = await bounded(connecting, 3000);
+      } catch (error) {
+        acquisitionExpired = true;
+        if (acquired) {
+          try {
+            acquired.release(unavailable());
+          } catch {
+            /* Already unavailable. */
+          }
+        }
+        throw error;
+      }
+      // Bound initial reads and atomic lazy settlement functions as well as
+      // the final fenced transaction. This owned connection is discarded on
+      // every handback, so session-level timeout settings cannot leak to reuse.
+      await query("SET statement_timeout='5s'");
+      await query("SET lock_timeout='5s'");
+      read: {
+        if (!(await observe())) break read;
+        const initial = await bounded(
+          () => readReceipts(client!, token, requestId),
+          5000,
+        );
+        // Preserve settlement's slot -> member writer order. No read-transaction
+        // locks are held while these independent atomic functions commit.
+        for (const item of initial.rows) {
+          if (item.state === "held")
+            await query("SELECT settle_member_sample_holds($1,$2)", [
+              hash(token),
+              item.id,
+            ]);
+        }
+        await query("BEGIN");
+        transactionOpen = true;
+        await query("SELECT set_config('transaction_timeout',$1,true)", [
+          `${Math.max(1, Math.floor(operationDeadline - performance.now()))}ms`,
+        ]);
+        const member = await query<{ id: string; expiresAt: string }>(
+          `SELECT p.id,p.expires_at::text AS "expiresAt"
+           FROM principals p JOIN learners l ON l.id=p.id
+           WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
+             AND p.expires_at>clock_timestamp() FOR SHARE OF p`,
+          [hash(token)],
+        );
+        if (!member.rows[0]) break read;
+        // Match deletion's principal -> owned workspace order and retain both
+        // locks through the final read/check/COMMIT. Settlement happens above.
+        const workspace = await query<{ id: string }>(
+          `SELECT id FROM workspaces
+           WHERE owner_principal_id=$1 AND deleting_at IS NULL FOR SHARE`,
+          [member.rows[0].id],
+        );
+        if (!workspace.rows[0]) break read;
+        const own = await bounded(
+          () => readReceipts(client!, token, requestId),
+          5000,
+        );
+        const grants =
+          requestId === null
+            ? await query<SampleHoldGrant>(
+                `SELECT g.id,g.category FROM synthetic_entitlement_grants g
+               JOIN principals p ON p.id=g.member_id
+               WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
+                 AND p.expires_at>clock_timestamp() AND g.starts_at<=clock_timestamp()
+                 AND g.expires_at>clock_timestamp() AND g.expired_at IS NULL
+                 AND g.available>=60 AND g.category IN ('coach_minutes','review_minutes')
+               ORDER BY g.expires_at,g.id`,
+                [hash(token)],
+              )
+            : { rows: [] };
+        if (!(await observe())) break read;
+        commitIssued = true;
+        await query("COMMIT");
+        transactionOpen = false;
+        result = { grants: grants.rows, receipts: own.rows };
+      }
+    } catch (error) {
+      if (
+        (!authorityDenied && performance.now() < authorityDeadline) ||
+        performance.now() >= operationDeadline
+      ) {
+        failed = true;
+        outcomeError = error;
+      }
+    } finally {
+      // A timeout or issued COMMIT has an uncertain outcome: never queue a
+      // ROLLBACK behind its pending reply, and never replay it. Discard releases
+      // server locks; already committed lazy settlement is not rolled back.
+      if (client && transactionOpen && !queryUncertain && !commitIssued) {
+        try {
+          await query("ROLLBACK");
+        } catch {
+          failed = true;
+          outcomeError = unavailable();
+        }
+      }
+      try {
+        client?.release(unavailable());
+      } catch {
+        failed = true;
+        outcomeError = unavailable();
+      }
+    }
+    if (failed) throw outcomeError;
+    if (performance.now() >= operationDeadline) throw unavailable();
+    if (performance.now() >= authorityDeadline) return null;
+    return result;
   }
   return {
     async withdraw(token, requestId) {
