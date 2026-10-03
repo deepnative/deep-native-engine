@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { SupportTimeReceipt } from "./support-time.ts";
 import { escape, hidden, page } from "./views.ts";
+import { supportTimeLink } from "./support-time-views.ts";
 import type {
   SupportRequestSummary,
   SupportMemberDetail,
@@ -118,13 +119,27 @@ export function supportMemberDetailPage(
     `<section class="reading"><p><a href="/support">Your private support requests</a></p><h1>Private sample support receipt</h1><p>${disclosure}</p>${lifecycle(value)}${minutes}${value.withdrawnAt ? '<p role="status">Request withdrawn. Request text and all associated messages were removed. The content-free receipt remains.</p>' : `<h2>${escape(value.subject!)}</h2><pre class="content-text" data-support-body>${escape(value.body!)}</pre><h2>Replies visible to you</h2><p>Newest replies first; at most 20 replies per page.</p>${value.replies.items.length ? `<ul aria-label="Replies visible to you">${value.replies.items.map((reply) => `<li id="reply-${escape(reply.id)}"><p>${escape(reply.attribution)} · ${time(reply.createdAt)}</p><pre class="content-text" data-support-reply>${escape(reply.body)}</pre></li>`).join("")}</ul>` : "<p>No member-visible reply on this page.</p>"}${pages(base, value.replies.nextCursor)}<form method="post" action="${base}/withdraw">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Withdraw this request and remove its subject, body and all associated messages. Keep a content-free receipt.</span></label><button class="secondary" type="submit">Withdraw request text</button></form>`}<p><a href="/member/export">Download private preview records</a></p><p>Withdrawal cannot recall downloaded copies or establish erasure from hosted backups.</p></section>`,
   );
 }
+function operatorContext(value: SupportOperatorSummary) {
+  const context = value.operatorContext,
+    effort = value.authorizedEffort;
+  const actions = context.allowedActions.map(
+    (action) =>
+      ({
+        acknowledge: "Separate acknowledgement",
+        note: "Internal note",
+        reply: "Member-visible reply",
+        resolve: "Local resolution",
+      })[action],
+  );
+  return `<dl><dt>Observed at (UTC)</dt><dd>${time(context.observedAt)}</dd><dt>Elapsed calendar time</dt><dd>${context.elapsedSeconds} seconds at this observation; not a staffed or business-day SLA</dd><dt>Current request grant</dt><dd>Starts ${time(context.grantStartsAt)}; expires ${time(context.grantExpiresAt)}</dd><dt>Allowed request-purpose actions</dt><dd>${actions.length ? actions.join(", ") : "None; request resolved"}</dd></dl>${effort ? `<section><h2>Allocation-specific test effort</h2><p>${effort.held} support test minutes held; ${effort.consumed} consumed; ${effort.released} released. Confirmed ceiling: ${effort.ceiling}. State: ${escape(effort.state)}.</p><p>One separately authorized allocation; not an aggregate, paid allowance or available expert time. Reading does not begin or record work.</p><a href="${escape(supportTimeLink(effort))}">Open separately authorized test effort receipt · ${escape(effort.allocationId)}</a></section>` : "<p>No separately authorized test effort shown</p>"}`;
+}
 export function supportOperatorWorklistPage(value: {
   items: SupportOperatorSummary[];
   nextCursor: string | null;
 }) {
   return page(
     "Granted local support requests",
-    `<section class="reading"><p class="eyebrow">EXACT-GRANTED LOCAL OPERATOR</p><h1>Granted local support requests</h1><p>${disclosure}</p><p>Only requests with a current exact grant appear. Newest receipts first; at most 20 per page. Opening a request does not acknowledge it.</p>${value.items.length ? `<ul aria-label="Granted support requests">${value.items.map((item) => `<li><a href="/operator/support/${encodeURIComponent(item.requestId)}?grant=${encodeURIComponent(item.grantId)}">${escape(item.subject!)} · ${escape(item.requestId)}</a>${lifecycle(item)}</li>`).join("")}</ul>` : "<p>No currently granted requests on this page.</p>"}${pages("/operator/support", value.nextCursor)}</section>`,
+    `<section class="reading"><p class="eyebrow">EXACT-GRANTED LOCAL OPERATOR</p><h1>Granted local support requests</h1><p>${disclosure}</p><p>Only requests with a current exact grant appear. Newest receipts first; at most 20 per page. Opening a request does not acknowledge it.</p>${value.items.length ? `<ul aria-label="Granted support requests">${value.items.map((item) => `<li><a href="/operator/support/${encodeURIComponent(item.requestId)}?grant=${encodeURIComponent(item.grantId)}">${escape(item.subject!)} · ${escape(item.requestId)}</a>${lifecycle(item)}${operatorContext(item)}</li>`).join("")}</ul>` : "<p>No currently granted requests on this page.</p>"}${pages("/operator/support", value.nextCursor)}</section>`,
   );
 }
 export function supportOperatorDetailPage(
@@ -149,7 +164,7 @@ export function supportOperatorDetailPage(
   };
   return page(
     "Granted sample support request",
-    `<section class="reading"><p><a href="/operator/support">Granted local support requests</a></p><h1>Granted sample support request</h1><p>${disclosure}</p>${lifecycle(value)}<h2>${escape(value.subject!)}</h2><pre class="content-text">${escape(value.body)}</pre><h2>Operator message history</h2><p>Newest entries first; at most 20 notes and replies per page.</p>${value.messages.items.length ? `<ul aria-label="Operator message history">${value.messages.items.map((item) => `<li id="message-${escape(item.id)}"><h3>${item.kind === "reply" ? "Reply visible to member" : "Internal note—staff only"}</h3><p>${escape(item.attribution)} · ${time(item.createdAt)}</p><pre class="content-text" data-support-message="${item.kind}">${escape(item.body)}</pre></li>`).join("")}</ul>` : "<p>No operator messages on this page.</p>"}${pages(`${base}?grant=${encodeURIComponent(value.grantId)}`, value.messages.nextCursor, true)}${value.resolvedAt ? '<p role="status">Resolved locally. No further acknowledgement, note or reply is accepted. This request cannot be reopened.</p>' : `${value.acknowledgedAt ? "" : transition("acknowledge", "Acknowledge request locally", "Record a separate local acknowledgement of this request.")}${message("note")}${message("reply")}${transition("resolve", "Resolve request locally", "Resolve this local request and stop further messages; this does not record member satisfaction or a separate acknowledgement.")}`}</section>`,
+    `<section class="reading"><p><a href="/operator/support">Granted local support requests</a></p><h1>Granted sample support request</h1><p>${disclosure}</p>${lifecycle(value)}${operatorContext(value)}<h2>${escape(value.subject!)}</h2><pre class="content-text">${escape(value.body)}</pre><h2>Operator message history</h2><p>Newest entries first; at most 20 notes and replies per page.</p>${value.messages.items.length ? `<ul aria-label="Operator message history">${value.messages.items.map((item) => `<li id="message-${escape(item.id)}"><h3>${item.kind === "reply" ? "Reply visible to member" : "Internal note—staff only"}</h3><p>${escape(item.attribution)} · ${time(item.createdAt)}</p><pre class="content-text" data-support-message="${item.kind}">${escape(item.body)}</pre></li>`).join("")}</ul>` : "<p>No operator messages on this page.</p>"}${pages(`${base}?grant=${encodeURIComponent(value.grantId)}`, value.messages.nextCursor, true)}${value.resolvedAt ? '<p role="status">Resolved locally. No further acknowledgement, note or reply is accepted. This request cannot be reopened.</p>' : `${value.acknowledgedAt ? "" : transition("acknowledge", "Acknowledge request locally", "Record a separate local acknowledgement of this request.")}${message("note")}${message("reply")}${transition("resolve", "Resolve request locally", "Resolve this local request and stop further messages; this does not record member satisfaction or a separate acknowledgement.")}`}</section>`,
   );
 }
 export function supportNoticePage(

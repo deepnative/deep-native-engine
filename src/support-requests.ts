@@ -5,6 +5,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
+import { performance } from "node:perf_hooks";
 import { hash } from "./store.ts";
 import {
   allocateSupportTime,
@@ -47,8 +48,17 @@ export interface SupportMemberDetail extends SupportRequestSummary {
   body: string | null;
   replies: SupportPage<SupportMemberReply>;
 }
+export interface SupportOperatorContext {
+  observedAt: Date;
+  elapsedSeconds: number;
+  grantStartsAt: Date;
+  grantExpiresAt: Date;
+  allowedActions: ("acknowledge" | "note" | "reply" | "resolve")[];
+}
 export interface SupportOperatorSummary extends SupportRequestSummary {
   grantId: string;
+  operatorContext: SupportOperatorContext;
+  authorizedEffort?: SupportTimeReceipt & SupportTimeScope;
 }
 export interface SupportOperatorMessage extends SupportMemberReply {
   kind: "reply" | "internal-note";
@@ -220,6 +230,7 @@ type Context = {
   actor: { id: string; kind: string };
   tokenHash: string;
   deadlines: Date[];
+  operatorReads?: SupportOperatorSummary[];
 };
 type Cursor = [string, string, "reply" | "internal-note" | "", number];
 class SupportFailure extends Error {
@@ -369,6 +380,160 @@ export function supportRequestStore(
     } finally {
       client?.release(releaseError);
     }
+  }
+  // Combined operator reads use one bounded transaction and one observation
+  // instant. No independently committed request/time read is composed here.
+  async function acquireOperator(): Promise<PoolClient> {
+    let expired = false,
+      timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const pending = pool.connect().then((client) => {
+        if (expired) {
+          client.release(new Error("Support acquisition expired"));
+          throw Error("Support operation unavailable");
+        }
+        return client;
+      });
+      return await Promise.race([
+        pending,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            expired = true;
+            reject(Error("Support operation unavailable"));
+          }, 3000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  async function runOperator<T>(
+    token: string,
+    use: (ctx: Context) => Promise<T>,
+  ): Promise<T | { kind: "denied" | "unavailable" }> {
+    if (typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token))
+      return { kind: "denied" };
+    const started = performance.now();
+    let client: PoolClient | undefined, releaseError: Error | undefined;
+    let result: T | { kind: "denied" | "unavailable" };
+    let checkedAt = 0,
+      remaining = 0,
+      accepted = false,
+      queryExpired = false;
+    try {
+      const connection = await acquireOperator();
+      // Server timeouts do not cover a withheld BEGIN/COMMIT reply. Keep a
+      // client-side query deadline inside the same total operation budget;
+      // discard the owned uncertain connection instead of queuing rollback.
+      client = Object.create(connection) as PoolClient;
+      client.query = (async (sql: string, values?: unknown[]) => {
+        const remaining = 10000 - (performance.now() - started);
+        if (remaining <= 0) {
+          queryExpired = true;
+          throw new SupportFailure("unavailable");
+        }
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          return await Promise.race([
+            connection.query(sql, values),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () => {
+                  queryExpired = true;
+                  reject(new SupportFailure("unavailable"));
+                },
+                Math.min(5000, remaining),
+              );
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+      }) as PoolClient["query"];
+      client.release = (error) => connection.release(error);
+      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+      await client.query("SET LOCAL lock_timeout='5s'");
+      await client.query("SET LOCAL statement_timeout='5s'");
+      await client.query("SELECT set_config('transaction_timeout',$1,true)", [
+        `${Math.max(1, Math.floor(10000 - (performance.now() - started)))}ms`,
+      ]);
+      const tokenHash = hash(token);
+      const actor = (
+        await client.query<{ id: string; kind: string }>(
+          "SELECT id,kind FROM principals WHERE token_hash=$1",
+          [tokenHash],
+        )
+      ).rows[0];
+      requireAccess(actor);
+      const ctx: Context = {
+        client,
+        actor,
+        tokenHash,
+        deadlines: [],
+        operatorReads: [],
+      };
+      result = await use(ctx);
+      checkedAt = performance.now();
+      const current = (
+        await client.query<{
+          valid: boolean;
+          observedAt: Date;
+          remainingMs: string;
+        }>(
+          `WITH instant AS MATERIALIZED (SELECT clock_timestamp() observed_at)
+        SELECT bool_and(deadline>t.observed_at) AS valid,t.observed_at AS "observedAt",
+        EXTRACT(EPOCH FROM (min(deadline)-t.observed_at))*1000 AS "remainingMs"
+        FROM unnest($1::timestamptz[]) AS times(deadline) CROSS JOIN instant t GROUP BY t.observed_at`,
+          [ctx.deadlines],
+        )
+      ).rows[0];
+      remaining = Number(current?.remainingMs);
+      requireAccess(
+        current?.valid &&
+          Number.isFinite(remaining) &&
+          remaining > performance.now() - checkedAt,
+      );
+      requireAccess(performance.now() - started < 10000, "unavailable");
+      for (const row of ctx.operatorReads!) {
+        row.operatorContext.observedAt = current.observedAt;
+        row.operatorContext.elapsedSeconds = Math.max(
+          0,
+          Math.floor(
+            (current.observedAt.valueOf() - row.receivedAt.valueOf()) / 1000,
+          ),
+        );
+      }
+      await client.query("COMMIT");
+      accepted = true;
+    } catch (error) {
+      result = {
+        kind: error instanceof SupportFailure ? error.kind : "unavailable",
+      };
+      if (client) {
+        if (!queryExpired) {
+          try {
+            await client.query("ROLLBACK");
+          } catch {
+            /* discard uncertain connection */
+          }
+        }
+        releaseError = new Error("Support operator outcome unavailable");
+      }
+    } finally {
+      try {
+        client?.release(releaseError);
+      } catch {
+        accepted = false;
+        result = { kind: "unavailable" };
+      }
+    }
+    // Include final query, COMMIT and connection handback in the permission
+    // lifetime. A late or uncertain result is withheld; never retry the read.
+    if (accepted && performance.now() - started >= 10000)
+      return { kind: "unavailable" };
+    if (accepted && remaining <= performance.now() - checkedAt)
+      return { kind: "denied" };
+    return result;
   }
   async function principals(
     ctx: Context,
@@ -602,7 +767,6 @@ export function supportRequestStore(
     ctx: Context,
     candidates: Candidate[],
     write: boolean,
-    list = false,
   ): Promise<RequestMeta[]> {
     requireAccess(ctx.actor.kind === "staff");
     await principals(
@@ -629,7 +793,6 @@ export function supportRequestStore(
             g.active,
         ),
       ),
-      list ? "unavailable" : "denied",
     );
     ctx.deadlines.push(...grants.map((g) => g.expiresAt));
     await workspaces(ctx, candidates, write);
@@ -644,13 +807,168 @@ export function supportRequestStore(
           (r) =>
             r.requestId === c.requestId &&
             r.memberId === c.memberId &&
+            r.workspaceId === c.workspaceId,
+        ),
+      ),
+    );
+    return rows;
+  }
+  type EffortCandidate = {
+    requestId: string;
+    grantId: string;
+    allocationId: string;
+  };
+  async function connectedScope(
+    ctx: Context,
+    candidates: Candidate[],
+    list: boolean,
+  ) {
+    requireAccess(ctx.actor.kind === "staff");
+    // Identifiers only, one current association per request, including the
+    // sentinel. No backfill if a discovered grant changes before its lock.
+    const times = (
+      await ctx.client.query<EffortCandidate>(
+        `SELECT r.id AS "requestId",selected.id AS "grantId",selected.allocation_id AS "allocationId"
+      FROM support_requests r JOIN LATERAL (
+        SELECT g.id,g.allocation_id FROM support_time_grants g
+        JOIN staff_profiles p ON p.principal_id=g.staff_id AND p.role=g.staff_role
+        WHERE g.request_id=r.id AND g.staff_id=$2 AND g.purpose='support-time-local-v1'
+        AND g.revoked_at IS NULL AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp()
+        ORDER BY g.created_at DESC,g.id DESC LIMIT 1
+      ) selected ON TRUE WHERE r.id=ANY($1::uuid[]) ORDER BY r.id`,
+        [candidates.map((c) => c.requestId), ctx.actor.id],
+      )
+    ).rows;
+    const people = await principals(
+      ctx,
+      candidates.map((c) => c.memberId),
+      [ctx.actor.id],
+    );
+    requireAccess(candidates.every((c) => people.get(c.memberId)!.active));
+    ctx.deadlines.push(
+      ...candidates.map((c) => people.get(c.memberId)!.expiresAt),
+    );
+    const roles = await profiles(ctx, [ctx.actor.id]),
+      role = roles.get(ctx.actor.id);
+    requireAccess(role === "operator" || role === "platform_admin");
+    const grants = await grantRows(
+      ctx,
+      candidates.map((c) => c.grantId),
+    );
+    requireAccess(
+      candidates.every((c) =>
+        grants.some(
+          (g) =>
+            g.id === c.grantId &&
+            g.requestId === c.requestId &&
+            g.staffId === ctx.actor.id &&
+            g.role === role &&
+            g.purpose === purpose &&
+            g.active,
+        ),
+      ),
+      list ? "unavailable" : "denied",
+    );
+    ctx.deadlines.push(...grants.map((g) => g.expiresAt));
+    const timeGrants = (
+      await ctx.client.query<GrantRow & { allocationId: string }>(
+        `SELECT ${grantColumns},allocation_id AS "allocationId" FROM support_time_grants WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE`,
+        [times.map((t) => t.grantId).sort()],
+      )
+    ).rows;
+    requireAccess(
+      times.every((t) =>
+        timeGrants.some(
+          (g) =>
+            g.id === t.grantId &&
+            g.requestId === t.requestId &&
+            g.allocationId === t.allocationId &&
+            g.staffId === ctx.actor.id &&
+            g.role === role &&
+            g.purpose === "support-time-local-v1" &&
+            g.active,
+        ),
+      ),
+      "unavailable",
+    );
+    ctx.deadlines.push(...timeGrants.map((g) => g.expiresAt));
+    await workspaces(ctx, candidates, false);
+    const rows = await requests(
+      ctx,
+      candidates.map((c) => c.requestId),
+      false,
+    );
+    requireAccess(
+      candidates.every((c) =>
+        rows.some(
+          (r) =>
+            r.requestId === c.requestId &&
+            r.memberId === c.memberId &&
             r.workspaceId === c.workspaceId &&
             (!list || !r.withdrawnAt),
         ),
       ),
       list ? "unavailable" : "denied",
     );
-    return rows;
+    const allocations = (
+      await ctx.client.query<{
+        id: string;
+        requestId: string;
+        memberId: string;
+      }>(
+        `SELECT id,request_id AS "requestId",member_id AS "memberId" FROM support_time_allocations WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE`,
+        [times.map((t) => t.allocationId).sort()],
+      )
+    ).rows;
+    requireAccess(
+      times.every((t) =>
+        allocations.some(
+          (a) =>
+            a.id === t.allocationId &&
+            a.requestId === t.requestId &&
+            rows.some(
+              (r) => r.requestId === a.requestId && r.memberId === a.memberId,
+            ),
+        ),
+      ),
+      "unavailable",
+    );
+    return { rows, grants, times };
+  }
+  async function operatorSummary(
+    ctx: Context,
+    value: SupportRequestSummary,
+    candidate: Candidate,
+    scope: Awaited<ReturnType<typeof connectedScope>>,
+  ): Promise<SupportOperatorSummary> {
+    const grant = scope.grants.find((g) => g.id === candidate.grantId)!;
+    const time = scope.times.find((t) => t.requestId === candidate.requestId);
+    const result: SupportOperatorSummary = {
+      ...receipt(value),
+      subject: value.subject,
+      grantId: candidate.grantId,
+      operatorContext: {
+        observedAt: new Date(0),
+        elapsedSeconds: 0,
+        grantStartsAt: grant.startsAt,
+        grantExpiresAt: grant.expiresAt,
+        allowedActions: value.resolvedAt
+          ? []
+          : value.acknowledgedAt
+            ? ["note", "reply", "resolve"]
+            : ["acknowledge", "note", "reply", "resolve"],
+      },
+      ...(time
+        ? {
+            authorizedEffort: {
+              ...(await supportTimeReceipt(ctx.client, time.allocationId)),
+              ...time,
+            },
+          }
+        : {}),
+    };
+    ctx.operatorReads!.push(result);
+    return result;
   }
   async function content(
     ctx: Context,
@@ -1211,7 +1529,7 @@ export function supportRequestStore(
       });
     },
     async operatorWorklist(token, after) {
-      return run(token, async (ctx) => {
+      return runOperator(token, async (ctx) => {
         const scope = "operator-worklist",
           previous = cursor(after, token, scope);
         requireAccess(ctx.actor.kind === "staff");
@@ -1232,7 +1550,7 @@ export function supportRequestStore(
             ],
           )
         ).rows;
-        await staffScope(ctx, candidates, false, true);
+        const connected = await connectedScope(ctx, candidates, true);
         const selected = page(candidates, token, scope, previous, (r) => [
           r.requestId,
           "",
@@ -1240,11 +1558,7 @@ export function supportRequestStore(
         const items: SupportOperatorSummary[] = [];
         for (const candidate of selected.rows) {
           const row = await content(ctx, candidate.requestId);
-          items.push({
-            ...receipt(row),
-            subject: row.subject,
-            grantId: candidate.grantId,
-          });
+          items.push(await operatorSummary(ctx, row, candidate, connected));
           await event(
             ctx,
             candidate.requestId,
@@ -1261,11 +1575,12 @@ export function supportRequestStore(
     },
     async operatorDetail(token, input, after) {
       if (!validScope(input)) return { kind: "denied" };
-      return run(token, async (ctx) => {
+      return runOperator(token, async (ctx) => {
         const scope = `operator:${input.requestId}:${input.grantId}`,
           previous = cursor(after, token, scope);
         const candidate = await discover(ctx, input);
-        const row = (await staffScope(ctx, [candidate], false))[0]!;
+        const connected = await connectedScope(ctx, [candidate], false);
+        const row = connected.rows[0]!;
         if (row.withdrawnAt) return { kind: "withdrawn" as const };
         const detail = await content(ctx, row.requestId);
         const result = await messages(
@@ -1278,14 +1593,15 @@ export function supportRequestStore(
         );
         await event(ctx, row.requestId, "detail-read", input.grantId);
         if (previous) requireAccess(previous[3] > Date.now());
+        const summary = await operatorSummary(
+          ctx,
+          detail,
+          candidate,
+          connected,
+        );
         return {
           kind: "ready" as const,
-          value: {
-            ...detail,
-            body: detail.body!,
-            grantId: input.grantId,
-            messages: result,
-          },
+          value: { ...summary, body: detail.body!, messages: result },
         };
       });
     },

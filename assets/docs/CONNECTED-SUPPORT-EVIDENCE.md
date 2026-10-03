@@ -1,0 +1,30 @@
+# Connected private support and test-effort evidence
+
+Delivery scope: [#445](https://github.com/deepnative/deep-native-engine/issues/445), child of [CTP-019 #39](https://github.com/deepnative/deep-native-engine/issues/39). Private invented-data read integration only. Parent #39 and qualified staffing/service gates remain open. No migration, new allowance, external provider, deployment or formal approval.
+
+## Acceptance mapping
+
+| Area | Behavioral evidence | Limits |
+| --- | --- | --- |
+| Context and exact request actions | Connected-store unit/actual PostgreSQL tests and browser L130–L132: common observed UTC time, calendar seconds, current grant window, narrowed acknowledged/resolved actions. | Not an SLA or staffed service. |
+| Independent authority | Actual PostgreSQL missing/expired/future/foreign/revoked states; unit wrong purpose/source/role and missing allocations; browser ordinary member/admin/foreign denial and independently revoked purposes. | Labels or staff role never grant source access. |
+| Single allocation | Actual terminal-allocation/newest-grant and tied-instant identifier ordering; linked receipt quantities and unchanged time-only content-free APIs. | No aggregate allowance, cost or expert availability. |
+| Transaction and races | Real lock barriers for grant revocation, withdrawal, member erasure, source role/state, grant/principal expiry after workspace wait, begin/cancel/settle winner orders; COMMIT/handback fault withholding. | Author tests and self-review, not independent review. |
+| Bounds | `connected-support-bounds.json`: 106 request receipts, 22 maximum 120-minute allocations, six keyset pages, at most 21 selected request/grant/allocation inputs; sorted source-principal input also includes the actor; actual PostgreSQL EXPLAIN. | Local fixture, not production load proof. |
+| No accidental mutation | Repeated read counts, exact allocation receipts, content-free read audits; paused writes retain independently authorized links without begin/record controls. | Explicit existing mutations remain separate. |
+| Browser journeys | Critical L130–L132 across general learner, non-IT professional and IT practitioner, desktop/mobile; keyboard receipt traversal, escaped text, wrap and independently revoked purposes. | Approved local register extended; full-MVP denominator preserved. |
+| Delivery and demo | README and operator guide updated. Exact-commit full gate, self-review, original PR/main CI, cleanup and verified-main dedicated demo will be linked in issue closeout. | Pending until actual delivery evidence is recorded. |
+
+## Retained working failures and corrections
+
+The unchanged clean `39e23a020c4e5d2cd6386ae3e5d3835e3cda6e8b` baseline passed the complete gate. The first three actual PostgreSQL behavior tests failed because connected context/effort did not exist, before implementation. An old broad unit SQL mock misidentified optional effort discovery; its fixture model was corrected without changing source permissions. The first full unit coverage run found unreachable legacy list-only branches after operator reads moved to the combined path; that unused mutation-helper list parameter was removed, and actual administrator mutation/post-COMMIT lifetime behavior was covered. A barrier helper accidentally paused COMMIT in a fault-injection case; an attempted patch did not match and the unchanged harness failure repeated once. Both failing reports were retained, then the helper was corrected to pause only non-fault barriers.
+
+The expanded 106-request/22-maximum-allocation fixture exceeded the default five-second whole-test timeout while seeding through real application APIs. Only this new maximum-data case has a 30-second fixture-and-test budget; every measured service read still asserts the unchanged ten-second operation bound and retains five-second SQL/lock deadlines. The first browser matrix failed at a member-page-only selector on the operator page; a visible exact-text assertion corrected that test locator. No retries, skipped cases, reduced coverage thresholds or removed journey denominators were used. Subsequent working passes do not erase the original failures or prove clean-commit/CI delivery.
+
+## Deadline correction after the first complete working gate
+
+The first dirty complete gate passed repository73/73, unit1,895/1,895, actual PostgreSQL1,361/1,361, approved local registerv79 132/132 (critical131/131),264 desktop/mobile executions, required cross-browser checks, build and dependency audit. It did not prove connected-driver stall recovery. Author review then reproduced a withheld first BEGIN reply: no bounded result or owned connection discard after6.5s. Seven new unit behavior cases failed before the correction (52 existing cases passed in the focused module), preserving that report.
+
+The corrected connected path wraps every driver query in the remaining ten-second operation budget with a maximum five-second client wait. Before BEGIN, at COMMIT and during rollback, late/uncertain replies cannot keep the read waiting without a bound. Timeout discards its owned connection, withholds data and queues no rollback/retry on that uncertain connection. Cumulative waits do not each receive a fresh operation budget. Actual PostgreSQL withheld BEGIN/COMMIT tests observe disappearance of the owned backend, fresh reauthorization, unchanged held quantities and no effort entries.
+
+After correction, all-source unit1,902/1,902 passed: statements6,717/6,723 (99.91%), branches6,247/6,271 (99.61%), functions1,361/1,361 (100%), lines6,239/6,243 (99.93%). Modified support module: statements540/540, branches367/367, functions139/139, lines491/491. Actual focused PostgreSQL43/43 and lint/types passed. These working results do not substitute for the new clean-commit full gate, unbypassed pre-push or original PR/main CI. The two new real-driver stall cases use a15s whole-test fixture budget to observe the unchanged5s service deadline and cleanup; global test limits and service limits remain unchanged.
