@@ -135,9 +135,20 @@ function privateReadClient(
     workspace?: boolean;
     current?: boolean;
     receipts?: unknown[];
+    initialReceipts?: unknown[];
   } = {},
 ) {
-  const query = vi.fn(async (sql: string) => {
+  let receiptReads = 0,
+    observations = 0;
+  const query = vi.fn(async (sql: string, values?: unknown[]) => {
+    void values;
+    if (sql.startsWith("WITH instant"))
+      return {
+        rows:
+          observations++ > 0 && options.current === false
+            ? []
+            : [{ valid: true, remainingMs: "60000", observedAt: new Date(0) }],
+      };
     if (sql.includes("FOR SHARE OF p"))
       return {
         rows:
@@ -148,7 +159,12 @@ function privateReadClient(
     if (sql.includes("SELECT id FROM workspaces"))
       return { rows: options.workspace === false ? [] : [{ id: "workspace" }] };
     if (sql.includes("SELECT r.request_id"))
-      return { rows: options.receipts ?? [receipt] };
+      return {
+        rows:
+          receiptReads++ === 0
+            ? (options.initialReceipts ?? [])
+            : (options.receipts ?? [receipt]),
+      };
     if (sql.includes("SELECT g.id,g.category"))
       return { rows: [{ id: grant, category: "coach_minutes" }] };
     if (sql.includes("AS valid"))
@@ -164,23 +180,30 @@ it("settles only the signed-in owner's exact receipts before returning current s
     .fn()
     .mockResolvedValueOnce({ rows: [receipt, settled] })
     .mockResolvedValue({ rows: [] });
-  const client = privateReadClient({ receipts: [settled] });
+  const client = privateReadClient({
+    receipts: [settled],
+    initialReceipts: [receipt, settled],
+  });
   const connect = vi.fn(async () => client);
   const api = memberSlotHolds({ query, connect } as unknown as Pool);
   expect(await api.snapshot("token")).toEqual({
     grants: [{ id: grant, category: "coach_minutes" }],
     receipts: [settled],
   });
-  expect(query.mock.calls[0]![1]).toEqual([hash("token"), null]);
-  expect(query.mock.calls[1]).toEqual([
+  expect(query).not.toHaveBeenCalled();
+  const preparation = client.query.mock.calls.find(([sql]) =>
+    sql.includes("SELECT r.request_id"),
+  );
+  expect(preparation![1]).toEqual([hash("token"), null]);
+  expect(client.query).toHaveBeenCalledWith(
     "SELECT settle_member_sample_holds($1,$2)",
     [hash("token"), id],
-  ]);
-  expect(query).toHaveBeenCalledTimes(2);
-  expect(query.mock.invocationCallOrder[1]).toBeLessThan(
-    connect.mock.invocationCallOrder[0]!,
   );
-  expect(client.release).toHaveBeenCalledWith(undefined);
+  const statements = client.query.mock.calls.map(([sql]) => sql);
+  expect(
+    statements.indexOf("SELECT settle_member_sample_holds($1,$2)"),
+  ).toBeLessThan(statements.indexOf("BEGIN"));
+  expect(client.release).toHaveBeenCalledWith(expect.any(Error));
   expect(await api.get("token", id)).toEqual(settled);
   const empty = privateReadClient({ receipts: [] });
   connect.mockResolvedValue(empty);
@@ -200,9 +223,9 @@ it.each(["member", "workspace", "current"] as const)(
     await expect(api.snapshot("token")).rejects.toMatchObject({
       code: "unavailable",
     });
-    expect(client.query).not.toHaveBeenCalledWith("COMMIT");
-    expect(client.query).toHaveBeenCalledWith("ROLLBACK");
-    expect(client.release).toHaveBeenCalledWith(undefined);
+    expect(client.query.mock.calls.map(([sql]) => sql)).not.toContain("COMMIT");
+    expect(client.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+    expect(client.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );
 
@@ -212,10 +235,13 @@ it.each(["read", "commit", "rollback"] as const)(
     const client = privateReadClient();
     const read = client.query.getMockImplementation()!;
     const failure = new Error("synthetic private database detail");
+    let receiptReads = 0;
     client.query.mockImplementation(async (sql) => {
+      const fencedRead =
+        sql.includes("SELECT r.request_id") && ++receiptReads === 2;
       if (
         (stage === "commit" && sql === "COMMIT") ||
-        (stage !== "commit" && sql.includes("SELECT r.request_id")) ||
+        (stage !== "commit" && fencedRead) ||
         (stage === "rollback" && sql === "ROLLBACK")
       )
         throw failure;
@@ -226,17 +252,24 @@ it.each(["read", "commit", "rollback"] as const)(
       query: vi.fn().mockResolvedValue({ rows: [] }),
       connect,
     } as unknown as Pool);
-    await expect(api.snapshot("token")).rejects.toBe(failure);
+    if (stage === "rollback")
+      await expect(api.snapshot("token")).rejects.toMatchObject({
+        code: "unavailable",
+      });
+    else await expect(api.snapshot("token")).rejects.toBe(failure);
     expect(connect).toHaveBeenCalledTimes(1);
     expect(
       client.query.mock.calls.filter(([sql]) =>
         sql.includes("SELECT r.request_id"),
       ),
-    ).toHaveLength(1);
-    expect(client.query).toHaveBeenCalledWith("ROLLBACK");
-    expect(client.release).toHaveBeenCalledWith(
-      stage === "read" ? undefined : failure,
-    );
+    ).toHaveLength(2);
+    if (stage === "commit")
+      expect(client.query.mock.calls.map(([sql]) => sql)).not.toContain(
+        "ROLLBACK",
+      );
+    else
+      expect(client.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+    expect(client.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );
 
@@ -273,8 +306,12 @@ it("passes only token-derived identity and stable request fields and keeps uncer
   await expect(api.request("token", slot, grant, id)).rejects.toMatchObject({
     code: "uncertain",
   });
-  query.mockRejectedValueOnce(new Error("read failed"));
-  await expect(api.snapshot("token")).rejects.toThrow("read failed");
+  const disconnected = memberSlotHolds({
+    connect: async () => {
+      throw new Error("read failed");
+    },
+  } as unknown as Pool);
+  await expect(disconnected.snapshot("token")).rejects.toThrow("read failed");
 });
 
 it("labels the receipt UTC fallback when a member removes or has no valid timezone", () => {

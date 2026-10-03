@@ -1399,6 +1399,7 @@ it.each(readKinds)(
     const locked = new Promise<void>((resolve) => (entered = resolve)),
       proceed = new Promise<void>((resolve) => (resume = resolve));
     let readerPid = 0;
+    let fenced = false;
     const paused = memberSlotHolds({
       query: pool.query.bind(pool),
       connect: async () => {
@@ -1406,7 +1407,9 @@ it.each(readKinds)(
         return {
           query: async (sql: string, values?: unknown[]) => {
             const result = await client.query(sql, values);
+            if (sql.includes("SELECT id FROM workspaces")) fenced = true;
             if (
+              fenced &&
               sql.includes(
                 kind === "get"
                   ? "SELECT r.request_id"
@@ -1559,7 +1562,7 @@ it.each(
             const result = await client.query(sql, values);
             if (sql.includes("SELECT r.request_id")) {
               reads++;
-              if (stage === "read")
+              if (stage === "read" && reads === 2)
                 throw new Error("Synthetic private read fault");
             }
             if (sql === "COMMIT" && stage === "commit")
@@ -1581,9 +1584,9 @@ it.each(
         ? "Synthetic private read fault"
         : "Synthetic lost read commit reply",
     );
-    expect(reads).toBe(1);
+    expect(reads).toBe(2);
     expect(released).toBe(true);
-    expect(!!discarded).toBe(stage === "commit");
+    expect(discarded).toBeInstanceOf(Error);
     expect(await retainedHoldRows(f.owner.id)).toEqual(before);
     expect(await memberHolds.get(f.owner.token, f.requestId)).toMatchObject({
       id: f.requestId,
@@ -1630,3 +1633,438 @@ it("withholds receipts and grants for unavailable owners and never returns an ou
     code: "unavailable",
   });
 });
+
+it.each(readKinds)(
+  "withholds %s retained data after a successful delayed COMMIT reply crosses DB session expiry",
+  async (kind) => {
+    const f = await heldReceipt();
+    await memberHolds.withdraw(f.owner.token, f.requestId);
+    const before = await retainedHoldRows(f.owner.id);
+    await pool.query(
+      "UPDATE principals SET expires_at=clock_timestamp()+interval '250 milliseconds' WHERE id=$1",
+      [f.owner.id],
+    );
+    let validAtFinal = false,
+      commits = 0,
+      rollbacks = 0;
+    const delayed = memberSlotHolds({
+      query: pool.query.bind(pool),
+      connect: async () => {
+        const client = await pool.connect();
+        return {
+          query: async (sql: string, values?: unknown[]) => {
+            const response = await client.query(sql, values);
+            if (sql.includes("AS valid"))
+              validAtFinal = response.rows[0]?.valid === true;
+            if (sql === "COMMIT") {
+              commits++;
+              await new Promise((resolve) => setTimeout(resolve, 350));
+            }
+            if (sql === "ROLLBACK") rollbacks++;
+            return response;
+          },
+          release: client.release.bind(client),
+        };
+      },
+    } as unknown as Pool);
+    await deniedRead(
+      privateRead(delayed, kind, f.owner.token, f.requestId),
+      kind,
+    );
+    expect(validAtFinal).toBe(true);
+    expect(commits).toBe(1);
+    expect(rollbacks).toBe(0);
+    expect(
+      (
+        await pool.query(
+          "SELECT expires_at<=clock_timestamp() AS expired FROM principals WHERE id=$1",
+          [f.owner.id],
+        )
+      ).rows[0].expired,
+    ).toBe(true);
+    expect(await retainedHoldRows(f.owner.id)).toEqual(before);
+    // Fixture-only reauthorization permits a fresh observation of durable state,
+    // not a retry of the uncertain reader or an application renewal promise.
+    await pool.query(
+      "UPDATE principals SET expires_at=clock_timestamp()+interval '1 day' WHERE id=$1",
+      [f.owner.id],
+    );
+    expect(await memberHolds.get(f.owner.token, f.requestId)).toMatchObject({
+      id: f.requestId,
+      state: "released",
+    });
+    expect(await retainedHoldRows(f.owner.id)).toEqual(before);
+  },
+);
+
+it.each(["receipt", "list"] as const)(
+  "actual private %s HTTP does not render owned retained markers after delayed successful commit expiry",
+  async (kind) => {
+    const f = await heldReceipt();
+    await memberHolds.withdraw(f.owner.token, f.requestId);
+    const before = await retainedHoldRows(f.owner.id);
+    let commits = 0;
+    const delayed = memberSlotHolds({
+      query: pool.query.bind(pool),
+      connect: async () => {
+        const client = await pool.connect();
+        return {
+          query: async (sql: string, values?: unknown[]) => {
+            const response = await client.query(sql, values);
+            if (sql === "COMMIT") {
+              commits++;
+              await new Promise((resolve) => setTimeout(resolve, 350));
+            }
+            return response;
+          },
+          release: client.release.bind(client),
+        };
+      },
+    } as unknown as Pool);
+    await withLoopback(
+      app(db, {
+        origin: "http://127.0.0.1:3000",
+        secret: "invented-handback-http",
+        memberSlotHolds: delayed,
+        availability: slots,
+      }),
+      async (server) => {
+        await pool.query(
+          "UPDATE principals SET expires_at=clock_timestamp()+interval '250 milliseconds' WHERE id=$1",
+          [f.owner.id],
+        );
+        const response = await request(server)
+          .get(
+            kind === "receipt"
+              ? `/availability/holds/${f.requestId}`
+              : "/availability",
+          )
+          .set("Host", "127.0.0.1:3000")
+          .set("Cookie", `${COOKIE}=${f.owner.token}`);
+        expect(response.status).toBe(kind === "receipt" ? 404 : 403);
+        for (const marker of [
+          f.requestId,
+          f.grantId,
+          "Your sample hold receipt",
+          "Reserved test quantity",
+        ])
+          expect(response.text).not.toContain(marker);
+        expect(commits).toBe(1);
+      },
+    );
+    expect(await retainedHoldRows(f.owner.id)).toEqual(before);
+  },
+);
+
+it.each(readKinds)(
+  "fresh %s recovery observes a committed lazy settlement once after a lost reply",
+  async (kind) => {
+    const f = await heldReceipt();
+    await pool.query(
+      "UPDATE synthetic_slot_holds SET expires_at=clock_timestamp()-interval '1 second' WHERE member_id=$1",
+      [f.owner.id],
+    );
+    let settlements = 0,
+      rollbacks = 0;
+    const broken = memberSlotHolds({
+      query: pool.query.bind(pool),
+      connect: async () => {
+        const client = await pool.connect();
+        return {
+          query: async (sql: string, values?: unknown[]) => {
+            const response = await client.query(sql, values);
+            if (sql.includes("SELECT settle_member_sample_holds")) {
+              settlements++;
+              throw Error("invented lost settlement reply");
+            }
+            if (sql === "ROLLBACK") rollbacks++;
+            return response;
+          },
+          release: client.release.bind(client),
+        };
+      },
+    } as unknown as Pool);
+    await expect(
+      privateRead(broken, kind, f.owner.token, f.requestId),
+    ).rejects.toThrow("invented lost settlement reply");
+    expect(settlements).toBe(1);
+    expect(rollbacks).toBe(0);
+    const settled = await retainedHoldRows(f.owner.id);
+    expect(await memberHolds.get(f.owner.token, f.requestId)).toMatchObject({
+      state: "expired",
+    });
+    await memberHolds.snapshot(f.owner.token);
+    expect(await retainedHoldRows(f.owner.id)).toEqual(settled);
+    expect(
+      (
+        await pool.query(
+          "SELECT operation,quantity FROM synthetic_entitlement_events WHERE member_id=$1 AND operation='release'",
+          [f.owner.id],
+        )
+      ).rows,
+    ).toEqual([{ operation: "release", quantity: 60 }]);
+  },
+);
+
+it.each(
+  readKinds.flatMap((kind) =>
+    ["mutation", "reader"].map((winner) => ({ kind, winner })),
+  ),
+)(
+  "preserves actual principal revocation winner order for $kind when $winner wins",
+  async ({ kind, winner }) => {
+    const f = await heldReceipt(),
+      other = await member("explorer");
+    await memberHolds.withdraw(f.owner.token, f.requestId);
+    const before = await retainedHoldRows(f.owner.id);
+    const expected = await privateRead(
+      memberHolds,
+      kind,
+      f.owner.token,
+      f.requestId,
+    );
+    const mutation = await pool.connect();
+    let entered!: () => void, resume!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const proceed = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    let readerPid = 0,
+      fenced = false;
+    const paused = memberSlotHolds({
+      connect: async () => {
+        const client = await pool.connect();
+        return {
+          query: async (sql: string, values?: unknown[]) => {
+            const response = await client.query(sql, values);
+            if (sql.includes("SELECT id FROM workspaces")) fenced = true;
+            if (
+              winner === "reader" &&
+              fenced &&
+              sql.includes("SELECT r.request_id")
+            ) {
+              readerPid = (await client.query("SELECT pg_backend_pid() AS pid"))
+                .rows[0].pid;
+              entered();
+              await proceed;
+            }
+            return response;
+          },
+          release: client.release.bind(client),
+        };
+      },
+    } as unknown as Pool);
+    let reading: ReturnType<typeof privateRead> | undefined;
+    let changing: Promise<unknown> | undefined;
+    try {
+      await mutation.query("BEGIN");
+      const mutationPid = (
+        await mutation.query("SELECT pg_backend_pid() AS pid")
+      ).rows[0].pid;
+      if (winner === "mutation") {
+        await mutation.query(
+          "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+          [f.owner.id],
+        );
+        reading = privateRead(paused, kind, f.owner.token, f.requestId);
+        const denial = deniedRead(reading, kind);
+        await blocksOn(mutationPid, "FOR SHARE OF p");
+        await mutation.query("COMMIT");
+        await denial;
+      } else {
+        reading = privateRead(paused, kind, f.owner.token, f.requestId);
+        await locked;
+        changing = mutation.query(
+          "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+          [f.owner.id],
+        );
+        await blocksOn(readerPid, "UPDATE principals");
+        resume();
+        expect(await reading).toEqual(expected);
+        await changing;
+        await mutation.query("COMMIT");
+        await deniedRead(
+          privateRead(memberHolds, kind, f.owner.token, f.requestId),
+          kind,
+        );
+      }
+      expect(await retainedHoldRows(f.owner.id)).toEqual(before);
+      expect(await memberHolds.snapshot(other.token)).toEqual({
+        grants: [],
+        receipts: [],
+      });
+    } finally {
+      resume();
+      await Promise.allSettled([
+        ...(reading ? [reading] : []),
+        ...(changing ? [changing] : []),
+      ]);
+      await mutation.query("ROLLBACK");
+      mutation.release();
+    }
+  },
+  15000,
+);
+
+it.each(
+  readKinds.flatMap((kind) =>
+    ["read", "commit"].map((stage) => ({ kind, stage })),
+  ),
+)(
+  "bounds a nonresolving real $stage driver reply for $kind and frees owned locks without replay",
+  async ({ kind, stage }) => {
+    const f = await heldReceipt(),
+      other = await member("explorer");
+    await memberHolds.withdraw(f.owner.token, f.requestId);
+    const before = await retainedHoldRows(f.owner.id);
+    let entered!: () => void;
+    const stalled = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let receiptReads = 0,
+      commits = 0,
+      rollbacks = 0,
+      readerPid = 0;
+    let discarded: Error | undefined;
+    const broken = memberSlotHolds({
+      connect: async () => {
+        const client = await pool.connect();
+        return {
+          query: async (sql: string, values?: unknown[]) => {
+            const response = await client.query(sql, values);
+            if (sql.includes("SELECT r.request_id")) receiptReads++;
+            if (sql === "COMMIT") commits++;
+            if (sql === "ROLLBACK") rollbacks++;
+            if (
+              (stage === "read" &&
+                receiptReads === 2 &&
+                sql.includes("SELECT r.request_id")) ||
+              (stage === "commit" && sql === "COMMIT")
+            ) {
+              readerPid = (await client.query("SELECT pg_backend_pid() AS pid"))
+                .rows[0].pid;
+              entered();
+              return await new Promise<never>(() => {});
+            }
+            return response;
+          },
+          release(error?: Error) {
+            discarded = error;
+            client.release(error);
+          },
+        };
+      },
+    } as unknown as Pool);
+    const started = performance.now();
+    const reading = privateRead(broken, kind, f.owner.token, f.requestId);
+    const withheld = expect(reading).rejects.toMatchObject({
+      code: "unavailable",
+    });
+    const mutation = await pool.connect();
+    let changing: Promise<unknown> | undefined;
+    try {
+      await stalled;
+      await mutation.query("BEGIN");
+      changing = mutation.query(
+        "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+        [f.owner.id],
+      );
+      if (stage === "read") await blocksOn(readerPid, "UPDATE principals");
+      else await changing; // COMMIT is durable even though its driver reply is withheld.
+      await withheld;
+      expect(performance.now() - started).toBeLessThan(10000);
+      expect(discarded).toBeInstanceOf(Error);
+      expect(commits).toBe(stage === "commit" ? 1 : 0);
+      expect(rollbacks).toBe(0);
+      await changing;
+      await mutation.query("COMMIT");
+      await deniedRead(
+        privateRead(memberHolds, kind, f.owner.token, f.requestId),
+        kind,
+      );
+      expect(await retainedHoldRows(f.owner.id)).toEqual(before);
+      expect(await memberHolds.snapshot(other.token)).toEqual({
+        grants: [],
+        receipts: [],
+      });
+    } finally {
+      await Promise.allSettled([reading, ...(changing ? [changing] : [])]);
+      await mutation.query("ROLLBACK");
+      mutation.release();
+    }
+  },
+  15000,
+);
+
+it.each(readKinds)(
+  "withholds %s private data when actual client handback crosses DB session expiry after known commit",
+  async (kind) => {
+    const f = await heldReceipt();
+    await memberHolds.withdraw(f.owner.token, f.requestId);
+    const before = await retainedHoldRows(f.owner.id);
+    await pool.query(
+      "UPDATE principals SET expires_at=clock_timestamp()+interval '250 milliseconds' WHERE id=$1",
+      [f.owner.id],
+    );
+    let validAtCommit = false,
+      commits = 0,
+      rollbacks = 0,
+      releases = 0;
+    const delayed = memberSlotHolds({
+      connect: async () => {
+        const client = await pool.connect();
+        return {
+          query: async (sql: string, values?: unknown[]) => {
+            const response = await client.query(sql, values);
+            if (sql === "COMMIT") {
+              commits++;
+              validAtCommit = (
+                await client.query(
+                  "SELECT expires_at>clock_timestamp() AS valid FROM principals WHERE id=$1",
+                  [f.owner.id],
+                )
+              ).rows[0].valid;
+            }
+            if (sql === "ROLLBACK") rollbacks++;
+            return response;
+          },
+          release(error?: Error) {
+            releases++;
+            client.release(error);
+            // PoolClient.release is synchronous. Delay its successful return
+            // after actual disposal while the independent database clock advances.
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 350);
+          },
+        };
+      },
+    } as unknown as Pool);
+    await deniedRead(
+      privateRead(delayed, kind, f.owner.token, f.requestId),
+      kind,
+    );
+    expect(validAtCommit).toBe(true);
+    expect(commits).toBe(1);
+    expect(rollbacks).toBe(0);
+    expect(releases).toBe(1);
+    expect(
+      (
+        await pool.query(
+          "SELECT expires_at<=clock_timestamp() AS expired FROM principals WHERE id=$1",
+          [f.owner.id],
+        )
+      ).rows[0].expired,
+    ).toBe(true);
+    expect(await retainedHoldRows(f.owner.id)).toEqual(before);
+    await pool.query(
+      "UPDATE principals SET expires_at=clock_timestamp()+interval '1 day' WHERE id=$1",
+      [f.owner.id],
+    );
+    expect(await memberHolds.get(f.owner.token, f.requestId)).toMatchObject({
+      id: f.requestId,
+      state: "released",
+    });
+    expect(await retainedHoldRows(f.owner.id)).toEqual(before);
+  },
+);
