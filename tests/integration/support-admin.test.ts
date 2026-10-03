@@ -1,3 +1,4 @@
+import { syntheticLedger } from "../../src/ledger.ts";
 import { spawn } from "node:child_process";
 import {
   mkdtemp,
@@ -192,6 +193,111 @@ it("grants and revokes an exact real request using current private administrator
       (await pool.query("SELECT count(*)::int n FROM support_request_grants"))
         .rows[0].n,
     ).toBe(1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("creates and revokes separate support-time purpose grants from protected local instructions without enabling note access", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dne-support-time-admin-"));
+  try {
+    expect((await run(root)).code).toBe(0);
+    const directory = join(root, "support-admin"),
+      token = randomBytes(32).toString("hex"),
+      members = store(pool),
+      support = supportRequestStore(pool);
+    await members.create(token, { background: "explorer", goal: "everyday" });
+    const member = await members.session(token);
+    if (member.kind !== "active" || !support.time)
+      throw Error("Missing invented member");
+    await syntheticLedger(pool).grant(
+      member.learner.id,
+      "support_minutes",
+      20,
+      randomUUID(),
+      {
+        startsAt: new Date(Date.now() - 60000).toISOString(),
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      },
+    );
+    const created = await support.create(token, {
+      idempotencyKey: randomUUID(),
+      subject: "Invented time instruction",
+      body: "Private sample",
+    });
+    if (!("receipt" in created)) throw Error("Missing request");
+    const allocated = await support.time.allocate(
+      token,
+      created.receipt.requestId,
+      randomUUID(),
+      20,
+    );
+    if (!("receipt" in allocated)) throw Error("Missing allocation");
+    const instruction = {
+      requestId: created.receipt.requestId,
+      allocationId: allocated.receipt.allocationId,
+      idempotencyKey: randomUUID(),
+      startsAt: new Date(Date.now() - 1000).toISOString(),
+      expiresAt: new Date(Date.now() + 1800000).toISOString(),
+    };
+    await writeFile(
+      join(directory, "time-grant.json"),
+      JSON.stringify(instruction),
+      { flag: "wx", mode: 0o600 },
+    );
+    const granted = await run(root, ["time-grant", "time-grant.json"]);
+    expect(granted.code).toBe(0);
+    const result = JSON.parse(granted.out);
+    expect(result).toMatchObject({
+      status: "complete",
+      action: "time-grant",
+      grantId: expect.any(String),
+    });
+    expect(
+      JSON.parse((await run(root, ["time-grant", "time-grant.json"])).out),
+    ).toEqual(result);
+    const operator = JSON.parse(
+      await readFile(join(directory, "operator.json"), "utf8"),
+    );
+    expect(granted.out + granted.err).not.toContain(operator.token);
+    const scope = {
+      requestId: instruction.requestId,
+      allocationId: instruction.allocationId,
+      grantId: result.grantId,
+    };
+    expect(
+      await support.time.operatorDetail(operator.token, scope),
+    ).toMatchObject({ kind: "ready", value: { canBegin: true, held: 20 } });
+    expect(
+      await support.operatorDetail(operator.token, {
+        requestId: instruction.requestId,
+        grantId: result.grantId,
+      }),
+    ).toEqual({ kind: "denied" });
+    expect(
+      (await support.time.begin(operator.token, scope, randomUUID())).kind,
+    ).toBe("applied");
+    await writeFile(
+      join(directory, "time-revoke.json"),
+      JSON.stringify({ grantId: result.grantId }),
+      { flag: "wx", mode: 0o600 },
+    );
+    expect((await run(root, ["time-revoke", "time-revoke.json"])).code).toBe(0);
+    expect((await run(root, ["time-revoke", "time-revoke.json"])).code).toBe(0);
+    expect(await support.time.operatorDetail(operator.token, scope)).toEqual({
+      kind: "denied",
+    });
+    expect(
+      await support.time.receipt(token, instruction.requestId),
+    ).toMatchObject({
+      kind: "ready",
+      value: {
+        state: "needs_reconciliation",
+        held: 20,
+        consumed: 0,
+        released: 0,
+      },
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

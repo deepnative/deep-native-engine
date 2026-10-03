@@ -88,7 +88,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v15",
+      version: "local-member-records-v16",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -211,7 +211,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    [2, 21, ...valid.slice(2)],
+    [2, 23, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -473,7 +473,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v15",
+        version: "local-member-records-v16",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -531,4 +531,29 @@ it("locks owned support parents before direct reply continuation and withholds t
       expect(parent).toBeLessThan(child);
     }
   }
+});
+
+it("keeps legacy section indices stable and accepts the two appended owned support-time sections", async () => {
+  const fake = fakePool({ id: "member-1" });
+  const exporter = memberExportStore(fake.pool, secret);
+  for (const section of [19, 20, 21, 22]) {
+    const result = await exporter.exportOwned(
+      "owner",
+      signed([2, section, ["key"], 2, Date.now() + 60000]),
+    );
+    expect(result.kind).toBe("ready");
+  }
+  expect(
+    fake.statements.some((sql) =>
+      sql.includes("support_time_allocations a WHERE a.member_id=$1"),
+    ),
+  ).toBe(true);
+  expect(
+    fake.statements.some(
+      (sql) =>
+        sql.includes(
+          "support_time_entries e JOIN support_time_allocations a",
+        ) && sql.includes("a.member_id=$1"),
+    ),
+  ).toBe(true);
 });

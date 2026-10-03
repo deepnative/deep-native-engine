@@ -1,3 +1,9 @@
+import {
+  supportTimeLink,
+  supportTimeWorklistPage,
+  supportTimeOperatorPage,
+} from "./support-time-views.ts";
+import type { SupportTimeScope } from "./support-time.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import {
@@ -100,10 +106,167 @@ export function mountSupportRequestRoutes(
           res,
           503,
           unavailable,
-          req.path.startsWith("/operator/") ? "/operator/support" : "/support",
+          req.path.startsWith("/operator/support-time")
+            ? "/operator/support-time"
+            : req.path.startsWith("/operator/")
+              ? "/operator/support"
+              : "/support",
         );
       }
     };
+  const timeScope = (
+    requestId: unknown,
+    allocationId: unknown,
+    grantId: unknown,
+  ): SupportTimeScope | null =>
+    uuid(requestId) && uuid(allocationId) && uuid(grantId)
+      ? { requestId, allocationId, grantId }
+      : null;
+  const utc = (value: unknown): Date | null => {
+    if (
+      typeof value !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
+    )
+      return null;
+    const date = new Date(value);
+    return Number.isFinite(date.valueOf()) && date.toISOString() === value
+      ? date
+      : null;
+  };
+  app.get(
+    "/operator/support-time",
+    route(async (req, res) => {
+      if (!store.time)
+        return resultFailure(res, "denied", "/operator/support-time");
+      if (!queryValid(req, ["after"]))
+        return notice(
+          res,
+          400,
+          "Use bounded granted support-time navigation.",
+          "/operator/support-time",
+        );
+      const result = await store.time.operatorWorklist(
+        res.locals.token,
+        req.query.after as string | undefined,
+      );
+      return result.kind === "ready"
+        ? res.send(supportTimeWorklistPage(result.value))
+        : resultFailure(res, result.kind, "/operator/support-time");
+    }),
+  );
+  app.get(
+    "/operator/support-time/:id",
+    route(async (req, res) => {
+      if (!store.time)
+        return resultFailure(res, "denied", "/operator/support-time");
+      const scope = timeScope(
+        req.params.id,
+        req.query.allocation,
+        req.query.grant,
+      );
+      if (!scope || !queryValid(req, ["allocation", "grant"]))
+        return notice(
+          res,
+          400,
+          "Use your exact support-time grant link.",
+          "/operator/support-time",
+        );
+      const result = await store.time.operatorDetail(res.locals.token, scope);
+      return result.kind === "ready"
+        ? res.send(supportTimeOperatorPage(result.value, res.locals.csrf))
+        : resultFailure(res, result.kind, "/operator/support-time");
+    }),
+  );
+  for (const action of ["begin", "record"] as const)
+    app.post(
+      `/operator/support-time/:id/${action}`,
+      route(async (req, res) => {
+        if (!store.time)
+          return resultFailure(res, "denied", "/operator/support-time");
+        const scope = timeScope(
+          req.params.id,
+          req.body?.allocationId,
+          req.body?.grantId,
+        );
+        const extra =
+          action === "record"
+            ? [
+                "supportStart",
+                "supportEnd",
+                "preparationStart",
+                "preparationEnd",
+              ]
+            : [];
+        if (
+          !scope ||
+          !queryValid(req, []) ||
+          !fields(req.body, [
+            "csrf",
+            "allocationId",
+            "grantId",
+            "idempotencyKey",
+            "confirm",
+            ...extra,
+          ]) ||
+          typeof req.body.csrf !== "string" ||
+          !uuid(req.body.idempotencyKey) ||
+          req.body.confirm !== "yes"
+        )
+          return notice(
+            res,
+            422,
+            "Use the exact support-time form and explicitly confirm this action.",
+            "/operator/support-time",
+          );
+        const href = supportTimeLink(scope);
+        let result;
+        if (action === "begin")
+          result = await store.time.begin(
+            res.locals.token,
+            scope,
+            req.body.idempotencyKey,
+          );
+        else {
+          const supportStart = utc(req.body.supportStart),
+            supportEnd = utc(req.body.supportEnd),
+            preparationStart =
+              req.body.preparationStart === ""
+                ? null
+                : utc(req.body.preparationStart),
+            preparationEnd =
+              req.body.preparationEnd === ""
+                ? null
+                : utc(req.body.preparationEnd);
+          if (
+            !supportStart ||
+            !supportEnd ||
+            (req.body.preparationStart !== "" && !preparationStart) ||
+            (req.body.preparationEnd !== "" && !preparationEnd)
+          )
+            return notice(
+              res,
+              422,
+              "Use valid UTC timestamps with milliseconds and Z; leave both optional preparation fields blank or enter both.",
+              href,
+            );
+          result = await store.time.record(
+            res.locals.token,
+            scope,
+            req.body.idempotencyKey,
+            { supportStart, supportEnd, preparationStart, preparationEnd },
+          );
+        }
+        if ("receipt" in result) return res.redirect(303, href);
+        if (result.kind === "insufficient")
+          return notice(
+            res,
+            409,
+            "This budget is no longer eligible for a new begin. Inspect saved state; held work is not refunded automatically.",
+            href,
+          );
+        return resultFailure(res, result.kind, href);
+      }),
+    );
   app.get(
     "/support/new",
     route((req, res) => {
@@ -243,9 +406,84 @@ export function mountSupportRequestRoutes(
         req.params.id,
         req.query.after as string | undefined,
       );
-      return result.kind === "ready"
-        ? res.send(supportMemberDetailPage(result.value, res.locals.csrf))
-        : resultFailure(res, result.kind, "/support");
+      if (result.kind !== "ready")
+        return resultFailure(res, result.kind, "/support");
+      return res.send(
+        supportMemberDetailPage(
+          result.value,
+          res.locals.csrf,
+          result.value.supportTime ?? (store.time ? null : undefined),
+          store.time?.writesEnabled ?? false,
+        ),
+      );
+    }),
+  );
+  app.post(
+    "/support/:id/time/:allocationId/cancel",
+    route(async (req, res) => {
+      if (!store.time) return resultFailure(res, "denied", "/support");
+      if (
+        !queryValid(req, []) ||
+        !uuid(req.params.id) ||
+        !uuid(req.params.allocationId) ||
+        !fields(req.body, ["csrf", "confirm"]) ||
+        typeof req.body.csrf !== "string" ||
+        req.body.confirm !== "yes"
+      )
+        return notice(
+          res,
+          422,
+          "Explicitly confirm cancellation of the unstarted allocation.",
+          "/support",
+        );
+      const result = await store.time.cancel(
+        res.locals.token,
+        req.params.id,
+        req.params.allocationId,
+      );
+      return "receipt" in result
+        ? res.redirect(303, `/support/${req.params.id}`)
+        : resultFailure(
+            res,
+            result.kind === "insufficient" ? "conflict" : result.kind,
+            `/support/${req.params.id}`,
+          );
+    }),
+  );
+  app.post(
+    "/support/:id/time/allocate",
+    route(async (req, res) => {
+      if (!store.time) return resultFailure(res, "denied", "/support");
+      if (
+        !queryValid(req, []) ||
+        !uuid(req.params.id) ||
+        !fields(req.body, ["csrf", "idempotencyKey", "ceiling", "confirm"]) ||
+        typeof req.body.csrf !== "string" ||
+        !uuid(req.body.idempotencyKey) ||
+        !/^(?:[1-9]|[1-9][0-9]|1[01][0-9]|120)$/.test(req.body.ceiling ?? "") ||
+        req.body.confirm !== "yes"
+      )
+        return notice(
+          res,
+          422,
+          "Confirm a whole-minute ceiling between 1 and 120 using the original allocation form.",
+        );
+      const result = await store.time.allocate(
+        res.locals.token,
+        req.params.id,
+        req.body.idempotencyKey,
+        Number(req.body.ceiling),
+      );
+      if ("receipt" in result)
+        return res.redirect(303, `/support/${req.params.id}`);
+      if (result.kind === "insufficient")
+        return notice(
+          res,
+          409,
+          "One existing eligible support test allowance must cover the whole ceiling. No units were created or pooled.",
+          `/support/${req.params.id}`,
+        );
+      return resultFailure(res, result.kind, `/support/${req.params.id}`);
     }),
   );
   app.post(

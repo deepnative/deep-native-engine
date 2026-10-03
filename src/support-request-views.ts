@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import type { SupportTimeReceipt } from "./support-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import type {
   SupportRequestSummary,
@@ -82,11 +84,38 @@ export function supportOwnerHistoryPage(value: {
 export function supportMemberDetailPage(
   value: SupportMemberDetail,
   csrf: string,
+  timeReceipt?: SupportTimeReceipt | null,
+  timeWrites = true,
 ) {
   const base = `/support/${encodeURIComponent(value.requestId)}`;
+  const receipt = timeReceipt
+    ? `<section aria-labelledby="support-time-heading"><h2 id="support-time-heading">Private support test minutes</h2><p role="status">${timeReceipt.held} support test minutes held</p><p>Confirmed ceiling: ${timeReceipt.ceiling}. Consumed: ${timeReceipt.consumed}. Released: ${timeReceipt.released}. State: ${escape(timeReceipt.state)}.</p><p>Recorded support: ${timeReceipt.supportMinutes} minutes; preparation: ${timeReceipt.preparationMinutes} minutes. These are private invented test records, not paid staff time or a service promise.</p></section>`
+    : "";
+  const allocationForm =
+    timeWrites &&
+    timeReceipt !== undefined &&
+    (!timeReceipt ||
+      timeReceipt.state === "completed" ||
+      timeReceipt.state === "cancelled") &&
+    !value.withdrawnAt &&
+    !value.resolvedAt
+      ? `<section aria-labelledby="support-time-allocation-heading"><h2 id="support-time-allocation-heading">Allocate private support test minutes</h2><p>Use one existing support test allowance. No minutes are purchased or created. Replies and acknowledgements remain unmetered. Withdrawal before work begins releases the hold; after begin, unresolved work stays held for reconciliation.</p><form method="post" action="${base}/time/allocate">${hidden(csrf)}<input type="hidden" name="idempotencyKey" value="${escape(randomUUID())}"><label for="support-time-ceiling">Maximum support and preparation minutes</label><input id="support-time-ceiling" name="ceiling" type="number" min="1" max="120" step="1" required><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Hold this ceiling from my existing private support test minutes for this invented request.</span></label><button type="submit">Hold support test minutes</button></form></section>`
+      : "";
+  const cancel =
+    timeWrites && timeReceipt?.state === "allocated" && !value.withdrawnAt
+      ? `<form method="post" action="${base}/time/${encodeURIComponent(timeReceipt.allocationId)}/cancel">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Cancel this unstarted allocation, release its held test minutes and keep the request text and receipt.</span></label><button class="secondary" type="submit">Cancel unstarted support allocation</button></form>`
+      : "";
+  const minutes =
+    receipt +
+    cancel +
+    allocationForm +
+    (timeReceipt !== undefined && !timeWrites
+      ? "<p>Support-time writes are paused. Retained receipts remain available; no holds are automatically refunded or retried.</p>"
+      : "");
+
   return page(
     "Private sample support receipt",
-    `<section class="reading"><p><a href="/support">Your private support requests</a></p><h1>Private sample support receipt</h1><p>${disclosure}</p>${lifecycle(value)}${value.withdrawnAt ? '<p role="status">Request withdrawn. Request text and all associated messages were removed. The content-free receipt remains.</p>' : `<h2>${escape(value.subject!)}</h2><pre class="content-text" data-support-body>${escape(value.body!)}</pre><h2>Replies visible to you</h2><p>Newest replies first; at most 20 replies per page.</p>${value.replies.items.length ? `<ul aria-label="Replies visible to you">${value.replies.items.map((reply) => `<li id="reply-${escape(reply.id)}"><p>${escape(reply.attribution)} · ${time(reply.createdAt)}</p><pre class="content-text" data-support-reply>${escape(reply.body)}</pre></li>`).join("")}</ul>` : "<p>No member-visible reply on this page.</p>"}${pages(base, value.replies.nextCursor)}<form method="post" action="${base}/withdraw">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Withdraw this request and remove its subject, body and all associated messages. Keep a content-free receipt.</span></label><button class="secondary" type="submit">Withdraw request text</button></form>`}<p><a href="/member/export">Download private preview records</a></p><p>Withdrawal cannot recall downloaded copies or establish erasure from hosted backups.</p></section>`,
+    `<section class="reading"><p><a href="/support">Your private support requests</a></p><h1>Private sample support receipt</h1><p>${disclosure}</p>${lifecycle(value)}${minutes}${value.withdrawnAt ? '<p role="status">Request withdrawn. Request text and all associated messages were removed. The content-free receipt remains.</p>' : `<h2>${escape(value.subject!)}</h2><pre class="content-text" data-support-body>${escape(value.body!)}</pre><h2>Replies visible to you</h2><p>Newest replies first; at most 20 replies per page.</p>${value.replies.items.length ? `<ul aria-label="Replies visible to you">${value.replies.items.map((reply) => `<li id="reply-${escape(reply.id)}"><p>${escape(reply.attribution)} · ${time(reply.createdAt)}</p><pre class="content-text" data-support-reply>${escape(reply.body)}</pre></li>`).join("")}</ul>` : "<p>No member-visible reply on this page.</p>"}${pages(base, value.replies.nextCursor)}<form method="post" action="${base}/withdraw">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Withdraw this request and remove its subject, body and all associated messages. Keep a content-free receipt.</span></label><button class="secondary" type="submit">Withdraw request text</button></form>`}<p><a href="/member/export">Download private preview records</a></p><p>Withdrawal cannot recall downloaded copies or establish erasure from hosted backups.</p></section>`,
   );
 }
 export function supportOperatorWorklistPage(value: {

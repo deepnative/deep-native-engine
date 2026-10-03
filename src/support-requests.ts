@@ -6,6 +6,18 @@ import {
 } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { hash } from "./store.ts";
+import {
+  allocateSupportTime,
+  cancelSupportTime,
+  beginSupportTime,
+  recordSupportTime,
+  supportIntervalMinutes,
+  supportTimeReceipt,
+  supportTimeOperatorReceipt,
+  type MemberSupportTimeStore,
+  type SupportTimeReceipt,
+  type SupportTimeScope,
+} from "./support-time.ts";
 
 export interface SupportPage<T> {
   items: T[];
@@ -31,6 +43,7 @@ export interface SupportMemberReply {
   attribution: "Synthetic operator";
 }
 export interface SupportMemberDetail extends SupportRequestSummary {
+  supportTime?: SupportTimeReceipt;
   body: string | null;
   replies: SupportPage<SupportMemberReply>;
 }
@@ -68,6 +81,7 @@ export interface SupportGrantInput {
   expiresAt: Date;
 }
 export interface SupportRequestStore {
+  readonly time?: MemberSupportTimeStore;
   create(
     token: string,
     input: { idempotencyKey: string; subject: string; body: string },
@@ -237,7 +251,9 @@ function validScope(scope: SupportOperatorScope): boolean {
 export function supportRequestStore(
   pool: Pool,
   cursorSecret: Buffer = randomBytes(32),
+  options: { timeWrites?: boolean } = {},
 ): SupportRequestStore {
+  const timeWrites = options.timeWrites !== false;
   function signature(body: string, token: string, scope: string): string {
     return createHmac("sha256", cursorSecret)
       .update(hash(token))
@@ -477,6 +493,95 @@ export function supportRequestStore(
       )
     ).rows;
   }
+  type TimeCandidate = Candidate & { allocationId: string };
+  async function timeScopes(
+    ctx: Context,
+    candidates: TimeCandidate[],
+    write: boolean,
+  ): Promise<RequestMeta[]> {
+    requireAccess(ctx.actor.kind === "staff");
+    const people = await principals(
+      ctx,
+      candidates.map((c) => c.memberId),
+      [ctx.actor.id],
+    );
+    requireAccess(candidates.every((c) => people.get(c.memberId)!.active));
+    ctx.deadlines.push(
+      ...candidates.map((c) => people.get(c.memberId)!.expiresAt),
+    );
+    const roles = await profiles(ctx, [ctx.actor.id]),
+      role = roles.get(ctx.actor.id);
+    requireAccess(role === "operator" || role === "platform_admin");
+    const grants = (
+      await ctx.client.query<GrantRow & { allocationId: string }>(
+        `SELECT ${grantColumns},allocation_id AS "allocationId" FROM support_time_grants WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE`,
+        [candidates.map((c) => c.grantId).sort()],
+      )
+    ).rows;
+    requireAccess(
+      candidates.every((c) =>
+        grants.some(
+          (g) =>
+            g.id === c.grantId &&
+            g.requestId === c.requestId &&
+            g.allocationId === c.allocationId &&
+            g.staffId === ctx.actor.id &&
+            g.role === role &&
+            g.purpose === "support-time-local-v1" &&
+            g.active,
+        ),
+      ),
+    );
+    ctx.deadlines.push(...grants.map((g) => g.expiresAt));
+    if (write)
+      await ctx.client.query(
+        "SELECT pg_advisory_xact_lock(44154,hashtext($1))",
+        [ctx.actor.id],
+      );
+    await workspaces(ctx, candidates, write);
+    const rows = await requests(
+      ctx,
+      candidates.map((c) => c.requestId),
+      write,
+    );
+    requireAccess(
+      candidates.every((c) =>
+        rows.some(
+          (r) =>
+            r.requestId === c.requestId &&
+            r.memberId === c.memberId &&
+            r.workspaceId === c.workspaceId,
+        ),
+      ),
+    );
+    // Scope deadlines can expire while workspace/request locks are awaited.
+    // Revalidate before any time mutation reaches database transition guards.
+    const current = (
+      await ctx.client.query<{ valid: boolean }>(
+        "SELECT bool_and(deadline>clock_timestamp()) AS valid FROM unnest($1::timestamptz[]) AS times(deadline)",
+        [ctx.deadlines],
+      )
+    ).rows[0];
+    requireAccess(current?.valid);
+    return rows;
+  }
+  async function timeScope(
+    ctx: Context,
+    scope: SupportTimeScope,
+    write: boolean,
+  ): Promise<RequestMeta> {
+    requireAccess(ctx.actor.kind === "staff");
+    const discovered = (
+      await ctx.client.query<TimeCandidate>(
+        `SELECT r.id AS "requestId",r.member_id AS "memberId",r.workspace_id AS "workspaceId",g.id AS "grantId",g.allocation_id AS "allocationId"
+      FROM support_time_grants g JOIN support_requests r ON r.id=g.request_id
+      WHERE g.id=$1 AND g.request_id=$2 AND g.allocation_id=$3 AND g.staff_id=$4`,
+        [scope.grantId, scope.requestId, scope.allocationId, ctx.actor.id],
+      )
+    ).rows[0];
+    requireAccess(discovered);
+    return (await timeScopes(ctx, [discovered], write))[0]!;
+  }
   async function discover(
     ctx: Context,
     scope: SupportOperatorScope,
@@ -672,6 +777,326 @@ export function supportRequestStore(
     });
   }
   return {
+    time: {
+      writesEnabled: timeWrites,
+      async cancel(token, requestId, allocationId) {
+        if (!timeWrites) return { kind: "denied" };
+        if (![requestId, allocationId].every((v) => uuid.test(v)))
+          return { kind: "denied" };
+        return run(token, async (ctx) => {
+          await ownRequest(ctx, requestId, true);
+          return cancelSupportTime(
+            ctx.client,
+            requestId,
+            allocationId,
+            ctx.actor.id,
+            ctx.deadlines,
+          );
+        });
+      },
+      async operatorDetail(token, scope) {
+        if (
+          ![scope.requestId, scope.allocationId, scope.grantId].every((v) =>
+            uuid.test(v),
+          )
+        )
+          return { kind: "denied" };
+        return run(token, async (ctx) => {
+          await timeScope(ctx, scope, false);
+          return {
+            kind: "ready" as const,
+            value: {
+              ...(await supportTimeOperatorReceipt(
+                ctx.client,
+                ctx.actor.id,
+                scope,
+              )),
+              ...(!timeWrites ? { canBegin: false, canRecord: false } : {}),
+            },
+          };
+        });
+      },
+      async operatorWorklist(token, after) {
+        return run(token, async (ctx) => {
+          requireAccess(ctx.actor.kind === "staff");
+          const scope = "support-time-worklist",
+            previous = cursor(after, token, scope);
+          const candidates = (
+            await ctx.client.query<TimeCandidate>(
+              `SELECT r.id AS "requestId",r.member_id AS "memberId",r.workspace_id AS "workspaceId",g.id AS "grantId",g.allocation_id AS "allocationId",${at("g.created_at")}
+            FROM support_time_grants g JOIN support_requests r ON r.id=g.request_id
+            JOIN principals p ON p.id=r.member_id AND p.kind='member'
+            JOIN staff_profiles profile ON profile.principal_id=g.staff_id AND profile.role=g.staff_role
+            WHERE g.staff_id=$1 AND g.purpose='support-time-local-v1' AND g.revoked_at IS NULL AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp()
+            AND p.revoked_at IS NULL AND p.expires_at>clock_timestamp()
+            AND ($2::timestamptz IS NULL OR (g.created_at,g.id)<($2::timestamptz,$3::uuid))
+            ORDER BY g.created_at DESC,g.id DESC LIMIT 21`,
+              [ctx.actor.id, previous?.[0] ?? null, previous?.[1] ?? null],
+            )
+          ).rows;
+          await timeScopes(ctx, candidates, false);
+          const selected = page(candidates, token, scope, previous, (r) => [
+            r.grantId,
+            "",
+          ]);
+          const items = [];
+          for (const c of selected.rows)
+            items.push(
+              await supportTimeOperatorReceipt(ctx.client, ctx.actor.id, c),
+            );
+          if (previous) requireAccess(previous[3] > Date.now());
+          return {
+            kind: "ready" as const,
+            value: { items, nextCursor: selected.nextCursor },
+          };
+        });
+      },
+      async record(token, scope, key, intervals) {
+        if (!timeWrites) return { kind: "denied" };
+        if (
+          ![scope.requestId, scope.allocationId, scope.grantId, key].every(
+            (v) => uuid.test(v),
+          ) ||
+          !supportIntervalMinutes(intervals)
+        )
+          return { kind: "denied" };
+        return run(token, async (ctx) => {
+          await timeScope(ctx, scope, true);
+          return recordSupportTime(
+            ctx.client,
+            ctx.actor.id,
+            scope,
+            key,
+            intervals,
+            ctx.deadlines,
+          );
+        });
+      },
+      async grant(token, input) {
+        if (!timeWrites) return { kind: "denied" };
+        if (
+          ![
+            input.requestId,
+            input.allocationId,
+            input.staffId,
+            input.idempotencyKey,
+          ].every((v) => uuid.test(v)) ||
+          !["operator", "platform_admin"].includes(input.role) ||
+          !(input.startsAt instanceof Date) ||
+          !(input.expiresAt instanceof Date) ||
+          !Number.isFinite(input.startsAt.valueOf()) ||
+          !Number.isFinite(input.expiresAt.valueOf()) ||
+          input.expiresAt <= input.startsAt
+        )
+          return { kind: "denied" };
+        return run(token, async (ctx) => {
+          requireAccess(ctx.actor.kind === "staff");
+          const discovered = (
+            await ctx.client.query<Candidate>(
+              `SELECT r.member_id AS "memberId",r.workspace_id AS "workspaceId",r.id AS "requestId" FROM support_requests r JOIN support_time_allocations a ON a.request_id=r.id AND a.member_id=r.member_id WHERE r.id=$1 AND a.id=$2`,
+              [input.requestId, input.allocationId],
+            )
+          ).rows[0];
+          requireAccess(discovered);
+          const people = await principals(
+            ctx,
+            [discovered.memberId],
+            [ctx.actor.id, input.staffId],
+            true,
+          );
+          const roles = await profiles(ctx, [ctx.actor.id, input.staffId]);
+          requireAccess(
+            roles.get(ctx.actor.id) === "platform_admin" &&
+              roles.get(input.staffId) === input.role &&
+              people.get(input.staffId)!.active &&
+              people.get(discovered.memberId)!.active,
+          );
+          ctx.deadlines.push(
+            people.get(input.staffId)!.expiresAt,
+            people.get(discovered.memberId)!.expiresAt,
+          );
+          const existing = (
+            await ctx.client.query<GrantRow & { allocationId: string }>(
+              `SELECT ${grantColumns},allocation_id AS "allocationId" FROM support_time_grants WHERE granted_by=$1 AND idempotency_key=$2 FOR UPDATE`,
+              [ctx.actor.id, input.idempotencyKey],
+            )
+          ).rows[0];
+          await workspaces(ctx, [discovered], true);
+          const row = (await requests(ctx, [input.requestId], true))[0];
+          requireAccess(
+            row &&
+              row.memberId === discovered.memberId &&
+              row.workspaceId === discovered.workspaceId,
+          );
+          const allocation = (
+            await ctx.client.query<{ state: string }>(
+              "SELECT state FROM support_time_allocations WHERE id=$1 AND request_id=$2 AND member_id=$3 FOR UPDATE",
+              [input.allocationId, input.requestId, discovered.memberId],
+            )
+          ).rows[0];
+          requireAccess(allocation);
+          if (existing)
+            return existing.requestId === input.requestId &&
+              existing.allocationId === input.allocationId &&
+              existing.staffId === input.staffId &&
+              existing.role === input.role &&
+              existing.startsAt.valueOf() === input.startsAt.valueOf() &&
+              existing.expiresAt.valueOf() === input.expiresAt.valueOf() &&
+              !existing.revokedAt
+              ? { kind: "replayed" as const, grantId: existing.id }
+              : { kind: "conflict" as const };
+          if (row.withdrawnAt) return { kind: "withdrawn" as const };
+          if (row.resolvedAt || allocation.state !== "allocated")
+            return { kind: "conflict" as const };
+          ctx.deadlines.push(input.expiresAt);
+          const id = randomUUID();
+          await ctx.client.query(
+            "INSERT INTO support_time_grants(id,allocation_id,request_id,staff_id,staff_role,starts_at,expires_at,granted_by,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+            [
+              id,
+              input.allocationId,
+              input.requestId,
+              input.staffId,
+              input.role,
+              input.startsAt,
+              input.expiresAt,
+              ctx.actor.id,
+              input.idempotencyKey,
+            ],
+          );
+          await ctx.client.query(
+            "INSERT INTO support_time_events(id,allocation_id,member_id,actor_id,action) VALUES($1,$2,$3,$4,'grant-created')",
+            [
+              randomUUID(),
+              input.allocationId,
+              discovered.memberId,
+              ctx.actor.id,
+            ],
+          );
+          return { kind: "created" as const, grantId: id };
+        });
+      },
+      async revoke(token, id) {
+        if (!timeWrites) return { kind: "denied" };
+        if (!uuid.test(id)) return { kind: "denied" };
+        return run(token, async (ctx) => {
+          requireAccess(ctx.actor.kind === "staff");
+          const discovered = (
+            await ctx.client.query<
+              Candidate & { staffId: string; allocationId: string }
+            >(
+              `SELECT g.request_id AS "requestId",g.staff_id AS "staffId",g.allocation_id AS "allocationId",r.member_id AS "memberId",r.workspace_id AS "workspaceId" FROM support_time_grants g JOIN support_requests r ON r.id=g.request_id WHERE g.id=$1`,
+              [id],
+            )
+          ).rows[0];
+          requireAccess(discovered);
+          await principals(
+            ctx,
+            [discovered.memberId],
+            [ctx.actor.id, discovered.staffId],
+          );
+          const roles = await profiles(ctx, [ctx.actor.id, discovered.staffId]);
+          requireAccess(roles.get(ctx.actor.id) === "platform_admin");
+          const grant = (
+            await ctx.client.query<GrantRow & { allocationId: string }>(
+              `SELECT ${grantColumns},allocation_id AS "allocationId" FROM support_time_grants WHERE id=$1 FOR UPDATE`,
+              [id],
+            )
+          ).rows[0];
+          requireAccess(
+            grant &&
+              grant.requestId === discovered.requestId &&
+              grant.staffId === discovered.staffId &&
+              grant.allocationId === discovered.allocationId,
+          );
+          await workspaces(ctx, [discovered], true);
+          const row = (await requests(ctx, [discovered.requestId], true))[0];
+          requireAccess(
+            row &&
+              row.memberId === discovered.memberId &&
+              row.workspaceId === discovered.workspaceId,
+          );
+          await ctx.client.query(
+            "SELECT id FROM support_time_allocations WHERE id=$1 FOR UPDATE",
+            [grant.allocationId],
+          );
+          if (grant.revokedAt) return { kind: "already-revoked" as const };
+          await ctx.client.query(
+            "UPDATE support_time_grants SET revoked_at=clock_timestamp() WHERE id=$1",
+            [id],
+          );
+          await ctx.client.query(
+            "INSERT INTO support_time_events(id,allocation_id,member_id,actor_id,action) VALUES($1,$2,$3,$4,'grant-revoked')",
+            [
+              randomUUID(),
+              grant.allocationId,
+              discovered.memberId,
+              ctx.actor.id,
+            ],
+          );
+          return { kind: "revoked" as const };
+        });
+      },
+      async begin(token, scope, key) {
+        if (!timeWrites) return { kind: "denied" };
+        if (
+          ![scope.requestId, scope.allocationId, scope.grantId, key].every(
+            (v) => uuid.test(v),
+          )
+        )
+          return { kind: "denied" };
+        return run(token, async (ctx) => {
+          const row = await timeScope(ctx, scope, true);
+          return beginSupportTime(
+            ctx.client,
+            ctx.actor.id,
+            scope,
+            row,
+            key,
+            ctx.deadlines,
+          );
+        });
+      },
+      async allocate(token, requestId, key, ceiling) {
+        if (!timeWrites) return { kind: "denied" };
+        if (
+          !uuid.test(requestId) ||
+          !uuid.test(key) ||
+          !Number.isSafeInteger(ceiling) ||
+          ceiling < 1 ||
+          ceiling > 120
+        )
+          return { kind: "denied" };
+        return run(token, async (ctx) => {
+          const row = await ownRequest(ctx, requestId, true);
+          return allocateSupportTime(
+            ctx.client,
+            row,
+            key,
+            ceiling,
+            ctx.deadlines,
+          );
+        });
+      },
+      async receipt(token, requestId) {
+        if (!uuid.test(requestId)) return { kind: "denied" };
+        return run(token, async (ctx) => {
+          await ownRequest(ctx, requestId, false);
+          const latest = (
+            await ctx.client.query<{ id: string }>(
+              "SELECT id FROM support_time_allocations WHERE request_id=$1 AND member_id=$2 ORDER BY created_at DESC,id DESC LIMIT 1",
+              [requestId, ctx.actor.id],
+            )
+          ).rows[0];
+          return {
+            kind: "ready" as const,
+            value: latest
+              ? await supportTimeReceipt(ctx.client, latest.id)
+              : null,
+          };
+        });
+      },
+    },
     async create(token, input) {
       for (const field of ["idempotencyKey", "subject", "body"] as const) {
         if (
@@ -759,6 +1184,15 @@ export function supportRequestStore(
           previous = cursor(after, token, scope);
         const row = await ownRequest(ctx, id, false);
         const detail = await content(ctx, id);
+        const allocation = (
+          await ctx.client.query<{ id: string }>(
+            "SELECT id FROM support_time_allocations WHERE request_id=$1 AND member_id=$2 ORDER BY created_at DESC,id DESC LIMIT 1",
+            [id, ctx.actor.id],
+          )
+        ).rows[0];
+        const supportTime = allocation
+          ? await supportTimeReceipt(ctx.client, allocation.id)
+          : undefined;
         const replies = row.withdrawnAt
           ? { items: [], nextCursor: null }
           : await messages(ctx, id, false, token, scope, previous);
@@ -767,6 +1201,7 @@ export function supportRequestStore(
           kind: "ready" as const,
           value: {
             ...detail,
+            ...(supportTime ? { supportTime } : {}),
             replies: {
               ...replies,
               items: replies.items.map(({ kind: _kind, ...reply }) => reply),

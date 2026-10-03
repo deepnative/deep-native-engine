@@ -212,6 +212,7 @@ async function applyEvent(
   key: string,
   input: EventInput,
   change: EventChange,
+  supportAllocationId?: string,
 ) {
   requireKey(key);
   const fingerprint = createHash("sha256")
@@ -220,6 +221,32 @@ async function applyEvent(
   await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
     key,
   ]);
+  // Replay also observes the protected domain; a known event is not authority
+  // for a generic ledger caller to operate on another domain's reservation.
+  if (input.operation === "consume" || input.operation === "release") {
+    const supportLink = (
+      await client.query<{ allocation_id: string }>(
+        "SELECT allocation_id FROM support_time_units WHERE reservation_id=$1",
+        [input.reservationId],
+      )
+    ).rows[0];
+    if (
+      supportLink
+        ? supportLink.allocation_id !== supportAllocationId
+        : supportAllocationId !== undefined
+    )
+      throw new LedgerFailure("unavailable");
+  }
+  if (input.operation === "reserve" && supportAllocationId !== undefined) {
+    const allocation = (
+      await client.query(
+        "SELECT 1 FROM support_time_allocations WHERE id=$1 AND member_id=$2 AND grant_id=$3 AND state='allocated' AND policy='support-time-test-v1'",
+        [supportAllocationId, input.memberId, input.grantId],
+      )
+    ).rows[0];
+    if (!allocation || input.quantity !== 1)
+      throw new LedgerFailure("unavailable");
+  }
   const previous = (
     await client.query<ExistingEvent>(
       "SELECT request_fingerprint,result_id FROM synthetic_entitlement_events WHERE idempotency_key=$1",
@@ -229,6 +256,17 @@ async function applyEvent(
   if (previous) {
     if (previous.request_fingerprint !== fingerprint)
       throw new LedgerFailure("idempotency_conflict");
+    if (
+      input.operation === "reserve" &&
+      supportAllocationId !== undefined &&
+      !(
+        await client.query(
+          "SELECT 1 FROM support_time_units WHERE reservation_id=$1 AND allocation_id=$2",
+          [previous.result_id, supportAllocationId],
+        )
+      ).rows[0]
+    )
+      throw new LedgerFailure("unavailable");
     return previous.result_id;
   }
   const eventId = randomUUID();
@@ -295,11 +333,34 @@ export function syntheticLedgerOnConnection(client: PoolClient, jobId: string) {
   return { reserve: ledger.reserve, consume: ledger.consume };
 }
 
+// Internal checked support boundary. The support store owns authorization,
+// allocation/entry/link writes and the sole transaction; this grants no units.
+export function supportLedgerOnConnection(
+  client: PoolClient,
+  allocationId: string,
+) {
+  requireId(allocationId);
+  const ledger = ledgerOperations(
+    client,
+    (key, input, change) =>
+      applyEvent(client, key, input, change, allocationId),
+    () => new Date(),
+    undefined,
+    allocationId,
+  );
+  return {
+    reserve: ledger.reserve,
+    consume: ledger.consume,
+    release: ledger.release,
+  };
+}
+
 function ledgerOperations(
   pool: Pick<Pool, "query">,
   apply: ApplyEvent,
   now: () => Date,
   jobId?: string,
+  supportAllocationId?: string,
 ): SyntheticLedger {
   async function settle(
     operation: "consume" | "release",
@@ -332,8 +393,17 @@ function ledgerOperations(
                SELECT 1 FROM local_ai_test_unit_jobs b
                WHERE b.reservation_id=r.id AND b.job_id IS DISTINCT FROM $3::uuid
              )
+             AND NOT EXISTS (
+               SELECT 1 FROM support_time_units u WHERE u.reservation_id=r.id
+                AND u.allocation_id IS DISTINCT FROM $4::uuid
+             )
            FOR UPDATE OF r,g`,
-            [reservationId, memberId, jobId ?? null],
+            [
+              reservationId,
+              memberId,
+              jobId ?? null,
+              supportAllocationId ?? null,
+            ],
           )
         ).rows[0];
         if (!row) throw new LedgerFailure("unavailable");
@@ -347,10 +417,36 @@ function ledgerOperations(
         ).rows[0];
         if (linked ? linked.job_id !== jobId : jobId !== undefined)
           throw new LedgerFailure("unavailable");
+        const supportLink = (
+          await client.query<{ allocation_id: string }>(
+            "SELECT allocation_id FROM support_time_units WHERE reservation_id=$1",
+            [reservationId],
+          )
+        ).rows[0];
+        if (
+          supportLink
+            ? supportLink.allocation_id !== supportAllocationId
+            : supportAllocationId !== undefined
+        )
+          throw new LedgerFailure("unavailable");
+        if (
+          supportAllocationId !== undefined &&
+          operation === "consume" &&
+          !(
+            await client.query(
+              `SELECT 1 FROM support_time_allocations a JOIN support_time_units u ON u.allocation_id=a.id
+           JOIN support_time_entries e ON e.allocation_id=a.id
+           WHERE a.id=$1 AND a.member_id=$2 AND a.state='begun' AND e.actor_id=a.begun_by
+             AND u.reservation_id=$3 AND u.ordinal<=e.support_minutes+e.preparation_minutes`,
+              [supportAllocationId, memberId, reservationId],
+            )
+          ).rows[0]
+        )
+          throw new LedgerFailure("unavailable");
         if (operation === "release") {
           await client.query(
-            "SELECT release_synthetic_reservation_balance($1,$2,$3,NULL)",
-            [reservationId, memberId, now()],
+            "SELECT release_synthetic_reservation_balance($1,$2,$3,NULL,$4)",
+            [reservationId, memberId, now(), supportAllocationId ?? null],
           );
         } else {
           await client.query(
@@ -491,6 +587,7 @@ function ledgerOperations(
                    SELECT 1 FROM synthetic_slot_holds h WHERE h.reservation_id=r.id
                  )
                  AND NOT EXISTS (SELECT 1 FROM local_ai_test_unit_jobs b WHERE b.reservation_id=r.id)
+                 AND NOT EXISTS (SELECT 1 FROM support_time_units u WHERE u.reservation_id=r.id)
                FOR UPDATE OF r,g`,
               [reservationId, memberId],
             )
@@ -505,6 +602,15 @@ function ledgerOperations(
             (
               await client.query(
                 "SELECT 1 FROM local_ai_test_unit_jobs WHERE reservation_id=$1",
+                [reservationId],
+              )
+            ).rows[0]
+          )
+            throw new LedgerFailure("unavailable");
+          if (
+            (
+              await client.query(
+                "SELECT 1 FROM support_time_units WHERE reservation_id=$1",
                 [reservationId],
               )
             ).rows[0]

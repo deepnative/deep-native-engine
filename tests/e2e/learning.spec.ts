@@ -1161,12 +1161,18 @@ test("[L13] lost idle database connections do not terminate the server and saved
   await fill(page);
   await page.getByRole("button", { name: "Save draft" }).click();
   const lost = await pool.query(
-    "SELECT pg_terminate_backend(pid) AS terminated FROM pg_stat_activity WHERE datname=current_database() AND application_name='deep-native-preview' AND state='idle'",
+    "SELECT pid, pg_terminate_backend(pid, 5000) AS terminated FROM pg_stat_activity WHERE datname=current_database() AND application_name='deep-native-preview' AND state='idle'",
   );
   expect(lost.rowCount).toBeGreaterThan(0);
   expect(lost.rows.every((r: { terminated: boolean }) => r.terminated)).toBe(
     true,
   );
+  // Wait for the original fault to complete, rather than only acknowledging its signals.
+  const remaining = await pool.query(
+    "SELECT pid FROM pg_stat_activity WHERE pid = ANY($1::integer[])",
+    [lost.rows.map((r: { pid: number }) => r.pid)],
+  );
+  expect(remaining.rowCount).toBe(0);
   // Re-request the current URL after the disconnect. A request concurrent with it may fail honestly.
   const response = await page.goto(page.url());
   expect([200, 503]).toContain(response!.status());

@@ -83,7 +83,9 @@ export async function start(env: NodeJS.ProcessEnv) {
       attempts: attemptStore(pool),
       practice: practiceStore(pool),
       practiceSessions: practiceSessionStore(pool),
-      supportRequests: supportRequestStore(pool),
+      supportRequests: supportRequestStore(pool, undefined, {
+        timeWrites: settings.supportTimeWrites,
+      }),
       memberExport: memberExportStore(pool),
       usefulness: usefulnessStore(pool),
       workflowFeedback: workflowFeedbackStore(pool),

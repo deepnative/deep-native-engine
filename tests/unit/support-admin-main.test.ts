@@ -13,6 +13,8 @@ const f = vi.hoisted(() => ({
   provision: vi.fn(),
   grant: vi.fn(),
   revoke: vi.fn(),
+  timeGrant: vi.fn(),
+  timeRevoke: vi.fn(),
 }));
 vi.mock("../../src/config.ts", () => ({ config: f.config }));
 vi.mock("node:fs/promises", () => ({
@@ -36,7 +38,11 @@ vi.mock("../../src/authorization.ts", () => ({
   authorizationStore: () => ({ provisionStaff: f.provision }),
 }));
 vi.mock("../../src/support-requests.ts", () => ({
-  supportRequestStore: () => ({ grant: f.grant, revoke: f.revoke }),
+  supportRequestStore: () => ({
+    grant: f.grant,
+    revoke: f.revoke,
+    time: { grant: f.timeGrant, revoke: f.timeRevoke },
+  }),
 }));
 const directory = {
   isDirectory: () => true,
@@ -95,6 +101,8 @@ beforeEach(() => {
   f.provision.mockResolvedValue("staff");
   f.grant.mockResolvedValue({ kind: "created", grantId: "grant" });
   f.revoke.mockResolvedValue({ kind: "revoked" });
+  f.timeGrant.mockResolvedValue({ kind: "created", grantId: "time-grant" });
+  f.timeRevoke.mockResolvedValue({ kind: "revoked" });
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -120,6 +128,64 @@ function failed(result: Awaited<ReturnType<typeof run>>) {
   });
   expect(process.exitCode).toBe(1);
 }
+it.each(["created", "replayed"])(
+  "uses a separate time grant boundary for %s without printing credentials",
+  async (kind) => {
+    f.read.mockImplementation((path: string) =>
+      Promise.resolve(
+        JSON.stringify(
+          path.endsWith("admin.json")
+            ? { token }
+            : path.endsWith("operator.json")
+              ? { id: "staff" }
+              : {
+                  requestId: "request",
+                  allocationId: "allocation",
+                  idempotencyKey: "key",
+                  startsAt: "2026-10-02T01:00:00Z",
+                  expiresAt: "2026-10-02T02:00:00Z",
+                },
+        ),
+      ),
+    );
+    f.timeGrant.mockResolvedValue({ kind, grantId: "time-grant" });
+    expect((await run(["time-grant", "instruction.json"])).out).toEqual([
+      [
+        JSON.stringify({
+          status: "complete",
+          action: "time-grant",
+          grantId: "time-grant",
+        }),
+      ],
+    ]);
+    expect(f.timeGrant).toHaveBeenCalledWith(token, {
+      requestId: "request",
+      allocationId: "allocation",
+      idempotencyKey: "key",
+      staffId: "staff",
+      role: "operator",
+      startsAt: new Date("2026-10-02T01:00:00Z"),
+      expiresAt: new Date("2026-10-02T02:00:00Z"),
+    });
+    expect(f.grant).not.toHaveBeenCalled();
+  },
+);
+it("rejects a time grant instruction without an exact allocation", async () => {
+  failed(await run(["time-grant", "instruction.json"]));
+  expect(f.timeGrant).not.toHaveBeenCalled();
+});
+it.each(["revoked", "already-revoked"])(
+  "uses separate time revocation for %s without note grant privileges",
+  async (kind) => {
+    f.read.mockResolvedValueOnce(JSON.stringify({ grantId: "time-grant" }));
+    f.timeRevoke.mockResolvedValue({ kind });
+    expect((await run(["time-revoke", "instruction.json"])).out).toEqual([
+      [JSON.stringify({ status: "complete", action: "time-revoke" })],
+    ]);
+    expect(f.timeRevoke).toHaveBeenCalledWith(token, "time-grant");
+    expect(f.revoke).not.toHaveBeenCalled();
+  },
+);
 it("uses an actual private administrator credential and fixed operator role for grant/replay", async () => {
   for (const kind of ["created", "replayed"]) {
     vi.resetModules();
