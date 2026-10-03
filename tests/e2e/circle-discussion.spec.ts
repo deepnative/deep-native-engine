@@ -340,14 +340,23 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
         ),
       ).toBe(true);
     } finally {
-      await Promise.all(contexts.map((context) => context.close()));
       try {
-        if (running) await running.close();
+        // The primary fixture context also owns speculative connections. Close
+        // every browser client before awaiting graceful listener shutdown; on
+        // Node24 an unparsed preconnection can otherwise retain server.close().
+        await Promise.all([
+          page.context().close(),
+          ...contexts.map((context) => context.close()),
+        ]);
       } finally {
-        for (const id of ownerIds) await members.remove(id);
-        for (const id of staffIds)
-          await pool.query("DELETE FROM principals WHERE id=$1", [id]);
-        await rm(storage, { recursive: true, force: true });
+        try {
+          if (running) await running.close();
+        } finally {
+          for (const id of ownerIds) await members.remove(id);
+          for (const id of staffIds)
+            await pool.query("DELETE FROM principals WHERE id=$1", [id]);
+          await rm(storage, { recursive: true, force: true });
+        }
       }
     }
   });
