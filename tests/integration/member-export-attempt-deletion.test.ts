@@ -56,9 +56,10 @@ function pausedAfterOwnerLookup() {
   };
 }
 
-function pausedAfterAttemptRead() {
+function pausedAfterAttemptRead(splitReply = false) {
   const attemptRead = gate();
   const continueExport = gate();
+  const secondReply = gate();
   const state = { pid: 0 };
   const controlledPool = {
     async connect() {
@@ -70,6 +71,28 @@ function pausedAfterAttemptRead() {
           const result = await client.query(sql, values);
           if (sql.includes("FROM assignment_attempts WHERE member_id=$1")) {
             attemptRead.release();
+            if (splitReply) {
+              // Keep each reply within the export's five-second driver bound,
+              // while retaining its locks across the writer's five-second wait.
+              let timer: ReturnType<typeof setTimeout> | undefined;
+              try {
+                await Promise.race([
+                  continueExport.wait,
+                  new Promise<void>((resolve) => {
+                    timer = setTimeout(resolve, 2500);
+                  }),
+                ]);
+              } finally {
+                clearTimeout(timer);
+              }
+            } else await continueExport.wait;
+          }
+          if (
+            splitReply &&
+            sql.startsWith("SELECT a.id") &&
+            sql.includes("FROM assignment_attempts a")
+          ) {
+            secondReply.release();
             await continueExport.wait;
           }
           return result;
@@ -82,6 +105,7 @@ function pausedAfterAttemptRead() {
     exported: memberExportStore(controlledPool),
     attemptRead,
     continueExport,
+    secondReply,
     state,
   };
 }
@@ -474,7 +498,7 @@ it.each(["revoked", "deleting-workspace"] as const)(
 
 it("does not acknowledge a deletion that times out behind an export, then recovers", async () => {
   const f = await fixture();
-  const controlled = pausedAfterAttemptRead();
+  const controlled = pausedAfterAttemptRead(true);
   const reading = controlled.exported.exportOwned(f.ownerToken);
   const writer = observableRemoval();
   let finished = false;
@@ -488,6 +512,14 @@ it("does not acknowledge a deletion that times out behind an export, then recove
         return value;
       });
     await writer.connected.wait;
+    expect(
+      await waitForBlocking(
+        writer.state.pid,
+        controlled.state.pid,
+        () => finished,
+      ),
+    ).toBe("blocked");
+    await controlled.secondReply.wait;
     expect(
       await waitForBlocking(
         writer.state.pid,

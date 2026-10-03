@@ -531,7 +531,7 @@ test("[L66] a member privately revises a submitted synthetic assignment without 
   await expect(history).toContainText(first);
   await expect(history).toContainText(second);
   const exported = await (await page.request.get("/api/member/export")).json();
-  expect(exported.version).toBe("local-member-records-v17");
+  expect(exported.version).toBe("local-member-records-v18");
   expect(exported.records.assignmentSubmissions).toMatchObject([
     { attemptId, sequence: 1, response: first },
     { attemptId, sequence: 2, response: second },

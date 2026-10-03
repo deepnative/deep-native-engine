@@ -354,6 +354,65 @@ for (const [index, [background, goal]] of audiences.entries()) {
       expect(JSON.stringify(records.supportTimeEntries)).not.toContain(
         granted.grantId,
       );
+      // Inspect actual downloaded retained support holds/events across all pages.
+      const expectedHolds = (
+        await pool.query(
+          "SELECT r.id,r.state FROM synthetic_entitlement_reservations r JOIN synthetic_entitlement_grants g ON g.id=r.grant_id WHERE g.member_id=$1 ORDER BY r.id",
+          [member.learner.id],
+        )
+      ).rows;
+      const downloadedHolds: { id: string; state: string }[] = [];
+      const downloadedEvents: { operation: string; quantity: number }[] = [];
+      await page.goto("/member/export");
+      let number = 0,
+        next: string | null = null;
+      do {
+        const downloadEvent = page.waitForEvent("download");
+        await page
+          .getByRole("button", {
+            name: `Download page ${++number}`,
+            exact: true,
+          })
+          .click();
+        const download = await downloadEvent,
+          stream = await download.createReadStream();
+        if (!stream) throw Error("Private history download unavailable");
+        let text = "";
+        for await (const chunk of stream) text += chunk.toString();
+        const payload = JSON.parse(text);
+        expect(payload.version).toBe("local-member-records-v18");
+        expect(payload.page.recordCount).toBeLessThanOrEqual(100);
+        expect(Buffer.byteLength(text)).toBeLessThanOrEqual(256 * 1024);
+        downloadedHolds.push(...payload.records.testUnitReservations);
+        downloadedEvents.push(...payload.records.testUnitEvents);
+        for (const name of [
+          "testUnitGrants",
+          "testUnitReservations",
+          "testUnitEvents",
+          "testUnitSettlements",
+        ]) {
+          expect(JSON.stringify(payload.records[name])).not.toMatch(
+            /fingerprint|idempotency|completionRef|resultId|staffId|requestId/,
+          );
+          expect(JSON.stringify(payload.records[name])).not.toContain(
+            operatorId,
+          );
+        }
+        next = payload.page.nextCursor;
+        if (next)
+          await page
+            .getByRole("link", { name: "Next page", exact: true })
+            .click();
+        expect(number).toBeLessThan(8);
+      } while (next);
+      expect(downloadedHolds.map(({ id, state }) => ({ id, state }))).toEqual(
+        expectedHolds,
+      );
+      expect(
+        downloadedEvents
+          .filter((row) => row.operation === "consume")
+          .reduce((total, row) => total + row.quantity, 0),
+      ).toBe(15);
       await page.goto("/learn");
       await page.getByLabel("Delete my local preview").check();
       await page.getByRole("button", { name: "Delete this preview" }).click();

@@ -94,7 +94,7 @@ it("exports a withdrawn completed exercise as a text-free retained completion ma
     "withdrawn",
   );
   const after = await ready(owner.token);
-  expect(after.version).toBe("local-member-records-v17");
+  expect(after.version).toBe("local-member-records-v18");
   expect(after.records).toMatchObject({
     exercises: [
       {
@@ -206,7 +206,13 @@ it("exports each retained local permission receipt once with safe owned job link
       "localAiReceiptId",
     ].sort(),
   );
-  expect(await ready(owner.token)).toEqual(snapshot);
+  const repeated = await ready(owner.token);
+  expect(repeated.records).toEqual(snapshot.records);
+  expect(repeated.profile).toEqual(snapshot.profile);
+  expect(repeated.page).toEqual(snapshot.page);
+  expect(+repeated.testUnitHistory.observedAt).toBeGreaterThanOrEqual(
+    +snapshot.testUnitHistory.observedAt,
+  );
   expect((await ready(other.token)).records).toMatchObject({
     localAiReceipts: [],
     adapterJobs: [],
@@ -220,7 +226,13 @@ it("exports each retained local permission receipt once with safe owned job link
     localAiReceipts: [{ id: own.receiptId, withdrawnAt: expect.any(Date) }],
   });
   expect(await own.local.withdraw(owner.token, own.receiptId)).toBe(true);
-  expect(await ready(owner.token)).toEqual(withdrawn);
+  const repeatedWithdrawal = await ready(owner.token);
+  expect(repeatedWithdrawal.records).toEqual(withdrawn.records);
+  expect(repeatedWithdrawal.profile).toEqual(withdrawn.profile);
+  expect(repeatedWithdrawal.page).toEqual(withdrawn.page);
+  expect(+repeatedWithdrawal.testUnitHistory.observedAt).toBeGreaterThanOrEqual(
+    +withdrawn.testUnitHistory.observedAt,
+  );
   const replacement = await own.local.grant(owner.token, own.evidenceId);
   expect(replacement.kind).toBe("granted");
   if (replacement.kind !== "granted") throw Error("Synthetic regrant failed");
@@ -923,7 +935,7 @@ it("withholds private records if the session expires during export assembly", as
   await receiptFixture(owner);
   const deadline = (
     await pool.query(
-      "UPDATE principals SET expires_at=clock_timestamp()+INTERVAL '5 seconds' WHERE id=$1 RETURNING expires_at",
+      "UPDATE principals SET expires_at=clock_timestamp()+INTERVAL '1 second' WHERE id=$1 RETURNING expires_at",
       [owner.id],
     )
   ).rows[0].expires_at as Date;
@@ -978,7 +990,7 @@ it("exports current structured records only for their active owner, with redacti
   );
   const own = await ready(a.token);
   expect(own).toMatchObject({
-    version: "local-member-records-v17",
+    version: "local-member-records-v18",
     profile: { id: a.id, background: "explorer" },
     records: {
       milestones: [{ milestoneTitle: "Invented milestone" }],
