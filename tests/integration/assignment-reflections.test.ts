@@ -247,7 +247,7 @@ it("keeps an absent rubric absent and a deleted reflection permanently text-free
   const exported = await exports.exportOwned(item.owner.token);
   expect(exported.kind).toBe("ready");
   if (exported.kind === "ready") {
-    expect(exported.payload.version).toBe("local-member-records-v16");
+    expect(exported.payload.version).toBe("local-member-records-v17");
     expect(exported.payload.records.assignmentReflections).toEqual([]);
     expect(JSON.stringify(exported.payload)).not.toContain(reflection.evidence);
   }
@@ -408,7 +408,7 @@ it("paginates owned reflections with their exact submission reference", async ()
   expect(second).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v16",
+      version: "local-member-records-v17",
       records: {
         assignmentReflections: [
           {

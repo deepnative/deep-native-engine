@@ -15,6 +15,9 @@ const f = vi.hoisted(() => ({
   revoke: vi.fn(),
   timeGrant: vi.fn(),
   timeRevoke: vi.fn(),
+  circleFactory: vi.fn(),
+  circleGrant: vi.fn(),
+  circleRevoke: vi.fn(),
 }));
 vi.mock("../../src/config.ts", () => ({ config: f.config }));
 vi.mock("node:fs/promises", () => ({
@@ -43,6 +46,12 @@ vi.mock("../../src/support-requests.ts", () => ({
     revoke: f.revoke,
     time: { grant: f.timeGrant, revoke: f.timeRevoke },
   }),
+}));
+vi.mock("../../src/circle-discussion.ts", () => ({
+  circleDiscussionStore: (...args: unknown[]) => {
+    f.circleFactory(...args);
+    return { grantModerator: f.circleGrant, revokeModerator: f.circleRevoke };
+  },
 }));
 const directory = {
   isDirectory: () => true,
@@ -436,3 +445,191 @@ it("denies bootstrap if checking an existing credential file fails without assum
   expect(f.provision).not.toHaveBeenCalled();
   expect(f.write).not.toHaveBeenCalled();
 });
+
+function circleInput(
+  input: Record<string, unknown>,
+  staff: unknown = "moderator",
+) {
+  f.config.mockReturnValue({
+    privateStorageRoot: "/private/test",
+    databaseUrl: "private-local-url",
+    secret: "private-secret",
+    circleDiscussion: true,
+  });
+  f.read.mockImplementation((path: string) =>
+    Promise.resolve(
+      JSON.stringify(
+        path.endsWith("admin.json")
+          ? { token }
+          : path.endsWith("moderator.json")
+            ? { id: staff }
+            : input,
+      ),
+    ),
+  );
+}
+it("bootstraps separate administrator and moderator credentials without creating a grant", async () => {
+  circleInput({});
+  f.lstat.mockImplementation((path: string) =>
+    path.endsWith("/support-admin")
+      ? Promise.resolve(directory)
+      : Promise.reject(Object.assign(Error("absent"), { code: "ENOENT" })),
+  );
+  const result = await run(["circle-bootstrap"]);
+  expect(result.err).toEqual([]);
+  expect(f.provision.mock.calls.map((row) => row[1])).toEqual([
+    "platform_admin",
+    "moderator",
+  ]);
+  expect(f.write.mock.calls.map((row) => row[0])).toEqual([
+    "/private/test/support-admin/admin.json",
+    "/private/test/support-admin/moderator.json",
+  ]);
+  expect(f.circleGrant).not.toHaveBeenCalled();
+  expect(f.circleFactory).not.toHaveBeenCalled();
+  for (const [, text, options] of f.write.mock.calls) {
+    const credential = JSON.parse(text);
+    expect(options).toEqual({ flag: "wx", mode: 0o600 });
+    expect(JSON.stringify(result)).not.toContain(credential.token);
+  }
+});
+it("creates an explicitly instructed circle grant and outputs only its safe receipt", async () => {
+  circleInput({
+    circleId: "everyday-ai",
+    idempotencyKey: "original",
+    expiresAt: "2026-10-04T12:00:00Z",
+  });
+  f.circleGrant.mockResolvedValue({
+    kind: "ready",
+    value: { id: "safe-grant" },
+  });
+  const result = await run(["circle-grant", "instruction.json"]);
+  expect(result).toEqual({
+    out: [
+      [
+        JSON.stringify({
+          status: "complete",
+          action: "circle-grant",
+          grantId: "safe-grant",
+        }),
+      ],
+    ],
+    err: [],
+  });
+  expect(f.circleGrant).toHaveBeenCalledWith(
+    token,
+    "moderator",
+    "everyday-ai",
+    "original",
+    new Date("2026-10-04T12:00:00Z"),
+  );
+  expect(JSON.stringify(result)).not.toContain(token);
+});
+it("preserves grant revocation while discussion sharing is paused", async () => {
+  circleInput({ circleId: "everyday-ai", grantId: "safe-grant" });
+  f.config.mockReturnValue({
+    privateStorageRoot: "/private/test",
+    databaseUrl: "private-local-url",
+    secret: "private-secret",
+    circleDiscussion: false,
+  });
+  f.circleRevoke.mockResolvedValue({
+    kind: "ready",
+    value: { id: "safe-grant" },
+  });
+  const result = await run(["circle-revoke", "instruction.json"]);
+  expect(result.err).toEqual([]);
+  expect(f.circleFactory.mock.calls[0]!.slice(1)).toEqual([
+    "private-secret",
+    false,
+  ]);
+  expect(f.circleRevoke).toHaveBeenCalledWith(
+    token,
+    "everyday-ai",
+    "safe-grant",
+  );
+});
+it.each(["circle-bootstrap", "circle-grant"])(
+  "denies %s during pause before creating files or a connection",
+  async (command) => {
+    circleInput({});
+    f.config.mockReturnValue({ circleDiscussion: false });
+    failed(
+      await run(
+        command === "circle-bootstrap"
+          ? [command]
+          : [command, "instruction.json"],
+      ),
+    );
+    expect(f.mkdir).not.toHaveBeenCalled();
+    expect(f.create).not.toHaveBeenCalled();
+  },
+);
+it.each([
+  [
+    "circle-grant",
+    { circleId: 1, idempotencyKey: "key", expiresAt: "2026-10-04T12:00:00Z" },
+    "moderator",
+  ],
+  [
+    "circle-grant",
+    { circleId: "everyday-ai", expiresAt: "2026-10-04T12:00:00Z" },
+    "moderator",
+  ],
+  [
+    "circle-grant",
+    { circleId: "everyday-ai", idempotencyKey: "key" },
+    "moderator",
+  ],
+  [
+    "circle-grant",
+    {
+      circleId: "everyday-ai",
+      idempotencyKey: "key",
+      expiresAt: "2026-10-04T12:00:00Z",
+      extra: "forged",
+    },
+    "moderator",
+  ],
+  [
+    "circle-grant",
+    {
+      circleId: "everyday-ai",
+      idempotencyKey: "key",
+      expiresAt: "2026-10-04T12:00:00Z",
+    },
+    null,
+  ],
+  ["circle-revoke", { circleId: "everyday-ai" }, "moderator"],
+  ["circle-revoke", { circleId: "everyday-ai", grantId: 1 }, "moderator"],
+  [
+    "circle-revoke",
+    { circleId: "everyday-ai", grantId: "grant", extra: "forged" },
+    "moderator",
+  ],
+] as const)(
+  "rejects malformed %s instructions without inventing success",
+  async (command, input, staff) => {
+    circleInput(input, staff);
+    failed(await run([command, "instruction.json"]));
+    expect(f.circleGrant).not.toHaveBeenCalled();
+    expect(f.circleRevoke).not.toHaveBeenCalled();
+  },
+);
+it.each(["circle-grant", "circle-revoke"])(
+  "withholds %s completion when authorization does not confirm",
+  async (command) => {
+    circleInput(
+      command === "circle-grant"
+        ? {
+            circleId: "everyday-ai",
+            idempotencyKey: "key",
+            expiresAt: "2026-10-04T12:00:00Z",
+          }
+        : { circleId: "everyday-ai", grantId: "grant" },
+    );
+    f.circleGrant.mockResolvedValue({ kind: "denied" });
+    f.circleRevoke.mockResolvedValue({ kind: "denied" });
+    failed(await run([command, "instruction.json"]));
+  },
+);

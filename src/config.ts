@@ -62,7 +62,11 @@ export function config(env: NodeJS.ProcessEnv) {
   const supportTimeWrites = env.DNE_SUPPORT_TIME_WRITES ?? "enabled";
   if (!["enabled", "disabled"].includes(supportTimeWrites))
     throw Error("DNE_SUPPORT_TIME_WRITES must be enabled or disabled.");
+  const circleDiscussion = env.DNE_CIRCLE_DISCUSSION ?? "disabled";
+  if (!["enabled", "disabled"].includes(circleDiscussion))
+    throw Error("DNE_CIRCLE_DISCUSSION must be enabled or disabled.");
   return {
+    circleDiscussion: circleDiscussion === "enabled",
     supportTimeWrites: supportTimeWrites === "enabled",
     databaseUrl,
     port,

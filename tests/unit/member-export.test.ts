@@ -88,7 +88,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v16",
+      version: "local-member-records-v17",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -211,7 +211,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    [2, 23, ...valid.slice(2)],
+    [2, 27, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -473,7 +473,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v16",
+        version: "local-member-records-v17",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -556,4 +556,27 @@ it("keeps legacy section indices stable and accepts the two appended owned suppo
         ) && sql.includes("a.member_id=$1"),
     ),
   ).toBe(true);
+});
+
+it("continues from appended circle sections at indices 23-26 without moving legacy indices", async () => {
+  for (const [index, name, table] of [
+    [23, "circleChoices", "preview_circle_choices"],
+    [24, "circlePosts", "preview_circle_posts"],
+    [25, "circleReports", "preview_circle_reports"],
+    [26, "circleMembershipHistory", "preview_circle_membership_history"],
+  ] as const) {
+    const fake = fakePool({ id: "member-1" }, (sql) =>
+      sql.includes(`FROM ${table} WHERE member_id=$1`)
+        ? [{ _key: ["z-record"], id: "retained-own-record" }]
+        : [],
+    );
+    const value = await memberExportStore(fake.pool, secret).exportOwned(
+      "owner",
+      signed([2, index, ["key"], 2, Date.now() + 60000]),
+    );
+    expect(value).toMatchObject({
+      kind: "ready",
+      payload: { records: { [name]: [{ id: "retained-own-record" }] } },
+    });
+  }
 });

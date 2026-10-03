@@ -172,7 +172,8 @@ export function circleStore(pool: Pool): CircleStore {
               `INSERT INTO preview_circle_memberships(circle_id,member_id)
                VALUES($1,$2)
                ON CONFLICT(circle_id,member_id) DO UPDATE
-               SET joined_at=CURRENT_TIMESTAMP,left_at=NULL`,
+               SET joined_at=clock_timestamp(),left_at=NULL,
+                   generation=preview_circle_memberships.generation+1`,
               [id, memberId],
             );
           }
