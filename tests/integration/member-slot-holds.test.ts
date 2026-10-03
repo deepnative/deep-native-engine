@@ -1997,3 +1997,74 @@ it.each(
   },
   15000,
 );
+
+it.each(readKinds)(
+  "withholds %s private data when actual client handback crosses DB session expiry after known commit",
+  async (kind) => {
+    const f = await heldReceipt();
+    await memberHolds.withdraw(f.owner.token, f.requestId);
+    const before = await retainedHoldRows(f.owner.id);
+    await pool.query(
+      "UPDATE principals SET expires_at=clock_timestamp()+interval '250 milliseconds' WHERE id=$1",
+      [f.owner.id],
+    );
+    let validAtCommit = false,
+      commits = 0,
+      rollbacks = 0,
+      releases = 0;
+    const delayed = memberSlotHolds({
+      connect: async () => {
+        const client = await pool.connect();
+        return {
+          query: async (sql: string, values?: unknown[]) => {
+            const response = await client.query(sql, values);
+            if (sql === "COMMIT") {
+              commits++;
+              validAtCommit = (
+                await client.query(
+                  "SELECT expires_at>clock_timestamp() AS valid FROM principals WHERE id=$1",
+                  [f.owner.id],
+                )
+              ).rows[0].valid;
+            }
+            if (sql === "ROLLBACK") rollbacks++;
+            return response;
+          },
+          release(error?: Error) {
+            releases++;
+            client.release(error);
+            // PoolClient.release is synchronous. Delay its successful return
+            // after actual disposal while the independent database clock advances.
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 350);
+          },
+        };
+      },
+    } as unknown as Pool);
+    await deniedRead(
+      privateRead(delayed, kind, f.owner.token, f.requestId),
+      kind,
+    );
+    expect(validAtCommit).toBe(true);
+    expect(commits).toBe(1);
+    expect(rollbacks).toBe(0);
+    expect(releases).toBe(1);
+    expect(
+      (
+        await pool.query(
+          "SELECT expires_at<=clock_timestamp() AS expired FROM principals WHERE id=$1",
+          [f.owner.id],
+        )
+      ).rows[0].expired,
+    ).toBe(true);
+    expect(await retainedHoldRows(f.owner.id)).toEqual(before);
+    await pool.query(
+      "UPDATE principals SET expires_at=clock_timestamp()+interval '1 day' WHERE id=$1",
+      [f.owner.id],
+    );
+    expect(await memberHolds.get(f.owner.token, f.requestId)).toMatchObject({
+      id: f.requestId,
+      state: "released",
+    });
+    expect(await retainedHoldRows(f.owner.id)).toEqual(before);
+  },
+);
