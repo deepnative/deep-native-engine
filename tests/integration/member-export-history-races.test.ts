@@ -55,7 +55,7 @@ async function blocked(pid: number, blocker: number) {
   }
   throw Error("Expected PostgreSQL lock conflict not observed");
 }
-function controlled(paused: boolean) {
+function controlled(paused: boolean, secret: Buffer = randomBytes(32)) {
   const entered = gate(),
     resume = gate(),
     connected = gate();
@@ -79,7 +79,7 @@ function controlled(paused: boolean) {
     },
   } as unknown as Pool;
   return {
-    exporter: memberExportStore(wrapper),
+    exporter: memberExportStore(wrapper, secret),
     entered,
     resume,
     connected,
@@ -90,20 +90,54 @@ const mutate = (action: string) =>
   action === "revocation"
     ? "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1"
     : "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1";
-it.each(["revocation", "workspace erasure"])(
-  "withholds every retained history section when %s wins the lock",
-  async (action) => {
+const raceCases = (["initial", "continuation"] as const).flatMap((page) =>
+  (["revocation", "workspace erasure"] as const).map((action) => ({
+    page,
+    action,
+  })),
+);
+async function historyCursor(
+  own: { id: string; token: string },
+  secret: Buffer,
+  page: "initial" | "continuation",
+): Promise<string | undefined> {
+  if (page === "initial") return undefined;
+  await pool.query(
+    `INSERT INTO learning_milestones(id,member_id,goal_title,milestone_title,next_action)
+     SELECT id,$1,'Invented goal','Invented milestone','Invented action'
+     FROM unnest($2::uuid[]) AS seed(id)`,
+    [own.id, Array.from({ length: 101 }, () => randomUUID())],
+  );
+  const first = await memberExportStore(pool, secret).exportOwned(own.token);
+  if (first.kind !== "ready" || !first.payload.page.nextCursor)
+    throw Error("Issued history continuation unavailable");
+  expect(first.payload.page.recordCount).toBe(100);
+  const resumed = await memberExportStore(pool, secret).exportOwned(
+    own.token,
+    first.payload.page.nextCursor,
+  );
+  expect(resumed.kind).toBe("ready");
+  if (resumed.kind !== "ready") throw Error("Owned history unavailable");
+  expect(resumed.payload.records.testUnitGrants).toHaveLength(1);
+  expect(resumed.payload.records.testUnitEvents).toHaveLength(3);
+  return first.payload.page.nextCursor;
+}
+it.each(raceCases)(
+  "withholds the retained $page history page when $action wins the lock",
+  async ({ page, action }) => {
     const own = await fixture(),
       other = await fixture(),
+      secret = randomBytes(32),
+      cursor = await historyCursor(own, secret, page),
       writer = await pool.connect(),
-      read = controlled(false);
+      read = controlled(false, secret);
     let reading: ReturnType<typeof read.exporter.exportOwned> | undefined;
     try {
       const writerPid = (await writer.query("SELECT pg_backend_pid() AS pid"))
         .rows[0].pid;
       await writer.query("BEGIN");
       await writer.query(mutate(action), [own.id]);
-      reading = read.exporter.exportOwned(own.token);
+      reading = read.exporter.exportOwned(own.token, cursor);
       await read.connected.wait;
       await blocked(read.pid(), writerPid);
       expect(
@@ -112,9 +146,10 @@ it.each(["revocation", "workspace erasure"])(
       await writer.query("COMMIT");
       const value = await reading;
       expect(value).toEqual({ kind: "unavailable" });
-      expect((await memberExportStore(pool).exportOwned(own.token)).kind).toBe(
-        "denied",
-      );
+      expect(
+        (await memberExportStore(pool, secret).exportOwned(own.token, cursor))
+          .kind,
+      ).toBe("denied");
     } finally {
       await writer.query("ROLLBACK");
       await Promise.allSettled(reading ? [reading] : []);
@@ -122,13 +157,15 @@ it.each(["revocation", "workspace erasure"])(
     }
   },
 );
-it.each(["revocation", "workspace erasure"])(
-  "finishes the owned history page before a conflicting %s can commit",
-  async (action) => {
+it.each(raceCases)(
+  "finishes the owned $page history page before a conflicting $action can commit",
+  async ({ page, action }) => {
     const own = await fixture(),
+      secret = randomBytes(32),
+      cursor = await historyCursor(own, secret, page),
       writer = await pool.connect(),
-      read = controlled(true);
-    const reading = read.exporter.exportOwned(own.token);
+      read = controlled(true, secret);
+    const reading = read.exporter.exportOwned(own.token, cursor);
     let changing: Promise<unknown> | undefined;
     try {
       await read.entered.wait;
@@ -147,9 +184,10 @@ it.each(["revocation", "workspace erasure"])(
       expect(value.payload.records.testUnitSettlements).toHaveLength(1);
       await changing;
       await writer.query("COMMIT");
-      expect((await memberExportStore(pool).exportOwned(own.token)).kind).toBe(
-        "denied",
-      );
+      expect(
+        (await memberExportStore(pool, secret).exportOwned(own.token, cursor))
+          .kind,
+      ).toBe("denied");
     } finally {
       read.resume.release();
       await Promise.allSettled([reading, ...(changing ? [changing] : [])]);
