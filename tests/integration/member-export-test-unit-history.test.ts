@@ -275,7 +275,7 @@ it("paginates more than 100 mixed retained rows without omissions or duplicates 
     expect(value.kind).toBe("ready");
     if (value.kind !== "ready") throw Error("Private export unavailable");
     const payload = value.payload;
-    expect(payload.version).toBe("local-member-records-v18");
+    expect(payload.version).toBe("local-member-records-v19");
     expect(payload.page.number).toBe(++number);
     expect(payload.page.consistency).toBe("live-pages");
     expect(payload.page.recordCount).toBeLessThanOrEqual(100);

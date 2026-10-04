@@ -1,3 +1,4 @@
+import { sampleFeedbackStore } from "./sample-feedback.ts";
 import { Pool } from "pg";
 import type { Server } from "node:http";
 import { readFileSync } from "node:fs";
@@ -90,6 +91,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       attempts: attemptStore(pool),
       practice: practiceStore(pool),
       practiceSessions: practiceSessionStore(pool),
+      sampleFeedback: sampleFeedbackStore(pool, objects),
       supportRequests: supportRequestStore(pool, undefined, {
         timeWrites: settings.supportTimeWrites,
       }),

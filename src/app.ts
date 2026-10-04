@@ -1,3 +1,5 @@
+import { mountSampleFeedbackRoutes } from "./sample-feedback-routes.ts";
+import type { SampleFeedbackStore } from "./sample-feedback.ts";
 import express, { type ErrorRequestHandler } from "express";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
@@ -276,6 +278,7 @@ export function app(
     practice?: PracticeStore;
     practiceSessions?: PracticeSessionStore;
     supportRequests?: SupportRequestStore;
+    sampleFeedback?: SampleFeedbackStore;
     usefulness?: UsefulnessStore;
     workflowFeedback?: WorkflowFeedbackStore;
     memberExport?: MemberExportStore;
@@ -1083,6 +1086,8 @@ export function app(
       next();
     },
   );
+  if (options.sampleFeedback)
+    mountSampleFeedbackRoutes(app, options.sampleFeedback);
   mountSupportRequestRoutes(
     app,
     options.supportRequests ?? disabledSupportRequestStore(),
