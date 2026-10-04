@@ -297,6 +297,36 @@ const sections = {
      WHERE e.member_id=$1 AND w.deleting_at IS NULL`,
     "e.id",
   ),
+  // v21 appends accounting sections; all prior cursor indices remain stable.
+  reviewTimeAllocations: section(
+    `a.id,a.evidence_id AS "evidenceId",a.policy,a.ceiling,a.state,
+     a.created_at AS "createdAt",a.begun_at AS "begunAt",a.settled_at AS "settledAt",
+     a.source_unavailable_at AS "sourceUnavailableAt",
+     (SELECT count(*)::integer FROM review_time_units u JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id WHERE u.allocation_id=a.id AND r.grant_id=a.grant_id AND r.state='reserved') AS held,
+     (SELECT count(*)::integer FROM review_time_units u JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id WHERE u.allocation_id=a.id AND r.grant_id=a.grant_id AND r.state='consumed') AS consumed,
+     (SELECT count(*)::integer FROM review_time_units u JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id WHERE u.allocation_id=a.id AND r.grant_id=a.grant_id AND r.state='released') AS released`,
+    `review_time_allocations a JOIN workspaces w ON w.id=a.workspace_id AND w.owner_principal_id=a.member_id
+     WHERE a.member_id=$1 AND w.deleting_at IS NULL`,
+    "a.id",
+    true,
+  ),
+  reviewTimeEntries: section(
+    `e.allocation_id AS "allocationId",e.review_start AS "reviewStart",e.review_end AS "reviewEnd",
+     e.preparation_start AS "preparationStart",e.preparation_end AS "preparationEnd",
+     e.review_minutes AS "reviewMinutes",e.preparation_minutes AS "preparationMinutes",e.created_at AS "createdAt",
+     'Local sample reviewer' AS attribution`,
+    `review_time_entries e JOIN review_time_allocations a ON a.id=e.allocation_id
+     JOIN workspaces w ON w.id=a.workspace_id AND w.owner_principal_id=a.member_id
+     WHERE a.member_id=$1 AND w.deleting_at IS NULL`,
+    "e.allocation_id",
+  ),
+  reviewTimeEvents: section(
+    `e.id,e.allocation_id AS "allocationId",e.action,e.occurred_at AS "occurredAt"`,
+    `review_time_events e JOIN review_time_allocations a ON a.id=e.allocation_id AND a.member_id=e.member_id
+     JOIN workspaces w ON w.id=a.workspace_id AND w.owner_principal_id=a.member_id
+     WHERE a.member_id=$1 AND w.deleting_at IS NULL`,
+    "e.id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -310,7 +340,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v20";
+  version: "local-member-records-v21";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -444,7 +474,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v20",
+          version: "local-member-records-v21",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

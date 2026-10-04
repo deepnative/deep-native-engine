@@ -103,7 +103,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v20",
+      version: "local-member-records-v21",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -226,7 +226,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    [2, 33, ...valid.slice(2)],
+    [2, 36, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -488,7 +488,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v20",
+        version: "local-member-records-v21",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -668,4 +668,40 @@ it("exports published sample feedback after fencing its source and omits interna
   expect(fence).toBeGreaterThan(-1);
   expect(feedback).toBeGreaterThan(fence);
   expect(fake.statements.at(-1)).toBe("COMMIT");
+});
+
+it("appends owned review accounting at indices 33-35 without moving existing sections", async () => {
+  for (const [index, name, table] of [
+    [33, "reviewTimeAllocations", "review_time_allocations a JOIN workspaces"],
+    [
+      34,
+      "reviewTimeEntries",
+      "review_time_entries e JOIN review_time_allocations",
+    ],
+    [
+      35,
+      "reviewTimeEvents",
+      "review_time_events e JOIN review_time_allocations",
+    ],
+  ] as const) {
+    const fake = fakePool({ id: "member-1" }, (sql) =>
+      sql.includes(`FROM ${table}`)
+        ? [{ _key: ["retained"], id: "owned-accounting" }]
+        : [],
+    );
+    const value = await memberExportStore(fake.pool, secret).exportOwned(
+      "owner",
+      signed([2, index, ["key"], 2, Date.now() + 60000]),
+    );
+    expect(value).toMatchObject({
+      kind: "ready",
+      payload: {
+        version: "local-member-records-v21",
+        records: { [name]: [{ id: "owned-accounting" }] },
+      },
+    });
+    expect(
+      fake.statements.filter((sql) => sql.includes(`FROM ${table}`))[0],
+    ).toContain("w.owner_principal_id=a.member_id");
+  }
 });

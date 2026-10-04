@@ -149,7 +149,7 @@ for (const [index, [background, goal]] of (
         const exported = await (
           await participant.request.get(`${origin}/api/member/export`)
         ).json();
-        expect(exported.version).toBe("local-member-records-v20");
+        expect(exported.version).toBe("local-member-records-v21");
         expect(exported.records.eventEnrollments).toHaveLength(1);
         expect(exported.records.eventEnrollments[0].id).toBe(
           new URL(participant === page ? receipt : peerReceipt).pathname

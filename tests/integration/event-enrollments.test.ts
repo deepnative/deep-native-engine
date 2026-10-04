@@ -765,7 +765,7 @@ it("exports bounded owned registration pages and invalidates continuation after 
     const result = await exports.exportOwned(owner.token, cursor);
     expect(result.kind).toBe("ready");
     if (result.kind !== "ready") throw Error("Expected owned event export");
-    expect(result.payload.version).toBe("local-member-records-v20");
+    expect(result.payload.version).toBe("local-member-records-v21");
     expect(result.payload.page.recordCount).toBeLessThanOrEqual(100);
     const rows = result.payload.records.eventEnrollments;
     expect(rows).toBeDefined();

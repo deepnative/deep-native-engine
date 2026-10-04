@@ -190,6 +190,7 @@ export async function migrate(pool: Pool) {
       "055-circle-discussion.sql",
       "056-private-sample-feedback.sql",
       "057-private-event-enrollment.sql",
+      "058-private-review-time.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

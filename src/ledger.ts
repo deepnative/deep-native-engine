@@ -1,5 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Pool, PoolClient } from "pg";
+import type { Pool, QueryResult, QueryResultRow } from "pg";
+export interface LedgerConnection {
+  query<T extends QueryResultRow = QueryResultRow>(
+    sql: string,
+    values?: unknown[],
+  ): Promise<QueryResult<T>>;
+}
 
 // Internal synthetic accounting only. No route grants these units or accepts a
 // payment; approved offers and retention rules need separate owner decisions.
@@ -196,7 +202,7 @@ export interface SyntheticLedger {
 }
 
 type EventChange = (
-  client: PoolClient,
+  client: LedgerConnection,
   eventId: string,
 ) => Promise<EventResult>;
 type ApplyEvent = (
@@ -208,11 +214,12 @@ type ApplyEvent = (
 // Caller owns the connection transaction. No connection acquisition or nested
 // BEGIN/COMMIT occurs here; pool and atomic member-job paths share event rules.
 async function applyEvent(
-  client: PoolClient,
+  client: LedgerConnection,
   key: string,
   input: EventInput,
   change: EventChange,
   supportAllocationId?: string,
+  reviewAllocationId?: string,
 ) {
   requireKey(key);
   const fingerprint = createHash("sha256")
@@ -247,6 +254,32 @@ async function applyEvent(
     if (!allocation || input.quantity !== 1)
       throw new LedgerFailure("unavailable");
   }
+  if (input.operation === "consume" || input.operation === "release") {
+    const reviewLink = (
+      await client.query<{ allocation_id: string }>(
+        "SELECT allocation_id FROM review_time_units WHERE reservation_id=$1",
+        [input.reservationId],
+      )
+    ).rows[0];
+    if (
+      reviewLink
+        ? reviewLink.allocation_id !== reviewAllocationId
+        : reviewAllocationId !== undefined
+    )
+      throw new LedgerFailure("unavailable");
+  }
+  if (input.operation === "reserve" && reviewAllocationId !== undefined) {
+    if (
+      input.quantity !== 1 ||
+      !(
+        await client.query(
+          "SELECT 1 FROM review_time_allocations WHERE id=$1 AND member_id=$2 AND grant_id=$3 AND state='allocated' AND policy='review-time-test-v1'",
+          [reviewAllocationId, input.memberId, input.grantId],
+        )
+      ).rows[0]
+    )
+      throw new LedgerFailure("unavailable");
+  }
   const previous = (
     await client.query<ExistingEvent>(
       "SELECT request_fingerprint,result_id FROM synthetic_entitlement_events WHERE idempotency_key=$1",
@@ -263,6 +296,17 @@ async function applyEvent(
         await client.query(
           "SELECT 1 FROM support_time_units WHERE reservation_id=$1 AND allocation_id=$2",
           [previous.result_id, supportAllocationId],
+        )
+      ).rows[0]
+    )
+      throw new LedgerFailure("unavailable");
+    if (
+      input.operation === "reserve" &&
+      reviewAllocationId !== undefined &&
+      !(
+        await client.query(
+          "SELECT 1 FROM review_time_units WHERE reservation_id=$1 AND allocation_id=$2",
+          [previous.result_id, reviewAllocationId],
         )
       ).rows[0]
     )
@@ -322,7 +366,10 @@ export function syntheticLedger(
 }
 
 // Internal atomic job boundary; not a route or an independently committed ledger.
-export function syntheticLedgerOnConnection(client: PoolClient, jobId: string) {
+export function syntheticLedgerOnConnection(
+  client: LedgerConnection,
+  jobId: string,
+) {
   requireId(jobId);
   const ledger = ledgerOperations(
     client,
@@ -336,7 +383,7 @@ export function syntheticLedgerOnConnection(client: PoolClient, jobId: string) {
 // Internal checked support boundary. The support store owns authorization,
 // allocation/entry/link writes and the sole transaction; this grants no units.
 export function supportLedgerOnConnection(
-  client: PoolClient,
+  client: LedgerConnection,
   allocationId: string,
 ) {
   requireId(allocationId);
@@ -355,12 +402,35 @@ export function supportLedgerOnConnection(
   };
 }
 
+// The review store owns the sole transaction, exact publication and authority.
+export function reviewLedgerOnConnection(
+  client: LedgerConnection,
+  allocationId: string,
+) {
+  requireId(allocationId);
+  const ledger = ledgerOperations(
+    client,
+    (key, input, change) =>
+      applyEvent(client, key, input, change, undefined, allocationId),
+    () => new Date(),
+    undefined,
+    undefined,
+    allocationId,
+  );
+  return {
+    reserve: ledger.reserve,
+    consume: ledger.consume,
+    release: ledger.release,
+  };
+}
+
 function ledgerOperations(
-  pool: Pick<Pool, "query">,
+  pool: LedgerConnection,
   apply: ApplyEvent,
   now: () => Date,
   jobId?: string,
   supportAllocationId?: string,
+  reviewAllocationId?: string,
 ): SyntheticLedger {
   async function settle(
     operation: "consume" | "release",
@@ -443,10 +513,42 @@ function ledgerOperations(
           ).rows[0]
         )
           throw new LedgerFailure("unavailable");
+        const reviewLink = (
+          await client.query<{ allocation_id: string }>(
+            "SELECT allocation_id FROM review_time_units WHERE reservation_id=$1",
+            [reservationId],
+          )
+        ).rows[0];
+        if (
+          reviewLink
+            ? reviewLink.allocation_id !== reviewAllocationId
+            : reviewAllocationId !== undefined
+        )
+          throw new LedgerFailure("unavailable");
+        if (
+          reviewAllocationId !== undefined &&
+          operation === "consume" &&
+          !(
+            await client.query(
+              `SELECT 1 FROM review_time_allocations a JOIN review_time_units u ON u.allocation_id=a.id
+           JOIN review_time_entries e ON e.allocation_id=a.id
+           WHERE a.id=$1 AND a.member_id=$2 AND a.state='begun' AND e.actor_id=a.begun_by
+            AND u.reservation_id=$3 AND u.ordinal<=e.review_minutes+e.preparation_minutes`,
+              [reviewAllocationId, memberId, reservationId],
+            )
+          ).rows[0]
+        )
+          throw new LedgerFailure("unavailable");
         if (operation === "release") {
           await client.query(
-            "SELECT release_synthetic_reservation_balance($1,$2,$3,NULL,$4)",
-            [reservationId, memberId, now(), supportAllocationId ?? null],
+            "SELECT release_synthetic_reservation_balance($1,$2,$3,NULL,$4,$5)",
+            [
+              reservationId,
+              memberId,
+              now(),
+              supportAllocationId ?? null,
+              reviewAllocationId ?? null,
+            ],
           );
         } else {
           await client.query(
@@ -588,6 +690,7 @@ function ledgerOperations(
                  )
                  AND NOT EXISTS (SELECT 1 FROM local_ai_test_unit_jobs b WHERE b.reservation_id=r.id)
                  AND NOT EXISTS (SELECT 1 FROM support_time_units u WHERE u.reservation_id=r.id)
+                 AND NOT EXISTS (SELECT 1 FROM review_time_units u WHERE u.reservation_id=r.id)
                FOR UPDATE OF r,g`,
               [reservationId, memberId],
             )

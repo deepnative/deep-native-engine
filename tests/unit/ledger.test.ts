@@ -6,6 +6,7 @@ import {
   syntheticLedger,
   syntheticLedgerOnConnection,
   supportLedgerOnConnection,
+  reviewLedgerOnConnection,
 } from "../../src/ledger.ts";
 
 const member = "00000000-0000-4000-8000-000000000001";
@@ -23,6 +24,7 @@ function database(
   now = () => new Date("2026-01-31T00:00:00.000Z"),
 ) {
   let supportReads = 0;
+  let reviewReads = 0;
   const query = vi.fn(async (sql: string, _params?: unknown[]) => {
     if (sql.startsWith("SELECT allocation_id FROM support_time_units")) {
       const link = supportReads++
@@ -36,6 +38,18 @@ function database(
       return { rows: rows.supportAuthority === false ? [] : [{}] };
     if (sql.startsWith("SELECT 1 FROM support_time_units"))
       return { rows: rows.supportReplay === false ? [] : [{}] };
+    if (sql.startsWith("SELECT allocation_id FROM review_time_units")) {
+      const link = reviewReads++
+        ? rows.reviewAfter === undefined
+          ? rows.review
+          : rows.reviewAfter
+        : rows.review;
+      return { rows: link ? [{ allocation_id: link }] : [] };
+    }
+    if (sql.startsWith("SELECT 1 FROM review_time_allocations"))
+      return { rows: rows.reviewAuthority === false ? [] : [{}] };
+    if (sql.startsWith("SELECT 1 FROM review_time_units"))
+      return { rows: rows.reviewReplay === false ? [] : [{}] };
     if (sql.includes("SELECT job_id FROM local_ai_test_unit_jobs"))
       return { rows: rows.link ? [{ job_id: rows.link }] : [] };
     if (sql.includes("SELECT request_fingerprint"))
@@ -188,6 +202,127 @@ it("consumes only recorded bounded support units and releases through the checke
     ).consume(member, reservation, "unrecorded"),
   ).rejects.toMatchObject({ code: "unavailable" });
 });
+
+it("requires a valid allocation identity before constructing the internal review boundary", () => {
+  expect(() =>
+    reviewLedgerOnConnection(
+      database().client as unknown as PoolClient,
+      "invalid",
+    ),
+  ).toThrow(LedgerFailure);
+});
+it("reserves only one-minute units for a current owned allocated group using the caller transaction", async () => {
+  const db = database(),
+    boundary = reviewLedgerOnConnection(
+      db.client as unknown as PoolClient,
+      allocation,
+    );
+  await expect(
+    boundary.reserve(member, grant, 1, "review-reserve"),
+  ).resolves.toMatch(/^[0-9a-f-]{36}$/);
+  await expect(
+    boundary.reserve(member, grant, 2, "too-many"),
+  ).rejects.toMatchObject({ code: "unavailable" });
+  const absent = database({ reviewAuthority: false });
+  await expect(
+    reviewLedgerOnConnection(
+      absent.client as unknown as PoolClient,
+      allocation,
+    ).reserve(member, grant, 1, "missing"),
+  ).rejects.toMatchObject({ code: "unavailable" });
+  expect(db.connect).not.toHaveBeenCalled();
+  expect(
+    db.query.mock.calls.some(([sql]) => /^(BEGIN|COMMIT|ROLLBACK)/.test(sql)),
+  ).toBe(false);
+});
+it("replays a review reserve only when its saved reservation is attached to the same allocation", async () => {
+  const event = {
+    request_fingerprint: fingerprint({
+      operation: "reserve",
+      memberId: member,
+      grantId: grant,
+      quantity: 1,
+    }),
+    result_id: reservation,
+  };
+  for (const valid of [true, false]) {
+    const db = database({ event, reviewReplay: valid });
+    const result = reviewLedgerOnConnection(
+      db.client as unknown as PoolClient,
+      allocation,
+    ).reserve(member, grant, 1, "saved");
+    if (valid) await expect(result).resolves.toBe(reservation);
+    else await expect(result).rejects.toMatchObject({ code: "unavailable" });
+  }
+});
+it.each(["consume", "release"] as const)(
+  "protects review %s from generic callers, missing links and link changes after locks",
+  async (operation) => {
+    const generic = database({ review: allocation });
+    await expect(
+      generic.ledger[operation](member, reservation, "generic"),
+    ).rejects.toMatchObject({ code: "unavailable" });
+    for (const config of [
+      {},
+      { review: grant },
+      { review: allocation, reviewAfter: grant },
+      { review: allocation, reviewAfter: null },
+    ]) {
+      const db = database(config);
+      await expect(
+        reviewLedgerOnConnection(
+          db.client as unknown as PoolClient,
+          allocation,
+        )[operation](member, reservation, "scoped"),
+      ).rejects.toMatchObject({ code: "unavailable" });
+    }
+  },
+);
+it("consumes only recorded bounded review units and releases through the checked shared balance function", async () => {
+  for (const operation of ["consume", "release"] as const) {
+    const db = database({ review: allocation });
+    await expect(
+      reviewLedgerOnConnection(db.client as unknown as PoolClient, allocation)[
+        operation
+      ](member, reservation, operation),
+    ).resolves.toBe(reservation);
+  }
+  const db = database({ review: allocation, reviewAuthority: false });
+  await expect(
+    reviewLedgerOnConnection(
+      db.client as unknown as PoolClient,
+      allocation,
+    ).consume(member, reservation, "unrecorded"),
+  ).rejects.toMatchObject({ code: "unavailable" });
+});
+
+it.each(["consume", "release"] as const)(
+  "rejects generic %s replay for an allocated review before consulting the saved event",
+  async (operation) => {
+    const db = database({
+      review: allocation,
+      event: {
+        request_fingerprint: fingerprint({
+          operation,
+          memberId: member,
+          reservationId: reservation,
+        }),
+        result_id: reservation,
+      },
+    });
+    await expect(
+      db.ledger[operation](member, reservation, "previous-review-operation"),
+    ).rejects.toMatchObject({ code: "unavailable" });
+    expect(
+      db.query.mock.calls.some(([sql]) =>
+        sql.includes("SELECT request_fingerprint"),
+      ),
+    ).toBe(false);
+    expect(
+      db.query.mock.calls.some(([sql]) => /^(UPDATE|INSERT|DELETE)/.test(sql)),
+    ).toBe(false);
+  },
+);
 
 it("rejects malformed synthetic requests before any database connection", async () => {
   const db = database();

@@ -7,16 +7,39 @@ import type {
 export const sampleFeedbackPath = (id: string, reviewer = false) =>
   `${reviewer ? "/review" : ""}/evidence/${encodeURIComponent(id)}/feedback`;
 const label =
-  '<p class="eyebrow">HUMAN-AUTHORED · PRIVATE SAMPLE · NOT FORMAL ASSESSMENT</p><p>This local feedback is not a qualification, score, paid review or promise of an outcome. Any time shown is self-reported and unbilled.</p>';
+  '<p class="eyebrow">HUMAN-AUTHORED · PRIVATE SAMPLE · NOT FORMAL ASSESSMENT</p><p>This local feedback is not a qualification, score, paid review or promise of an outcome. Draft time observations are self-reported and unbilled. Reserved test-minute receipts separately show simulated consumption and returns; they are not money or a paid service.</p>';
 function published(row: SampleFeedbackRecord) {
-  return `<article><h2>Published sample feedback</h2><p>Reviewer reference ${escape(row.authorId)} · source version ${row.sourceRevision} · published ${escape(row.publishedAt!.toISOString())}</p>${row.criteria.map((c) => `<section><h3>${escape(c.label)}</h3><blockquote>${escape(c.quote)}</blockquote><p>${escape(c.comment)}</p></section>`).join("")}<p>Self-reported preparation: ${row.preparationMinutes ?? "not supplied"} minutes; review: ${row.reviewMinutes ?? "not supplied"} minutes.</p>${row.clarification ? `<h3>Your clarification</h3><p>${escape(row.clarification)}</p>` : ""}${row.answer ? `<h3>Reviewer answer</h3><p>${escape(row.answer)}</p>` : ""}</article>`;
+  return `<article><h2>Published sample feedback</h2><p>Reviewer reference ${escape(row.authorId)} · source version ${row.sourceRevision} · published ${escape(row.publishedAt!.toISOString())}</p>${row.criteria.map((c) => `<section><h3>${escape(c.label)}</h3><blockquote>${escape(c.quote)}</blockquote><p>${escape(c.comment)}</p></section>`).join("")}<p>Unbilled draft observation — preparation: ${row.preparationMinutes ?? "not supplied"} minutes; review: ${row.reviewMinutes ?? "not supplied"} minutes.</p>${row.clarification ? `<h3>Your clarification</h3><p>${escape(row.clarification)}</p>` : ""}${row.answer ? `<h3>Reviewer answer</h3><p>${escape(row.answer)}</p>` : ""}</article>`;
 }
 export function sampleFeedbackRecovery(
   title: string,
   message: string,
   href: string,
   attempt?: Record<string, string>,
+  publicationRecovery?: { csrf: string },
 ) {
+  const reconciliation =
+    publicationRecovery && attempt
+      ? `<form method="post" action="${escape(href)}/publish">${hidden(publicationRecovery.csrf)}${[
+          "operationId",
+          "revision",
+          "confirm",
+          "allocationId",
+          "grantId",
+          "reviewStart",
+          "reviewEnd",
+          "preparationStart",
+          "preparationEnd",
+        ]
+          .filter((key) => attempt[key] !== undefined)
+          .map(
+            (key) =>
+              `<input type="hidden" name="${key}" value="${escape(attempt[key]!)}">`,
+          )
+          .join(
+            "",
+          )}<p>Send the original saved draft, operation reference and intervals again. A committed publication is reconciled without a second charge. Inspect saved feedback first; nothing is sent automatically.</p><button>Reconcile original publication</button></form>`
+      : "";
   return page(
     title,
     `<section class="reading"><h1>${escape(title)}</h1><p role="alert">${escape(message)}</p><p>Nothing is retried automatically. Inspect saved feedback before deciding what to do next.</p>${
@@ -34,11 +57,27 @@ export function sampleFeedbackRecovery(
             )
             .join("")}`
         : ""
-    }<p><a href="${escape(href)}">Inspect saved feedback</a></p><p><a href="/evidence">Your private evidence</a></p></section>`,
+    }<p><a href="${escape(href)}">Inspect saved feedback</a></p>${reconciliation}<p><a href="/evidence">Your private evidence</a></p></section>`,
   );
 }
 function exchangeForm(path: string, csrf: string, id: string, answer: boolean) {
   return `<form method="post" action="${escape(path)}/${answer ? "answer" : "clarify"}">${hidden(csrf)}<input type="hidden" name="feedbackId" value="${escape(id)}"><input type="hidden" name="operationId" value="${randomUUID()}"><label for="message-${escape(id)}">${answer ? "One reviewer answer" : "One clarification"}</label><textarea id="message-${escape(id)}" name="message" maxlength="2000" required></textarea><p>One clarification and one answer are available while consent and reviewer authority remain active. This is not an appeal service.</p><button type="submit">${answer ? "Send answer" : "Send clarification"}</button></form>`;
+}
+function reviewControls(view: SampleFeedbackView, csrf: string, path: string) {
+  const allocation = view.reviewAllocation;
+  if (!allocation) return "";
+  const { receipt: r, grantId, writesEnabled } = allocation;
+  const ids = `<input type="hidden" name="allocationId" value="${escape(r.allocationId)}"><input type="hidden" name="grantId" value="${escape(grantId)}">`;
+  const begin =
+    r.state === "allocated" && writesEnabled
+      ? `<form method="post" action="${path}/begin">${hidden(csrf)}${ids}<input type="hidden" name="operationId" value="${randomUUID()}"><button>Begin reserved review</button></form>`
+      : "";
+  return `<section><h2>Reserved review test minutes</h2><p>State: ${escape(r.state)}. Held: ${r.held}; consumed: ${r.consumed}; returned: ${r.released}.</p>${writesEnabled ? "" : "<p>New review work is paused.</p>"}${begin}</section>`;
+}
+function reviewIntervalFields(view: SampleFeedbackView) {
+  const a = view.reviewAllocation;
+  if (!a) return "";
+  return `<input type="hidden" name="allocationId" value="${escape(a.receipt.allocationId)}"><input type="hidden" name="grantId" value="${escape(a.grantId)}"><p>Record whole-minute intervals within the last 24 hours using UTC timestamps (for example 2026-10-04T12:00:00Z). Publication consumes actual test minutes and returns unused reserved minutes.</p>${["reviewStart", "reviewEnd", "preparationStart", "preparationEnd"].map((name) => `<label>${name.replace(/([A-Z])/g, " $1")} (UTC)<input name="${name}" placeholder="YYYY-MM-DDTHH:mm:00Z" ${name.startsWith("review") ? "required" : ""}></label>`).join("")}`;
 }
 export function sampleFeedbackPage(
   view: SampleFeedbackView,
@@ -65,7 +104,7 @@ export function sampleFeedbackPage(
       },
     ).join(
       "",
-    )}<label for="preparation">Self-reported preparation minutes (optional, unbilled)</label><input id="preparation" name="preparationMinutes" type="number" min="0" max="480" value="${draft?.preparationMinutes ?? ""}"><label for="review">Self-reported review minutes (optional, unbilled)</label><input id="review" name="reviewMinutes" type="number" min="0" max="480" value="${draft?.reviewMinutes ?? ""}"><button type="submit">Save private feedback draft</button></form>${draft ? `<form method="post" action="${path}/publish">${hidden(csrf)}<input type="hidden" name="operationId" value="${randomUUID()}"><input type="hidden" name="revision" value="${draft.revision}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Publish saved draft version ${draft.revision}. Published feedback cannot be edited; unsaved form changes are not included.</span></label><button type="submit">Publish saved feedback</button></form>` : ""}`;
+    )}<label for="preparation">Self-reported preparation minutes (optional, unbilled)</label><input id="preparation" name="preparationMinutes" type="number" min="0" max="480" value="${draft?.preparationMinutes ?? ""}"><label for="review">Self-reported review minutes (optional, unbilled)</label><input id="review" name="reviewMinutes" type="number" min="0" max="480" value="${draft?.reviewMinutes ?? ""}"><button type="submit">Save private feedback draft</button></form>${draft && (!view.reviewAllocation || (view.reviewAllocation.receipt.state === "begun" && view.reviewAllocation.writesEnabled)) ? `<form method="post" action="${path}/publish">${hidden(csrf)}${reviewIntervalFields(view)}<input type="hidden" name="operationId" value="${randomUUID()}"><input type="hidden" name="revision" value="${draft.revision}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Publish saved draft version ${draft.revision}. Published feedback cannot be edited; unsaved form changes are not included.</span></label><button type="submit">Publish saved feedback</button></form>` : ""}`;
   } else {
     content = view.records.length
       ? view.records
@@ -83,6 +122,6 @@ export function sampleFeedbackPage(
   }
   return page(
     reviewer ? "Review private sample" : "Your private sample feedback",
-    `<nav class="breadcrumb"><a href="/evidence">Your private evidence</a></nav><section class="reading sample-feedback">${label}<h1>${reviewer ? "Review private sample" : "Your private sample feedback"}</h1><h2>${escape(view.title)}</h2><p>Source version ${view.sourceRevision} · ${view.consent ? "Private-review consent active" : "Consent withdrawn: published feedback remains private to its owner; no new clarification exchange is available."}</p><details open><summary>Exact source sample</summary><pre class="content-text">${escape(view.source)}</pre></details>${content}${view.next ? `<p><a href="${path}?after=${encodeURIComponent(view.next)}">Next feedback page</a></p>` : ""}${reviewer ? "<p>The source owner controls consent, revisions and deletion.</p>" : '<p><a href="/evidence">Manage source revisions, consent and deletion</a></p>'}</section>`,
+    `<nav class="breadcrumb"><a href="/evidence">Your private evidence</a></nav><section class="reading sample-feedback">${label}<h1>${reviewer ? "Review private sample" : "Your private sample feedback"}</h1><h2>${escape(view.title)}</h2><p>Source version ${view.sourceRevision} · ${view.consent ? "Private-review consent active" : "Consent withdrawn: published feedback remains private to its owner; no new clarification exchange is available."}</p><details open><summary>Exact source sample</summary><pre class="content-text">${escape(view.source)}</pre></details>${reviewer ? reviewControls(view, csrf, path) : `<p><a href="/evidence/${encodeURIComponent(view.evidenceId)}/review-allocation">Reserve review test minutes</a></p>`}${content}${view.next ? `<p><a href="${path}?after=${encodeURIComponent(view.next)}">Next feedback page</a></p>` : ""}${reviewer ? "<p>The source owner controls consent, revisions and deletion.</p>" : '<p><a href="/evidence">Manage source revisions, consent and deletion</a></p>'}</section>`,
   );
 }

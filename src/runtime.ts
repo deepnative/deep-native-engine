@@ -1,3 +1,4 @@
+import { reviewTimeStore } from "./review-time-store.ts";
 import { eventEnrollmentStore } from "./event-enrollments.ts";
 import { sampleFeedbackStore } from "./sample-feedback.ts";
 import { Pool } from "pg";
@@ -92,7 +93,15 @@ export async function start(env: NodeJS.ProcessEnv) {
       attempts: attemptStore(pool),
       practice: practiceStore(pool),
       practiceSessions: practiceSessionStore(pool),
-      sampleFeedback: sampleFeedbackStore(pool, objects),
+      reviewTime: reviewTimeStore(pool, {
+        enabled: settings.reviewTimeWrites,
+        mode: settings.mode,
+      }),
+      reviewTimeWrites: settings.reviewTimeWrites,
+      sampleFeedback: sampleFeedbackStore(pool, objects, {
+        reviewTimeWrites: settings.reviewTimeWrites,
+        mode: settings.mode,
+      }),
       eventEnrollments: eventEnrollmentStore(pool, {
         mode: settings.mode,
         enabled: settings.eventRegistration,
