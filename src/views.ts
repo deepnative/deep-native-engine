@@ -1020,22 +1020,24 @@ export function eventDiscoveryPage(
   items: EventPreview[],
   timezone?: string | null,
   allTopics = false,
+  registrationEnabled = false,
 ) {
   const intro = allTopics
     ? "Exploring all topics"
     : "Events matched to your saved goal or interests";
   const list = items.length
-    ? `<ul>${items.map((event) => `<li><h2><a href="/events/${encodeURIComponent(event.id)}/${event.version}">${escape(event.title)}</a></h2><p>${escape(event.description)}</p><p>Version ${event.version} · Synthetic preview; enrollment unavailable</p>${previewEventTime(event, timezone)}</li>`).join("")}</ul>`
+    ? `<ul>${items.map((event) => `<li><h2><a href="/events/${encodeURIComponent(event.id)}/${event.version}">${escape(event.title)}</a></h2><p>${escape(event.description)}</p><p>Version ${event.version} · ${registrationEnabled && event.localRegistration ? "Synthetic preview; local registration rehearsal only" : "Synthetic preview; enrollment unavailable"}</p>${previewEventTime(event, timezone)}${registrationEnabled && event.localRegistration ? `<p><a href="/events/${encodeURIComponent(event.id)}/${event.version}/rehearsal">Try local registration rehearsal</a></p>` : ""}</li>`).join("")}</ul>`
     : `<p role="status">${allTopics ? "No upcoming synthetic event previews are available." : "No upcoming synthetic event previews match your saved goal or interests."} Nothing has been booked or reserved.</p>`;
   return page(
     "Sample events",
-    `<nav class="breadcrumb"><a href="/learn">← Your learning path</a></nav><section class="reading"><p class="eyebrow">SYNTHETIC, UNREVIEWED LOCAL PREVIEWS</p><h1>Explore sample events</h1><p>No clinic, qualified expert, recording, enrollment or live community is available here. Sample times and fixture capacity are not available seats.</p><p>Access and cost: unresolved. Expert coverage: unresolved. Recording: unresolved.</p><p role="status">${intro}</p><p>${allTopics ? '<a href="/events">Show matches for my direction</a>' : '<a href="/events?all=1">Explore other topics</a>'}</p>${list}</section>`,
+    `<nav class="breadcrumb"><a href="/learn">← Your learning path</a></nav><section class="reading"><p class="eyebrow">SYNTHETIC, UNREVIEWED LOCAL PREVIEWS</p><h1>Explore sample events</h1><p>No real clinic, qualified expert, recording or live community is available here. ${registrationEnabled ? "Explicitly labelled local registration rehearsals use invented data only." : "Enrollment is unavailable."} Sample times and fixture capacity are not available seats.</p><p>Access and cost: unresolved. Expert coverage: unresolved. Recording: unresolved.</p><p role="status">${intro}</p><p>${allTopics ? '<a href="/events">Show matches for my direction</a>' : '<a href="/events?all=1">Explore other topics</a>'}</p>${list}<p><a href="/events/registrations">Your registration history</a></p></section>`,
   );
 }
 
 export function eventDetailPage(
   detail: Exclude<EventPreviewDetail, { status: "missing" }>,
   timezone?: string | null,
+  registrationEnabled = false,
 ) {
   const event = detail.event;
   const current = detail.status === "current";
@@ -1049,7 +1051,7 @@ export function eventDetailPage(
     : `<p role="status">${unavailable[detail.status as keyof typeof unavailable]}. This exact version is unavailable; nothing was booked. Browse current previews separately.</p>`;
   return page(
     event.title,
-    `<nav class="breadcrumb"><a href="/events">← Sample events</a></nav><article class="reading"><p class="eyebrow">SYNTHETIC, UNREVIEWED LOCAL PREVIEW</p><h1>${escape(event.title)}</h1><p>Version ${event.version} · Synthetic preview; enrollment unavailable</p><p>${escape(event.description)}</p>${current ? previewEventTime(event, timezone) : ""}${agenda}<h2>Readiness</h2><p>Access and cost: unresolved</p><p>Expert coverage: unresolved</p><p>Recording: unresolved</p><p>No live clinic or reservation exists. A sample fixture capacity is not remaining seats.</p></article>`,
+    `<nav class="breadcrumb"><a href="/events">← Sample events</a></nav><article class="reading"><p class="eyebrow">SYNTHETIC, UNREVIEWED LOCAL PREVIEW</p><h1>${escape(event.title)}</h1><p>Version ${event.version} · ${registrationEnabled && event.localRegistration ? "Synthetic preview; local registration rehearsal only" : "Synthetic preview; enrollment unavailable"}</p><p>${escape(event.description)}</p>${current ? previewEventTime(event, timezone) : ""}${agenda}${registrationEnabled && event.localRegistration ? `<p><a href="/events/${encodeURIComponent(event.id)}/${event.version}/rehearsal">Try local registration rehearsal</a></p>` : ""}<h2>Readiness</h2><p>Access and cost: unresolved</p><p>Expert coverage: unresolved</p><p>Recording: unresolved</p><p>No live clinic or reservation exists. A sample fixture capacity is not remaining seats.</p></article>`,
   );
 }
 export function workflowRegistryPage(items: WorkflowBundle[], q: string) {

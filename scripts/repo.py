@@ -488,11 +488,12 @@ def validate_event_previews(root):
     }
     versions = {}
     for event in events:
-        require(isinstance(event, dict) and set(event) == keys, message)
+        require(isinstance(event, dict) and set(event) in (keys, keys | {"localRegistration"}), message)
         require(isinstance(event["id"], str) and
                 re.fullmatch(r"[a-z][a-z0-9-]{0,79}", event["id"]), message)
         require(type(event["version"]) is int and 0 < event["version"] <= 1000000, message)
         require(event["status"] in ("current", "retired", "replaced"), message)
+        require(type(event.get("localRegistration", False)) is bool, message)
         for key in ("title", "description"):
             require(isinstance(event[key], str) and 0 < len(event[key].strip()) <= 1000, message)
         require(isinstance(event["agenda"], list) and 0 < len(event["agenda"]) <= 10 and

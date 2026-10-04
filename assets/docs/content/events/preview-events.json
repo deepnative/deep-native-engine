@@ -127,5 +127,30 @@
     ],
     "startsAt": "2020-01-01T15:00:00.000Z",
     "endsAt": "2020-01-01T16:00:00.000Z"
+  },
+  {
+    "version": 1,
+    "status": "current",
+    "description": "Use an invented example to practise checking AI suggestions together.",
+    "agenda": [
+      "Read a synthetic example",
+      "Compare possible instructions",
+      "Check the suggested result"
+    ],
+    "domainTags": [
+      "creative"
+    ],
+    "itRoles": [],
+    "fixtureCapacity": 1,
+    "id": "local-registration-rehearsal",
+    "title": "Local event registration rehearsal",
+    "goals": [
+      "everyday",
+      "work",
+      "build"
+    ],
+    "startsAt": "2030-11-03T05:30:00.000Z",
+    "endsAt": "2030-11-03T06:30:00.000Z",
+    "localRegistration": true
   }
 ]

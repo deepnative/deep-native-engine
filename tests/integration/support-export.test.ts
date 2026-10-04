@@ -67,7 +67,7 @@ it.each([
       expect(result.kind).toBe("ready");
       if (result.kind !== "ready") throw Error("Missing owner export");
       const payload = result.payload;
-      expect(payload.version).toBe("local-member-records-v19");
+      expect(payload.version).toBe("local-member-records-v20");
       expect(payload.page.recordCount).toBeLessThanOrEqual(
         MAX_MEMBER_EXPORT_RECORDS,
       );
