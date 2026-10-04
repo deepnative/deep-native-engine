@@ -1,3 +1,4 @@
+import { reviewerWorklistStore } from "./reviewer-worklist.ts";
 import { reviewTimeStore } from "./review-time-store.ts";
 import { eventEnrollmentStore } from "./event-enrollments.ts";
 import { sampleFeedbackStore } from "./sample-feedback.ts";
@@ -98,6 +99,11 @@ export async function start(env: NodeJS.ProcessEnv) {
         mode: settings.mode,
       }),
       reviewTimeWrites: settings.reviewTimeWrites,
+      reviewerWorklist: reviewerWorklistStore(
+        pool,
+        undefined,
+        settings.reviewerWorklistReads,
+      ),
       sampleFeedback: sampleFeedbackStore(pool, objects, {
         reviewTimeWrites: settings.reviewTimeWrites,
         mode: settings.mode,
