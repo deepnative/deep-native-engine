@@ -101,7 +101,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v18",
+      version: "local-member-records-v19",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -224,7 +224,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    [2, 31, ...valid.slice(2)],
+    [2, 32, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -486,7 +486,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v18",
+        version: "local-member-records-v19",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -623,4 +623,47 @@ it("accepts every legacy section index and appends retained unit history at indi
       payload: { records: { [name]: [{ id: "retained-owned" }] } },
     });
   }
+});
+it("exports published sample feedback after fencing its source and omits internal pagination keys", async () => {
+  const fake = fakePool({ id: "member-1" }, (sql) => {
+    if (sql.startsWith("SELECT e.id FROM evidence_objects e"))
+      return [{ id: "source-1" }];
+    if (sql.includes("FROM private_sample_feedback f JOIN"))
+      return [
+        {
+          id: "feedback-1",
+          evidenceId: "source-1",
+          criteria: [{ label: "Clarity", comment: "Invented feedback" }],
+          consentActive: false,
+        },
+      ];
+    return [];
+  });
+  const result = await memberExportStore(fake.pool).exportOwned("x");
+  expect(result).toMatchObject({
+    kind: "ready",
+    payload: {
+      records: {
+        sampleFeedback: [
+          {
+            id: "feedback-1",
+            evidenceId: "source-1",
+            criteria: [{ label: "Clarity", comment: "Invented feedback" }],
+            consentActive: false,
+          },
+        ],
+      },
+      page: { complete: true, recordCount: 1 },
+    },
+  });
+  expect(JSON.stringify(result)).not.toContain('"_key"');
+  const fence = fake.statements.findIndex((sql) =>
+    sql.startsWith("SELECT e.id FROM evidence_objects e"),
+  );
+  const feedback = fake.statements.findIndex((sql) =>
+    sql.includes("FROM private_sample_feedback f JOIN"),
+  );
+  expect(fence).toBeGreaterThan(-1);
+  expect(feedback).toBeGreaterThan(fence);
+  expect(fake.statements.at(-1)).toBe("COMMIT");
 });

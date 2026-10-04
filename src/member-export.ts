@@ -274,6 +274,20 @@ const sections = {
     WHERE s.member_id=$1 AND g.member_id=$1 AND s.category=g.category`,
     "s.id",
   ),
+  // Append after existing indices; never export another actor's private draft.
+  sampleFeedback: section(
+    `f.id,e.id AS "evidenceId",s.id AS "submissionId",f.reviewer_id AS "authorId",
+     f.source_sha256 AS "sourceSha256",f.source_revision AS "sourceRevision",f.criteria,
+     f.preparation_minutes AS "selfReportedPreparationMinutes",f.review_minutes AS "selfReportedReviewMinutes",
+     f.published_at AS "publishedAt",f.clarification,f.clarified_at AS "clarifiedAt",f.answer,f.answered_at AS "answeredAt",
+     e.private_review_allowed AS "consentActive",'human-authored-private-sample-not-formal' AS label`,
+    `private_sample_feedback f JOIN evidence_review_submissions s ON s.id=f.submission_id
+     JOIN evidence_objects e ON e.id=s.evidence_id
+     WHERE e.owner_principal_id=$1 AND e.quarantine_state<>'deleting'
+      AND f.published_at IS NOT NULL AND e.id=ANY($4::uuid[])`,
+    "e.id,f.id",
+    true,
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -287,7 +301,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v18";
+  version: "local-member-records-v19";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -421,7 +435,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v18",
+          version: "local-member-records-v19",
           profile: owner.rows[0],
           records,
           testUnitHistory: {
@@ -503,6 +517,21 @@ export function memberExportStore(
                 SELECT 1 FROM support_request_replies e WHERE e.request_id=r.id
                   AND jsonb_build_array(e.request_id,e.id)>$3::jsonb)
               ORDER BY r.id LIMIT $2 FOR SHARE OF r`,
+              values,
+            );
+            values.push(parents.rows.map((row) => row.id));
+          }
+          if (name === "sampleFeedback") {
+            // Continuations may start here. Fence source before submission and
+            // feedback, matching publication/withdrawal/deletion; never acquire
+            // a feedback lock first through a planner-chosen joined scan.
+            const parents = await client.query<{ id: string }>(
+              `SELECT e.id FROM evidence_objects e
+               WHERE e.owner_principal_id=$1 AND e.quarantine_state<>'deleting' AND EXISTS(
+                 SELECT 1 FROM evidence_review_submissions s JOIN private_sample_feedback f ON f.submission_id=s.id
+                 WHERE s.evidence_id=e.id AND f.published_at IS NOT NULL
+                   AND jsonb_build_array(e.id,f.id)>$3::jsonb)
+               ORDER BY e.id LIMIT $2 FOR SHARE OF e`,
               values,
             );
             values.push(parents.rows.map((row) => row.id));
