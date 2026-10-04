@@ -25,6 +25,9 @@ function fixture() {
   };
   const saved = { kind: "saved" as const, id, revision: 1 };
   const store = {
+    beginReview: vi
+      .fn<SampleFeedbackStore["beginReview"]>()
+      .mockResolvedValue({ kind: "unavailable" }),
     owner: vi.fn<SampleFeedbackStore["owner"]>().mockResolvedValue(view),
     reviewer: vi.fn<SampleFeedbackStore["reviewer"]>().mockResolvedValue(view),
     save: vi.fn<SampleFeedbackStore["save"]>().mockResolvedValue(saved),
@@ -119,7 +122,13 @@ it("requires explicit publication confirmation and submits only the saved revisi
       .post(staffPath + "/publish")
       .send({ revision: "2", operationId: id, confirm: "yes" })
       .expect(303);
-    expect(f.store.publish).toHaveBeenCalledWith("session", id, 2, id);
+    expect(f.store.publish).toHaveBeenCalledWith(
+      "session",
+      id,
+      2,
+      id,
+      undefined,
+    );
   });
 });
 it.each(["clarify", "answer"] as const)(
@@ -276,7 +285,13 @@ it("rejects a publication missing its revision and operation through the store c
       .post(staffPath + "/publish")
       .send({ confirm: "yes" })
       .expect(422);
-    expect(f.store.publish).toHaveBeenCalledWith("session", id, NaN, "");
+    expect(f.store.publish).toHaveBeenCalledWith(
+      "session",
+      id,
+      NaN,
+      "",
+      undefined,
+    );
   });
 });
 it("passes absent exchange fields as invalid empty values rather than inventing data", async () => {
@@ -316,3 +331,177 @@ it("keeps both optional effort fields unspecified when the form leaves them blan
     );
   });
 });
+
+it("passes exact reviewer begin references and does not begin on malformed bodies", async () => {
+  const f = fixture();
+  await withLoopback(f.app, async (server) => {
+    for (const body of [
+      [],
+      { allocationId: id, grantId: id, operationId: id, unexpected: "x" },
+    ]) {
+      expect(
+        (await request(server).post(`${staffPath}/begin`).send(body)).status,
+      ).toBe(422);
+    }
+    expect(f.store.beginReview).not.toHaveBeenCalled();
+    expect(
+      (await request(server).post(`${staffPath}/begin`).send({})).status,
+    ).toBe(503);
+    expect(f.store.beginReview).toHaveBeenLastCalledWith(
+      "session",
+      id,
+      "",
+      "",
+      "",
+    );
+    const receipt = {
+      allocationId: id,
+      state: "begun" as const,
+      ceiling: 20,
+      held: 20,
+      consumed: 0,
+      released: 0,
+      reviewMinutes: 0,
+      preparationMinutes: 0,
+      sourceAvailable: true,
+    };
+    for (const kind of ["applied", "replayed"] as const) {
+      f.store.beginReview.mockResolvedValue({ kind, receipt });
+      const result = await request(server)
+        .post(`${staffPath}/begin`)
+        .send({ allocationId: id, grantId: id, operationId: id });
+      expect(result.status).toBe(303);
+      expect(result.headers.location).toBe(staffPath);
+    }
+    expect(f.store.beginReview).toHaveBeenLastCalledWith(
+      "session",
+      id,
+      id,
+      id,
+      id,
+    );
+  });
+});
+it.each([false, true])(
+  "passes explicit allocated publication intervals with preparation=%s",
+  async (prep) => {
+    const f = fixture();
+    await withLoopback(f.app, async (server) => {
+      const reviewStart = "2026-10-04T12:00:00Z",
+        reviewEnd = "2026-10-04T12:10:00Z";
+      const response = await request(server)
+        .post(`${staffPath}/publish`)
+        .send({
+          confirm: "yes",
+          revision: "1",
+          operationId: id,
+          allocationId: id,
+          grantId: id,
+          reviewStart,
+          reviewEnd,
+          ...(prep
+            ? {
+                preparationStart: "2026-10-04T11:55:00Z",
+                preparationEnd: reviewStart,
+              }
+            : {}),
+        });
+      expect(response.status).toBe(303);
+      expect(f.store.publish).toHaveBeenCalledWith("session", id, 1, id, {
+        allocationId: id,
+        grantId: id,
+        intervals: {
+          reviewStart: new Date(reviewStart),
+          reviewEnd: new Date(reviewEnd),
+          preparationStart: prep ? new Date("2026-10-04T11:55:00Z") : null,
+          preparationEnd: prep ? new Date(reviewStart) : null,
+        },
+      });
+    });
+  },
+);
+it("passes missing allocated fields as invalid values, never inventing a time grant or interval", async () => {
+  const f = fixture();
+  await withLoopback(f.app, async (server) => {
+    f.store.publish.mockResolvedValue({ kind: "invalid" });
+    expect(
+      (
+        await request(server).post(`${staffPath}/publish`).send({
+          confirm: "yes",
+          revision: "1",
+          operationId: id,
+          allocationId: id,
+        })
+      ).status,
+    ).toBe(422);
+    const input = f.store.publish.mock.calls[0]![4]!;
+    expect(input.grantId).toBe("");
+    expect(Number.isNaN(+input.intervals.reviewStart)).toBe(true);
+    expect(Number.isNaN(+input.intervals.reviewEnd)).toBe(true);
+  });
+});
+it.each([false, true])(
+  "preserves the exact allocated publication for manual reconciliation after uncertainty (throw=%s)",
+  async (throws) => {
+    const f = fixture();
+    if (throws)
+      f.store.publish.mockRejectedValue(Error("private database detail"));
+    else f.store.publish.mockResolvedValue({ kind: "unavailable" });
+    await withLoopback(f.app, async (server) => {
+      const original = {
+        csrf: "stale-csrf",
+        confirm: "yes",
+        revision: "3",
+        operationId: id,
+        allocationId: id,
+        grantId: id,
+        reviewStart: "2026-10-04T12:00:00Z",
+        reviewEnd: "2026-10-04T12:10:00Z",
+        preparationStart: "2026-10-04T11:55:00Z",
+        preparationEnd: "2026-10-04T12:00:00Z",
+      };
+      const result = await request(server)
+        .post(staffPath + "/publish")
+        .send(original)
+        .expect(503);
+      expect(result.text).toContain("Reconcile original publication");
+      expect(result.text).toContain('action="' + staffPath + '/publish"');
+      for (const [key, value] of Object.entries(original).filter(
+        ([key]) => key !== "csrf",
+      ))
+        expect(result.text).toContain(
+          'type="hidden" name="' + key + '" value="' + value + '"',
+        );
+      expect(result.text).toContain('name="csrf" value="csrf-token"');
+      expect(result.text).not.toContain("stale-csrf");
+      expect(result.text).not.toContain("private database detail");
+      expect(f.store.publish).toHaveBeenCalledOnce();
+      f.store.publish.mockResolvedValue({ kind: "saved", id, revision: 3 });
+      await request(server)
+        .post(staffPath + "/publish")
+        .send({ ...original, csrf: "csrf-token" })
+        .expect(303);
+      expect(f.store.publish.mock.calls[1]).toEqual(
+        f.store.publish.mock.calls[0],
+      );
+    });
+  },
+);
+it.each(["conflict", "denied", "invalid"] as const)(
+  "does not offer publication replay after %s",
+  async (kind) => {
+    const f = fixture();
+    f.store.publish.mockResolvedValue({ kind });
+    await withLoopback(f.app, async (server) => {
+      const result = await request(server)
+        .post(staffPath + "/publish")
+        .send({
+          confirm: "yes",
+          revision: "1",
+          operationId: id,
+          allocationId: id,
+        });
+      expect(result.text).not.toContain("Reconcile original publication");
+    });
+  },
+);

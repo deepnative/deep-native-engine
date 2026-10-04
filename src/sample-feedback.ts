@@ -1,3 +1,4 @@
+import type { ApplicationMode } from "./adapters.ts";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, QueryResultRow } from "pg";
 import type { ObjectStorage } from "./evidence.ts";
@@ -18,6 +19,20 @@ import {
   sampleDraftDigest,
   type SampleCriterion,
 } from "./sample-feedback-values.ts";
+import {
+  recordReviewTime,
+  beginReviewTime,
+  reviewTimeReceipt,
+  type ReviewTimeReceipt,
+  type ReviewTimeResult,
+  reviewIntervalMinutes,
+  type ReviewTimeIntervals,
+} from "./review-time.ts";
+export interface AllocatedFeedbackInput {
+  allocationId: string;
+  grantId: string;
+  intervals: ReviewTimeIntervals;
+}
 export interface SampleFeedbackRecord extends QueryResultRow {
   id: string;
   submissionId: string;
@@ -39,6 +54,11 @@ export interface SampleFeedbackRecord extends QueryResultRow {
   answeredAt: Date | null;
 }
 export interface SampleFeedbackView {
+  reviewAllocation?: {
+    receipt: ReviewTimeReceipt;
+    grantId: string;
+    writesEnabled: boolean;
+  };
   kind: "ready";
   evidenceId: string;
   submissionId: string;
@@ -55,6 +75,13 @@ export type SampleFeedbackResult =
   | { kind: "saved"; id: string; revision: number }
   | { kind: SampleFailureKind };
 export interface SampleFeedbackStore {
+  beginReview(
+    token: string,
+    evidenceId: string,
+    allocationId: string,
+    grantId: string,
+    operationId: string,
+  ): Promise<ReviewTimeResult | { kind: SampleFailureKind }>;
   reviewer(token: string, evidenceId: string): Promise<SampleFeedbackResult>;
   owner(
     token: string,
@@ -71,6 +98,7 @@ export interface SampleFeedbackStore {
     evidenceId: string,
     revision: number,
     operationId: string,
+    allocated?: AllocatedFeedbackInput,
   ): Promise<SampleFeedbackResult>;
   clarify(
     token: string,
@@ -99,6 +127,7 @@ interface Scope {
   workspaceId: string;
   evidenceId: string;
   submissionId: string;
+  status: string;
   title: string;
   source: string;
   digest: string;
@@ -114,14 +143,19 @@ const fail = (kind: SampleFailureKind): never => {
 export function sampleFeedbackStore(
   pool: Pool,
   objects: ObjectStorage,
+  options: { reviewTimeWrites: boolean; mode: ApplicationMode } = {
+    reviewTimeWrites: false,
+    mode: "demo",
+  },
 ): SampleFeedbackStore {
-  async function execute(
+  async function execute<T = SampleFeedbackResult>(
     token: string,
     evidenceId: string,
     staff: boolean,
     writing: boolean,
-    use: (scope: Scope) => Promise<SampleFeedbackResult>,
-  ): Promise<SampleFeedbackResult> {
+    use: (scope: Scope) => Promise<T>,
+    actorExclusion = false,
+  ): Promise<T | { kind: SampleFailureKind }> {
     if (!sampleToken(token) || !sampleUuid(evidenceId))
       return { kind: "denied" };
     try {
@@ -147,6 +181,19 @@ export function sampleFeedbackStore(
           return fail("denied");
         const expires = [identity.expires];
         await tx.observe(expires);
+        if (actorExclusion) {
+          const profile = (
+            await tx.query(
+              "SELECT 1 FROM staff_profiles WHERE principal_id=$1 AND role='reviewer' FOR SHARE",
+              [identity.id],
+            )
+          ).rows[0];
+          if (!profile) return fail("denied");
+          await tx.query("SELECT pg_advisory_xact_lock(44154,hashtext($1))", [
+            identity.id,
+          ]);
+          await tx.observe(expires);
+        }
         const workspace = (
           await tx.query<{ id: string }>(
             `SELECT w.id FROM workspaces w JOIN evidence_objects e ON e.workspace_id=w.id
@@ -251,6 +298,7 @@ export function sampleFeedbackStore(
           workspaceId: workspace.id,
           evidenceId,
           submissionId: submission.id,
+          status: submission.status,
           title: evidence.name,
           source,
           digest: evidence.digest,
@@ -270,6 +318,24 @@ export function sampleFeedbackStore(
           error instanceof SampleFeedbackFailure ? error.kind : "unavailable",
       };
     }
+  }
+  async function allocationGrant(
+    s: Scope,
+    allocationId: string,
+    grantId: string,
+  ) {
+    const grant = (
+      await s.tx.query<{ expires: Date }>(
+        `SELECT g.expires_at AS expires FROM review_time_grants g JOIN review_time_allocations a ON a.id=g.allocation_id
+       WHERE g.id=$1 AND g.allocation_id=$2 AND g.staff_id=$3 AND g.purpose='review-time-local-v1'
+        AND g.revoked_at IS NULL AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp()
+        AND a.submission_id=$4 AND a.workspace_id=$5 AND a.source_unavailable_at IS NULL FOR SHARE OF g`,
+        [grantId, allocationId, s.actorId, s.submissionId, s.workspaceId],
+      )
+    ).rows[0];
+    if (!grant) return fail("denied");
+    s.expires.push(grant.expires);
+    await s.tx.observe(s.expires);
   }
   async function audit(s: Scope, action: string) {
     await s.tx.query(
@@ -328,150 +394,289 @@ export function sampleFeedbackStore(
   ) {
     if (!sampleUuid(id) || !sampleUuid(operationId) || !sampleText(text, 2000))
       return { kind: "invalid" as const };
-    return execute(token, evidenceId, staff, true, async (s) => {
-      if (!s.consent) return fail("denied");
-      const row = (
-        await s.tx.query<SampleFeedbackRecord>(
-          `SELECT ${projection} FROM private_sample_feedback
+    return execute<SampleFeedbackResult>(
+      token,
+      evidenceId,
+      staff,
+      true,
+      async (s) => {
+        if (!s.consent) return fail("denied");
+        const row = (
+          await s.tx.query<SampleFeedbackRecord>(
+            `SELECT ${projection} FROM private_sample_feedback
     WHERE id=$1 AND submission_id=$2 AND published_at IS NOT NULL FOR UPDATE`,
-          [id, s.submissionId],
-        )
-      ).rows[0];
-      if (!row || (staff && row.authorId !== s.actorId)) return fail("denied");
-      if (staff && row.clarification === null) return fail("conflict");
-      const prior = staff ? row.answer : row.clarification,
-        priorOp = staff ? row.answerOperationId : row.clarificationOperationId;
-      if (prior !== null) {
-        if (prior !== text || priorOp !== operationId) return fail("conflict");
-      } else
-        await s.tx.query(
-          staff
-            ? `UPDATE private_sample_feedback SET answer=$2,answer_operation_id=$3,answered_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1`
-            : `UPDATE private_sample_feedback SET clarification=$2,clarification_operation_id=$3,clarified_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1`,
-          [id, text, operationId],
-        );
-      if (staff) await audit(s, "answered");
-      return { kind: "saved", id: row.id, revision: row.revision };
-    });
+            [id, s.submissionId],
+          )
+        ).rows[0];
+        if (!row || (staff && row.authorId !== s.actorId))
+          return fail("denied");
+        if (staff && row.clarification === null) return fail("conflict");
+        const prior = staff ? row.answer : row.clarification,
+          priorOp = staff
+            ? row.answerOperationId
+            : row.clarificationOperationId;
+        if (prior !== null) {
+          if (prior !== text || priorOp !== operationId)
+            return fail("conflict");
+        } else
+          await s.tx.query(
+            staff
+              ? `UPDATE private_sample_feedback SET answer=$2,answer_operation_id=$3,answered_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1`
+              : `UPDATE private_sample_feedback SET clarification=$2,clarification_operation_id=$3,clarified_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1`,
+            [id, text, operationId],
+          );
+        if (staff) await audit(s, "answered");
+        return { kind: "saved", id: row.id, revision: row.revision };
+      },
+    );
   }
   return {
     reviewer(token, evidenceId) {
-      return execute(token, evidenceId, true, false, async (s) => {
-        const rows = (
-          await s.tx.query<SampleFeedbackRecord>(
-            `SELECT ${projection} FROM private_sample_feedback WHERE submission_id=$1 AND reviewer_id=$2 FOR SHARE`,
-            [s.submissionId, s.actorId],
-          )
-        ).rows;
-        await audit(s, "read");
-        return view(s, rows);
-      });
+      return execute<SampleFeedbackResult>(
+        token,
+        evidenceId,
+        true,
+        false,
+        async (s) => {
+          const rows = (
+            await s.tx.query<SampleFeedbackRecord>(
+              `SELECT ${projection} FROM private_sample_feedback WHERE submission_id=$1 AND reviewer_id=$2 FOR SHARE`,
+              [s.submissionId, s.actorId],
+            )
+          ).rows;
+          await audit(s, "read");
+          const result = view(s, rows);
+          const current = (
+            await s.tx.query<{ allocationId: string; grantId: string }>(
+              `SELECT a.id AS "allocationId",g.id AS "grantId" FROM review_time_allocations a JOIN review_time_grants g ON g.allocation_id=a.id
+             WHERE a.submission_id=$1 AND g.staff_id=$2 AND a.source_unavailable_at IS NULL AND g.revoked_at IS NULL
+              AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp()
+              AND (a.begun_grant_id IS NULL OR a.begun_grant_id=g.id)
+             ORDER BY CASE WHEN a.state IN ('allocated','begun','needs_reconciliation') THEN 0 ELSE 1 END,
+              a.created_at DESC,a.id DESC,g.id LIMIT 1 FOR SHARE OF a,g`,
+              [s.submissionId, s.actorId],
+            )
+          ).rows[0];
+          if (current) {
+            await allocationGrant(s, current.allocationId, current.grantId);
+            result.reviewAllocation = {
+              receipt: await reviewTimeReceipt(s.tx, current.allocationId),
+              grantId: current.grantId,
+              writesEnabled:
+                options.reviewTimeWrites && options.mode !== "live",
+            };
+          }
+          return result;
+        },
+      );
     },
     owner(token, evidenceId, after) {
       if (after !== undefined && !sampleUuid(after))
         return Promise.resolve({ kind: "denied" });
-      return execute(token, evidenceId, false, false, async (s) => {
-        const rows = (
-          await s.tx.query<SampleFeedbackRecord>(
-            `SELECT ${projection} FROM private_sample_feedback
+      return execute<SampleFeedbackResult>(
+        token,
+        evidenceId,
+        false,
+        false,
+        async (s) => {
+          const rows = (
+            await s.tx.query<SampleFeedbackRecord>(
+              `SELECT ${projection} FROM private_sample_feedback
      WHERE submission_id=$1 AND published_at IS NOT NULL AND ($2::uuid IS NULL OR id>$2)
      ORDER BY id LIMIT $3 FOR SHARE`,
-            [s.submissionId, after ?? null, SAMPLE_FEEDBACK_PAGE_SIZE + 1],
-          )
-        ).rows;
-        const more = rows.length > SAMPLE_FEEDBACK_PAGE_SIZE;
-        const items = rows.slice(0, SAMPLE_FEEDBACK_PAGE_SIZE);
-        return view(s, items, more ? items.at(-1)!.id : null);
-      });
+              [s.submissionId, after ?? null, SAMPLE_FEEDBACK_PAGE_SIZE + 1],
+            )
+          ).rows;
+          const more = rows.length > SAMPLE_FEEDBACK_PAGE_SIZE;
+          const items = rows.slice(0, SAMPLE_FEEDBACK_PAGE_SIZE);
+          return view(s, items, more ? items.at(-1)!.id : null);
+        },
+      );
     },
     save(token, evidenceId, input) {
-      return execute(token, evidenceId, true, true, async (s) => {
-        if (!sampleDraftValid(input, s.source)) return fail("invalid");
-        const row = await own(s),
-          digest = sampleDraftDigest(input);
-        if (row?.publishedAt) return fail("conflict");
-        if (row) {
-          const replay = (
-            await s.tx.query<{ digest: string; revision: number }>(
-              `SELECT request_sha256 AS digest,resulting_revision AS revision
+      return execute<SampleFeedbackResult>(
+        token,
+        evidenceId,
+        true,
+        true,
+        async (s) => {
+          if (!sampleDraftValid(input, s.source)) return fail("invalid");
+          const row = await own(s),
+            digest = sampleDraftDigest(input);
+          if (row?.publishedAt) return fail("conflict");
+          if (row) {
+            const replay = (
+              await s.tx.query<{ digest: string; revision: number }>(
+                `SELECT request_sha256 AS digest,resulting_revision AS revision
       FROM private_sample_feedback_draft_operations WHERE feedback_id=$1 AND operation_id=$2`,
-              [row.id, input.operationId],
-            )
-          ).rows[0];
-          if (replay) {
-            if (replay.digest !== digest || replay.revision !== row.revision)
-              return fail("conflict");
-            return { kind: "saved", id: row.id, revision: row.revision };
+                [row.id, input.operationId],
+              )
+            ).rows[0];
+            if (replay) {
+              if (replay.digest !== digest || replay.revision !== row.revision)
+                return fail("conflict");
+              return { kind: "saved", id: row.id, revision: row.revision };
+            }
           }
-        }
-        if ((row?.revision ?? 0) !== input.revision) return fail("conflict");
-        const id = row?.id ?? randomUUID(),
-          revision = input.revision + 1;
-        if (row)
-          await s.tx.query(
-            `UPDATE private_sample_feedback SET criteria=$2,preparation_minutes=$3,review_minutes=$4,
+          if ((row?.revision ?? 0) !== input.revision) return fail("conflict");
+          const id = row?.id ?? randomUUID(),
+            revision = input.revision + 1;
+          if (row)
+            await s.tx.query(
+              `UPDATE private_sample_feedback SET criteria=$2,preparation_minutes=$3,review_minutes=$4,
      draft_revision=$5,draft_operation_id=$6,updated_at=clock_timestamp() WHERE id=$1`,
-            [
-              id,
-              JSON.stringify(input.criteria),
-              input.preparationMinutes,
-              input.reviewMinutes,
-              revision,
-              input.operationId,
-            ],
-          );
-        else
-          await s.tx.query(
-            `INSERT INTO private_sample_feedback(id,submission_id,reviewer_id,source_sha256,source_revision,criteria,
+              [
+                id,
+                JSON.stringify(input.criteria),
+                input.preparationMinutes,
+                input.reviewMinutes,
+                revision,
+                input.operationId,
+              ],
+            );
+          else
+            await s.tx.query(
+              `INSERT INTO private_sample_feedback(id,submission_id,reviewer_id,source_sha256,source_revision,criteria,
      preparation_minutes,review_minutes,draft_revision,draft_operation_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-            [
-              id,
-              s.submissionId,
-              s.actorId,
-              s.digest,
-              s.sourceRevision,
-              JSON.stringify(input.criteria),
-              input.preparationMinutes,
-              input.reviewMinutes,
-              revision,
-              input.operationId,
-            ],
-          );
-        await s.tx.query(
-          `INSERT INTO private_sample_feedback_draft_operations(feedback_id,operation_id,request_sha256,resulting_revision)
+              [
+                id,
+                s.submissionId,
+                s.actorId,
+                s.digest,
+                s.sourceRevision,
+                JSON.stringify(input.criteria),
+                input.preparationMinutes,
+                input.reviewMinutes,
+                revision,
+                input.operationId,
+              ],
+            );
+          await s.tx.query(
+            `INSERT INTO private_sample_feedback_draft_operations(feedback_id,operation_id,request_sha256,resulting_revision)
     VALUES($1,$2,$3,$4)`,
-          [id, input.operationId, digest, revision],
-        );
-        await audit(s, "draft-saved");
-        return { kind: "saved", id, revision };
-      });
+            [id, input.operationId, digest, revision],
+          );
+          await audit(s, "draft-saved");
+          return { kind: "saved", id, revision };
+        },
+      );
     },
-    publish(token, evidenceId, revision, operationId) {
+    beginReview(token, evidenceId, allocationId, grantId, operationId) {
+      if (!options.reviewTimeWrites || options.mode === "live")
+        return Promise.resolve({ kind: "unavailable" });
+      if (![allocationId, grantId, operationId].every(sampleUuid))
+        return Promise.resolve({ kind: "invalid" });
+      return execute<ReviewTimeResult>(
+        token,
+        evidenceId,
+        true,
+        true,
+        async (s) => {
+          await allocationGrant(s, allocationId, grantId);
+          return beginReviewTime(
+            s.tx,
+            s.actorId,
+            { sourceKey: s.submissionId, allocationId, grantId },
+            {
+              withdrawnAt: null,
+              resolvedAt: s.status === "queued" ? null : new Date(0),
+            },
+            operationId,
+            s.expires,
+          );
+        },
+        true,
+      );
+    },
+    publish(token, evidenceId, revision, operationId, allocated) {
+      if (allocated && (!options.reviewTimeWrites || options.mode === "live"))
+        return Promise.resolve({ kind: "unavailable" });
       if (
         !Number.isSafeInteger(revision) ||
         revision < 1 ||
         !sampleUuid(operationId)
       )
         return Promise.resolve({ kind: "invalid" });
-      return execute(token, evidenceId, true, true, async (s) => {
-        const row = await own(s);
-        if (!row || row.revision !== revision) return fail("conflict");
-        if (row.publishedAt) {
-          if (row.publicationOperationId !== operationId)
-            return fail("conflict");
-        } else {
-          await s.tx.query(
-            `UPDATE private_sample_feedback SET publication_operation_id=$2,published_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1`,
-            [row.id, operationId],
-          );
-          await s.tx.query(
-            `UPDATE evidence_review_submissions SET status='reviewed' WHERE id=$1 AND status='queued'`,
-            [s.submissionId],
-          );
-        }
-        await audit(s, "published");
-        return { kind: "saved", id: row.id, revision: row.revision };
-      });
+      if (
+        allocated &&
+        (!sampleUuid(allocated.allocationId) ||
+          !sampleUuid(allocated.grantId) ||
+          !reviewIntervalMinutes(allocated.intervals))
+      )
+        return Promise.resolve({ kind: "invalid" });
+      // Snapshot caller-owned mutable Dates before the first authority wait.
+      const input = allocated
+        ? {
+            allocationId: allocated.allocationId,
+            grantId: allocated.grantId,
+            intervals: {
+              reviewStart: new Date(+allocated.intervals.reviewStart),
+              reviewEnd: new Date(+allocated.intervals.reviewEnd),
+              preparationStart: allocated.intervals.preparationStart
+                ? new Date(+allocated.intervals.preparationStart)
+                : null,
+              preparationEnd: allocated.intervals.preparationEnd
+                ? new Date(+allocated.intervals.preparationEnd)
+                : null,
+            },
+          }
+        : undefined;
+      return execute<SampleFeedbackResult>(
+        token,
+        evidenceId,
+        true,
+        true,
+        async (s) => {
+          const row = await own(s);
+          if (!row || row.revision !== revision) return fail("conflict");
+          const publish = async () => {
+            if (row.publishedAt) {
+              if (row.publicationOperationId !== operationId)
+                return fail("conflict");
+            } else {
+              await s.tx.query(
+                "UPDATE private_sample_feedback SET publication_operation_id=$2,published_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1",
+                [row.id, operationId],
+              );
+              await s.tx.query(
+                "UPDATE evidence_review_submissions SET status='reviewed' WHERE id=$1 AND status='queued'",
+                [s.submissionId],
+              );
+            }
+          };
+          if (input) {
+            await allocationGrant(s, input.allocationId, input.grantId);
+            const settled = await recordReviewTime(
+              s.tx,
+              s.actorId,
+              {
+                sourceKey: s.submissionId,
+                allocationId: input.allocationId,
+                grantId: input.grantId,
+              },
+              operationId,
+              input.intervals,
+              s.expires,
+              { feedbackId: row.id, draftRevision: revision, operationId },
+              publish,
+            );
+            if (settled.kind !== "applied" && settled.kind !== "replayed")
+              return fail(settled.kind === "conflict" ? "conflict" : "denied");
+          } else {
+            const held = (
+              await s.tx.query(
+                "SELECT 1 FROM review_time_allocations WHERE source_key=$1 AND state IN ('allocated','begun','needs_reconciliation')",
+                [s.submissionId],
+              )
+            ).rows[0];
+            if (held) return fail("conflict");
+            await publish();
+          }
+          await audit(s, "published");
+          return { kind: "saved", id: row.id, revision: row.revision };
+        },
+        !!input,
+      );
     },
     clarify(token, evidenceId, id, text, operationId) {
       return exchange(token, evidenceId, id, text, operationId, false);

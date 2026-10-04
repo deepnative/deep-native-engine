@@ -29,6 +29,7 @@ export function mountSampleFeedbackRoutes(
     kind: string,
     path: string,
     attempt?: Record<string, string>,
+    recoverPublication = false,
   ) {
     const status =
       kind === "denied"
@@ -54,6 +55,11 @@ export function mountSampleFeedbackRoutes(
           message,
           path,
           attempt,
+          kind === "unavailable" &&
+            recoverPublication &&
+            attempt?.allocationId !== undefined
+            ? { csrf: res.locals.csrf as string }
+            : undefined,
         ),
       );
   }
@@ -71,9 +77,36 @@ export function mountSampleFeedbackRoutes(
             req.path.startsWith("/review/"),
           ),
           fields(req.body) ? req.body : undefined,
+          req.path.endsWith("/publish"),
         );
       }
     };
+  app.post(
+    "/review/evidence/:id/feedback/begin",
+    wrap(async (req, res) => {
+      const id = String(req.params.id),
+        path = sampleFeedbackPath(id, true);
+      if (!fields(req.body)) return failure(res, "invalid", path);
+      const b = req.body;
+      if (
+        Object.keys(b).some(
+          (key) =>
+            !["csrf", "allocationId", "grantId", "operationId"].includes(key),
+        )
+      )
+        return failure(res, "invalid", path);
+      const result = await store.beginReview(
+        res.locals.token as string,
+        id,
+        b.allocationId ?? "",
+        b.grantId ?? "",
+        b.operationId ?? "",
+      );
+      if (result.kind !== "applied" && result.kind !== "replayed")
+        return failure(res, result.kind, path);
+      res.redirect(303, path);
+    }),
+  );
   for (const reviewer of [false, true]) {
     const base = `${reviewer ? "/review" : ""}/evidence/:id/feedback`;
     app.get(
@@ -122,7 +155,18 @@ export function mountSampleFeedbackRoutes(
                   ).flat(),
                 ]
               : action === "publish"
-                ? ["csrf", "operationId", "revision", "confirm"]
+                ? [
+                    "csrf",
+                    "operationId",
+                    "revision",
+                    "confirm",
+                    "allocationId",
+                    "grantId",
+                    "reviewStart",
+                    "reviewEnd",
+                    "preparationStart",
+                    "preparationEnd",
+                  ]
                 : ["csrf", "operationId", "feedbackId", "message"];
           if (Object.keys(b).some((key) => !allowed.includes(key)))
             return failure(res, "invalid", path, b);
@@ -176,6 +220,22 @@ export function mountSampleFeedbackRoutes(
               id,
               number(b.revision),
               b.operationId ?? "",
+              b.allocationId !== undefined
+                ? {
+                    allocationId: b.allocationId,
+                    grantId: b.grantId ?? "",
+                    intervals: {
+                      reviewStart: new Date(b.reviewStart ?? ""),
+                      reviewEnd: new Date(b.reviewEnd ?? ""),
+                      preparationStart: b.preparationStart
+                        ? new Date(b.preparationStart)
+                        : null,
+                      preparationEnd: b.preparationEnd
+                        ? new Date(b.preparationEnd)
+                        : null,
+                    },
+                  }
+                : undefined,
             );
           } else
             result = await store[action === "answer" ? "answer" : "clarify"](
@@ -186,7 +246,7 @@ export function mountSampleFeedbackRoutes(
               b.operationId ?? "",
             );
           if (result.kind !== "saved")
-            return failure(res, result.kind, path, b);
+            return failure(res, result.kind, path, b, action === "publish");
           res.redirect(303, path);
         }),
       );

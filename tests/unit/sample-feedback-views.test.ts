@@ -155,3 +155,80 @@ it("keeps attempted text copyable while omitting hidden request credentials", ()
     "Your attempted text",
   );
 });
+
+it.each(["allocated", "begun", "completed", "needs_reconciliation"] as const)(
+  "shows only appropriate controls for a %s review allocation",
+  (state) => {
+    for (const writesEnabled of [true, false]) {
+      const v = view();
+      v.records = [record()];
+      v.reviewAllocation = {
+        grantId: id,
+        writesEnabled,
+        receipt: {
+          allocationId: id,
+          state,
+          ceiling: 20,
+          held: 20,
+          consumed: 0,
+          released: 0,
+          reviewMinutes: 0,
+          preparationMinutes: 0,
+          sourceAvailable: true,
+        },
+      };
+      const html = sampleFeedbackPage(v, "csrf", true);
+      expect(html.includes("Begin reserved review")).toBe(
+        writesEnabled && state === "allocated",
+      );
+      expect(html.includes("Publish saved feedback")).toBe(
+        writesEnabled && state === "begun",
+      );
+      if (writesEnabled && state === "begun") {
+        expect(html).toContain('name="allocationId"');
+        expect(html).toContain('name="grantId"');
+        for (const name of [
+          "reviewStart",
+          "reviewEnd",
+          "preparationStart",
+          "preparationEnd",
+        ])
+          expect(html).toContain(`name="${name}"`);
+      }
+      expect(html.includes("New review work is paused")).toBe(!writesEnabled);
+    }
+  },
+);
+it("keeps manual publication recovery scoped to original fields and escapes attempted values", () => {
+  const html = sampleFeedbackRecovery(
+    "Uncertain",
+    "Inspect first",
+    "/review/evidence/source/feedback",
+    {
+      operationId: '"<original>',
+      revision: "1",
+      allocationId: id,
+      grantId: id,
+      reviewStart: "start",
+      reviewEnd: "end",
+      csrf: "old-token",
+      unexpected: "not-a-posted-field",
+    },
+    { csrf: "fresh-token" },
+  );
+  expect(html).toContain('name="operationId" value="&quot;&lt;original&gt;"');
+  expect(html).toContain('name="csrf" value="fresh-token"');
+  expect(html).not.toContain('name="unexpected"');
+  expect(html).not.toContain('name="preparationStart"');
+  expect(html).not.toContain("old-token");
+  expect(html).not.toContain('value=""<original>"');
+  expect(
+    sampleFeedbackRecovery(
+      "Uncertain",
+      "Inspect first",
+      "/evidence",
+      undefined,
+      { csrf: "fresh-token" },
+    ),
+  ).not.toContain("Reconcile original publication");
+});

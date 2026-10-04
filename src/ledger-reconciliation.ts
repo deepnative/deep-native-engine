@@ -114,6 +114,26 @@ const reportSql = `WITH
    LEFT JOIN support_time_entries e ON e.allocation_id=a.id
    LEFT JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id
    LEFT JOIN synthetic_entitlement_grants g ON g.id=r.grant_id
+ ), review_unit_facts AS (
+   SELECT u.reservation_id,u.allocation_id,u.ordinal,e.id AS entry_id,
+     NOT COALESCE(a.grant_id=r.grant_id AND a.member_id=g.member_id
+       AND g.category='review_minutes' AND r.quantity=1
+       AND u.ordinal BETWEEN 1 AND a.ceiling AND
+       CASE a.state
+         WHEN 'completed' THEN e.id IS NOT NULL AND
+           CASE WHEN u.ordinal<=e.review_minutes+e.preparation_minutes
+             THEN r.state='consumed' ELSE r.state='released' END
+         WHEN 'cancelled' THEN e.id IS NULL AND r.state='released'
+         WHEN 'allocated' THEN e.id IS NULL AND r.state='reserved'
+         WHEN 'begun' THEN e.id IS NULL AND r.state='reserved'
+         WHEN 'needs_reconciliation' THEN e.id IS NULL AND r.state='reserved'
+         ELSE false
+       END,false) AS invalid
+   FROM review_time_units u
+   LEFT JOIN review_time_allocations a ON a.id=u.allocation_id
+   LEFT JOIN review_time_entries e ON e.allocation_id=a.id
+   LEFT JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id
+   LEFT JOIN synthetic_entitlement_grants g ON g.id=r.grant_id
  ), event_facts AS (
    SELECT e.id,e.member_id,e.grant_id,e.reservation_id,e.operation,e.quantity,e.result_id,g.category,
      NOT COALESCE(e.member_id=g.member_id AND
@@ -155,7 +175,7 @@ const reportSql = `WITH
    JOIN synthetic_entitlement_grants g ON g.id=r.grant_id
    LEFT JOIN reservation_event_facts f ON f.reservation_id=r.id
    LEFT JOIN synthetic_entitlement_settlements s ON s.reservation_id=r.id
-   LEFT JOIN support_unit_facts u ON u.reservation_id=r.id
+   LEFT JOIN (SELECT * FROM support_unit_facts UNION ALL SELECT * FROM review_unit_facts) u ON u.reservation_id=r.id
  ), support_group_units AS (
    SELECT u.allocation_id,count(*) AS units,min(u.ordinal) AS first_unit,max(u.ordinal) AS last_unit,
      bool_or(u.invalid OR r.invalid) AS invalid
@@ -186,6 +206,36 @@ const reportSql = `WITH
    LEFT JOIN support_group_units u ON u.allocation_id=a.id
    LEFT JOIN support_time_entries e ON e.allocation_id=a.id
    LEFT JOIN support_time_grants permission ON permission.id=e.grant_id AND permission.allocation_id=a.id AND permission.request_id=a.request_id
+ ), review_group_units AS (
+   SELECT u.allocation_id,count(*) AS units,min(u.ordinal) AS first_unit,max(u.ordinal) AS last_unit,
+     bool_or(u.invalid OR r.invalid) AS invalid
+   FROM review_unit_facts u LEFT JOIN reservation_facts r ON r.id=u.reservation_id
+   GROUP BY u.allocation_id
+ ), review_group_facts AS (
+   SELECT a.id,e.id AS entry_id,
+     'review_minutes'::text AS category,
+     e.review_minutes+e.preparation_minutes AS quantity,e.review_minutes AS delivered_minutes,e.preparation_minutes,
+     NOT COALESCE(g.category='review_minutes' AND g.member_id=a.member_id
+       AND u.units=a.ceiling AND u.first_unit=1 AND u.last_unit=a.ceiling AND NOT u.invalid
+       AND CASE WHEN a.state='completed' THEN
+         e.id IS NOT NULL AND e.actor_id=a.begun_by AND e.grant_id=a.begun_grant_id
+         AND permission.id IS NOT NULL AND permission.staff_id=e.actor_id AND permission.purpose='review-time-local-v1'
+         AND e.review_minutes BETWEEN 1 AND 120 AND e.preparation_minutes BETWEEN 0 AND 119
+         AND e.review_minutes+e.preparation_minutes<=a.ceiling
+         AND isfinite(e.review_start) AND isfinite(e.review_end)
+         AND e.review_start>=e.created_at-interval '24 hours' AND e.review_end<=e.created_at
+         AND extract(epoch FROM e.review_end-e.review_start)=e.review_minutes*60
+         AND CASE WHEN e.preparation_minutes=0 THEN e.preparation_start IS NULL AND e.preparation_end IS NULL
+           ELSE isfinite(e.preparation_start) AND isfinite(e.preparation_end)
+             AND e.preparation_start>=e.created_at-interval '24 hours' AND e.preparation_end<=e.created_at
+             AND extract(epoch FROM e.preparation_end-e.preparation_start)=e.preparation_minutes*60
+             AND (e.preparation_end<=e.review_start OR e.review_end<=e.preparation_start) END
+         ELSE e.id IS NULL END,false) AS invalid
+   FROM review_time_allocations a
+   LEFT JOIN synthetic_entitlement_grants g ON g.id=a.grant_id
+   LEFT JOIN review_group_units u ON u.allocation_id=a.id
+   LEFT JOIN review_time_entries e ON e.allocation_id=a.id
+   LEFT JOIN review_time_grants permission ON permission.id=e.grant_id AND permission.allocation_id=a.id
  ), grant_event_facts AS (
    SELECT grant_id,
      count(*) FILTER(WHERE operation='grant') AS grants,
@@ -219,6 +269,7 @@ const reportSql = `WITH
        AND e.member_id=s.member_id AND e.grant_id=s.grant_id
        AND e.quantity=s.quantity AND e.result_id=s.id
        AND NOT EXISTS(SELECT 1 FROM support_time_units u WHERE u.reservation_id=r.id)
+       AND NOT EXISTS(SELECT 1 FROM review_time_units u WHERE u.reservation_id=r.id)
        AND CASE g.category
          WHEN 'study_requests' THEN s.quantity=1 AND s.delivered_minutes IS NULL AND s.preparation_minutes IS NULL
          WHEN 'review_minutes' THEN s.delivered_minutes>0 AND s.preparation_minutes>=0 AND s.delivered_minutes::numeric+s.preparation_minutes=s.quantity
@@ -232,6 +283,9 @@ const reportSql = `WITH
    UNION ALL
    SELECT quantity,delivered_minutes,preparation_minutes,category,invalid
    FROM support_group_facts WHERE entry_id IS NOT NULL
+   UNION ALL
+   SELECT quantity,delivered_minutes,preparation_minutes,category,invalid
+   FROM review_group_facts WHERE entry_id IS NOT NULL
  ), grants AS (
    SELECT category,count(*) AS records,count(*) FILTER(WHERE invalid) AS invalid,
      sum(quantity::numeric) AS granted,sum(available::numeric) AS available,
@@ -270,7 +324,7 @@ const reportSql = `WITH
    COALESCE(s.preparation,0)::text AS "preparationMinutes",COALESCE(r.unattached,0)::text AS "consumedWithoutAttachment",
    COALESCE(g.invalid,0)::text AS "invalidGrants",COALESCE(r.invalid,0)::text AS "invalidReservations",
    COALESCE(e.invalid,0)::text AS "invalidEvents",
-   (COALESCE(s.invalid,0)+(SELECT count(*) FROM support_group_facts sf WHERE sf.category=c.category AND sf.entry_id IS NULL AND sf.invalid))::text AS "invalidCompletions"
+   (COALESCE(s.invalid,0)+(SELECT count(*) FROM support_group_facts sf WHERE sf.category=c.category AND sf.entry_id IS NULL AND sf.invalid)+(SELECT count(*) FROM review_group_facts rf WHERE rf.category=c.category AND rf.entry_id IS NULL AND rf.invalid))::text AS "invalidCompletions"
  FROM (VALUES ('coach_minutes',1),('review_minutes',2),('support_minutes',3),('mock_sessions',4),('study_requests',5)) c(category,position)
  LEFT JOIN grants g USING(category) LEFT JOIN reservations r USING(category)
  LEFT JOIN events e USING(category) LEFT JOIN completions s USING(category)

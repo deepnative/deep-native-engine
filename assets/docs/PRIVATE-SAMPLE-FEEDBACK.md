@@ -16,7 +16,7 @@ Withdrawal stops reviewer access and new exchanges, while the owner retains publ
 
 ## Failure recovery and boundaries
 
-A stale or rejected write shows submitted text for copying. An uncertain write may already have committed: inspect saved state before deciding on another action. There is no automatic replay. Publication and operation identities distinguish exact repeats from conflicting submissions. No allowance, ledger charge or qualified review is created.
+A stale or rejected write shows submitted text for copying. An uncertain write may already have committed: inspect saved state before deciding on another action. There is no automatic replay. Publication and operation identities distinguish exact repeats from conflicting submissions. Without an explicit review-time allocation, no allowance or ledger charge is created. Optional [review test-minute settlement](PRIVATE-REVIEW-TEST-MINUTES.md) uses a separate allocation-specific permission and actual intervals; existing unbilled observations are never converted or backfilled. Neither flow establishes qualified review.
 
 References use UTF-16 code-unit offsets and exact source text; surrogate pairs cannot be split. Stored source length and SHA-256 are checked before display or mutation. Source reads are limited to 1 MiB. Owner feedback pages contain at most 20 records; member export retains its existing 100-record and byte bounds.
 

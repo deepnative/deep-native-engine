@@ -1,3 +1,5 @@
+import { mountReviewTimeRoutes } from "./review-time-routes.ts";
+import type { reviewTimeStore } from "./review-time-store.ts";
 import { mountSampleFeedbackRoutes } from "./sample-feedback-routes.ts";
 import type { SampleFeedbackStore } from "./sample-feedback.ts";
 import express, { type ErrorRequestHandler } from "express";
@@ -284,6 +286,8 @@ export function app(
     practiceSessions?: PracticeSessionStore;
     supportRequests?: SupportRequestStore;
     sampleFeedback?: SampleFeedbackStore;
+    reviewTime?: ReturnType<typeof reviewTimeStore>;
+    reviewTimeWrites?: boolean;
     eventEnrollments?: EventEnrollmentStore;
     eventRegistration?: boolean;
     usefulness?: UsefulnessStore;
@@ -1017,6 +1021,7 @@ export function app(
       "/practice",
       "/practice-sessions",
       "/support",
+      "/review-minutes",
       "/assignments",
       "/milestones",
       "/career",
@@ -1093,6 +1098,13 @@ export function app(
       next();
     },
   );
+  if (options.sampleFeedback && options.reviewTime)
+    mountReviewTimeRoutes(
+      app,
+      options.reviewTime,
+      options.sampleFeedback,
+      options.reviewTimeWrites ?? false,
+    );
   if (options.sampleFeedback)
     mountSampleFeedbackRoutes(app, options.sampleFeedback);
   mountSupportRequestRoutes(

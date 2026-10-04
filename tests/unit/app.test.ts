@@ -1692,7 +1692,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v20",
+          version: "local-member-records-v21",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -1732,7 +1732,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v20",
+    version: "local-member-records-v21",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -4567,7 +4567,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v20" as const,
+    version: "local-member-records-v21" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -5013,3 +5013,66 @@ it("mounts private support with member authentication and separate exact-granted
   await agent.get("/operator/support").set("Host", host).expect(403);
   expect(worklist).toHaveBeenCalledOnce();
 });
+
+it.each([undefined, false, true])(
+  "mounts review allocation with authenticated owned reads and explicit write controls (%s)",
+  async (reviewTimeWrites) => {
+    const db = storage();
+    const id = "11111111-1111-4111-8111-111111111111";
+    const sampleFeedback = {
+      owner: vi.fn().mockResolvedValue({ kind: "ready" }),
+      reviewer: vi.fn(),
+      save: vi.fn(),
+      publish: vi.fn(),
+      clarify: vi.fn(),
+      answer: vi.fn(),
+      beginReview: vi.fn(),
+    };
+    const reviewTime = {
+      history: vi
+        .fn()
+        .mockResolvedValue({ kind: "ready", receipts: [], next: null }),
+      allocate: vi.fn(),
+      receipt: vi.fn(),
+      cancel: vi.fn(),
+    };
+    const agent = await managedAgent(
+      app(db, {
+        origin,
+        secret: "secret",
+        sampleFeedback,
+        reviewTime,
+        ...(reviewTimeWrites === undefined ? {} : { reviewTimeWrites }),
+      }),
+    );
+    await agent.get("/").set("Host", host).expect(200);
+    await agent.get("/review-minutes").set("Host", host).expect(303);
+    expect(reviewTime.history).not.toHaveBeenCalled();
+    db.session.mockResolvedValue({ kind: "active", learner: member });
+    await agent.get("/review-minutes").set("Host", host).expect(200);
+    expect(reviewTime.history).toHaveBeenCalledOnce();
+    const allocation = await agent
+      .get(`/evidence/${id}/review-allocation`)
+      .set("Host", host)
+      .expect(200);
+    if (reviewTimeWrites) {
+      expect(allocation.text).toContain("Reserve test minutes");
+      expect(allocation.text).not.toContain(
+        "New review allocations are paused",
+      );
+    } else {
+      expect(allocation.text).toContain("New review allocations are paused");
+      expect(allocation.text).not.toContain('name="ceiling"');
+    }
+    await agent
+      .post(`/evidence/${id}/review-allocation`)
+      .set("Host", host)
+      .set("Origin", origin)
+      .send({ csrf: "forged", operationId: id, ceiling: "20" })
+      .expect(403);
+    expect(reviewTime.allocate).not.toHaveBeenCalled();
+    db.session.mockResolvedValue({ kind: "expired" });
+    await agent.get("/review-minutes").set("Host", host).expect(303);
+    expect(reviewTime.history).toHaveBeenCalledOnce();
+  },
+);
