@@ -36,14 +36,26 @@ it.each(cases)(
     let committed = false,
       released = false;
     const statements: string[] = [];
+    const delayedReplies: Promise<unknown>[] = [];
+    // A delayed first DB observation makes conservative authority expire
+    // before database wall time, exposing premature clock assertions.
+    let delayedObservation = false;
     const controlled = workflowFeedbackStore({
       connect: async () => ({
         async query(sql: string, values?: unknown[]) {
           statements.push(sql);
+          if (sql.includes("WITH instant") && !delayedObservation) {
+            delayedObservation = true;
+            await pool.query("SELECT pg_sleep(0.08)");
+          }
           const result = await client.query(sql, values);
           if (sql === "COMMIT") {
             committed = true;
-            if (boundary === "commit") await pool.query("SELECT pg_sleep(0.6)");
+            if (boundary === "commit") {
+              const reply = pool.query("SELECT pg_sleep(0.6)");
+              delayedReplies.push(reply);
+              await reply;
+            }
           }
           return result;
         },
@@ -97,6 +109,9 @@ it.each(cases)(
                 });
         },
       );
+      // Denial may arrive before database expiry. Observe the deliberately
+      // delayed successful reply before asserting the later DB clock.
+      await Promise.all(delayedReplies);
       expect(committed).toBe(true);
       expect(
         (
@@ -141,6 +156,7 @@ it.each(cases)(
       );
       expect(await normal.list(token)).toMatchObject(retained);
     } finally {
+      await Promise.allSettled(delayedReplies);
       if (!released) client.release();
     }
   },
