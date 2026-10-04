@@ -106,3 +106,25 @@ backgrounds, using a fresh owned PostgreSQL database and storage. Original repor
 are retained at `/tmp/dne453-l102-focused-original-artifacts`.
 The new revision still requires complete exact-commit verification,
 normal pre-push, original hosted checks and the remaining delivery gates.
+
+## Resulting-main export fixture finding
+
+PR #455 merged as `41b6886` after original push and PR CI passed on the
+same tested tree. Original resulting-main run 37185302154 then failed one
+member-export unit case: 2139/2140 passed; downstream application checks were
+not completed. The original failure is retained and is not replaced by a rerun.
+
+The successful-export fake database response constructed its observation time
+and transaction-start time with consecutive `new Date()` calls. A deterministic
+probe of the unchanged fixture advanced the second call by one millisecond:
+the resulting impossible transaction-start-after-observation ordering correctly
+returned unavailable, rolled back and discarded the client. The fixture now uses
+one coherent instant for those two fake timestamps. The same boundary probe then
+returned ready and committed. Production timestamp validation is unchanged.
+Probe evidence is retained in `/tmp/dne453-export-clock-original-reproduction.json`
+and `/tmp/dne453-export-clock-repaired-reproduction.json`.
+
+The full member-export unit file passed once, 19/19 with no pending tests.
+This fixture-only correction changes no production deadline, assertion, test
+inventory, retry or coverage denominator. A fresh exact-commit gate, normal
+pre-push, original hosted checks and resulting-main verification are still required.
