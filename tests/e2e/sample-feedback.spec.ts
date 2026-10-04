@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { testPool } from "../support/database.ts";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -8,6 +8,21 @@ import { COOKIE } from "../../src/session.ts";
 const pool = testPool();
 const origin = "http://127.0.0.1:4317";
 test.afterAll(async () => pool.end());
+const sampleText = `An invented team checks every factual claim.
+  Keep indentation and line breaks.
+${"invented".repeat(70)}`;
+const feedbackText = `Explain how each claim is checked. ${"reference".repeat(30)}`;
+async function readableFeedback(page: Page) {
+  await expect(page.locator("details pre")).toHaveText(sampleText, {
+    useInnerText: false,
+  });
+  expect(await page.locator("details pre").textContent()).toBe(sampleText);
+  const size = await page.evaluate(() => ({
+    content: document.documentElement.scrollWidth,
+    viewport: window.innerWidth,
+  }));
+  expect(size.content).toBeLessThanOrEqual(size.viewport);
+}
 const audiences = [
   ["explorer", "everyday"],
   ["professional", "work"],
@@ -44,9 +59,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
         .click();
       await page.goto("/evidence");
       await page.getByLabel("Sample title").fill(name);
-      await page
-        .getByLabel("Invented text sample")
-        .fill("An invented team checks every factual claim.");
+      await page.getByLabel("Invented text sample").fill(sampleText);
       await page.getByLabel("I created this invented sample").check();
       await page.getByLabel("I explicitly allow this sample").check();
       await page
@@ -109,12 +122,13 @@ for (const [index, [background, goal]] of audiences.entries()) {
         expiry,
       );
       await staff.goto(staffPath);
+      await readableFeedback(staff);
       await staff
         .getByLabel("Criterion 1 label", { exact: true })
         .fill("Claim checks");
       await staff
         .getByLabel("Criterion 1 comment", { exact: true })
-        .fill("Explain how each claim is checked.");
+        .fill(feedbackText);
       await staff
         .getByLabel("Criterion 1 exact source quote", { exact: true })
         .fill("An invented");
@@ -145,7 +159,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
       await staff.getByRole("link", { name: "Inspect saved feedback" }).click();
       await expect(
         staff.getByLabel("Criterion 1 comment", { exact: true }),
-      ).toHaveValue("Explain how each claim is checked.");
+      ).toHaveValue(feedbackText);
       await page.goto(ownerPath);
       await expect(
         page.getByText("No published feedback is available for this sample."),
@@ -169,13 +183,11 @@ for (const [index, [background, goal]] of audiences.entries()) {
       ]);
       const outsider = await outsiderContext.newPage();
       expect((await outsider.goto(ownerPath))!.status()).toBe(403);
-      await expect(
-        outsider.getByText("Explain how each claim is checked."),
-      ).toHaveCount(0);
+      await expect(outsider.getByText(feedbackText)).toHaveCount(0);
       await page.reload();
-      await expect(
-        page.getByText("Explain how each claim is checked."),
-      ).toBeVisible();
+      await expect(page.getByText(feedbackText)).toBeVisible();
+      await readableFeedback(page);
+      await readableFeedback(staff);
       await page
         .getByLabel("One clarification", { exact: true })
         .fill("Which claim comes first?");

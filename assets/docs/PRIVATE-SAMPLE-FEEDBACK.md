@@ -29,3 +29,5 @@ The transaction locks current principal, workspace, source, submission, workspac
 Acquisition is bounded at 3 seconds, each stage at 5 seconds and the whole operation at 10 seconds. Validated database remaining authority is also enforced with monotonic elapsed time through COMMIT and connection handback. An unknown query or commit discards the owned connection without queued rollback or replay. Audit records carry identifiers/actions, never raw source or comment text.
 
 Rollback after data exists must disable new feedback routes and writes while retaining schema, published records and compatible owner read/export/deletion behavior. Do not revert to an older binary that silently omits retained feedback from export. Do not drop tables, re-enable withdrawn consent or repurpose legacy grants. This procedure authorizes no live deployment.
+
+Exact source text preserves its stored whitespace and line breaks while wrapping long lines for narrow screens. This visual wrapping does not alter stored source offsets, quoted references or downloaded content.
