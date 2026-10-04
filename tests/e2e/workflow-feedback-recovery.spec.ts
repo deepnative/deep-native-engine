@@ -43,7 +43,6 @@ for (const [index, background] of (
         };
       },
     } as unknown as Pool);
-    let application: ReturnType<typeof app>;
     const server = createServer((req, res) => application(req, res));
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
@@ -51,7 +50,7 @@ for (const [index, background] of (
     if (!address || typeof address === "string")
       throw Error("No local listener");
     const origin = `http://127.0.0.1:${address.port}`;
-    application = app(db, {
+    const application = app(db, {
       origin,
       secret: "invented-feedback-recovery",
       workflowFeedback: backend,
