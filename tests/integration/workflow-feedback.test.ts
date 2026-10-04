@@ -8,6 +8,7 @@ import { memberExportStore } from "../../src/member-export.ts";
 import { migrate, store } from "../../src/store.ts";
 import { workflowFeedbackStore } from "../../src/workflow-feedback.ts";
 import { testPool } from "../support/database.ts";
+import { withLoopback } from "../support/loopback-server.ts";
 
 const handedBack = new WeakSet<PoolClient>();
 function handback(client: PoolClient, error?: Error) {
@@ -573,16 +574,18 @@ it.each([
 );
 
 function feedbackPage(value: string, backend = feedback, id = "WF-001") {
-  return request(
+  return withLoopback(
     app(db, {
       origin: "http://localhost",
       secret: "test-secret",
       workflowFeedback: backend,
     }),
-  )
-    .get(`/workflow-feedback/${id}`)
-    .set("Host", "localhost")
-    .set("Cookie", `dne_preview=${value}`);
+    (server) =>
+      request(server)
+        .get(`/workflow-feedback/${id}`)
+        .set("Host", "localhost")
+        .set("Cookie", `dne_preview=${value}`),
+  );
 }
 
 it("distinguishes valid empty and historical pages from content-free denial for every workflow ID", async () => {
@@ -591,9 +594,8 @@ it("distinguishes valid empty and historical pages from content-free denial for 
   expect(await feedback.list(token())).toBeNull();
   expect(await feedback.list(owner.token)).toEqual([]);
   expect((await feedbackPage(owner.token)).status).toBe(200);
-  expect((await feedbackPage(owner.token, feedback, "WF-999")).status).toBe(
-    404,
-  );
+  const unknown = await feedbackPage(owner.token, feedback, "WF-999");
+  expect(unknown.status, unknown.text).toBe(404);
   await pool.query(
     "INSERT INTO workflow_feedback(member_id,workflow_id,workflow_version,note) VALUES($1,'WF-998',2,'Invented historical-only private note')",
     [owner.id],
