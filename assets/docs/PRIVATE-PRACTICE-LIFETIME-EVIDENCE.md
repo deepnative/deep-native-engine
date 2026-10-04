@@ -106,3 +106,47 @@ backgrounds, using a fresh owned PostgreSQL database and storage. Original repor
 are retained at `/tmp/dne453-l102-focused-original-artifacts`.
 The new revision still requires complete exact-commit verification,
 normal pre-push, original hosted checks and the remaining delivery gates.
+
+## Resulting-main export fixture finding
+
+PR #455 merged as `41b6886` after original push and PR CI passed on the
+same tested tree. Original resulting-main run 37185302154 then failed one
+member-export unit case: 2139/2140 passed; downstream application checks were
+not completed. The original failure is retained and is not replaced by a rerun.
+
+The successful-export fake database response constructed its observation time
+and transaction-start time with consecutive `new Date()` calls. A deterministic
+probe of the unchanged fixture advanced the second call by one millisecond:
+the resulting impossible transaction-start-after-observation ordering correctly
+returned unavailable, rolled back and discarded the client. The fixture now uses
+one coherent instant for those two fake timestamps. The same boundary probe then
+returned ready and committed. Production timestamp validation is unchanged.
+Probe evidence is retained in `/tmp/dne453-export-clock-original-reproduction.json`
+and `/tmp/dne453-export-clock-repaired-reproduction.json`.
+
+The full member-export unit file passed once, 19/19 with no pending tests.
+This fixture-only correction changes no production deadline, assertion, test
+inventory, retry or coverage denominator. A fresh exact-commit gate, normal
+pre-push, original hosted checks and resulting-main verification are still required.
+
+## Original repair-CI grant ordering finding
+
+Original push run 37187503726 on `34927db` passed all 2140 unit tests but
+failed one of 1470 PostgreSQL tests, the connected-support equal-creation-time
+grant ordering case. Its raw reports are preserved separately. The test sampled
+a PostgreSQL timestamp through a JavaScript Date, losing microsecond precision;
+copied rows could then precede a source grant within the same millisecond.
+
+A first diagnostic attempt to modify existing grant creation times was rejected
+by the immutable-history constraint; that setup failure is retained and is not
+the claimed reproduction. A fresh dedicated database instead inserted an
+invented predecessor at a sub-millisecond instant and selected a tie instant one
+microsecond later. Passing that timestamp through Date reproduced the original
+wrong-grant assertion. The corrected fixture retains the PostgreSQL timestamp
+as text and uses a database-derived instant strictly after existing grant times.
+The sub-millisecond predecessor remains in the test to expose regression. Both
+allocation totals and descending-identifier assertions remain unchanged; no
+production ordering, deadlines, retries or coverage inventory are modified.
+Original diagnostic logs are retained at
+`/tmp/dne453-grant-clock-reproduction.log` and
+`/tmp/dne453-grant-clock-precision-reproduction.log`.

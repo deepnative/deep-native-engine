@@ -30,19 +30,21 @@ function fakePool(
           sql.startsWith("SELECT id FROM principals")
         )
           return { rows: owner ? [owner] : [] };
-        if (sql.startsWith("WITH instant"))
+        if (sql.startsWith("WITH instant")) {
+          const observedAt = new Date();
           return {
             rows: owner
               ? [
                   {
                     id: owner.id,
-                    observedAt: new Date(),
-                    snapshotStartedAt: new Date(),
+                    observedAt,
+                    snapshotStartedAt: observedAt,
                     remainingMs: "60000",
                   },
                 ]
               : [],
           };
+        }
         const all = rows(sql).map((row, index) => ({
           _key: [String(index).padStart(5, "0")],
           ...row,
