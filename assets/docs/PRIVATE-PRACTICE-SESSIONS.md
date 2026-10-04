@@ -17,3 +17,34 @@ Before any data exists, revert the feature and additive migration together. Afte
 ## Evidence boundary
 
 L103–L105 extend approved local browser coverage to opt-in/multiple response/reload/cap, isolation/unavailable-source history, and export/withdrawal across three backgrounds on desktop/mobile. This changes the local register from 102 to 105 journeys; existing IDs and mandatory variants remain. Full-MVP acceptance, qualified curriculum review, live AI and paid-service criteria remain separate open requirements on #200/#34. Record actual verification results in the issue/PR before delivery closeout.
+
+## Session lifetime and uncertain replies (#453)
+
+Practice source, start, history, detail, response and withdrawal operations use the
+same bounded transaction boundary. Principal, workspace, source and session locks
+retain their existing order. PostgreSQL validates remaining authority after the
+principal lock and again before commit; monotonic elapsed time includes query
+transit, commit reply and native connection handback. A delayed reply cannot extend
+an expired session's authority or expose its private result.
+
+The whole operation has a 10-second budget, acquisition at most 3 seconds and each
+query/commit/known rollback at most 5 seconds, further restricted by remaining
+operation and authority time. Server statement and lock timeouts remain 5 seconds;
+the transaction timeout uses the remaining operation budget. Missing or malformed
+clock evidence fails closed. A connection acquired too late is discarded. An
+unresolved operation is never followed by a queued rollback or automatic replay;
+its owned connection is discarded. Known rollback is bounded. Native release is
+synchronous and cannot be preempted, but its elapsed time is checked before returning
+any result.
+
+A denied or unavailable response does not prove a submitted write was undone.
+A successful PostgreSQL commit can outlive its acknowledgement. Re-establish valid
+member authority and inspect saved history before deciding what to do next. The
+server does not automatically resubmit the write. Published source/goal/prompt
+pins, replay/conflict semantics, pair limits, withdrawal and export remain unchanged.
+
+No schema or retention policy changes are needed. To roll back safely, pause the
+affected practice operations while retaining their stored records and existing
+export/deletion paths. Restoring the older transaction reader also restores the
+known expiry defect; it is not a privacy-preserving recovery. This local correction
+does not establish hosted deployment, live AI, paid capacity or qualified review.

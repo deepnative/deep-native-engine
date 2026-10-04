@@ -101,7 +101,15 @@ function fixture(
         sourceExcerpt: params![4] as string,
       });
     if (sql.includes("AS valid"))
-      return { rows: [{ valid: options.valid !== false }] };
+      return {
+        rows: [
+          {
+            valid: options.valid !== false,
+            remaining: "60000",
+            observed: new Date(),
+          },
+        ],
+      };
     return { rows: [], rowCount: 1 };
   });
   const release = vi.fn();
@@ -155,7 +163,7 @@ it.each(Object.keys(operations) as (keyof typeof operations)[])(
       expect(await operations[operation](f.store)).toEqual(denied(operation));
       expect(f.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
       expect(f.query.mock.calls.map(([sql]) => sql)).not.toContain("COMMIT");
-      expect(f.release).toHaveBeenCalledWith(undefined);
+      expect(f.release).toHaveBeenCalledWith(expect.any(Error));
     }
     const empty = fixture();
     expect(await operations[operation](empty.store, " ")).toEqual(
@@ -432,8 +440,11 @@ it.each([
       /^Practice session unavailable$/,
     );
     expect(f.connect).toHaveBeenCalledOnce();
-    expect(f.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
-    expect(f.release).toHaveBeenCalledWith(undefined);
+    const statements = f.query.mock.calls.map(([sql]) => sql);
+    if (failAt === "BEGIN" || failAt === "COMMIT")
+      expect(statements).not.toContain("ROLLBACK");
+    else expect(statements).toContain("ROLLBACK");
+    expect(f.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );
 it("discards a connection after failed rollback and sanitizes connect failures", async () => {

@@ -294,3 +294,119 @@ it("traverses bounded owned keyset history pages over HTTP with no omissions", a
     404,
   );
 });
+
+it.each(
+  (["detail", "history", "append"] as const).flatMap((operation) =>
+    (["commit-reply", "native-handback"] as const).map((delay) => ({
+      operation,
+      delay,
+    })),
+  ),
+)(
+  "withholds HTTP $operation after successful $delay crosses authority expiry",
+  async ({ operation, delay }) => {
+    const { draft } = await fixture(),
+      token = await member();
+    const begun = await post(
+      token,
+      `/library/${draft.id}/practice-session/start`,
+      startFields,
+    );
+    const location = begun.headers.location as string;
+    await post(token, `${location}/responses`, {
+      expected_sequence: "1",
+      response: "Private invented expiry marker",
+      synthetic: "yes",
+    });
+    const identity = await db.session(token);
+    if (identity.kind !== "active") throw Error("Fixture member missing");
+    const expires = (
+      await pool.query(
+        "UPDATE principals SET expires_at=clock_timestamp()+interval '1 second' WHERE id=$1 RETURNING expires_at",
+        [identity.learner.id],
+      )
+    ).rows[0].expires_at as Date;
+    let commits = 0;
+    let deliver!: () => void;
+    const delivered = new Promise<void>((resolve) => {
+      deliver = resolve;
+    });
+    const delayed = practiceSessionStore({
+      async connect() {
+        const client = await pool.connect();
+        return {
+          async query(sql: string, values?: unknown[]) {
+            const result = await client.query(sql, values);
+            if (sql === "COMMIT") {
+              commits++;
+              if (delay === "commit-reply")
+                while (
+                  !(
+                    await pool.query(
+                      "SELECT clock_timestamp()>=$1::timestamptz expired",
+                      [expires],
+                    )
+                  ).rows[0].expired
+                )
+                  await new Promise((resolve) => setTimeout(resolve, 5));
+              deliver();
+            }
+            return result;
+          },
+          release(error?: Error) {
+            client.release(error);
+            if (delay === "native-handback" && commits === 1)
+              Atomics.wait(
+                new Int32Array(new SharedArrayBuffer(4)),
+                0,
+                0,
+                1100,
+              );
+          },
+        };
+      },
+    } as unknown as import("pg").Pool);
+    const actualApp = app(db, {
+      origin,
+      secret,
+      practiceSessions: delayed,
+      catalog,
+      practice: practiceStore(pool),
+    });
+    const response = await withLoopback(actualApp, (server) => {
+      const call =
+        operation === "append"
+          ? request(server)
+              .post(`${location}/responses`)
+              .set("Origin", origin)
+              .type("form")
+              .send({
+                csrf: csrf(token, secret),
+                expected_sequence: "2",
+                response: "Another invented response",
+                synthetic: "yes",
+              })
+          : request(server).get(
+              operation === "detail" ? location : "/practice-sessions",
+            );
+      return call
+        .set("Host", "127.0.0.1:3000")
+        .set("Cookie", `${COOKIE}=${token}`);
+    });
+    expect(commits).toBe(1);
+    await delivered;
+    expect(
+      (
+        await pool.query("SELECT clock_timestamp()>=$1::timestamptz expired", [
+          expires,
+        ])
+      ).rows[0].expired,
+    ).toBe(true);
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.text.includes("Private invented expiry marker")).toBe(
+      false,
+    );
+    expect(response.text.includes(draft.title)).toBe(false);
+    expect(response.headers.location).toBeUndefined();
+  },
+);

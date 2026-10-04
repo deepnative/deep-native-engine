@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import type { Pool } from "pg";
 import { migrate, store } from "../../src/store.ts";
 import {
@@ -13,6 +13,10 @@ const pool = testPool(),
   db = store(pool),
   practice = practiceSessionStore(pool),
   catalog = catalogStore(pool);
+const resourceChecks: Array<() => Promise<void>> = [];
+afterEach(async () => {
+  for (const check of resourceChecks.splice(0)) await check();
+});
 const token = () => randomBytes(32).toString("hex");
 beforeAll(async () => {
   await migrate(pool);
@@ -981,3 +985,322 @@ it("discards a connection whose rollback fails and leaves the original history r
     await isolated.end();
   }
 });
+
+// AC1: real PostgreSQL has committed; delay only delivery or native handback.
+it.each(
+  (
+    ["source", "start", "detail", "history", "append", "withdraw"] as const
+  ).flatMap((operation) =>
+    (["commit-reply", "native-handback"] as const).map((delay) => ({
+      operation,
+      delay,
+    })),
+  ),
+)(
+  "withholds $operation after successful $delay crosses real authority expiry",
+  async ({ operation, delay }) => {
+    const f = await fixture(),
+      id = await f.begin();
+    await append(f.owner.token, id);
+    const expires = (
+      await pool.query(
+        "UPDATE principals SET expires_at=clock_timestamp()+interval '1 second' WHERE id=$1 RETURNING expires_at",
+        [f.owner.id],
+      )
+    ).rows[0].expires_at as Date;
+    let commits = 0,
+      released = 0;
+    const delivered = latch();
+    const delayed = practiceSessionStore({
+      async connect() {
+        const client = await pool.connect();
+        return {
+          async query(sql: string, values?: unknown[]) {
+            const result = await client.query(sql, values);
+            if (sql === "COMMIT") {
+              commits++;
+              if (delay === "commit-reply") {
+                while (
+                  !(
+                    await pool.query(
+                      "SELECT clock_timestamp()>=$1::timestamptz expired",
+                      [expires],
+                    )
+                  ).rows[0].expired
+                )
+                  await new Promise((resolve) => setTimeout(resolve, 5));
+              }
+              delivered.release();
+            }
+            return result;
+          },
+          release(error?: Error) {
+            released++;
+            client.release(error);
+            if (delay === "native-handback" && commits === 1)
+              Atomics.wait(
+                new Int32Array(new SharedArrayBuffer(4)),
+                0,
+                0,
+                1100,
+              );
+          },
+        };
+      },
+    } as unknown as Pool);
+    const denied =
+      operation === "start"
+        ? { kind: "unavailable" }
+        : operation === "append" || operation === "withdraw"
+          ? "unavailable"
+          : null;
+    let outcome: unknown;
+    try {
+      outcome =
+        operation === "source"
+          ? await delayed.source(f.owner.token, f.source.id)
+          : operation === "start"
+            ? await delayed.start(f.owner.token, f.input)
+            : operation === "withdraw"
+              ? await delayed.withdraw(f.owner.token, id)
+              : operation === "detail"
+                ? await delayed.detail(f.owner.token, id)
+                : operation === "history"
+                  ? await delayed.history(f.owner.token)
+                  : await delayed.append(f.owner.token, id, {
+                      expectedSequence: 2,
+                      response: "Second invented response",
+                    });
+    } catch (error) {
+      expect(error).toEqual(new Error("Practice session unavailable"));
+      outcome = denied;
+    }
+    // Conservative monotonic expiry can deny before the delayed driver reply arrives.
+    await delivered.wait;
+    expect(commits).toBe(1);
+    expect(released).toBe(1);
+    expect(
+      (
+        await pool.query("SELECT clock_timestamp()>=$1::timestamptz expired", [
+          expires,
+        ])
+      ).rows[0].expired,
+    ).toBe(true);
+    expect(outcome).toEqual(denied);
+    // A late reply cannot undo an acknowledged PostgreSQL commit or replay it.
+    await pool.query(
+      "UPDATE principals SET expires_at=clock_timestamp()+interval '1 day' WHERE id=$1",
+      [f.owner.id],
+    );
+    const actual = await practice.detail(f.owner.token, id);
+    expect(actual?.exchanges).toHaveLength(
+      operation === "append" ? 2 : operation === "withdraw" ? 0 : 1,
+    );
+    expect(await practice.detail(f.other.token, id)).toBeNull();
+  },
+);
+
+it.each(["detail", "append"] as const)(
+  "discards an unresolved real PostgreSQL %s query without queued rollback",
+  async (operation) => {
+    const f = await fixture(),
+      id = await f.begin();
+    await append(f.owner.token, id);
+    await pool.query(
+      "UPDATE principals SET expires_at=clock_timestamp()+interval '700 milliseconds' WHERE id=$1",
+      [f.owner.id],
+    );
+    const isolated = testPool(),
+      ended = latch();
+    const statements: string[] = [];
+    let discarded = false,
+      pid = 0;
+    const delayed = practiceSessionStore({
+      async connect() {
+        const client = await isolated.connect();
+        pid = (await client.query("SELECT pg_backend_pid() pid")).rows[0].pid;
+        client.once("end", ended.release);
+        return {
+          async query(sql: string, values?: unknown[]) {
+            statements.push(sql);
+            if (
+              (operation === "detail" &&
+                sql.includes("FROM private_practice_exchanges") &&
+                sql.startsWith("SELECT")) ||
+              (operation === "append" &&
+                sql.startsWith("INSERT INTO private_practice_exchanges"))
+            )
+              await client.query("SELECT pg_sleep(10)");
+            return client.query(sql, values);
+          },
+          release(error?: Error) {
+            discarded = error instanceof Error;
+            client.release(error);
+          },
+        };
+      },
+    } as unknown as Pool);
+    try {
+      const result =
+        operation === "detail"
+          ? await delayed.detail(f.owner.token, id)
+          : await delayed.append(f.owner.token, id, {
+              expectedSequence: 2,
+              response: "Uncommitted invented response",
+            });
+      expect(result).toBe(operation === "detail" ? null : "unavailable");
+      expect(discarded).toBe(true);
+      expect(statements).not.toContain("ROLLBACK");
+      expect(statements).not.toContain("COMMIT");
+      // Client closure is immediate; the server notices EOF after the bounded
+      // active statement. Teardown verifies this without weakening test deadlines.
+      resourceChecks.push(async () => {
+        await ended.wait;
+        const cleanupDeadline = performance.now() + 6000;
+        let active: unknown[];
+        do {
+          active = (
+            await pool.query("SELECT pid FROM pg_stat_activity WHERE pid=$1", [
+              pid,
+            ])
+          ).rows;
+          if (!active.length) break;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        } while (performance.now() < cleanupDeadline);
+        expect(active).toHaveLength(0);
+        await pool.query(
+          "UPDATE principals SET expires_at=clock_timestamp()+interval '1 day' WHERE id=$1",
+          [f.owner.id],
+        );
+        expect(
+          (await practice.detail(f.owner.token, id))?.exchanges,
+        ).toHaveLength(1);
+        expect(await practice.detail(f.other.token, id)).toBeNull();
+      });
+    } finally {
+      await isolated.end();
+    }
+  },
+);
+
+it("disposes an actual PostgreSQL client delivered after the acquisition bound", async () => {
+  const f = await fixture(),
+    id = await f.begin(),
+    isolated = testPool(),
+    ended = latch(),
+    released = latch();
+  let queries = 0,
+    discarded = false;
+  const delayed = practiceSessionStore({
+    async connect() {
+      const client = await isolated.connect();
+      client.once("end", ended.release);
+      await new Promise((resolve) => setTimeout(resolve, 3100));
+      return {
+        query(sql: string, values?: unknown[]) {
+          queries++;
+          return client.query(sql, values);
+        },
+        release(error?: Error) {
+          discarded = error instanceof Error;
+          client.release(error);
+          released.release();
+        },
+      };
+    },
+  } as unknown as Pool);
+  try {
+    await expect(delayed.detail(f.owner.token, id)).rejects.toThrow(
+      /^Practice session unavailable$/,
+    );
+    await released.wait;
+    await ended.wait;
+    expect(discarded).toBe(true);
+    expect(queries).toBe(0);
+    expect(await practice.detail(f.owner.token, id)).not.toBeNull();
+  } finally {
+    await isolated.end();
+  }
+});
+
+it.each(
+  (["detail", "history"] as const).flatMap((operation) =>
+    (["revoke", "delete"] as const).flatMap((change) =>
+      (["read-first", "change-first"] as const).map((order) => ({
+        operation,
+        change,
+        order,
+      })),
+    ),
+  ),
+)(
+  "serializes $operation with $change in $order order",
+  async ({ operation, change, order }) => {
+    const f = await fixture(),
+      id = await f.begin(),
+      otherId = await f.begin(f.other.token);
+    await append(f.owner.token, id);
+    await append(f.other.token, otherId);
+    const reader = controlled(
+        order === "read-first" ? "WITH instant" : undefined,
+      ),
+      client = await pool.connect();
+    let reading: Promise<unknown> | undefined,
+      changing: Promise<unknown> | undefined;
+    const changeOwner = () =>
+      change === "delete"
+        ? store(client as unknown as Pool).remove(f.owner.id)
+        : client.query(
+            "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+            [f.owner.id],
+          );
+    try {
+      const pid = (await client.query("SELECT pg_backend_pid() pid")).rows[0]
+        .pid;
+      if (order === "read-first") {
+        reading = invoke(operation, reader.use, f.owner.token, id);
+        await reader.reached.wait;
+        changing = changeOwner();
+        await blocked(pid, reader.state.pid);
+        reader.resume.release();
+        const result = await reading;
+        expect(result).toMatchObject(
+          operation === "detail"
+            ? { exchanges: [{ response: "Invented response" }] }
+            : { items: [{ id }] },
+        );
+        await changing;
+      } else {
+        await client.query("BEGIN");
+        await changeOwner();
+        reading = invoke(operation, reader.use, f.owner.token, id);
+        await reader.connected.wait;
+        await blocked(reader.state.pid, pid);
+        await client.query("COMMIT");
+        expect(await reading).toBeNull();
+      }
+      expect(await practice.detail(f.owner.token, id)).toBeNull();
+      expect(await practice.history(f.owner.token)).toBeNull();
+      expect(await practice.detail(f.other.token, otherId)).toMatchObject({
+        exchanges: [{ response: "Invented response" }],
+      });
+      if (change === "delete")
+        expect(
+          (
+            await pool.query(
+              "SELECT id FROM private_practice_sessions WHERE member_id=$1",
+              [f.owner.id],
+            )
+          ).rows,
+        ).toHaveLength(0);
+    } finally {
+      reader.resume.release();
+      await client.query("ROLLBACK");
+      await Promise.allSettled([
+        ...(reading ? [reading] : []),
+        ...(changing ? [changing] : []),
+      ]);
+      client.release();
+    }
+  },
+);

@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { Pool, PoolClient } from "pg";
+import type { Pool } from "pg";
+import {
+  practiceTransaction,
+  PracticeLifetimeFailure,
+  type PracticeTransaction,
+} from "./practice-session-lifetime.ts";
 import type { Goal } from "./content.ts";
 import { hash } from "./store.ts";
 
@@ -144,64 +149,41 @@ function decodeCursor(after: string): [string, string] | null {
 export function practiceSessionStore(pool: Pool): PracticeSessionStore {
   async function transaction<T>(
     token: string,
-    use: (client: PoolClient, memberId: string) => Promise<T>,
+    use: (client: PracticeTransaction, memberId: string) => Promise<T>,
   ): Promise<T | null> {
     if (typeof token !== "string" || !token.trim()) return null;
-    let client: PoolClient | undefined;
-    let releaseError: Error | undefined;
     try {
-      client = await pool.connect();
-      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
-      await client.query("SET LOCAL lock_timeout='5s'");
-      const principal = (
-        await client.query<{ id: string; expires_at: Date }>(
-          `SELECT id,expires_at FROM principals WHERE token_hash=$1 AND kind='member'
-         AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE`,
-          [hash(token)],
-        )
-      ).rows[0];
-      if (!principal) {
-        await client.query("ROLLBACK");
+      return await practiceTransaction(pool, async (client) => {
+        const principal = (
+          await client.query<{ id: string; expires_at: Date }>(
+            `SELECT id,expires_at FROM principals WHERE token_hash=$1 AND kind='member'
+           AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE`,
+            [hash(token)],
+          )
+        ).rows[0];
+        if (!principal) throw new PracticeLifetimeFailure("denied");
+        await client.observe([principal.expires_at]);
+        // Retain owner-operation serialization with withdrawal and deletion.
+        const workspace = await client.query(
+          `SELECT id FROM workspaces WHERE id=$1 AND owner_principal_id=$1
+           AND deleting_at IS NULL FOR UPDATE`,
+          [principal.id],
+        );
+        if (!workspace.rows[0]) throw new PracticeLifetimeFailure("denied");
+        const result = await use(client, principal.id);
+        await client.observe([principal.expires_at]);
+        return result;
+      });
+    } catch (error) {
+      if (error instanceof PracticeLifetimeFailure && error.kind === "denied")
         return null;
-      }
-      // All owner operations, including reads, serialize with withdrawal/deletion.
-      // A subsequent statement sees the state committed by a transaction we waited on.
-      const workspace = await client.query(
-        `SELECT id FROM workspaces WHERE id=$1 AND owner_principal_id=$1
-         AND deleting_at IS NULL FOR UPDATE`,
-        [principal.id],
-      );
-      if (!workspace.rows[0]) {
-        await client.query("ROLLBACK");
-        return null;
-      }
-      const result = await use(client, principal.id);
-      const current = await client.query<{ valid: boolean }>(
-        "SELECT clock_timestamp() < $1::timestamptz AS valid",
-        [principal.expires_at],
-      );
-      if (!current.rows[0]!.valid) {
-        await client.query("ROLLBACK");
-        return null;
-      }
-      await client.query("COMMIT");
-      return result;
-    } catch {
-      if (client) {
-        try {
-          await client.query("ROLLBACK");
-        } catch {
-          releaseError = new Error("Practice session rollback failed");
-        }
-      }
-      // Do not reveal database text or automatically replay an uncertain COMMIT.
-      throw new Error("Practice session unavailable");
-    } finally {
-      client?.release(releaseError);
     }
+    // Raw driver errors can contain private parameters; expose only this boundary.
+    throw new Error("Practice session unavailable");
   }
+
   async function source(
-    client: PoolClient,
+    client: PracticeTransaction,
     memberId: string,
     contentId: string,
     version?: number,
@@ -229,7 +211,7 @@ export function practiceSessionStore(pool: Pool): PracticeSessionStore {
     );
   }
   async function session(
-    client: PoolClient,
+    client: PracticeTransaction,
     memberId: string,
     id: string,
     lock: boolean,
@@ -246,7 +228,7 @@ export function practiceSessionStore(pool: Pool): PracticeSessionStore {
     );
   }
   async function exchanges(
-    client: PoolClient,
+    client: PracticeTransaction,
     id: string,
   ): Promise<PracticeSessionExchange[]> {
     return (
