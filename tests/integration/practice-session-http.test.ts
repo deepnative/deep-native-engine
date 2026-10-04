@@ -327,6 +327,10 @@ it.each(
       )
     ).rows[0].expires_at as Date;
     let commits = 0;
+    let deliver!: () => void;
+    const delivered = new Promise<void>((resolve) => {
+      deliver = resolve;
+    });
     const delayed = practiceSessionStore({
       async connect() {
         const client = await pool.connect();
@@ -345,6 +349,7 @@ it.each(
                   ).rows[0].expired
                 )
                   await new Promise((resolve) => setTimeout(resolve, 5));
+              deliver();
             }
             return result;
           },
@@ -389,6 +394,7 @@ it.each(
         .set("Cookie", `${COOKIE}=${token}`);
     });
     expect(commits).toBe(1);
+    await delivered;
     expect(
       (
         await pool.query("SELECT clock_timestamp()>=$1::timestamptz expired", [

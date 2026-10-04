@@ -59,3 +59,21 @@ Demonstrate ordinary invented practice create/append/reload/history/withdrawal u
 a dedicated preview, plus an isolated controlled expiry showing no private response
 and a fresh authorized view of any durable write. Keep credentials and private data
 out of captures. This is local synthetic evidence, not qualified or full-MVP acceptance.
+
+## Original hosted CI synchronization finding
+
+At head `d3607d9`, original push CI 37177008731 failed two HTTP cases
+(history and append); original PR CI 37177030176 failed the history case.
+Both failed the database-clock-expired assertion before testing response denial.
+Their complete original reports are retained separately; local gate success does
+not override either hosted failure. The conservative monotonic deadline can return
+a denial before the test driver finishes its deliberately delayed successful
+COMMIT reply. The HTTP fixture now waits for that controlled reply before checking
+the PostgreSQL clock, matching the existing store-level synchronization. It still
+asserts exactly one COMMIT, denied response, no private text and no success redirect.
+No production logic, timeout, retry, test inventory or assertion is weakened.
+The corrected complete store/HTTP files passed once: 63/63, no pending/failed tests
+and zero unhandled diagnostics, using a fresh owned PostgreSQL database. Raw reports
+are retained in `/tmp/dne453-http-sync-focused-original-artifacts`. A new clean
+exact-commit gate, pre-push and original hosted checks remain required; focused
+success does not establish those gates.
