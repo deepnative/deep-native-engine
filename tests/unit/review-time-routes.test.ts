@@ -1,6 +1,17 @@
 import express from "express";
 import request from "supertest";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import type { Server } from "node:http";
+import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
+const servers: Server[] = [];
+async function http(application: ReturnType<typeof express>) {
+  const server = await listenLoopback(application);
+  servers.push(server);
+  return request(server);
+}
+afterEach(async () => {
+  for (const server of servers.splice(0)) await closeLoopback(server);
+});
 import { mountReviewTimeRoutes } from "../../src/review-time-routes.ts";
 import type { reviewTimeStore } from "../../src/review-time-store.ts";
 import type { SampleFeedbackStore } from "../../src/sample-feedback.ts";
@@ -30,15 +41,15 @@ it("keeps a paused owner's receipt and cancellation usable without exposing allo
     next();
   });
   mountReviewTimeRoutes(app, store, feedback, false);
-  const form = await request(app).get(`/evidence/${id}/review-allocation`);
+  const form = await (await http(app)).get(`/evidence/${id}/review-allocation`);
   expect(form.status).toBe(200);
   expect(form.text).toContain("allocations are paused");
   expect(form.text).not.toContain('name="ceiling"');
-  const read = await request(app).get(`/review-minutes/${id}`);
+  const read = await (await http(app)).get(`/review-minutes/${id}`);
   expect(read.status).toBe(200);
   expect(read.text).toContain("Cancel unused allocation");
   expect(store.receipt).toHaveBeenCalledWith("owner-token", id);
-  const cancel = await request(app).post(`/review-minutes/${id}/cancel`);
+  const cancel = await (await http(app)).post(`/review-minutes/${id}/cancel`);
   expect(cancel.status).toBe(303);
   expect(cancel.headers.location).toBe(`/review-minutes/${id}`);
   expect(store.cancel).toHaveBeenCalledWith("owner-token", id);
@@ -61,7 +72,9 @@ it.each(["returned", "thrown"])(
       next();
     });
     mountReviewTimeRoutes(app, store, {} as SampleFeedbackStore, true);
-    const response = await request(app)
+    const response = await (
+      await http(app)
+    )
       .post(`/evidence/${id}/review-allocation`)
       .type("form")
       .send({ operationId: id, ceiling: "20" });
@@ -112,12 +125,16 @@ function routeFixture() {
 }
 it("offers explicit bounded allocation and redirects successful and replayed requests to the same receipt", async () => {
   const f = routeFixture();
-  const page = await request(f.app).get(`/evidence/${id}/review-allocation`);
+  const page = await (
+    await http(f.app)
+  ).get(`/evidence/${id}/review-allocation`);
   expect(page.status).toBe(200);
   expect(page.text).toContain('min="1" max="120"');
   for (const kind of ["applied", "replayed"]) {
     f.store.allocate.mockResolvedValue({ kind, receipt: f.receipt });
-    const result = await request(f.app)
+    const result = await (
+      await http(f.app)
+    )
       .post(`/evidence/${id}/review-allocation`)
       .send({ operationId: id, ceiling: "20" });
     expect(result.status).toBe(303);
@@ -135,8 +152,13 @@ it.each([
 ])("rejects malformed allocation without a write: %j", async (body) => {
   const f = routeFixture();
   expect(
-    (await request(f.app).post(`/evidence/${id}/review-allocation`).send(body))
-      .status,
+    (
+      await (
+        await http(f.app)
+      )
+        .post(`/evidence/${id}/review-allocation`)
+        .send(body)
+    ).status,
   ).toBe(404);
   expect(f.store.allocate).not.toHaveBeenCalled();
 });
@@ -145,7 +167,9 @@ it.each(["denied", "conflict", "insufficient", "unavailable"])(
   async (kind) => {
     const f = routeFixture();
     f.store.allocate.mockResolvedValue({ kind } as never);
-    const result = await request(f.app)
+    const result = await (
+      await http(f.app)
+    )
       .post(`/evidence/${id}/review-allocation`)
       .send({ operationId: id, ceiling: "20" });
     expect(result.status).toBe(
@@ -165,8 +189,8 @@ it.each(["receipt", "cancel"] as const)(
       f.store[method].mockResolvedValue({ kind } as never);
       const result =
         method === "receipt"
-          ? await request(f.app).get(`/review-minutes/${id}`)
-          : await request(f.app).post(`/review-minutes/${id}/cancel`);
+          ? await (await http(f.app)).get(`/review-minutes/${id}`)
+          : await (await http(f.app)).post(`/review-minutes/${id}/cancel`);
       expect(result.status).toBe(kind === "denied" ? 404 : 503);
       expect(result.text).not.toContain("Reserved</dt>");
     }
@@ -179,7 +203,7 @@ it("does not offer cancellation for completed or reconciliation receipts and lab
       kind: "applied",
       receipt: { ...f.receipt, state, sourceAvailable: false },
     });
-    const result = await request(f.app).get(`/review-minutes/${id}`);
+    const result = await (await http(f.app)).get(`/review-minutes/${id}`);
     expect(result.status).toBe(200);
     expect(result.text).not.toContain("Cancel unused allocation");
     expect(result.text).toContain("accounting metadata only");
@@ -187,33 +211,33 @@ it("does not offer cancellation for completed or reconciliation receipts and lab
 });
 it("renders owned history and a continuation without accepting foreign filters", async () => {
   const f = routeFixture();
-  let result = await request(f.app).get("/review-minutes");
+  let result = await (await http(f.app)).get("/review-minutes");
   expect(result.text).toContain("No review allocations yet");
   f.store.history.mockResolvedValue({
     kind: "ready",
     receipts: [f.receipt],
     next: id,
   } as never);
-  result = await request(f.app).get(`/review-minutes?after=${id}`);
+  result = await (await http(f.app)).get(`/review-minutes?after=${id}`);
   expect(result.status).toBe(200);
   expect(result.text).toContain("Next receipts");
   expect(result.text).toContain("consumed 0, returned 0");
   expect(f.store.history).toHaveBeenLastCalledWith("owner", id);
   for (const query of ["member=foreign", "after=a&after=b"]) {
-    const denied = await request(f.app).get(`/review-minutes?${query}`);
+    const denied = await (await http(f.app)).get(`/review-minutes?${query}`);
     expect(denied.status).toBe(404);
   }
   f.store.history.mockResolvedValue({ kind: "denied" } as never);
-  expect((await request(f.app).get("/review-minutes")).status).toBe(404);
+  expect((await (await http(f.app)).get("/review-minutes")).status).toBe(404);
 });
 it("withholds allocation forms when the source is denied and hides thrown read diagnostics", async () => {
   const f = routeFixture();
   f.feedback.owner.mockResolvedValue({ kind: "denied" });
   expect(
-    (await request(f.app).get(`/evidence/${id}/review-allocation`)).status,
+    (await (await http(f.app)).get(`/evidence/${id}/review-allocation`)).status,
   ).toBe(404);
   f.store.receipt.mockRejectedValue(Error("private source text"));
-  const result = await request(f.app).get(`/review-minutes/${id}`);
+  const result = await (await http(f.app)).get(`/review-minutes/${id}`);
   expect(result.status).toBe(503);
   expect(result.text).not.toContain("private source text");
   expect(result.text).not.toContain("Reconcile this same allocation");

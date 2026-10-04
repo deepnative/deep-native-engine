@@ -49,3 +49,9 @@ The migration guards INSERT as well as UPDATE publication, couples completed all
 A review finding was reproduced before correction: with two valid grants, reviewer detail chose the lexically first grant even after begin had pinned the other. The regression deterministically begins with the larger ID and failed against the original query. The corrected query requires the pinned grant, prioritizes unresolved allocations, and then uses creation time rather than random UUID as the primary history order. All29 PostgreSQL tests passed afterward; originals are retained under `/tmp/dne458-pinned-grant-original.*`. No separate or qualified review is claimed.
 
 No blocking finding remains from this source review. Final exact-commit verification and hosted delivery remain mandatory; passing earlier development runs is not sufficient for push or closeout.
+
+### First exact-commit gate failure and fixture correction
+
+The first clean gate at `0c8ed97` failed in the isolated unimported-public-source probe after its normal2333-test unit run passed. One new route test received403 instead of the expected503; the original reports are preserved in `/tmp/dne458-exact-commit-original-artifacts`. The bare Express route fixture has no403 response path. Its implicit Supertest listener was replaced with the repository's explicit127.0.0.1 listener and per-test cleanup, consistent with the established HTTP fixture. This corrects the fixture without changing application authorization, response assertions, timeouts, thresholds or probe requirements; it does not establish the exact transport cause of the original403.
+
+After that change, all20 route tests and the complete negative-probe command pass (`/tmp/dne458-loopback-correction.log`, `/tmp/dne458-loopback-probes.log`). A new committed revision must pass the complete exact gate before push. The failed gate remains failed evidence, not a passing retry of the same revision.
