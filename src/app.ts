@@ -2229,14 +2229,24 @@ export function app(
         );
       return;
     }
-    if (
-      !(await workflowFeedback.withdraw(
-        res.locals.token as string,
-        req.params.id as string,
-        version,
-        revision,
-      ))
-    ) {
+    const withdrawn = await workflowFeedback.withdraw(
+      res.locals.token as string,
+      req.params.id as string,
+      version,
+      revision,
+    );
+    if (withdrawn === "uncertain") {
+      res
+        .status(503)
+        .send(
+          errorPage(
+            "Feedback withdrawal unconfirmed",
+            "We could not confirm whether your note was removed. Reopen the workflow and check your current note before trying again.",
+          ),
+        );
+      return;
+    }
+    if (!withdrawn) {
       res
         .status(409)
         .send(

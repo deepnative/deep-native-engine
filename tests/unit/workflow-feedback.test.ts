@@ -16,8 +16,8 @@ it("accepts only bounded, nonempty invented feedback text", () => {
 });
 
 it("rejects invalid, unknown and stale workflow versions without a database write", async () => {
-  const query = vi.fn();
-  const feedback = workflowFeedbackStore({ query } as unknown as Pool);
+  const db = withdrawalPool();
+  const feedback = workflowFeedbackStore(db.pool);
   for (const [id, version, revision] of [
     ["WF-999", 1, 0],
     ["WF-001", 0, 0],
@@ -30,7 +30,9 @@ it("rejects invalid, unknown and stale workflow versions without a database writ
       await feedback.save("owner", id, version, "Invented note", revision),
     ).toBe(false);
   expect(await feedback.save("owner", "WF-001", 1, " ", 0)).toBe(false);
-  expect(query).not.toHaveBeenCalled();
+  expect(
+    db.query.mock.calls.some(([sql]) => /^(INSERT|UPDATE)/.test(sql)),
+  ).toBe(false);
 });
 
 it("keeps disabled feedback unavailable without implying persistence", async () => {
@@ -45,7 +47,7 @@ it("keeps disabled feedback unavailable without implying persistence", async () 
 it("lists only returned feedback rows", async () => {
   const db = withdrawalPool();
   expect(await workflowFeedbackStore(db.pool).list("owner")).toEqual([]);
-  expect(db.release).toHaveBeenCalledWith(undefined);
+  expect(db.release).toHaveBeenCalledWith(expect.any(Error));
 });
 
 it.each([
@@ -55,15 +57,13 @@ it.each([
   { rejectOn: "SELECT workflow_id" },
   { rejectOn: "COMMIT" },
   { principal: false, rollbackFails: true },
-  { rollbackFails: true },
+  { releaseFails: true },
 ])(
   "withholds feedback when authorization or storage fails: %j",
   async (options) => {
     const db = withdrawalPool(options);
     expect(await workflowFeedbackStore(db.pool).list("owner")).toBeNull();
-    expect(db.release).toHaveBeenCalledWith(
-      options.rollbackFails ? expect.any(Error) : undefined,
-    );
+    expect(db.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );
 
@@ -90,7 +90,7 @@ it.each([0, 1])(
       ),
     ).toBe(true);
     expect(db.query.mock.calls.map(([sql]) => sql)).toContain("COMMIT");
-    expect(db.release).toHaveBeenCalledWith(undefined);
+    expect(db.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );
 
@@ -112,7 +112,7 @@ it.each([
   ).toBe(false);
   expect(db.query.mock.calls.map(([sql]) => sql)).not.toContain("COMMIT");
   expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
-  expect(db.release).toHaveBeenCalledWith(undefined);
+  expect(db.release).toHaveBeenCalledWith(expect.any(Error));
 });
 
 it.each([
@@ -132,8 +132,10 @@ it.each([
         statement.startsWith("INSERT") ? 0 : 1,
       ),
     ).toBe(statement === "COMMIT" ? "uncertain" : false);
-    expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
-    expect(db.release).toHaveBeenCalledWith(undefined);
+    expect(db.query.mock.calls.map(([sql]) => sql).includes("ROLLBACK")).toBe(
+      statement !== "COMMIT",
+    );
+    expect(db.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );
 
@@ -173,9 +175,12 @@ function withdrawalPool(
     current?: boolean;
     rejectOn?: string;
     rollbackFails?: boolean;
+    releaseFails?: boolean;
   } = {},
 ) {
-  const release = vi.fn();
+  const release = vi.fn(() => {
+    if (options.releaseFails) throw Error("Handback failed");
+  });
   const query = vi.fn(async (statement: string) => {
     if (options.rejectOn && statement.startsWith(options.rejectOn))
       throw new Error("Simulated database failure");
@@ -197,8 +202,16 @@ function withdrawalPool(
       return { rowCount: options.saved === false ? 0 : 1 };
     if (statement.startsWith("DELETE FROM workflow_feedback"))
       return { rowCount: options.deleted === false ? 0 : 1 };
-    if (statement.startsWith("SELECT clock_timestamp()"))
-      return { rows: [{ valid: options.current !== false }] };
+    if (statement.includes("WITH instant"))
+      return {
+        rows: [
+          {
+            valid: options.current !== false,
+            remaining: "60000",
+            observed: new Date(),
+          },
+        ],
+      };
     return { rows: [], rowCount: 0 };
   });
   const connect = vi.fn(async () => ({ query, release }));
@@ -218,7 +231,7 @@ it("withdraws only a current revision for an authorized member and active worksp
     "COMMIT",
   );
   expect(db.release).toHaveBeenCalledOnce();
-  expect(db.release).toHaveBeenCalledWith(undefined);
+  expect(db.release).toHaveBeenCalledWith(expect.any(Error));
   for (const [id, version, revision] of [
     ["invalid", 1, 1],
     ["WF-001", 0, 1],
@@ -245,7 +258,7 @@ it.each([
   expect(db.query.mock.calls.map(([statement]) => statement)).toContain(
     "ROLLBACK",
   );
-  expect(db.release).toHaveBeenCalledWith(undefined);
+  expect(db.release).toHaveBeenCalledWith(expect.any(Error));
 });
 
 it.each(["DELETE FROM workflow_feedback", "COMMIT"])(
@@ -254,9 +267,11 @@ it.each(["DELETE FROM workflow_feedback", "COMMIT"])(
     const db = withdrawalPool({ rejectOn: statement });
     expect(
       await workflowFeedbackStore(db.pool).withdraw("owner", "WF-001", 1, 2),
-    ).toBe(false);
-    expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
-    expect(db.release).toHaveBeenCalledWith(undefined);
+    ).toBe(statement === "COMMIT" ? "uncertain" : false);
+    expect(db.query.mock.calls.map(([sql]) => sql).includes("ROLLBACK")).toBe(
+      statement !== "COMMIT",
+    );
+    expect(db.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );
 

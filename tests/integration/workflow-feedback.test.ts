@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import request from "supertest";
@@ -7,6 +8,14 @@ import { memberExportStore } from "../../src/member-export.ts";
 import { migrate, store } from "../../src/store.ts";
 import { workflowFeedbackStore } from "../../src/workflow-feedback.ts";
 import { testPool } from "../support/database.ts";
+import { withLoopback } from "../support/loopback-server.ts";
+
+const handedBack = new WeakSet<PoolClient>();
+function handback(client: PoolClient, error?: Error) {
+  if (handedBack.has(client)) return;
+  handedBack.add(client);
+  client.release(error);
+}
 
 const pool = testPool();
 const db = store(pool);
@@ -249,7 +258,12 @@ it.each([
       .rows[0].pid as number;
     const controlled = workflowFeedbackStore({
       query: writer.query.bind(writer),
-      connect: async () => ({ query: writer.query.bind(writer), release() {} }),
+      connect: async () => ({
+        query: writer.query.bind(writer),
+        release(error?: Error) {
+          handback(writer, error);
+        },
+      }),
     } as unknown as import("pg").Pool);
     let writing: ReturnType<typeof feedback.save> | undefined;
     try {
@@ -312,7 +326,7 @@ it.each([
       await blocker.query("ROLLBACK");
       if (writing) await Promise.allSettled([writing]);
       blocker.release();
-      writer.release();
+      handback(writer);
     }
   },
   15_000,
@@ -342,7 +356,9 @@ it.each([0, 1])(
       const controlled = workflowFeedbackStore({
         connect: async () => ({
           query: writer.query.bind(writer),
-          release() {},
+          release(error?: Error) {
+            handback(writer, error);
+          },
         }),
       } as unknown as import("pg").Pool);
       let writing: ReturnType<typeof feedback.save> | undefined;
@@ -389,7 +405,7 @@ it.each([0, 1])(
         await blocker.query("ROLLBACK");
         if (writing) await Promise.allSettled([writing]);
         blocker.release();
-        writer.release();
+        handback(writer);
       }
     }
   },
@@ -409,7 +425,9 @@ it("retains feedback on save transport failures and releases authorization locks
           throw new Error("Simulated post-write transport failure");
         return result;
       },
-      release() {},
+      release(error?: Error) {
+        handback(client, error);
+      },
     }),
   } as unknown as import("pg").Pool);
   try {
@@ -447,7 +465,7 @@ it("retains feedback on save transport failures and releases authorization locks
       probe.release();
     }
   } finally {
-    client.release();
+    handback(client);
   }
 });
 
@@ -509,7 +527,9 @@ it.each([
             throw new Error("Simulated lost commit acknowledgement");
           return result;
         },
-        release() {},
+        release(error?: Error) {
+          handback(client, error);
+        },
       }),
     } as unknown as import("pg").Pool);
     try {
@@ -548,22 +568,24 @@ it.each([
       if (timing === "after")
         expect(await feedback.list(owner.token)).toMatchObject(retained);
     } finally {
-      client.release();
+      handback(client);
     }
   },
 );
 
 function feedbackPage(value: string, backend = feedback, id = "WF-001") {
-  return request(
+  return withLoopback(
     app(db, {
       origin: "http://localhost",
       secret: "test-secret",
       workflowFeedback: backend,
     }),
-  )
-    .get(`/workflow-feedback/${id}`)
-    .set("Host", "localhost")
-    .set("Cookie", `dne_preview=${value}`);
+    (server) =>
+      request(server)
+        .get(`/workflow-feedback/${id}`)
+        .set("Host", "localhost")
+        .set("Cookie", `dne_preview=${value}`),
+  );
 }
 
 it("distinguishes valid empty and historical pages from content-free denial for every workflow ID", async () => {
@@ -572,9 +594,8 @@ it("distinguishes valid empty and historical pages from content-free denial for 
   expect(await feedback.list(token())).toBeNull();
   expect(await feedback.list(owner.token)).toEqual([]);
   expect((await feedbackPage(owner.token)).status).toBe(200);
-  expect((await feedbackPage(owner.token, feedback, "WF-999")).status).toBe(
-    404,
-  );
+  const unknown = await feedbackPage(owner.token, feedback, "WF-999");
+  expect(unknown.status, unknown.text).toBe(404);
   await pool.query(
     "INSERT INTO workflow_feedback(member_id,workflow_id,workflow_version,note) VALUES($1,'WF-998',2,'Invented historical-only private note')",
     [owner.id],
@@ -641,7 +662,12 @@ it.each(["principal", "workspace", "query"] as const)(
     const readerPid = (await reader.query("SELECT pg_backend_pid() AS pid"))
       .rows[0].pid;
     const controlled = workflowFeedbackStore({
-      connect: async () => ({ query: reader.query.bind(reader), release() {} }),
+      connect: async () => ({
+        query: reader.query.bind(reader),
+        release(error?: Error) {
+          handback(reader, error);
+        },
+      }),
     } as unknown as import("pg").Pool);
     let reading: ReturnType<typeof feedback.list> | undefined;
     try {
@@ -686,7 +712,7 @@ it.each(["principal", "workspace", "query"] as const)(
       await blocker.query("ROLLBACK");
       if (reading) await Promise.allSettled([reading]);
       blocker.release();
-      reader.release();
+      handback(reader);
     }
   },
   15_000,
@@ -712,7 +738,12 @@ it.each(["revoked", "deleting"] as const)(
     const readerPid = (await reader.query("SELECT pg_backend_pid() AS pid"))
       .rows[0].pid;
     const controlled = workflowFeedbackStore({
-      connect: async () => ({ query: reader.query.bind(reader), release() {} }),
+      connect: async () => ({
+        query: reader.query.bind(reader),
+        release(error?: Error) {
+          handback(reader, error);
+        },
+      }),
     } as unknown as import("pg").Pool);
     let reading: ReturnType<typeof feedback.list> | undefined;
     try {
@@ -735,7 +766,7 @@ it.each(["revoked", "deleting"] as const)(
       await blocker.query("ROLLBACK");
       if (reading) await Promise.allSettled([reading]);
       blocker.release();
-      reader.release();
+      handback(reader);
     }
   },
 );
@@ -765,7 +796,12 @@ it.each(["revoked", "deleting"] as const)(
       await invalidator.query("SELECT pg_backend_pid() AS pid")
     ).rows[0].pid;
     const controlled = workflowFeedbackStore({
-      connect: async () => ({ query: reader.query.bind(reader), release() {} }),
+      connect: async () => ({
+        query: reader.query.bind(reader),
+        release(error?: Error) {
+          handback(reader, error);
+        },
+      }),
     } as unknown as import("pg").Pool);
     let reading: ReturnType<typeof feedback.list> | undefined;
     let invalidating: Promise<unknown> | undefined;
@@ -802,7 +838,7 @@ it.each(["revoked", "deleting"] as const)(
         ...(invalidating ? [invalidating] : []),
       ]);
       tableBlocker.release();
-      reader.release();
+      handback(reader);
       invalidator.release();
     }
   },
@@ -828,7 +864,9 @@ it("does not render a private or empty success after read failure and releases a
           throw new Error("Invented failed read note");
         return result;
       },
-      release() {},
+      release(error?: Error) {
+        handback(client, error);
+      },
     }),
   } as unknown as import("pg").Pool);
   try {
@@ -856,6 +894,6 @@ it("does not render a private or empty success after read failure and releases a
       { note: "Invented failed read note" },
     ]);
   } finally {
-    client.release();
+    handback(client);
   }
 });
