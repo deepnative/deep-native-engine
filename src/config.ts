@@ -65,7 +65,11 @@ export function config(env: NodeJS.ProcessEnv) {
   const circleDiscussion = env.DNE_CIRCLE_DISCUSSION ?? "disabled";
   if (!["enabled", "disabled"].includes(circleDiscussion))
     throw Error("DNE_CIRCLE_DISCUSSION must be enabled or disabled.");
+  const eventRegistration = env.DNE_EVENT_REGISTRATION ?? "disabled";
+  if (!["enabled", "disabled"].includes(eventRegistration))
+    throw Error("DNE_EVENT_REGISTRATION must be enabled or disabled.");
   return {
+    eventRegistration: eventRegistration === "enabled",
     circleDiscussion: circleDiscussion === "enabled",
     supportTimeWrites: supportTimeWrites === "enabled",
     databaseUrl,

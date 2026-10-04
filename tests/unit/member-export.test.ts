@@ -103,7 +103,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v19",
+      version: "local-member-records-v20",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -226,7 +226,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    [2, 32, ...valid.slice(2)],
+    [2, 33, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -488,7 +488,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v19",
+        version: "local-member-records-v20",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },

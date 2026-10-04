@@ -14,6 +14,7 @@ export interface EventPreview {
   startsAt: string;
   endsAt: string;
   fixtureCapacity: number;
+  localRegistration?: boolean;
 }
 
 // Trusted, Git-versioned content. The repository gate checks the complete schema,

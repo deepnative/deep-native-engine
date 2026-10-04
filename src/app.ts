@@ -134,6 +134,11 @@ import {
   type CircleDiscussionStore,
 } from "./circle-discussion.ts";
 import { disabledCircleStore, type CircleStore } from "./circles.ts";
+import { mountEventEnrollmentRoutes } from "./event-enrollment-routes.ts";
+import {
+  disabledEventEnrollmentStore,
+  type EventEnrollmentStore,
+} from "./event-enrollments.ts";
 import { eventPreviewDetail, listEventPreviews } from "./events.ts";
 import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
 import { compareResponses } from "./attempt-compare.ts";
@@ -279,6 +284,8 @@ export function app(
     practiceSessions?: PracticeSessionStore;
     supportRequests?: SupportRequestStore;
     sampleFeedback?: SampleFeedbackStore;
+    eventEnrollments?: EventEnrollmentStore;
+    eventRegistration?: boolean;
     usefulness?: UsefulnessStore;
     workflowFeedback?: WorkflowFeedbackStore;
     memberExport?: MemberExportStore;
@@ -1708,6 +1715,10 @@ export function app(
       ),
     );
   });
+  mountEventEnrollmentRoutes(
+    app,
+    options.eventEnrollments ?? disabledEventEnrollmentStore(),
+  );
   app.get("/events", (req, res) => {
     const member = res.locals.learner as Learner;
     const allTopics = req.query.all === "1";
@@ -1723,6 +1734,7 @@ export function app(
         ),
         member.timezone,
         allTopics,
+        options.eventRegistration ?? false,
       ),
     );
   });
@@ -1743,7 +1755,13 @@ export function app(
     }
     res
       .status(detail.status === "current" ? 200 : 410)
-      .send(eventDetailPage(detail, (res.locals.learner as Learner).timezone));
+      .send(
+        eventDetailPage(
+          detail,
+          (res.locals.learner as Learner).timezone,
+          options.eventRegistration ?? false,
+        ),
+      );
   });
   app.post("/circles/:id/join", async (req, res) => {
     const result = await circles.join(

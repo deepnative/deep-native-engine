@@ -288,6 +288,15 @@ const sections = {
     "e.id,f.id",
     true,
   ),
+  eventEnrollments: section(
+    `e.id,e.event_id AS "eventId",e.event_version AS "eventVersion",i.title,
+     i.starts_at AS "startsAt",i.ends_at AS "endsAt",e.created_at AS "createdAt",e.withdrawn_at AS "withdrawnAt"`,
+    `private_event_enrollments e JOIN private_event_inventory i
+     ON i.event_id=e.event_id AND i.event_version=e.event_version AND i.capacity=e.capacity
+     JOIN workspaces w ON w.id=e.workspace_id AND w.owner_principal_id=e.member_id
+     WHERE e.member_id=$1 AND w.deleting_at IS NULL`,
+    "e.id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -301,7 +310,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v19";
+  version: "local-member-records-v20";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -435,7 +444,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v19",
+          version: "local-member-records-v20",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

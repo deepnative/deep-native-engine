@@ -1,3 +1,4 @@
+import { eventEnrollmentStore } from "./event-enrollments.ts";
 import { sampleFeedbackStore } from "./sample-feedback.ts";
 import { Pool } from "pg";
 import type { Server } from "node:http";
@@ -92,6 +93,10 @@ export async function start(env: NodeJS.ProcessEnv) {
       practice: practiceStore(pool),
       practiceSessions: practiceSessionStore(pool),
       sampleFeedback: sampleFeedbackStore(pool, objects),
+      eventEnrollments: eventEnrollmentStore(pool, {
+        mode: settings.mode,
+        enabled: settings.eventRegistration,
+      }),
       supportRequests: supportRequestStore(pool, undefined, {
         timeWrites: settings.supportTimeWrites,
       }),

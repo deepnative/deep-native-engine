@@ -19,7 +19,11 @@ it("discovers current future previews for each goal without requiring a paid or 
   ] as const) {
     expect(
       listEventPreviews({ ...profile, goal }, { now }).map((event) => event.id),
-    ).toEqual([id]);
+    ).toEqual(
+      id === "everyday-ai-preview"
+        ? [id, "local-registration-rehearsal"]
+        : ["local-registration-rehearsal", id],
+    );
   }
 });
 
@@ -31,6 +35,7 @@ it("adds domain and IT interests, deduplicates overlap and lets learners explore
     ).map((event) => event.id),
   ).toEqual([
     "everyday-ai-preview",
+    "local-registration-rehearsal",
     "professional-work-preview",
     "technical-practice-preview",
   ]);
@@ -39,8 +44,8 @@ it("adds domain and IT interests, deduplicates overlap and lets learners explore
       { ...profile, domainTags: ["creative"], itRoles: ["other"] },
       { now },
     ).map((event) => event.id),
-  ).toEqual(["everyday-ai-preview"]);
-  expect(listEventPreviews(profile, { now, allTopics: true })).toHaveLength(3);
+  ).toEqual(["everyday-ai-preview", "local-registration-rehearsal"]);
+  expect(listEventPreviews(profile, { now, allTopics: true })).toHaveLength(4);
 });
 
 it("uses an exact version and never silently substitutes a replacement", () => {
@@ -107,7 +112,7 @@ it("returns honest empty matches and sorts without modifying the source catalog"
 it("uses the runtime clock when callers do not override it and preserves retirement after the sample date", () => {
   vi.useFakeTimers();
   vi.setSystemTime(now);
-  expect(listEventPreviews(profile)).toHaveLength(1);
+  expect(listEventPreviews(profile)).toHaveLength(2);
   expect(eventPreviewDetail("everyday-ai-preview", 2).status).toBe("current");
   vi.setSystemTime(new Date("2040-01-01T00:00:00.000Z"));
   expect(listEventPreviews(profile)).toEqual([]);
