@@ -49,6 +49,10 @@ test("[L102] three audiences keep exact private starter practice when changing g
     ).toHaveCount(1);
     await firstLink.focus();
     await page.keyboard.press("Enter");
+    await page.waitForURL(
+      `**/lesson?version=1&goal=${a}#starter-version-1-${a}`,
+      { waitUntil: "load" },
+    );
     await expect(page.getByText(first, { exact: true })).toBeVisible();
     await expect(page.locator('form[action="/exercise"]')).toHaveCount(0);
     const withdraw = page.getByLabel(
@@ -56,6 +60,7 @@ test("[L102] three audiences keep exact private starter practice when changing g
     );
     await withdraw.focus();
     await page.keyboard.press("Space");
+    await expect(withdraw).toBeChecked();
     await page.keyboard.press("Tab");
     await expect(
       page.getByRole("button", { name: "Withdraw completed exercise text" }),

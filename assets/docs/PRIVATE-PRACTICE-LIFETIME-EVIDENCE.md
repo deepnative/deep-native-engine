@@ -77,3 +77,32 @@ and zero unhandled diagnostics, using a fresh owned PostgreSQL database. Raw rep
 are retained in `/tmp/dne453-http-sync-focused-original-artifacts`. A new clean
 exact-commit gate, pre-push and original hosted checks remain required; focused
 success does not establish those gates.
+
+## Original browser navigation finding
+
+At corrected head `6352e32`, original push CI 37180125946 passed the unit and
+PostgreSQL suites but failed mobile L102: Space did not check the withdrawal
+checkbox, and Tab did not reach the submit button. Original PR CI 37180127829
+independently passed; that success does not erase the push failure. Both original
+runs are retained, and no rerun was requested.
+
+A controlled browser probe used the original trace's invented historical-page
+markup and unchanged stylesheet, with stylesheet completion held by a barrier.
+Focusing the checkbox before page load completed reproduced native fragment
+navigation removing its focus: Space left it unchecked, and Tab focused the
+checkbox rather than the button. Releasing the identical resource and observing
+load before focusing produced a checked checkbox and focused submit button with
+the same Space/Tab keys. The probe and event evidence are retained at
+`/tmp/dne453-fragment-probe.mjs` and
+`/tmp/dne453-fragment-probe-result.json`; fixture hidden fields were omitted.
+
+L102 now waits for its exact goal/version/fragment navigation to load before
+keyboard interaction and explicitly asserts the Space-selected checkbox. It
+preserves keyboard activation, button focus, withdrawal, other-goal retention,
+export privacy, all backgrounds and both browser profiles. No application code,
+timeout, retry, scenario count or coverage denominator changes for this repair.
+The corrected L102 passed once on desktop and mobile, each exercising all three
+backgrounds, using a fresh owned PostgreSQL database and storage. Original reports
+are retained at `/tmp/dne453-l102-focused-original-artifacts`.
+The new revision still requires complete exact-commit verification,
+normal pre-push, original hosted checks and the remaining delivery gates.
