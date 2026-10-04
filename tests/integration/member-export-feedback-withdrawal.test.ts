@@ -217,7 +217,7 @@ it("lets an export holding the feedback note finish before withdrawal commits", 
   );
   const controlled = pausedAfterFeedbackRead();
   const reading = controlled.exported.exportOwned(ownerToken);
-  let writing: Promise<boolean> | undefined;
+  let writing: Promise<boolean | "uncertain"> | undefined;
   try {
     await controlled.feedbackRead.wait;
     const writer = observableWriter();
@@ -267,7 +267,7 @@ it("does not falsely accept a feedback withdrawal whose session expires while bl
   );
   const controlled = pausedAfterFeedbackRead();
   const reading = controlled.exported.exportOwned(ownerToken);
-  let writing: Promise<boolean> | undefined;
+  let writing: Promise<boolean | "uncertain"> | undefined;
   try {
     await controlled.feedbackRead.wait;
     const writer = observableWriter();
@@ -457,7 +457,7 @@ it.each([
     ).toBe(false);
     expect(deleteAttempted).toBe(true);
     expect(released).toBe(true);
-    expect(releaseHadError).toBe(rollbackFails);
+    expect(releaseHadError).toBe(true);
 
     if (rollbackFails) {
       const deadline = performance.now() + 3000;

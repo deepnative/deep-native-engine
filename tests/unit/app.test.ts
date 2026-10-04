@@ -266,6 +266,20 @@ it("keeps workflow feedback owner-only and never claims a failed or stale write"
   expect(unconfirmed.text).toContain("Feedback save unconfirmed");
   expect(unconfirmed.text).toContain("check your current note");
   expect(unconfirmed.text).not.toContain("Nothing was saved");
+  feedback.withdraw.mockResolvedValueOnce("uncertain");
+  const withdrawalUnconfirmed = await post(
+    "/workflow-feedback/WF-001/withdraw",
+    {
+      workflow_version: "1",
+      revision: "1",
+      confirm: "yes",
+    },
+  ).expect(503);
+  expect(withdrawalUnconfirmed.text).toContain(
+    "Feedback withdrawal unconfirmed",
+  );
+  expect(withdrawalUnconfirmed.text).toContain("check your current note");
+  expect(withdrawalUnconfirmed.text).not.toContain("Nothing was removed");
   expect(feedback.save).toHaveBeenCalledWith(
     expect.any(String),
     "WF-001",
