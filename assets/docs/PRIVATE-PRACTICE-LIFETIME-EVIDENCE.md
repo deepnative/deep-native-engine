@@ -128,3 +128,25 @@ The full member-export unit file passed once, 19/19 with no pending tests.
 This fixture-only correction changes no production deadline, assertion, test
 inventory, retry or coverage denominator. A fresh exact-commit gate, normal
 pre-push, original hosted checks and resulting-main verification are still required.
+
+## Original repair-CI grant ordering finding
+
+Original push run 37187503726 on `34927db` passed all 2140 unit tests but
+failed one of 1470 PostgreSQL tests, the connected-support equal-creation-time
+grant ordering case. Its raw reports are preserved separately. The test sampled
+a PostgreSQL timestamp through a JavaScript Date, losing microsecond precision;
+copied rows could then precede a source grant within the same millisecond.
+
+A first diagnostic attempt to modify existing grant creation times was rejected
+by the immutable-history constraint; that setup failure is retained and is not
+the claimed reproduction. A fresh dedicated database instead inserted an
+invented predecessor at a sub-millisecond instant and selected a tie instant one
+microsecond later. Passing that timestamp through Date reproduced the original
+wrong-grant assertion. The corrected fixture retains the PostgreSQL timestamp
+as text and uses a database-derived instant strictly after existing grant times.
+The sub-millisecond predecessor remains in the test to expose regression. Both
+allocation totals and descending-identifier assertions remain unchanged; no
+production ordering, deadlines, retries or coverage inventory are modified.
+Original diagnostic logs are retained at
+`/tmp/dne453-grant-clock-reproduction.log` and
+`/tmp/dne453-grant-clock-precision-reproduction.log`.

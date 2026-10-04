@@ -1059,7 +1059,17 @@ it("breaks equal time-grant creation instants by descending identifier without a
     ...f,
     allocationId: second.receipt.allocationId,
   });
-  const tiedAt = (await pool.query("SELECT clock_timestamp() at")).rows[0].at;
+  // Keep a sub-millisecond predecessor so Date truncation cannot hide here.
+  await pool.query(
+    "INSERT INTO support_time_grants(id,allocation_id,request_id,staff_id,staff_role,starts_at,expires_at,granted_by,idempotency_key,created_at) SELECT $2,allocation_id,request_id,staff_id,staff_role,starts_at,expires_at,granted_by,$3,date_trunc('milliseconds',clock_timestamp())+interval '900 microseconds' FROM support_time_grants WHERE id=$1",
+    [next.grantId, randomUUID(), randomUUID()],
+  );
+  const tiedAt = (
+    await pool.query(
+      "SELECT (max(created_at)+interval '1 microsecond')::text AS at FROM support_time_grants WHERE request_id=$1",
+      [f.scope.requestId],
+    )
+  ).rows[0].at;
   const pairs = [
     {
       id: randomUUID(),
