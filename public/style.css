@@ -703,3 +703,8 @@ footer span {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* Exact-source feedback stays readable without expanding a narrow viewport. */
+.sample-feedback {
+  overflow-wrap: anywhere;
+}
