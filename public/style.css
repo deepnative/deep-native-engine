@@ -708,3 +708,9 @@ footer span {
 .sample-feedback {
   overflow-wrap: anywhere;
 }
+
+/* Long allowed sample titles stay readable through queueing and discovery. */
+.private-evidence,
+.reviewer-worklist {
+  overflow-wrap: anywhere;
+}

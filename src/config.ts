@@ -59,6 +59,9 @@ export function config(env: NodeJS.ProcessEnv) {
     privateStorageRoot.startsWith(`${publicRoot}${sep}`)
   )
     throw new Error("Private evidence storage cannot be served publicly.");
+  const reviewerWorklistReads = env.DNE_REVIEWER_WORKLIST_READS ?? "enabled";
+  if (!["enabled", "disabled"].includes(reviewerWorklistReads))
+    throw Error("DNE_REVIEWER_WORKLIST_READS must be enabled or disabled.");
   const reviewTimeWrites = env.DNE_REVIEW_TIME_WRITES ?? "disabled";
   if (!["enabled", "disabled"].includes(reviewTimeWrites))
     throw Error("DNE_REVIEW_TIME_WRITES must be enabled or disabled.");
@@ -72,6 +75,7 @@ export function config(env: NodeJS.ProcessEnv) {
   if (!["enabled", "disabled"].includes(eventRegistration))
     throw Error("DNE_EVENT_REGISTRATION must be enabled or disabled.");
   return {
+    reviewerWorklistReads: reviewerWorklistReads === "enabled",
     reviewTimeWrites: reviewTimeWrites === "enabled",
     eventRegistration: eventRegistration === "enabled",
     circleDiscussion: circleDiscussion === "enabled",

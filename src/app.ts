@@ -1,3 +1,5 @@
+import { mountReviewerWorklistRoutes } from "./reviewer-worklist-routes.ts";
+import type { ReviewerWorklistStore } from "./reviewer-worklist.ts";
 import { mountReviewTimeRoutes } from "./review-time-routes.ts";
 import type { reviewTimeStore } from "./review-time-store.ts";
 import { mountSampleFeedbackRoutes } from "./sample-feedback-routes.ts";
@@ -286,6 +288,7 @@ export function app(
     practiceSessions?: PracticeSessionStore;
     supportRequests?: SupportRequestStore;
     sampleFeedback?: SampleFeedbackStore;
+    reviewerWorklist?: ReviewerWorklistStore;
     reviewTime?: ReturnType<typeof reviewTimeStore>;
     reviewTimeWrites?: boolean;
     eventEnrollments?: EventEnrollmentStore;
@@ -1105,6 +1108,8 @@ export function app(
       options.sampleFeedback,
       options.reviewTimeWrites ?? false,
     );
+  if (options.reviewerWorklist)
+    mountReviewerWorklistRoutes(app, options.reviewerWorklist);
   if (options.sampleFeedback)
     mountSampleFeedbackRoutes(app, options.sampleFeedback);
   mountSupportRequestRoutes(
