@@ -56,18 +56,24 @@ function fixture(
         rows:
           options.principal === false
             ? []
-            : [{ id: "owner-id", expiresAt: new Date() }],
+            : [{ id: "owner-id", expiresAt: new Date(Date.now() + 60000) }],
       };
     if (sql.startsWith("SELECT id FROM workspaces"))
       return {
         rows: options.workspace === false ? [] : [{ id: "workspace-id" }],
       };
-    if (sql.startsWith("SELECT clock_timestamp"))
+    if (sql.includes("WITH instant AS MATERIALIZED"))
       return {
         rows:
           options.valid === "missing"
             ? []
-            : [{ valid: options.valid !== false }],
+            : [
+                {
+                  valid: options.valid !== false,
+                  remaining: options.valid === false ? "-1" : "60000",
+                  observed: new Date(),
+                },
+              ],
       };
     return { rows: [], rowCount: options.changed === false ? 0 : 1 };
   });
@@ -92,43 +98,45 @@ it("returns accepted and conflict results for creation, correction and withdrawa
     );
     expect(await f.reports.withdraw("owner", "SYN-971", 1, 2)).toBe(changed);
     expect(f.release).toHaveBeenCalledTimes(3);
-    expect(f.release).toHaveBeenCalledWith(undefined);
+    expect(f.release).toHaveBeenCalledWith(expect.any(Error));
   }
   const disabled = disabledUsefulnessStore();
   expect(await disabled.list("owner")).toEqual([]);
   expect(await disabled.save("owner", "SYN-971", 1, "helpful", 0)).toBeNull();
   expect(await disabled.withdraw("owner", "SYN-971", 1, 1)).toBeNull();
 });
-it.each([
-  { principal: false },
-  { workspace: false },
-  { valid: false },
-  { valid: "missing" as const },
-])("rolls back authorization denial safely: %j", async (options) => {
-  const f = fixture(options);
-  expect(await f.reports.save("owner", "SYN-971", 1, "helpful", 0)).toBeNull();
-  expect(f.query).toHaveBeenCalledWith("ROLLBACK");
-  expect(f.query).not.toHaveBeenCalledWith("COMMIT");
-  expect(f.release).toHaveBeenCalledWith(undefined);
-});
+it.each([{ principal: false }, { workspace: false }, { valid: false }])(
+  "rolls back authorization denial safely: %j",
+  async (options) => {
+    const f = fixture(options);
+    expect(
+      await f.reports.save("owner", "SYN-971", 1, "helpful", 0),
+    ).toBeNull();
+    if (options.valid === false)
+      expect(f.query).not.toHaveBeenCalledWith("ROLLBACK", undefined);
+    else expect(f.query).toHaveBeenCalledWith("ROLLBACK", undefined);
+    expect(f.query).not.toHaveBeenCalledWith("COMMIT", undefined);
+    expect(f.release).toHaveBeenCalledWith(expect.any(Error));
+  },
+);
 it.each([
   "BEGIN",
   "SET LOCAL",
   "SELECT id,expires_at",
   "SELECT id FROM workspaces",
   "INSERT INTO",
-  "SELECT clock_timestamp",
+  "WITH instant AS MATERIALIZED",
   "COMMIT",
 ])("does not retry failed work at %s", async (fault) => {
   const f = fixture({ fault });
   await expect(
     f.reports.save("owner", "SYN-971", 1, "helpful", 0),
-  ).rejects.toThrow("synthetic database fault");
+  ).rejects.toThrow("Usefulness operation unconfirmed");
   expect(f.connect).toHaveBeenCalledTimes(1);
-  expect(f.query).toHaveBeenCalledWith("ROLLBACK");
-  expect(f.release).toHaveBeenCalledWith(
-    fault === "COMMIT" ? expect.any(Error) : undefined,
-  );
+  if (fault === "COMMIT" || fault === "BEGIN")
+    expect(f.query).not.toHaveBeenCalledWith("ROLLBACK", undefined);
+  else expect(f.query).toHaveBeenCalledWith("ROLLBACK", undefined);
+  expect(f.release).toHaveBeenCalledWith(expect.any(Error));
 });
 it.each([{ principal: false }, { fault: "INSERT INTO" }])(
   "discards connection when rollback fails: %j",
@@ -136,7 +144,7 @@ it.each([{ principal: false }, { fault: "INSERT INTO" }])(
     const f = fixture({ ...options, rollbackFault: true });
     await expect(
       f.reports.save("owner", "SYN-971", 1, "helpful", 0),
-    ).rejects.toThrow("Usefulness mutation rollback failed");
+    ).rejects.toThrow("Usefulness operation unconfirmed");
     expect(f.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );
@@ -144,7 +152,16 @@ it("propagates failed acquisition without retrying", async () => {
   const connect = vi.fn().mockRejectedValue(new Error("pool unavailable"));
   const reports = usefulnessStore({ connect } as unknown as Pool);
   await expect(reports.withdraw("owner", "SYN-971", 1, 1)).rejects.toThrow(
-    "pool unavailable",
+    "Usefulness operation unconfirmed",
   );
   expect(connect).toHaveBeenCalledTimes(1);
+});
+
+it("treats missing authority observation as unavailable rather than a revision conflict", async () => {
+  const f = fixture({ valid: "missing" });
+  await expect(
+    f.reports.save("owner", "SYN-971", 1, "helpful", 0),
+  ).rejects.toThrow("Usefulness operation unconfirmed");
+  expect(f.query).not.toHaveBeenCalledWith("COMMIT", undefined);
+  expect(f.release).toHaveBeenCalledWith(expect.any(Error));
 });

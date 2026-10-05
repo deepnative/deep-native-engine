@@ -1,6 +1,6 @@
 import request from "supertest";
 import { app } from "../../src/app.ts";
-import { COOKIE } from "../../src/session.ts";
+import { COOKIE, csrf } from "../../src/session.ts";
 import { withLoopback } from "../support/loopback-server.ts";
 import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
@@ -568,7 +568,7 @@ it("does not replay a committed correction after a lost COMMIT reply", async () 
   } as unknown as import("pg").Pool);
   try {
     await expect(mutate(ambiguous, "correct", owner)).rejects.toThrow(
-      "Synthetic lost commit acknowledgement",
+      "Usefulness operation unconfirmed",
     );
     expect(writes).toBe(1);
     expect(discarded).toBeInstanceOf(Error);
@@ -625,7 +625,8 @@ it("rolls back query failure, releases authorization locks and returns a generic
             confirm: "yes",
           })
           .expect(503);
-        expect(response.text).toContain("We could not confirm the result");
+        expect(response.text).toContain("Usefulness response unconfirmed");
+        expect(response.text).toContain('href="/progress"');
         expect(response.text).not.toMatch(
           /synthetic_missing_usefulness_table|Invented usefulness lesson/,
         );
@@ -664,7 +665,9 @@ it("times out a blocked report without mutation and allows later correction", as
       [owner.id],
     );
     result = mutate(reports, "correct", owner).catch((error) => error);
-    expect(await result).toMatchObject({ code: "55P03" });
+    expect(await result).toMatchObject({
+      message: "Usefulness operation unconfirmed",
+    });
     expect(await retained(owner.id)).toEqual(before);
     await blocker.query("COMMIT");
     expect(await mutate(reports, "correct", owner)).toBe(true);
@@ -672,5 +675,254 @@ it("times out a blocked report without mutation and allows later correction", as
     await blocker.query("ROLLBACK");
     if (result) await Promise.allSettled([result]);
     blocker.release();
+  }
+}, 10000);
+
+const lifetimeCases = (["save", "correct", "withdraw"] as const).flatMap(
+  (operation) =>
+    (["commit", "handback"] as const).map((boundary) => ({
+      operation,
+      boundary,
+    })),
+);
+it.each(lifetimeCases)(
+  "recovers $operation without replay after expiry at $boundary",
+  async ({ operation, boundary }) => {
+    await publishLesson();
+    const owner = await member("explorer");
+    await selfAssess(owner.id);
+    if (operation !== "save")
+      expect(await reports.save(owner.token, lessonId, 1, "helpful", 0)).toBe(
+        true,
+      );
+    const statements: string[] = [],
+      replies: Promise<unknown>[] = [];
+    let committed = false,
+      discarded = false;
+    const target = usefulnessStore({
+      connect: async () => {
+        const client = await pool.connect();
+        return {
+          async query(sql: string, values?: unknown[]) {
+            statements.push(sql);
+            const result = await client.query(sql, values);
+            if (sql === "COMMIT") {
+              committed = true;
+              if (boundary === "commit") {
+                const reply = pool.query("SELECT pg_sleep(2.3)");
+                replies.push(reply);
+                await reply;
+              }
+            }
+            return result;
+          },
+          release(error?: Error) {
+            if (committed && boundary === "handback") {
+              const until = performance.now() + 2300;
+              while (performance.now() < until) {
+                /* native handback */
+              }
+            }
+            discarded = !!error;
+            client.release(error);
+          },
+        };
+      },
+    } as unknown as import("pg").Pool);
+    const secret = "invented-usefulness-lifetime";
+    try {
+      await pool.query(
+        "UPDATE principals SET expires_at=clock_timestamp()+interval '2 seconds' WHERE id=$1",
+        [owner.id],
+      );
+      const response = await withLoopback(
+        app(db, { origin, secret, usefulness: target }),
+        (server) =>
+          request(server)
+            .post(`/library/${lessonId}/usefulness`)
+            .set("Host", "127.0.0.1:3000")
+            .set("Cookie", `${COOKIE}=${owner.token}`)
+            .set("Origin", origin)
+            .type("form")
+            .send({
+              csrf: csrf(owner.token, secret),
+              content_version: "1",
+              revision: operation === "save" ? "0" : "1",
+              intent: operation === "withdraw" ? "withdraw" : "save",
+              choice: operation === "save" ? "helpful" : "not_yet",
+              confirm: "yes",
+            }),
+      );
+      await Promise.all(replies);
+      expect(committed).toBe(true);
+      expect(
+        (
+          await pool.query(
+            "SELECT expires_at<=clock_timestamp() expired FROM principals WHERE id=$1",
+            [owner.id],
+          )
+        ).rows[0].expired,
+      ).toBe(true);
+      expect.soft(response.status).toBe(503);
+      expect.soft(response.headers.location).toBeUndefined();
+      expect.soft(response.text).toMatch(/unconfirmed/i);
+      expect.soft(response.text).toContain('href="/progress"');
+      expect.soft(response.text).not.toContain("<form");
+      expect.soft(response.text).not.toContain("Nothing was saved");
+      expect.soft(discarded).toBe(true);
+      expect(statements.filter((sql) => sql === "COMMIT")).toHaveLength(1);
+      expect(statements).not.toContain("ROLLBACK");
+      const durable = await retained(owner.id);
+      expect(durable).toHaveLength(operation === "withdraw" ? 0 : 1);
+      if (operation !== "withdraw")
+        expect(durable[0]).toMatchObject({
+          choice: operation === "save" ? "helpful" : "not_yet",
+          revision: operation === "save" ? 1 : 2,
+        });
+      expect(await reports.list(owner.token)).toEqual([]);
+      await pool.query(
+        "UPDATE principals SET expires_at=clock_timestamp()+interval '1 hour' WHERE id=$1",
+        [owner.id],
+      );
+      const fresh = await withLoopback(
+        app(db, { origin, secret, usefulness: reports }),
+        (server) =>
+          request(server)
+            .get("/progress")
+            .set("Host", "127.0.0.1:3000")
+            .set("Cookie", `${COOKIE}=${owner.token}`),
+      );
+      expect(fresh.status).toBe(200);
+      if (operation === "withdraw")
+        expect(fresh.text).not.toContain("Your current answer:");
+      else
+        expect(fresh.text).toContain(
+          operation === "save" ? "Helpful for my next step" : "Not helpful yet",
+        );
+      expect(await retained(owner.id)).toEqual(durable);
+    } finally {
+      await Promise.all(replies);
+    }
+  },
+  10000,
+);
+
+it.each(["query", "commit", "rollback"] as const)(
+  "bounds unresolved %s without replay or queued rollback",
+  async (boundary) => {
+    await publishLesson();
+    const owner = await member("professional");
+    await selfAssess(owner.id);
+    let resume!: () => void;
+    const stalled = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    const statements: string[] = [],
+      replies: Promise<unknown>[] = [];
+    let released = 0,
+      intercepted = false;
+    const backend = usefulnessStore({
+      connect: async () => {
+        const client = await pool.connect();
+        return {
+          async query(sql: string, values?: unknown[]) {
+            statements.push(sql);
+            if (
+              boundary === "rollback" &&
+              sql.startsWith("SELECT id,expires_at")
+            )
+              return { rows: [] };
+            const result = await client.query(sql, values);
+            if (
+              (boundary === "query" &&
+                sql.includes("INSERT INTO lesson_usefulness")) ||
+              (boundary === "commit" && sql === "COMMIT") ||
+              (boundary === "rollback" && sql === "ROLLBACK")
+            ) {
+              intercepted = true;
+              replies.push(stalled);
+              await stalled;
+            }
+            return result;
+          },
+          release(error?: Error) {
+            released++;
+            expect(error).toBeInstanceOf(Error);
+            client.release(error);
+          },
+        };
+      },
+    } as unknown as import("pg").Pool);
+    try {
+      const entered = performance.now();
+      await expect(
+        backend.save(owner.token, lessonId, 1, "helpful", 0),
+      ).rejects.toThrow("Usefulness operation unconfirmed");
+      expect(intercepted).toBe(true);
+      expect(released).toBe(1);
+      expect(performance.now() - entered).toBeLessThan(8000);
+      expect(statements.filter((sql) => sql === "COMMIT")).toHaveLength(
+        boundary === "commit" ? 1 : 0,
+      );
+      expect(statements.filter((sql) => sql === "ROLLBACK")).toHaveLength(
+        boundary === "rollback" ? 1 : 0,
+      );
+      resume();
+      await Promise.all(replies);
+      expect(await retained(owner.id)).toHaveLength(
+        boundary === "commit" ? 1 : 0,
+      );
+    } finally {
+      resume();
+      await Promise.allSettled(replies);
+    }
+  },
+  12000,
+);
+
+it("bounds pool exhaustion and disposes a late connection without work", async () => {
+  const { Pool } = await import("pg");
+  const limited = new Pool({
+    connectionString: process.env.DNE_TEST_DATABASE_URL,
+    max: 1,
+  });
+  const held = await limited.connect();
+  let heldReturned = false,
+    released = 0,
+    queried = false,
+    late!: Promise<void>;
+  const backend = usefulnessStore({
+    connect: () => {
+      const acquisition = limited.connect().then((client) => ({
+        query(sql: string, values?: unknown[]) {
+          queried = true;
+          return client.query(sql, values);
+        },
+        release(error?: Error) {
+          released++;
+          expect(error).toBeInstanceOf(Error);
+          client.release(error);
+        },
+      }));
+      late = acquisition.then(() => {});
+      return acquisition;
+    },
+  } as unknown as import("pg").Pool);
+  try {
+    const entered = performance.now();
+    await expect(backend.withdraw("invented", lessonId, 1, 1)).rejects.toThrow(
+      "Usefulness operation unconfirmed",
+    );
+    expect(performance.now() - entered).toBeLessThan(5000);
+    expect(released).toBe(0);
+    held.release();
+    heldReturned = true;
+    await late;
+    await Promise.resolve();
+    expect(released).toBe(1);
+    expect(queried).toBe(false);
+  } finally {
+    if (!heldReturned) held.release();
+    await limited.end();
   }
 }, 10000);

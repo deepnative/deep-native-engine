@@ -1434,6 +1434,33 @@
       "expected": "Uncertain writes return503 with no mutation replay form; exactly one second membership generation, preserved first closed interval, and fresh read reflects committed joined/departed state without changing history on both registered viewports",
       "issues": [467, 42],
       "critical": true
+    },
+    {
+      "id": "L160",
+      "actor": "General learner",
+      "preconditions": "Dedicated local app and generated test database; self-assessed invented lesson; controlled successful COMMIT reply delay",
+      "steps": "Save, reload, correct, reload, withdraw and reload a private usefulness answer; repeat each mutation across expiry and recover using a fresh authorized activity read",
+      "expected": "Unconfirmed writes return 503 with no mutation form or automatic replay; fresh activity read shows exactly the committed choice/revision or withdrawal without a second write on both registered viewports",
+      "issues": [469, 42],
+      "critical": true
+    },
+    {
+      "id": "L161",
+      "actor": "Professional outside IT",
+      "preconditions": "Dedicated local app and generated test database; self-assessed invented lesson; controlled successful COMMIT reply delay",
+      "steps": "Save, reload, correct, reload, withdraw and reload a private usefulness answer; repeat each mutation across expiry and recover using a fresh authorized activity read",
+      "expected": "Unconfirmed writes return 503 with no mutation form or automatic replay; fresh activity read shows exactly the committed choice/revision or withdrawal without a second write on both registered viewports",
+      "issues": [469, 42],
+      "critical": true
+    },
+    {
+      "id": "L162",
+      "actor": "IT practitioner",
+      "preconditions": "Dedicated local app and generated test database; self-assessed invented lesson; controlled successful COMMIT reply delay",
+      "steps": "Save, reload, correct, reload, withdraw and reload a private usefulness answer; repeat each mutation across expiry and recover using a fresh authorized activity read",
+      "expected": "Unconfirmed writes return 503 with no mutation form or automatic replay; fresh activity read shows exactly the committed choice/revision or withdrawal without a second write on both registered viewports",
+      "issues": [469, 42],
+      "critical": true
     }
   ],
   "fullMvp": [
