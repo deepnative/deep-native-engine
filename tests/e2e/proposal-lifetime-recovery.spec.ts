@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { randomBytes } from "node:crypto";
 import type { Pool } from "pg";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "@playwright/test";
 import { app } from "../../src/app.ts";
 import { store } from "../../src/store.ts";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -79,17 +79,20 @@ for (const [index, background] of (
       actor: string,
       button: string,
       heading: string,
+      scope?: Locator,
     ) {
       await pool.query(
         "UPDATE principals SET expires_at=clock_timestamp()+interval '2 seconds' WHERE id=$1",
         [actor],
       );
       delayNextCommit = true;
-      const response = page.waitForResponse(
-        (r) => r.request().method() === "POST",
-      );
-      await page.getByRole("button", { name: button, exact: true }).click();
-      expect((await response).status()).toBe(503);
+      const [response] = await Promise.all([
+        page.waitForResponse((r) => r.request().method() === "POST"),
+        (scope ?? page)
+          .getByRole("button", { name: button, exact: true })
+          .click(),
+      ]);
+      expect(response.status()).toBe(503);
       await expect(
         page.getByRole("heading", { name: heading, exact: true }),
       ).toBeVisible();
@@ -158,6 +161,17 @@ for (const [index, background] of (
       await expect(
         page.getByText("PRIVATE SAMPLE · SUBMITTED", { exact: true }),
       ).toBeVisible();
+      const otherId = await backend.createDraft(
+        owner,
+        {
+          title: "Invented separate queued sample",
+          body: "This other proposal must remain submitted.",
+          sources: "Original invented source",
+        },
+        true,
+      );
+      if (!otherId) throw Error("Missing separate queued sample");
+      expect(await backend.submit(owner, otherId, true, 1)).toBe("submitted");
       await staffPage.goto(origin + "/moderate/proposals");
       await expect(
         staffPage.locator(`[data-proposal-id="${id}"]`),
@@ -167,6 +181,7 @@ for (const [index, background] of (
         staffId,
         "Quarantine for review",
         "Proposal moderation unconfirmed",
+        staffPage.locator(`[data-proposal-id="${id}"]`),
       );
       await staffPage
         .getByRole("link", { name: "Check current private state" })
@@ -174,6 +189,7 @@ for (const [index, background] of (
       await expect(
         staffPage.locator(`[data-proposal-id="${id}"]`),
       ).toContainText("quarantined");
+      expect((await backend.preview(owner, otherId))?.state).toBe("submitted");
       expect(
         (
           await pool.query(
