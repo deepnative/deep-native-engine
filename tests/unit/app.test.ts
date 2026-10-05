@@ -1644,6 +1644,22 @@ it("accepts a member's confirmed usefulness choice and fails closed on stale, fo
     revision: "1",
   }).expect(503);
   expect(uncertain.text).not.toContain("private database text");
+  expect(uncertain.text).toContain("Usefulness response unconfirmed");
+  expect(uncertain.text).toContain('href="/progress"');
+  expect(uncertain.text).not.toContain("<form");
+  expect(uncertain.text).not.toContain("Nothing was saved");
+  usefulness.withdraw.mockRejectedValueOnce(
+    new Error("private withdrawal detail"),
+  );
+  const withdrawal = await post({
+    intent: "withdraw",
+    confirm: "yes",
+    revision: "1",
+  }).expect(503);
+  expect(withdrawal.text).toContain("Usefulness response unconfirmed");
+  expect(withdrawal.text).toContain('href="/progress"');
+  expect(withdrawal.text).not.toContain("<form");
+  expect(withdrawal.text).not.toContain("private withdrawal detail");
   await post({ intent: "withdraw", confirm: "yes", revision: "1" }).expect(303);
   usefulness.withdraw.mockResolvedValueOnce(false);
   await post({ intent: "withdraw", confirm: "yes", revision: "1" }).expect(409);

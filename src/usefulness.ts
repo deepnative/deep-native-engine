@@ -1,4 +1,8 @@
 import type { Pool } from "pg";
+import {
+  practiceTransaction,
+  PracticeLifetimeFailure,
+} from "./practice-session-lifetime.ts";
 import { hash } from "./store.ts";
 
 export type UsefulnessChoice = "helpful" | "not_yet";
@@ -54,55 +58,39 @@ export function usefulnessStore(pool: Pool): UsefulnessStore {
     sql: string,
     values: unknown[],
   ): Promise<boolean | null> => {
-    const client = await pool.connect();
-    let committed = false;
-    let releaseError: Error | undefined;
-    const rollback = async () => {
-      try {
-        await client.query("ROLLBACK");
-      } catch {
-        releaseError = new Error("Usefulness mutation rollback failed");
-        throw releaseError;
-      }
-    };
+    let readyToCommit = false;
     try {
-      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
-      await client.query("SET LOCAL lock_timeout='5s'");
-      // Match deletion/revocation order before locking activity, content and report rows.
-      const principal = (
-        await client.query<{ id: string; expiresAt: Date }>(
-          `SELECT id,expires_at AS "expiresAt" FROM principals WHERE token_hash=$1
-         AND kind='member' AND revoked_at IS NULL
-         AND expires_at>clock_timestamp() FOR SHARE`,
-          [values[0]],
-        )
-      ).rows[0];
-      if (!principal) return null;
-      const workspace = await client.query(
-        `SELECT id FROM workspaces WHERE owner_principal_id=$1
-         AND deleting_at IS NULL FOR SHARE`,
-        [principal.id],
-      );
-      if (!workspace.rows[0]) return null;
-      const result = (await client.query(sql, values)).rowCount === 1;
-      // A row or unique-key wait can outlast the principal without changing its tuple.
-      const current = await client.query<{ valid: boolean }>(
-        "SELECT clock_timestamp() < $1::timestamptz AS valid",
-        [principal.expiresAt],
-      );
-      if (!current.rows[0]?.valid) return null;
-      // A lost COMMIT reply is uncertain: discard the connection and never replay it.
-      releaseError = new Error("Usefulness mutation commit outcome unknown");
-      await client.query("COMMIT");
-      committed = true;
-      releaseError = undefined;
-      return result;
-    } finally {
-      try {
-        if (!committed) await rollback();
-      } finally {
-        client.release(releaseError);
-      }
+      return await practiceTransaction(pool, async (client) => {
+        // Match deletion/revocation order before locking activity, content and report rows.
+        const principal = (
+          await client.query<{ id: string; expiresAt: Date }>(
+            `SELECT id,expires_at AS "expiresAt" FROM principals WHERE token_hash=$1
+             AND kind='member' AND revoked_at IS NULL
+             AND expires_at>clock_timestamp() FOR SHARE`,
+            [values[0]],
+          )
+        ).rows[0];
+        if (!principal) throw new PracticeLifetimeFailure("denied");
+        await client.observe([principal.expiresAt]);
+        const workspace = await client.query(
+          `SELECT id FROM workspaces WHERE owner_principal_id=$1
+           AND deleting_at IS NULL FOR SHARE`,
+          [principal.id],
+        );
+        if (!workspace.rows[0]) throw new PracticeLifetimeFailure("denied");
+        const result = (await client.query(sql, values)).rowCount === 1;
+        await client.observe([principal.expiresAt]);
+        readyToCommit = true;
+        return result;
+      });
+    } catch (error) {
+      if (
+        !readyToCommit &&
+        error instanceof PracticeLifetimeFailure &&
+        error.kind === "denied"
+      )
+        return null;
+      throw new Error("Usefulness operation unconfirmed", { cause: error });
     }
   };
   return {

@@ -1010,6 +1010,13 @@ export function circleMembershipRecoveryPage() {
   );
 }
 
+export function usefulnessRecoveryPage() {
+  return page(
+    "Usefulness response unconfirmed",
+    `<section class="error-page"><h1>Usefulness response unconfirmed</h1><p>The request may already have completed. Nothing is retried automatically.</p><p>Check your current private activity before choosing to save, correct or withdraw an answer again.</p><p><a href="/progress">Check current private activity</a></p></section>`,
+  );
+}
+
 export function errorPage(title: string, message: string) {
   return page(
     title,

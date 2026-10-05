@@ -65,6 +65,7 @@ import {
   careerPage,
   errorPage,
   circleMembershipRecoveryPage,
+  usefulnessRecoveryPage,
   assignmentAttemptsPage,
   assignmentAttemptPage,
   assignmentComparisonPage,
@@ -3212,21 +3213,27 @@ export function app(
         );
       return;
     }
-    const saved =
-      action === "save"
-        ? await usefulness.save(
-            res.locals.token as string,
-            req.params.id as string,
-            contentVersion,
-            choice as UsefulnessChoice,
-            revision,
-          )
-        : await usefulness.withdraw(
-            res.locals.token as string,
-            req.params.id as string,
-            contentVersion,
-            revision,
-          );
+    let saved;
+    try {
+      saved =
+        action === "save"
+          ? await usefulness.save(
+              res.locals.token as string,
+              req.params.id as string,
+              contentVersion,
+              choice as UsefulnessChoice,
+              revision,
+            )
+          : await usefulness.withdraw(
+              res.locals.token as string,
+              req.params.id as string,
+              contentVersion,
+              revision,
+            );
+    } catch {
+      res.status(503).send(usefulnessRecoveryPage());
+      return;
+    }
     if (saved === null) {
       res
         .status(403)
