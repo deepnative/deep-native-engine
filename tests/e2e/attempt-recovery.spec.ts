@@ -214,33 +214,78 @@ for (const [index, background] of (
             expect(durable[0].snapshots).toHaveLength(1);
           }
           if (uncertain) {
+            const title =
+              action === "save"
+                ? "Save outcome unknown"
+                : action === "submit"
+                  ? "Submission outcome unknown"
+                  : action === "revise"
+                    ? "Revision outcome unknown"
+                    : action.startsWith("reflection-")
+                      ? "Reflection outcome unknown"
+                      : "Assignment attempt unconfirmed";
             await expect(
-              page.getByRole("heading", {
-                name: "Assignment attempt unconfirmed",
-              }),
+              page.getByRole("heading", { name: title, exact: true }),
             ).toBeVisible();
             await expect(page.locator("form")).toHaveCount(0);
             await expect(page.locator("body")).not.toContainText(
-              `Invented private response for ${background}`,
+              "Invented private recovery assignment",
             );
-            await expect(page.locator("body")).not.toContainText(
-              `Invented retained reflection for ${background}`,
-            );
+            await expect(
+              page.getByRole("region", {
+                name: "Private local submission history",
+              }),
+            ).toHaveCount(0);
+            if (action === "save" || action === "submit") {
+              const copy = page.getByLabel(
+                "Response to copy before leaving this page",
+              );
+              await expect(copy).toHaveValue(
+                `Invented private response for ${background}; verify this exact source.`,
+              );
+              await expect(copy).toHaveAttribute("readonly", "");
+            } else
+              await expect(page.locator("body")).not.toContainText(
+                `Invented private response for ${background}`,
+              );
+            if (action === "reflection-save") {
+              const copy = page.getByLabel("Evidence I can point to, to copy", {
+                exact: true,
+              });
+              await expect(copy).toHaveValue(
+                `Invented retained reflection for ${background}`,
+              );
+              await expect(copy).toHaveAttribute("readonly", "");
+            } else
+              await expect(page.locator("body")).not.toContainText(
+                `Invented retained reflection for ${background}`,
+              );
             await pool.query(
               "UPDATE principals SET expires_at=clock_timestamp()+interval '1 hour' WHERE id=$1",
               [session.learner.id],
             );
-            await page
-              .getByRole("link", {
-                name: "Check current private attempts",
-                exact: true,
-              })
-              .click();
-            if (action !== "remove")
+            if (action === "start" || action === "remove") {
               await page
-                .locator(`a[href="/assignments/attempts/${id}"]`)
+                .getByRole("link", {
+                  name: "Check current private attempts",
+                  exact: true,
+                })
+                .click();
+              if (action !== "remove")
+                await page
+                  .locator(`a[href="/assignments/attempts/${id}"]`)
+                  .click();
+            } else
+              await page
+                .getByRole("link", {
+                  name: action.startsWith("reflection-")
+                    ? "Inspect the current saved attempt"
+                    : "Reload this attempt",
+                  exact: true,
+                })
                 .click();
           }
+
           if (action === "remove")
             await expect(
               page.getByText("No private assignment attempts yet"),

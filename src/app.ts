@@ -4550,7 +4550,21 @@ export function app(
       ),
   );
   const failure: ErrorRequestHandler = (error, req, res, _next) => {
-    if (error instanceof AttemptOperationUnconfirmed) {
+    const write =
+      req.method === "POST"
+        ? attemptWritePath.exec(req.originalUrl.split("?")[0]!)
+        : null;
+    const reflectionWrite =
+      req.method === "POST"
+        ? attemptReflectionWritePath.exec(req.originalUrl.split("?")[0]!)
+        : null;
+    // Preserve the existing copy aid for current POST input only. Read errors
+    // and actions without attempted text must never echo retained store data.
+    if (
+      error instanceof AttemptOperationUnconfirmed &&
+      !write &&
+      !reflectionWrite
+    ) {
       res.status(503).send(attemptOperationRecoveryPage());
       return;
     }
@@ -4582,14 +4596,6 @@ export function app(
         );
       return;
     }
-    const write =
-      req.method === "POST"
-        ? attemptWritePath.exec(req.originalUrl.split("?")[0]!)
-        : null;
-    const reflectionWrite =
-      req.method === "POST"
-        ? attemptReflectionWritePath.exec(req.originalUrl.split("?")[0]!)
-        : null;
     if (write) {
       res
         .status(503)

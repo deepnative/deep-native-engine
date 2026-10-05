@@ -4,7 +4,7 @@ A member can start a selected eligible sample assignment, save a private draft, 
 
 ## Check an uncertain result
 
-An assignment action may have completed even when its reply cannot be confirmed. The **Assignment attempt unconfirmed** page returns 503, offers **Check current private attempts**, and contains no stored private text or mutation form. Nothing is retried automatically. Open the current attempts using a valid authorized session, inspect the retained draft, submission or reflection, then decide whether another action is needed. Reloading is a read and does not create another revision or submission.
+An assignment action may have completed even when its reply cannot be confirmed. The recovery page returns 503 and contains no stored private text or mutation form. Attempted text from the current POST remains available in a clearly labelled, read-only copy aid; it is not a saved receipt. Save, submission, revision and reflection pages retain their existing outcome-unknown titles and exact-attempt read links. Reads, starts and removals use **Assignment attempt unconfirmed** with **Check current private attempts**. Nothing is retried automatically. Open the current attempts using a valid authorized session, inspect the retained draft, submission or reflection, then decide whether another action is needed. Reloading is a read and does not create another revision or submission.
 
 The same recovery response protects delayed attempt lists, detail, comparison and portfolio downloads. An uncertain portfolio read supplies no attachment. A definite pre-commit authorization denial remains distinct from an unavailable or possibly committed operation; an ordinary stale revision remains a conflict. Normal successful writes retain their redirects.
 

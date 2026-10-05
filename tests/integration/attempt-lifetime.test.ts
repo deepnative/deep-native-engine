@@ -224,6 +224,12 @@ it.each(
       ).rows[0].expired,
     ).toBe(true);
     expect.soft(response.status).toBe(503);
+    if (operation === "save") {
+      expect
+        .soft(response.text)
+        .toContain("Response to copy before leaving this page");
+      expect.soft(response.text).toContain("Invented changed response");
+    }
     expect.soft(response.headers["content-disposition"]).toBeUndefined();
     expect
       .soft(response.text)
