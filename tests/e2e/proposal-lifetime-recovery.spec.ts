@@ -235,9 +235,13 @@ for (const [index, background] of (
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
       );
-      await pool.query("DELETE FROM principals WHERE id=ANY($1::uuid[])", [
-        [session.learner.id, staffId],
+      // Proposals retain the moderator reference after withdrawal. Remove the
+      // invented member and its proposals before deleting that staff profile;
+      // one multi-row DELETE does not guarantee cascade ordering.
+      await pool.query("DELETE FROM principals WHERE id=$1", [
+        session.learner.id,
       ]);
+      await pool.query("DELETE FROM principals WHERE id=$1", [staffId]);
     }
   });
 }
