@@ -15,6 +15,9 @@ const f = vi.hoisted(() => ({
   revoke: vi.fn(),
   timeGrant: vi.fn(),
   timeRevoke: vi.fn(),
+  holdFactory: vi.fn(),
+  holdGrant: vi.fn(),
+  holdRevoke: vi.fn(),
   circleFactory: vi.fn(),
   circleGrant: vi.fn(),
   circleRevoke: vi.fn(),
@@ -51,6 +54,12 @@ vi.mock("../../src/circle-discussion.ts", () => ({
   circleDiscussionStore: (...args: unknown[]) => {
     f.circleFactory(...args);
     return { grantModerator: f.circleGrant, revokeModerator: f.circleRevoke };
+  },
+}));
+vi.mock("../../src/local-ai-hold-inspection.ts", () => ({
+  localAiHoldInspectionStore: (...args: unknown[]) => {
+    f.holdFactory(...args);
+    return { grant: f.holdGrant, revoke: f.holdRevoke };
   },
 }));
 const directory = {
@@ -630,6 +639,128 @@ it.each(["circle-grant", "circle-revoke"])(
     );
     f.circleGrant.mockResolvedValue({ kind: "denied" });
     f.circleRevoke.mockResolvedValue({ kind: "denied" });
+    failed(await run([command, "instruction.json"]));
+  },
+);
+
+function holdInput(
+  input: Record<string, unknown>,
+  operator: unknown = "staff",
+) {
+  f.config.mockReturnValue({
+    privateStorageRoot: "/private/test",
+    databaseUrl: "private-local-url",
+    mode: "test",
+    localHoldInspectionReads: true,
+  });
+  f.read.mockImplementation((path: string) =>
+    Promise.resolve(
+      JSON.stringify(
+        path.endsWith("admin.json")
+          ? { token }
+          : path.endsWith("operator.json")
+            ? { id: operator }
+            : input,
+      ),
+    ),
+  );
+}
+const holdInstruction = {
+  jobId: "job",
+  idempotencyKey: "key",
+  startsAt: "2026-10-05T12:00:00Z",
+  expiresAt: "2026-10-05T13:00:00Z",
+};
+it.each(["applied", "replayed"])(
+  "confirms %s exact hold inspection grant through private admin/operator credentials",
+  async (kind) => {
+    holdInput(holdInstruction);
+    f.holdGrant.mockResolvedValue({ kind, grantId: "grant" });
+    const result = await run(["hold-grant", "instruction.json"]);
+    expect(result).toEqual({
+      out: [
+        [
+          JSON.stringify({
+            status: "complete",
+            action: "hold-grant",
+            grantId: "grant",
+          }),
+        ],
+      ],
+      err: [],
+    });
+    expect(f.holdGrant).toHaveBeenCalledWith(
+      token,
+      "job",
+      "staff",
+      new Date(holdInstruction.startsAt),
+      new Date(holdInstruction.expiresAt),
+      "key",
+    );
+    expect(f.holdFactory.mock.calls[0]?.[1]).toEqual({
+      mode: "test",
+      enabled: true,
+    });
+    expect(JSON.stringify(result)).not.toContain(token);
+    expect(f.grant).not.toHaveBeenCalled();
+  },
+);
+it.each(["applied", "replayed"])(
+  "preserves exact hold revocation during pause: %s",
+  async (kind) => {
+    holdInput({ grantId: "grant" });
+    f.config.mockReturnValue({
+      privateStorageRoot: "/private/test",
+      databaseUrl: "private-local-url",
+      mode: "test",
+      localHoldInspectionReads: false,
+    });
+    f.holdRevoke.mockResolvedValue({ kind, grantId: "grant" });
+    expect(await run(["hold-revoke", "instruction.json"])).toEqual({
+      out: [[JSON.stringify({ status: "complete", action: "hold-revoke" })]],
+      err: [],
+    });
+    expect(f.holdFactory.mock.calls[0]?.[1]).toEqual({
+      mode: "test",
+      enabled: false,
+    });
+    expect(f.holdRevoke).toHaveBeenCalledWith(token, "grant");
+    expect(f.revoke).not.toHaveBeenCalled();
+  },
+);
+it.each([
+  "jobId",
+  "idempotencyKey",
+  "startsAt",
+  "expiresAt",
+  "operator",
+  "extra",
+  "missing",
+])("rejects malformed hold grant %s", async (field) => {
+  const input: Record<string, unknown> = { ...holdInstruction };
+  if (field === "extra") input.forbidden = "invented";
+  else if (field === "missing") delete input.jobId;
+  else if (field !== "operator") input[field] = null;
+  holdInput(input, field === "operator" ? null : "staff");
+  failed(await run(["hold-grant", "instruction.json"]));
+  expect(f.holdGrant).not.toHaveBeenCalled();
+});
+it.each([{ grantId: null }, { grantId: "grant", extra: "invented" }])(
+  "rejects malformed hold revocation %j",
+  async (input) => {
+    holdInput(input);
+    failed(await run(["hold-revoke", "instruction.json"]));
+    expect(f.holdRevoke).not.toHaveBeenCalled();
+  },
+);
+it.each(["hold-grant", "hold-revoke"])(
+  "withholds unconfirmed %s and suppresses private errors",
+  async (command) => {
+    holdInput(
+      command === "hold-grant" ? holdInstruction : { grantId: "grant" },
+    );
+    f.holdGrant.mockResolvedValue({ kind: "denied" });
+    f.holdRevoke.mockResolvedValue({ kind: "unavailable" });
     failed(await run([command, "instruction.json"]));
   },
 );
