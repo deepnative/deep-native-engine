@@ -77,14 +77,12 @@ for (const [index, background] of (
       ]);
       const page = await context.newPage();
       await page.goto(origin + "/circles");
-      const item = page
-        .getByRole("listitem")
-        .filter({
-          has: page.getByRole("heading", {
-            name: "Everyday AI practice",
-            exact: true,
-          }),
-        });
+      const item = page.getByRole("listitem").filter({
+        has: page.getByRole("heading", {
+          name: "Everyday AI practice",
+          exact: true,
+        }),
+      });
       const state = async () => ({
         membership: (
           await pool.query(
