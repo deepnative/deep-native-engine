@@ -1017,6 +1017,13 @@ export function usefulnessRecoveryPage() {
   );
 }
 
+export function attemptOperationRecoveryPage() {
+  return page(
+    "Assignment attempt unconfirmed",
+    `<section class="error-page"><h1>Assignment attempt unconfirmed</h1><p>The current private result could not be confirmed. A requested change may already have completed. Nothing is retried automatically.</p><p>Check your current private attempts before choosing another action.</p><p><a href="/assignments/attempts">Check current private attempts</a></p></section>`,
+  );
+}
+
 export function errorPage(title: string, message: string) {
   return page(
     title,

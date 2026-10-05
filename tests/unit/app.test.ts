@@ -43,7 +43,10 @@ import { type PracticeStore } from "../../src/practice.ts";
 import { type UsefulnessStore } from "../../src/usefulness.ts";
 import { type WorkflowFeedbackStore } from "../../src/workflow-feedback.ts";
 import { type MemberExportStore } from "../../src/member-export.ts";
-import { disabledAttemptStore } from "../../src/attempts.ts";
+import {
+  AttemptOperationUnconfirmed,
+  disabledAttemptStore,
+} from "../../src/attempts.ts";
 import {
   disabledAvailabilityStore,
   type AvailabilityStore,
@@ -5122,3 +5125,32 @@ it.each([undefined, false, true])(
     expect(reviewTime.history).toHaveBeenCalledOnce();
   },
 );
+
+it("withholds an unconfirmed private attempt read and offers only fresh-state recovery", async () => {
+  const db = storage();
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const attempts = {
+    ...disabledAttemptStore(),
+    list: vi
+      .fn()
+      .mockRejectedValue(
+        new AttemptOperationUnconfirmed(
+          new Error("Invented private retained response"),
+        ),
+      ),
+  };
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", attempts }),
+  );
+  const recovery = await agent
+    .get("/assignments/attempts")
+    .set("Host", host)
+    .expect(503);
+  expect(recovery.text).toContain("Assignment attempt unconfirmed");
+  expect(recovery.text).toContain('href="/assignments/attempts"');
+  expect(recovery.text).toContain("Nothing is retried automatically");
+  expect(recovery.text).not.toContain("Invented private retained response");
+  expect(recovery.text).not.toContain("<form");
+  expect(recovery.text).not.toContain("Nothing was saved");
+  expect(attempts.list).toHaveBeenCalledOnce();
+});

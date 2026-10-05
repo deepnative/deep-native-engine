@@ -35,8 +35,10 @@ it("reads only the hashed owner session and preserves missing results", async ()
       };
     if (statement.includes("FROM workspaces"))
       return { rows: [{ id: "workspace" }] };
-    if (statement.startsWith("SELECT clock_timestamp()"))
-      return { rows: [{ valid: true }] };
+    if (statement.startsWith("WITH instant AS MATERIALIZED"))
+      return {
+        rows: [{ valid: true, remaining: "60000", observed: new Date() }],
+      };
     if (statement.includes("FROM assignment_attempts a"))
       return {
         rows: statement.includes('AS "submissionHistory"')
@@ -93,6 +95,7 @@ function detailPool(
   } = {},
 ) {
   const release = vi.fn();
+  let observations = 0;
   const query = vi.fn(async (statement: string) => {
     if (options.rejectOn && statement.includes(options.rejectOn))
       throw Error("Synthetic read failure");
@@ -125,8 +128,14 @@ function detailPool(
           },
         ],
       };
-    if (statement.startsWith("SELECT clock_timestamp()"))
-      return { rows: [{ valid: options.current !== false }] };
+    if (statement.startsWith("WITH instant AS MATERIALIZED")) {
+      const valid = options.current !== false || ++observations === 1;
+      return {
+        rows: [
+          { valid, remaining: valid ? "60000" : "-1", observed: new Date() },
+        ],
+      };
+    }
     return { rows: [] };
   });
   return {
@@ -144,8 +153,14 @@ it.each([
 ] as const)("withholds private detail for %s", async (_reason, options) => {
   const db = detailPool(options);
   expect(await attemptStore(db.pool).detail("owner", "attempt")).toBeNull();
-  expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
-  expect(db.release).toHaveBeenCalledWith(undefined);
+  if ("current" in options) {
+    expect(db.query.mock.calls.map(([sql]) => sql)).not.toContain("COMMIT");
+    expect(db.query.mock.calls.map(([sql]) => sql)).not.toContain("ROLLBACK");
+  } else
+    expect(db.query.mock.calls.map(([sql]) => sql)).toContain(
+      "attempt" in options ? "COMMIT" : "ROLLBACK",
+    );
+  expect(db.release).toHaveBeenCalledWith(expect.any(Error));
 });
 
 it("reads locked submission text only after current session check and commit", async () => {
@@ -177,7 +192,9 @@ it("reads locked submission text only after current session check and commit", a
 
 it("drops an unsafe connection if private-detail rollback fails", async () => {
   const db = detailPool({ principal: false, rollbackFails: true });
-  expect(await attemptStore(db.pool).detail("owner", "attempt")).toBeNull();
+  await expect(
+    attemptStore(db.pool).detail("owner", "attempt"),
+  ).rejects.toThrow("Assignment attempt operation unconfirmed");
   expect(db.release).toHaveBeenCalledWith(expect.any(Error));
 });
 
@@ -185,7 +202,7 @@ it("never returns private detail after a database read failure", async () => {
   const db = detailPool({ rejectOn: "FROM assignment_submission_snapshots s" });
   await expect(
     attemptStore(db.pool).detail("owner", "attempt"),
-  ).rejects.toThrow("Synthetic read failure");
+  ).rejects.toThrow("Assignment attempt operation unconfirmed");
   expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
 });
 
@@ -201,6 +218,7 @@ function transactionPool(
   } = {},
 ) {
   const release = vi.fn();
+  let observations = 0;
   const query = vi.fn(async (statement: string, _params?: unknown[]) => {
     if (options.rejectOn && statement.startsWith(options.rejectOn))
       throw new Error("Simulated database failure");
@@ -226,8 +244,14 @@ function transactionPool(
       return { rows: options.workspace === false ? [] : [{ id: "workspace" }] };
     if (statement.startsWith("DELETE FROM assignment_attempts"))
       return { rowCount: options.deleted === false ? 0 : 1 };
-    if (statement.startsWith("SELECT clock_timestamp()"))
-      return { rows: [{ valid: options.current !== false }] };
+    if (statement.startsWith("WITH instant AS MATERIALIZED")) {
+      const valid = options.current !== false || ++observations === 1;
+      return {
+        rows: [
+          { valid, remaining: valid ? "60000" : "-1", observed: new Date() },
+        ],
+      };
+    }
     return { rows: [], rowCount: 0 };
   });
   const connect = vi.fn(async () => ({ query, release }));
@@ -244,10 +268,16 @@ it("confirms deletion only after the owning member's transaction commits", async
   expect(db.query.mock.calls.map(([statement]) => statement)).not.toContain(
     "ROLLBACK",
   );
-  expect(db.query.mock.calls[2]![1]).toEqual([hash(token)]);
-  expect(db.query.mock.calls[4]![1]).toEqual(["member", "owned-attempt"]);
+  expect(
+    db.query.mock.calls.find(([sql]) => sql.includes("FROM principals"))?.[1],
+  ).toEqual([hash(token)]);
+  expect(
+    db.query.mock.calls.find(([sql]) =>
+      sql.startsWith("DELETE FROM assignment_attempts"),
+    )?.[1],
+  ).toEqual(["member", "owned-attempt"]);
   expect(db.release).toHaveBeenCalledOnce();
-  expect(db.release).toHaveBeenCalledWith(undefined);
+  expect(db.release).toHaveBeenCalledWith(expect.any(Error));
 });
 
 const reflectionInput = {
@@ -372,9 +402,15 @@ it.each([
             )
           : await attempts.deleteReflection("owner", "attempt", 1, 1);
       expect(result).toBe(false);
-      expect(db.query.mock.calls.map(([sql]) => sql)).toContain(
-        "mutation" in options ? "COMMIT" : "ROLLBACK",
-      );
+      if ("current" in options) {
+        expect(db.query.mock.calls.map(([sql]) => sql)).not.toContain("COMMIT");
+        expect(db.query.mock.calls.map(([sql]) => sql)).not.toContain(
+          "ROLLBACK",
+        );
+      } else
+        expect(db.query.mock.calls.map(([sql]) => sql)).toContain(
+          "mutation" in options ? "COMMIT" : "ROLLBACK",
+        );
     }
   },
 );
@@ -392,7 +428,9 @@ it.each(["WITH owned", "COMMIT"])(
         reflectionInput,
       ),
     ).rejects.toThrow();
-    expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+    expect(db.query.mock.calls.map(([sql]) => sql)).not.toContain(
+      rejectOn === "COMMIT" ? "ROLLBACK" : "COMMIT",
+    );
   },
 );
 
@@ -430,28 +468,38 @@ it.each([
 ] as const)("does not delete an attempt for %s", async (_reason, options) => {
   const db = transactionPool(options);
   expect(await attemptStore(db.pool).remove("owner", "attempt")).toBe(false);
-  expect(db.query.mock.calls.map(([statement]) => statement)).not.toContain(
-    "COMMIT",
-  );
-  expect(db.query.mock.calls.map(([statement]) => statement)).toContain(
-    "ROLLBACK",
-  );
-  expect(db.release).toHaveBeenCalledWith(undefined);
+  if ("current" in options) {
+    expect(db.query.mock.calls.map(([sql]) => sql)).not.toContain("COMMIT");
+    expect(db.query.mock.calls.map(([sql]) => sql)).not.toContain("ROLLBACK");
+  } else
+    expect(db.query.mock.calls.map(([sql]) => sql)).toContain(
+      "deleted" in options ? "COMMIT" : "ROLLBACK",
+    );
+  expect(db.release).toHaveBeenCalledWith(expect.any(Error));
 });
 
 it.each(["DELETE FROM assignment_attempts", "COMMIT"])(
   "does not confirm deletion after %s fails",
   async (statement) => {
     const db = transactionPool({ rejectOn: statement });
-    expect(await attemptStore(db.pool).remove("owner", "attempt")).toBe(false);
-    expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
-    expect(db.release).toHaveBeenCalledWith(undefined);
+    await expect(
+      attemptStore(db.pool).remove("owner", "attempt"),
+    ).rejects.toThrow("Assignment attempt operation unconfirmed");
+    expect(db.query.mock.calls.map(([sql]) => sql)).not.toContain(
+      statement === "COMMIT" ? "ROLLBACK" : "COMMIT",
+    );
+    expect(db.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );
 
 it("discards a connection when failed deletion cannot be rolled back", async () => {
-  const db = transactionPool({ deleted: false, rollbackFails: true });
-  expect(await attemptStore(db.pool).remove("owner", "attempt")).toBe(false);
+  const db = transactionPool({
+    rejectOn: "DELETE FROM assignment_attempts",
+    rollbackFails: true,
+  });
+  await expect(
+    attemptStore(db.pool).remove("owner", "attempt"),
+  ).rejects.toThrow("Assignment attempt operation unconfirmed");
   expect(db.release).toHaveBeenCalledWith(expect.any(Error));
 });
 
@@ -459,12 +507,9 @@ it("fails closed when an attempt database connection is unavailable", async () =
   const connect = vi
     .fn()
     .mockRejectedValue(new Error("Connection unavailable"));
-  expect(
-    await attemptStore({ connect } as unknown as Pool).remove(
-      "owner",
-      "attempt",
-    ),
-  ).toBe(false);
+  await expect(
+    attemptStore({ connect } as unknown as Pool).remove("owner", "attempt"),
+  ).rejects.toThrow("Assignment attempt operation unconfirmed");
 });
 
 const mutations = ["start", "save", "submit", "revise"] as const;
@@ -500,13 +545,15 @@ it.each(mutations)(
       ),
     );
     expect(completed).not.toHaveBeenCalled();
-    expect(db.query.mock.calls[2]![1]).toEqual([hash("owner")]);
+    expect(
+      db.query.mock.calls.find(([sql]) => sql.includes("FROM principals"))?.[1],
+    ).toEqual([hash("owner")]);
     acknowledgeCommit();
     await pending;
     expect(completed).toHaveBeenCalledWith(
       operation === "start" ? "owned" : true,
     );
-    expect(db.release).toHaveBeenCalledWith(undefined);
+    expect(db.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );
 
@@ -527,11 +574,11 @@ it.each(mutations)(
         expect(
           db.query.mock.calls.map(([statement]) => statement),
         ).not.toContain("COMMIT");
-        expect(db.query.mock.calls.map(([statement]) => statement)).toContain(
-          "ROLLBACK",
-        );
+        const calls = db.query.mock.calls.map(([statement]) => statement);
+        if ("current" in options) expect(calls).not.toContain("ROLLBACK");
+        else expect(calls).toContain("ROLLBACK");
       }
-      expect(db.release).toHaveBeenCalledWith(undefined);
+      expect(db.release).toHaveBeenCalledWith(expect.any(Error));
     }
   },
 );
@@ -541,18 +588,19 @@ it.each(["UPDATE assignment_attempts", "COMMIT"])(
   async (rejectOn) => {
     const db = transactionPool({ rejectOn });
     await expect(mutate(attemptStore(db.pool), "save")).rejects.toThrow(
-      "Simulated database failure",
+      "Assignment attempt operation unconfirmed",
     );
-    expect(db.query.mock.calls.map(([statement]) => statement)).toContain(
-      "ROLLBACK",
+    expect(db.query.mock.calls.map(([statement]) => statement)).not.toContain(
+      rejectOn === "COMMIT" ? "ROLLBACK" : "COMMIT",
     );
-    expect(db.release).toHaveBeenCalledWith(undefined);
+    expect(db.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );
 
-it("discards a connection when an expired mutation cannot roll back", async () => {
+it("discards an expired mutation connection without queuing rollback", async () => {
   const db = transactionPool({ current: false, rollbackFails: true });
   expect(await mutate(attemptStore(db.pool), "save")).toBe(false);
+  expect(db.query.mock.calls.map(([sql]) => sql)).not.toContain("ROLLBACK");
   expect(db.release).toHaveBeenCalledWith(expect.any(Error));
 });
 
@@ -561,7 +609,7 @@ it("keeps a connection failure as an unconfirmed write error", async () => {
     connect: vi.fn().mockRejectedValue(new Error("Connection unavailable")),
   } as unknown as Pool;
   await expect(mutate(attemptStore(pool), "save")).rejects.toThrow(
-    "Connection unavailable",
+    "Assignment attempt operation unconfirmed",
   );
 });
 
@@ -574,7 +622,9 @@ it.each([
   async (_reason, options) => {
     const db = detailPool(options);
     expect(await attemptStore(db.pool).list("owner")).toBeNull();
-    expect(db.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
-    expect(db.release).toHaveBeenCalledWith(undefined);
+    const calls = db.query.mock.calls.map(([sql]) => sql);
+    if ("current" in options) expect(calls).not.toContain("ROLLBACK");
+    else expect(calls).toContain("ROLLBACK");
+    expect(db.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );

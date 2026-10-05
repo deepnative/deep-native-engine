@@ -23,6 +23,7 @@ import {
 } from "./validation.ts";
 import {
   welcome,
+  attemptOperationRecoveryPage,
   dashboard,
   privateProgressPage,
   evidencePage,
@@ -147,7 +148,11 @@ import {
   type EventEnrollmentStore,
 } from "./event-enrollments.ts";
 import { eventPreviewDetail, listEventPreviews } from "./events.ts";
-import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
+import {
+  AttemptOperationUnconfirmed,
+  disabledAttemptStore,
+  type AttemptStore,
+} from "./attempts.ts";
 import { compareResponses } from "./attempt-compare.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
 import {
@@ -4545,6 +4550,10 @@ export function app(
       ),
   );
   const failure: ErrorRequestHandler = (error, req, res, _next) => {
+    if (error instanceof AttemptOperationUnconfirmed) {
+      res.status(503).send(attemptOperationRecoveryPage());
+      return;
+    }
     if (error instanceof LessonActivityUnavailable) {
       res
         .status(403)

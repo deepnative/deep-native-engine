@@ -1,6 +1,17 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, QueryResultRow } from "pg";
 import { hash } from "./store.ts";
+import {
+  practiceTransaction,
+  PracticeLifetimeFailure,
+  type PracticeTransaction,
+} from "./practice-session-lifetime.ts";
+
+export class AttemptOperationUnconfirmed extends Error {
+  constructor(cause: unknown) {
+    super("Assignment attempt operation unconfirmed", { cause });
+  }
+}
 
 export interface AssignmentAttempt {
   id: string;
@@ -122,54 +133,55 @@ const columns = `a.id,a.content_id AS "contentId",a.content_version AS "contentV
     AND ${eligible}),false) AS "currentEligible"`;
 
 export function attemptStore(pool: Pool): AttemptStore {
+  async function fencedOperation<T>(
+    credentialHash: unknown,
+    use: (client: PracticeTransaction, memberId: string) => Promise<T>,
+  ): Promise<T | null> {
+    let readyToCommit = false;
+    try {
+      return await practiceTransaction(pool, async (client) => {
+        // Match owner export, revocation and deletion: principal, workspace,
+        // then attempt and retained reflection rows.
+        const principal = (
+          await client.query<{ id: string; expiresAt: Date }>(
+            `SELECT id,expires_at AS "expiresAt" FROM principals
+           WHERE token_hash=$1 AND kind='member' AND revoked_at IS NULL
+             AND expires_at>clock_timestamp() FOR SHARE`,
+            [credentialHash],
+          )
+        ).rows[0];
+        if (!principal) throw new PracticeLifetimeFailure("denied");
+        await client.observe([principal.expiresAt]);
+        const workspace = await client.query(
+          `SELECT id FROM workspaces WHERE owner_principal_id=$1
+           AND deleting_at IS NULL FOR SHARE`,
+          [principal.id],
+        );
+        if (!workspace.rows[0]) throw new PracticeLifetimeFailure("denied");
+        const result = await use(client, principal.id);
+        await client.observe([principal.expiresAt]);
+        readyToCommit = true;
+        return result;
+      });
+    } catch (error) {
+      if (
+        !readyToCommit &&
+        error instanceof PracticeLifetimeFailure &&
+        error.kind === "denied"
+      )
+        return null;
+      // A lost acknowledgement or late handback never proves that a write
+      // failed. Readers also withhold private payloads on this path.
+      throw new AttemptOperationUnconfirmed(error);
+    }
+  }
   async function authorizedOperation<Row extends QueryResultRow>(
     statement: string,
     values: unknown[],
   ) {
-    const client = await pool.connect();
-    let committed = false;
-    let releaseError: Error | undefined;
-    try {
-      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
-      await client.query("SET LOCAL lock_timeout='5s'");
-      // Match owner export and deletion: principal, workspace, then attempt.
-      // The shared locks keep revocation and workspace deletion serialized.
-      const principal = (
-        await client.query<{ id: string; expiresAt: Date }>(
-          `SELECT id,expires_at AS "expiresAt" FROM principals
-           WHERE token_hash=$1 AND kind='member' AND revoked_at IS NULL
-             AND expires_at>clock_timestamp() FOR SHARE`,
-          [values[0]],
-        )
-      ).rows[0];
-      if (!principal) return null;
-      const workspace = await client.query(
-        `SELECT id FROM workspaces WHERE owner_principal_id=$1
-         AND deleting_at IS NULL FOR SHARE`,
-        [principal.id],
-      );
-      if (!workspace.rows[0]) return null;
-      const result = await client.query<Row>(statement, values);
-      // CURRENT_TIMESTAMP predates lock waits. Check wall time after every
-      // operation, including reads, insert conflicts and snapshot insertion.
-      const current = await client.query<{ valid: boolean }>(
-        "SELECT clock_timestamp() < $1::timestamptz AS valid",
-        [principal.expiresAt],
-      );
-      if (!current.rows[0]?.valid) return null;
-      await client.query("COMMIT");
-      committed = true;
-      return result;
-    } finally {
-      if (!committed) {
-        try {
-          await client.query("ROLLBACK");
-        } catch {
-          releaseError = new Error("Attempt operation rollback failed");
-        }
-      }
-      client.release(releaseError);
-    }
+    return fencedOperation(values[0], (client) =>
+      client.query<Row>(statement, values),
+    );
   }
   return {
     async list(token) {
@@ -188,27 +200,7 @@ export function attemptStore(pool: Pool): AttemptStore {
       return result?.rows ?? null;
     },
     async detail(token, id) {
-      const client = await pool.connect();
-      let committed = false;
-      let releaseError: Error | undefined;
-      try {
-        await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
-        await client.query("SET LOCAL lock_timeout='5s'");
-        const principal = (
-          await client.query<{ id: string; expiresAt: Date }>(
-            `SELECT id,expires_at AS "expiresAt" FROM principals
-             WHERE token_hash=$1 AND kind='member' AND revoked_at IS NULL
-               AND expires_at>clock_timestamp() FOR SHARE`,
-            [hash(token)],
-          )
-        ).rows[0];
-        if (!principal) return null;
-        const workspace = await client.query(
-          `SELECT id FROM workspaces WHERE owner_principal_id=$1
-           AND deleting_at IS NULL FOR SHARE`,
-          [principal.id],
-        );
-        if (!workspace.rows[0]) return null;
+      return fencedOperation(hash(token), async (client, memberId) => {
         const attempt = (
           await client.query<AssignmentAttempt>(
             `SELECT ${columns},cv.rubric,
@@ -219,7 +211,7 @@ export function attemptStore(pool: Pool): AttemptStore {
              JOIN learners l ON l.id=a.member_id
              LEFT JOIN learner_assignment_choices ch ON ch.member_id=l.id
              WHERE a.member_id=$1 AND a.id=$2 FOR SHARE OF a`,
-            [principal.id, id],
+            [memberId, id],
           )
         ).rows[0];
         if (!attempt) return null;
@@ -243,28 +235,12 @@ export function attemptStore(pool: Pool): AttemptStore {
            WHERE s.attempt_id=$1 ORDER BY s.sequence`,
           [id],
         );
-        const current = await client.query<{ valid: boolean }>(
-          "SELECT clock_timestamp() < $1::timestamptz AS valid",
-          [principal.expiresAt],
-        );
-        if (!current.rows[0]?.valid) return null;
-        await client.query("COMMIT");
-        committed = true;
         attempt.submissions = submissions.rows.map((entry) => ({
           ...entry,
           submittedAt: new Date(entry.submittedAt).toISOString(),
         }));
         return attempt;
-      } finally {
-        if (!committed) {
-          try {
-            await client.query("ROLLBACK");
-          } catch {
-            releaseError = new Error("Attempt detail rollback failed");
-          }
-        }
-        client.release(releaseError);
-      }
+      });
     },
     async start(token) {
       const result = await authorizedOperation<{ id: string }>(
@@ -399,60 +375,13 @@ export function attemptStore(pool: Pool): AttemptStore {
       return result?.rowCount === 1;
     },
     async remove(token, id) {
-      try {
-        const client = await pool.connect();
-        let committed = false;
-        let releaseError: Error | undefined;
-        try {
-          await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
-          await client.query("SET LOCAL lock_timeout='5s'");
-          // Match owner export and account deletion: principal, workspace,
-          // then the attempt whose deletion cascades its submission history.
-          const principal = (
-            await client.query<{ id: string; expiresAt: Date }>(
-              `SELECT id,expires_at AS "expiresAt" FROM principals
-               WHERE token_hash=$1 AND kind='member' AND revoked_at IS NULL
-                 AND expires_at>clock_timestamp() FOR SHARE`,
-              [hash(token)],
-            )
-          ).rows[0];
-          if (!principal) return false;
-          const workspace = await client.query(
-            `SELECT id FROM workspaces WHERE owner_principal_id=$1
-             AND deleting_at IS NULL FOR SHARE`,
-            [principal.id],
-          );
-          if (!workspace.rows[0]) return false;
-          const deleted = await client.query(
-            `DELETE FROM assignment_attempts WHERE member_id=$1 AND id=$2`,
-            [principal.id, id],
-          );
-          if (deleted.rowCount !== 1) return false;
-          // CURRENT_TIMESTAMP is fixed at transaction start, which may be
-          // older than a wait on an export's attempt row lock.
-          const current = await client.query<{ valid: boolean }>(
-            "SELECT clock_timestamp() < $1::timestamptz AS valid",
-            [principal.expiresAt],
-          );
-          if (!current.rows[0]?.valid) return false;
-          await client.query("COMMIT");
-          committed = true;
-          return true;
-        } finally {
-          if (!committed) {
-            try {
-              await client.query("ROLLBACK");
-            } catch {
-              releaseError = new Error("Attempt deletion rollback failed");
-            }
-          }
-          client.release(releaseError);
-        }
-      } catch {
-        // A lost commit acknowledgement leaves deletion uncertain, never a
-        // confirmed success. The caller directs the member to inspect state.
-        return false;
-      }
+      const result = await fencedOperation(hash(token), (client, memberId) =>
+        client.query(
+          `DELETE FROM assignment_attempts WHERE member_id=$1 AND id=$2`,
+          [memberId, id],
+        ),
+      );
+      return result?.rowCount === 1;
     },
   };
 }
