@@ -52,7 +52,8 @@ for (const [index, background] of (
   }) => {
     const db = store(pool),
       token = randomBytes(32).toString("hex");
-    const lessonId = `SYN-${860 + index * 2 + (test.info().project.name === "desktop-chromium" ? 0 : 1)}`;
+    // Reserve SYN-760..765 for this fixture; assignment history owns 860..862.
+    const lessonId = `SYN-${760 + index * 2 + (test.info().project.name === "desktop-chromium" ? 0 : 1)}`;
     await publishLesson(lessonId);
     await db.create(token, {
       background,
