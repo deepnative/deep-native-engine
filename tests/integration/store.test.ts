@@ -3089,7 +3089,7 @@ it("rolls back a failed assignment snapshot and backfills legacy submitted attem
       "CREATE TRIGGER test_reject_snapshot_insert BEFORE INSERT ON assignment_submission_snapshots FOR EACH ROW EXECUTE FUNCTION test_reject_snapshot_insert()",
     );
     await expect(attempts.submit(owner.token, id, 2)).rejects.toThrow(
-      "synthetic snapshot write fault",
+      "Assignment attempt operation unconfirmed",
     );
     expect(await attempts.detail(owner.token, id)).toMatchObject({
       response,
@@ -3203,7 +3203,7 @@ it("keeps failed PostgreSQL attempt writes unconfirmed until a checked retry", a
     await reject();
     await expect(
       attempts.save(owner.token, id, 1, "Synthetic text after a fault."),
-    ).rejects.toThrow("synthetic attempt write fault");
+    ).rejects.toThrow("Assignment attempt operation unconfirmed");
     expect(await attempts.detail(owner.token, id)).toMatchObject({
       response: "",
       revision: 1,
@@ -3215,7 +3215,7 @@ it("keeps failed PostgreSQL attempt writes unconfirmed until a checked retry", a
     ).toBe(true);
     await reject();
     await expect(attempts.submit(owner.token, id, 2)).rejects.toThrow(
-      "synthetic attempt write fault",
+      "Assignment attempt operation unconfirmed",
     );
     expect((await attempts.detail(owner.token, id))?.submittedAt).toBeNull();
     await allow();

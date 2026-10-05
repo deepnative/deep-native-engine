@@ -8,6 +8,8 @@ The response is limited to 4,000 characters and the form requires confirmation t
 
 Approved local scenarios L48–L50 cover general, non-IT professional and IT paths, private save/reload/submit/delete, stale tabs, goal and content-version changes, retirement, and unrelated-member denial. The full member-to-qualified-review journey remains outstanding. #103 owns structured prerequisite expansion, #93/#97 reviewed content, and #38 qualified review and evidence handoff. This local submission ID is not an evidence-store reference.
 
+For bounded authorization through delayed replies, safe fresh-state recovery and uncertain comparison/download handling, see [private attempt recovery](PRIVATE-ATTEMPT-RECOVERY.md).
+
 ## Failed-write recovery
 
 L51–L52 inject a deterministic PostgreSQL update failure for one synthetic attempt on desktop and mobile. A failed save or submission shows a no-store, copyable response page and an **unknown** outcome; it does not automatically retry or claim success. The member reloads the owned attempt to inspect the current saved revision or submission state before retrying. Optimistic revisions, the unique member/content/version key and the submitted-state guard still prevent stale overwrites and duplicate submissions. Validation, stale revisions, changed eligibility, expired sessions, same-origin form errors and transient storage errors have distinct messages. An expired session does not grant access to old database content; the response echoed from the member's own POST is only a local copy aid. A submit form carries a displayed response snapshot for that recovery purpose; it is never trusted as the submitted version or stored separately. Origin/CSRF checks continue to reject writes.

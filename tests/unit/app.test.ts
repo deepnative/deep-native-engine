@@ -43,7 +43,10 @@ import { type PracticeStore } from "../../src/practice.ts";
 import { type UsefulnessStore } from "../../src/usefulness.ts";
 import { type WorkflowFeedbackStore } from "../../src/workflow-feedback.ts";
 import { type MemberExportStore } from "../../src/member-export.ts";
-import { disabledAttemptStore } from "../../src/attempts.ts";
+import {
+  AttemptOperationUnconfirmed,
+  disabledAttemptStore,
+} from "../../src/attempts.ts";
 import {
   disabledAvailabilityStore,
   type AvailabilityStore,
@@ -4091,7 +4094,9 @@ it("keeps synthetic assignment attempts private through start, validation, confl
     sample_confirmed: "yes",
   }).expect(303);
   attempts.save.mockRejectedValueOnce(
-    new Error("private database connection secret"),
+    new AttemptOperationUnconfirmed(
+      new Error("private database connection secret"),
+    ),
   );
   const failedWrite = await post(`/assignments/attempts/${id}/save`, {
     revision: "2",
@@ -4350,7 +4355,9 @@ it("preserves attempted text and separates stale, ineligible, expired and uncert
       }).expect(409)
     ).text,
   ).toContain("Save at least 20 characters");
-  attempts.submit.mockRejectedValueOnce(new Error("private storage secret"));
+  attempts.submit.mockRejectedValueOnce(
+    new AttemptOperationUnconfirmed(new Error("private storage secret")),
+  );
   const unknownSubmit = await post("submit", {
     revision: "2",
     confirm: "yes",
@@ -4492,7 +4499,7 @@ it("keeps assignment self-reflection saves, deletion and recovery tied to an own
   const unavailableSession = await post("save", save).expect(401);
   expect(unavailableSession.text).toContain("Session unavailable");
   attempts.saveReflection.mockRejectedValueOnce(
-    new Error("secret storage failure"),
+    new AttemptOperationUnconfirmed(new Error("secret storage failure")),
   );
   const uncertain = await post("save", save).expect(503);
   expect(uncertain.text).toContain("Reflection outcome unknown");
@@ -5122,3 +5129,32 @@ it.each([undefined, false, true])(
     expect(reviewTime.history).toHaveBeenCalledOnce();
   },
 );
+
+it("withholds an unconfirmed private attempt read and offers only fresh-state recovery", async () => {
+  const db = storage();
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const attempts = {
+    ...disabledAttemptStore(),
+    list: vi
+      .fn()
+      .mockRejectedValue(
+        new AttemptOperationUnconfirmed(
+          new Error("Invented private retained response"),
+        ),
+      ),
+  };
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", attempts }),
+  );
+  const recovery = await agent
+    .get("/assignments/attempts")
+    .set("Host", host)
+    .expect(503);
+  expect(recovery.text).toContain("Assignment attempt unconfirmed");
+  expect(recovery.text).toContain('href="/assignments/attempts"');
+  expect(recovery.text).toContain("Nothing is retried automatically");
+  expect(recovery.text).not.toContain("Invented private retained response");
+  expect(recovery.text).not.toContain("<form");
+  expect(recovery.text).not.toContain("Nothing was saved");
+  expect(attempts.list).toHaveBeenCalledOnce();
+});

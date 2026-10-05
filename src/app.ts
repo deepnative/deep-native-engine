@@ -23,6 +23,7 @@ import {
 } from "./validation.ts";
 import {
   welcome,
+  attemptOperationRecoveryPage,
   dashboard,
   privateProgressPage,
   evidencePage,
@@ -147,7 +148,11 @@ import {
   type EventEnrollmentStore,
 } from "./event-enrollments.ts";
 import { eventPreviewDetail, listEventPreviews } from "./events.ts";
-import { disabledAttemptStore, type AttemptStore } from "./attempts.ts";
+import {
+  AttemptOperationUnconfirmed,
+  disabledAttemptStore,
+  type AttemptStore,
+} from "./attempts.ts";
 import { compareResponses } from "./attempt-compare.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
 import {
@@ -4545,6 +4550,24 @@ export function app(
       ),
   );
   const failure: ErrorRequestHandler = (error, req, res, _next) => {
+    const write =
+      req.method === "POST"
+        ? attemptWritePath.exec(req.originalUrl.split("?")[0]!)
+        : null;
+    const reflectionWrite =
+      req.method === "POST"
+        ? attemptReflectionWritePath.exec(req.originalUrl.split("?")[0]!)
+        : null;
+    // Preserve the existing copy aid for current POST input only. Read errors
+    // and actions without attempted text must never echo retained store data.
+    if (
+      error instanceof AttemptOperationUnconfirmed &&
+      !write &&
+      !reflectionWrite
+    ) {
+      res.status(503).send(attemptOperationRecoveryPage());
+      return;
+    }
     if (error instanceof LessonActivityUnavailable) {
       res
         .status(403)
@@ -4573,14 +4596,6 @@ export function app(
         );
       return;
     }
-    const write =
-      req.method === "POST"
-        ? attemptWritePath.exec(req.originalUrl.split("?")[0]!)
-        : null;
-    const reflectionWrite =
-      req.method === "POST"
-        ? attemptReflectionWritePath.exec(req.originalUrl.split("?")[0]!)
-        : null;
     if (write) {
       res
         .status(503)

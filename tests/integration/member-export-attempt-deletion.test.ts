@@ -288,7 +288,7 @@ it("does not return a partial progress list when snapshot metadata cannot be rea
     },
   } as unknown as Pool);
   await expect(failed.list(f.ownerToken)).rejects.toThrow(
-    "Synthetic PostgreSQL read fault",
+    "Assignment attempt operation unconfirmed",
   );
   expect(await attempts.list(f.ownerToken)).toHaveLength(1);
 });
@@ -502,15 +502,19 @@ it("does not acknowledge a deletion that times out behind an export, then recove
   const reading = controlled.exported.exportOwned(f.ownerToken);
   const writer = observableRemoval();
   let finished = false;
-  let writing: Promise<boolean> | undefined;
+  let writing: Promise<{ value?: boolean; error?: unknown }> | undefined;
   try {
     await controlled.attemptRead.wait;
-    writing = writer.attempts
-      .remove(f.ownerToken, f.attemptId)
-      .then((value) => {
+    writing = writer.attempts.remove(f.ownerToken, f.attemptId).then(
+      (value) => {
         finished = true;
-        return value;
-      });
+        return { value };
+      },
+      (error: unknown) => {
+        finished = true;
+        return { error };
+      },
+    );
     await writer.connected.wait;
     expect(
       await waitForBlocking(
@@ -527,7 +531,12 @@ it("does not acknowledge a deletion that times out behind an export, then recove
         () => finished,
       ),
     ).toBe("blocked");
-    expect(await writing).toBe(false);
+    const outcome = await writing;
+    expect(outcome.value).toBeUndefined();
+    expect(outcome.error).toBeInstanceOf(Error);
+    expect((outcome.error as Error).message).toBe(
+      "Assignment attempt operation unconfirmed",
+    );
     const retained = await pool.query(
       `SELECT
          (SELECT count(*)::integer FROM assignment_attempts WHERE id=$1) AS attempts,
