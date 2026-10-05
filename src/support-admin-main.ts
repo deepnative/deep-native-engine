@@ -7,6 +7,7 @@ import { migrate } from "./store.ts";
 import { authorizationStore } from "./authorization.ts";
 import { circleDiscussionStore } from "./circle-discussion.ts";
 import { supportRequestStore } from "./support-requests.ts";
+import { localAiHoldInspectionStore } from "./local-ai-hold-inspection.ts";
 
 let pool: Pool | undefined;
 let failed = false;
@@ -41,6 +42,8 @@ try {
         "time-revoke",
         "circle-grant",
         "circle-revoke",
+        "hold-grant",
+        "hold-revoke",
       ].includes(args[0]!) &&
       /^[a-zA-Z0-9_-]+\.json$/.test(args[1]!)
     )
@@ -132,7 +135,55 @@ try {
     const support = supportRequestStore(pool, undefined, {
       timeWrites: settings.supportTimeWrites,
     });
-    if (args[0] === "circle-grant" || args[0] === "circle-revoke") {
+    if (args[0] === "hold-grant" || args[0] === "hold-revoke") {
+      const holds = localAiHoldInspectionStore(pool, {
+        mode: settings.mode,
+        enabled: settings.localHoldInspectionReads,
+      });
+      if (args[0] === "hold-grant") {
+        const operator = await privateJson("operator.json");
+        if (
+          Object.keys(input).length !== 4 ||
+          Object.keys(input).some(
+            (key) =>
+              !["jobId", "idempotencyKey", "startsAt", "expiresAt"].includes(
+                key,
+              ),
+          ) ||
+          typeof input.jobId !== "string" ||
+          typeof input.idempotencyKey !== "string" ||
+          typeof input.startsAt !== "string" ||
+          typeof input.expiresAt !== "string" ||
+          typeof operator.id !== "string"
+        )
+          throw Error("Invalid hold inspection grant instruction.");
+        const applied = await holds.grant(
+          admin.token,
+          input.jobId,
+          operator.id,
+          new Date(input.startsAt),
+          new Date(input.expiresAt),
+          input.idempotencyKey,
+        );
+        if (applied.kind !== "applied" && applied.kind !== "replayed")
+          throw Error("Hold inspection grant not confirmed.");
+        result = {
+          status: "complete",
+          action: args[0],
+          grantId: applied.grantId,
+        };
+      } else {
+        if (
+          Object.keys(input).length !== 1 ||
+          typeof input.grantId !== "string"
+        )
+          throw Error("Invalid hold inspection revocation instruction.");
+        const applied = await holds.revoke(admin.token, input.grantId);
+        if (applied.kind !== "applied" && applied.kind !== "replayed")
+          throw Error("Hold inspection revocation not confirmed.");
+        result = { status: "complete", action: args[0] };
+      }
+    } else if (args[0] === "circle-grant" || args[0] === "circle-revoke") {
       if (typeof input.circleId !== "string")
         throw Error("Invalid circle instruction.");
       const circles = circleDiscussionStore(

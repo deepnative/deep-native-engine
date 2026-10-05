@@ -161,6 +161,11 @@ import {
 } from "./ledger-reconciliation.ts";
 import { registerLedgerReconciliationRoutes } from "./ledger-reconciliation-routes.ts";
 import {
+  disabledLocalAiHoldInspectionStore,
+  type LocalAiHoldInspectionStore,
+} from "./local-ai-hold-inspection.ts";
+import { registerLocalAiHoldInspectionRoutes } from "./local-ai-hold-inspection-routes.ts";
+import {
   disabledMemberTestUnitsStore,
   type MemberTestUnitsStore,
 } from "./member-test-units.ts";
@@ -290,6 +295,7 @@ export function app(
     circleDiscussionEnabled?: boolean;
     metrics?: MetricsStore;
     ledgerReconciliation?: LedgerReconciliationStore;
+    localHoldInspection?: LocalAiHoldInspectionStore;
     memberTestUnits?: MemberTestUnitsStore;
     attempts?: AttemptStore;
     practice?: PracticeStore;
@@ -479,6 +485,11 @@ export function app(
     res.send(trackReadinessPage(await tracks.snapshot())),
   );
   registerLedgerReconciliationRoutes(app, ledgerReconciliation, mode);
+  registerLocalAiHoldInspectionRoutes(
+    app,
+    options.localHoldInspection ?? disabledLocalAiHoldInspectionStore(),
+    mode,
+  );
   registerMemberTestUnitsRoutes(
     app,
     options.memberTestUnits ?? disabledMemberTestUnitsStore(),

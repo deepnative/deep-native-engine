@@ -22,6 +22,7 @@ import { circleDiscussionStore } from "./circle-discussion.ts";
 import { circleStore } from "./circles.ts";
 import { metricsStore } from "./metrics.ts";
 import { ledgerReconciliationStore } from "./ledger-reconciliation.ts";
+import { localAiHoldInspectionStore } from "./local-ai-hold-inspection.ts";
 import { memberTestUnitsStore } from "./member-test-units.ts";
 import { attemptStore } from "./attempts.ts";
 import { practiceStore } from "./practice.ts";
@@ -90,6 +91,11 @@ export async function start(env: NodeJS.ProcessEnv) {
       ),
       metrics: metricsStore(pool),
       ledgerReconciliation: ledgerReconciliationStore(pool),
+      localHoldInspection: localAiHoldInspectionStore(pool, {
+        mode: settings.mode,
+        enabled: settings.localHoldInspectionReads,
+        secret: Buffer.from(settings.secret, "hex"),
+      }),
       memberTestUnits: memberTestUnitsStore(pool),
       attempts: attemptStore(pool),
       practice: practiceStore(pool),

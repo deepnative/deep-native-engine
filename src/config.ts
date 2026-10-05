@@ -71,10 +71,15 @@ export function config(env: NodeJS.ProcessEnv) {
   const circleDiscussion = env.DNE_CIRCLE_DISCUSSION ?? "disabled";
   if (!["enabled", "disabled"].includes(circleDiscussion))
     throw Error("DNE_CIRCLE_DISCUSSION must be enabled or disabled.");
+  const localHoldInspectionReads =
+    env.DNE_LOCAL_AI_HOLD_INSPECTION ?? "disabled";
+  if (!["enabled", "disabled"].includes(localHoldInspectionReads))
+    throw Error("DNE_LOCAL_AI_HOLD_INSPECTION must be enabled or disabled.");
   const eventRegistration = env.DNE_EVENT_REGISTRATION ?? "disabled";
   if (!["enabled", "disabled"].includes(eventRegistration))
     throw Error("DNE_EVENT_REGISTRATION must be enabled or disabled.");
   return {
+    localHoldInspectionReads: localHoldInspectionReads === "enabled",
     reviewerWorklistReads: reviewerWorklistReads === "enabled",
     reviewTimeWrites: reviewTimeWrites === "enabled",
     eventRegistration: eventRegistration === "enabled",
