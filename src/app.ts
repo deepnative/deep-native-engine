@@ -64,6 +64,7 @@ import {
   milestonesPage,
   careerPage,
   errorPage,
+  circleMembershipRecoveryPage,
   assignmentAttemptsPage,
   assignmentAttemptPage,
   assignmentComparisonPage,
@@ -1788,10 +1789,16 @@ export function app(
       );
   });
   app.post("/circles/:id/join", async (req, res) => {
-    const result = await circles.join(
-      res.locals.token as string,
-      req.params.id as string,
-    );
+    let result;
+    try {
+      result = await circles.join(
+        res.locals.token as string,
+        req.params.id as string,
+      );
+    } catch {
+      res.status(503).send(circleMembershipRecoveryPage());
+      return;
+    }
     if (result !== "joined") {
       res
         .status(result === "full" ? 409 : 404)
@@ -1806,12 +1813,17 @@ export function app(
     res.redirect(303, "/circles");
   });
   app.post("/circles/:id/leave", async (req, res) => {
-    if (
-      !(await circles.leave(
+    let left;
+    try {
+      left = await circles.leave(
         res.locals.token as string,
         req.params.id as string,
-      ))
-    ) {
+      );
+    } catch {
+      res.status(503).send(circleMembershipRecoveryPage());
+      return;
+    }
+    if (!left) {
       res
         .status(409)
         .send(

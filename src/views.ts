@@ -1003,6 +1003,13 @@ export function exerciseWriteRecoveryPage(
     `<section class="error-page"><p class="eyebrow">PRIVATE LOCAL RECOVERY</p><h1>Save outcome unknown</h1><div class="notice" role="alert"><p>The storage result could not be confirmed. Your exercise may or may not have been saved. Copy the attempted text below before closing this page, then inspect the saved lesson before deciding whether to try again. Nothing will be submitted automatically.</p></div><label for="attempted-instruction">Attempted instruction</label><textarea id="attempted-instruction" rows="5" readonly>${escape(instruction)}</textarea><label for="attempted-verification">Attempted way to check</label><textarea id="attempted-verification" rows="3" readonly>${escape(verification)}</textarea><p><a class="button" href="${goal ? `/lesson?version=${LESSON.version}&amp;goal=${escape(goal)}` : "/lesson"}" target="_blank" rel="noopener noreferrer">Inspect saved lesson (opens in a new tab)</a></p><p class="small">The new tab shows the current saved state. Keep this recovery page open until you have copied anything you need.</p></section>`,
   );
 }
+export function circleMembershipRecoveryPage() {
+  return page(
+    "Circle membership unconfirmed",
+    `<section class="error-page"><h1>Circle membership unconfirmed</h1><p>The request may already have completed. Nothing is retried automatically.</p><p>Check your current membership before choosing to join or leave again.</p><p><a href="/circles">Check current membership</a></p></section>`,
+  );
+}
+
 export function errorPage(title: string, message: string) {
   return page(
     title,

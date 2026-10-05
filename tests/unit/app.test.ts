@@ -1358,6 +1358,22 @@ it("renders only local circle state and handles join, full, denied, and leave ou
   await post("/circles/everyday-ai/leave").expect(303);
   circles.leave.mockResolvedValueOnce(false);
   await post("/circles/everyday-ai/leave").expect(409);
+  for (const operation of ["join", "leave"] as const) {
+    circles[operation].mockRejectedValueOnce(
+      new Error("Invented private database details"),
+    );
+    const before = circles[operation].mock.calls.length;
+    const recovery = await post(`/circles/everyday-ai/${operation}`).expect(
+      503,
+    );
+    expect(recovery.text).toContain("Circle membership unconfirmed");
+    expect(recovery.text).toContain('href="/circles"');
+    expect(recovery.text).toContain("Check current membership");
+    expect(recovery.text).not.toContain("<form");
+    expect(recovery.text).not.toContain("Invented private database details");
+    expect(recovery.headers.location).toBeUndefined();
+    expect(circles[operation].mock.calls.length).toBe(before + 1);
+  }
   circles.list.mockResolvedValueOnce(null);
   await agent.get("/circles").set("Host", host).expect(403);
 });
