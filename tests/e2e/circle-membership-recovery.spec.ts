@@ -100,6 +100,8 @@ for (const [index, background] of (
       await item
         .getByRole("button", { name: "Join Everyday AI practice", exact: true })
         .click();
+      await expect(item).toContainText("You joined this local circle");
+      await page.waitForLoadState("load");
       await page.reload();
       await expect(item).toContainText("You joined this local circle");
       await item
@@ -108,6 +110,15 @@ for (const [index, background] of (
           exact: true,
         })
         .click();
+      // Observe the redirected document before reloading it. A click's navigation
+      // callback can precede Chromium attaching the replacement page session.
+      await expect(
+        item.getByRole("button", {
+          name: "Join Everyday AI practice",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await page.waitForLoadState("load");
       await page.reload();
       await expect(
         item.getByRole("button", {
@@ -162,6 +173,13 @@ for (const [index, background] of (
         await page
           .getByRole("link", { name: "Check current membership", exact: true })
           .click();
+        await expect(
+          item.getByRole("button", {
+            name: `${action === "join" ? "Leave" : "Join"} Everyday AI practice`,
+            exact: true,
+          }),
+        ).toBeVisible();
+        await page.waitForLoadState("load");
         await page.reload();
         await expect(
           item.getByRole("button", {
