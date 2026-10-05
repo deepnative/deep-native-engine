@@ -114,11 +114,9 @@ for (const [index, background] of (
       ]);
       const page = await context.newPage();
       await page.goto(origin + "/progress");
-      const activity = page
-        .getByRole("listitem")
-        .filter({
-          has: page.getByRole("heading", { name: "Invented practical step" }),
-        });
+      const activity = page.getByRole("listitem").filter({
+        has: page.getByRole("heading", { name: "Invented practical step" }),
+      });
       const state = async () =>
         (
           await pool.query(
