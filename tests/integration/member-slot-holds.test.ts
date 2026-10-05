@@ -140,10 +140,16 @@ it("requires an explicit current allowance for every background and returns a pr
       state: "held",
       quantity: 60,
     });
-    expect(receipt!.expiresAt.getTime() - Date.now()).toBeGreaterThan(590_000);
-    expect(receipt!.expiresAt.getTime() - Date.now()).toBeLessThanOrEqual(
-      600_000,
-    );
+    // The hold deadline uses PostgreSQL's clock; a host/DB clock difference
+    // must not look like an allowance longer than the ten-minute contract.
+    const databaseClock = (
+      await pool.query<{ now: Date }>("SELECT clock_timestamp() AS now")
+    ).rows[0];
+    if (!databaseClock) throw new Error("Missing database clock observation");
+    const remaining =
+      receipt!.expiresAt.getTime() - databaseClock.now.getTime();
+    expect(remaining).toBeGreaterThan(590_000);
+    expect(remaining).toBeLessThanOrEqual(600_000);
     expect(receipt!.expiresAt.getTime()).toBeLessThan(
       fixtureRow.startsAt.getTime(),
     );

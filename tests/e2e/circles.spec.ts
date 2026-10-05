@@ -381,14 +381,27 @@ test("[L96] a circle leave waiting past session expiry keeps membership unchange
                  AND waiter.wait_event_type='Lock'
                  AND $1::integer=ANY(pg_blocking_pids(waiter.pid))
                  AND position('UPDATE preview_circle_memberships' in waiter.query)>0
-                 AND waiter.xact_start<p.expires_at
-                 AND p.expires_at<=clock_timestamp()`,
+                 AND waiter.xact_start<p.expires_at`,
               [holderPid, tokenHash],
             )
           ).rowCount,
         { timeout: 7_000, intervals: [10, 20, 50] },
       )
       .toBe(1);
+    // Connection disposal can stop the blocked query before expiry; observe
+    // the lock order and database expiry separately.
+    await expect
+      .poll(
+        async () =>
+          (
+            await pool.query(
+              "SELECT expires_at<=clock_timestamp() AS expired FROM principals WHERE token_hash=$1",
+              [tokenHash],
+            )
+          ).rows[0]?.expired,
+        { timeout: 7000, intervals: [10, 20, 50] },
+      )
+      .toBe(true);
     await holder.query("COMMIT");
     await leaving;
     await expect(

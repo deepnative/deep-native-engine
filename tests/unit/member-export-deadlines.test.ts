@@ -34,8 +34,9 @@ function driver(
               : [
                   options.clock ?? {
                     id: "invented-member",
-                    observedAt: new Date(),
-                    snapshotStartedAt: new Date(),
+                    // A transaction snapshot precedes its authority observation.
+                    observedAt: new Date(1),
+                    snapshotStartedAt: new Date(0),
                     remainingMs: "60000",
                   },
                 ],
@@ -139,8 +140,8 @@ it("charges commit and connection handback against the database-derived authorit
     const fake = driver({
       clock: {
         remainingMs: "100",
-        observedAt: new Date(),
-        snapshotStartedAt: new Date(),
+        observedAt: new Date(1),
+        snapshotStartedAt: new Date(0),
       },
       query: (sql) => {
         if (sql === "COMMIT" && delayed === "commit") elapsed += 101;

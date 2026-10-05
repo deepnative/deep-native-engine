@@ -36,13 +36,14 @@ function listPool({
   failRollback = false,
 } = {}) {
   const error = new Error("synthetic list failure");
+  let observations = 0;
   const query = vi.fn(async (sql: string) => {
     if (
-      (failure === "begin" && sql === "BEGIN") ||
+      (failure === "begin" && sql.startsWith("BEGIN")) ||
       (failure === "principal" && sql.includes("SELECT p.id")) ||
       (failure === "workspace" && sql.includes("SELECT id FROM workspaces")) ||
       (failure === "aggregate" && sql.includes("COUNT(*)")) ||
-      (failure === "expiry" && sql.includes("SELECT clock_timestamp()")) ||
+      (failure === "expiry" && sql.includes("WITH instant AS MATERIALIZED")) ||
       (failure === "commit" && sql === "COMMIT")
     )
       throw error;
@@ -51,7 +52,7 @@ function listPool({
     if (sql.includes("SELECT p.id"))
       return {
         rows: member
-          ? [{ id: "me", expiresAt: "2030-01-01 00:00:00.123456+00" }]
+          ? [{ id: "me", expires_at: new Date("2030-01-01T00:00:00Z") }]
           : [],
       };
     if (sql.includes("SELECT id FROM workspaces"))
@@ -60,8 +61,16 @@ function listPool({
       return {
         rows: [{ circle_id: "everyday-ai", member_count: 2, joined: true }],
       };
-    if (sql.includes("SELECT clock_timestamp()"))
-      return { rows: [{ valid: validAtCompletion }] };
+    if (sql.includes("WITH instant AS MATERIALIZED"))
+      return {
+        rows: [
+          {
+            valid: ++observations === 1 || validAtCompletion,
+            remaining: "60000",
+            observed: new Date(),
+          },
+        ],
+      };
     return { rows: [] };
   });
   const release = vi.fn();
@@ -84,7 +93,7 @@ it("lists only an active member's own state and aggregate seats", async () => {
   ]);
   expect(active.query.mock.calls.map(([sql]) => sql)).toContain("COMMIT");
   expect(active.release).toHaveBeenCalledOnce();
-  expect(active.release).toHaveBeenCalledWith(undefined);
+  expect(active.release).toHaveBeenCalledWith(expect.any(Error));
 });
 
 it.each([
@@ -106,25 +115,20 @@ it.each(["begin", "principal", "workspace", "aggregate", "expiry", "commit"])(
   "does not return a partial listing or replay after a %s failure",
   async (failure) => {
     const failed = listPool({ failure });
-    await expect(circleStore(failed.pool).list("member")).rejects.toBe(
-      failed.error,
-    );
+    expect(await circleStore(failed.pool).list("member")).toBeNull();
     expect(failed.connect).toHaveBeenCalledOnce();
-    expect(failed.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+    if (failure !== "begin" && failure !== "commit")
+      expect(failed.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
     expect(failed.release).toHaveBeenCalledOnce();
-    expect(failed.release).toHaveBeenCalledWith(
-      failure === "commit" ? failed.error : undefined,
-    );
+    expect(failed.release).toHaveBeenCalledWith(expect.any(Error));
   },
 );
 
 it("discards a failed listing connection when rollback is unavailable", async () => {
   const failed = listPool({ failure: "aggregate", failRollback: true });
-  await expect(circleStore(failed.pool).list("member")).rejects.toBe(
-    failed.error,
-  );
+  expect(await circleStore(failed.pool).list("member")).toBeNull();
   expect(failed.release).toHaveBeenCalledOnce();
-  expect(failed.release).toHaveBeenCalledWith(failed.error);
+  expect(failed.release).toHaveBeenCalledWith(expect.any(Error));
   expect(failed.connect).toHaveBeenCalledOnce();
 });
 
@@ -139,6 +143,7 @@ function joinPool({
   failInsert = false,
   validAtCompletion = true,
 } = {}) {
+  let observations = 0;
   const query = vi.fn(async (sql: string) => {
     if (sql === "ROLLBACK" && failRollback)
       throw new Error("rollback unavailable");
@@ -150,7 +155,7 @@ function joinPool({
     if (sql.includes("SELECT p.id"))
       return {
         rows: member
-          ? [{ id: "member-id", expiresAt: "2030-01-01 00:00:00.123456+00" }]
+          ? [{ id: "member-id", expires_at: new Date("2030-01-01T00:00:00Z") }]
           : [],
       };
     if (sql.includes("SELECT 1 FROM preview_circle_memberships"))
@@ -158,8 +163,16 @@ function joinPool({
     if (sql.includes("COUNT(*)")) return { rows: [{ n: count }] };
     if (sql.includes("INSERT INTO preview_circle_memberships") && failInsert)
       throw new Error("write failed");
-    if (sql.includes("SELECT clock_timestamp()"))
-      return { rows: [{ valid: validAtCompletion }] };
+    if (sql.includes("WITH instant AS MATERIALIZED"))
+      return {
+        rows: [
+          {
+            valid: ++observations === 1 || validAtCompletion,
+            remaining: "60000",
+            observed: new Date(),
+          },
+        ],
+      };
     return { rows: [], rowCount: 0 };
   });
   const release = vi.fn();
@@ -194,7 +207,10 @@ it("locks the circle before the count, refuses a full circle, and rolls back fai
   expect(await circleStore(full.pool).join("token", "everyday-ai")).toBe(
     "full",
   );
-  expect(full.query.mock.calls[1]![0]).toContain("pg_advisory_xact_lock");
+  const statements = full.query.mock.calls.map(([sql]) => sql);
+  expect(
+    statements.findIndex((sql) => sql.includes("pg_advisory_xact_lock")),
+  ).toBeLessThan(statements.findIndex((sql) => sql.includes("COUNT(*)")));
   expect(full.query.mock.calls.some((call) => call[0].includes("INSERT"))).toBe(
     false,
   );
@@ -208,7 +224,7 @@ it("locks the circle before the count, refuses a full circle, and rolls back fai
   const failed = joinPool({ failInsert: true });
   await expect(
     circleStore(failed.pool).join("token", "everyday-ai"),
-  ).rejects.toThrow("write failed");
+  ).rejects.toThrow("Circle operation unconfirmed");
   expect(failed.query.mock.calls.map((call) => call[0])).toContain("ROLLBACK");
   expect(failed.release).toHaveBeenCalledOnce();
 });
@@ -239,13 +255,14 @@ function leavePool({
   failUpdate = false,
   failRollback = false,
 } = {}) {
+  let observations = 0;
   const query = vi.fn(async (sql: string) => {
     if (sql === "ROLLBACK" && failRollback)
       throw new Error("rollback unavailable");
     if (sql.includes("SELECT p.id"))
       return {
         rows: member
-          ? [{ id: "member-id", expiresAt: "2030-01-01 00:00:00+00" }]
+          ? [{ id: "member-id", expires_at: new Date("2030-01-01T00:00:00Z") }]
           : [],
       };
     if (sql.includes("SELECT id FROM workspaces"))
@@ -254,8 +271,16 @@ function leavePool({
       if (failUpdate) throw new Error("membership write failed");
       return { rowCount: changed ? 1 : 0 };
     }
-    if (sql.includes("SELECT clock_timestamp()"))
-      return { rows: [{ valid: validAtCompletion }] };
+    if (sql.includes("WITH instant AS MATERIALIZED"))
+      return {
+        rows: [
+          {
+            valid: ++observations === 1 || validAtCompletion,
+            remaining: "60000",
+            observed: new Date(),
+          },
+        ],
+      };
     return { rows: [], rowCount: 0 };
   });
   const release = vi.fn();
@@ -301,7 +326,7 @@ it("rolls back a leave that expires during its membership wait or fails to write
   const failed = leavePool({ failUpdate: true });
   await expect(
     circleStore(failed.pool).leave("token", "everyday-ai"),
-  ).rejects.toThrow("membership write failed");
+  ).rejects.toThrow("Circle operation unconfirmed");
   expect(failed.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
   expect(failed.release).toHaveBeenCalledOnce();
 
@@ -311,7 +336,7 @@ it("rolls back a leave that expires during its membership wait or fails to write
   });
   await expect(
     circleStore(unavailableRollback.pool).leave("token", "everyday-ai"),
-  ).rejects.toThrow("membership write failed");
+  ).rejects.toThrow("Circle operation unconfirmed");
   expect(unavailableRollback.release).toHaveBeenCalledOnce();
   expect(unavailableRollback.release.mock.calls[0]![0]).toBeInstanceOf(Error);
 });
@@ -363,7 +388,7 @@ it.each([
     const failed = joinPool(options);
     await expect(
       circleStore(failed.pool).join("token", "everyday-ai"),
-    ).rejects.toThrow(options.message);
+    ).rejects.toThrow("Circle operation unconfirmed");
     expect(failed.connect).toHaveBeenCalledOnce();
     expect(failed.release).toHaveBeenCalledOnce();
     expect(
@@ -371,8 +396,6 @@ it.each([
         sql.includes("INSERT INTO preview_circle_memberships"),
       ),
     ).toHaveLength(options.failWorkspace ? 0 : 1);
-    if (options.discard)
-      expect(failed.release.mock.calls[0]![0]).toBeInstanceOf(Error);
-    else expect(failed.release.mock.calls[0]![0]).toBeUndefined();
+    expect(failed.release.mock.calls[0]![0]).toBeInstanceOf(Error);
   },
 );

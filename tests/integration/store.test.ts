@@ -397,33 +397,36 @@ async function waitForCircleJoinExpiry(
   memberId: string,
   queryFragment: string,
 ) {
-  const deadline = performance.now() + 5_000;
-  let observed;
-  do {
-    observed = (
-      await pool.query<{
-        blocked: boolean;
-        started_before_expiry: boolean;
-        expired: boolean;
-      }>(
-        `SELECT $1::integer=ANY(pg_blocking_pids(waiter.pid)) AS blocked,
-           waiter.xact_start<p.expires_at AS started_before_expiry,
-           p.expires_at<=clock_timestamp() AS expired
-         FROM pg_stat_activity waiter CROSS JOIN principals p
-         WHERE waiter.pid=$2 AND p.id=$3 AND waiter.state='active'
-           AND waiter.wait_event_type='Lock' AND position($4 in waiter.query)>0`,
-        [blockerPid, waiterPid, memberId, queryFragment],
-      )
-    ).rows[0];
-    if (observed?.blocked && observed.started_before_expiry && observed.expired)
-      return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  } while (performance.now() < deadline);
-  expect(observed).toEqual({
-    blocked: true,
-    started_before_expiry: true,
-    expired: true,
-  });
+  await expect
+    .poll(
+      async () =>
+        (
+          await pool.query(
+            `SELECT $1::integer=ANY(pg_blocking_pids(waiter.pid)) AS blocked,
+      waiter.xact_start<p.expires_at AS started_before_expiry
+     FROM pg_stat_activity waiter CROSS JOIN principals p
+     WHERE waiter.pid=$2 AND p.id=$3 AND waiter.state='active'
+       AND waiter.wait_event_type='Lock' AND position($4 in waiter.query)>0`,
+            [blockerPid, waiterPid, memberId, queryFragment],
+          )
+        ).rows[0],
+      { timeout: 5000, interval: 10 },
+    )
+    .toEqual({ blocked: true, started_before_expiry: true });
+  // The bounded operation may discard its connection before expiry. Prove
+  // the blocking order first, then independently observe database expiry.
+  await expect
+    .poll(
+      async () =>
+        (
+          await pool.query(
+            `SELECT expires_at<=clock_timestamp() AS expired FROM principals WHERE id=$1`,
+            [memberId],
+          )
+        ).rows[0]?.expired,
+      { timeout: 5000, interval: 10 },
+    )
+    .toBe(true);
 }
 
 async function circleJoinExpiringAtLock(
@@ -434,6 +437,7 @@ async function circleJoinExpiringAtLock(
   const blocker = await pool.connect();
   const waiter = await pool.connect();
   let pending: Promise<string> | undefined;
+  let waiterReleased = false;
   try {
     const blockerPid = (
       await blocker.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
@@ -470,7 +474,10 @@ async function circleJoinExpiringAtLock(
     const borrowedPool = {
       connect: async () => ({
         query: waiter.query.bind(waiter),
-        release() {},
+        release(error?: Error) {
+          waiterReleased = true;
+          waiter.release(error);
+        },
       }),
     } as unknown as Pool;
     pending = circleStore(borrowedPool).join(token, "everyday-ai");
@@ -492,7 +499,7 @@ async function circleJoinExpiringAtLock(
     await blocker.query("ROLLBACK");
     await Promise.allSettled(pending ? [pending] : []);
     blocker.release();
-    waiter.release();
+    if (!waiterReleased) waiter.release();
   }
 }
 
@@ -517,6 +524,7 @@ it.each(["membership", "principal"] as const)(
     const blocker = await pool.connect();
     const waiter = await pool.connect();
     let pending: Promise<boolean> | undefined;
+    let waiterReleased = false;
     try {
       const blockerPid = (
         await blocker.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
@@ -539,7 +547,10 @@ it.each(["membership", "principal"] as const)(
         query: waiter.query.bind(waiter),
         connect: async () => ({
           query: waiter.query.bind(waiter),
-          release() {},
+          release(error?: Error) {
+            waiterReleased = true;
+            waiter.release(error);
+          },
         }),
       } as unknown as Pool;
       pending = circleStore(borrowedPool).leave(owner.token, "everyday-ai");
@@ -558,7 +569,7 @@ it.each(["membership", "principal"] as const)(
       await blocker.query("ROLLBACK");
       await Promise.allSettled(pending ? [pending] : []);
       blocker.release();
-      waiter.release();
+      if (!waiterReleased) waiter.release();
     }
   },
   10_000,
@@ -600,7 +611,7 @@ it("orders a valid leave after a rejoin committed while its transaction waited t
     return {
       query: (async (statement: string, values?: unknown[]) => {
         const result = await query(statement, values);
-        if (statement === "BEGIN") {
+        if (statement.startsWith("BEGIN")) {
           entered();
           await proceed;
         }
@@ -7543,9 +7554,7 @@ it.each(["write", "commit"] as const)(
     } as unknown as Pool);
     try {
       await expect(broken.join(owner.token, "everyday-ai")).rejects.toThrow(
-        stage === "write"
-          ? "Synthetic circle write failure"
-          : "Synthetic lost circle commit reply",
+        "Circle operation unconfirmed",
       );
       expect(writes).toBe(1);
       const before = await circleMembershipRows(owner.learner.id);
@@ -7864,15 +7873,10 @@ it.each(["aggregate", "commit"] as const)(
       }),
     } as unknown as Pool);
     try {
-      await expect(broken.list(owner.token)).rejects.toThrow(
-        stage === "aggregate"
-          ? "Synthetic circle read failure"
-          : "Synthetic lost circle read commit reply",
-      );
+      expect(await broken.list(owner.token)).toBeNull();
       expect(reads).toBe(1);
       expect(released).toBe(true);
-      if (stage === "commit") expect(discarded).toBeInstanceOf(Error);
-      else expect(discarded).toBeUndefined();
+      expect(discarded).toBeInstanceOf(Error);
       expect(await circleMembershipRows(owner.learner.id)).toEqual(before);
       expect((await circles.list(owner.token))?.[0]).toMatchObject({
         joined: true,
