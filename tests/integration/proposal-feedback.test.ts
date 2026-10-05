@@ -726,7 +726,7 @@ it.each(["immediate", "commit"] as const)(
           : "CREATE CONSTRAINT TRIGGER reject_changes_test AFTER INSERT ON proposal_audit DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION reject_changes_test()",
       );
       await expect(request(proposals, f)).rejects.toThrow(
-        "Synthetic audit failure",
+        "Proposal operation unconfirmed",
       );
       expect(await saved(f.id)).toEqual(before);
       expect(await decisions(f.id)).toEqual([]);
@@ -752,7 +752,7 @@ it.each(["request", "submit"] as const)(
       action === "request"
         ? request(uncertain.target, f)
         : uncertain.target.submit(f.owner, f.id, true, 2),
-    ).rejects.toThrow("Synthetic unconfirmed transaction");
+    ).rejects.toThrow("Proposal operation unconfirmed");
     expect(uncertain.state.discarded).toBe(true);
     const current = await saved(f.id),
       history = await decisions(f.id);
@@ -779,7 +779,7 @@ it("discards a connection with a failed rollback and retains no uncommitted feed
     before = await saved(f.id),
     uncertain = controlled({ failure: "COMMIT", rollbackFails: true });
   await expect(request(uncertain.target, f)).rejects.toThrow(
-    "Synthetic unconfirmed transaction",
+    "Proposal operation unconfirmed",
   );
   expect(uncertain.state.discarded).toBe(true);
   expect(await saved(f.id)).toEqual(before);
@@ -792,9 +792,7 @@ it.each(["before", "after"] as const)(
     const f = await fixture();
     await request(proposals, f);
     const reading = controlled({ failure: "COMMIT", after: when === "after" });
-    await expect(reading.target.preview(f.owner, f.id)).rejects.toThrow(
-      "Synthetic unconfirmed transaction",
-    );
+    expect(await reading.target.preview(f.owner, f.id)).toBeNull();
     expect(reading.state.discarded).toBe(true);
     expect(await proposals.preview(f.owner, f.id)).toMatchObject({
       feedback: { text: feedback },

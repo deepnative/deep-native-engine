@@ -13,6 +13,7 @@ import {
   moderationPage,
   proposalChangesRecoveryPage,
   proposalSubmissionRecoveryPage,
+  proposalOperationRecoveryPage,
 } from "../../src/views.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
 import { withLoopback } from "../support/loopback-server.ts";
@@ -45,6 +46,8 @@ function fixture() {
   });
   const proposals = {
     ...disabledProposalStore(),
+    owned: vi.fn<ProposalStore["owned"]>().mockResolvedValue([]),
+    moderate: vi.fn<ProposalStore["moderate"]>().mockResolvedValue(true),
     requestChanges: vi
       .fn<ProposalStore["requestChanges"]>()
       .mockResolvedValue("requested"),
@@ -387,4 +390,78 @@ it("bounds and escapes recovery text and links without a replay form", () => {
   expect(proposalSubmissionRecoveryPage('id"')).toContain(
     'href="/contribute/id&quot;"',
   );
+});
+
+it("withholds the contribution list when current authority cannot be confirmed", async () => {
+  const f = fixture();
+  f.proposals.owned.mockResolvedValue(null);
+  const response = await withLoopback(f.application, (server) =>
+    request(server)
+      .get("/contribute")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${token}`),
+  );
+  expect(response.status).toBe(403);
+  expect(response.text).toContain("Proposals unavailable");
+  expect(response.text).not.toContain(returned.title);
+});
+it.each(["creation", "withdrawal", "moderation"] as const)(
+  "shows truthful %s recovery with no automatic write replay",
+  async (operation) => {
+    const f = fixture();
+    const failure = new Error(
+      "Private database details must not reach the response",
+    );
+    let path: string, body: Record<string, unknown>;
+    if (operation === "creation") {
+      f.proposals.createDraft.mockRejectedValue(failure);
+      path = "/contribute";
+      body = {
+        title: "Invented title",
+        body: "Invented text",
+        sources: "Invented source",
+        sample_confirmed: "yes",
+      };
+    } else if (operation === "withdrawal") {
+      f.proposals.withdraw.mockRejectedValue(failure);
+      path = `/contribute/${id}/withdraw`;
+      body = { confirm: "yes" };
+    } else {
+      f.proposals.moderate.mockRejectedValue(failure);
+      path = `/moderate/proposals/${id}/reject`;
+      body = {};
+    }
+    const response = await f.post(path, body);
+    expect(response.status).toBe(503);
+    expect(response.headers.location).toBeUndefined();
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.text).toContain(`Proposal ${operation} unconfirmed`);
+    expect(response.text).toContain("may already have completed");
+    expect(response.text).not.toContain(failure.message);
+    expect(response.text).not.toContain('<form method="post"');
+    const href =
+      operation === "creation"
+        ? "/contribute"
+        : operation === "withdrawal"
+          ? `/contribute/${id}`
+          : "/moderate/proposals";
+    expect(response.text).toContain(`href="${href}"`);
+    expect(
+      f.proposals.createDraft.mock.calls.length +
+        f.proposals.withdraw.mock.calls.length +
+        f.proposals.moderate.mock.calls.length,
+    ).toBe(1);
+    if (operation === "creation")
+      expect(response.text).toContain(
+        "repeating creation can make a second draft",
+      );
+  },
+);
+it("keeps recovery destinations escaped and defaults to the creation list", () => {
+  expect(proposalOperationRecoveryPage("creation")).toContain(
+    'href="/contribute"',
+  );
+  expect(
+    proposalOperationRecoveryPage("withdrawal", '"><script>'),
+  ).not.toContain("<script>");
 });

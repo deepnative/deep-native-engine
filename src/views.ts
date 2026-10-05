@@ -376,6 +376,21 @@ export function proposalEditRecoveryPage(
     `<section class="error-page"><p class="eyebrow">PRIVATE SAMPLE · ${status}</p><h1>${title}</h1><div class="notice" role="alert"><p>${escape(message)}</p></div>${revision !== undefined ? `<p>You were changing saved revision ${revision}. Check these fields and try again. A changed draft will require you to review the current preview first.</p>${proposalEditForm(id, csrf, revision, bounded)}` : `<p>Copy your attempted text before opening the current preview. This page does not retry the write.</p><label for="unsaved-proposal-title">Attempted title</label><input id="unsaved-proposal-title" readonly value="${escape(bounded.title)}"><label for="unsaved-proposal-body">Attempted sample</label><textarea id="unsaved-proposal-body" readonly>${escape(bounded.body)}</textarea><label for="unsaved-proposal-sources">Attempted sources and rights notes</label><textarea id="unsaved-proposal-sources" readonly>${escape(bounded.sources)}</textarea>`}<p><a href="/contribute/${escape(id)}">Open the current private preview</a> to check the saved revision and submission state.</p></section>`,
   );
 }
+export function proposalOperationRecoveryPage(
+  operation: "creation" | "withdrawal" | "moderation",
+  id = "",
+) {
+  const href =
+    operation === "moderation"
+      ? "/moderate/proposals"
+      : operation === "creation"
+        ? "/contribute"
+        : `/contribute/${encodeURIComponent(id)}`;
+  return page(
+    `Proposal ${operation} unconfirmed`,
+    `<section class="error-page"><h1>Proposal ${operation} unconfirmed</h1><p role="alert">The operation may already have completed. Nothing is retried automatically.</p><p>${operation === "creation" ? "A draft may already exist. Inspect your private proposals before creating another; repeating creation can make a second draft." : "Inspect the current state before deciding what to do next. An unavailable item does not confirm which action occurred."}</p><p><a href="${escape(href)}">Check current private state</a></p></section>`,
+  );
+}
 export function proposalSubmissionRecoveryPage(id: string) {
   return page(
     "Proposal submission outcome unknown",

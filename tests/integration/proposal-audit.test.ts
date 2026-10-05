@@ -264,9 +264,7 @@ it.each(["insert", "commit"] as const)(
           ? "CREATE TRIGGER fail_proposal_test_audit BEFORE INSERT ON proposal_audit FOR EACH ROW EXECUTE FUNCTION fail_proposal_test_audit()"
           : "CREATE CONSTRAINT TRIGGER fail_proposal_test_audit AFTER INSERT ON proposal_audit DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fail_proposal_test_audit()",
       );
-      await expect(proposals.moderationQueue(f.token)).rejects.toThrow(
-        "Synthetic proposal audit failure",
-      );
+      expect(await proposals.moderationQueue(f.token)).toBeNull();
       const origin = "http://127.0.0.1:3000";
       const server = await listenLoopback(
         app(db, {
@@ -286,8 +284,8 @@ it.each(["insert", "commit"] as const)(
           .get("/moderate/proposals")
           .set("Host", "127.0.0.1:3000")
           .set("Cookie", `dne_preview=${f.token}`)
-          .expect(503);
-        expect(read.text).toContain("We could not save or load that");
+          .expect(403);
+        expect(read.text).toContain("Moderation unavailable");
         for (const secret of [
           ...Object.values(f.value),
           f.token,
@@ -310,14 +308,14 @@ it.each(["insert", "commit"] as const)(
           .type("form")
           .send({ csrf })
           .expect(503);
-        expect(write.text).toContain("We could not save or load that");
+        expect(write.text).toContain("Proposal moderation unconfirmed");
         expect(write.text).not.toContain(f.value.body);
       } finally {
         await closeLoopback(server);
       }
       expect(await events()).toEqual([]);
       await expect(proposals.moderate(f.token, f.id, "reject")).rejects.toThrow(
-        "Synthetic proposal audit failure",
+        "Proposal operation unconfirmed",
       );
       expect(await events()).toEqual([]);
       expect(await proposals.preview(f.owner.token, f.id)).toMatchObject({
