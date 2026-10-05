@@ -458,9 +458,9 @@ it.each(["immediate", "commit"] as const)(
       );
       await expect(
         proposals.editDraft(f.token, f.id, corrected, 1),
-      ).rejects.toThrow("Synthetic proposal mutation failure");
+      ).rejects.toThrow("Proposal operation unconfirmed");
       await expect(proposals.submit(f.token, f.id, true, 1)).rejects.toThrow(
-        "Synthetic proposal mutation failure",
+        "Proposal operation unconfirmed",
       );
       expect(await proposals.preview(f.token, f.id)).toMatchObject({
         ...original,
@@ -556,10 +556,8 @@ it("times out a blocked save without changes, releases its transaction, and perm
       [f.id],
     );
     pending = proposals.editDraft(f.token, f.id, corrected, 1);
-    // Both unchanged five-second bounds can cancel this actual row wait.
-    await expect(pending).rejects.toMatchObject({
-      code: expect.stringMatching(/^(55P03|57014)$/),
-    });
+    // A bounded adapter failure must not expose the database error or report success.
+    await expect(pending).rejects.toThrow("Proposal operation unconfirmed");
     await blocker.query("ROLLBACK");
     expect(await proposals.preview(f.token, f.id)).toMatchObject({
       ...original,

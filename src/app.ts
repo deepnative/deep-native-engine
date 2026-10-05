@@ -59,6 +59,7 @@ import {
   proposalEditRecoveryPage,
   proposalChangesRecoveryPage,
   proposalSubmissionRecoveryPage,
+  proposalOperationRecoveryPage,
   moderationPage,
   milestonesPage,
   careerPage,
@@ -732,14 +733,20 @@ export function app(
   });
   app.post("/moderate/proposals/:id/:action", async (req, res) => {
     const action = req.params.action;
-    if (
-      (action !== "quarantine" && action !== "reject") ||
-      !(await proposals.moderate(
-        res.locals.token as string,
-        req.params.id as string,
-        action,
-      ))
-    ) {
+    let moderated = false;
+    try {
+      if (action === "quarantine" || action === "reject") {
+        moderated = await proposals.moderate(
+          res.locals.token as string,
+          req.params.id as string,
+          action,
+        );
+      }
+    } catch {
+      res.status(503).send(proposalOperationRecoveryPage("moderation"));
+      return;
+    }
+    if (!moderated) {
       res
         .status(409)
         .send(
@@ -1832,13 +1839,19 @@ export function app(
         );
       return;
     }
-    res.send(
-      proposalListPage(
-        await proposals.owned(res.locals.token as string),
-        res.locals.csrf as string,
-        workflow,
-      ),
-    );
+    const owned = await proposals.owned(res.locals.token as string);
+    if (!owned) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Proposals unavailable",
+            "Reopen your private session before checking current proposals.",
+          ),
+        );
+      return;
+    }
+    res.send(proposalListPage(owned, res.locals.csrf as string, workflow));
   });
   app.post("/contribute", async (req, res) => {
     const fields = (req.body ?? {}) as Fields;
@@ -1879,12 +1892,22 @@ export function app(
               : Number.NaN,
           }
         : undefined;
-    const id = await proposals.createDraft(
-      res.locals.token as string,
-      { title: value("title"), body: value("body"), sources: value("sources") },
-      fields.sample_confirmed === "yes",
-      workflow,
-    );
+    let id: string | null;
+    try {
+      id = await proposals.createDraft(
+        res.locals.token as string,
+        {
+          title: value("title"),
+          body: value("body"),
+          sources: value("sources"),
+        },
+        fields.sample_confirmed === "yes",
+        workflow,
+      );
+    } catch {
+      res.status(503).send(proposalOperationRecoveryPage("creation"));
+      return;
+    }
     if (!id) {
       res
         .status(422)
@@ -2066,15 +2089,29 @@ export function app(
   });
   app.post("/contribute/:id/withdraw", async (req, res) => {
     const fields = (req.body ?? {}) as Fields;
-    if (
-      Object.keys(req.query).length > 0 ||
-      Object.keys(fields).some((key) => !["csrf", "confirm"].includes(key)) ||
-      fields.confirm !== "yes" ||
-      !(await proposals.withdraw(
-        res.locals.token as string,
-        req.params.id as string,
-      ))
-    ) {
+    let withdrawn: boolean;
+    try {
+      if (
+        Object.keys(req.query).length > 0 ||
+        Object.keys(fields).some((key) => !["csrf", "confirm"].includes(key)) ||
+        fields.confirm !== "yes"
+      ) {
+        withdrawn = false;
+      } else {
+        withdrawn = await proposals.withdraw(
+          res.locals.token as string,
+          req.params.id as string,
+        );
+      }
+    } catch {
+      res
+        .status(503)
+        .send(
+          proposalOperationRecoveryPage("withdrawal", req.params.id as string),
+        );
+      return;
+    }
+    if (!withdrawn) {
       res
         .status(409)
         .send(

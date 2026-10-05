@@ -71,33 +71,43 @@ it("keeps invalid consent and rights submissions out of storage", async () => {
   expect(query).not.toHaveBeenCalled();
 });
 it("bounds member reads and creation to their current owner", async () => {
-  const query = vi
-    .fn()
-    .mockResolvedValueOnce({ rows: [{ id: draft.id }] })
-    .mockResolvedValueOnce({ rows: [] })
-    .mockResolvedValueOnce({ rows: [draft] })
-    .mockResolvedValueOnce({ rows: [draft] })
-    .mockResolvedValueOnce({ rows: [] });
-  const store = proposalStore({ query } as unknown as Pool);
-  expect(await store.createDraft("member", value, true)).toBe(draft.id);
-  expect(await store.createDraft("unknown", value, true)).toBeNull();
-  expect(await store.owned("member")).toEqual([draft]);
+  const f = ownerFixture();
+  expect(await f.store.createDraft("member", value, true)).toBe(draft.id);
+  expect(
+    await ownerFixture({ principal: false }).store.createDraft(
+      "unknown",
+      value,
+      true,
+    ),
+  ).toBeNull();
+  expect(await f.store.owned("member")).toEqual([draft]);
+  expect(
+    await ownerFixture({ principal: false }).store.owned("unknown"),
+  ).toBeNull();
 });
 it("rejects forged or stale workflow references at creation", async () => {
-  const query = vi.fn().mockResolvedValue({ rows: [{ id: draft.id }] });
-  const resolve = vi.fn(async (id: string) =>
-    id === "WF-001" ? ({ version: 1 } as never) : null,
-  );
-  const store = proposalStore({ query } as unknown as Pool, resolve);
-  for (const ref of [
-    { id: "WF-999", version: 1 },
-    { id: "WF-001", version: 0 },
-    { id: "WF-001", version: 2 },
-  ])
-    expect(await store.createDraft("member", value, true, ref)).toBeNull();
-  expect(query).not.toHaveBeenCalled();
+  for (const options of [{ workflow: null }, { workflow: 2 }]) {
+    const f = ownerFixture(options);
+    expect(
+      await f.store.createDraft("member", value, true, {
+        id: "WF-001",
+        version: 1,
+      }),
+    ).toBeNull();
+    expect(f.query.mock.calls.some(([sql]) => sql.startsWith("INSERT"))).toBe(
+      false,
+    );
+  }
+  const f = ownerFixture();
   expect(
-    await store.createDraft("member", value, true, {
+    await f.store.createDraft("member", value, true, {
+      id: "WF-001",
+      version: 0,
+    }),
+  ).toBeNull();
+  expect(f.connect).not.toHaveBeenCalled();
+  expect(
+    await f.store.createDraft("member", value, true, {
       id: "WF-001",
       version: 1,
     }),
@@ -127,6 +137,7 @@ function ownerFixture(
   const query = vi.fn(async (sql: string) => {
     if (
       sql === options.failure ||
+      (options.failure === "BEGIN" && sql.startsWith("BEGIN ")) ||
       (options.failure === "write" && sql.startsWith("UPDATE member_proposals"))
     )
       throw Error("Synthetic mutation failure");
@@ -141,7 +152,7 @@ function ownerFixture(
       };
     if (sql.startsWith("SELECT id FROM workspaces"))
       return { rows: options.workspace === false ? [] : [{ id: "workspace" }] };
-    if (sql.startsWith("SELECT mp.id"))
+    if (sql.startsWith("SELECT mp.id") || sql.startsWith("WITH owned"))
       return {
         rows:
           options.row === null
@@ -157,8 +168,18 @@ function ownerFixture(
                 },
               ],
       };
-    if (sql.startsWith("SELECT clock_timestamp()"))
-      return { rows: [{ valid: !options.expired }] };
+    if (sql.startsWith("WITH instant"))
+      return {
+        rows: [
+          {
+            valid: !options.expired,
+            remaining: options.expired ? "-1" : "60000",
+            observed: new Date(),
+          },
+        ],
+      };
+    if (sql.startsWith("INSERT INTO member_proposals"))
+      return { rows: [{ id: draft.id }], rowCount: 1 };
     return { rows: [], rowCount: 1 };
   });
   const connect = vi.fn(async () => ({ query, release }));
@@ -224,8 +245,10 @@ it.each([
           ? f.store.submit("member", draft.id, true, 1)
           : f.store.withdraw("member", draft.id)),
     ).toBe(action === "withdraw" ? false : "denied");
-    expect(f.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
-    expect(f.release).toHaveBeenCalledWith(undefined);
+    expect(f.query.mock.calls.some(([sql]) => sql === "COMMIT")).toBe(false);
+    if (!options.expired)
+      expect(f.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
+    expect(f.release).toHaveBeenCalledWith(expect.any(Error));
   }
 });
 it.each(["submitted", "quarantined", "rejected", "withdrawn"] as const)(
@@ -277,30 +300,25 @@ it.each([1, 2, null])(
   },
 );
 it.each(["BEGIN", "write", "COMMIT"])(
-  "rolls back failed %s without reporting success",
+  "withholds success and discards the connection after %s failure",
   async (failure) => {
     const f = ownerFixture({ failure });
     await expect(
       f.store.editDraft("member", draft.id, value, 1),
-    ).rejects.toThrow("Synthetic mutation failure");
-    expect(f.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
-    expect(f.release).toHaveBeenCalledWith(
-      failure === "COMMIT"
-        ? expect.objectContaining({
-            message: "Proposal commit outcome unconfirmed",
-          })
-        : undefined,
+    ).rejects.toThrow("Proposal operation unconfirmed");
+    expect(f.query.mock.calls.some(([sql]) => sql === "ROLLBACK")).toBe(
+      failure === "write",
     );
+    expect(f.release).toHaveBeenCalledExactlyOnceWith(expect.any(Error));
   },
 );
 it("discards a mutation connection when rollback fails", async () => {
   const f = ownerFixture({ failure: "write", rollbackFails: true });
   await expect(f.store.submit("member", draft.id, true, 1)).rejects.toThrow(
-    "Synthetic mutation failure",
+    "Proposal operation unconfirmed",
   );
-  expect(f.release).toHaveBeenCalledWith(
-    expect.objectContaining({ message: "Proposal mutation rollback failed" }),
-  );
+  expect(f.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
+  expect(f.release).toHaveBeenCalledExactlyOnceWith(expect.any(Error));
 });
 
 function moderationFixture(
@@ -324,6 +342,7 @@ function moderationFixture(
   const query = vi.fn(async (statement: string, values?: unknown[]) => {
     if (
       statement === options.failure ||
+      (options.failure === "BEGIN" && statement.startsWith("BEGIN ")) ||
       (options.failure === "audit" &&
         statement.includes("INSERT INTO proposal_audit"))
     )
@@ -356,8 +375,16 @@ function moderationFixture(
           (row) => ({ ...row, workspace_id: "workspace", member_id: "member" }),
         ),
       };
-    if (statement.startsWith("SELECT clock_timestamp()"))
-      return { rows: [{ valid: !options.expired }] };
+    if (statement.startsWith("WITH instant"))
+      return {
+        rows: [
+          {
+            valid: !options.expired,
+            remaining: options.expired ? "-1" : "60000",
+            observed: new Date(),
+          },
+        ],
+      };
     if (statement.includes("INSERT INTO proposal_audit")) history.push(values!);
     return { rows: [], rowCount: 1 };
   });
@@ -402,7 +429,7 @@ it("commits one content-free event for each returned private proposal without ex
     ],
   ]);
   expect(f.query.mock.calls.at(-1)?.[0]).toBe("COMMIT");
-  expect(f.release).toHaveBeenCalledWith(undefined);
+  expect(f.release).toHaveBeenCalledWith(expect.any(Error));
   const empty = moderationFixture({ rows: [] });
   expect(await empty.store.moderationQueue("staff")).toEqual([]);
   expect(empty.history).toEqual([]);
@@ -417,9 +444,10 @@ it.each([{ principal: false }, { profile: false }, { expired: true }])(
           ? f.store.moderationQueue("staff")
           : f.store.moderate("staff", draft.id, "reject")),
       ).toEqual(action === "read" ? null : false);
-      expect(f.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
+      if (!options.expired)
+        expect(f.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
       expect(f.query.mock.calls.some(([sql]) => sql === "COMMIT")).toBe(false);
-      expect(f.release).toHaveBeenCalledWith(undefined);
+      expect(f.release).toHaveBeenCalledWith(expect.any(Error));
     }
   },
 );
@@ -440,30 +468,23 @@ it.each([
   },
 );
 it.each(["BEGIN", "audit", "COMMIT"])(
-  "returns no private text and releases the connection on %s failure",
+  "withholds private text and discards the connection after %s failure",
   async (failure) => {
     const f = moderationFixture({ failure });
-    await expect(f.store.moderationQueue("staff")).rejects.toThrow(
-      "Synthetic transaction failure",
+    expect(await f.store.moderationQueue("staff")).toBeNull();
+    expect(f.query.mock.calls.some(([sql]) => sql === "ROLLBACK")).toBe(
+      failure === "audit",
     );
-    expect(f.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
-    expect(f.release).toHaveBeenCalledWith(
-      failure === "COMMIT"
-        ? expect.objectContaining({
-            message: "Proposal commit outcome unconfirmed",
-          })
-        : undefined,
-    );
+    expect(f.release).toHaveBeenCalledExactlyOnceWith(expect.any(Error));
   },
 );
 it("discards a connection when audit and rollback both fail", async () => {
   const f = moderationFixture({ failure: "audit", rollbackFails: true });
   await expect(f.store.moderate("staff", draft.id, "reject")).rejects.toThrow(
-    "Synthetic transaction failure",
+    "Proposal operation unconfirmed",
   );
-  expect(f.release).toHaveBeenCalledWith(
-    expect.objectContaining({ message: "Proposal audit rollback failed" }),
-  );
+  expect(f.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
+  expect(f.release).toHaveBeenCalledExactlyOnceWith(expect.any(Error));
 });
 
 it("denies malformed proposal IDs without a database query", async () => {
@@ -645,7 +666,9 @@ it.each([{ principal: false }, { profile: false }, { expired: true }])(
         feedback: "Sample",
       }),
     ).toBe("denied");
-    expect(f.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
+    expect(f.query.mock.calls.some(([sql]) => sql === "COMMIT")).toBe(false);
+    if (!options.expired)
+      expect(f.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
   },
 );
 it.each([

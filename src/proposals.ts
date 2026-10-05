@@ -4,7 +4,12 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
-import type { Pool, PoolClient } from "pg";
+import type { Pool } from "pg";
+import {
+  practiceTransaction as proposalTransaction,
+  PracticeLifetimeFailure,
+  type PracticeTransaction,
+} from "./practice-session-lifetime.ts";
 import { hash } from "./store.ts";
 import { workflowBundle } from "./workflow-registry.ts";
 
@@ -48,7 +53,7 @@ export interface ProposalStore {
     sampleConfirmed: boolean,
     workflow?: WorkflowReference,
   ): Promise<string | null>;
-  owned(token: string): Promise<Proposal[]>;
+  owned(token: string): Promise<Proposal[] | null>;
   preview(token: string, id: string): Promise<OwnerProposal | null>;
   requestChanges(
     token: string,
@@ -140,8 +145,6 @@ function projection(row: Proposal): Proposal {
     submittedAt: row.submittedAt,
   };
 }
-const member = `p.token_hash=$1 AND p.kind='member'
- AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP`;
 interface ModerationActor {
   id: string;
   expires_at: Date;
@@ -195,78 +198,73 @@ export function proposalStore(
       id: match[2]!,
     };
   }
+  async function withMember<T>(
+    token: string,
+    denied: T,
+    use: (
+      client: PracticeTransaction,
+      principal: { id: string; expires_at: Date },
+    ) => Promise<T>,
+    read = false,
+  ): Promise<T> {
+    let readyToCommit = false;
+    try {
+      return await proposalTransaction(pool, async (client) => {
+        // Match erasure ordering: actor, workspace, then proposal rows.
+        const principal = (
+          await client.query<{ id: string; expires_at: Date }>(
+            `SELECT id,expires_at FROM principals WHERE token_hash=$1 AND kind='member'
+           AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE`,
+            [hash(token)],
+          )
+        ).rows[0];
+        if (!principal) throw new PracticeLifetimeFailure("denied");
+        await client.observe([principal.expires_at]);
+        const workspace = await client.query(
+          `SELECT id FROM workspaces WHERE owner_principal_id=$1 AND deleting_at IS NULL FOR SHARE`,
+          [principal.id],
+        );
+        if (!workspace.rows[0]) throw new PracticeLifetimeFailure("denied");
+        const result = await use(client, principal);
+        await client.observe([principal.expires_at]);
+        readyToCommit = true;
+        return result;
+      });
+    } catch (error) {
+      if (
+        read ||
+        (!readyToCommit &&
+          error instanceof PracticeLifetimeFailure &&
+          error.kind === "denied")
+      )
+        return denied;
+      throw new Error("Proposal operation unconfirmed", { cause: error });
+    }
+  }
   async function withOwner<T>(
     token: string,
     id: string,
     denied: T,
-    use: (client: PoolClient, row: OwnerRow) => Promise<T>,
+    use: (client: PracticeTransaction, row: OwnerRow) => Promise<T>,
     read = false,
   ): Promise<T> {
     if (!proposalIdPattern.test(id)) return denied;
-    const client = await pool.connect();
-    let releaseError: Error | undefined;
-    let commitAttempted = false;
-    try {
-      await client.query("BEGIN");
-      await client.query("SET LOCAL lock_timeout='5s'");
-      await client.query("SET LOCAL statement_timeout='5s'");
-      // Match deletion/moderation ordering. Authorization remains locked until
-      // commit; row locking makes revision checks and state changes atomic.
-      const principal = (
-        await client.query<{ id: string; expires_at: Date }>(
-          `SELECT id,expires_at FROM principals WHERE token_hash=$1 AND kind='member'
-           AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE`,
-          [hash(token)],
-        )
-      ).rows[0];
-      if (!principal) {
-        await client.query("ROLLBACK");
-        return denied;
-      }
-      const workspace = await client.query(
-        `SELECT id FROM workspaces WHERE owner_principal_id=$1
-         AND deleting_at IS NULL FOR SHARE`,
-        [principal.id],
-      );
-      if (!workspace.rows[0]) {
-        await client.query("ROLLBACK");
-        return denied;
-      }
-      const row = (
-        await client.query<OwnerRow>(
-          `SELECT ${ownerColumns} FROM member_proposals mp
-           WHERE mp.member_id=$1 AND mp.id=$2 FOR ${read ? "SHARE" : "UPDATE"}`,
-          [principal.id, id],
-        )
-      ).rows[0];
-      if (!row) {
-        await client.query("ROLLBACK");
-        return denied;
-      }
-      const result = await use(client, row);
-      const current = await client.query<{ valid: boolean }>(
-        "SELECT clock_timestamp() < $1::timestamptz AS valid",
-        [principal.expires_at],
-      );
-      if (!current.rows[0]!.valid) {
-        await client.query("ROLLBACK");
-        return denied;
-      }
-      commitAttempted = true;
-      await client.query("COMMIT");
-      return result;
-    } catch (error) {
-      if (commitAttempted)
-        releaseError = new Error("Proposal commit outcome unconfirmed");
-      try {
-        await client.query("ROLLBACK");
-      } catch {
-        releaseError = new Error("Proposal mutation rollback failed");
-      }
-      throw error;
-    } finally {
-      client.release(releaseError);
-    }
+    return withMember(
+      token,
+      denied,
+      async (client, principal) => {
+        const row = (
+          await client.query<OwnerRow>(
+            `SELECT ${ownerColumns} FROM member_proposals mp
+         WHERE mp.member_id=$1 AND mp.id=$2 FOR ${read ? "SHARE" : "UPDATE"}`,
+            [principal.id, id],
+          )
+        ).rows[0];
+        if (!row) throw new PracticeLifetimeFailure("denied");
+        return use(client, row);
+      },
+      read,
+    );
   }
 
   async function currentWorkflow(row: Proposal): Promise<boolean> {
@@ -276,7 +274,7 @@ export function proposalStore(
   }
 
   async function audit(
-    client: PoolClient,
+    client: PracticeTransaction,
     actor: ModerationActor,
     row: ModerationProposal,
     action:
@@ -309,7 +307,7 @@ export function proposalStore(
     id: string | null,
     denied: T,
     use: (
-      client: PoolClient,
+      client: PracticeTransaction,
       actor: ModerationActor,
       rows: ModerationProposal[],
       nextCursor: string | null,
@@ -317,82 +315,71 @@ export function proposalStore(
     cursor?: unknown,
     change?: { expectedRevision: number; feedback: string },
   ): Promise<T> {
-    const client = await pool.connect();
-    let releaseError: Error | undefined;
-    let commitAttempted = false;
+    let readyToCommit = false;
     try {
-      await client.query("BEGIN");
-      await client.query("SET LOCAL lock_timeout='5s'");
-      await client.query("SET LOCAL statement_timeout='5s'");
-      // Lock order: staff principal, profile, member principals, workspaces,
-      // proposals. Member principal locks precede both deletion cascades.
-      const principal = (
-        await client.query<{ id: string; expires_at: Date }>(
-          `SELECT id,expires_at FROM principals WHERE token_hash=$1 AND kind='staff'
+      return await proposalTransaction(pool, async (client) => {
+        // Lock order: staff principal, profile, member principals, workspaces,
+        // proposals. Member principal locks precede both deletion cascades.
+        const principal = (
+          await client.query<{ id: string; expires_at: Date }>(
+            `SELECT id,expires_at FROM principals WHERE token_hash=$1 AND kind='staff'
          AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE`,
-          [hash(token)],
-        )
-      ).rows[0];
-      if (!principal) {
-        await client.query("ROLLBACK");
-        return denied;
-      }
-      const profile = (
-        await client.query<{ role: ModerationActor["role"] }>(
-          `SELECT role FROM staff_profiles WHERE principal_id=$1
+            [hash(token)],
+          )
+        ).rows[0];
+        if (!principal) throw new PracticeLifetimeFailure("denied");
+        await client.observe([principal.expires_at]);
+        const profile = (
+          await client.query<{ role: ModerationActor["role"] }>(
+            `SELECT role FROM staff_profiles WHERE principal_id=$1
          AND role IN ('moderator','platform_admin') FOR SHARE`,
-          [principal.id],
-        )
-      ).rows[0];
-      if (!profile) {
-        await client.query("ROLLBACK");
-        return denied;
-      }
-      const after =
-        cursor === undefined ? null : readCursor(cursor, principal.id, token);
-      if (cursor !== undefined && !after) {
-        await client.query("ROLLBACK");
-        return denied;
-      }
-      // Capture only identifiers and ordering metadata until all locks are held.
-      // Exclude already deleting/absent workspaces before LIMIT so they cannot
-      // permanently hide a later eligible proposal during deletion recovery.
-      // A concurrently withdrawn/deleted candidate is excluded, never replaced
-      // with an unlocked row beyond this invocation's ordered 100-row window.
-      const states = change
-        ? ["submitted", "changes_requested"]
-        : ["submitted", "quarantined"];
-      const candidates = (
-        await client.query<{
-          id: string;
-          member_id: string;
-          submitted_at: string;
-        }>(
-          `SELECT mp.id,mp.member_id,mp.submitted_at::text FROM member_proposals mp
+            [principal.id],
+          )
+        ).rows[0];
+        if (!profile) throw new PracticeLifetimeFailure("denied");
+        const after =
+          cursor === undefined ? null : readCursor(cursor, principal.id, token);
+        if (cursor !== undefined && !after)
+          throw new PracticeLifetimeFailure("denied");
+        // Capture only identifiers and ordering metadata until all locks are held.
+        // Exclude already deleting/absent workspaces before LIMIT so they cannot
+        // permanently hide a later eligible proposal during deletion recovery.
+        // A concurrently withdrawn/deleted candidate is excluded, never replaced
+        // with an unlocked row beyond this invocation's ordered 100-row window.
+        const states = change
+          ? ["submitted", "changes_requested"]
+          : ["submitted", "quarantined"];
+        const candidates = (
+          await client.query<{
+            id: string;
+            member_id: string;
+            submitted_at: string;
+          }>(
+            `SELECT mp.id,mp.member_id,mp.submitted_at::text FROM member_proposals mp
          JOIN workspaces w ON w.owner_principal_id=mp.member_id
          WHERE w.deleting_at IS NULL AND mp.state=ANY($4::text[])
            AND ($1::uuid IS NULL OR mp.id=$1)
            AND ($2::timestamptz IS NULL OR (mp.submitted_at,mp.id)>($2::timestamptz,$3::uuid))
          ORDER BY mp.submitted_at,mp.id LIMIT 100`,
-          [id, after?.submittedAt ?? null, after?.id ?? null, states],
-        )
-      ).rows;
-      const members = candidates.map((row) => row.member_id);
-      await client.query(
-        `SELECT id FROM principals WHERE id=ANY($1::uuid[]) AND kind='member'
+            [id, after?.submittedAt ?? null, after?.id ?? null, states],
+          )
+        ).rows;
+        const members = candidates.map((row) => row.member_id);
+        await client.query(
+          `SELECT id FROM principals WHERE id=ANY($1::uuid[]) AND kind='member'
          ORDER BY id FOR SHARE`,
-        [members],
-      );
-      const workspaces = (
-        await client.query<{ id: string }>(
-          `SELECT id FROM workspaces WHERE owner_principal_id=ANY($1::uuid[])
-         AND deleting_at IS NULL ORDER BY id FOR SHARE`,
           [members],
-        )
-      ).rows;
-      const rows = (
-        await client.query<ModerationProposal>(
-          `WITH locked AS MATERIALIZED (
+        );
+        const workspaces = (
+          await client.query<{ id: string }>(
+            `SELECT id FROM workspaces WHERE owner_principal_id=ANY($1::uuid[])
+         AND deleting_at IS NULL ORDER BY id FOR SHARE`,
+            [members],
+          )
+        ).rows;
+        const rows = (
+          await client.query<ModerationProposal>(
+            `WITH locked AS MATERIALIZED (
            SELECT mp.*,w.id AS workspace_id FROM member_proposals mp
            JOIN workspaces w ON w.owner_principal_id=mp.member_id
            WHERE mp.id=ANY($1::uuid[]) AND w.id=ANY($2::uuid[])
@@ -400,52 +387,41 @@ export function proposalStore(
            ORDER BY mp.id FOR UPDATE OF mp
          ) SELECT ${columns},mp.workspace_id,mp.member_id${change ? ",mp.change_feedback=$4 AS feedback_matches,mp.change_feedback_revision AS feedback_revision,mp.moderated_by AS decision_actor_id" : ""} FROM locked mp
          ORDER BY mp.submitted_at,mp.id`,
-          [
-            candidates.map((row) => row.id),
-            workspaces.map((row) => row.id),
-            states,
-            ...(change ? [change.feedback] : []),
-          ],
-        )
-      ).rows;
-      // Advance past the candidate boundary even if it was withdrawn/deleted
-      // while locks were acquired. Do not look ahead or refill the window.
-      let nextCursor: string | null = null;
-      if (candidates.length === 100) {
-        const boundary = candidates[99]!;
-        const payload = `v1.${Buffer.from(boundary.submitted_at).toString("base64url")}.${boundary.id}`;
-        nextCursor = `${payload}.${cursorSignature(payload, principal.id, token)}`;
-      }
-      const result = await use(
-        client,
-        { ...principal, ...profile },
-        rows,
-        nextCursor,
-      );
-      // BEGIN time is frozen. Audit insertion can itself wait; check actual
-      // wall time after every lock/write, before COMMIT and private output.
-      const current = await client.query<{ valid: boolean }>(
-        "SELECT clock_timestamp() < $1::timestamptz AS valid",
-        [principal.expires_at],
-      );
-      if (!current.rows[0]!.valid) {
-        await client.query("ROLLBACK");
-        return denied;
-      }
-      commitAttempted = true;
-      await client.query("COMMIT");
-      return result;
+            [
+              candidates.map((row) => row.id),
+              workspaces.map((row) => row.id),
+              states,
+              ...(change ? [change.feedback] : []),
+            ],
+          )
+        ).rows;
+        // Advance past the candidate boundary even if it was withdrawn/deleted
+        // while locks were acquired. Do not look ahead or refill the window.
+        let nextCursor: string | null = null;
+        if (candidates.length === 100) {
+          const boundary = candidates[99]!;
+          const payload = `v1.${Buffer.from(boundary.submitted_at).toString("base64url")}.${boundary.id}`;
+          nextCursor = `${payload}.${cursorSignature(payload, principal.id, token)}`;
+        }
+        const result = await use(
+          client,
+          { ...principal, ...profile },
+          rows,
+          nextCursor,
+        );
+        await client.observe([principal.expires_at]);
+        readyToCommit = true;
+        return result;
+      });
     } catch (error) {
-      if (commitAttempted)
-        releaseError = new Error("Proposal commit outcome unconfirmed");
-      try {
-        await client.query("ROLLBACK");
-      } catch {
-        releaseError = new Error("Proposal audit rollback failed");
-      }
-      throw error;
-    } finally {
-      client.release(releaseError);
+      if (
+        id === null ||
+        (!readyToCommit &&
+          error instanceof PracticeLifetimeFailure &&
+          error.kind === "denied")
+      )
+        return denied;
+      throw new Error("Proposal operation unconfirmed", { cause: error });
     }
   }
 
@@ -472,39 +448,56 @@ export function proposalStore(
   return {
     async createDraft(token, value, sampleConfirmed, workflow) {
       if (!sampleConfirmed || !validProposal(value)) return null;
-      if (workflow) {
-        if (!Number.isSafeInteger(workflow.version) || workflow.version < 1)
-          return null;
-        const current = await resolveWorkflow(workflow.id);
-        if (!current || current.version !== workflow.version) return null;
-      }
-      const id = randomUUID();
-      const result = await pool.query<{ id: string }>(
-        `INSERT INTO member_proposals(id,member_id,title,body,sources,
-           workflow_id,workflow_version,sample_attested_at)
-         SELECT $2,p.id,$3,$4,$5,$6,$7,CURRENT_TIMESTAMP FROM principals p
-         JOIN learners l ON l.id=p.id WHERE ${member}
-         RETURNING id`,
-        [
-          hash(token),
-          id,
-          value.title,
-          value.body,
-          value.sources,
-          workflow?.id ?? null,
-          workflow?.version ?? null,
-        ],
+      if (
+        workflow &&
+        (!Number.isSafeInteger(workflow.version) || workflow.version < 1)
+      )
+        return null;
+      return withMember<string | null>(
+        token,
+        null,
+        async (client, principal) => {
+          if (workflow) {
+            const current = await client.bounded(() =>
+              resolveWorkflow(workflow.id),
+            );
+            if (!current || current.version !== workflow.version) return null;
+          }
+          const result = await client.query<{ id: string }>(
+            `INSERT INTO member_proposals(id,member_id,title,body,sources,
+             workflow_id,workflow_version,sample_attested_at)
+           SELECT $2,l.id,$3,$4,$5,$6,$7,clock_timestamp() FROM learners l WHERE l.id=$1
+           RETURNING id`,
+            [
+              principal.id,
+              randomUUID(),
+              value.title,
+              value.body,
+              value.sources,
+              workflow?.id ?? null,
+              workflow?.version ?? null,
+            ],
+          );
+          return result.rows[0]?.id ?? null;
+        },
       );
-      return result.rows[0]?.id ?? null;
     },
     async owned(token) {
-      const result = await pool.query<Proposal>(
-        `SELECT ${columns} FROM member_proposals mp
-         JOIN principals p ON p.id=mp.member_id
-         WHERE ${member} ORDER BY mp.created_at DESC`,
-        [hash(token)],
+      return withMember<Proposal[] | null>(
+        token,
+        null,
+        async (client, principal) => {
+          const result = await client.query<Proposal>(
+            `WITH owned AS MATERIALIZED (
+               SELECT mp.* FROM member_proposals mp WHERE mp.member_id=$1
+               ORDER BY mp.id FOR SHARE
+             ) SELECT ${columns} FROM owned mp ORDER BY mp.created_at DESC`,
+            [principal.id],
+          );
+          return result.rows.map(projection);
+        },
+        true,
       );
-      return result.rows.map(projection);
     },
     async preview(token, id) {
       return withOwner<OwnerProposal | null>(
@@ -582,7 +575,7 @@ export function proposalStore(
         async (client, row) => {
           if (
             !["draft", "changes_requested"].includes(row.state) ||
-            !(await currentWorkflow(row))
+            !(await client.bounded(() => currentWorkflow(row)))
           )
             return "denied";
           if (row.revision !== expectedRevision || row.revision === 2147483647)
@@ -607,7 +600,7 @@ export function proposalStore(
         async (client, row) => {
           if (
             !["draft", "changes_requested", "submitted"].includes(row.state) ||
-            !(await currentWorkflow(row))
+            !(await client.bounded(() => currentWorkflow(row)))
           )
             return "denied";
           if (row.revision !== expectedRevision) return "conflict";

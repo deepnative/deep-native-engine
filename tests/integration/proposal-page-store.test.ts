@@ -201,9 +201,9 @@ it.each(["insert", "commit"])(
           ? "CREATE TRIGGER fail_page_audit BEFORE INSERT ON proposal_audit FOR EACH ROW EXECUTE FUNCTION fail_page_audit()"
           : "CREATE CONSTRAINT TRIGGER fail_page_audit AFTER INSERT ON proposal_audit DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fail_page_audit()",
       );
-      await expect(
-        proposals.moderationPage(f.staffToken, first!.nextCursor),
-      ).rejects.toThrow("Synthetic page audit failure");
+      expect(
+        await proposals.moderationPage(f.staffToken, first!.nextCursor),
+      ).toBeNull();
       expect(await events()).toEqual(prior);
     } finally {
       await pool.query(
