@@ -16,7 +16,7 @@ The support slice introduced structured export `local-member-records-v14`, which
 
 ## Trusted local operator setup
 
-This is an explicit maintenance boundary for a loopback demo/test database, not an HTTP identity or grant endpoint. Never use real member information. Run `make setup` first and start the local preview with `make dev`. Its private storage directory defaults to `.dne-private/evidence`; preserve your configured `DNE_PRIVATE_STORAGE_ROOT` if different.
+This protected maintenance boundary provisions trusted identities for a loopback demo/test database. Never use real member information. Run `make setup` first and start the local preview with `make dev`. Its private storage directory defaults to `.dne-private/evidence`; preserve your configured `DNE_PRIVATE_STORAGE_ROOT` if different. The later [local staff form](PRIVATE-LOCAL-STAFF-ENTRY.md) uses these existing identities. The separately enabled [administrator browser](PRIVATE-SUPPORT-ASSIGNMENT.md) can create/revoke exact support grants using ordinary member and operator references; it cannot provision identities or read credential files.
 
 ```sh
 npm run support:local-admin -- bootstrap
@@ -24,7 +24,7 @@ npm run support:local-admin -- bootstrap
 
 This creates one-hour administrator/operator credentials in the private storage directory's `support-admin/admin.json` and `operator.json`. The command rejects symlinked, wrongly owned, non-directory, non-0700 or noncanonical credential directories before provisioning. Files are created with mode 0600 and never overwritten. Existing credentials stop bootstrap before provisioning. Tokens are never printed. Grant/revoke commands read the current administrator token from the private file and authorize it against PostgreSQL. An expired credential is not renewed automatically; preserve old records and use a separately controlled new local preview if you need fresh bootstrap identities.
 
-After the member creates a request, put its receipt ID and a new UUID key in a private `support-admin/grant.json` instruction. All four fields are required; no caller-supplied administrator identity or role is accepted:
+For protected CLI maintenance, after the member creates a request, put its receipt ID and a new UUID key in a private `support-admin/grant.json` instruction. All four fields are required; no caller-supplied administrator identity or role is accepted:
 
 ```json
 {
@@ -47,7 +47,7 @@ The command prints only the confirmed grant ID. Exact repeated instructions reus
 npm run support:local-admin -- revoke revoke.json
 ```
 
-The operator browser must use a separate browser context from the member. For an explicitly local demonstration, the installed Playwright library can load the operator credential file directly into a separate HttpOnly/SameSite=Strict `dne_preview` cookie, then open `/operator/support`. Keep the token in the private file; never paste it in a URL or terminal command. The browser test fixture demonstrates this exact boundary. No staff-login endpoint or remote identity provider is introduced.
+Enable `DNE_LOCAL_STAFF_ENTRY=enabled`, restart, and use `/staff/sign-in` to enter the protected credential in its password field. The separate staff cookie preserves learner access in the same browser; separate browser contexts also remain usable. Open the role portal and then **Your granted support requests**. Keep credential values out of URLs, commands, logs and captures. Existing legacy trusted-cookie callers remain compatible, but the new administrator assignment browser requires explicit staff sign-in. No remote identity provider is introduced.
 
 ## Verification and rollback
 

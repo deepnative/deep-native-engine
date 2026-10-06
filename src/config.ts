@@ -62,6 +62,9 @@ export function config(env: NodeJS.ProcessEnv) {
   const localStaffEntry = env.DNE_LOCAL_STAFF_ENTRY ?? "disabled";
   if (!["enabled", "disabled"].includes(localStaffEntry))
     throw Error("DNE_LOCAL_STAFF_ENTRY must be enabled or disabled.");
+  const localSupportAssignment = env.DNE_LOCAL_SUPPORT_ASSIGNMENT ?? "disabled";
+  if (!["enabled", "disabled"].includes(localSupportAssignment))
+    throw Error("DNE_LOCAL_SUPPORT_ASSIGNMENT must be enabled or disabled.");
   const reviewerWorklistReads = env.DNE_REVIEWER_WORKLIST_READS ?? "enabled";
   if (!["enabled", "disabled"].includes(reviewerWorklistReads))
     throw Error("DNE_REVIEWER_WORKLIST_READS must be enabled or disabled.");
@@ -83,6 +86,7 @@ export function config(env: NodeJS.ProcessEnv) {
     throw Error("DNE_EVENT_REGISTRATION must be enabled or disabled.");
   return {
     localStaffEntry: localStaffEntry === "enabled",
+    localSupportAssignment: localSupportAssignment === "enabled",
     localHoldInspectionReads: localHoldInspectionReads === "enabled",
     reviewerWorklistReads: reviewerWorklistReads === "enabled",
     reviewTimeWrites: reviewTimeWrites === "enabled",

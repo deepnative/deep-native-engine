@@ -1,4 +1,9 @@
 import {
+  createSupportGrantRecord,
+  revokeSupportGrantRecord,
+  sameSupportGrant,
+} from "./support-grant-records.ts";
+import {
   createHmac,
   randomBytes,
   randomUUID,
@@ -1698,29 +1703,14 @@ export function supportRequestStore(
         );
         if (row.withdrawnAt) return { kind: "withdrawn" as const };
         if (existing)
-          return existing.requestId === input.requestId &&
-            existing.staffId === input.staffId &&
-            existing.role === input.role &&
-            existing.startsAt.valueOf() === input.startsAt.valueOf() &&
-            existing.expiresAt.valueOf() === input.expiresAt.valueOf() &&
-            !existing.revokedAt
+          return sameSupportGrant(existing, input)
             ? { kind: "replayed" as const, grantId: existing.id }
             : { kind: "conflict" as const };
-        const id = randomUUID();
-        await ctx.client.query(
-          `INSERT INTO support_request_grants(id,request_id,staff_id,staff_role,starts_at,expires_at,granted_by,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [
-            id,
-            input.requestId,
-            input.staffId,
-            input.role,
-            input.startsAt,
-            input.expiresAt,
-            ctx.actor.id,
-            input.idempotencyKey,
-          ],
+        const id = await createSupportGrantRecord(
+          ctx.client,
+          ctx.actor.id,
+          input,
         );
-        await event(ctx, input.requestId, "grant-created", id);
         return { kind: "created" as const, grantId: id };
       });
     },
@@ -1757,11 +1747,12 @@ export function supportRequestStore(
             row.workspaceId === discovered.workspaceId,
         );
         if (grant.revokedAt) return { kind: "already-revoked" as const };
-        await ctx.client.query(
-          "UPDATE support_request_grants SET revoked_at=clock_timestamp() WHERE id=$1",
-          [id],
+        await revokeSupportGrantRecord(
+          ctx.client,
+          ctx.actor.id,
+          discovered.requestId,
+          id,
         );
-        await event(ctx, discovered.requestId, "grant-revoked", id);
         return { kind: "revoked" as const };
       });
     },
