@@ -790,8 +790,10 @@ it("exports bounded owned registration pages and invalidates continuation after 
       "endsAt",
       "createdAt",
       "withdrawnAt",
+      "cancelledAt",
     ].sort(),
   );
+  expect(collected.every((row) => row.cancelledAt === null)).toBe(true);
   await members.remove(owner.id);
   expect(await exports.exportOwned(owner.token, savedCursor)).toEqual({
     kind: "denied",
