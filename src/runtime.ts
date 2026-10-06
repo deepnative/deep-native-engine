@@ -1,3 +1,4 @@
+import { staffEntryStore } from "./staff-entry.ts";
 import { reviewerWorklistStore } from "./reviewer-worklist.ts";
 import { reviewTimeStore } from "./review-time-store.ts";
 import { eventEnrollmentStore } from "./event-enrollments.ts";
@@ -77,6 +78,7 @@ export async function start(env: NodeJS.ProcessEnv) {
     const objects = fileObjectStorage(settings.privateStorageRoot);
     const options = {
       ...settings,
+      staffEntry: staffEntryStore(pool),
       authorization: authorizationStore(pool),
       catalog: catalogStore(pool),
       tracks: trackStore(pool),
