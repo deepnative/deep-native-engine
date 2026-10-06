@@ -3,8 +3,8 @@ import {
   sampleAssignmentInput,
   sampleAssignmentReferences,
   sampleAssignmentSource,
-  sampleAssignmentUtc,
 } from "../../src/sample-assignment-input.ts";
+import { sampleAssignmentUtc } from "../../src/sample-assignment-values.ts";
 const evidenceId = "a12f4499-6652-4a39-8d68-0e390a19beef",
   reviewerId = "b12f4499-6652-4a39-8d68-0e390a19beef";
 const refs = { evidenceId, sourceRevision: 1, reviewerId };

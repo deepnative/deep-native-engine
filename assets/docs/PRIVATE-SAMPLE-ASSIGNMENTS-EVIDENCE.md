@@ -50,6 +50,8 @@ Current full unit original86471 EXIT0:2721/2721,0 failed/pending. `/tmp/dne480-i
 
 - Full prescribed format check first failed only on the coordinator browser regex line after its fixture correction (`/tmp/dne480-integrated-format-first.log`). Pinned Prettier changed only line wrapping; the first failure is retained.
 
+- First complete gate at clean `4b826141b8e02cd97f8314b218eb77b93db9b2d4`, tree `12f2b2185bd28efdb8594a88c4787d62a5489089`, original61952 exited2 after73 repository and2721 unit tests passed. The strict raw coverage validator rejected the new values module’s empty function denominator (three constants and erased interfaces), before any PostgreSQL/browser stage. `/tmp/dne480-gate-first` retains complete original artifacts/log/start/terminal. The existing canonical UTC validator was relocated unchanged from input to values, following the existing runtime-value module pattern; input/tests import the same behavior. No dummy function, threshold/gate change, exclusion, deleted module or reduced test count was added. A fresh clean-commit gate is required for the revised tree.
+
 These focused results establish only their tested boundaries, not complete acceptance. Provider state is local synthetic; no external service, payment, deployment or qualification was enabled.
 
 ## Review and delivery boundary

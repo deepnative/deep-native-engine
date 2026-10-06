@@ -5,6 +5,16 @@ export const SAMPLE_ASSIGNMENT_REFERENCE_PATH =
   "/review/sample-assignment-reference";
 export const SAMPLE_ASSIGNMENT_PAGE_SIZE = 20;
 
+/** Canonical finite UTC values are shared by assignment input boundaries. */
+export function sampleAssignmentUtc(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) &&
+    Number.isFinite(Date.parse(value)) &&
+    new Date(value).toISOString() === value
+  );
+}
+
 export interface SampleAssignmentSource {
   evidenceId: string;
   sourceRevision: number;

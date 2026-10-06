@@ -1,4 +1,5 @@
 import { sampleUuid } from "./sample-feedback-values.ts";
+import { sampleAssignmentUtc } from "./sample-assignment-values.ts";
 import type {
   SampleAssignmentInput,
   SampleAssignmentReferences,
@@ -57,14 +58,6 @@ export function sampleAssignmentReferences(
   return source
     ? { ...source, reviewerId: value.reviewerId.toLowerCase() }
     : null;
-}
-export function sampleAssignmentUtc(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) &&
-    Number.isFinite(Date.parse(value)) &&
-    new Date(value).toISOString() === value
-  );
 }
 export function sampleAssignmentInput(
   value: unknown,
