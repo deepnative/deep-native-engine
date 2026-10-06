@@ -20,7 +20,16 @@ List prerequisite issues, decisions, data/privacy boundaries, provider states, a
 
 ## Acceptance criteria
 
-- [ ] Given a concrete starting state, an action produces an observable outcome.
+- [ ] For application outcomes, each AC has stable scenario IDs with concrete Given/When/Then examples and observable outcomes.
+
+```gherkin
+Scenario: ISSUE-S01 — Member-visible outcome
+  Given a concrete starting state
+  When the member takes the relevant action
+  Then the expected observable outcome occurs
+```
+
+Map each application scenario to its planned test layer and existing approved journey IDs where applicable. Include meaningful denial/failure/recovery examples. For documentation or tooling, give concrete before/after procedural examples. Follow the BDD procedure in `assets/docs/workflows/TEAM-WORKFLOW.md`; proposed scenarios are not passing test evidence.
 - [ ] Applicable failure, recovery, privacy, and boundary scenarios are covered.
 
 ## Model recommendation
@@ -29,7 +38,7 @@ Select one `model:*` label and reasoning effort. Add separate review/design/esca
 
 ## Verification evidence
 
-List commands, behavior-based tests, scenario IDs, expected artifacts, and review decisions. Application work follows the repository's 99% unit / 99% E2E journey / 100% critical-and-pass gates; planning work uses document evidence without invented coverage.
+List commands, scenario-to-test mappings, expected artifacts, and review decisions. For missing application behavior, record the meaningful first failing test before implementation and the subsequent passing result; for already delivered behavior, record the actual baseline without inventing a failure. Application work follows the repository's 99% unit / 99% E2E journey / 100% critical-and-pass gates; planning work uses document evidence without invented coverage.
 
 ## Definition of done
 

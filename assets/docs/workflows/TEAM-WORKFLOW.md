@@ -37,9 +37,39 @@ $dne-handoff Prepare verification evidence and a next-step handoff for this PR.
 
 Native role definitions live in `.codex/agents/*.toml`; skills live in `.agents/skills/*/SKILL.md`. Skills guide tasks; role files configure custom subagents. A root task's model is selected separately. When delegation is requested, give the named role a bounded task, relevant issue/path, permitted writes, expected evidence, and stop conditions. Do not spawn every role for every task. When separate review is required, that reviewer must inspect the diff and evidence, not just the builder's summary.
 
+## Behavior-driven development (BDD)
+
+Prioritize usable UI/backend outcomes in the live feature-first MVP plan. Before application implementation, discover the behavior from the member or staff perspective and record concrete examples on the scoped issue. Give each scenario a stable issue-local ID and map it to an acceptance criterion. Use Given (starting state), When (user action or event), Then (observable outcome); use And for relevant additional state or outcomes. Cover the main journey and applicable validation, denial, failure and recovery boundaries. Describe behavior in domain language rather than code structure.
+
+For example, these are proposed scenarios for #475, not delivered behavior:
+
+```gherkin
+Scenario: STAFF-01 — Open granted staff work while retaining learner access
+  Given a learner is signed in and has saved private progress
+  And a current local staff credential has an exact work grant
+  When they sign in through the staff entry screen
+  Then they can open only the work permitted by that grant
+  And returning to learner pages still shows their own saved progress
+
+Scenario: STAFF-02 — Deny work outside the grant
+  Given a signed-in staff member has no grant for another member's work
+  When they request that work
+  Then access is denied without disclosing that member's content
+```
+
+Before implementing missing behavior, write an executable behavioral test and record its meaningful first failure: expected outcome, actual outcome, command and revision. A syntax error or broken fixture is not evidence of the missing product behavior. For an already delivered scenario, record its actual passing baseline; do not fabricate a red step. Fix defects using a reproducible failing scenario. Implement the smallest complete outcome, then refactor while preserving its tests.
+
+Use existing Vitest for domain rules, actual PostgreSQL integration for persistence/authorization/transactions, and Playwright for user-visible journeys. Choose the layer that proves each behavior; user-visible changes require browser evidence and database guarantees require integration evidence. Keep scenario IDs in test names or an explicit issue evidence mapping. Reuse sound existing tests rather than duplicate suites. Gherkin-style prose is the shared specification; it does not require Cucumber or a new runner and is not executable acceptance evidence on its own.
+
+At review and handoff, map AC → scenario ID → test file/name → observed result at the verified revision. For browser scenarios also map the applicable approved journey IDs and mandatory variants. New issue-local IDs do not silently add, remove or rename approved journey denominators. Retain all unit/journey thresholds, complete required browser matrix and first-attempt reporting. Show the same main journey in the dedicated milestone demo; distinguish tested private-preview behavior from formal or full-MVP acceptance.
+
+For documentation/tooling work, use concrete before/after procedural examples and artifact checks appropriate to the change; do not fabricate application tests. Planning and read-only roles preserve their write restrictions. A BDD scenario, claim or passing test does not expand scope or grant publication, provider, commercial or qualified approval.
+
 ## 3. Deliver a reviewable slice
 
 Create a `codex/` branch or isolated worktree. Run `make bootstrap` once per checkout; it refuses conflicting hook settings. Establish the baseline with `make verify`. Use `$dne-deliver-issue`, read existing code before editing, and define behavioral acceptance tests before implementation. Reproduce bugs, use deterministic synthetic fixtures, and inspect real failure paths. Validate official APIs and locked dependency versions. Record material choices with the [decision template](../templates/DECISION.md).
+
+Before starting a full local gate, coordinate its process/session owner with workers in other worktrees and serialize `make verify` and pre-push verification. The browser suite currently binds loopback port `4317`, so separate databases do not isolate concurrent browser servers. Preserve a confirmed live gate; do not restart it, reuse another worker's server, or present a port-conflict retry as a first-attempt pass. Record any actual collision and its resolution in the issue evidence.
 
 Application work uses the shared repository/application gate under QA-001/002/003. New source types need measured coverage and a reviewed scope extension. Reviewers must inspect real behavioral checks and preserve the approved journey inventory.
 
