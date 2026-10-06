@@ -22,6 +22,7 @@ import { trackStore } from "./track-readiness.ts";
 import { proposalStore } from "./proposals.ts";
 import { careerStore } from "./career.ts";
 import { circleDiscussionStore } from "./circle-discussion.ts";
+import { circleGrantAdminStore } from "./circle-grant-admin.ts";
 import { circleStore } from "./circles.ts";
 import { metricsStore } from "./metrics.ts";
 import { ledgerReconciliationStore } from "./ledger-reconciliation.ts";
@@ -93,6 +94,11 @@ export async function start(env: NodeJS.ProcessEnv) {
       career: careerStore(pool),
       circles: circleStore(pool),
       circleDiscussionEnabled: settings.circleDiscussion,
+      circleGrantAdmin: circleGrantAdminStore(pool, settings.secret, {
+        mode: settings.mode,
+        writes: settings.localCircleAdmin,
+        discussion: settings.circleDiscussion,
+      }),
       circleDiscussion: circleDiscussionStore(
         pool,
         settings.secret,

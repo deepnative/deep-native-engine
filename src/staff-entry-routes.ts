@@ -32,6 +32,7 @@ export interface StaffTools {
   holds: boolean;
   proposals: boolean;
   circles: boolean;
+  circleGrants: boolean;
   localAi: boolean;
   receipts: boolean;
 }
@@ -86,6 +87,11 @@ function links(role: StaffRole, tools: StaffTools) {
     );
   if (role === "moderator" || role === "platform_admin") {
     choices.push([
+      tools.circleGrants,
+      "/moderate/circle-reference",
+      "My moderation reference",
+    ]);
+    choices.push([
       tools.proposals,
       "/moderate/proposals",
       "Private proposal moderation",
@@ -99,6 +105,11 @@ function links(role: StaffRole, tools: StaffTools) {
   }
   if (role === "platform_admin")
     choices.push(
+      [
+        tools.circleGrants,
+        "/operator/circle-grants",
+        "Circle moderation grants",
+      ],
       [
         tools.sampleAssignments,
         "/operator/sample-assignments",

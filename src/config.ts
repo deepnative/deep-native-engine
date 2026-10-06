@@ -83,6 +83,9 @@ export function config(env: NodeJS.ProcessEnv) {
   const circleDiscussion = env.DNE_CIRCLE_DISCUSSION ?? "disabled";
   if (!["enabled", "disabled"].includes(circleDiscussion))
     throw Error("DNE_CIRCLE_DISCUSSION must be enabled or disabled.");
+  const localCircleAdmin = env.DNE_LOCAL_CIRCLE_ADMIN ?? "disabled";
+  if (!["enabled", "disabled"].includes(localCircleAdmin))
+    throw Error("DNE_LOCAL_CIRCLE_ADMIN must be enabled or disabled.");
   const localHoldInspectionReads =
     env.DNE_LOCAL_AI_HOLD_INSPECTION ?? "disabled";
   if (!["enabled", "disabled"].includes(localHoldInspectionReads))
@@ -100,6 +103,7 @@ export function config(env: NodeJS.ProcessEnv) {
     reviewTimeWrites: reviewTimeWrites === "enabled",
     eventRegistration: eventRegistration === "enabled",
     circleDiscussion: circleDiscussion === "enabled",
+    localCircleAdmin: localCircleAdmin === "enabled",
     supportTimeWrites: supportTimeWrites === "enabled",
     databaseUrl,
     port,
