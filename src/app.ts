@@ -1,3 +1,6 @@
+import type { StaffEntryStore } from "./staff-entry.ts";
+import { mountStaffEntryRoutes } from "./staff-entry-routes.ts";
+import { selectedStaffToken } from "./staff-entry-selection.ts";
 import { mountReviewerWorklistRoutes } from "./reviewer-worklist-routes.ts";
 import type { ReviewerWorklistStore } from "./reviewer-worklist.ts";
 import { mountReviewTimeRoutes } from "./review-time-routes.ts";
@@ -278,6 +281,10 @@ function currentStarter(
 export function app(
   store: Store,
   options: {
+    localStaffEntry?: boolean;
+    staffEntry?: StaffEntryStore;
+    localHoldInspectionReads?: boolean;
+    reviewerWorklistReads?: boolean;
     origin: string;
     secret: string;
     mode?: ApplicationMode;
@@ -396,8 +403,41 @@ export function app(
   );
   app.use(express.urlencoded({ extended: false, limit: "16kb" }));
   app.use(cookieParser());
+  mountStaffEntryRoutes(app, options.staffEntry, options, {
+    library: Boolean(options.catalog),
+    worklist:
+      Boolean(options.reviewerWorklist) &&
+      options.reviewerWorklistReads !== false,
+    support: Boolean(options.supportRequests),
+    experts: Boolean(options.tracks),
+    metrics: Boolean(options.metrics),
+    ledger: Boolean(options.ledgerReconciliation),
+    holds:
+      Boolean(options.localHoldInspection) &&
+      options.localHoldInspectionReads === true,
+    proposals: Boolean(options.proposals),
+    circles: options.circleDiscussionEnabled === true,
+    localAi: Boolean(options.localAiControl),
+    receipts: Boolean(options.manualObservations),
+  });
   app.use((req, res, next) => {
-    const session = token(req.cookies[COOKIE]);
+    const session = selectedStaffToken(
+      req.path,
+      req.headers.cookie,
+      token(req.cookies[COOKIE]),
+      options.localStaffEntry === true && mode !== "live",
+    );
+    if (session === null) {
+      res
+        .status(403)
+        .send(
+          errorPage(
+            "Staff access unavailable",
+            "Open staff sign-in to establish current local staff access. Your learning access is unchanged.",
+          ),
+        );
+      return;
+    }
     res.locals.token = session;
     res.locals.csrf = csrf(session, options.secret);
     const write = attemptWritePath.exec(req.originalUrl.split("?")[0]!);
