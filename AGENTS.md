@@ -2,6 +2,8 @@
 
 ## Current authorization
 
+The owner has authorized the ongoing engineering loop to implement independently executable backlog UI/backend outcomes after explicit bounded issue scope, acceptance scenarios, dependencies, non-goals, tests and definition of done are recorded. A Ready label alone is not authorization; use the standing owner instruction and live scope together. Do not ask again for routine implementation or CI-verified merge permission already granted.
+
 Current scope includes the explicitly authorized [first local learning slice](assets/docs/INITIAL-LEARNING-SLICE.md) and the synthetic supporting slices already accepted through their live issues. Each new backlog implementation still requires explicit issue scope; a lifecycle claim coordinates authorized work but does not create that authorization. Do not deploy, purchase live services, contact prospects, or enable payments without authorization. The archived build prompt is historical context, not current authorization to start coding. The adopted process and evidence are recorded in [GOV-001](assets/docs/GOV-001-WORKING-AGREEMENT-ACCEPTANCE.md).
 
 ## Context and precedence
@@ -9,6 +11,21 @@ Current scope includes the explicitly authorized [first local learning slice](as
 Read [the current product direction](assets/docs/PRODUCT-DIRECTION.md), `assets/docs/context/README.md`, `assets/docs/context/QUALITY-GATES.md`, and the relevant live GitHub issue before work. Current explicit user instructions take precedence, followed by the product direction and revised live issues. The finalized historical outputs take precedence over older working drafts only where still applicable; contractor-only assumptions are superseded. Preserve the archived files unchanged.
 
 Deep Native Engine serves people across IT, other professions and general learning interests who want to learn, apply AI, participate and contribute. Use learner/member as the common identity; background and goals do not grant staff privileges or assign a paid plan. Contracting, career preparation and high-touch coaching are optional paths. Preserve CTP IDs and applicable commercial/privacy invariants; the original coaching prices are not universal membership prices. Foundation access/pricing require their own explicit decisions. All prices and demand forecasts remain hypotheses.
+
+## MVP priorities and BDD
+
+Deliver usable UI/backend journeys in this order: **learn and track**, **submit and receive feedback**, then **participate and contribute**. Read the live feature-first plan on [roadmap #1](https://github.com/deepnative/deep-native-engine/issues/1#issuecomment-6005908423) and Project 1's **Product delivery** field. Verify what already works before choosing a missing outcome; reuse delivered backend behavior. If Ready is empty, audit unclaimed P0/P1 Backlog against actual delivered behavior and dependencies, refine an independently executable authorized outcome on the live issue, then move it to Ready before claiming. Do not infer that all Backlog work is blocked from the absence of Ready items. Measure progress by usable journeys and original parent acceptance criteria, not child-issue or PR counts. Prioritize additional hardening only when needed for the selected feature or a reproduced blocking defect.
+
+For each authorized feature, follow BDD:
+
+1. Check live issue scope, dependencies and competing claims. Recommend the lead model/effort before starting; publish your own bounded claim and branch.
+2. Record stable Given/When/Then scenario IDs in member/staff language, covering the main journey and applicable denial, failure and recovery behavior. Map them to AC and planned unit, PostgreSQL or browser tests.
+3. Before implementing missing behavior, run a meaningful failing behavioral test and record its expected/actual outcome and revision. For behavior already delivered, record an honest passing baseline instead.
+4. Implement one complete UI/backend outcome using existing Vitest, real PostgreSQL integration and Playwright. Gherkin prose is a specification, not proof; no new BDD runner is required.
+5. Link AC → scenario ID → executable test/result, preserve all approved journey IDs/denominators and gates, and complete verification, self-review, PR CI, guarded merge and resulting-main CI.
+6. Show the same runnable journey with invented preview data, update the concise README, reconcile the issue/project with actual evidence, clean up the merged branch/worktree, and recommend the next bounded action and model/effort.
+
+Do not create tests or children merely to show activity, recreate completed slices, hide failures through retries, or claim a broad parent is complete from one synthetic slice. Record any genuinely blocked owner/qualified decision on the issue with a recommendation, and continue independent authorized product work. Follow [the shared BDD procedure](assets/docs/workflows/TEAM-WORKFLOW.md#behavior-driven-development-bdd) for examples and evidence boundaries.
 
 ## Every task
 
@@ -18,7 +35,7 @@ Before starting or resuming issue work, follow [issue coordination](assets/docs/
 
 At every planning, delivery, review or verification handoff, including partial, blocked or paused work, name one bounded next action from the live backlog, or the specific owner decision needed if none is ready. Explain why it is next, its dependencies or competing claim, and recommend the lead model and starting reasoning effort from the live issue labels and [routing policy](assets/docs/context/MODEL-RECOMMENDATIONS.md); include separate design/review settings when relevant. A recommendation does not change the running model, claim the next issue or authorize its implementation.
 
-Run `make bootstrap` once per checkout and `make verify` before every push. Bootstrap installs the repository-local pre-push hook without replacing conflicting hooks. The hook requires a clean checkout at the exact pushed commit and repeats verification; CI repeats it independently. The shared gate validates repository assets plus the initial application slice: formatting/lint, types, >=99% unit metrics, real PostgreSQL integration, the complete approved E2E browser matrix, production build and dependency audit. It reports slice and outstanding full-MVP coverage separately. Record results with the [evidence template](assets/docs/templates/EVIDENCE.md).
+Run `make bootstrap` once per checkout and `make verify` before every push. Coordinate and serialize full local verification across worktrees because the browser suite shares a loopback port; preserve another worker's live gate process. Bootstrap installs the repository-local pre-push hook without replacing conflicting hooks. The hook requires a clean checkout at the exact pushed commit and repeats verification; CI repeats it independently. The shared gate validates repository assets plus the initial application slice: formatting/lint, types, >=99% unit metrics, real PostgreSQL integration, the complete approved E2E browser matrix, production build and dependency audit. It reports slice and outstanding full-MVP coverage separately. Record results with the [evidence template](assets/docs/templates/EVIDENCE.md).
 
 ## Complete delivery through main
 
@@ -32,6 +49,7 @@ After every completed product slice or milestone, show the actual runnable resul
 
 - Start from a ready issue with acceptance criteria, dependencies, non-goals, test scenarios, and a definition of done. Implement one reviewable vertical slice at a time; record architectural decisions and preserve unrelated work.
 - Check current official documentation before choosing dependency versions or integrating providers. Keep a modular monolith and explicit provider boundaries unless an architectural decision establishes a reason to change.
+- Use BDD for UI/backend features: record stable Given/When/Then scenarios before coding, prove missing behavior with a meaningful failing test, and map scenarios to executable evidence and the milestone demo using the [team workflow](assets/docs/workflows/TEAM-WORKFLOW.md#behavior-driven-development-bdd). Preserve existing approved journey IDs and denominators.
 - Write behavior-based tests and reproduce defects before fixing them. Review generated code, dependencies, authorization boundaries, and failure handling. Do not use coverage padding or implementation-mirroring tests.
 - Require at least 99% unit statement, branch, function, and line coverage of first-party executable application code. Include unimported source; exclusions require specific review. Follow the separate E2E requirements-coverage definition in `QUALITY-GATES.md`.
 - Run the complete prescribed verification command **before every push** on the exact intended revision. Record commands, revision, environment, and reports. After changes, rerun affected checks and the complete push gate. Never use `--no-verify`, skipped tests, reduced thresholds, retries, or changed denominators to hide failures.

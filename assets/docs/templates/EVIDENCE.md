@@ -8,9 +8,13 @@
 - Date, OS, runtime/dependency versions:
 - Commands and exit statuses / report links:
 
-| Acceptance criterion | Observable result | Evidence | Remaining gap |
+| Acceptance criterion / BDD scenario ID | Observable result | Executable test or artifact evidence | Remaining gap |
 | --- | --- | --- | --- |
-| Criterion from the issue | Actual observed behavior | File, test, trace, or decision | Explicitly none or unresolved |
+| Criterion and stable Given/When/Then scenario | Actual observed behavior | Test file/name, result and applicable approved journey ID; artifact/decision for non-application work | Explicitly none or unresolved |
+
+- Missing behavior: first failing behavioral test command, revision, expected/actual outcome and subsequent passing evidence:
+- Already delivered scenarios: actual baseline evidence, no fabricated failure:
+- Scenario mapping covers mandatory variants; prose alone does not establish application acceptance:
 
 For application work, record unit raw covered/total counts for each metric and module; E2E register version, passing/total scenario IDs, critical coverage, uncovered/skipped/retried IDs; first-attempt required test results; build and integration results. For planning/tooling, state application metrics are not applicable and not achieved.
 
