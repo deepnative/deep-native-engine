@@ -2,6 +2,8 @@ import type { StaffEntryStore } from "./staff-entry.ts";
 import { mountStaffEntryRoutes } from "./staff-entry-routes.ts";
 import { mountSupportAssignmentRoutes } from "./support-assignment-routes.ts";
 import type { SupportAssignmentStore } from "./support-assignment.ts";
+import { mountSampleAssignmentRoutes } from "./sample-assignment-routes.ts";
+import type { SampleAssignmentStore } from "./sample-assignment-values.ts";
 import { selectedStaffToken } from "./staff-entry-selection.ts";
 import { mountReviewerWorklistRoutes } from "./reviewer-worklist-routes.ts";
 import type { ReviewerWorklistStore } from "./reviewer-worklist.ts";
@@ -312,6 +314,8 @@ export function app(
     supportRequests?: SupportRequestStore;
     supportAssignment?: SupportAssignmentStore;
     localSupportAssignment?: boolean;
+    sampleAssignments?: SampleAssignmentStore;
+    sampleAssignmentAdministration?: boolean;
     sampleFeedback?: SampleFeedbackStore;
     reviewerWorklist?: ReviewerWorklistStore;
     reviewTime?: ReturnType<typeof reviewTimeStore>;
@@ -417,6 +421,9 @@ export function app(
     assignments:
       Boolean(options.supportAssignment) &&
       options.localSupportAssignment === true,
+    sampleAssignments:
+      Boolean(options.sampleAssignments) &&
+      options.sampleAssignmentAdministration === true,
     experts: Boolean(options.tracks),
     metrics: Boolean(options.metrics),
     ledger: Boolean(options.ledgerReconciliation),
@@ -1188,6 +1195,16 @@ export function app(
   if (options.sampleFeedback)
     mountSampleFeedbackRoutes(app, options.sampleFeedback);
   mountSupportAssignmentRoutes(app, options.supportAssignment, options);
+  mountSampleAssignmentRoutes(app, options.sampleAssignments, {
+    // Runtime and owned port0 previews fill the actual bound origin after listen.
+    get origin() {
+      return options.origin;
+    },
+    secret: options.secret,
+    mode: options.mode,
+    enabled: options.sampleAssignmentAdministration,
+    localStaffEntry: options.localStaffEntry,
+  });
   mountSupportRequestRoutes(
     app,
     options.supportRequests ?? disabledSupportRequestStore(),

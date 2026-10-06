@@ -103,7 +103,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v21",
+      version: "local-member-records-v22",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -226,7 +226,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    [2, 36, ...valid.slice(2)],
+    [2, 37, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -488,7 +488,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v21",
+        version: "local-member-records-v22",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -696,7 +696,7 @@ it("appends owned review accounting at indices 33-35 without moving existing sec
     expect(value).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v21",
+        version: "local-member-records-v22",
         records: { [name]: [{ id: "owned-accounting" }] },
       },
     });
@@ -704,4 +704,52 @@ it("appends owned review accounting at indices 33-35 without moving existing sec
       fake.statements.filter((sql) => sql.includes(`FROM ${table}`))[0],
     ).toContain("w.owner_principal_id=a.member_id");
   }
+});
+
+it("appends safe source-deleted assignment receipts at index36 without moving any v2 cursor section", async () => {
+  const record = {
+    receiptId: "retained",
+    evidenceId: "deleted-source",
+    sourceRevision: 2,
+    startsAt: "2090-01-01T00:00:00.000Z",
+    expiresAt: "2090-01-02T00:00:00.000Z",
+    createdAt: "2090-01-01T00:00:00.000Z",
+    state: "retained-structural-receipt",
+  };
+  const fake = fakePool({ id: "member-1" }, (sql) =>
+    sql.includes("FROM private_sample_assignment_operations o JOIN workspaces")
+      ? [{ _key: ["retained"], ...record }]
+      : [],
+  );
+  const exporter = memberExportStore(fake.pool, secret);
+  const value = await exporter.exportOwned(
+    "owner",
+    signed([2, 36, ["key"], 2, Date.now() + 60000]),
+  );
+  expect(value).toMatchObject({
+    kind: "ready",
+    payload: {
+      version: "local-member-records-v22",
+      records: { sampleAssignmentOperations: [record] },
+    },
+  });
+  const query = fake.statements.find((sql) =>
+    sql.includes("FROM private_sample_assignment_operations"),
+  )!;
+  expect(query).toContain("w.owner_principal_id=$1 AND w.deleting_at IS NULL");
+  expect(query).not.toMatch(
+    /administrator_id|reviewer_id|operation_id|assignment_id|exact_grant_id|JOIN evidence/,
+  );
+  for (let index = 0; index <= 36; index++)
+    expect(
+      (
+        await memberExportStore(
+          fakePool({ id: "member-1" }).pool,
+          secret,
+        ).exportOwned(
+          "owner",
+          signed([2, index, ["key"], 2, Date.now() + 60000]),
+        )
+      ).kind,
+    ).toBe("ready");
 });

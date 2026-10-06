@@ -327,6 +327,16 @@ const sections = {
      WHERE a.member_id=$1 AND w.deleting_at IS NULL`,
     "e.id",
   ),
+  // Append after v21's index 35. Receipts are owned structural metadata even
+  // after source deletion; neither staff identities nor operation keys export.
+  sampleAssignmentOperations: section(
+    `o.id AS "receiptId",o.evidence_id AS "evidenceId",o.source_revision AS "sourceRevision",
+     o.starts_at AS "startsAt",o.expires_at AS "expiresAt",o.created_at AS "createdAt",
+     'retained-structural-receipt' AS state`,
+    `private_sample_assignment_operations o JOIN workspaces w ON w.id=o.workspace_id
+     WHERE w.owner_principal_id=$1 AND w.deleting_at IS NULL`,
+    "o.id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -340,7 +350,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v21";
+  version: "local-member-records-v22";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -474,7 +484,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v21",
+          version: "local-member-records-v22",
           profile: owner.rows[0],
           records,
           testUnitHistory: {
