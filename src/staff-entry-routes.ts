@@ -23,6 +23,7 @@ export interface StaffTools {
   library: boolean;
   worklist: boolean;
   support: boolean;
+  supportTime: boolean;
   experts: boolean;
   metrics: boolean;
   ledger: boolean;
@@ -54,7 +55,7 @@ function links(role: StaffRole, tools: StaffTools) {
     choices.push(
       [tools.support, "/operator/support", "Your granted support requests"],
       [
-        tools.support,
+        tools.supportTime,
         "/operator/support-time",
         "Your granted support test effort",
       ],

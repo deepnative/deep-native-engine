@@ -409,6 +409,7 @@ export function app(
       Boolean(options.reviewerWorklist) &&
       options.reviewerWorklistReads !== false,
     support: Boolean(options.supportRequests),
+    supportTime: Boolean(options.supportRequests?.time),
     experts: Boolean(options.tracks),
     metrics: Boolean(options.metrics),
     ledger: Boolean(options.ledgerReconciliation),
@@ -416,7 +417,9 @@ export function app(
       Boolean(options.localHoldInspection) &&
       options.localHoldInspectionReads === true,
     proposals: Boolean(options.proposals),
-    circles: options.circleDiscussionEnabled === true,
+    circles:
+      Boolean(options.circleDiscussion) &&
+      options.circleDiscussionEnabled === true,
     localAi: Boolean(options.localAiControl),
     receipts: Boolean(options.manualObservations),
   });

@@ -12,6 +12,7 @@ import { disabledSupportRequestStore } from "../../src/support-requests.ts";
 import { disabledTrackStore } from "../../src/track-readiness.ts";
 import { disabledMetricsStore } from "../../src/metrics.ts";
 import { disabledLedgerReconciliationStore } from "../../src/ledger-reconciliation.ts";
+import { disabledCircleDiscussionStore } from "../../src/circle-discussion.ts";
 import { disabledProposalStore } from "../../src/proposals.ts";
 import { disabledManualObservationStore } from "../../src/manual-observations.ts";
 import { disabledLocalAiHoldInspectionStore } from "../../src/local-ai-hold-inspection.ts";
@@ -49,7 +50,21 @@ async function fixture(
       ? {
           catalog: disabledCatalogStore(),
           reviewerWorklist: { list: vi.fn() },
-          supportRequests: disabledSupportRequestStore(),
+          supportRequests: {
+            ...disabledSupportRequestStore(),
+            time: {
+              writesEnabled: false,
+              allocate: vi.fn(),
+              cancel: vi.fn(),
+              begin: vi.fn(),
+              record: vi.fn(),
+              grant: vi.fn(),
+              revoke: vi.fn(),
+              receipt: vi.fn(),
+              operatorWorklist: vi.fn(),
+              operatorDetail: vi.fn(),
+            },
+          },
           tracks: disabledTrackStore(),
           metrics: disabledMetricsStore(),
           ledgerReconciliation: disabledLedgerReconciliationStore(),
@@ -57,6 +72,7 @@ async function fixture(
           localHoldInspectionReads: true,
           proposals: disabledProposalStore(),
           circleDiscussionEnabled: true,
+          circleDiscussion: disabledCircleDiscussionStore(),
           localAiControl: { current: vi.fn(), read: vi.fn(), set: vi.fn() },
           manualObservations: disabledManualObservationStore(),
         }
@@ -144,6 +160,22 @@ it("STAFF-01-ROLES omits unavailable tools and allows only already established l
   await get("/staff", `${COOKIE}=${legacy}; dne_staff=signed-out`).expect(403);
   await get("/staff").expect(403);
   expect(f.admit).toHaveBeenCalledTimes(1);
+});
+it("STAFF-01-ROLES support without optional test-effort capability advertises only the available request tool", async () => {
+  await fixture({ supportRequests: disabledSupportRequestStore() });
+  const r = await get("/staff", `dne_staff=${credential}`).expect(200);
+  expect(r.text).toContain('href="/operator/support"');
+  expect(r.text).not.toContain('href="/operator/support-time"');
+});
+it("STAFF-01-ROLES enabled circle flag without a discussion capability does not advertise unavailable moderation", async () => {
+  const f = await fixture({ circleDiscussionEnabled: true });
+  f.admit.mockImplementation(async () => ({
+    kind: "ready",
+    role: "moderator",
+    deadline: performance.now() + 60000,
+  }));
+  const r = await get("/staff", `dne_staff=${credential}`).expect(200);
+  expect(r.text).not.toContain('href="/moderate/circles/');
 });
 it.each([
   { localStaffEntry: false },
