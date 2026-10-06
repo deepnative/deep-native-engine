@@ -527,8 +527,8 @@ export function circleDiscussionStore(
     ].sort();
     const principals = (
       await client.query<{ id: string; kind: string }>(
-        "SELECT id,kind FROM principals WHERE id=ANY($1::uuid[]) AND revoked_at IS NULL AND expires_at>clock_timestamp() ORDER BY id FOR SHARE",
-        [ids],
+        "SELECT id,kind FROM principals WHERE id=ANY($1::uuid[]) AND revoked_at IS NULL AND expires_at>clock_timestamp() AND (id<>$2::uuid OR token_hash=$3) ORDER BY id FOR SHARE",
+        [ids, observation.actor, hash(token)],
       )
     ).rows;
     if (
