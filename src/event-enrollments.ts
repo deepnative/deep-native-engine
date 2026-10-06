@@ -17,6 +17,7 @@ export interface EventEnrollmentReceipt {
   endsAt: Date;
   createdAt: Date;
   withdrawnAt: Date | null;
+  cancelledAt: Date | null;
 }
 export type EventEnrollmentOutcome =
   | { kind: "enrolled" | "replayed" | "already-enrolled"; receiptId: string }
@@ -26,8 +27,15 @@ export interface EventEnrollmentPreview {
   canEnroll: boolean;
   remaining: number | null;
   activeReceiptId: string | null;
+  cancelledAt: Date | null;
 }
 export interface EventEnrollmentStore {
+  cancellations(
+    token: string,
+    references: readonly { eventId: string; eventVersion: number }[],
+  ): Promise<
+    { eventId: string; eventVersion: number; cancelledAt: Date }[] | null
+  >;
   preview(
     token: string,
     eventId: string,
@@ -54,6 +62,7 @@ export interface EventEnrollmentStore {
 }
 export function disabledEventEnrollmentStore(): EventEnrollmentStore {
   return {
+    cancellations: async () => [],
     preview: async () => null,
     enroll: async () => ({ kind: "unavailable" }),
     receipt: async () => null,
@@ -67,9 +76,10 @@ const uuidPattern =
 const validVersion = (version: number) =>
   Number.isInteger(version) && version >= 1 && version <= 1000000;
 const receiptColumns = `e.id,e.event_id AS "eventId",e.event_version AS "eventVersion",
- i.title,i.starts_at AS "startsAt",i.ends_at AS "endsAt",e.created_at AS "createdAt",e.withdrawn_at AS "withdrawnAt"`;
+ i.title,i.starts_at AS "startsAt",i.ends_at AS "endsAt",e.created_at AS "createdAt",e.withdrawn_at AS "withdrawnAt",c.cancelled_at AS "cancelledAt"`;
 const receiptJoin = `private_event_enrollments e JOIN private_event_inventory i
- ON i.event_id=e.event_id AND i.event_version=e.event_version AND i.capacity=e.capacity`;
+ ON i.event_id=e.event_id AND i.event_version=e.event_version AND i.capacity=e.capacity
+ LEFT JOIN private_event_cancellations c ON c.event_id=e.event_id AND c.event_version=e.event_version`;
 type Inventory = {
   title: string;
   startsAt: Date;
@@ -173,6 +183,35 @@ export function eventEnrollmentStore(
     );
   }
   return {
+    async cancellations(token, references) {
+      if (
+        references.length > 100 ||
+        references.some(
+          (item) =>
+            !idPattern.test(item.eventId) || !validVersion(item.eventVersion),
+        )
+      )
+        return null;
+      return owned(
+        token,
+        async (tx) =>
+          (
+            await tx.query<{
+              eventId: string;
+              eventVersion: number;
+              cancelledAt: Date;
+            }>(
+              `SELECT c.event_id AS "eventId",c.event_version AS "eventVersion",c.cancelled_at AS "cancelledAt"
+           FROM private_event_cancellations c JOIN unnest($1::text[],$2::integer[]) requested(event_id,event_version)
+           ON c.event_id=requested.event_id AND c.event_version=requested.event_version`,
+              [
+                references.map((item) => item.eventId),
+                references.map((item) => item.eventVersion),
+              ],
+            )
+          ).rows,
+      );
+    },
     async preview(token, eventId, version) {
       if (!idPattern.test(eventId) || !validVersion(version)) return null;
       const event = find(eventId, version);
@@ -199,8 +238,16 @@ export function eventEnrollmentStore(
               [event.startsAt],
             )
           ).rows[0]?.future === true;
+        const cancelledAt =
+          (
+            await tx.query<{ cancelled_at: Date }>(
+              `SELECT cancelled_at FROM private_event_cancellations WHERE event_id=$1 AND event_version=$2`,
+              [eventId, version],
+            )
+          ).rows[0]?.cancelled_at ?? null;
         const canEnroll =
           eligible(event) &&
+          !cancelledAt &&
           future &&
           (!inventory || matches(inventory, event));
         const seats =
@@ -214,6 +261,7 @@ export function eventEnrollmentStore(
             ? event.fixtureCapacity - (seats?.size ?? 0)
             : null,
           activeReceiptId: active?.id ?? null,
+          cancelledAt,
         };
       });
     },
@@ -265,6 +313,13 @@ export function eventEnrollmentStore(
             ).rows[0];
             if (!inventory || !matches(inventory, event))
               return { kind: "unavailable" };
+            const state = (
+              await tx.query<{ cancellation_id: string | null }>(
+                `SELECT cancellation_id FROM private_event_cancellation_state WHERE event_id=$1 AND event_version=$2 FOR UPDATE`,
+                [eventId, version],
+              )
+            ).rows[0];
+            if (!state || state.cancellation_id) return { kind: "unavailable" };
             await tx.observe([inventory.startsAt]);
             const seats = await activeSeats(
               tx,

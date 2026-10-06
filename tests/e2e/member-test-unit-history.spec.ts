@@ -194,7 +194,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
           `deep-native-member-records-page-${number}.json`,
         );
         const payload = JSON.parse(text);
-        expect(payload.version).toBe("local-member-records-v22");
+        expect(payload.version).toBe("local-member-records-v23");
         expect(payload.page.recordCount).toBeLessThanOrEqual(100);
         expect(Buffer.byteLength(text)).toBeLessThanOrEqual(256 * 1024);
         expect(payload.testUnitHistory.availableMeaning).toBe(

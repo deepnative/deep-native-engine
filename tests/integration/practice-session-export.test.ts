@@ -133,7 +133,7 @@ it("traverses every retained pair in bounded UTF-8 pages without exposing anothe
     const page = await exporter.exportOwned(owner.token, cursor);
     expect(page.kind).toBe("ready");
     if (page.kind !== "ready") throw Error("Export unavailable");
-    expect(page.payload.version).toBe("local-member-records-v22");
+    expect(page.payload.version).toBe("local-member-records-v23");
     expect(Buffer.byteLength(JSON.stringify(page.payload))).toBeLessThanOrEqual(
       MAX_MEMBER_EXPORT_BYTES,
     );

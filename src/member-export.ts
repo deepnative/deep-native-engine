@@ -290,9 +290,10 @@ const sections = {
   ),
   eventEnrollments: section(
     `e.id,e.event_id AS "eventId",e.event_version AS "eventVersion",i.title,
-     i.starts_at AS "startsAt",i.ends_at AS "endsAt",e.created_at AS "createdAt",e.withdrawn_at AS "withdrawnAt"`,
+     i.starts_at AS "startsAt",i.ends_at AS "endsAt",e.created_at AS "createdAt",e.withdrawn_at AS "withdrawnAt",c.cancelled_at AS "cancelledAt"`,
     `private_event_enrollments e JOIN private_event_inventory i
      ON i.event_id=e.event_id AND i.event_version=e.event_version AND i.capacity=e.capacity
+     LEFT JOIN private_event_cancellations c ON c.event_id=e.event_id AND c.event_version=e.event_version
      JOIN workspaces w ON w.id=e.workspace_id AND w.owner_principal_id=e.member_id
      WHERE e.member_id=$1 AND w.deleting_at IS NULL`,
     "e.id",
@@ -350,7 +351,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v22";
+  version: "local-member-records-v23";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -484,7 +485,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v22",
+          version: "local-member-records-v23",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

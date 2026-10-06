@@ -4,6 +4,8 @@ import { mountSupportAssignmentRoutes } from "./support-assignment-routes.ts";
 import type { SupportAssignmentStore } from "./support-assignment.ts";
 import { mountSampleAssignmentRoutes } from "./sample-assignment-routes.ts";
 import type { SampleAssignmentStore } from "./sample-assignment-values.ts";
+import { mountEventCancellationRoutes } from "./event-cancellation-routes.ts";
+import type { EventCancellationStore } from "./event-cancellation-values.ts";
 import { mountCircleGrantRoutes } from "./circle-grant-routes.ts";
 import type { CircleGrantAdminStore } from "./circle-grant-values.ts";
 import { selectedStaffToken } from "./staff-entry-selection.ts";
@@ -325,6 +327,8 @@ export function app(
     reviewTime?: ReturnType<typeof reviewTimeStore>;
     reviewTimeWrites?: boolean;
     eventEnrollments?: EventEnrollmentStore;
+    eventCancellations?: EventCancellationStore;
+    localEventAdmin?: boolean;
     eventRegistration?: boolean;
     usefulness?: UsefulnessStore;
     workflowFeedback?: WorkflowFeedbackStore;
@@ -439,6 +443,7 @@ export function app(
       Boolean(options.circleDiscussion) &&
       options.circleDiscussionEnabled === true,
     circleGrants: Boolean(options.circleGrantAdmin),
+    eventCancellations: Boolean(options.eventCancellations),
     localAi: Boolean(options.localAiControl),
     receipts: Boolean(options.manualObservations),
   });
@@ -1201,6 +1206,7 @@ export function app(
     mountSampleFeedbackRoutes(app, options.sampleFeedback);
   mountSupportAssignmentRoutes(app, options.supportAssignment, options);
   mountCircleGrantRoutes(app, options.circleGrantAdmin, options);
+  mountEventCancellationRoutes(app, options.eventCancellations, options);
   mountSampleAssignmentRoutes(app, options.sampleAssignments, {
     // Runtime and owned port0 previews fill the actual bound origin after listen.
     get origin() {
@@ -1835,26 +1841,49 @@ export function app(
     app,
     options.eventEnrollments ?? disabledEventEnrollmentStore(),
   );
-  app.get("/events", (req, res) => {
+  app.get("/events", async (req, res) => {
     const member = res.locals.learner as Learner;
     const allTopics = req.query.all === "1";
-    res.send(
-      eventDiscoveryPage(
-        listEventPreviews(
-          {
-            goal: member.goal,
-            domainTags: member.domainTags ?? [],
-            itRoles: member.itRoles ?? [],
-          },
-          { allTopics },
-        ),
-        member.timezone,
-        allTopics,
-        options.eventRegistration ?? false,
-      ),
+    const items = listEventPreviews(
+      {
+        goal: member.goal,
+        domainTags: member.domainTags ?? [],
+        itRoles: member.itRoles ?? [],
+      },
+      { allTopics },
     );
+    try {
+      const cancellations = await (
+        options.eventEnrollments ?? disabledEventEnrollmentStore()
+      ).cancellations(
+        res.locals.token,
+        items.map((event) => ({
+          eventId: event.id,
+          eventVersion: event.version,
+        })),
+      );
+      if (!cancellations) throw Error("Event cancellation status unavailable");
+      res.send(
+        eventDiscoveryPage(
+          items,
+          member.timezone,
+          allTopics,
+          options.eventRegistration ?? false,
+          cancellations,
+        ),
+      );
+    } catch {
+      res
+        .status(503)
+        .send(
+          errorPage(
+            "Event status unavailable",
+            "Current event cancellation state could not be checked. No availability or registration is confirmed. Inspect your saved registration history separately.",
+          ),
+        );
+    }
   });
-  app.get("/events/:id/:version", (req, res) => {
+  app.get("/events/:id/:version", async (req, res) => {
     const rawVersion = req.params.version as string;
     const version = /^[1-9][0-9]*$/.test(rawVersion) ? Number(rawVersion) : NaN;
     const detail = eventPreviewDetail(req.params.id as string, version);
@@ -1869,15 +1898,33 @@ export function app(
         );
       return;
     }
-    res
-      .status(detail.status === "current" ? 200 : 410)
-      .send(
-        eventDetailPage(
-          detail,
-          (res.locals.learner as Learner).timezone,
-          options.eventRegistration ?? false,
-        ),
-      );
+    try {
+      const cancellations = await (
+        options.eventEnrollments ?? disabledEventEnrollmentStore()
+      ).cancellations(res.locals.token, [
+        { eventId: detail.event.id, eventVersion: detail.event.version },
+      ]);
+      if (!cancellations) throw Error("Event cancellation status unavailable");
+      res
+        .status(detail.status === "current" ? 200 : 410)
+        .send(
+          eventDetailPage(
+            detail,
+            (res.locals.learner as Learner).timezone,
+            options.eventRegistration ?? false,
+            cancellations[0]?.cancelledAt ?? null,
+          ),
+        );
+    } catch {
+      res
+        .status(503)
+        .send(
+          errorPage(
+            "Event status unavailable",
+            "Current event cancellation state could not be checked. No availability or registration is confirmed. Inspect your saved registration history separately.",
+          ),
+        );
+    }
   });
   app.post("/circles/:id/join", async (req, res) => {
     let result;

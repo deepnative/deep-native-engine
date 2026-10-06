@@ -1,3 +1,4 @@
+import { disabledEventEnrollmentStore } from "../../src/event-enrollments.ts";
 import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import request from "supertest";
 import { createServer, type Server } from "node:http";
@@ -1741,7 +1742,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v22",
+          version: "local-member-records-v23",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -1781,7 +1782,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v22",
+    version: "local-member-records-v23",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -4620,7 +4621,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v22" as const,
+    version: "local-member-records-v23" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -5157,4 +5158,61 @@ it("withholds an unconfirmed private attempt read and offers only fresh-state re
   expect(recovery.text).not.toContain("<form");
   expect(recovery.text).not.toContain("Nothing was saved");
   expect(attempts.list).toHaveBeenCalledOnce();
+});
+
+it.each(["/events", "/events/everyday-ai-preview/2"])(
+  "EVCANCEL-03 %s withholds availability when cancellation state is unknown",
+  async (path) => {
+    for (const failure of ["absent", "database"] as const) {
+      const db = storage(),
+        events = disabledEventEnrollmentStore();
+      events.cancellations =
+        failure === "absent"
+          ? vi.fn().mockResolvedValue(null)
+          : vi
+              .fn()
+              .mockRejectedValue(new Error("private database diagnostics"));
+      const agent = await managedAgent(
+        app(db, {
+          origin,
+          secret: "secret",
+          eventEnrollments: events,
+          eventRegistration: true,
+        }),
+      );
+      db.session.mockResolvedValue({ kind: "active", learner: member });
+      const response = await agent.get(path).set("Host", host).expect(503);
+      expect(response.text).toContain(
+        "No availability or registration is confirmed",
+      );
+      expect(response.text).not.toContain("private database diagnostics");
+      expect(response.text).not.toContain("Try local registration rehearsal");
+    }
+  },
+);
+it("EVCANCEL-03 exact cancelled member detail remains readable without offering registration", async () => {
+  const db = storage(),
+    events = disabledEventEnrollmentStore();
+  events.cancellations = vi.fn().mockResolvedValue([
+    {
+      eventId: "local-registration-rehearsal",
+      eventVersion: 1,
+      cancelledAt: new Date("2026-10-06T12:00:00.000Z"),
+    },
+  ]);
+  const agent = await managedAgent(
+    app(db, {
+      origin,
+      secret: "secret",
+      eventEnrollments: events,
+      eventRegistration: true,
+    }),
+  );
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const response = await agent
+    .get("/events/local-registration-rehearsal/1")
+    .set("Host", host)
+    .expect(200);
+  expect(response.text).toContain("Event cancelled");
+  expect(response.text).not.toContain("Try local registration rehearsal");
 });

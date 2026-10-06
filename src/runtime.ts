@@ -3,6 +3,7 @@ import { supportAssignmentStore } from "./support-assignment.ts";
 import { sampleAssignmentStore } from "./sample-assignment.ts";
 import { reviewerWorklistStore } from "./reviewer-worklist.ts";
 import { reviewTimeStore } from "./review-time-store.ts";
+import { eventCancellationStore } from "./event-cancellations.ts";
 import { eventEnrollmentStore } from "./event-enrollments.ts";
 import { sampleFeedbackStore } from "./sample-feedback.ts";
 import { Pool } from "pg";
@@ -82,6 +83,11 @@ export async function start(env: NodeJS.ProcessEnv) {
     const options = {
       ...settings,
       staffEntry: staffEntryStore(pool),
+      eventCancellations: eventCancellationStore(pool, {
+        mode: settings.mode,
+        writes: settings.localEventAdmin,
+        registration: settings.eventRegistration,
+      }),
       supportAssignment: supportAssignmentStore(pool, settings.secret),
       sampleAssignments: sampleAssignmentStore(pool, {
         enabled: settings.sampleAssignmentAdministration,
