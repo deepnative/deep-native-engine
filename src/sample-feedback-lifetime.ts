@@ -15,6 +15,8 @@ export interface SampleTransaction {
   ): Promise<QueryResult<T>>;
   bounded<T>(use: () => Promise<T>): Promise<T>;
   observe(expires: Date[]): Promise<void>;
+  /** Server-only monotonic deadline; observations may shorten, never renew it. */
+  deadline(): number;
 }
 /** One owned transaction; source/authority fences are acquired by the caller in
  * documented order. No retry, no rollback behind an unknown query/commit. */
@@ -140,7 +142,12 @@ export async function sampleFeedbackTransaction<T>(
     await query("SELECT set_config('transaction_timeout',$1,true)", [
       `${Math.max(1, Math.floor(deadline - performance.now()))}ms`,
     ]);
-    result = await use({ query, bounded, observe });
+    result = await use({
+      query,
+      bounded,
+      observe,
+      deadline: () => Math.min(deadline, authority),
+    });
     // The caller's last DB observation must precede handback; refusing an
     // unobserved callback prevents accidentally adding a new unfenced path.
     if (!Number.isFinite(authority)) throw unavailable();

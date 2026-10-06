@@ -25,6 +25,7 @@ export interface StaffTools {
   support: boolean;
   supportTime: boolean;
   assignments: boolean;
+  sampleAssignments: boolean;
   experts: boolean;
   metrics: boolean;
   ledger: boolean;
@@ -46,12 +47,18 @@ function links(role: StaffRole, tools: StaffTools) {
   const choices: [boolean, string, string][] = [];
   if (role === "editor" || role === "reviewer")
     choices.push([tools.library, "/editor/library", "Content workflow"]);
-  if (role === "reviewer")
+  if (role === "reviewer") {
     choices.push([
       tools.worklist,
       "/review/worklist",
       "Your sample feedback worklist",
     ]);
+    choices.push([
+      tools.sampleAssignments,
+      "/review/sample-assignment-reference",
+      "My reviewer reference",
+    ]);
+  }
   if (role === "operator" || role === "platform_admin")
     choices.push(
       [tools.support, "/operator/support", "Your granted support requests"],
@@ -92,6 +99,11 @@ function links(role: StaffRole, tools: StaffTools) {
   }
   if (role === "platform_admin")
     choices.push(
+      [
+        tools.sampleAssignments,
+        "/operator/sample-assignments",
+        "Private sample assignments",
+      ],
       [
         tools.assignments,
         "/operator/support-assignment",

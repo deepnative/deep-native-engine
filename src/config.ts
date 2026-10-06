@@ -65,6 +65,12 @@ export function config(env: NodeJS.ProcessEnv) {
   const localSupportAssignment = env.DNE_LOCAL_SUPPORT_ASSIGNMENT ?? "disabled";
   if (!["enabled", "disabled"].includes(localSupportAssignment))
     throw Error("DNE_LOCAL_SUPPORT_ASSIGNMENT must be enabled or disabled.");
+  const sampleAssignmentAdministration =
+    env.DNE_SAMPLE_ASSIGNMENT_ADMINISTRATION ?? "disabled";
+  if (!["enabled", "disabled"].includes(sampleAssignmentAdministration))
+    throw Error(
+      "DNE_SAMPLE_ASSIGNMENT_ADMINISTRATION must be enabled or disabled.",
+    );
   const reviewerWorklistReads = env.DNE_REVIEWER_WORKLIST_READS ?? "enabled";
   if (!["enabled", "disabled"].includes(reviewerWorklistReads))
     throw Error("DNE_REVIEWER_WORKLIST_READS must be enabled or disabled.");
@@ -87,6 +93,8 @@ export function config(env: NodeJS.ProcessEnv) {
   return {
     localStaffEntry: localStaffEntry === "enabled",
     localSupportAssignment: localSupportAssignment === "enabled",
+    sampleAssignmentAdministration:
+      sampleAssignmentAdministration === "enabled",
     localHoldInspectionReads: localHoldInspectionReads === "enabled",
     reviewerWorklistReads: reviewerWorklistReads === "enabled",
     reviewTimeWrites: reviewTimeWrites === "enabled",
