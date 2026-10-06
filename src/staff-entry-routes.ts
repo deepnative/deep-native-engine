@@ -24,6 +24,7 @@ export interface StaffTools {
   worklist: boolean;
   support: boolean;
   supportTime: boolean;
+  assignments: boolean;
   experts: boolean;
   metrics: boolean;
   ledger: boolean;
@@ -68,11 +69,14 @@ function links(role: StaffRole, tools: StaffTools) {
       ],
     );
   if (role === "operator")
-    choices.push([
-      tools.holds,
-      "/operator/local-ai-holds",
-      "Your assigned local request holds",
-    ]);
+    choices.push(
+      [tools.assignments, "/operator/assignment-id", "My local assignment ID"],
+      [
+        tools.holds,
+        "/operator/local-ai-holds",
+        "Your assigned local request holds",
+      ],
+    );
   if (role === "moderator" || role === "platform_admin") {
     choices.push([
       tools.proposals,
@@ -88,6 +92,11 @@ function links(role: StaffRole, tools: StaffTools) {
   }
   if (role === "platform_admin")
     choices.push(
+      [
+        tools.assignments,
+        "/operator/support-assignment",
+        "Support request assignments",
+      ],
       [tools.localAi, "/operator/local-ai", "Local simulation control"],
       [
         tools.receipts,

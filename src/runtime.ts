@@ -1,4 +1,5 @@
 import { staffEntryStore } from "./staff-entry.ts";
+import { supportAssignmentStore } from "./support-assignment.ts";
 import { reviewerWorklistStore } from "./reviewer-worklist.ts";
 import { reviewTimeStore } from "./review-time-store.ts";
 import { eventEnrollmentStore } from "./event-enrollments.ts";
@@ -79,6 +80,7 @@ export async function start(env: NodeJS.ProcessEnv) {
     const options = {
       ...settings,
       staffEntry: staffEntryStore(pool),
+      supportAssignment: supportAssignmentStore(pool, settings.secret),
       authorization: authorizationStore(pool),
       catalog: catalogStore(pool),
       tracks: trackStore(pool),

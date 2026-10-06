@@ -1,5 +1,7 @@
 import type { StaffEntryStore } from "./staff-entry.ts";
 import { mountStaffEntryRoutes } from "./staff-entry-routes.ts";
+import { mountSupportAssignmentRoutes } from "./support-assignment-routes.ts";
+import type { SupportAssignmentStore } from "./support-assignment.ts";
 import { selectedStaffToken } from "./staff-entry-selection.ts";
 import { mountReviewerWorklistRoutes } from "./reviewer-worklist-routes.ts";
 import type { ReviewerWorklistStore } from "./reviewer-worklist.ts";
@@ -308,6 +310,8 @@ export function app(
     practice?: PracticeStore;
     practiceSessions?: PracticeSessionStore;
     supportRequests?: SupportRequestStore;
+    supportAssignment?: SupportAssignmentStore;
+    localSupportAssignment?: boolean;
     sampleFeedback?: SampleFeedbackStore;
     reviewerWorklist?: ReviewerWorklistStore;
     reviewTime?: ReturnType<typeof reviewTimeStore>;
@@ -410,6 +414,9 @@ export function app(
       options.reviewerWorklistReads !== false,
     support: Boolean(options.supportRequests),
     supportTime: Boolean(options.supportRequests?.time),
+    assignments:
+      Boolean(options.supportAssignment) &&
+      options.localSupportAssignment === true,
     experts: Boolean(options.tracks),
     metrics: Boolean(options.metrics),
     ledger: Boolean(options.ledgerReconciliation),
@@ -1180,6 +1187,7 @@ export function app(
     mountReviewerWorklistRoutes(app, options.reviewerWorklist);
   if (options.sampleFeedback)
     mountSampleFeedbackRoutes(app, options.sampleFeedback);
+  mountSupportAssignmentRoutes(app, options.supportAssignment, options);
   mountSupportRequestRoutes(
     app,
     options.supportRequests ?? disabledSupportRequestStore(),
