@@ -765,7 +765,7 @@ it("exports bounded owned registration pages and invalidates continuation after 
     const result = await exports.exportOwned(owner.token, cursor);
     expect(result.kind).toBe("ready");
     if (result.kind !== "ready") throw Error("Expected owned event export");
-    expect(result.payload.version).toBe("local-member-records-v22");
+    expect(result.payload.version).toBe("local-member-records-v23");
     expect(result.payload.page.recordCount).toBeLessThanOrEqual(100);
     const rows = result.payload.records.eventEnrollments;
     expect(rows).toBeDefined();
@@ -790,8 +790,10 @@ it("exports bounded owned registration pages and invalidates continuation after 
       "endsAt",
       "createdAt",
       "withdrawnAt",
+      "cancelledAt",
     ].sort(),
   );
+  expect(collected.every((row) => row.cancelledAt === null)).toBe(true);
   await members.remove(owner.id);
   expect(await exports.exportOwned(owner.token, savedCursor)).toEqual({
     kind: "denied",

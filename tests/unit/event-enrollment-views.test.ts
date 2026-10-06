@@ -18,6 +18,7 @@ const receipt: EventEnrollmentReceipt = {
   endsAt: new Date("2030-11-03T06:30:00.000Z"),
   createdAt: new Date("2030-10-01T12:00:00.000Z"),
   withdrawnAt: null,
+  cancelledAt: null,
 };
 const preview: EventEnrollmentPreview = {
   event: {
@@ -38,6 +39,7 @@ const preview: EventEnrollmentPreview = {
   canEnroll: true,
   remaining: 1,
   activeReceiptId: null,
+  cancelledAt: null,
 };
 it("requires deliberate invented-data enrollment and escapes text and hidden values", () => {
   const html = eventEnrollmentPage(
@@ -116,4 +118,32 @@ it("renders bounded history navigation and escaped uncertainty without automatic
   expect(eventEnrollmentRecovery("Unknown outcome")).not.toContain(
     "Check this registration attempt",
   );
+});
+
+it("shows event cancellation separately from withdrawal and offers no new registration", () => {
+  const cancelledAt = new Date("2029-10-01T12:00:00.000Z");
+  const saved = { ...receipt, cancelledAt };
+  const html = eventEnrollmentReceiptPage(saved, "csrf");
+  expect(html).toContain("Event cancelled");
+  expect(html).toContain(cancelledAt.toISOString());
+  expect(html).toContain("Withdraw registration");
+  expect(html).not.toContain("Check this version for a new registration");
+  const history = eventEnrollmentHistoryPage({
+    items: [saved],
+    nextCursor: null,
+  });
+  expect(history).toContain("event cancelled");
+  const rehearsal = eventEnrollmentPage(
+    { ...preview, cancelledAt, canEnroll: false, remaining: null },
+    "csrf",
+    "new",
+  );
+  expect(rehearsal).toContain("Event cancelled");
+  expect(rehearsal).not.toContain("Enroll in local rehearsal");
+  const withdrawn = eventEnrollmentReceiptPage(
+    { ...saved, withdrawnAt: new Date("2029-10-02") },
+    "csrf",
+  );
+  expect(withdrawn).toContain("Registration withdrawn");
+  expect(withdrawn).toContain("Event cancelled");
 });

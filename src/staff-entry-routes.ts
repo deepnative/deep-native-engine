@@ -33,6 +33,7 @@ export interface StaffTools {
   proposals: boolean;
   circles: boolean;
   circleGrants: boolean;
+  eventCancellations?: boolean;
   localAi: boolean;
   receipts: boolean;
 }
@@ -105,6 +106,11 @@ function links(role: StaffRole, tools: StaffTools) {
   }
   if (role === "platform_admin")
     choices.push(
+      [
+        tools.eventCancellations === true,
+        "/operator/event-cancellations",
+        "Event cancellation",
+      ],
       [
         tools.circleGrants,
         "/operator/circle-grants",

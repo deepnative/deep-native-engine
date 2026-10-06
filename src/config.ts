@@ -90,6 +90,9 @@ export function config(env: NodeJS.ProcessEnv) {
     env.DNE_LOCAL_AI_HOLD_INSPECTION ?? "disabled";
   if (!["enabled", "disabled"].includes(localHoldInspectionReads))
     throw Error("DNE_LOCAL_AI_HOLD_INSPECTION must be enabled or disabled.");
+  const localEventAdmin = env.DNE_LOCAL_EVENT_ADMIN ?? "disabled";
+  if (!["enabled", "disabled"].includes(localEventAdmin))
+    throw Error("DNE_LOCAL_EVENT_ADMIN must be enabled or disabled.");
   const eventRegistration = env.DNE_EVENT_REGISTRATION ?? "disabled";
   if (!["enabled", "disabled"].includes(eventRegistration))
     throw Error("DNE_EVENT_REGISTRATION must be enabled or disabled.");
@@ -102,6 +105,7 @@ export function config(env: NodeJS.ProcessEnv) {
     reviewerWorklistReads: reviewerWorklistReads === "enabled",
     reviewTimeWrites: reviewTimeWrites === "enabled",
     eventRegistration: eventRegistration === "enabled",
+    localEventAdmin: localEventAdmin === "enabled",
     circleDiscussion: circleDiscussion === "enabled",
     localCircleAdmin: localCircleAdmin === "enabled",
     supportTimeWrites: supportTimeWrites === "enabled",

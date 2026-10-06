@@ -32,6 +32,7 @@ const receipt: EventEnrollmentReceipt = {
   endsAt: new Date(event.endsAt),
   createdAt: new Date("2029-01-01"),
   withdrawnAt: null,
+  cancelledAt: null,
 };
 const inventory = {
   title: event.title,
@@ -55,6 +56,13 @@ function fixture(
     history?: EventEnrollmentReceipt[];
     current?: { withdrawn_at: Date | null } | null;
     failAt?: string;
+    cancelledAt?: Date;
+    cancellationStateMissing?: boolean;
+    cancellationRows?: {
+      eventId: string;
+      eventVersion: number;
+      cancelledAt: Date;
+    }[];
   } = {},
 ) {
   const query = vi.fn(async (sql: string) => {
@@ -89,6 +97,20 @@ function fixture(
           options.inventory === null
             ? []
             : [{ ...inventory, ...options.inventory }],
+      };
+    if (sql.includes("JOIN unnest($1::text[]"))
+      return { rows: options.cancellationRows ?? [] };
+    if (sql.startsWith("SELECT cancelled_at"))
+      return {
+        rows: options.cancelledAt
+          ? [{ cancelled_at: options.cancelledAt }]
+          : [],
+      };
+    if (sql.startsWith("SELECT cancellation_id"))
+      return {
+        rows: options.cancellationStateMissing
+          ? []
+          : [{ cancellation_id: options.cancelledAt ? id : null }],
       };
     if (sql.startsWith("SELECT seat_number"))
       return {
@@ -196,6 +218,7 @@ it("uses current authority and owned state for a nonbinding availability snapsho
     canEnroll: true,
     remaining: 1,
     activeReceiptId: id,
+    cancelledAt: null,
   });
   expect(f.query).toHaveBeenCalledWith(
     expect.stringContaining("owner_principal_id=$1"),
@@ -352,4 +375,83 @@ it("withdraws only an owned exact attempt, preserving terminal state on replay",
     expect.stringContaining("UPDATE private_event_enrollments"),
     [id],
   );
+});
+
+it("retains cancellation in availability but denies fresh registrations for cancelled or missing state", async () => {
+  const cancelledAt = new Date("2029-01-01");
+  const f = fixture({ cancelledAt });
+  expect(await f.store.preview("token", event.id, 1)).toMatchObject({
+    cancelledAt,
+    canEnroll: false,
+    remaining: null,
+  });
+  for (const state of [{ cancelledAt }, { cancellationStateMissing: true }]) {
+    const denied = fixture(state);
+    expect(await denied.store.enroll("token", event.id, 1, id)).toEqual({
+      kind: "unavailable",
+    });
+    expect(
+      denied.query.mock.calls.some(([sql]) =>
+        sql.startsWith("INSERT INTO private_event_enrollments"),
+      ),
+    ).toBe(false);
+  }
+});
+it("EVCANCEL-03 member discovery reads only bounded requested cancellation metadata", async () => {
+  const cancelledAt = new Date("2026-10-06T12:00:00.000Z"),
+    rows = [{ eventId: event.id, eventVersion: 1, cancelledAt }];
+  const f = fixture({ cancellationRows: rows });
+  expect(
+    await f.store.cancellations("owner-token", [
+      { eventId: event.id, eventVersion: 1 },
+    ]),
+  ).toEqual(rows);
+  expect(f.release).toHaveBeenCalledOnce();
+  expect(await f.store.cancellations("owner-token", [])).toEqual(rows);
+});
+it.each(
+  [
+    Array.from({ length: 101 }, () => ({ eventId: event.id, eventVersion: 1 })),
+    [{ eventId: "foreign/id", eventVersion: 1 }],
+    [{ eventId: event.id, eventVersion: 0 }],
+    [{ eventId: event.id, eventVersion: 1.5 }],
+  ].map((references) => ({ references })),
+)(
+  "EVCANCEL-03 malformed or oversized discovery references deny before connection",
+  async ({ references }) => {
+    const f = fixture();
+    expect(await f.store.cancellations("owner-token", references)).toBeNull();
+    expect(f.connect).not.toHaveBeenCalled();
+  },
+);
+it.each([
+  { principal: false },
+  { workspace: false },
+  { mode: "live" as const },
+])(
+  "EVCANCEL-03 unavailable owned discovery %j never fabricates active events",
+  async (options) => {
+    const f = fixture(options);
+    expect(
+      await f.store.cancellations("owner-token", [
+        { eventId: event.id, eventVersion: 1 },
+      ]),
+    ).toBeNull();
+  },
+);
+it("EVCANCEL-08 disabled registration port retains public cancellation metadata as an empty local baseline", async () => {
+  expect(
+    await disabledEventEnrollmentStore().cancellations("invented", [
+      { eventId: event.id, eventVersion: 1 },
+    ]),
+  ).toEqual([]);
+});
+
+it("EVCANCEL-03 database failure rejects discovery without private diagnostics", async () => {
+  const f = fixture({ failAt: "JOIN unnest" });
+  await expect(
+    f.store.cancellations("owner-token", [
+      { eventId: event.id, eventVersion: 1 },
+    ]),
+  ).rejects.toThrow("Private event registration unavailable");
 });

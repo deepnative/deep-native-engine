@@ -380,7 +380,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
         let text = "";
         for await (const chunk of stream) text += chunk.toString();
         const payload = JSON.parse(text);
-        expect(payload.version).toBe("local-member-records-v22");
+        expect(payload.version).toBe("local-member-records-v23");
         expect(payload.page.recordCount).toBeLessThanOrEqual(100);
         expect(Buffer.byteLength(text)).toBeLessThanOrEqual(256 * 1024);
         downloadedHolds.push(...payload.records.testUnitReservations);

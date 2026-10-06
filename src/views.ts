@@ -1057,12 +1057,25 @@ export function eventDiscoveryPage(
   timezone?: string | null,
   allTopics = false,
   registrationEnabled = false,
+  cancellations: readonly {
+    eventId: string;
+    eventVersion: number;
+    cancelledAt: Date;
+  }[] = [],
 ) {
   const intro = allTopics
     ? "Exploring all topics"
     : "Events matched to your saved goal or interests";
   const list = items.length
-    ? `<ul>${items.map((event) => `<li><h2><a href="/events/${encodeURIComponent(event.id)}/${event.version}">${escape(event.title)}</a></h2><p>${escape(event.description)}</p><p>Version ${event.version} · ${registrationEnabled && event.localRegistration ? "Synthetic preview; local registration rehearsal only" : "Synthetic preview; enrollment unavailable"}</p>${previewEventTime(event, timezone)}${registrationEnabled && event.localRegistration ? `<p><a href="/events/${encodeURIComponent(event.id)}/${event.version}/rehearsal">Try local registration rehearsal</a></p>` : ""}</li>`).join("")}</ul>`
+    ? `<ul>${items
+        .map((event) => {
+          const cancelledAt = cancellations.find(
+            (item) =>
+              item.eventId === event.id && item.eventVersion === event.version,
+          )?.cancelledAt;
+          return `<li><h2><a href="/events/${encodeURIComponent(event.id)}/${event.version}">${escape(event.title)}</a></h2><p>${escape(event.description)}</p><p>Version ${event.version} · ${registrationEnabled && event.localRegistration ? "Synthetic preview; local registration rehearsal only" : "Synthetic preview; enrollment unavailable"}</p>${previewEventTime(event, timezone)}${cancelledAt ? `<p role="status">Event cancelled · ${cancelledAt.toISOString()}. New registrations are closed.</p>` : ""}${!cancelledAt && registrationEnabled && event.localRegistration ? `<p><a href="/events/${encodeURIComponent(event.id)}/${event.version}/rehearsal">Try local registration rehearsal</a></p>` : ""}</li>`;
+        })
+        .join("")}</ul>`
     : `<p role="status">${allTopics ? "No upcoming synthetic event previews are available." : "No upcoming synthetic event previews match your saved goal or interests."} Nothing has been booked or reserved.</p>`;
   return page(
     "Sample events",
@@ -1074,6 +1087,7 @@ export function eventDetailPage(
   detail: Exclude<EventPreviewDetail, { status: "missing" }>,
   timezone?: string | null,
   registrationEnabled = false,
+  cancelledAt: Date | null = null,
 ) {
   const event = detail.event;
   const current = detail.status === "current";
@@ -1087,7 +1101,7 @@ export function eventDetailPage(
     : `<p role="status">${unavailable[detail.status as keyof typeof unavailable]}. This exact version is unavailable; nothing was booked. Browse current previews separately.</p>`;
   return page(
     event.title,
-    `<nav class="breadcrumb"><a href="/events">← Sample events</a></nav><article class="reading"><p class="eyebrow">SYNTHETIC, UNREVIEWED LOCAL PREVIEW</p><h1>${escape(event.title)}</h1><p>Version ${event.version} · ${registrationEnabled && event.localRegistration ? "Synthetic preview; local registration rehearsal only" : "Synthetic preview; enrollment unavailable"}</p><p>${escape(event.description)}</p>${current ? previewEventTime(event, timezone) : ""}${agenda}${registrationEnabled && event.localRegistration ? `<p><a href="/events/${encodeURIComponent(event.id)}/${event.version}/rehearsal">Try local registration rehearsal</a></p>` : ""}<h2>Readiness</h2><p>Access and cost: unresolved</p><p>Expert coverage: unresolved</p><p>Recording: unresolved</p><p>No live clinic or reservation exists. A sample fixture capacity is not remaining seats.</p></article>`,
+    `<nav class="breadcrumb"><a href="/events">← Sample events</a></nav><article class="reading"><p class="eyebrow">SYNTHETIC, UNREVIEWED LOCAL PREVIEW</p><h1>${escape(event.title)}</h1><p>Version ${event.version} · ${registrationEnabled && event.localRegistration ? "Synthetic preview; local registration rehearsal only" : "Synthetic preview; enrollment unavailable"}</p><p>${escape(event.description)}</p>${current ? previewEventTime(event, timezone) : ""}${agenda}${cancelledAt ? `<p role="status">Event cancelled · ${cancelledAt.toISOString()}. New registrations are closed; your saved receipt remains in registration history.</p>` : ""}${current && !cancelledAt && registrationEnabled && event.localRegistration ? `<p><a href="/events/${encodeURIComponent(event.id)}/${event.version}/rehearsal">Try local registration rehearsal</a></p>` : ""}<h2>Readiness</h2><p>Access and cost: unresolved</p><p>Expert coverage: unresolved</p><p>Recording: unresolved</p><p>No live clinic or reservation exists. A sample fixture capacity is not remaining seats.</p></article>`,
   );
 }
 export function workflowRegistryPage(items: WorkflowBundle[], q: string) {

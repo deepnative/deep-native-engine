@@ -48,7 +48,7 @@ async function page(token: string, cursor?: string) {
   expect(
     value.payload.version,
     "New circle sections need their own export schema version",
-  ).toBe("local-member-records-v22");
+  ).toBe("local-member-records-v23");
   expect(value.payload.page.recordCount).toBeLessThanOrEqual(
     MAX_MEMBER_EXPORT_RECORDS,
   );
@@ -251,7 +251,7 @@ it("preserves a signed legacy v2 proposal continuation and appends current circl
   expect(value.kind).toBe("ready");
   if (value.kind !== "ready") throw Error("Legacy continuation unavailable");
   expect(value.payload.page.number).toBe(2);
-  expect(value.payload.version).toBe("local-member-records-v22");
+  expect(value.payload.version).toBe("local-member-records-v23");
   expect(value.payload.records.proposals).toMatchObject([
     { id: after, body: "Later invented private proposal" },
   ]);

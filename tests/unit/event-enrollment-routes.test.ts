@@ -23,7 +23,13 @@ const event = {
   fixtureCapacity: 1,
   localRegistration: true,
 };
-const preview = { event, canEnroll: true, remaining: 1, activeReceiptId: null };
+const preview = {
+  event,
+  canEnroll: true,
+  remaining: 1,
+  activeReceiptId: null,
+  cancelledAt: null,
+};
 const receipt = {
   id,
   eventId: event.id,
@@ -33,6 +39,7 @@ const receipt = {
   endsAt: new Date(event.endsAt),
   createdAt: new Date("2029-01-01"),
   withdrawnAt: null,
+  cancelledAt: null,
 };
 function fixture(overrides: Partial<EventEnrollmentStore> = {}) {
   const store = { ...disabledEventEnrollmentStore(), ...overrides };
