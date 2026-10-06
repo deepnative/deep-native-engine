@@ -42,6 +42,9 @@ function fixture(
     writes?: boolean;
     registration?: boolean;
     catalog?: readonly EventPreview[];
+    catalogReader?: Parameters<
+      typeof eventCancellationStore
+    >[1]["catalogReader"];
   } = {},
 ) {
   const state = {
@@ -200,6 +203,23 @@ it.each(["inspectOperation", "cancel"] as const)(
     expect(f.connect).not.toHaveBeenCalled();
   },
 );
+it("REHSCHED-07 default trusted Git catalog preserves the original static rehearsal preview", async () => {
+  const f = fixture({ catalog: undefined });
+  const trusted = EVENT_PREVIEWS.find(
+    (item) => item.localRegistration === true,
+  )!;
+  expect(
+    await f.store.preview(token, {
+      eventId: trusted.id,
+      eventVersion: trusted.version,
+    }),
+  ).toMatchObject({
+    kind: "ready",
+    value: { event: trusted, creationEnabled: true, receipt: null },
+  });
+  expect(trusted.startsAt).not.toBe(event.startsAt);
+  expect(f.release).toHaveBeenCalledOnce();
+});
 it("EVCANCEL-01 future opted-in preview allows an explicit new cancellation", async () => {
   const f = fixture();
   expect(await f.store.preview(token, scope)).toMatchObject({
@@ -468,4 +488,21 @@ it("EVCANCEL-05 database error is unavailable without exposing diagnostics", asy
   f.state.fail = "FROM principals";
   expect(await f.store.admin(token)).toEqual({ kind: "unavailable" });
   expect(f.release).toHaveBeenCalledOnce();
+});
+
+it("REHSCHED-03 cancellation uses the injected shared catalog under current administrator authority", async () => {
+  const reader = {
+    acceptsReference: () => true,
+    find: vi.fn(async () => event),
+    list: async () => [event],
+  };
+  const f = fixture({ catalogReader: reader });
+  expect(await f.store.preview(token, scope)).toMatchObject({
+    kind: "ready",
+    value: { event },
+  });
+  expect(await f.store.cancel(token, scope, key, snapshot)).toMatchObject({
+    kind: "ready",
+  });
+  expect(reader.find).toHaveBeenCalled();
 });

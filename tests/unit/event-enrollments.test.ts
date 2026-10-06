@@ -45,6 +45,7 @@ function fixture(
     mode?: "demo" | "test" | "live";
     enabled?: boolean;
     catalog?: readonly EventPreview[];
+    catalogReader?: Parameters<typeof eventEnrollmentStore>[1]["catalogReader"];
     principal?: boolean;
     workspace?: boolean;
     valid?: boolean;
@@ -137,6 +138,7 @@ function fixture(
     mode: options.mode ?? "test",
     enabled: options.enabled ?? true,
     catalog: options.catalog ?? [event],
+    catalogReader: options.catalogReader,
   });
   return { store, connect, query, release };
 }
@@ -454,4 +456,29 @@ it("EVCANCEL-03 database failure rejects discovery without private diagnostics",
       { eventId: event.id, eventVersion: 1 },
     ]),
   ).rejects.toThrow("Private event registration unavailable");
+});
+
+it("REHSCHED-02/04 shared dynamic reader remains inside owned authorization and missing snapshots are unavailable", async () => {
+  const reader = {
+    acceptsReference: vi.fn(() => true),
+    find: vi.fn(async () => undefined),
+    list: vi.fn(async () => []),
+  };
+  const f = fixture({ catalogReader: reader });
+  expect(
+    await f.store.preview(
+      "owner-token",
+      "local-rehearsal-33333333-3333-4333-8333-333333333333",
+      1,
+    ),
+  ).toBeNull();
+  expect(reader.find).toHaveBeenCalledOnce();
+  expect(
+    await f.store.enroll(
+      "owner-token",
+      "local-rehearsal-33333333-3333-4333-8333-333333333333",
+      1,
+      id,
+    ),
+  ).toEqual({ kind: "unavailable" });
 });

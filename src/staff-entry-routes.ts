@@ -34,6 +34,7 @@ export interface StaffTools {
   circles: boolean;
   circleGrants: boolean;
   eventCancellations?: boolean;
+  eventRehearsals?: boolean;
   localAi: boolean;
   receipts: boolean;
 }
@@ -106,6 +107,11 @@ function links(role: StaffRole, tools: StaffTools) {
   }
   if (role === "platform_admin")
     choices.push(
+      [
+        tools.eventRehearsals === true,
+        "/operator/event-rehearsals",
+        "Schedule a private rehearsal",
+      ],
       [
         tools.eventCancellations === true,
         "/operator/event-cancellations",

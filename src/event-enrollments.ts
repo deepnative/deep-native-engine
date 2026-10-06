@@ -1,6 +1,10 @@
 import type { Pool } from "pg";
 import type { ApplicationMode } from "./adapters.ts";
 import { EVENT_PREVIEWS, type EventPreview } from "./events.ts";
+import {
+  eventCatalogReader,
+  type EventCatalogReader,
+} from "./event-catalog.ts";
 import { hash } from "./store.ts";
 import {
   practiceTransaction,
@@ -92,12 +96,13 @@ export function eventEnrollmentStore(
     mode: ApplicationMode;
     enabled: boolean;
     catalog?: readonly EventPreview[];
+    catalogReader?: EventCatalogReader;
   },
 ): EventEnrollmentStore {
-  const catalog = options.catalog ?? EVENT_PREVIEWS;
+  const reader =
+    options.catalogReader ??
+    eventCatalogReader(options.catalog ?? EVENT_PREVIEWS);
   const local = options.mode === "demo" || options.mode === "test";
-  const find = (id: string, version: number) =>
-    catalog.find((event) => event.id === id && event.version === version);
   const eligible = (event: EventPreview | undefined): event is EventPreview =>
     local &&
     options.enabled &&
@@ -214,9 +219,10 @@ export function eventEnrollmentStore(
     },
     async preview(token, eventId, version) {
       if (!idPattern.test(eventId) || !validVersion(version)) return null;
-      const event = find(eventId, version);
-      if (!event) return null;
+      if (!reader.acceptsReference(eventId, version)) return null;
       return owned(token, async (tx, member, workspace) => {
+        const event = await reader.find(tx, eventId, version);
+        if (!event) return null;
         const inventory = (
           await tx.query<Inventory>(
             `SELECT title,starts_at AS "startsAt",ends_at AS "endsAt",capacity FROM private_event_inventory
@@ -290,7 +296,7 @@ export function eventEnrollmentStore(
             ).rows[0];
             if (active)
               return { kind: "already-enrolled", receiptId: active.id };
-            const event = find(eventId, version);
+            const event = await reader.find(tx, eventId, version);
             if (!eligible(event)) return { kind: "unavailable" };
             await tx.query(
               `INSERT INTO private_event_inventory(event_id,event_version,title,starts_at,ends_at,capacity)
