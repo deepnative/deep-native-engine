@@ -164,8 +164,16 @@ it("reports all five categories with distinct current/future/held/expired accoun
   }
   const before = await retained(owner.id),
     value = await read(owner.token);
+  expect(value.categories).toHaveLength(categories.length);
   for (const name of categories) {
-    expect(category(value, name)).toMatchObject({
+    expect(category(value, name)).toEqual({
+      category: name,
+      unit:
+        name === "mock_sessions"
+          ? "sessions"
+          : name === "study_requests"
+            ? "requests"
+            : "minutes",
       grants: 4,
       granted: 220,
       usable: 65,
@@ -181,8 +189,10 @@ it("reports all five categories with distinct current/future/held/expired accoun
   }
   expect(category(value, "mock_sessions").unit).toBe("sessions");
   expect(category(value, "study_requests").unit).toBe("requests");
+  // Exact accounting above excludes the other owner's 999-unit grants;
+  // searching timestamps for that substring would reject valid .999 dates.
   expect(JSON.stringify(value)).not.toMatch(
-    new RegExp(`${owner.id}|${other.id}|999`),
+    new RegExp(`${owner.id}|${other.id}`),
   );
   expect(await retained(owner.id)).toEqual(before);
 });
