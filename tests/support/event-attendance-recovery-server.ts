@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type { Server } from "node:http";
+import type { Socket } from "node:net";
 import { app } from "../../src/app.ts";
 import { store } from "../../src/store.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
@@ -40,12 +41,16 @@ export async function startAttendanceRecoveryServer(pool: Pool) {
   } as unknown as Pool;
   let server: Server | undefined,
     origin = "http://127.0.0.1:0";
+  const sockets = new Set<Socket>();
   const close = () =>
-    new Promise<void>((resolve, reject) =>
-      server
-        ? server.close((error) => (error ? reject(error) : resolve()))
-        : resolve(),
-    );
+    new Promise<void>((resolve, reject) => {
+      if (!server) return resolve();
+      server.close((error) => (error ? reject(error) : resolve()));
+      // Browser preconnections may not have sent an HTTP request and are not
+      // idle HTTP connections. Release only this fixture's accepted sockets
+      // during its explicit pause/stop; product transactions are unchanged.
+      for (const socket of sockets) socket.destroy();
+    });
   const listen = async (enabled: boolean, port: number) => {
     const reader = eventCatalogReader();
     const options = {
@@ -69,6 +74,10 @@ export async function startAttendanceRecoveryServer(pool: Pool) {
       memberEvents: memberEventCatalog(pool, "test", reader),
     };
     server = app(store(pool), options).listen(port, "127.0.0.1");
+    server.on("connection", (socket) => {
+      sockets.add(socket);
+      socket.once("close", () => sockets.delete(socket));
+    });
     await new Promise<void>((resolve, reject) => {
       server!.once("listening", resolve);
       server!.once("error", reject);
@@ -85,6 +94,12 @@ export async function startAttendanceRecoveryServer(pool: Pool) {
       origin,
       evidence,
       close,
+      connections: () =>
+        new Promise<number>((resolve, reject) =>
+          server!.getConnections((error, count) =>
+            error ? reject(error) : resolve(count),
+          ),
+        ),
       pause: async () => {
         const port = Number(new URL(origin).port);
         await close();
