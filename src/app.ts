@@ -1,3 +1,5 @@
+import { mountWorkflowReviewStaffRoutes } from "./workflow-review-staff-routes.ts";
+import type { WorkflowReviewStaffStore } from "./workflow-review-staff.ts";
 import type { StaffEntryStore } from "./staff-entry.ts";
 import { mountStaffEntryRoutes } from "./staff-entry-routes.ts";
 import { mountSupportAssignmentRoutes } from "./support-assignment-routes.ts";
@@ -147,6 +149,8 @@ import {
   parseWorkflowFeedback,
   type WorkflowFeedbackStore,
 } from "./workflow-feedback.ts";
+import type { WorkflowReviewStore } from "./workflow-review.ts";
+import { mountWorkflowReviewRoutes } from "./workflow-review-routes.ts";
 import { registerCircleDiscussion } from "./circle-discussion-routes.ts";
 import {
   disabledCircleDiscussionStore,
@@ -337,6 +341,9 @@ export function app(
     eventRegistration?: boolean;
     usefulness?: UsefulnessStore;
     workflowFeedback?: WorkflowFeedbackStore;
+    workflowReviewStaff?: WorkflowReviewStaffStore;
+    workflowReviews?: WorkflowReviewStore;
+    workflowReviewRequests?: boolean;
     memberExport?: MemberExportStore;
     availability?: AvailabilityStore;
     memberSlotHolds?: MemberSlotHolds;
@@ -450,6 +457,7 @@ export function app(
     circleGrants: Boolean(options.circleGrantAdmin),
     eventCancellations: Boolean(options.eventCancellations),
     eventRehearsals: Boolean(options.eventRehearsals),
+    workflowReviews: Boolean(options.workflowReviewStaff),
     localAi: Boolean(options.localAiControl),
     receipts: Boolean(options.manualObservations),
   });
@@ -1210,6 +1218,7 @@ export function app(
     mountReviewerWorklistRoutes(app, options.reviewerWorklist);
   if (options.sampleFeedback)
     mountSampleFeedbackRoutes(app, options.sampleFeedback);
+  mountWorkflowReviewStaffRoutes(app, options.workflowReviewStaff, options);
   mountSupportAssignmentRoutes(app, options.supportAssignment, options);
   mountCircleGrantRoutes(app, options.circleGrantAdmin, options);
   mountEventCancellationRoutes(app, options.eventCancellations, options);
@@ -2374,6 +2383,7 @@ export function app(
     res.attachment(`${item.id}-v${item.version}.md`);
     res.send(item.download);
   });
+  mountWorkflowReviewRoutes(app, options.workflowReviews);
   app.get("/workflow-feedback/:id", async (req, res) => {
     const id = req.params.id as string;
     const [item, reports] = await Promise.all([
@@ -2403,7 +2413,15 @@ export function app(
         );
       return;
     }
-    res.send(workflowFeedbackPage(item, own, res.locals.csrf as string, id));
+    res.send(
+      workflowFeedbackPage(item, own, res.locals.csrf as string, id, {
+        configured: Boolean(options.workflowReviews),
+        enabled:
+          Boolean(options.workflowReviews) &&
+          options.workflowReviewRequests === true &&
+          options.mode !== "live",
+      }),
+    );
   });
   app.post("/workflow-feedback/:id/save", async (req, res) => {
     const fields = req.body as Fields;

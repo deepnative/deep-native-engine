@@ -73,7 +73,7 @@ async function resubmit(f: Awaited<ReturnType<typeof fixture>>) {
 it("exports current owner feedback and exact fresh rights without staff or audit identities", async () => {
   const f = await fixture();
   const returned = await snapshot(f.owner.token);
-  expect(returned.version).toBe("local-member-records-v23");
+  expect(returned.version).toBe("local-member-records-v24");
   expect(returned.records.proposals).toMatchObject([
     {
       id: f.id,
@@ -292,7 +292,7 @@ it("pages maximum Unicode feedback without increasing record or byte limits or r
     expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(
       MAX_MEMBER_EXPORT_BYTES,
     );
-    expect(page.version).toBe("local-member-records-v23");
+    expect(page.version).toBe("local-member-records-v24");
     for (const row of page.records.proposals!) {
       seen.push(row.id as string);
       expect(row.feedback).toMatchObject({

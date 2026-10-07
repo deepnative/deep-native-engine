@@ -35,6 +35,7 @@ export interface StaffTools {
   circleGrants: boolean;
   eventCancellations?: boolean;
   eventRehearsals?: boolean;
+  workflowReviews?: boolean;
   localAi: boolean;
   receipts: boolean;
 }
@@ -139,6 +140,24 @@ function links(role: StaffRole, tools: StaffTools) {
         "Synthetic observation register",
       ],
     );
+  if (role === "platform_admin")
+    choices.push([
+      tools.workflowReviews === true,
+      "/operator/workflow-reviews",
+      "Assign private workflow review",
+    ]);
+  if (role === "moderator")
+    choices.push([
+      tools.workflowReviews === true,
+      "/moderate/workflow-review-reference",
+      "My private workflow review reference",
+    ]);
+  if (role === "moderator")
+    choices.push([
+      tools.workflowReviews === true,
+      "/moderate/workflow-reviews",
+      "My assigned private workflow reviews",
+    ]);
   const available = choices.filter(([enabled]) => enabled);
   return available.length
     ? `<ul>${available.map(([, url, label]) => `<li><a href="${escape(url)}">${escape(label)}</a></li>`).join("")}</ul>`
