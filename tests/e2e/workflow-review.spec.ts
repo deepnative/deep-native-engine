@@ -130,6 +130,7 @@ for (const [index, [background, goal]] of [
       await page
         .getByRole("button", { name: "Save private feedback", exact: true })
         .click();
+      await expect(page.getByRole("status")).toContainText("saved privately");
       await page.reload();
       const memberRequest = await requestReview(page, origin);
       const adminToken = randomBytes(32).toString("hex"),
