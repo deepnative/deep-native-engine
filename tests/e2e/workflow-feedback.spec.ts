@@ -39,7 +39,9 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
     .getByRole("link", { name: "Save private feedback about this draft" })
     .click();
   await expect(
-    page.getByText("Only you can read this invented-text note"),
+    page.getByText(
+      "Saving this note does not share it. Only a separate unexpired request and exact moderator assignment can permit local reading.",
+    ),
   ).toBeVisible();
   const cookie = (await context.cookies()).find(
     (item) => item.name === "dne_preview",

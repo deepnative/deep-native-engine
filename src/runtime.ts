@@ -1,6 +1,8 @@
+import { workflowReviewStaffStore } from "./workflow-review-staff.ts";
 import { staffEntryStore } from "./staff-entry.ts";
 import { supportAssignmentStore } from "./support-assignment.ts";
 import { sampleAssignmentStore } from "./sample-assignment.ts";
+import { workflowReviewStore } from "./workflow-review.ts";
 import { reviewerWorklistStore } from "./reviewer-worklist.ts";
 import { reviewTimeStore } from "./review-time-store.ts";
 import { eventCancellationStore } from "./event-cancellations.ts";
@@ -87,6 +89,19 @@ export async function start(env: NodeJS.ProcessEnv) {
     const options = {
       ...settings,
       staffEntry: staffEntryStore(pool),
+      workflowReviewStaff: workflowReviewStaffStore(
+        pool,
+        { enabled: settings.workflowReviewRequests, mode: settings.mode },
+        settings.secret,
+      ),
+      workflowReviews: workflowReviewStore(
+        pool,
+        {
+          enabled: settings.workflowReviewRequests,
+          mode: settings.mode,
+        },
+        settings.secret,
+      ),
       eventCancellations: eventCancellationStore(pool, {
         mode: settings.mode,
         writes: settings.localEventAdmin,

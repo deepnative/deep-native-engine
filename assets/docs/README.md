@@ -2,6 +2,7 @@
 
 Start with [the current product direction](PRODUCT-DIRECTION.md): the AI learning and participation ecosystem for IT, other professionals and general learners. It supersedes contractor-only assumptions in historical source.
 
+- [Private workflow review](PRIVATE-WORKFLOW-REVIEW.md): exact member request, finite administrator assignment, moderator reading, original-key recovery and compatible creation pause.
 - [Private synthetic ledger reconciliation](PRIVATE-SYNTHETIC-LEDGER-RECONCILIATION.md): an operator-only structural report of retained invented records, with separate units and explicit external-source limitations.
 - [Private proposal revisions](PRIVATE-PROPOSAL-REVISIONS.md): moderator-requested changes, same-ID correction, fresh revision-specific rights, current-feedback export/redaction and legacy-consent boundaries.
 - [Private sample support](PRIVATE-SAMPLE-SUPPORT.md): owner intake/receipts, exact local operator grants, separate internal notes and replies, withdrawal/export and the trusted setup runbook.

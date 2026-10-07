@@ -338,6 +338,26 @@ const sections = {
      WHERE w.owner_principal_id=$1 AND w.deleting_at IS NULL`,
     "o.id",
   ),
+  // v24 appends owned private workflow permission metadata. Existing section
+  // positions and cursor v2 continue unchanged. Never copy notes, staff IDs,
+  // credential/operation keys or grant any new permission through an export.
+  workflowReviewRequests: section(
+    `r.id AS "requestId",r.workflow_id AS "workflowId",r.workflow_version AS "workflowVersion",
+     r.source_instance_id AS "sourceInstanceId",r.source_revision AS "sourceRevision",
+     r.expires_at AS "expiresAt",r.created_at AS "createdAt",r.withdrawn_at AS "withdrawnAt"`,
+    `workflow_review_requests r JOIN workspaces w ON w.id=r.workspace_id AND w.owner_principal_id=r.member_id
+     WHERE r.member_id=$1 AND w.deleting_at IS NULL`,
+    "r.id",
+  ),
+  workflowReviewAssignments: section(
+    `g.id AS "grantId",g.request_id AS "requestId",g.source_instance_id AS "sourceInstanceId",
+     g.source_revision AS "sourceRevision",g.starts_at AS "startsAt",g.expires_at AS "expiresAt",g.created_at AS "createdAt",g.revoked_at AS "revokedAt",
+     'Local workflow moderator' AS attribution`,
+    `workflow_review_grants g JOIN workflow_review_requests r ON r.id=g.request_id AND r.workspace_id=g.workspace_id
+     JOIN workspaces w ON w.id=g.workspace_id AND w.owner_principal_id=r.member_id
+     WHERE r.member_id=$1 AND w.deleting_at IS NULL`,
+    "g.id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -351,7 +371,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v23";
+  version: "local-member-records-v24";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -485,7 +505,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v23",
+          version: "local-member-records-v24",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

@@ -103,7 +103,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v23",
+      version: "local-member-records-v24",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -226,7 +226,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    [2, 37, ...valid.slice(2)],
+    [2, 39, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -488,7 +488,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v23",
+        version: "local-member-records-v24",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -696,7 +696,7 @@ it("appends owned review accounting at indices 33-35 without moving existing sec
     expect(value).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v23",
+        version: "local-member-records-v24",
         records: { [name]: [{ id: "owned-accounting" }] },
       },
     });
@@ -729,7 +729,7 @@ it("appends safe source-deleted assignment receipts at index36 without moving an
   expect(value).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v23",
+      version: "local-member-records-v24",
       records: { sampleAssignmentOperations: [record] },
     },
   });
@@ -753,3 +753,29 @@ it("appends safe source-deleted assignment receipts at index36 without moving an
       ).kind,
     ).toBe("ready");
 });
+
+it.each([
+  [37, "workflowReviewRequests", "FROM workflow_review_requests r"],
+  [38, "workflowReviewAssignments", "FROM workflow_review_grants g"],
+] as const)(
+  "accepts appended workflow export section %s without moving existing cursors",
+  async (index, name, source) => {
+    const record = { receipt: "invented owned metadata" };
+    const fake = fakePool({ id: "member-1" }, (sql) =>
+      sql.includes(source) ? [{ _key: ["owned"], ...record }] : [],
+    );
+    const result = await memberExportStore(fake.pool, secret).exportOwned(
+      "owner",
+      signed([2, index, ["key"], 2, Date.now() + 60000]),
+    );
+    expect(result).toMatchObject({
+      kind: "ready",
+      payload: { records: { [name]: [record] } },
+    });
+    const query = fake.statements.find((sql) => sql.includes(source))!;
+    expect(query).toContain("r.member_id=$1 AND w.deleting_at IS NULL");
+    expect(query).not.toMatch(
+      /moderator_id|administrator_id|operation_id|note|token_hash/,
+    );
+  },
+);

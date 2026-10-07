@@ -72,6 +72,9 @@ export function config(env: NodeJS.ProcessEnv) {
       "DNE_SAMPLE_ASSIGNMENT_ADMINISTRATION must be enabled or disabled.",
     );
   const reviewerWorklistReads = env.DNE_REVIEWER_WORKLIST_READS ?? "enabled";
+  const workflowReviewRequests = env.DNE_WORKFLOW_REVIEW_REQUESTS ?? "disabled";
+  if (!["enabled", "disabled"].includes(workflowReviewRequests))
+    throw Error("DNE_WORKFLOW_REVIEW_REQUESTS must be enabled or disabled.");
   if (!["enabled", "disabled"].includes(reviewerWorklistReads))
     throw Error("DNE_REVIEWER_WORKLIST_READS must be enabled or disabled.");
   const reviewTimeWrites = env.DNE_REVIEW_TIME_WRITES ?? "disabled";
@@ -101,6 +104,7 @@ export function config(env: NodeJS.ProcessEnv) {
     throw Error("DNE_LOCAL_EVENT_SCHEDULING must be enabled or disabled.");
   return {
     localStaffEntry: localStaffEntry === "enabled",
+    workflowReviewRequests: workflowReviewRequests === "enabled",
     localSupportAssignment: localSupportAssignment === "enabled",
     sampleAssignmentAdministration:
       sampleAssignmentAdministration === "enabled",
