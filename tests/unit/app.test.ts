@@ -1,4 +1,5 @@
 import { disabledEventEnrollmentStore } from "../../src/event-enrollments.ts";
+import { EVENT_PREVIEWS } from "../../src/events.ts";
 import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import request from "supertest";
 import { createServer, type Server } from "node:http";
@@ -5216,3 +5217,205 @@ it("EVCANCEL-03 exact cancelled member detail remains readable without offering 
   expect(response.text).toContain("Event cancelled");
   expect(response.text).not.toContain("Try local registration rehearsal");
 });
+it("REHSCHED-05 invalid catalog deadlines must withhold member discovery and exact detail", async () => {
+  const db = storage();
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const event = {
+    ...EVENT_PREVIEWS.find((e) => e.status === "current")!,
+    goals: [member.goal],
+  };
+  const catalog = {
+    list: vi.fn(async () => ({
+      kind: "ready" as const,
+      value: [event],
+      observedAt: new Date(),
+      deadline: NaN,
+    })),
+    find: vi.fn(async () => ({
+      kind: "ready" as const,
+      value: event,
+      observedAt: new Date(),
+      deadline: NaN,
+    })),
+  };
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", memberEvents: catalog }),
+  );
+  expect((await agent.get("/events").set("Host", host)).status).toBe(503);
+  expect(
+    (await agent.get(`/events/${event.id}/${event.version}`).set("Host", host))
+      .status,
+  ).toBe(503);
+});
+it("REHSCHED-02 shared catalog supplies an exact dated member event instead of the static fixture", async () => {
+  const db = storage();
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const event = {
+    ...EVENT_PREVIEWS.find((e) => e.status === "current")!,
+    id: "local-rehearsal-33333333-3333-4333-8333-333333333333",
+    goals: [member.goal],
+  };
+  const catalog = {
+    list: vi.fn(async () => ({
+      kind: "ready" as const,
+      value: [event],
+      observedAt: new Date(),
+      deadline: performance.now() + 60000,
+    })),
+    find: vi.fn(async () => ({
+      kind: "ready" as const,
+      value: event,
+      observedAt: new Date(),
+      deadline: performance.now() + 60000,
+    })),
+  };
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", memberEvents: catalog }),
+  );
+  const list = await agent.get("/events").set("Host", host);
+  expect(list.status).toBe(200);
+  expect(list.text).toContain(`/events/${event.id}/${event.version}`);
+  const detail = await agent
+    .get(`/events/${event.id}/${event.version}`)
+    .set("Host", host);
+  expect(detail.status).toBe(200);
+  expect(detail.text).toContain(event.startsAt);
+});
+it.each(["denied", "unavailable", "invalid"] as const)(
+  "REHSCHED-04/05 catalog %s does not confirm discovery or detail availability",
+  async (kind) => {
+    const db = storage();
+    db.session.mockResolvedValue({ kind: "active", learner: member });
+    const catalog = {
+      list: vi.fn(async () => ({ kind })),
+      find: vi.fn(async () => ({ kind })),
+    };
+    const agent = await managedAgent(
+      app(db, { origin, secret: "secret", memberEvents: catalog }),
+    );
+    expect((await agent.get("/events").set("Host", host)).status).toBe(503);
+    expect(
+      (await agent.get("/events/everyday-ai-preview/2").set("Host", host))
+        .status,
+    ).toBe(kind === "invalid" ? 404 : 503);
+  },
+);
+it("REHSCHED-04 absent exact catalog version is404 and lookup failures are503 without private diagnostics", async () => {
+  const db = storage();
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const catalog = {
+    list: vi.fn(async () => ({
+      kind: "ready" as const,
+      value: [],
+      observedAt: new Date(),
+      deadline: performance.now() + 60000,
+    })),
+    find: vi.fn(async () => ({
+      kind: "ready" as const,
+      value: undefined,
+      observedAt: new Date(),
+      deadline: performance.now() + 60000,
+    })),
+  };
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", memberEvents: catalog }),
+  );
+  expect((await agent.get("/events/unknown/1").set("Host", host)).status).toBe(
+    404,
+  );
+  catalog.list.mockRejectedValue(Error("private diagnostic"));
+  catalog.find.mockRejectedValue(Error("private diagnostic"));
+  for (const path of ["/events", "/events/unknown/1"]) {
+    const response = await agent.get(path).set("Host", host);
+    expect(response.status).toBe(503);
+    expect(response.text).not.toContain("private diagnostic");
+  }
+});
+it.each(["already-expired", "expires-during-cancellation"])(
+  "REHSCHED-05 catalog %s withholds discovery and detail handback",
+  async (timing) => {
+    const db = storage();
+    db.session.mockResolvedValue({ kind: "active", learner: member });
+    const event = EVENT_PREVIEWS.find((e) => e.status === "current")!;
+    const listing = {
+      kind: "ready" as const,
+      value: [event],
+      observedAt: new Date(),
+      deadline: timing === "already-expired" ? 0 : performance.now() + 60000,
+    };
+    const detail = { ...listing, value: event };
+    const catalog = {
+      list: vi.fn(async () => listing),
+      find: vi.fn(async () => detail),
+    };
+    const enrollments = {
+      ...disabledEventEnrollmentStore(),
+      cancellations: vi.fn(async () => {
+        listing.deadline = 0;
+        detail.deadline = 0;
+        return [];
+      }),
+    };
+    const agent = await managedAgent(
+      app(db, {
+        origin,
+        secret: "secret",
+        memberEvents: catalog,
+        eventEnrollments: enrollments,
+      }),
+    );
+    expect((await agent.get("/events?all=1").set("Host", host)).status).toBe(
+      503,
+    );
+    if (timing !== "already-expired")
+      detail.deadline = performance.now() + 60000;
+    expect(
+      (
+        await agent
+          .get(`/events/${event.id}/${event.version}`)
+          .set("Host", host)
+      ).status,
+    ).toBe(503);
+  },
+);
+it.each(["expired", "nonfinite"])(
+  "REHSCHED-05 %s catalog lifetime during rendering withholds discovery and detail",
+  async (timing) => {
+    const db = storage();
+    db.session.mockResolvedValue({ kind: "active", learner: member });
+    const event = structuredClone(
+      EVENT_PREVIEWS.find((e) => e.localRegistration === true)!,
+    );
+    const title = "Invented render-boundary title";
+    const listing = {
+      kind: "ready" as const,
+      value: [event],
+      observedAt: new Date(),
+      deadline: performance.now() + 60000,
+    };
+    const detail = { ...listing, value: event };
+    Object.defineProperty(event, "title", {
+      get() {
+        listing.deadline = timing === "nonfinite" ? NaN : 0;
+        detail.deadline = listing.deadline;
+        return title;
+      },
+    });
+    const catalog = {
+      list: vi.fn(async () => listing),
+      find: vi.fn(async () => detail),
+    };
+    const agent = await managedAgent(
+      app(db, { origin, secret: "secret", memberEvents: catalog }),
+    );
+    for (const path of [
+      "/events?all=1",
+      `/events/${event.id}/${event.version}`,
+    ]) {
+      listing.deadline = detail.deadline = performance.now() + 60000;
+      const response = await agent.get(path).set("Host", host);
+      expect(response.status).toBe(503);
+      expect(response.text).not.toContain(title);
+    }
+  },
+);

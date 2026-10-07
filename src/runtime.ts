@@ -5,6 +5,9 @@ import { reviewerWorklistStore } from "./reviewer-worklist.ts";
 import { reviewTimeStore } from "./review-time-store.ts";
 import { eventCancellationStore } from "./event-cancellations.ts";
 import { eventEnrollmentStore } from "./event-enrollments.ts";
+import { eventCatalogReader } from "./event-catalog.ts";
+import { memberEventCatalog } from "./member-event-catalog.ts";
+import { eventRehearsalStore } from "./event-rehearsals.ts";
 import { sampleFeedbackStore } from "./sample-feedback.ts";
 import { Pool } from "pg";
 import type { Server } from "node:http";
@@ -80,6 +83,7 @@ export async function start(env: NodeJS.ProcessEnv) {
     await migrate(pool);
     await seedDraftPack(pool);
     const objects = fileObjectStorage(settings.privateStorageRoot);
+    const eventReader = eventCatalogReader();
     const options = {
       ...settings,
       staffEntry: staffEntryStore(pool),
@@ -87,6 +91,7 @@ export async function start(env: NodeJS.ProcessEnv) {
         mode: settings.mode,
         writes: settings.localEventAdmin,
         registration: settings.eventRegistration,
+        catalogReader: eventReader,
       }),
       supportAssignment: supportAssignmentStore(pool, settings.secret),
       sampleAssignments: sampleAssignmentStore(pool, {
@@ -138,6 +143,13 @@ export async function start(env: NodeJS.ProcessEnv) {
       eventEnrollments: eventEnrollmentStore(pool, {
         mode: settings.mode,
         enabled: settings.eventRegistration,
+        catalogReader: eventReader,
+      }),
+      memberEvents: memberEventCatalog(pool, settings.mode, eventReader),
+      eventRehearsals: eventRehearsalStore(pool, {
+        mode: settings.mode,
+        writes: settings.eventScheduling,
+        registration: settings.eventRegistration,
       }),
       supportRequests: supportRequestStore(pool, undefined, {
         timeWrites: settings.supportTimeWrites,

@@ -159,6 +159,9 @@ import {
   type EventEnrollmentStore,
 } from "./event-enrollments.ts";
 import { eventPreviewDetail, listEventPreviews } from "./events.ts";
+import type { MemberEventCatalog } from "./member-event-catalog.ts";
+import type { EventRehearsalStore } from "./event-rehearsal-values.ts";
+import { mountEventRehearsalRoutes } from "./event-rehearsal-routes.ts";
 import {
   AttemptOperationUnconfirmed,
   disabledAttemptStore,
@@ -327,6 +330,8 @@ export function app(
     reviewTime?: ReturnType<typeof reviewTimeStore>;
     reviewTimeWrites?: boolean;
     eventEnrollments?: EventEnrollmentStore;
+    memberEvents?: MemberEventCatalog;
+    eventRehearsals?: EventRehearsalStore;
     eventCancellations?: EventCancellationStore;
     localEventAdmin?: boolean;
     eventRegistration?: boolean;
@@ -444,6 +449,7 @@ export function app(
       options.circleDiscussionEnabled === true,
     circleGrants: Boolean(options.circleGrantAdmin),
     eventCancellations: Boolean(options.eventCancellations),
+    eventRehearsals: Boolean(options.eventRehearsals),
     localAi: Boolean(options.localAiControl),
     receipts: Boolean(options.manualObservations),
   });
@@ -1207,6 +1213,7 @@ export function app(
   mountSupportAssignmentRoutes(app, options.supportAssignment, options);
   mountCircleGrantRoutes(app, options.circleGrantAdmin, options);
   mountEventCancellationRoutes(app, options.eventCancellations, options);
+  mountEventRehearsalRoutes(app, options.eventRehearsals, options);
   mountSampleAssignmentRoutes(app, options.sampleAssignments, {
     // Runtime and owned port0 previews fill the actual bound origin after listen.
     get origin() {
@@ -1844,15 +1851,28 @@ export function app(
   app.get("/events", async (req, res) => {
     const member = res.locals.learner as Learner;
     const allTopics = req.query.all === "1";
-    const items = listEventPreviews(
-      {
-        goal: member.goal,
-        domainTags: member.domainTags ?? [],
-        itRoles: member.itRoles ?? [],
-      },
-      { allTopics },
-    );
     try {
+      const catalog = options.memberEvents
+        ? await options.memberEvents.list(res.locals.token)
+        : undefined;
+      if (
+        catalog &&
+        (catalog.kind !== "ready" ||
+          !Number.isFinite(catalog.deadline) ||
+          performance.now() >= catalog.deadline)
+      )
+        throw Error("Event catalog unavailable");
+      const items = listEventPreviews(
+        {
+          goal: member.goal,
+          domainTags: member.domainTags ?? [],
+          itRoles: member.itRoles ?? [],
+        },
+        {
+          allTopics,
+          ...(catalog?.kind === "ready" ? { catalog: catalog.value } : {}),
+        },
+      );
       const cancellations = await (
         options.eventEnrollments ?? disabledEventEnrollmentStore()
       ).cancellations(
@@ -1863,15 +1883,26 @@ export function app(
         })),
       );
       if (!cancellations) throw Error("Event cancellation status unavailable");
-      res.send(
-        eventDiscoveryPage(
-          items,
-          member.timezone,
-          allTopics,
-          options.eventRegistration ?? false,
-          cancellations,
-        ),
+      if (
+        catalog?.kind === "ready" &&
+        (!Number.isFinite(catalog.deadline) ||
+          performance.now() >= catalog.deadline)
+      )
+        throw Error("Event catalog read expired");
+      const html = eventDiscoveryPage(
+        items,
+        member.timezone,
+        allTopics,
+        options.eventRegistration ?? false,
+        cancellations,
       );
+      if (
+        catalog?.kind === "ready" &&
+        (!Number.isFinite(catalog.deadline) ||
+          performance.now() >= catalog.deadline)
+      )
+        throw Error("Event catalog render expired");
+      res.send(html);
     } catch {
       res
         .status(503)
@@ -1886,35 +1917,68 @@ export function app(
   app.get("/events/:id/:version", async (req, res) => {
     const rawVersion = req.params.version as string;
     const version = /^[1-9][0-9]*$/.test(rawVersion) ? Number(rawVersion) : NaN;
-    const detail = eventPreviewDetail(req.params.id as string, version);
-    if (detail.status === "missing") {
-      res
-        .status(404)
-        .send(
-          errorPage(
-            "Event version unavailable",
-            "This exact event version is not in the local preview. Browse current sample events separately.",
-          ),
-        );
-      return;
-    }
     try {
+      const catalog = options.memberEvents
+        ? await options.memberEvents.find(
+            res.locals.token,
+            req.params.id as string,
+            version,
+          )
+        : undefined;
+      if (catalog && catalog.kind !== "ready" && catalog.kind !== "invalid")
+        throw Error("Event catalog unavailable");
+      if (
+        catalog?.kind === "ready" &&
+        (!Number.isFinite(catalog.deadline) ||
+          performance.now() >= catalog.deadline)
+      )
+        throw Error("Event catalog read expired");
+      const detail = eventPreviewDetail(
+        req.params.id as string,
+        version,
+        new Date(),
+        catalog
+          ? catalog.kind === "ready" && catalog.value
+            ? [catalog.value]
+            : []
+          : undefined,
+      );
+      if (detail.status === "missing") {
+        res
+          .status(404)
+          .send(
+            errorPage(
+              "Event version unavailable",
+              "This exact event version is not in the local preview. Browse current sample events separately.",
+            ),
+          );
+        return;
+      }
       const cancellations = await (
         options.eventEnrollments ?? disabledEventEnrollmentStore()
       ).cancellations(res.locals.token, [
         { eventId: detail.event.id, eventVersion: detail.event.version },
       ]);
       if (!cancellations) throw Error("Event cancellation status unavailable");
-      res
-        .status(detail.status === "current" ? 200 : 410)
-        .send(
-          eventDetailPage(
-            detail,
-            (res.locals.learner as Learner).timezone,
-            options.eventRegistration ?? false,
-            cancellations[0]?.cancelledAt ?? null,
-          ),
-        );
+      if (
+        catalog?.kind === "ready" &&
+        (!Number.isFinite(catalog.deadline) ||
+          performance.now() >= catalog.deadline)
+      )
+        throw Error("Event catalog read expired");
+      const html = eventDetailPage(
+        detail,
+        (res.locals.learner as Learner).timezone,
+        options.eventRegistration ?? false,
+        cancellations[0]?.cancelledAt ?? null,
+      );
+      if (
+        catalog?.kind === "ready" &&
+        (!Number.isFinite(catalog.deadline) ||
+          performance.now() >= catalog.deadline)
+      )
+        throw Error("Event catalog render expired");
+      res.status(detail.status === "current" ? 200 : 410).send(html);
     } catch {
       res
         .status(503)

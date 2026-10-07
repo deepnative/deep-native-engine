@@ -68,12 +68,15 @@ for (const [index, [background, goal]] of (
       owners.push(await onboard(page, origin, background, goal));
       owners.push(await onboard(peer, origin, background, goal));
       await page.goto(`${origin}/events`);
-      await page
-        .getByRole("link", {
-          name: "Local event registration rehearsal",
-          exact: true,
-        })
-        .click();
+      // This journey exercises the unchanged static event; dated rehearsals
+      // intentionally share its trusted title but have distinct immutable IDs.
+      const originalEvent = page.locator(
+        'a[href="/events/local-registration-rehearsal/1"]',
+      );
+      await expect(originalEvent).toHaveText(
+        "Local event registration rehearsal",
+      );
+      await originalEvent.click();
       await page
         .getByRole("link", { name: "Try local registration rehearsal" })
         .click();

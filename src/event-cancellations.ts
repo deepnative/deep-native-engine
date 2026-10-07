@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { ApplicationMode } from "./adapters.ts";
 import { EVENT_PREVIEWS, type EventPreview } from "./events.ts";
+import {
+  eventCatalogReader,
+  type EventCatalogReader,
+} from "./event-catalog.ts";
 import { hash } from "./store.ts";
 import { staffCredential } from "./staff-entry-selection.ts";
 import {
@@ -48,14 +52,13 @@ export function eventCancellationStore(
     writes: boolean;
     registration: boolean;
     catalog?: readonly EventPreview[];
+    catalogReader?: EventCatalogReader;
   },
 ): EventCancellationStore {
-  const catalog = options.catalog ?? EVENT_PREVIEWS,
+  const reader =
+      options.catalogReader ??
+      eventCatalogReader(options.catalog ?? EVENT_PREVIEWS),
     creationEnabled = options.writes && options.registration;
-  const find = (scope: EventCancellationScope) =>
-    catalog.find(
-      (e) => e.id === scope.eventId && e.version === scope.eventVersion,
-    );
   async function run<T>(
     token: string,
     writing: boolean,
@@ -207,7 +210,11 @@ export function eventCancellationStore(
       if (!eventCancellationScope(scope))
         return Promise.resolve({ kind: "invalid" });
       return run(token, false, async (ctx) => {
-        const event = find(scope);
+        const event = await reader.find(
+          ctx.tx,
+          scope.eventId,
+          scope.eventVersion,
+        );
         demand(
           event?.status === "current" && event.localRegistration === true,
           "unavailable",
@@ -254,7 +261,11 @@ export function eventCancellationStore(
           demand(saved?.id === prior.cancellationId, "unavailable");
           return { receipt: saved, replayed: true };
         }
-        const event = find(scope);
+        const event = await reader.find(
+          ctx.tx,
+          scope.eventId,
+          scope.eventVersion,
+        );
         eligible(event);
         demand(matchingSnapshot(event, snapshot), "conflict");
         await ctx.tx.observe([ctx.expires, new Date(event.startsAt)]);

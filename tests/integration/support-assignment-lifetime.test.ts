@@ -84,6 +84,19 @@ async function blockedBy(pid: number) {
   }
   throw Error("Expected actual PostgreSQL lock wait");
 }
+async function databaseExpiryDeadline(expires: Date) {
+  const row = (
+    await pool.query<{ remaining: string }>(
+      "SELECT EXTRACT(EPOCH FROM ($1::timestamptz-clock_timestamp()))*1000 AS remaining",
+      [expires],
+    )
+  ).rows[0];
+  const remaining = Number(row?.remaining);
+  expect(Number.isFinite(remaining)).toBe(true);
+  // Anchor after receiving the real database observation. Host wall-clock skew
+  // must not let synchronous handback finish before PostgreSQL authority expires.
+  return performance.now() + Math.max(0, remaining) + 25;
+}
 async function afterExpiry(at: Date) {
   await pool.query(
     "SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM ($1::timestamptz-clock_timestamp())))+0.025)",
@@ -251,6 +264,8 @@ it.each(["commit", "release", "observation"])(
       expires,
       f.adminId,
     ]);
+    const handbackDeadline =
+      phase === "release" ? await databaseExpiryDeadline(expires) : 0;
     let releases = 0,
       commits = 0;
     const scoped = {
@@ -270,7 +285,7 @@ it.each(["commit", "release", "observation"])(
           release: (error?: Error) => {
             releases++;
             if (phase === "release") {
-              while (Date.now() <= +expires + 20) {
+              while (performance.now() <= handbackDeadline) {
                 /* Exercise synchronous native handback at actual expiry. */
               }
             }
@@ -286,6 +301,13 @@ it.each(["commit", "release", "observation"])(
     expect(result).toEqual({
       kind: phase === "observation" ? "denied" : "unavailable",
     });
+    expect(
+      (
+        await pool.query("SELECT $1::timestamptz<=clock_timestamp() expired", [
+          expires,
+        ])
+      ).rows[0].expired,
+    ).toBe(true);
     expect(releases).toBe(1);
     expect(commits).toBe(phase === "observation" ? 0 : 1);
     const freshAdmin = fresh();
@@ -597,6 +619,8 @@ for (const authority of ["operator", "member", "grant"] as const)
           f.memberId,
         ]);
       if (authority === "grant") input.expiresAt = expires;
+      const handbackDeadline =
+        phase === "release" ? await databaseExpiryDeadline(expires) : 0;
       let commits = 0,
         releases = 0;
       const scoped = {
@@ -614,7 +638,7 @@ for (const authority of ["operator", "member", "grant"] as const)
             release: (error?: Error) => {
               releases++;
               if (phase === "release")
-                while (Date.now() <= +expires + 20) {
+                while (performance.now() <= handbackDeadline) {
                   /* Actual synchronous handback crossing the finite authority. */
                 }
               client.release(error);
@@ -627,6 +651,14 @@ for (const authority of ["operator", "member", "grant"] as const)
       ).toEqual({ kind: "unavailable" });
       expect(commits).toBe(1);
       expect(releases).toBe(1);
+      expect(
+        (
+          await pool.query(
+            "SELECT $1::timestamptz<=clock_timestamp() expired",
+            [expires],
+          )
+        ).rows[0].expired,
+      ).toBe(true);
       const recovered = value(
         await subject.history(
           f.admin,
