@@ -1,3 +1,5 @@
+import { eventAttendanceStore } from "../../src/event-attendance.ts";
+import type { Pool } from "pg";
 import { disabledEventEnrollmentStore } from "../../src/event-enrollments.ts";
 import { EVENT_PREVIEWS } from "../../src/events.ts";
 import { beforeEach, afterEach, it, expect, vi } from "vitest";
@@ -1743,7 +1745,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v24",
+          version: "local-member-records-v25",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -1783,7 +1785,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v24",
+    version: "local-member-records-v25",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -4622,7 +4624,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v24" as const,
+    version: "local-member-records-v25" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -5419,3 +5421,29 @@ it.each(["expired", "nonfinite"])(
     }
   },
 );
+
+it("ATTEND-08 configured private attendance cannot expose member receipt routes in live mode", async () => {
+  const db = storage();
+  const query = vi.fn();
+  const attendance = eventAttendanceStore({ query } as unknown as Pool, {
+    mode: "live",
+    enabled: true,
+    registration: true,
+  });
+  const agent = await managedAgent(
+    app(db, {
+      origin,
+      secret: "secret",
+      mode: "live",
+      eventAttendance: attendance,
+    }),
+  );
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  await agent
+    .get(
+      "/events/registrations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/attendance",
+    )
+    .set("Host", host)
+    .expect(404);
+  expect(query).not.toHaveBeenCalled();
+});

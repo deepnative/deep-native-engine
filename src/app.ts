@@ -7,6 +7,8 @@ import type { SupportAssignmentStore } from "./support-assignment.ts";
 import { mountSampleAssignmentRoutes } from "./sample-assignment-routes.ts";
 import type { SampleAssignmentStore } from "./sample-assignment-values.ts";
 import { mountEventCancellationRoutes } from "./event-cancellation-routes.ts";
+import { mountEventAttendanceRoutes } from "./event-attendance-routes.ts";
+import type { EventAttendanceRuntimeStore } from "./event-attendance.ts";
 import type { EventCancellationStore } from "./event-cancellation-values.ts";
 import { mountCircleGrantRoutes } from "./circle-grant-routes.ts";
 import type { CircleGrantAdminStore } from "./circle-grant-values.ts";
@@ -334,6 +336,7 @@ export function app(
     reviewTime?: ReturnType<typeof reviewTimeStore>;
     reviewTimeWrites?: boolean;
     eventEnrollments?: EventEnrollmentStore;
+    eventAttendance?: EventAttendanceRuntimeStore;
     memberEvents?: MemberEventCatalog;
     eventRehearsals?: EventRehearsalStore;
     eventCancellations?: EventCancellationStore;
@@ -456,6 +459,7 @@ export function app(
       options.circleDiscussionEnabled === true,
     circleGrants: Boolean(options.circleGrantAdmin),
     eventCancellations: Boolean(options.eventCancellations),
+    eventAttendance: Boolean(options.eventAttendance),
     eventRehearsals: Boolean(options.eventRehearsals),
     workflowReviews: Boolean(options.workflowReviewStaff),
     localAi: Boolean(options.localAiControl),
@@ -1222,6 +1226,7 @@ export function app(
   mountSupportAssignmentRoutes(app, options.supportAssignment, options);
   mountCircleGrantRoutes(app, options.circleGrantAdmin, options);
   mountEventCancellationRoutes(app, options.eventCancellations, options);
+  mountEventAttendanceRoutes(app, options.eventAttendance, options);
   mountEventRehearsalRoutes(app, options.eventRehearsals, options);
   mountSampleAssignmentRoutes(app, options.sampleAssignments, {
     // Runtime and owned port0 previews fill the actual bound origin after listen.
@@ -1856,6 +1861,7 @@ export function app(
   mountEventEnrollmentRoutes(
     app,
     options.eventEnrollments ?? disabledEventEnrollmentStore(),
+    Boolean(options.eventAttendance) && options.mode !== "live",
   );
   app.get("/events", async (req, res) => {
     const member = res.locals.learner as Learner;

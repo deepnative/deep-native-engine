@@ -358,6 +358,27 @@ const sections = {
      WHERE r.member_id=$1 AND w.deleting_at IS NULL`,
     "g.id",
   ),
+  // Append indexes39/40 after v24. Keep cursor v2 and every existing section
+  // position; export exact owner facts with generic attribution, never staff
+  // credentials, directory references or operation keys.
+  eventAttendancePermissions: section(
+    `p.id AS "permissionId",p.registration_id AS "registrationId",e.event_id AS "eventId",e.event_version AS "eventVersion",
+     p.starts_at AS "startsAt",p.expires_at AS "expiresAt",p.created_at AS "createdAt",p.withdrawn_at AS "withdrawnAt",
+     'Local platform administrator' AS attribution`,
+    `private_event_attendance_permissions p JOIN private_event_enrollments e ON e.id=p.registration_id AND e.member_id=p.member_id AND e.workspace_id=p.workspace_id
+     JOIN workspaces w ON w.id=p.workspace_id AND w.owner_principal_id=p.member_id
+     WHERE p.member_id=$1 AND w.deleting_at IS NULL`,
+    "p.id",
+  ),
+  eventAttendanceObservations: section(
+    `o.id AS "observationId",o.permission_id AS "permissionId",o.registration_id AS "registrationId",
+     e.event_id AS "eventId",e.event_version AS "eventVersion",o.recorded_at AS "recordedAt",
+     'Local platform administrator' AS attribution`,
+    `private_event_attendance_observations o JOIN private_event_enrollments e ON e.id=o.registration_id AND e.member_id=o.member_id AND e.workspace_id=o.workspace_id
+     JOIN workspaces w ON w.id=o.workspace_id AND w.owner_principal_id=o.member_id
+     WHERE o.member_id=$1 AND w.deleting_at IS NULL`,
+    "o.id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -371,7 +392,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v24";
+  version: "local-member-records-v25";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -505,7 +526,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v24",
+          version: "local-member-records-v25",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

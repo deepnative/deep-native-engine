@@ -1,0 +1,34 @@
+# Private attendance BDD evidence map
+
+Issue [#490](https://github.com/deepnative/deep-native-engine/issues/490) is the live authority for scope and completion. This maps its accepted private local outcome; parent [#119](https://github.com/deepnative/deep-native-engine/issues/119) remains separate. Actual exact-commit verification, PR/main CI and demonstrated-main revision are recorded in the live issue closeout. A focused dirty-source pass below is not that closeout.
+
+| Scenario | Observable behavior | Executable evidence |
+| --- | --- | --- |
+| ATTEND-01 | Checked, unchecked-to-explicit finite exact member permission; own staff reference; no inferred permission | `event-attendance-migration.test.ts`, `private-event-attendance.test.ts`, reader/permissions/routes/views unit tests; L197 |
+| ATTEND-02 | Genuine event/permission window, selected current administrator and immutable database-timed observation | `event-attendance-observation.test.ts`, `event-attendance-contention.test.ts`, observation unit tests; L197 |
+| ATTEND-03 | Exact owner receipt/history, missing fact language, generic attribution, private source denial and current sharing | history/reader/views/routes unit tests, migration/observation integration; L197 |
+| ATTEND-04 | Sharing withdrawal retains fact; exact removal deletes identifying links; erasure/replacement deny old scope | migration/observation/contention integration, permissions/removal/inspection unit tests; L197 |
+| ATTEND-05 | Observed privacy/observation waiter orders; current principal/source/window; expiry through query, COMMIT reply, native and render | contention integration, transaction/observation/routes unit tests; render checks use controlled unit clock, not a fake database event date |
+| ATTEND-06 | Successful COMMIT lost reply; fresh read-only original-key inspection and deliberate same-instruction repeat | migration/observation/contention/private-runtime integration, inspection/routes/views unit tests; L198 actual member browser recovery |
+| ATTEND-07 | Signed20-item history pages,105 retained permissions across100-record export pages, foreign/forged/deleted cursor denial, populated reapply and erasure | migration integration, export/history unit tests; L197 owned fact export |
+| ATTEND-08 | Normal member/staff entry, three audiences, keyboard/mobile, explicit confirmation, safe errors and default-off/live/pause | L197 and L198 on desktop/mobile Chromium; runtime/config/app/views/routes unit tests; private-runtime integration |
+
+## Retained first failures and corrections
+
+The initial missing member attendance endpoint returned404 instead of200 on unchanged main2daa4b8; implementation then passed the same real PostgreSQL HTTP journey. Missing original-key recovery likewise returned404 before its implementation. A source-borrowing operation insert incorrectly accepted another registration's permission; the database guard now rejects it. These are behavioral product failures, distinct from fixture errors.
+
+The original unchanged unit gates initially failed required coverage, even though assertions passed. All source inclusions, per-module/global99% thresholds and retry0 remain unchanged. Original results and source snapshots are retained; the subsequent3793-test dirty-source gate passes all assertions with S99.93/B99.72/F99.95/L99.94 and every module>=99. Full exact-commit `make verify` remains required after this measurement.
+
+L197's first run failed because its test used an ambiguous scheduling input shared with the read-only inspection form. Binding the existing new-schedule form repaired the fixture; the complete genuine-window journey then passed both browsers with all three audiences. No product clock or existing gate timeout was changed. L197 declares240seconds before first execution solely for the scheduler's actual two-minute lead time.
+
+L198 exposed that browser Back cannot recover a private uncached POST response after same-tab inspection (`ERR_CACHE_MISS`). Inspection now explicitly opens a new tab, retaining the original uncertain form and its unchecked deliberate-repeat action. The corrected real successful-COMMIT-loss journey passes both browsers and preserves exact permission ID, creation time and deadline after manual repeat and a creation-pause restart. The application does not redispatch automatically.
+
+History's original sharing-state test passed21 assertions and failed the new expiry assertion. Receipt/history now share the same database-observed sharing projection, retaining the original observation while accurately showing expiry or cancellation. Corrected22 assertions pass. A missed updated observed-time argument caused TS2554 during this repair; the call site was fixed before clean type checking.
+
+Other retained setup/assertion corrections include invalid background/goal literals, an invalid erasure-method name, the real20 future-event scheduling limit in a multipage fixture, an uppercase test UUID that contained no letters, a mutation assertion matching `SELECT FOR UPDATE`, and the old invalid export upper index becoming an intentionally appended valid section. None represents removed privacy denial, lowered coverage, changed existing journey denominator, an automatic retry or qualified acceptance. Initial lint findings were fixed without disabling rules.
+
+Full original logs, raw reports, tested source snapshots and SHA256 manifests are kept in the owner's private `dne490-delivery-evidence` folder, including a disclosed loss of the original raw JSON for two early unit runs; their original console/source are retained and no later raw report substitutes for them. The live issue links checkpoints. Do not publish credentials, private member records or recovery forms with evidence.
+
+## Release boundaries
+
+Existing L01–L196 are preserved; explicitly scoped L197/L198 are appended in initial-learning-v101. The separate full-MVP-v1 register is unchanged. Local invented observation is not real clinic fulfillment, assessment, qualification, paid access or deployment. [Use/pause instructions](PRIVATE-EVENT-ATTENDANCE.md) explain additive migration066 and retained privacy readers. No destructive downgrade or hosted-backup recall is claimed.

@@ -7,7 +7,7 @@ interface Cursor {
 }
 export function workflowReviewCursor(
   secret: string,
-  purpose: "worklist" | "member-history",
+  purpose: "worklist" | "member-history" | "attendance-history",
 ) {
   const mac = (text: string) =>
     createHmac("sha256", secret)

@@ -102,6 +102,9 @@ export function config(env: NodeJS.ProcessEnv) {
   const eventScheduling = env.DNE_LOCAL_EVENT_SCHEDULING ?? "disabled";
   if (!["enabled", "disabled"].includes(eventScheduling))
     throw Error("DNE_LOCAL_EVENT_SCHEDULING must be enabled or disabled.");
+  const eventAttendance = env.DNE_EVENT_ATTENDANCE ?? "disabled";
+  if (!["enabled", "disabled"].includes(eventAttendance))
+    throw Error("DNE_EVENT_ATTENDANCE must be enabled or disabled.");
   return {
     localStaffEntry: localStaffEntry === "enabled",
     workflowReviewRequests: workflowReviewRequests === "enabled",
@@ -112,6 +115,7 @@ export function config(env: NodeJS.ProcessEnv) {
     reviewerWorklistReads: reviewerWorklistReads === "enabled",
     reviewTimeWrites: reviewTimeWrites === "enabled",
     eventRegistration: eventRegistration === "enabled",
+    eventAttendance: eventAttendance === "enabled",
     eventScheduling: eventScheduling === "enabled",
     localEventAdmin: localEventAdmin === "enabled",
     circleDiscussion: circleDiscussion === "enabled",

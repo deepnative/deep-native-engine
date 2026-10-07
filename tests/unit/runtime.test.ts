@@ -46,6 +46,26 @@ const env = {
   DNE_PORT: "4567",
   DNE_APP_MODE: "test",
 };
+it("ATTEND-08 runtime attendance creation requires actual local staff entry alongside its explicit flag", async () => {
+  server();
+  const running = await start({
+    ...env,
+    DNE_EVENT_ATTENDANCE: "enabled",
+    DNE_EVENT_REGISTRATION: "enabled",
+    DNE_LOCAL_STAFF_ENTRY: "disabled",
+  });
+  try {
+    const options = doubles.app.mock.calls[0]![1];
+    expect(
+      await options.eventAttendance.checkPermission("b".repeat(64), {
+        registrationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        administratorId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      }),
+    ).toEqual({ kind: "denied" });
+  } finally {
+    await running.close();
+  }
+});
 beforeEach(() => {
   vi.clearAllMocks();
   doubles.app.mockImplementation(() => ({ listen: doubles.listen }));
