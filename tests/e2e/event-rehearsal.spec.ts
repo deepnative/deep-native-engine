@@ -428,6 +428,9 @@ test("[L191] REHSCHED-06 administrator manually recovers an actual committed sch
           .n,
       ).toBe(1);
   } finally {
+    // Dispose this test's browser connections before waiting for its listener.
+    // Node 24 can retain an unused preconnection while server.close() waits.
+    await page.context().close();
     await recovery?.close();
     await pool.end();
     if (created) {
