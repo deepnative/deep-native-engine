@@ -43,6 +43,19 @@ async function fixture() {
     },
   };
 }
+async function databaseExpiryDeadline(expires: Date) {
+  const row = (
+    await pool.query<{ remaining: string }>(
+      "SELECT EXTRACT(EPOCH FROM ($1::timestamptz-clock_timestamp()))*1000 AS remaining",
+      [expires],
+    )
+  ).rows[0];
+  const remaining = Number(row?.remaining);
+  expect(Number.isFinite(remaining)).toBe(true);
+  // Anchor after receiving the real database observation. Host wall-clock skew
+  // must not let synchronous handback finish before PostgreSQL authority expires.
+  return performance.now() + Math.max(0, remaining) + 25;
+}
 async function afterExpiry(expires: Date) {
   await pool.query(
     "SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM ($1::timestamptz-clock_timestamp())))+0.025)",
@@ -180,6 +193,8 @@ it.each(lifetimeCases)(
       authority === "actor" ? f.adminId : f.staffId,
     ]);
     if (authority === "target") f.input.expiresAt = expires;
+    const handbackDeadline =
+      phase === "release" ? await databaseExpiryDeadline(expires) : 0;
     let commits = 0,
       observations = 0,
       releases = 0;
@@ -213,7 +228,7 @@ it.each(lifetimeCases)(
           release: (error?: Error) => {
             releases++;
             if (phase === "release")
-              while (Date.now() <= +expires + 20) {
+              while (performance.now() <= handbackDeadline) {
                 /* Actual synchronous native handback. */
               }
             client.release(error);
