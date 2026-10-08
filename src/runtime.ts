@@ -7,6 +7,7 @@ import { reviewerWorklistStore } from "./reviewer-worklist.ts";
 import { reviewTimeStore } from "./review-time-store.ts";
 import { eventCancellationStore } from "./event-cancellations.ts";
 import { eventEnrollmentStore } from "./event-enrollments.ts";
+import { eventAttendanceStore } from "./event-attendance.ts";
 import { eventCatalogReader } from "./event-catalog.ts";
 import { memberEventCatalog } from "./member-event-catalog.ts";
 import { eventRehearsalStore } from "./event-rehearsals.ts";
@@ -160,6 +161,15 @@ export async function start(env: NodeJS.ProcessEnv) {
         enabled: settings.eventRegistration,
         catalogReader: eventReader,
       }),
+      eventAttendance: eventAttendanceStore(
+        pool,
+        {
+          mode: settings.mode,
+          enabled: settings.eventAttendance && settings.localStaffEntry,
+          registration: settings.eventRegistration,
+        },
+        settings.secret,
+      ),
       memberEvents: memberEventCatalog(pool, settings.mode, eventReader),
       eventRehearsals: eventRehearsalStore(pool, {
         mode: settings.mode,

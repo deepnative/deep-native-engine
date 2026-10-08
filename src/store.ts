@@ -198,6 +198,7 @@ export async function migrate(pool: Pool) {
       "063-private-event-rehearsal.sql",
       "064-workflow-feedback-instance.sql",
       "065-private-workflow-review.sql",
+      "066-private-event-attendance.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

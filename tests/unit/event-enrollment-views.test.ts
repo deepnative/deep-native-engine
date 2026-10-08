@@ -41,6 +41,14 @@ const preview: EventEnrollmentPreview = {
   activeReceiptId: null,
   cancelledAt: null,
 };
+it("ATTEND-03 private receipt links to its exact owning attendance when the runtime supplies that capability", () => {
+  expect(
+    eventEnrollmentReceiptPage(receipt, "csrf", "America/Toronto", true),
+  ).toContain(`href="/events/registrations/${receipt.id}/attendance"`);
+  expect(
+    eventEnrollmentReceiptPage(receipt, "csrf", "America/Toronto", false),
+  ).not.toContain("My private attendance receipt");
+});
 it("requires deliberate invented-data enrollment and escapes text and hidden values", () => {
   const html = eventEnrollmentPage(
     preview,

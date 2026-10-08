@@ -103,7 +103,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v24",
+      version: "local-member-records-v25",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -226,7 +226,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    [2, 39, ...valid.slice(2)],
+    [2, 41, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -260,6 +260,35 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     ),
   ).toMatchObject({ kind: "ready" });
 });
+it.each([
+  [37, "workflowReviewRequests", "workflow_review_requests"],
+  [38, "workflowReviewAssignments", "workflow_review_grants"],
+  [39, "eventAttendancePermissions", "private_event_attendance_permissions"],
+  [40, "eventAttendanceObservations", "private_event_attendance_observations"],
+] as const)(
+  "ATTEND-07 cursor v2 preserves section index%s for %s",
+  async (index, name, table) => {
+    const fake = fakePool({ id: "member-1" }, (sql) =>
+      sql.includes(`FROM ${table} `)
+        ? [{ _key: ["saved-id"], record: "Invented owned metadata" }]
+        : [],
+    );
+    const result = await memberExportStore(fake.pool, secret).exportOwned(
+      "owner",
+      signed([2, index, ["prior-id"], 2, Date.now() + 60000]),
+    );
+    expect(result).toMatchObject({
+      kind: "ready",
+      payload: {
+        version: "local-member-records-v25",
+        records: { [name]: [{ record: "Invented owned metadata" }] },
+      },
+    });
+    expect(fake.statements.some((sql) => sql.includes(`FROM ${table} `))).toBe(
+      true,
+    );
+  },
+);
 it("withholds a page if continuation expires during assembly", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   const fake = fakePool({ id: "member-1" }, (sql) => {
@@ -488,7 +517,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v24",
+        version: "local-member-records-v25",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -696,7 +725,7 @@ it("appends owned review accounting at indices 33-35 without moving existing sec
     expect(value).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v24",
+        version: "local-member-records-v25",
         records: { [name]: [{ id: "owned-accounting" }] },
       },
     });
@@ -729,7 +758,7 @@ it("appends safe source-deleted assignment receipts at index36 without moving an
   expect(value).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v24",
+      version: "local-member-records-v25",
       records: { sampleAssignmentOperations: [record] },
     },
   });

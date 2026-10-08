@@ -24,6 +24,7 @@ function fields(value: unknown): value is Record<string, string> {
 export function mountEventEnrollmentRoutes(
   app: Express,
   store: EventEnrollmentStore,
+  attendanceAvailable = false,
 ) {
   const wrap =
     (handler: (req: Request, res: Response) => Promise<unknown>) =>
@@ -91,6 +92,7 @@ export function mountEventEnrollmentRoutes(
           result,
           res.locals.csrf as string,
           res.locals.learner.timezone,
+          attendanceAvailable,
         ),
       );
     }),
