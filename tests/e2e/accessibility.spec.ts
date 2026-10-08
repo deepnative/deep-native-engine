@@ -69,6 +69,13 @@ test("[L53] three learner paths retain visible keyboard focus, actionable errors
       name: "Private local participation",
     });
     await expect(participation).toBeVisible();
+    for (const link of await participation.getByRole("link").all()) {
+      expect(
+        await link.evaluate(
+          (element) => element.getBoundingClientRect().height,
+        ),
+      ).toBeGreaterThanOrEqual(24);
+    }
     await expect(participation).toContainText(
       "reviewed publication remain pending",
     );
