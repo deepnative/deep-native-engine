@@ -128,6 +128,37 @@ it("keeps older completed exercise versions withdrawable after a source change",
     'action="/exercise/clear-instructions/2/withdraw"',
   );
 });
+it("PARTNAV-01 exposes existing private participation without promising live services across learner backgrounds", () => {
+  for (const [background, goal] of [
+    ["explorer", "everyday"],
+    ["professional", "work"],
+    ["technical", "build"],
+  ] as const) {
+    const html = dashboard(
+      { ...learner, background, goal },
+      undefined,
+      "token",
+    );
+    expect(html).toContain('aria-label="Private local participation"');
+    expect(html).toContain('href="/circles">Explore local circles</a>');
+    expect(html).toContain(
+      'href="/workflows">Read workflow demonstrations</a>',
+    );
+    expect(html).toContain(
+      'href="/contribute">Draft a private contribution</a>',
+    );
+    expect(html).toContain(
+      "Joining does not share your private evidence or grant staff access.",
+    );
+    expect(html).toContain(
+      "Live community services, paid coaching and reviewed publication remain pending.",
+    );
+    expect(html).not.toContain(
+      "Community and coaching features are not yet available.",
+    );
+  }
+});
+
 it("keeps blocked synthetic assignments separate from selectable choices and escapes their titles", () => {
   const blocked: AssignmentReadiness = {
     contentId: "SYN-831",

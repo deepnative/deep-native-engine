@@ -63,6 +63,55 @@ test("[L53] three learner paths retain visible keyboard focus, actionable errors
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/learn$/);
 
+    // PARTNAV-01/02: discover existing private outcomes from the dashboard,
+    // without creating a proposal or implicitly joining a circle.
+    const participation = page.getByRole("complementary", {
+      name: "Private local participation",
+    });
+    await expect(participation).toBeVisible();
+    await expect(participation).toContainText(
+      "reviewed publication remain pending",
+    );
+    await expect(
+      page.getByText("Community and coaching features are not yet available.", {
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    const workflows = participation.getByRole("link", {
+      name: "Read workflow demonstrations",
+    });
+    await tabTo(page, workflows);
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByRole("heading", {
+        name: "Workflow demonstrations",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("No workflow runs here", { exact: false }),
+    ).toBeVisible();
+    await page
+      .getByRole("link", { name: "Return to learning", exact: true })
+      .click();
+    const contribution = participation.getByRole("link", {
+      name: "Draft a private contribution",
+      exact: true,
+    });
+    await tabTo(page, contribution);
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByRole("heading", { name: "Your sample proposals", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("No sample proposals yet.", { exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("link", { name: "Return to learning", exact: true })
+      .click();
+    await page.reload();
+    await expect(participation).toBeVisible();
+
     const lesson = page.getByRole("link", { name: "Open lesson" });
     await tabTo(page, lesson);
     await page.keyboard.press("Enter");
@@ -103,7 +152,19 @@ test("[L53] three learner paths retain visible keyboard focus, actionable errors
     await page.reload();
     await expect(page.getByText("Exercise completed")).toBeVisible();
 
-    const circles = page.getByRole("link", { name: "Local circles" });
+    // PARTNAV-03: saved practice survives the return to dashboard; use its
+    // participation entry, keeping the original L53 join/reload/leave checks.
+    await page
+      .getByRole("link", { name: "See your progress", exact: true })
+      .click();
+    await expect(
+      page.getByRole("progressbar", { name: "Exercises completed" }),
+    ).toHaveAttribute("value", "1");
+    await expect(participation).toBeVisible();
+    const circles = participation.getByRole("link", {
+      name: "Explore local circles",
+      exact: true,
+    });
     await tabTo(page, circles);
     await page.keyboard.press("Enter");
     await expect(
