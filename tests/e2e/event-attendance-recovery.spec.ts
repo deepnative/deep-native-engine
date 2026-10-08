@@ -6,17 +6,7 @@ import { authorizationStore } from "../../src/authorization.ts";
 import { eventRehearsalStore } from "../../src/event-rehearsals.ts";
 import { rehearsalSnapshot } from "../../src/event-rehearsal-values.ts";
 import { startAttendanceRecoveryServer } from "../support/event-attendance-recovery-server.ts";
-async function dropOwnedDatabase(control: Pool, name: string) {
-  const active = (
-    await control.query(
-      "SELECT COUNT(*)::integer count FROM pg_stat_activity WHERE datname=$1",
-      [name],
-    )
-  ).rows[0].count;
-  if (active !== 0)
-    throw Error("Owned browser database still active; no forced deletion");
-  await control.query(`DROP DATABASE "${name}"`);
-}
+import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
 
 test.use({ trace: "off" });
 test("[L198] ATTEND-06/08 member deliberately inspects and repeats original permission after an actual committed lost reply, with pause retaining inspection", async ({
@@ -226,9 +216,12 @@ test("[L198] ATTEND-06/08 member deliberately inspects and repeats original perm
     await staffContext?.close();
     await running?.close();
     await pool.end();
-    if (created) {
-      await dropOwnedDatabase(control, name);
+    try {
+      if (created) {
+        await dropAttendanceBrowserDatabase(control, name);
+      }
+    } finally {
+      await control.end();
     }
-    await control.end();
   }
 });
