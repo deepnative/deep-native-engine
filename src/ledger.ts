@@ -7,8 +7,8 @@ export interface LedgerConnection {
   ): Promise<QueryResult<T>>;
 }
 
-// Internal synthetic accounting only. No route grants these units or accepts a
-// payment; approved offers and retention rules need separate owner decisions.
+// Internal synthetic accounting. Only the explicit fixed local study fixture
+// can be issued by browser; live offers/payments remain separately gated.
 export type LedgerCategory =
   | "coach_minutes"
   | "review_minutes"
@@ -148,6 +148,8 @@ interface EventInput {
   quantity?: number;
   window?: ValidityWindow;
   completion?: SyntheticCompletion;
+  fixtureRequestId?: string;
+  expiryReason?: "owner_fixture_withdrawal";
 }
 interface EventResult {
   resultId: string;
@@ -334,9 +336,12 @@ async function applyEvent(
   return result.resultId;
 }
 
+// Shared native clock keeps internal bridges on the same existing time source.
+const systemLedgerClock = () => new Date();
+
 export function syntheticLedger(
   pool: Pool,
-  now: () => Date = () => new Date(),
+  now: () => Date = systemLedgerClock,
 ): SyntheticLedger {
   const apply: ApplyEvent = async (key, input, change) => {
     requireKey(key);
@@ -374,10 +379,117 @@ export function syntheticLedgerOnConnection(
   const ledger = ledgerOperations(
     client,
     (key, input, change) => applyEvent(client, key, input, change),
-    () => new Date(),
+    systemLedgerClock,
     jobId,
   );
   return { reserve: ledger.reserve, consume: ledger.consume };
+}
+
+// Internal fixed-fixture boundary. The issuance store owns current authority,
+// the policy slot/provenance and the sole transaction. No arbitrary grant or
+// generic early expiry is exposed by this bridge.
+export function studyFixtureLedgerOnConnection(
+  client: LedgerConnection,
+  requestId: string,
+) {
+  requireId(requestId);
+  const ledger = ledgerOperations(
+    client,
+    (key, input, change) =>
+      applyEvent(
+        client,
+        key,
+        { ...input, fixtureRequestId: requestId },
+        change,
+      ),
+    systemLedgerClock,
+  );
+  return {
+    async grant(memberId: string, window: ValidityWindow) {
+      requireId(memberId);
+      requireWindow(window);
+      const exact = (
+        await client.query(
+          `SELECT r.id FROM browser_study_fixture_requests r
+           JOIN principals m ON m.id=r.member_id
+           JOIN principals a ON a.id=r.administrator_id
+           JOIN staff_profiles s ON s.principal_id=a.id
+           JOIN workspaces w ON w.id=r.workspace_id
+           WHERE r.id=$1 AND r.member_id=$2 AND r.policy='browser-study-fixture-v1'
+             AND r.grant_id IS NULL AND r.withdrawn_at IS NULL
+             AND m.kind='member' AND m.revoked_at IS NULL AND m.expires_at>clock_timestamp()
+             AND a.kind='staff' AND a.revoked_at IS NULL AND a.expires_at>clock_timestamp()
+             AND s.role='platform_admin' AND w.owner_principal_id=m.id AND w.deleting_at IS NULL
+             AND $3::timestamptz<=clock_timestamp() AND $4::timestamptz>clock_timestamp()
+             AND $4::timestamptz<=$3::timestamptz+interval '15 minutes'
+             AND $4::timestamptz<=r.expires_at AND $4::timestamptz<=m.expires_at
+             AND $4::timestamptz<=a.expires_at
+           FOR UPDATE OF r`,
+          [requestId, memberId, window.startsAt, window.expiresAt],
+        )
+      ).rows[0];
+      if (!exact) throw new LedgerFailure("unavailable");
+      return ledger.grant(
+        memberId,
+        "study_requests",
+        3,
+        `browser-study-fixture-grant:${requestId}`,
+        window,
+      );
+    },
+    async withdraw(memberId: string, grantId: string) {
+      requireId(memberId);
+      requireId(grantId);
+      const source = (
+        await client.query<{ withdrawn_at: Date }>(
+          `SELECT withdrawn_at FROM browser_study_fixture_requests
+           WHERE id=$1 AND member_id=$2 AND grant_id=$3
+             AND policy='browser-study-fixture-v1' AND withdrawn_at IS NOT NULL FOR UPDATE`,
+          [requestId, memberId, grantId],
+        )
+      ).rows[0];
+      if (!source) throw new LedgerFailure("unavailable");
+      const grant = (
+        await client.query<{ expired_at: Date | null; available: number }>(
+          `SELECT expired_at,available FROM synthetic_entitlement_grants
+           WHERE id=$1 AND member_id=$2 AND category='study_requests' AND quantity=3 FOR UPDATE`,
+          [grantId, memberId],
+        )
+      ).rows[0];
+      if (!grant) throw new LedgerFailure("unavailable");
+      // A previously settled natural expiry is not another balance mutation.
+      if (grant.expired_at !== null) return grantId;
+      return applyEvent(
+        client,
+        `browser-study-fixture-withdraw:${requestId}`,
+        {
+          operation: "expire",
+          memberId,
+          grantId,
+          fixtureRequestId: requestId,
+          expiryReason: "owner_fixture_withdrawal",
+        },
+        async (connection) => {
+          const row = (
+            await connection.query<{ id: string }>(
+              `UPDATE synthetic_entitlement_grants SET expired=expired+available,
+               available=0,expired_at=(SELECT withdrawn_at FROM browser_study_fixture_requests WHERE id=$3)
+               WHERE id=$1 AND member_id=$2
+               AND expired_at IS NULL RETURNING id`,
+              [grantId, memberId, requestId],
+            )
+          ).rows[0];
+          if (!row) throw new LedgerFailure("unavailable");
+          return {
+            resultId: grantId,
+            grantId,
+            reservationId: null,
+            quantity: grant.available,
+          };
+        },
+      );
+    },
+  };
 }
 
 // Internal checked support boundary. The support store owns authorization,
@@ -391,7 +503,7 @@ export function supportLedgerOnConnection(
     client,
     (key, input, change) =>
       applyEvent(client, key, input, change, allocationId),
-    () => new Date(),
+    systemLedgerClock,
     undefined,
     allocationId,
   );
@@ -412,7 +524,7 @@ export function reviewLedgerOnConnection(
     client,
     (key, input, change) =>
       applyEvent(client, key, input, change, undefined, allocationId),
-    () => new Date(),
+    systemLedgerClock,
     undefined,
     undefined,
     allocationId,

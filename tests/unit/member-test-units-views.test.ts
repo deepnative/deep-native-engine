@@ -87,3 +87,13 @@ it.each(["denied", "unavailable", "live", "query"] as const)(
 it("links existing sample availability to the private reader without granting anything", () => {
   expect(availabilityPage([], "UTC")).toContain('href="/member/test-units"');
 });
+
+it("TESTISSUE-08 an installed fixture reader links deliberate request/withdrawal and distinguishes owner withdrawal from elapsed expiry", () => {
+  const html = memberTestUnitsPage(fixture(), true);
+  expect(html).toContain('href="/member/test-unit-request"');
+  expect(html).toContain(
+    "Expired totals also include unused study units you explicitly withdrew",
+  );
+  expect(html).toContain("withdrawal does not mean it elapsed naturally");
+  expect(html).not.toContain("<form");
+});

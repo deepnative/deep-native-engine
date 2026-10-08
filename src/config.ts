@@ -62,6 +62,9 @@ export function config(env: NodeJS.ProcessEnv) {
   const localStaffEntry = env.DNE_LOCAL_STAFF_ENTRY ?? "disabled";
   if (!["enabled", "disabled"].includes(localStaffEntry))
     throw Error("DNE_LOCAL_STAFF_ENTRY must be enabled or disabled.");
+  const localTestUnitIssuance = env.DNE_LOCAL_TEST_UNIT_ISSUANCE ?? "disabled";
+  if (!["enabled", "disabled"].includes(localTestUnitIssuance))
+    throw Error("DNE_LOCAL_TEST_UNIT_ISSUANCE must be enabled or disabled.");
   const localSupportAssignment = env.DNE_LOCAL_SUPPORT_ASSIGNMENT ?? "disabled";
   if (!["enabled", "disabled"].includes(localSupportAssignment))
     throw Error("DNE_LOCAL_SUPPORT_ASSIGNMENT must be enabled or disabled.");
@@ -107,6 +110,7 @@ export function config(env: NodeJS.ProcessEnv) {
     throw Error("DNE_EVENT_ATTENDANCE must be enabled or disabled.");
   return {
     localStaffEntry: localStaffEntry === "enabled",
+    localTestUnitIssuance: localTestUnitIssuance === "enabled",
     workflowReviewRequests: workflowReviewRequests === "enabled",
     localSupportAssignment: localSupportAssignment === "enabled",
     sampleAssignmentAdministration:

@@ -226,7 +226,8 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    [2, 41, ...valid.slice(2)],
+    // Original indexes 0..40 are unchanged; appended fixture index 41 is valid.
+    [2, 42, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -808,3 +809,36 @@ it.each([
     );
   },
 );
+
+it("TESTISSUE-07 original attendance index 40 and appended fixture index 41 retain their authenticated cursor mapping", async () => {
+  for (const [index, section, source] of [
+    [
+      40,
+      "eventAttendanceObservations",
+      "FROM private_event_attendance_observations",
+    ],
+    [41, "studyFixtureRequests", "FROM browser_study_fixture_requests"],
+  ] as const) {
+    const f = fakePool({ id: "member-1" }, (sql) =>
+      sql.includes(source)
+        ? [{ _key: ["b"], observed: "invented-owned-record" }]
+        : [],
+    );
+    const exporter = memberExportStore(f.pool, secret);
+    const result = await exporter.exportOwned(
+      "owner",
+      signed([2, index, ["a"], 2, Date.now() + 60000]),
+    );
+    expect(result.kind).toBe("ready");
+    if (result.kind !== "ready") throw Error("Expected appended owner cursor");
+    expect(result.payload.records[section]).toEqual([
+      { observed: "invented-owned-record" },
+    ]);
+    expect(result.payload.page.number).toBe(2);
+    expect(result.payload.page.complete).toBe(true);
+    expect(Object.keys(result.payload.records).at(-1)).toBe(
+      "studyFixtureRequests",
+    );
+    expect(f.statements.some((sql) => sql.includes(source))).toBe(true);
+  }
+});

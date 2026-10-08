@@ -379,6 +379,16 @@ const sections = {
      WHERE o.member_id=$1 AND w.deleting_at IS NULL`,
     "o.id",
   ),
+  // Append only: existing section positions and cursor contracts remain stable.
+  studyFixtureRequests: section(
+    `r.id AS "requestId",r.policy,'study_requests' AS category,3 AS quantity,
+     r.created_at AS "createdAt",r.expires_at AS "expiresAt",r.grant_id AS "grantId",
+     r.issued_at AS "issuedAt",r.grant_expires_at AS "grantExpiresAt",r.withdrawn_at AS "withdrawnAt",
+     'Local platform administrator' AS attribution`,
+    `browser_study_fixture_requests r JOIN workspaces w ON w.id=r.workspace_id AND w.owner_principal_id=r.member_id
+     WHERE r.member_id=$1 AND w.deleting_at IS NULL`,
+    "r.id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;

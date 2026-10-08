@@ -227,3 +227,31 @@ it("does not read balances on a foreign host or a write method", async () => {
   expect(write.status).not.toBe(200);
   expect(f.snapshot).not.toHaveBeenCalled();
 });
+
+it("TESTISSUE-08 app wiring exposes fixture navigation only from the installed private reader", async () => {
+  const snapshot = vi
+    .fn<MemberTestUnitsStore["snapshot"]>()
+    .mockResolvedValue({ kind: "ready", value });
+  const application = app({ session: vi.fn() } as unknown as Store, {
+    origin: "http://127.0.0.1:3000",
+    secret: "invented-fixture-wiring",
+    mode: "test",
+    memberTestUnits: { snapshot },
+    studyUnitFixtures: {} as NonNullable<
+      Parameters<typeof app>[1]["studyUnitFixtures"]
+    >,
+    localTestUnitIssuance: true,
+  });
+  const result = await withLoopback(application, (s) =>
+    request(s)
+      .get("/member/test-units")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${"a".repeat(64)}`)
+      .expect(200),
+  );
+  expect(result.text).toContain('href="/member/test-unit-request"');
+  expect(result.text).toContain(
+    "withdrawal does not mean it elapsed naturally",
+  );
+  expect(snapshot).toHaveBeenCalledTimes(1);
+});

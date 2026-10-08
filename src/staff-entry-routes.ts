@@ -35,6 +35,7 @@ export interface StaffTools {
   circleGrants: boolean;
   eventCancellations?: boolean;
   eventAttendance?: boolean;
+  studyUnits?: boolean;
   eventRehearsals?: boolean;
   workflowReviews?: boolean;
   localAi: boolean;
@@ -109,6 +110,11 @@ function links(role: StaffRole, tools: StaffTools) {
   }
   if (role === "platform_admin")
     choices.push(
+      [
+        tools.studyUnits === true,
+        "/operator/study-test-units",
+        "Issue local study test units",
+      ],
       [
         tools.eventAttendance === true,
         "/operator/event-attendance",
