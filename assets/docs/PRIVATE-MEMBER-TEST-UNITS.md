@@ -11,3 +11,5 @@ Reload after a hold, withdrawal, settlement or deadline. Reading never settles o
 The page and download use the current cookie, reject query scope, prevent caching and deny staff or expired/revoked/deleted members. Live mode does not expose this synthetic reader. No service, allowance or model-provider policy changed. Rollback removes the reader/routes/link; there is no database migration or persisted data rewrite.
 
 Delivery scope is [#435](https://github.com/deepnative/deep-native-engine/issues/435). Parents #199, #34 and #27 remain open for their broader policies and behavior. PostgreSQL and browser evidence covers private local synthetic fixtures, not commercial or full-MVP acceptance.
+
+An explicitly enabled [one-time local study fixture](PRIVATE-STUDY-UNIT-FIXTURES.md) can now be requested and issued through normal member/administrator confirmations. Reading this balance still creates nothing. Its withdrawal makes only unused units unavailable; original held/consumed history and deadlines remain distinct.

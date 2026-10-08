@@ -35,6 +35,7 @@ import { metricsStore } from "./metrics.ts";
 import { ledgerReconciliationStore } from "./ledger-reconciliation.ts";
 import { localAiHoldInspectionStore } from "./local-ai-hold-inspection.ts";
 import { memberTestUnitsStore } from "./member-test-units.ts";
+import { studyUnitFixtureStore } from "./study-unit-fixtures.ts";
 import { attemptStore } from "./attempts.ts";
 import { practiceStore } from "./practice.ts";
 import { practiceSessionStore } from "./practice-sessions.ts";
@@ -89,6 +90,10 @@ export async function start(env: NodeJS.ProcessEnv) {
     const eventReader = eventCatalogReader();
     const options = {
       ...settings,
+      studyUnitFixtures: studyUnitFixtureStore(pool, {
+        mode: settings.mode,
+        enabled: settings.localTestUnitIssuance,
+      }),
       staffEntry: staffEntryStore(pool),
       workflowReviewStaff: workflowReviewStaffStore(
         pool,

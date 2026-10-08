@@ -1,0 +1,74 @@
+# Local study-fixture acceptance evidence
+
+Issue [#494](https://github.com/deepnative/deep-native-engine/issues/494), original parent [CTP-011 #27](https://github.com/deepnative/deep-native-engine/issues/27). Accountable author: Tom Wu / Codex worker `DNE-2026-10-08-494-root-v2`, branch `codex/browser-test-unit-issuance-v2`. Lead recommendation: GPT-6 Astra / XHigh; author self-review: High. This is private synthetic UI/backend implementation under the issue's explicit fixed policy and standing owner authorization. Author review is not independent review or qualified acceptance.
+
+This document records pre-commit acceptance development on 8 October 2026. It does **not** claim a clean implementation gate, push, PR CI, merge, resulting-main CI or completed main demo. Exact final revisions, gate reports, PR/merge/main CI and cleanup are recorded on the delivery issue before closeout. Original parent criteria and live offer/provider/qualified decisions remain open.
+
+## Baseline and scenarios
+
+Original clean baseline `40039a29736dcb8b115b6daf28c079a96ff59f3b`: `make verify PYTHON=/opt/homebrew/bin/python3.14` passed 13:01:31–13:49:20 UTC, with 73 repository tests, 3,795 unit tests, 2,217 PostgreSQL tests, 396 mandatory browser executions and six cross-browser executions. The original 198 approved journey IDs passed. There were no skipped, unexpected or flaky browser results. Node 24.21.0, Python 3.14, macOS and real isolated PostgreSQL were used; no provider was called.
+
+Before implementation, HTTP testing at that unchanged application recorded an honest passing fresh-member zero-balance baseline and a failing deliberate-request-page scenario: expected 200, actual 404. That is the missing product behavior; failures in test setup described below are not substituted for it.
+
+| Issue scenario | Executable acceptance and observed result | Remaining delivery boundary |
+| --- | --- | --- |
+| TESTISSUE-01 | `test-unit-issuance-http.test.ts`, values/views/routes/config unit tests and L199: normal fresh member confirms the fixed three-unit request; GET creates nothing; all three backgrounds use the same flow. | Exact-commit full gate and main demo pending at this snapshot. |
+| TESTISSUE-02 | Real PostgreSQL `study-unit-fixtures.test.ts`, HTTP and L199: exact finite selected platform administrator issues one linked grant/event/operation through one connection/transaction; outsider, role change and revocation deny. | Private synthetic authority only. |
+| TESTISSUE-03 | L199: normal browser onboarding, staff sign-in, issuance, invented-source upload and separate permission, local deterministic execution consumes one unit; balance/history reload agrees; withdrawal retains consumed history. | Trusted local quarantine transition is explicit invented-data setup; no live AI or source permission inferred from issuance. |
+| TESTISSUE-04 | Real PostgreSQL duplicate/key/guard tests and observed contention in both issue/withdraw and member-erasure orders; original administrator expiry plus renewal cannot revive issuance or protected inspection; anonymous erased keys cannot be reassigned. | No cross-account identity tracker or refill policy. |
+| TESTISSUE-05 | Real PostgreSQL held/consumed/available accounting and HTTP/L199: pending cancellation or issued withdrawal stops only remaining availability; original window is unchanged; held release stays unavailable; generic early ledger expiry still denies. | No automatic refund, settlement or job retry. |
+| TESTISSUE-06 | Real PostgreSQL nine interruption variants and ledger-audit rollback; L200 normal browsers recover all three operations before COMMIT and after actual successful COMMIT across three backgrounds and desktop/mobile: 36 explicit fault/recovery cases, original key and unchecked deliberate confirmation, no automatic dispatch or duplicate event. Unit route/store tests fence query/commit/handback/render deadlines and generic unavailable responses. | An unavailable reply is not proof of rollback. |
+| TESTISSUE-07 | Real populated migration/reapply, legacy grant preservation, direct SQL guards, selected-admin erasure, owner erasure and paginated export tests. All old section indexes 0–40 preserved, fixture section appended at 41; foreign/forged/deleted-owner cursor denies. Owner export excludes administrator identity, instruction hash and operation keys. | Compatible additive migration only; no populated downgrade or hosted backup claim. |
+| TESTISSUE-08 | L199 keyboard/narrow normal journey; L200 recovery journey; HTTP unsafe Host/Origin/CSRF, unconfirmed/arbitrary instructions and wrong role deny. Actual populated runtime restart with issuance disabled rejects new check/write, retains finite original-operation inspection, owner balance and deliberate withdrawal. Domain tests retain pending cancellation while paused. | Final complete browser matrix and verified-main dedicated preview pending. |
+
+The final working unit suite passed 3,924/3,924; global statement/branch/function/line coverage was 99.93/99.73/99.95/99.95%, every first-party module met all four 99% thresholds, and the five new fixture modules reached 100%. Raw counts/module reports are retained outside the checkout alongside original failures. Source inclusion/exclusions, thresholds and retry policy were not weakened. These working results precede the mandatory exact-commit gate.
+
+The latest real PostgreSQL feature file passed 27/27. HTTP runtime/pause checks passed 4/4. L199 and L200 each passed their first desktop and mobile executions, with no skips/retries/unexpected/flaky results. Register v103 appends L199/L200 to all 198 original approved IDs (200 total); original full-MVP IDs/denominators are unchanged. Private local coverage is distinct from full-MVP approval.
+
+## Retained failures and corrections
+
+Evidence is retained in the owner's private `2026-10-08/dne494-delivery-evidence` directory with distinct first/corrected prefixes; no first-run report is overwritten. It includes original red/baseline, raw unit counts/module coverage, actual PostgreSQL failures/results and browser results/captures.
+
+- First full working unit run found the old negative cursor test treating section 41 as invalid. Since 41 is the intentionally appended section, the invalid upper-bound case is 42; explicit positive signed old-40/new-41 mapping and real paginated export were added. All existing sections/IDs remain included.
+- The next full unit run passed assertions but correctly failed per-module coverage for application navigation, withdrawal wording and an unused new internal clock callback. Actual navigation/withdrawal behavior tests and reuse of the existing native ledger clock resolved the findings. The final working suite passed every module/global threshold without exclusions or threshold changes.
+- Early test-fixture defects were retained and corrected: invalid goal name; incomplete fake transaction adapter; noncanonical test hash field ordering; receipt comparison using pre-issuance state; invalid CSRF fixture for a helper trusting its generated token; incorrect typed ledger test call. They were not claimed as product-red evidence.
+- Pre-commit type/lint checks found overly narrow export-test inference, a throw in browser cleanup's finally block and unused destructuring bindings. Follow-up field deletion also produced a type error until the test field maps were explicitly typed. Corrected typecheck and lint passed. Cleanup still refuses to drop a database with active connections.
+
+## Author review and rollback
+
+Reviewed current-authority locking, sorted principals → owner workspace → policy slot/exact source → operation key → grant ordering, one caller-owned transaction, immutable original bounds, source-linked expiry fingerprint, late result fencing, local/default-off configuration, same-key read-only recovery, owner export and erasure. The finite staff reference is not a credential/directory. Staff erasure cannot transfer pending issuance. No dependency/provider was added. Continue full gate and exact-commit author review before pushing; this development review does not replace them.
+
+Compatible rollback pauses creation on the retained additive schema using `DNE_LOCAL_TEST_UNIT_ISSUANCE=disabled`; owner receipts/balances/export/withdrawal/erasure and finite original inspection remain. Do not delete grants, reset spent slots, force uncertain jobs to settle or run an older incompatible issuer. See [the operator/member guide](PRIVATE-STUDY-UNIT-FIXTURES.md).
+
+## Required completed milestone demo
+
+Still pending at this snapshot: a dedicated invented-data preview of verified main, finite administrator sign-in → fresh member request → explicit issuance → separate source permission → local consumption → remaining-unit withdrawal, with revision/date, actual access, captures, restart instructions and limits. Use a separate database/server, never an active gate resource. The README describes the scoped capability; feature prose and working test captures alone are not that main demo.
+
+Next bounded action: finish #494's clean exact-commit full gate, unbypassed pre-push, recorded author self-review, PR CI, guarded merge, original resulting-main CI, actual demo and safe branch/worktree cleanup. Dependencies are the existing verified #435/#437/#447/#475 paths; this worker holds the current claim. Recommended lead GPT-6 Astra / XHigh, author review High. Keep #27 and separately gated live/qualified policies open.
+
+## Retained delivery-time failures and shutdown correction — 8 October 2026
+
+The first clean implementation revision `e28f546` passed its complete local gate
+and original pre-push repeat. Git publication then failed when the remote SSH
+connection closed during the long hook; the branch was not published. A normal
+push with command-scoped SSH keepalives subsequently stopped correctly on a
+first-attempt browser failure: L199 mobile teardown observed five PostgreSQL
+sessions immediately after the owned pools ended (399 passing executions,
+1 failed, no skips or retries). Those complete reports and browser artifacts
+remain retained separately; neither earlier pass overrides this failure.
+
+The two new fixture browser teardowns now reuse the repository's existing
+bounded owned-database drain/drop helper. It observes backend disconnection
+within its fixed deadline, validates the generated database name, bounds read
+queries and refuses deletion while sessions remain. It never replays browser
+application actions, terminates a backend or force-drops a database. Control
+pools close even if database drain is refused. This corrects teardown ordering;
+it does not change product behavior, test retries, thresholds or journey IDs.
+
+On the changed source, all three existing real PostgreSQL drain/refusal tests
+and all four L199/L200 desktop/mobile executions passed on their first
+invocations. Typecheck and lint passed. These are focused working-source
+results, not clean-commit or main acceptance. The corrected exact commit must
+still pass complete local/pre-push verification, original PR and resulting-main
+CI, the actual invented-data main demo and safe delivery cleanup. Live evidence
+and the retained failures are linked on delivery issue #494.

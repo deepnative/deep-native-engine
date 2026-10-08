@@ -12,7 +12,10 @@ function time(value: Date) {
   const text = escape(value.toISOString());
   return `<time datetime="${text}">${text}</time>`;
 }
-export function memberTestUnitsPage(value: MemberTestUnitSnapshot) {
+export function memberTestUnitsPage(
+  value: MemberTestUnitSnapshot,
+  fixtureReader = false,
+) {
   const empty = value.categories.every((row) => row.grants === 0);
   const categories = value.categories
     .map(
@@ -43,7 +46,7 @@ export function memberTestUnitsPage(value: MemberTestUnitSnapshot) {
     .join("");
   return page(
     "Your local test units",
-    `<article class="reading"><p><a href="/availability">Sample availability</a></p><p class="eyebrow">PRIVATE · LOCAL TEST PREVIEW</p><h1>Your local test units</h1><p>These are existing test allowances for this session. Reading this page creates no allowance, purchase or booking. Minutes, sessions and requests are separate.</p><p>Snapshot taken ${time(value.asOf)}. Balances can change after a hold, withdrawal, settlement or deadline; reload before making a request.</p>${empty ? '<p role="status">No local test grants are configured for this session. This does not define a foundation allowance or a paid plan.</p>' : ""}${categories}<p>Held units remain held until an explicit outcome, even after a grant deadline. A zero balance does not describe a purchased service or qualified capacity.</p><p><a href="/member/test-units">Read a fresh snapshot</a> · <a href="/member/test-units/download">Download a current summary (JSON)</a></p><p>The download is another current snapshot. It can differ after an intervening change and contains no historical ledger or private learning content.</p><p><a href="/member/export">Download retained test-unit history</a> as part of your private structured records. History includes expired and released units; stored counters differ from current usable balances.</p></article>`,
+    `<article class="reading"><p><a href="/availability">Sample availability</a></p><p class="eyebrow">PRIVATE · LOCAL TEST PREVIEW</p><h1>Your local test units</h1><p>These are existing test allowances for this session. Reading this page creates no allowance, purchase or booking. Minutes, sessions and requests are separate.</p><p>Snapshot taken ${time(value.asOf)}. Balances can change after a hold, withdrawal, settlement or deadline; reload before making a request.</p>${empty ? '<p role="status">No local test grants are configured for this session. This does not define a foundation allowance or a paid plan.</p>' : ""}${categories}${fixtureReader ? '<p><a href="/member/test-unit-request">Request or withdraw your one-time local study fixture</a></p><p>Expired totals also include unused study units you explicitly withdrew from that fixture. The original deadline is retained; withdrawal does not mean it elapsed naturally.</p>' : ""}<p>Held units remain held until an explicit outcome, even after a grant deadline. A zero balance does not describe a purchased service or qualified capacity.</p><p><a href="/member/test-units">Read a fresh snapshot</a> · <a href="/member/test-units/download">Download a current summary (JSON)</a></p><p>The download is another current snapshot. It can differ after an intervening change and contains no historical ledger or private learning content.</p><p><a href="/member/export">Download retained test-unit history</a> as part of your private structured records. History includes expired and released units; stored counters differ from current usable balances.</p></article>`,
   );
 }
 export function memberTestUnitsUnavailablePage(

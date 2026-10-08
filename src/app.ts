@@ -190,6 +190,8 @@ import {
   type MemberTestUnitsStore,
 } from "./member-test-units.ts";
 import { registerMemberTestUnitsRoutes } from "./member-test-units-routes.ts";
+import type { StudyUnitFixtureStore } from "./study-unit-fixtures.ts";
+import { mountStudyUnitFixtureRoutes } from "./study-unit-fixture-routes.ts";
 import { disabledPracticeStore, type PracticeStore } from "./practice.ts";
 import {
   disabledPracticeSessionStore,
@@ -323,6 +325,8 @@ export function app(
     ledgerReconciliation?: LedgerReconciliationStore;
     localHoldInspection?: LocalAiHoldInspectionStore;
     memberTestUnits?: MemberTestUnitsStore;
+    studyUnitFixtures?: StudyUnitFixtureStore;
+    localTestUnitIssuance?: boolean;
     attempts?: AttemptStore;
     practice?: PracticeStore;
     practiceSessions?: PracticeSessionStore;
@@ -460,6 +464,9 @@ export function app(
     circleGrants: Boolean(options.circleGrantAdmin),
     eventCancellations: Boolean(options.eventCancellations),
     eventAttendance: Boolean(options.eventAttendance),
+    studyUnits:
+      Boolean(options.studyUnitFixtures) &&
+      options.localTestUnitIssuance === true,
     eventRehearsals: Boolean(options.eventRehearsals),
     workflowReviews: Boolean(options.workflowReviewStaff),
     localAi: Boolean(options.localAiControl),
@@ -579,7 +586,9 @@ export function app(
     app,
     options.memberTestUnits ?? disabledMemberTestUnitsStore(),
     mode,
+    Boolean(options.studyUnitFixtures),
   );
+  mountStudyUnitFixtureRoutes(app, options.studyUnitFixtures, options);
   app.get("/operator/experts", async (_req, res) => {
     const records = await tracks.registry(res.locals.token as string);
     if (!records) {

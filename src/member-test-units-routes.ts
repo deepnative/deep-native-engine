@@ -10,6 +10,7 @@ export function registerMemberTestUnitsRoutes(
   app: Express,
   store: MemberTestUnitsStore,
   mode: ApplicationMode,
+  fixtureReader = false,
 ) {
   app.get(
     ["/member/test-units", "/member/test-units/download"],
@@ -50,7 +51,7 @@ export function registerMemberTestUnitsRoutes(
             );
             return res.json(body);
           }
-          return res.send(memberTestUnitsPage(value));
+          return res.send(memberTestUnitsPage(value, fixtureReader));
         }
         return res
           .status(result.kind === "denied" ? 403 : 503)
