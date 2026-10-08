@@ -39,7 +39,9 @@ test("[L47] operator sees labelled preview aggregates while a learner cannot rea
       .selectOption("everyday");
     await page.getByLabel("I'll use invented or sample information").check();
     await page.getByRole("button", { name: "Start my learning path" }).click();
-    await page.getByRole("link", { name: "Local circles", exact: true }).click();
+    await page
+      .getByRole("link", { name: "Local circles", exact: true })
+      .click();
     await page
       .getByRole("button", { name: "Join Everyday AI practice" })
       .click();
