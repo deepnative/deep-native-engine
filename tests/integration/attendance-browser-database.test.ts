@@ -1,7 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
-import { expect, it } from "vitest";
-import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
+import { afterEach, beforeEach, expect, it } from "vitest";
+import {
+  dropAttendanceBrowserDatabase,
+  waitForAttendanceBrowserDatabaseDrain,
+} from "../support/attendance-browser-database.ts";
 async function fixture() {
   const original = process.env.DNE_TEST_DATABASE_URL;
   if (
@@ -25,45 +28,21 @@ async function fixture() {
   expect(active.rows[0].count).toBe(1);
   return { name, control, own };
 }
-async function dispose(
-  f: Awaited<ReturnType<typeof fixture>>,
-  ended: Promise<void>,
-) {
-  await ended;
-  const deadline = Date.now() + 3000;
-  while (
-    (
-      await f.control.query(
-        "SELECT COUNT(*)::integer count FROM pg_stat_activity WHERE datname=$1",
-        [f.name],
-      )
-    ).rows[0].count !== 0
-  ) {
-    if (Date.now() >= deadline)
-      throw Error("Fixture connection did not drain; no forced deletion");
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  await f.control.query(`DROP DATABASE IF EXISTS "${f.name}"`);
-  await f.control.end();
-}
-it("CI-ATTEND-02 waits for the observed owned PostgreSQL session to disconnect before deletion", async () => {
-  const f = await fixture();
-  let disconnected = false;
-  const ended = new Promise<void>((resolve, reject) => {
-    setTimeout(() => {
-      f.own.end().then(() => {
-        disconnected = true;
-        resolve();
-      }, reject);
-    }, 150);
-  });
+
+let f: Awaited<ReturnType<typeof fixture>>;
+let ended: Promise<void> | undefined;
+let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+beforeEach(async () => {
+  f = await fixture();
+  ended = undefined;
+  releaseTimer = undefined;
+});
+afterEach(async () => {
+  if (releaseTimer) clearTimeout(releaseTimer);
   try {
-    const outcome = await dropAttendanceBrowserDatabase(f.control, f.name).then(
-      () => "dropped",
-      () => "refused",
-    );
-    expect(outcome).toBe("dropped");
-    expect(disconnected).toBe(true);
+    ended ??= f.own.end();
+    await ended;
+    await dropAttendanceBrowserDatabase(f.control, f.name);
     expect(
       (
         await f.control.query(
@@ -73,51 +52,55 @@ it("CI-ATTEND-02 waits for the observed owned PostgreSQL session to disconnect b
       ).rows,
     ).toHaveLength(0);
   } finally {
-    await dispose(f, ended);
+    await f.control.end();
   }
+});
+it("CI-ATTEND-02 waits for the observed owned PostgreSQL session to disconnect before deletion", async () => {
+  let disconnected = false;
+  releaseTimer = setTimeout(() => {
+    ended = f.own.end().then(() => {
+      disconnected = true;
+    });
+    // The lifecycle awaits this same promise; avoid an unobserved rejection
+    // if the drain assertion fails before teardown begins.
+    void ended.catch(() => {});
+  }, 150);
+  await waitForAttendanceBrowserDatabaseDrain(f.control, f.name);
+  expect(disconnected).toBe(true);
+  expect(
+    (
+      await f.control.query(
+        "SELECT datname FROM pg_database WHERE datname=$1",
+        [f.name],
+      )
+    ).rows,
+  ).toHaveLength(1);
 });
 it("CI-ATTEND-02 refuses to drop an owned database whose observed session remains active", async () => {
-  const f = await fixture();
-  try {
-    await expect(
-      dropAttendanceBrowserDatabase(f.control, f.name),
-    ).rejects.toThrow(
-      "Owned browser database still active; no forced deletion",
-    );
-    expect(
-      (
-        await f.control.query(
-          "SELECT datname FROM pg_database WHERE datname=$1",
-          [f.name],
-        )
-      ).rows,
-    ).toHaveLength(1);
-    expect((await f.own.query("SELECT 1 AS retained")).rows[0].retained).toBe(
-      1,
-    );
-  } finally {
-    await dispose(f, f.own.end());
-  }
+  await expect(
+    dropAttendanceBrowserDatabase(f.control, f.name),
+  ).rejects.toThrow("Owned browser database still active; no forced deletion");
+  expect(
+    (
+      await f.control.query(
+        "SELECT datname FROM pg_database WHERE datname=$1",
+        [f.name],
+      )
+    ).rows,
+  ).toHaveLength(1);
+  expect((await f.own.query("SELECT 1 AS retained")).rows[0].retained).toBe(1);
 });
-
 it("CI-ATTEND-02 rejects a non-owned database identity before issuing deletion", async () => {
-  const f = await fixture();
-  try {
-    await expect(
-      dropAttendanceBrowserDatabase(f.control, "postgres"),
-    ).rejects.toThrow("Generated owned browser database required");
-    expect(
-      (
-        await f.control.query(
-          "SELECT datname FROM pg_database WHERE datname=$1",
-          [f.name],
-        )
-      ).rows,
-    ).toHaveLength(1);
-    expect((await f.own.query("SELECT 1 AS retained")).rows[0].retained).toBe(
-      1,
-    );
-  } finally {
-    await dispose(f, f.own.end());
-  }
+  await expect(
+    dropAttendanceBrowserDatabase(f.control, "postgres"),
+  ).rejects.toThrow("Generated owned browser database required");
+  expect(
+    (
+      await f.control.query(
+        "SELECT datname FROM pg_database WHERE datname=$1",
+        [f.name],
+      )
+    ).rows,
+  ).toHaveLength(1);
+  expect((await f.own.query("SELECT 1 AS retained")).rows[0].retained).toBe(1);
 });

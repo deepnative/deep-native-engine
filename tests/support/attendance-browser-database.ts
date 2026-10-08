@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 /** Wait only for this generated fixture's sessions to finish disconnecting.
  * This never terminates a backend or repeats the browser's application actions. */
-export async function dropAttendanceBrowserDatabase(
+export async function waitForAttendanceBrowserDatabaseDrain(
   control: Pool,
   name: string,
 ) {
@@ -28,9 +28,14 @@ export async function dropAttendanceBrowserDatabase(
       setTimeout(resolve, Math.min(25, deadline - performance.now())),
     );
   }
-  const dropQuery = {
-    text: `DROP DATABASE "${name}"`,
-    query_timeout: Math.max(1, Math.floor(deadline - performance.now())),
-  };
-  await control.query(dropQuery);
+}
+
+export async function dropAttendanceBrowserDatabase(
+  control: Pool,
+  name: string,
+) {
+  await waitForAttendanceBrowserDatabaseDrain(control, name);
+  // Preserve native DDL completion: a client-only timer does not cancel DROP.
+  // The caller's existing test/teardown lifecycle bounds this operation.
+  await control.query(`DROP DATABASE "${name}"`);
 }
