@@ -8,6 +8,7 @@ import {
 import { randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { Pool } from "pg";
+import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
 import { app } from "../../src/app.ts";
 import { migrate, store } from "../../src/store.ts";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -281,17 +282,10 @@ test("[L200] TESTISSUE-06/08 all audiences deliberately inspect and recover orig
     for (const context of contexts) await context.close();
     if (server) await closeLoopback(server);
     await pool.end();
-    if (created) {
-      expect(
-        (
-          await control.query(
-            "SELECT count(*)::integer n FROM pg_stat_activity WHERE datname=$1",
-            [name],
-          )
-        ).rows,
-      ).toEqual([{ n: 0 }]);
-      await control.query(`DROP DATABASE "${name}"`);
+    try {
+      if (created) await dropAttendanceBrowserDatabase(control, name);
+    } finally {
+      await control.end();
     }
-    await control.end();
   }
 });

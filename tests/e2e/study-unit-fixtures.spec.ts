@@ -10,6 +10,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Pool } from "pg";
+import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
 import { start } from "../../src/runtime.ts";
 import { migrate } from "../../src/store.ts";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -244,20 +245,11 @@ test("[L199] TESTISSUE-01/02/03/05/08 three audiences request, receive, use and 
     for (const context of contexts) await context.close();
     await running?.close();
     await pool.end();
-    if (created) {
-      const active = (
-        await control.query(
-          "SELECT count(*)::integer n FROM pg_stat_activity WHERE datname=$1",
-          [name],
-        )
-      ).rows[0].n;
-      expect(
-        active,
-        "Owned browser database remains active; do not force deletion",
-      ).toBe(0);
-      await control.query(`DROP DATABASE "${name}"`);
+    try {
+      if (created) await dropAttendanceBrowserDatabase(control, name);
+    } finally {
+      await control.end();
+      await rm(storage, { recursive: true, force: true });
     }
-    await control.end();
-    await rm(storage, { recursive: true, force: true });
   }
 });

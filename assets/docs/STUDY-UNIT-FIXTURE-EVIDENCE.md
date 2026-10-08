@@ -45,3 +45,30 @@ Compatible rollback pauses creation on the retained additive schema using `DNE_L
 Still pending at this snapshot: a dedicated invented-data preview of verified main, finite administrator sign-in → fresh member request → explicit issuance → separate source permission → local consumption → remaining-unit withdrawal, with revision/date, actual access, captures, restart instructions and limits. Use a separate database/server, never an active gate resource. The README describes the scoped capability; feature prose and working test captures alone are not that main demo.
 
 Next bounded action: finish #494's clean exact-commit full gate, unbypassed pre-push, recorded author self-review, PR CI, guarded merge, original resulting-main CI, actual demo and safe branch/worktree cleanup. Dependencies are the existing verified #435/#437/#447/#475 paths; this worker holds the current claim. Recommended lead GPT-6 Astra / XHigh, author review High. Keep #27 and separately gated live/qualified policies open.
+
+## Retained delivery-time failures and shutdown correction — 8 October 2026
+
+The first clean implementation revision `e28f546` passed its complete local gate
+and original pre-push repeat. Git publication then failed when the remote SSH
+connection closed during the long hook; the branch was not published. A normal
+push with command-scoped SSH keepalives subsequently stopped correctly on a
+first-attempt browser failure: L199 mobile teardown observed five PostgreSQL
+sessions immediately after the owned pools ended (399 passing executions,
+1 failed, no skips or retries). Those complete reports and browser artifacts
+remain retained separately; neither earlier pass overrides this failure.
+
+The two new fixture browser teardowns now reuse the repository's existing
+bounded owned-database drain/drop helper. It observes backend disconnection
+within its fixed deadline, validates the generated database name, bounds read
+queries and refuses deletion while sessions remain. It never replays browser
+application actions, terminates a backend or force-drops a database. Control
+pools close even if database drain is refused. This corrects teardown ordering;
+it does not change product behavior, test retries, thresholds or journey IDs.
+
+On the changed source, all three existing real PostgreSQL drain/refusal tests
+and all four L199/L200 desktop/mobile executions passed on their first
+invocations. Typecheck and lint passed. These are focused working-source
+results, not clean-commit or main acceptance. The corrected exact commit must
+still pass complete local/pre-push verification, original PR and resulting-main
+CI, the actual invented-data main demo and safe delivery cleanup. Live evidence
+and the retained failures are linked on delivery issue #494.
