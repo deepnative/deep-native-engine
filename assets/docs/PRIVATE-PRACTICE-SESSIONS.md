@@ -8,6 +8,29 @@ Owner history remains available after goal changes or source retirement. A submi
 
 History has bounded keyset pages, and a detail has at most 15 pairs. Structured member export includes all retained session metadata and exchanges through the existing authenticated 100-record/256-KiB pagination. Practice delivery introduced payload `local-member-records-v13` with these two sections; the current support addition uses v14 with later appended sections; cursor v2 preserves existing section indices. Pages remain live reads, not one immutable snapshot across requests.
 
+## Return to saved practice (#499)
+
+From the learning dashboard or private learning activity, choose **Saved practice
+sessions** or **Saved practice notes**. These entries remain available even when
+there is no matching published lesson for the current goal. History pages and
+session details include **Return to learning**. Opening history never starts a
+session, saves a note, marks completion or grants access. The existing exact-source
+and owner-only readers still control retained content and whether appending is
+available; an unavailable source remains read-only.
+
+BDD mapping: PRACTICE-RETURN-01 → L103 (dashboard, exact-session resume/append/reload);
+PRACTICE-RETURN-02 → L103 (empty histories and no records created);
+PRACTICE-RETURN-03 → L104 (goal/source changes, owned return and other-member denial);
+PRACTICE-RETURN-04 → L58 with L81 regression (saved/retired notes and withdrawal).
+Existing Vitest view tests check discovery before potentially long assignment
+lists and keep history separate from completion. Existing PostgreSQL readers and
+L105 export/withdrawal checks remain unchanged. Approved journey IDs and
+register denominators are preserved. Record revision-specific results on #499;
+this mapping itself is not delivery evidence or parent/full-MVP acceptance.
+
+Navigation rollback requires only reverting the view change; there is no data
+migration or mutation to reverse. Preserve the existing readers and stored work.
+
 ## Failure and rollback
 
 Failed or uncertain writes return generic non-success and never replay automatically. Reload owned history to inspect actual durable state. Expiry, revocation or deletion during lock waits denies or rolls back; a failed rollback discards the connection.
