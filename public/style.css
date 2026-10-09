@@ -435,6 +435,17 @@ progress {
 .next-card {
   background: #f0eee5;
 }
+.next-card ul {
+  padding-left: 20px;
+}
+.next-card li + li {
+  margin-top: 8px;
+}
+.next-card li a {
+  display: inline-block;
+  padding-block: 4px;
+}
+
 .lesson-card .eyebrow {
   margin-bottom: 10px;
 }

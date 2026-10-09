@@ -11,7 +11,7 @@ async function onboard(page: Page, background: string, goal: string) {
   await page.getByLabel("What would you like to do?").selectOption(goal);
   await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
-  await page.getByRole("link", { name: "Local circles" }).click();
+  await page.getByRole("link", { name: "Local circles", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Explore learning circles" }),
   ).toBeVisible();

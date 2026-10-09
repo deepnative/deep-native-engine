@@ -23,11 +23,30 @@ test("[L102] three audiences keep exact private starter practice when changing g
     await page.getByLabel("I checked the context").check();
     await page.getByRole("button", { name: "Complete exercise" }).click();
     await page.goto("/learn");
+    // PARTNAV-03: preserve the original L102 history and withdrawal checks
+    // while also observing discovery after background and goal changes.
+    await page
+      .getByLabel("Your starting point")
+      .selectOption(background === "explorer" ? "professional" : "explorer");
     await page.getByLabel("What would you like to do?").selectOption(b);
     await page.getByRole("button", { name: "Save my direction" }).click();
     await expect(
       page.getByRole("progressbar", { name: "Exercises completed" }),
     ).toHaveAttribute("value", "0");
+    await page.reload();
+    const participation = page.getByRole("complementary", {
+      name: "Private local participation",
+    });
+    await expect(participation).toBeVisible();
+    await expect(
+      participation.getByRole("link", {
+        name: "Explore local circles",
+        exact: true,
+      }),
+    ).toHaveAttribute("href", "/circles");
+    await expect(participation).toContainText(
+      "reviewed publication remain pending",
+    );
     await page.getByRole("link", { name: "Open lesson" }).click();
     await expect(page.getByLabel("Your instruction to AI")).toHaveValue("");
     const second = `Invented ${background} second goal plan with a different outcome.`;
@@ -81,11 +100,14 @@ test("[L102] three audiences keep exact private starter practice when changing g
     expect(JSON.stringify(payload)).not.toContain(first);
     expect(JSON.stringify(payload)).toContain(second);
     await page.goto("/learn");
+    await page.getByLabel("Your starting point").selectOption(background);
     await page.getByLabel("What would you like to do?").selectOption(a);
     await page.getByRole("button", { name: "Save my direction" }).click();
     await expect(
       page.getByRole("progressbar", { name: "Exercises completed" }),
     ).toHaveAttribute("value", "1");
+    await page.reload();
+    await expect(participation).toBeVisible();
     await page.goto("/lesson");
     await expect(page.locator('form[action="/exercise"]')).toHaveCount(0);
     await expect(page.getByText(first, { exact: true })).toHaveCount(0);
