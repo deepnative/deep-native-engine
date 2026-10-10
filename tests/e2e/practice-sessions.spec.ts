@@ -126,10 +126,50 @@ test("[L103] all three audiences explicitly opt into ordered private pairs, relo
     await expect(page).toHaveURL(
       new RegExp(`/library/${id}/practice-session$`),
     );
-    await page.goto("/practice-sessions");
+    // PRACTICE-RETURN-02: find empty histories through the member UI,
+    // without guessing a URL or creating practice by visiting a history.
+    await page.goto("/learn");
+    const sessionsLink = page.getByRole("link", {
+      name: "Saved practice sessions",
+      exact: true,
+    });
+    await expect(sessionsLink).toBeVisible();
+    await sessionsLink.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/practice-sessions$/);
     await expect(
       page.getByText("No private sessions are saved yet", { exact: false }),
     ).toBeVisible();
+    await page
+      .getByRole("link", { name: "Return to learning", exact: true })
+      .click();
+    await page
+      .getByRole("link", { name: "Saved practice notes", exact: true })
+      .click();
+    await expect(
+      page.getByText("No private practice is saved yet.", { exact: true }),
+    ).toBeVisible();
+    const emptyHistory = await exported(page);
+    expect(emptyHistory.records.practiceSessions).toEqual([]);
+    expect(emptyHistory.records.privatePractice).toEqual([]);
+    await page
+      .getByRole("link", { name: "Return to learning", exact: true })
+      .click();
+    await page
+      .getByRole("link", {
+        name: "View private learning activity",
+        exact: true,
+      })
+      .click();
+    await page
+      .getByRole("link", { name: "Saved practice notes", exact: true })
+      .click();
+    await expect(
+      page.getByText("No private practice is saved yet.", { exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("link", { name: "Return to learning", exact: true })
+      .click();
     const path = await start(page, id);
     await expect(
       page.getByText("cannot judge competence", { exact: false }),
@@ -150,6 +190,18 @@ test("[L103] all three audiences explicitly opt into ordered private pairs, relo
         exact: false,
       }),
     ).toBeVisible();
+    // PRACTICE-RETURN-01: resume the same saved record from learning,
+    // then append the next pair before returning through the lesson flow.
+    await page.goto("/learn");
+    await page
+      .getByRole("link", { name: "Saved practice sessions", exact: true })
+      .click();
+    await page
+      .getByRole("link", { name: new RegExp(`${id} · version 1`) })
+      .click();
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await expect(page.locator("[data-practice-response]")).toHaveCount(2);
+    await respond(page, `Invented ${goal} response 3: check the source.`);
     await page.goto(`/library/${id}/practice`);
     await expect(
       page.getByRole("button", { name: "Save private practice", exact: true }),
@@ -162,7 +214,7 @@ test("[L103] all three audiences explicitly opt into ordered private pairs, relo
       .getByRole("button", { name: "Start or return to private session" })
       .click();
     await expect(page).toHaveURL(new RegExp(`${path}$`));
-    for (let sequence = 3; sequence <= 15; sequence++)
+    for (let sequence = 4; sequence <= 15; sequence++)
       await respond(
         page,
         `Invented ${goal} response ${sequence}: check the source.`,
@@ -216,6 +268,20 @@ test("[L104] all three audiences retain owner-only exact sessions through goal a
         .locator('input[name="csrf"]')
         .first()
         .inputValue();
+      await otherPage
+        .getByRole("link", { name: "Saved practice sessions", exact: true })
+        .click();
+      await expect(
+        otherPage.getByText("No private sessions are saved yet", {
+          exact: false,
+        }),
+      ).toBeVisible();
+      await expect(
+        otherPage.getByRole("link", { name: new RegExp(`${id} · version 1`) }),
+      ).toHaveCount(0);
+      await otherPage
+        .getByRole("link", { name: "Return to learning", exact: true })
+        .click();
       const denied = await otherPage.goto(path);
       expect(denied!.status()).toBe(404);
       await expect(otherPage.getByText(words, { exact: true })).toHaveCount(0);
@@ -249,7 +315,20 @@ test("[L104] all three audiences retain owner-only exact sessions through goal a
         ).status(),
       ).toBe(422);
       await changeGoal(page, goal === "everyday" ? "work" : "everyday");
-      await page.goto(path);
+      // PRACTICE-RETURN-03: changed goals do not hide retained exact sessions.
+      await page
+        .getByRole("link", {
+          name: "View private learning activity",
+          exact: true,
+        })
+        .click();
+      await page
+        .getByRole("link", { name: "Saved practice sessions", exact: true })
+        .click();
+      await page
+        .getByRole("link", { name: new RegExp(`${id} · version 1`) })
+        .click();
+      await expect(page).toHaveURL(new RegExp(`${path}$`));
       await expect(page.getByRole("status")).toContainText(
         "Saved pairs are read-only",
       );
@@ -261,7 +340,15 @@ test("[L104] all three audiences retain owner-only exact sessions through goal a
       await page.goto(path);
       await respond(page, `Restored invented ${background} goal`);
       await publish(2);
-      await page.goto(path);
+      await page
+        .getByRole("link", { name: "Return to learning", exact: true })
+        .click();
+      await page
+        .getByRole("link", { name: "Saved practice sessions", exact: true })
+        .click();
+      await page
+        .getByRole("link", { name: new RegExp(`${id} · version 1`) })
+        .click();
       await expect(page.getByRole("status")).toContainText(
         "Saved pairs are read-only",
       );

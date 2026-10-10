@@ -411,18 +411,29 @@ test("[L58] cross-audience private practice persists one exact sample version an
       exact: false,
     }),
   ).toBeVisible();
-  await page.goto("/practice");
+  // PRACTICE-RETURN-04: recover saved notes through the activity page.
+  await page.goto("/progress");
+  await page
+    .getByRole("link", { name: "Saved practice notes", exact: true })
+    .click();
   await expect(
     page.getByText("<invented> I would verify the original sample.", {
       exact: false,
     }),
   ).toBeVisible();
+  await page
+    .getByRole("link", { name: "Return to learning", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/learn$/);
   expect(await catalog.retire(editor, id)).toBe(true);
   await page.goto(`/library/${id}/practice`);
   await expect(
     page.getByRole("heading", { name: "Practice source unavailable" }),
   ).toBeVisible();
-  await page.goto("/practice");
+  await page.goto("/learn");
+  await page
+    .getByRole("link", { name: "Saved practice notes", exact: true })
+    .click();
   await expect(
     page.getByText("Source unavailable; saved private note only"),
   ).toBeVisible();

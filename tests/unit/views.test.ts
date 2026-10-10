@@ -159,6 +159,39 @@ it("PARTNAV-01 exposes existing private participation without promising live ser
   }
 });
 
+it("PRACTICE-RETURN keeps saved work discoverable before assignment lists and separate from completion", () => {
+  for (const [background, goal] of [
+    ["explorer", "everyday"],
+    ["professional", "work"],
+    ["technical", "build"],
+  ] as const) {
+    const html = dashboard(
+      { ...learner, background, goal },
+      undefined,
+      "token",
+    );
+    const history = html.indexOf('aria-label="Saved private practice"');
+    expect(history).toBeGreaterThan(-1);
+    expect(history).toBeLessThan(
+      html.indexOf('aria-labelledby="assignment-options-title"'),
+    );
+    expect(html).toContain(
+      "Opening history creates no practice or completion record.",
+    );
+    expect(html).toContain(
+      'href="/practice-sessions">Saved practice sessions</a>',
+    );
+    expect(html).toContain('href="/practice">Saved practice notes</a>');
+  }
+  const activity = privateProgressPage([]);
+  expect(activity).toContain("No learning activity has been saved");
+  expect(activity).toContain(
+    'href="/practice-sessions">Saved practice sessions</a>',
+  );
+  expect(activity).toContain('href="/practice">Saved practice notes</a>');
+  expect(activity).not.toContain('aria-label="Exercises completed"');
+});
+
 it("keeps blocked synthetic assignments separate from selectable choices and escapes their titles", () => {
   const blocked: AssignmentReadiness = {
     contentId: "SYN-831",
