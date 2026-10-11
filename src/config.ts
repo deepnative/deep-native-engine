@@ -80,6 +80,16 @@ export function config(env: NodeJS.ProcessEnv) {
     throw Error("DNE_WORKFLOW_REVIEW_REQUESTS must be enabled or disabled.");
   if (!["enabled", "disabled"].includes(reviewerWorklistReads))
     throw Error("DNE_REVIEWER_WORKLIST_READS must be enabled or disabled.");
+  const reviewTimeGrantAdministration =
+    env.DNE_REVIEW_TIME_GRANT_ADMINISTRATION ?? "disabled";
+  if (
+    !["disabled", "enabled", "recovery-only"].includes(
+      reviewTimeGrantAdministration,
+    )
+  )
+    throw Error(
+      "DNE_REVIEW_TIME_GRANT_ADMINISTRATION must be disabled, enabled or recovery-only.",
+    );
   const reviewTimeWrites = env.DNE_REVIEW_TIME_WRITES ?? "disabled";
   if (!["enabled", "disabled"].includes(reviewTimeWrites))
     throw Error("DNE_REVIEW_TIME_WRITES must be enabled or disabled.");
@@ -117,6 +127,8 @@ export function config(env: NodeJS.ProcessEnv) {
       sampleAssignmentAdministration === "enabled",
     localHoldInspectionReads: localHoldInspectionReads === "enabled",
     reviewerWorklistReads: reviewerWorklistReads === "enabled",
+    reviewTimeGrantAdministration:
+      reviewTimeGrantAdministration as import("./review-time-grant-values.ts").ReviewGrantAdministration,
     reviewTimeWrites: reviewTimeWrites === "enabled",
     eventRegistration: eventRegistration === "enabled",
     eventAttendance: eventAttendance === "enabled",

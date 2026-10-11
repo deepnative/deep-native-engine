@@ -4,6 +4,7 @@ import { supportAssignmentStore } from "./support-assignment.ts";
 import { sampleAssignmentStore } from "./sample-assignment.ts";
 import { workflowReviewStore } from "./workflow-review.ts";
 import { reviewerWorklistStore } from "./reviewer-worklist.ts";
+import { reviewTimeGrantAdminStore } from "./review-time-grant-admin.ts";
 import { reviewTimeStore } from "./review-time-store.ts";
 import { eventCancellationStore } from "./event-cancellations.ts";
 import { eventEnrollmentStore } from "./event-enrollments.ts";
@@ -147,6 +148,14 @@ export async function start(env: NodeJS.ProcessEnv) {
       attempts: attemptStore(pool),
       practice: practiceStore(pool),
       practiceSessions: practiceSessionStore(pool),
+      reviewTimeGrantAdmin: reviewTimeGrantAdminStore(
+        pool,
+        {
+          mode: settings.mode,
+          administration: settings.reviewTimeGrantAdministration,
+        },
+        Buffer.from(settings.secret, "hex"),
+      ),
       reviewTime: reviewTimeStore(pool, {
         enabled: settings.reviewTimeWrites,
         mode: settings.mode,
