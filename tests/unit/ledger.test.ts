@@ -26,6 +26,13 @@ function database(
   let supportReads = 0;
   let reviewReads = 0;
   const query = vi.fn(async (sql: string, _params?: unknown[]) => {
+    if (sql === 'SELECT clock_timestamp() AS "instant"')
+      return {
+        rows:
+          rows.clock === false
+            ? []
+            : [{ instant: rows.clock ?? new Date("2026-01-31T00:00:00.000Z") }],
+      };
     if (sql.startsWith("SELECT allocation_id FROM support_time_units")) {
       const link = supportReads++
         ? rows.supportAfter === undefined
@@ -517,7 +524,7 @@ it("stops reservations at the exact window boundary and expires available units 
   ).rejects.toMatchObject({ code: "unavailable" });
 });
 
-it("uses the current clock when no test clock is injected", async () => {
+it("uses the database clock when no test clock is injected", async () => {
   const db = database();
   const currentLedger = syntheticLedger({
     connect: db.connect,
@@ -525,6 +532,42 @@ it("uses the current clock when no test clock is injected", async () => {
   await expect(
     currentLedger.reserve(member, grant, 1, "default-clock"),
   ).resolves.toMatch(/^[0-9a-f-]{36}$/);
+});
+
+it.each([false, "not a date", new Date(NaN), 123])(
+  "refuses native reservation when the trusted clock observation is malformed: %s",
+  async (clock) => {
+    const db = database({ clock });
+    const currentLedger = syntheticLedger({
+      connect: db.connect,
+    } as unknown as Pool);
+    await expect(
+      currentLedger.reserve(member, grant, 1, "invalid-db-clock"),
+    ).rejects.toMatchObject({ code: "unavailable" });
+    expect(
+      db.query.mock.calls.some(([sql]) =>
+        String(sql).startsWith(
+          "INSERT INTO synthetic_entitlement_reservations",
+        ),
+      ),
+    ).toBe(false);
+    expect(db.query.mock.calls.some(([sql]) => sql === "ROLLBACK")).toBe(true);
+  },
+);
+it("never falls back to the native host clock after database clock failure", async () => {
+  const db = database();
+  const query = vi.fn(async (sql: string, values?: unknown[]) => {
+    if (sql === 'SELECT clock_timestamp() AS "instant"')
+      throw Error("Clock unavailable");
+    return db.query(sql, values);
+  });
+  const ledger = syntheticLedger({
+    connect: async () => ({ query, release: vi.fn() }),
+  } as unknown as Pool);
+  await expect(
+    ledger.reserve(member, grant, 1, "failed-clock"),
+  ).rejects.toMatchObject({ code: "unavailable" });
+  expect(query.mock.calls.some(([sql]) => sql === "ROLLBACK")).toBe(true);
 });
 
 it("expires a late release while a late consume still settles reserved units", async () => {
