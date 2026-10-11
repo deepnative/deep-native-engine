@@ -1,6 +1,7 @@
 # Documentation and assets
 
-Start with [the current product direction](PRODUCT-DIRECTION.md): the AI learning and participation ecosystem for IT, other professionals and general learners. It supersedes contractor-only assumptions in historical source.
+- [Private review-minute permissions](PRIVATE-REVIEW-TIME-PERMISSIONS.md): member allocation and reviewer references, administrator browser grant/history/recovery and exact revocation, with retained accounting and creation rollback.
+  Start with [the current product direction](PRODUCT-DIRECTION.md): the AI learning and participation ecosystem for IT, other professionals and general learners. It supersedes contractor-only assumptions in historical source.
 
 - [Private workflow review](PRIVATE-WORKFLOW-REVIEW.md): exact member request, finite administrator assignment, moderator reading, original-key recovery and compatible creation pause.
 - [Private synthetic ledger reconciliation](PRIVATE-SYNTHETIC-LEDGER-RECONCILIATION.md): an operator-only structural report of retained invented records, with separate units and explicit external-source limitations.

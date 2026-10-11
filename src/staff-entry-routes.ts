@@ -26,6 +26,8 @@ export interface StaffTools {
   supportTime: boolean;
   assignments: boolean;
   sampleAssignments: boolean;
+  reviewTimeGrants?: boolean;
+  reviewTimeGrantReference?: boolean;
   experts: boolean;
   metrics: boolean;
   ledger: boolean;
@@ -60,8 +62,10 @@ function links(role: StaffRole, tools: StaffTools) {
       "Your sample feedback worklist",
     ]);
     choices.push([
-      tools.sampleAssignments,
-      "/review/sample-assignment-reference",
+      tools.sampleAssignments || tools.reviewTimeGrantReference === true,
+      tools.sampleAssignments
+        ? "/review/sample-assignment-reference"
+        : "/review/review-time-reference",
       "My reviewer reference",
     ]);
   }
@@ -134,6 +138,11 @@ function links(role: StaffRole, tools: StaffTools) {
         tools.circleGrants,
         "/operator/circle-grants",
         "Circle moderation grants",
+      ],
+      [
+        tools.reviewTimeGrants === true,
+        "/operator/review-time-grants",
+        "Private review-minute permissions",
       ],
       [
         tools.sampleAssignments,

@@ -6,6 +6,7 @@ import { sampleToken, sampleUuid } from "./sample-feedback-values.ts";
 import {
   SampleFeedbackFailure,
   sampleFeedbackTransaction,
+  type SampleTransaction,
 } from "./sample-feedback-lifetime.ts";
 export type ReviewGrantResult =
   | { kind: "applied" | "replayed"; grantId: string }
@@ -128,14 +129,14 @@ export function reviewTimeGrants(
             ).rowCount
           )
             return deny();
-          const id = randomUUID();
-          await tx.query(
-            "INSERT INTO review_time_grants(id,allocation_id,staff_id,starts_at,expires_at,granted_by,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7)",
-            [id, allocationId, reviewerId, start, end, admin.id, key],
-          );
-          await tx.query(
-            "INSERT INTO review_time_events(id,allocation_id,member_id,actor_id,action) SELECT $1,id,member_id,$3,'grant-created' FROM review_time_allocations WHERE id=$2",
-            [randomUUID(), allocationId, admin.id],
+          const id = await createReviewTimeGrantRecord(
+            tx,
+            admin.id,
+            allocationId,
+            reviewerId,
+            start,
+            end,
+            key,
           );
           await tx.observe(deadlines);
           return { kind: "applied", grantId: id };
@@ -186,16 +187,8 @@ export function reviewTimeGrants(
             )
           ).rows[0];
           if (!grant) return deny();
-          if (!grant.revoked) {
-            await tx.query(
-              "UPDATE review_time_grants SET revoked_at=clock_timestamp() WHERE id=$1",
-              [grantId],
-            );
-            await tx.query(
-              "INSERT INTO review_time_events(id,allocation_id,member_id,actor_id,action) SELECT $1,a.id,a.member_id,$3,'grant-revoked' FROM review_time_allocations a JOIN review_time_grants g ON g.allocation_id=a.id WHERE g.id=$2",
-              [randomUUID(), grantId, admin.id],
-            );
-          }
+          if (!grant.revoked)
+            await revokeReviewTimeGrantRecord(tx, admin.id, grantId);
           await tx.observe(deadlines);
           return { kind: grant.revoked ? "replayed" : "applied", grantId };
         });
@@ -209,4 +202,41 @@ export function reviewTimeGrants(
       }
     },
   };
+}
+
+/** Shared SQL mutations only: callers retain their established authorization,
+ * lock order, operation identity and transaction lifetime. */
+export async function createReviewTimeGrantRecord(
+  tx: SampleTransaction,
+  adminId: string,
+  allocationId: string,
+  reviewerId: string,
+  starts: Date,
+  expires: Date,
+  key: string,
+) {
+  const id = randomUUID();
+  await tx.query(
+    "INSERT INTO review_time_grants(id,allocation_id,staff_id,starts_at,expires_at,granted_by,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7)",
+    [id, allocationId, reviewerId, starts, expires, adminId, key],
+  );
+  await tx.query(
+    "INSERT INTO review_time_events(id,allocation_id,member_id,actor_id,action) SELECT $1,id,member_id,$3,'grant-created' FROM review_time_allocations WHERE id=$2",
+    [randomUUID(), allocationId, adminId],
+  );
+  return id;
+}
+export async function revokeReviewTimeGrantRecord(
+  tx: SampleTransaction,
+  adminId: string,
+  grantId: string,
+) {
+  await tx.query(
+    "UPDATE review_time_grants SET revoked_at=clock_timestamp() WHERE id=$1",
+    [grantId],
+  );
+  await tx.query(
+    "INSERT INTO review_time_events(id,allocation_id,member_id,actor_id,action) SELECT $1,a.id,a.member_id,$3,'grant-revoked' FROM review_time_allocations a JOIN review_time_grants g ON g.allocation_id=a.id WHERE g.id=$2",
+    [randomUUID(), grantId, adminId],
+  );
 }

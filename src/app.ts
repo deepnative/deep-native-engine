@@ -15,6 +15,9 @@ import type { CircleGrantAdminStore } from "./circle-grant-values.ts";
 import { selectedStaffToken } from "./staff-entry-selection.ts";
 import { mountReviewerWorklistRoutes } from "./reviewer-worklist-routes.ts";
 import type { ReviewerWorklistStore } from "./reviewer-worklist.ts";
+import { mountReviewTimeGrantRoutes } from "./review-time-grant-routes.ts";
+import type { reviewTimeGrantAdminStore } from "./review-time-grant-admin.ts";
+import type { ReviewGrantAdministration } from "./review-time-grant-values.ts";
 import { mountReviewTimeRoutes } from "./review-time-routes.ts";
 import type { reviewTimeStore } from "./review-time-store.ts";
 import { mountSampleFeedbackRoutes } from "./sample-feedback-routes.ts";
@@ -339,6 +342,8 @@ export function app(
     reviewerWorklist?: ReviewerWorklistStore;
     reviewTime?: ReturnType<typeof reviewTimeStore>;
     reviewTimeWrites?: boolean;
+    reviewTimeGrantAdmin?: ReturnType<typeof reviewTimeGrantAdminStore>;
+    reviewTimeGrantAdministration?: ReviewGrantAdministration;
     eventEnrollments?: EventEnrollmentStore;
     eventAttendance?: EventAttendanceRuntimeStore;
     memberEvents?: MemberEventCatalog;
@@ -448,6 +453,13 @@ export function app(
     assignments:
       Boolean(options.supportAssignment) &&
       options.localSupportAssignment === true,
+    reviewTimeGrants:
+      Boolean(options.reviewTimeGrantAdmin) &&
+      options.reviewTimeGrantAdministration !== undefined &&
+      options.reviewTimeGrantAdministration !== "disabled",
+    reviewTimeGrantReference:
+      Boolean(options.reviewTimeGrantAdmin) &&
+      options.reviewTimeGrantAdministration === "enabled",
     sampleAssignments:
       Boolean(options.sampleAssignments) &&
       options.sampleAssignmentAdministration === true,
@@ -1237,6 +1249,15 @@ export function app(
   mountEventCancellationRoutes(app, options.eventCancellations, options);
   mountEventAttendanceRoutes(app, options.eventAttendance, options);
   mountEventRehearsalRoutes(app, options.eventRehearsals, options);
+  mountReviewTimeGrantRoutes(app, options.reviewTimeGrantAdmin, {
+    get origin() {
+      return options.origin;
+    },
+    secret: options.secret,
+    mode: options.mode,
+    administration: options.reviewTimeGrantAdministration,
+    localStaffEntry: options.localStaffEntry,
+  });
   mountSampleAssignmentRoutes(app, options.sampleAssignments, {
     // Runtime and owned port0 previews fill the actual bound origin after listen.
     get origin() {

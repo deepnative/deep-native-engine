@@ -26,6 +26,7 @@ export default defineConfig({
       DNE_LOCAL_SUPPORT_ASSIGNMENT: "enabled",
       DNE_SAMPLE_ASSIGNMENT_ADMINISTRATION: "enabled",
       DNE_REVIEW_TIME_WRITES: "enabled",
+      DNE_REVIEW_TIME_GRANT_ADMINISTRATION: "enabled",
       DNE_LOCAL_AI_HOLD_INSPECTION: "enabled",
       DNE_PRIVATE_STORAGE_ROOT: process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!,
     },

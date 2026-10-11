@@ -3,11 +3,66 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { testPool } from "../support/database.ts";
 import { authorizationStore } from "../../src/authorization.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
-import { COOKIE } from "../../src/session.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
-import { reviewTimeGrants } from "../../src/review-time-grants.ts";
 const pool = testPool();
 const origin = "http://127.0.0.1:4317";
+// Normal staff entry sends a protected credential; retain no network traces.
+test.use({ trace: "off" });
+async function staffSignIn(page: Page, credential: string) {
+  await page.goto("/staff/sign-in");
+  await page.getByLabel("Trusted local staff credential").fill(credential);
+  await page
+    .getByRole("button", { name: "Sign in to staff tools", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Your local staff tools", exact: true }),
+  ).toBeVisible();
+}
+async function grantTimePermission(
+  page: Page,
+  allocationId: string,
+  reviewerId: string,
+  expires: Date,
+) {
+  await page.goto("/operator/review-time-grants");
+  await page
+    .getByLabel("Allocation reference", { exact: true })
+    .fill(allocationId);
+  await page.getByLabel("Reviewer reference", { exact: true }).fill(reviewerId);
+  await page
+    .getByRole("button", { name: "Check exact references", exact: true })
+    .click();
+  await expect(page.locator("body")).not.toContainText(sampleText);
+  const confirmation = page.getByLabel(
+    "I confirm this exact finite permission",
+    {
+      exact: true,
+    },
+  );
+  await expect(confirmation).not.toBeChecked();
+  await page
+    .getByLabel("Starts at (UTC)", { exact: true })
+    .fill(new Date(Date.now() - 60000).toISOString());
+  await page
+    .getByLabel("Expires at (UTC)", { exact: true })
+    .fill(new Date(+expires - 1000).toISOString());
+  await confirmation.check();
+  await page
+    .getByRole("button", {
+      name: "Grant review-minute permission",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Review-minute permission receipt",
+      exact: true,
+    }),
+  ).toBeVisible();
+  const reference = page.locator("[data-review-time-grant-reference]");
+  await expect(reference).toHaveCount(1);
+  return (await reference.innerText()).trim();
+}
 test.afterAll(async () => pool.end());
 const sampleText = `An invented team checks every factual claim.
   Keep indentation and line breaks.
@@ -38,6 +93,11 @@ for (const [index, [background, goal]] of audiences.entries()) {
       baseURL: origin,
       viewport: page.viewportSize(),
     });
+    const administratorContext = await browser.newContext({
+      baseURL: origin,
+      viewport: page.viewportSize(),
+    });
+    const administrator = await administratorContext.newPage();
     const outsiderContext = await browser.newContext({ baseURL: origin });
     const staff = await staffContext.newPage();
     const reviewerToken = randomBytes(32).toString("hex");
@@ -92,6 +152,20 @@ for (const [index, [background, goal]] of audiences.entries()) {
       const adminToken = randomBytes(32).toString("hex");
       adminId = await auth.provisionStaff(adminToken, "platform_admin", expiry);
       reviewerId = await auth.provisionStaff(reviewerToken, "reviewer", expiry);
+      // REVIEW-GRANT-01/03: use real staff entry and each person's own ordinary
+      // reference. Staff provisioning and test-unit issuance remain named fixtures.
+      await staffSignIn(administrator, adminToken);
+      await expect(
+        administrator.getByRole("link", {
+          name: "Private review-minute permissions",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await staffSignIn(staff, reviewerToken);
+      await staff.goto("/review/sample-assignment-reference");
+      await expect(staff.locator("[data-reviewer-reference]")).toHaveText(
+        reviewerId,
+      );
       const assignment = await auth.grantAssignment(
         adminId,
         reviewerId,
@@ -102,15 +176,6 @@ for (const [index, [background, goal]] of audiences.entries()) {
       );
       const staffPath = `/review/evidence/${source.id}/feedback`,
         ownerPath = `/evidence/${source.id}/feedback`;
-      await staffContext.addCookies([
-        {
-          name: COOKIE,
-          value: reviewerToken,
-          url: origin,
-          httpOnly: true,
-          sameSite: "Strict",
-        },
-      ]);
       expect((await staff.goto(staffPath))!.status()).toBe(403);
       await auth.grantEvidenceReview(
         adminId,
@@ -158,18 +223,22 @@ for (const [index, [background, goal]] of audiences.entries()) {
       expect(new URL(page.url()).pathname).not.toBe(cancelledPath);
       const receiptPath = new URL(page.url()).pathname;
       const allocationId = receiptPath.split("/").at(-1)!;
-      const grant = await reviewTimeGrants(pool, {
-        enabled: true,
-        mode: "test",
-      }).grant(
-        adminToken,
+      await expect(
+        page.locator("[data-review-allocation-reference]"),
+      ).toHaveText(allocationId);
+      expect((await staff.goto(staffPath))!.status()).toBe(200);
+      await expect(
+        staff.getByRole("button", {
+          name: "Begin reserved review",
+          exact: true,
+        }),
+      ).toHaveCount(0);
+      await grantTimePermission(
+        administrator,
         allocationId,
         reviewerId,
-        new Date(Date.now() - 60000),
         expiry,
-        randomUUID(),
       );
-      expect(grant.kind).toBe("applied");
       await staff.goto(staffPath);
       await expect(
         staff.getByRole("heading", { name: "Reserved review test minutes" }),
@@ -336,18 +405,16 @@ for (const [index, [background, goal]] of audiences.entries()) {
         page.getByRole("heading", { name: "Your review-minute receipt" }),
       ).toBeVisible();
       const unresolvedPath = new URL(page.url()).pathname;
-      const secondGrant = await reviewTimeGrants(pool, {
-        enabled: true,
-        mode: "test",
-      }).grant(
-        adminToken,
-        unresolvedPath.split("/").at(-1)!,
+      const secondAllocation = unresolvedPath.split("/").at(-1)!;
+      await expect(
+        page.locator("[data-review-allocation-reference]"),
+      ).toHaveText(secondAllocation);
+      await grantTimePermission(
+        administrator,
+        secondAllocation,
         reviewerId,
-        new Date(Date.now() - 60000),
         expiry,
-        randomUUID(),
       );
-      expect(secondGrant.kind).toBe("applied");
       const secondStaffPath = `/review/evidence/${secondId}/feedback`;
       await staff.goto(secondStaffPath);
       await staff
@@ -380,6 +447,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
         `DROP TRIGGER IF EXISTS ${faultName} ON review_time_entries`,
       );
       await pool.query(`DROP FUNCTION IF EXISTS ${faultName}()`);
+      await administratorContext.close();
       await staffContext.close();
       await outsiderContext.close();
       if (reviewerId)
