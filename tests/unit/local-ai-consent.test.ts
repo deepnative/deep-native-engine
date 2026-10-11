@@ -214,6 +214,8 @@ function setup(
       };
     if (options.fail && sql.includes(options.fail))
       throw Error("private synthetic database detail");
+    if (sql === 'SELECT clock_timestamp() AS "instant"')
+      return { rows: [{ instant: new Date("2026-01-31T00:00:00.000Z") }] };
     if (sql === "ROLLBACK" && options.broken) throw Error("rollback detail");
     if (sql === "COMMIT") {
       commits++;
@@ -733,6 +735,23 @@ it("metered enqueue reserves one unit in the caller transaction before reporting
       sql.includes("INSERT INTO synthetic_entitlement_events"),
     ),
   ).toHaveLength(1);
+  expect(f.execute).not.toHaveBeenCalled();
+});
+it("metered enqueue rolls back instead of using host time when the database clock is unavailable", async () => {
+  const f = setup({
+    metered: true,
+    missing: "collision",
+    fail: "SELECT clock_timestamp()",
+  });
+  expect(
+    await f.service.enqueueMetered("member", rid, "clock-unavailable"),
+  ).toEqual({ kind: "denied" });
+  expect(f.query.mock.calls.filter(([sql]) => sql === "COMMIT")).toHaveLength(
+    0,
+  );
+  expect(f.query.mock.calls.filter(([sql]) => sql === "ROLLBACK")).toHaveLength(
+    1,
+  );
   expect(f.execute).not.toHaveBeenCalled();
 });
 it("metered enqueue refuses an absent grant without inserting a job or event", async () => {

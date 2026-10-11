@@ -28,6 +28,12 @@ Issuance, immutable ledger event, exact fixture linkage and original operation r
 
 The structured owner export appends `studyFixtureRequests` after all existing sections; existing indexes 0–40 remain stable, and the new section uses index 41. Records contain only the policy, fixed category/quantity, original timestamps, grant reference and generic administrator attribution. They contain no credential, administrator identity, instruction hash, replay key or private learning text. Bounded authenticated pagination and owner erasure/revocation controls still apply.
 
+Issued units can be used immediately within their recorded validity window.
+The preview checks that window against its local database clock; changing the
+app/device wall clock does not extend a deadline, create units or make an
+expired hold usable. See [native test-unit validity](CTP-011-NATIVE-LEDGER-CLOCK.md)
+for the accounting boundary and behavioral evidence.
+
 ## Pause and rollback
 
 Set `DNE_LOCAL_TEST_UNIT_ISSUANCE=disabled` and restart the compatible current application. This pauses new requests/issuance, while current owning receipts, balances, history, export, withdrawal, account erasure and finite original staff inspection remain available. Keep migration 067 and these readers. Do not delete populated grants, remove the spent policy slot, force uncertain holds to settle, run an older incompatible issuer or treat a schema downgrade as rollback. There is no deployment, hosted backup or old-binary compatibility claim.

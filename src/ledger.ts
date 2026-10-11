@@ -336,13 +336,7 @@ async function applyEvent(
   return result.resultId;
 }
 
-// Shared native clock keeps internal bridges on the same existing time source.
-const systemLedgerClock = () => new Date();
-
-export function syntheticLedger(
-  pool: Pool,
-  now: () => Date = systemLedgerClock,
-): SyntheticLedger {
+export function syntheticLedger(pool: Pool, now?: () => Date): SyntheticLedger {
   const apply: ApplyEvent = async (key, input, change) => {
     requireKey(key);
     const client = await pool.connect().catch(() => {
@@ -379,7 +373,7 @@ export function syntheticLedgerOnConnection(
   const ledger = ledgerOperations(
     client,
     (key, input, change) => applyEvent(client, key, input, change),
-    systemLedgerClock,
+    undefined,
     jobId,
   );
   return { reserve: ledger.reserve, consume: ledger.consume };
@@ -402,7 +396,7 @@ export function studyFixtureLedgerOnConnection(
         { ...input, fixtureRequestId: requestId },
         change,
       ),
-    systemLedgerClock,
+    undefined,
   );
   return {
     async grant(memberId: string, window: ValidityWindow) {
@@ -503,7 +497,7 @@ export function supportLedgerOnConnection(
     client,
     (key, input, change) =>
       applyEvent(client, key, input, change, allocationId),
-    systemLedgerClock,
+    undefined,
     undefined,
     allocationId,
   );
@@ -524,7 +518,7 @@ export function reviewLedgerOnConnection(
     client,
     (key, input, change) =>
       applyEvent(client, key, input, change, undefined, allocationId),
-    systemLedgerClock,
+    undefined,
     undefined,
     undefined,
     allocationId,
@@ -539,11 +533,29 @@ export function reviewLedgerOnConnection(
 function ledgerOperations(
   pool: LedgerConnection,
   apply: ApplyEvent,
-  now: () => Date,
+  now: (() => Date) | undefined,
   jobId?: string,
   supportAllocationId?: string,
   reviewAllocationId?: string,
 ): SyntheticLedger {
+  // Grant windows are persisted in PostgreSQL time. Observe that same clock
+  // after each mutation's locks, never the app clock or BEGIN's timestamp.
+  // An explicitly supplied synthetic test clock retains its prior semantics.
+  async function currentTime(connection: LedgerConnection): Promise<Date> {
+    if (now) return now();
+    const row = (
+      await connection.query<{ instant: Date }>(
+        'SELECT clock_timestamp() AS "instant"',
+      )
+    ).rows[0];
+    if (
+      !row ||
+      !(row.instant instanceof Date) ||
+      !Number.isFinite(+row.instant)
+    )
+      throw new LedgerFailure("unavailable");
+    return row.instant;
+  }
   async function settle(
     operation: "consume" | "release",
     memberId: string,
@@ -657,7 +669,7 @@ function ledgerOperations(
             [
               reservationId,
               memberId,
-              now(),
+              await currentTime(client),
               supportAllocationId ?? null,
               reviewAllocationId ?? null,
             ],
@@ -745,7 +757,7 @@ function ledgerOperations(
             )
           ).rows[0];
           if (!grant) throw new LedgerFailure("unavailable");
-          const current = now();
+          const current = await currentTime(client);
           if (
             grant.expired_at !== null ||
             current < grant.starts_at ||
@@ -907,7 +919,11 @@ function ledgerOperations(
               [grantId, memberId],
             )
           ).rows[0];
-          if (!grant || grant.expired_at !== null || now() >= grant.expires_at)
+          if (
+            !grant ||
+            grant.expired_at !== null ||
+            (await currentTime(client)) >= grant.expires_at
+          )
             throw new LedgerFailure("unavailable");
           if (grant.available < quantity)
             throw new LedgerFailure("insufficient");
@@ -935,7 +951,7 @@ function ledgerOperations(
           `SELECT id,member_id FROM synthetic_entitlement_grants
            WHERE expired_at IS NULL AND expires_at <= $1
            ORDER BY expires_at,id LIMIT $2`,
-          [now(), limit],
+          [await currentTime(pool), limit],
         );
         for (const candidate of candidates.rows) {
           try {
@@ -955,7 +971,7 @@ function ledgerOperations(
         const remaining = await pool.query(
           `SELECT 1 FROM synthetic_entitlement_grants
            WHERE expired_at IS NULL AND expires_at <= $1 LIMIT 1`,
-          [now()],
+          [await currentTime(pool)],
         );
         return { processed, skipped, moreDue: remaining.rows.length > 0 };
       } catch {
@@ -981,7 +997,7 @@ function ledgerOperations(
             )
           ).rows[0];
           if (!grant) throw new ExpirySkipped("unavailable");
-          const current = now();
+          const current = await currentTime(client);
           if (current < grant.expires_at)
             throw new ExpirySkipped("unavailable");
           if (grant.expired_at !== null)
