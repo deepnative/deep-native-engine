@@ -22,7 +22,7 @@ export function bindEvidenceExport(doc, browser) {
       const page = payload.page;
       if (
         payload.kind !== "ready" ||
-        payload.version !== "local-evidence-v2" ||
+        payload.version !== "local-evidence-v3" ||
         !Array.isArray(payload.items) ||
         page.consistency !== "live-pages" ||
         !Number.isSafeInteger(page.number) ||

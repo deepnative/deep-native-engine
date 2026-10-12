@@ -60,6 +60,9 @@ export function config(env: NodeJS.ProcessEnv) {
   )
     throw new Error("Private evidence storage cannot be served publicly.");
   const localStaffEntry = env.DNE_LOCAL_STAFF_ENTRY ?? "disabled";
+  const preparedReviewSamples = env.DNE_PREPARED_REVIEW_SAMPLES ?? "disabled";
+  if (!["enabled", "disabled"].includes(preparedReviewSamples))
+    throw Error("DNE_PREPARED_REVIEW_SAMPLES must be enabled or disabled.");
   if (!["enabled", "disabled"].includes(localStaffEntry))
     throw Error("DNE_LOCAL_STAFF_ENTRY must be enabled or disabled.");
   const localTestUnitIssuance = env.DNE_LOCAL_TEST_UNIT_ISSUANCE ?? "disabled";
@@ -119,6 +122,7 @@ export function config(env: NodeJS.ProcessEnv) {
   if (!["enabled", "disabled"].includes(eventAttendance))
     throw Error("DNE_EVENT_ATTENDANCE must be enabled or disabled.");
   return {
+    preparedReviewSamples: preparedReviewSamples === "enabled",
     localStaffEntry: localStaffEntry === "enabled",
     localTestUnitIssuance: localTestUnitIssuance === "enabled",
     workflowReviewRequests: workflowReviewRequests === "enabled",

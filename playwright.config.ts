@@ -23,6 +23,7 @@ export default defineConfig({
       DNE_PORT: "4317",
       DNE_APP_MODE: "test",
       DNE_LOCAL_STAFF_ENTRY: "enabled",
+      DNE_PREPARED_REVIEW_SAMPLES: "enabled",
       DNE_LOCAL_SUPPORT_ASSIGNMENT: "enabled",
       DNE_SAMPLE_ASSIGNMENT_ADMINISTRATION: "enabled",
       DNE_REVIEW_TIME_WRITES: "enabled",

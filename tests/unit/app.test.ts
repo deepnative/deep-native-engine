@@ -1,4 +1,9 @@
 import { eventAttendanceStore } from "../../src/event-attendance.ts";
+import type { PreparedSampleStore } from "../../src/prepared-samples.ts";
+import {
+  PREPARED_SAMPLES,
+  PROVIDED_SAMPLE_LABEL,
+} from "../../src/prepared-sample-values.ts";
 import type { Pool } from "pg";
 import { disabledEventEnrollmentStore } from "../../src/event-enrollments.ts";
 import { EVENT_PREVIEWS } from "../../src/events.ts";
@@ -1107,6 +1112,61 @@ function evidenceStorage() {
       .mockResolvedValue(undefined),
   };
 }
+it("PREPARED-07 download response identifies the exact provided source without claiming a live scan", async () => {
+  const template = PREPARED_SAMPLES[0]!,
+    files = evidenceStorage(),
+    { agent } = await client(files);
+  files.download.mockResolvedValueOnce({
+    kind: "allowed",
+    name: template.name,
+    mediaType: "text/plain",
+    data: Buffer.from(template.text),
+    origin: {
+      kind: "platform-provided-invented",
+      templateId: template.id,
+      templateVersion: 1,
+      templateDigest: template.digest,
+      acknowledgedAt: new Date(),
+      label: PROVIDED_SAMPLE_LABEL,
+    },
+  });
+  const response = await agent
+    .get(
+      "/api/evidence/11111111-1111-4111-8111-111111111111/download?capability=provided",
+    )
+    .set("Host", host)
+    .expect(200);
+  expect(response.text).toBe(template.text);
+  expect(response.headers["x-evidence-origin"]).toBe(
+    "platform-provided-invented; local-synthetic; unreviewed",
+  );
+  expect(response.headers["x-evidence-template"]).toBe(template.id);
+  expect(response.headers["x-evidence-template-version"]).toBe("1");
+  expect(response.headers["x-evidence-template-digest"]).toBe(template.digest);
+});
+it("PREPARED-01/08 evidence entry reflects explicit creation configuration without creating anything on read", async () => {
+  const prepared = {
+    open: vi.fn(),
+    create: vi.fn(),
+    inspect: vi.fn(),
+  } satisfies PreparedSampleStore;
+  for (const enabled of [false, true]) {
+    const memberStore = storage();
+    memberStore.session.mockResolvedValue({ kind: "active", learner: member });
+    const agent = await managedAgent(
+      app(memberStore, {
+        origin,
+        secret: "secret",
+        mode: "test",
+        preparedSamples: prepared,
+        preparedReviewSamples: enabled,
+      }),
+    );
+    const response = await agent.get("/evidence").set("Host", host).expect(200);
+    expect(response.text.includes('href="/evidence/prepared"')).toBe(enabled);
+  }
+  expect(prepared.create).not.toHaveBeenCalled();
+});
 it("requires explicit member confirmation and current local AI permission at every UI step", async () => {
   const localAiConsent = {
     ...disabledLocalAiConsentStore(),
@@ -1685,7 +1745,7 @@ it("serves owner evidence pages and denies malformed, expired or unavailable con
   }
   const result = {
     kind: "ready" as const,
-    version: "local-evidence-v2" as const,
+    version: "local-evidence-v3" as const,
     items: [],
     page: {
       number: 2,
@@ -1745,7 +1805,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v25",
+          version: "local-member-records-v26",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -1785,7 +1845,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v25",
+    version: "local-member-records-v26",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -4624,7 +4684,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v25" as const,
+    version: "local-member-records-v26" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),

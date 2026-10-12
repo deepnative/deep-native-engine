@@ -1,3 +1,8 @@
+import {
+  PROVIDED_ORIGIN_SQL,
+  PROVIDED_ORIGIN_JOIN,
+  type ProvidedSampleOrigin,
+} from "./prepared-sample-values.ts";
 import type { ApplicationMode } from "./adapters.ts";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, QueryResultRow } from "pg";
@@ -54,6 +59,7 @@ export interface SampleFeedbackRecord extends QueryResultRow {
   answeredAt: Date | null;
 }
 export interface SampleFeedbackView {
+  origin?: ProvidedSampleOrigin;
   reviewAllocation?: {
     receipt: ReviewTimeReceipt;
     grantId: string;
@@ -122,6 +128,7 @@ const projection = `id,submission_id AS "submissionId",reviewer_id AS "authorId"
  clarification,clarification_operation_id AS "clarificationOperationId",clarified_at AS "clarifiedAt",
  answer,answer_operation_id AS "answerOperationId",answered_at AS "answeredAt"`;
 interface Scope {
+  origin?: ProvidedSampleOrigin;
   tx: SampleTransaction;
   actorId: string;
   workspaceId: string;
@@ -227,6 +234,12 @@ export function sampleFeedbackStore(
           (staff && (!evidence.consent || evidence.state !== "clean"))
         )
           return fail("denied");
+        const origin = (
+          await tx.query<{ origin: ProvidedSampleOrigin | null }>(
+            `SELECT ${PROVIDED_ORIGIN_SQL} FROM evidence_objects e ${PROVIDED_ORIGIN_JOIN} WHERE e.id=$1`,
+            [evidenceId],
+          )
+        ).rows[0]?.origin;
         const submission = (
           await tx.query<{ id: string; status: string }>(
             `SELECT id,status FROM evidence_review_submissions
@@ -300,6 +313,7 @@ export function sampleFeedbackStore(
           submissionId: submission.id,
           status: submission.status,
           title: evidence.name,
+          ...(origin ? { origin } : {}),
           source,
           digest: evidence.digest,
           sourceRevision: evidence.revision,
@@ -377,6 +391,7 @@ export function sampleFeedbackStore(
     evidenceId: s.evidenceId,
     submissionId: s.submissionId,
     title: s.title,
+    ...(s.origin ? { origin: s.origin } : {}),
     source: s.source,
     sourceSha256: s.digest,
     sourceRevision: s.sourceRevision,

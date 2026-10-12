@@ -9,6 +9,11 @@ import { basename, join, resolve } from "node:path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import type { Pool, PoolClient } from "pg";
 import { hash } from "./store.ts";
+import {
+  PROVIDED_ORIGIN_SQL,
+  PROVIDED_ORIGIN_JOIN,
+  type ProvidedSampleOrigin,
+} from "./prepared-sample-values.ts";
 
 export const MAX_EVIDENCE_BYTES = 1024 * 1024;
 export const MAX_EXPORT_ITEMS = 20;
@@ -53,9 +58,11 @@ type EvidenceMetadata = {
   original_name: string;
   media_type: EvidenceType;
   storage_key: string;
+  origin?: ProvidedSampleOrigin;
 };
 
 export interface OwnedEvidence {
+  origin?: ProvidedSampleOrigin;
   id: string;
   name: string;
   mediaType: EvidenceType;
@@ -70,6 +77,7 @@ export interface OwnedEvidence {
   hasRevision: boolean;
 }
 export interface ExportedEvidence {
+  origin?: ProvidedSampleOrigin;
   id: string;
   name: string;
   mediaType: EvidenceType;
@@ -87,7 +95,7 @@ export type EvidenceExport =
   | { kind: "unavailable" }
   | {
       kind: "ready";
-      version: "local-evidence-v2";
+      version: "local-evidence-v3";
       items: ExportedEvidence[];
       page: {
         number: number;
@@ -134,6 +142,7 @@ export interface EvidenceStore {
         name: string;
         mediaType: EvidenceType;
         data: Buffer;
+        origin?: ProvidedSampleOrigin;
       }
   >;
   addDerivative(
@@ -382,8 +391,8 @@ export function evidenceStore(
         }
       >(
         `SELECT e.id,e.workspace_id,e.original_name,e.media_type,e.storage_key,
-              e.owner_principal_id,e.private_review_allowed,e.learning_circle_id
-       FROM evidence_objects e WHERE e.id=$1 AND e.workspace_id=$2
+              e.owner_principal_id,e.private_review_allowed,e.learning_circle_id,${PROVIDED_ORIGIN_SQL}
+       FROM evidence_objects e ${PROVIDED_ORIGIN_JOIN} WHERE e.id=$1 AND e.workspace_id=$2
          AND e.quarantine_state='clean' FOR SHARE OF e`,
         [evidenceId, workspace.id],
       )
@@ -544,9 +553,11 @@ export function evidenceStore(
                     WHEN parent.quarantine_state='deleting' THEN 'deleting'
                     ELSE 'current' END AS "revisionParentStatus",
                   e.revision_number AS "revisionNumber",
+                  ${PROVIDED_ORIGIN_SQL},
                   EXISTS(SELECT 1 FROM evidence_objects child
                     WHERE child.revision_parent_id=e.id) AS "hasRevision"
            FROM evidence_objects e
+           ${PROVIDED_ORIGIN_JOIN}
            JOIN principals p ON p.id=e.owner_principal_id
            LEFT JOIN evidence_objects parent ON parent.id=e.revision_parent_id
            LEFT JOIN evidence_review_submissions s ON s.evidence_id=e.id
@@ -555,7 +566,10 @@ export function evidenceStore(
            ORDER BY e.created_at DESC,e.id`,
           [hash(token)],
         )
-      ).rows;
+      ).rows.map(({ origin, ...row }) => ({
+        ...row,
+        ...(origin ? { origin } : {}),
+      }));
     },
     async exportOwned(token, continuation) {
       if (!tokenPattern.test(token)) return { kind: "denied" };
@@ -605,6 +619,7 @@ export function evidenceStore(
           byteSize: number;
           sha256: string;
           storageKey: string;
+          origin?: ProvidedSampleOrigin;
         }>(
           `SELECT e.id,e.original_name AS name,e.media_type AS "mediaType",
                   e.quarantine_state AS "quarantineState",
@@ -618,8 +633,9 @@ export function evidenceStore(
                     WHEN parent.quarantine_state='deleting' THEN 'deleting'
                     ELSE 'current' END AS "revisionParentStatus",
                   e.revision_number AS "revisionNumber",e.byte_size AS "byteSize",
-                  e.sha256,e.storage_key AS "storageKey"
+                  e.sha256,e.storage_key AS "storageKey",${PROVIDED_ORIGIN_SQL}
            FROM evidence_objects e
+           ${PROVIDED_ORIGIN_JOIN}
            LEFT JOIN evidence_objects parent ON parent.id=e.revision_parent_id
            WHERE e.owner_principal_id=$1 AND e.workspace_id=$2
              AND ($3::timestamptz IS NULL OR (e.created_at,e.id)>($3::timestamptz,$4::uuid))
@@ -679,6 +695,7 @@ export function evidenceStore(
             revisionParentStatus: row.revisionParentStatus,
             revisionNumber: row.revisionNumber,
             sourceBase64,
+            ...(row.origin ? { origin: row.origin } : {}),
           });
         }
         // BEGIN freezes CURRENT_TIMESTAMP; source reads can outlive the session.
@@ -701,7 +718,7 @@ export function evidenceStore(
             : null;
         return {
           kind: "ready",
-          version: "local-evidence-v2",
+          version: "local-evidence-v3",
           items,
           page: {
             number: cursor?.[3] ?? 1,
@@ -959,6 +976,7 @@ export function evidenceStore(
             name: row.original_name,
             mediaType: row.media_type,
             data,
+            ...(row.origin ? { origin: row.origin } : {}),
           };
         },
         () => validCapability(evidenceId, capability, clock()),

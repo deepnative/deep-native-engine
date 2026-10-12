@@ -1116,6 +1116,29 @@ it("upgrades populated pre-review-time feedback twice without converting unbille
       expect(
         (await client.query(`SELECT count(*)::integer n FROM ${table}`)).rows,
       ).toEqual([{ n: 0 }]);
+    // Exercise the current reader only after the rest of the additive upgrade.
+    // Migration 058's isolated assertions above keep its legacy contract intact.
+    for (const name of (await readdir(directory))
+      .filter(
+        (name) => /^\d{3}-.*\.sql$/.test(name) && Number(name.slice(0, 3)) > 58,
+      )
+      .sort())
+      await client.query(await readFile(new URL(name, directory), "utf8"));
+    expect(
+      (
+        await client.query(
+          "SELECT * FROM private_sample_feedback WHERE id=$1",
+          [feedbackId],
+        )
+      ).rows,
+    ).toEqual(before);
+    expect(
+      (await client.query("SELECT * FROM reviewer_evidence_grants ORDER BY id"))
+        .rows,
+    ).toEqual(originalGrants);
+    expect(
+      (await client.query("SELECT * FROM provided_evidence_origins")).rows,
+    ).toEqual([]);
     const owner = ready(await f.feedback.owner(f.ownerToken, f.id));
     expect(owner.records).toHaveLength(1);
     expect(owner.records[0]).toMatchObject({

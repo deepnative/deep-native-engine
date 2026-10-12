@@ -5,6 +5,9 @@ import { mountStaffEntryRoutes } from "./staff-entry-routes.ts";
 import { mountSupportAssignmentRoutes } from "./support-assignment-routes.ts";
 import type { SupportAssignmentStore } from "./support-assignment.ts";
 import { mountSampleAssignmentRoutes } from "./sample-assignment-routes.ts";
+import { preparedSamplesEnabled } from "./prepared-samples.ts";
+import { mountPreparedSampleRoutes } from "./prepared-sample-routes.ts";
+import type { PreparedSampleStore } from "./prepared-samples.ts";
 import type { SampleAssignmentStore } from "./sample-assignment-values.ts";
 import { mountEventCancellationRoutes } from "./event-cancellation-routes.ts";
 import { mountEventAttendanceRoutes } from "./event-attendance-routes.ts";
@@ -313,6 +316,8 @@ export function app(
     adapters?: AdapterReadiness[];
     authorization?: AuthorizationStore;
     evidence?: EvidenceStore;
+    preparedSamples?: PreparedSampleStore;
+    preparedReviewSamples?: boolean;
     localAiConsent?: LocalAiConsentStore;
     localAiControl?: LocalAiControlStore;
     catalog?: CatalogStore;
@@ -1104,6 +1109,19 @@ export function app(
       res.status(403).json({ error: "forbidden" });
       return;
     }
+    if (result.origin) {
+      res
+        .set(
+          "X-Evidence-Origin",
+          "platform-provided-invented; local-synthetic; unreviewed",
+        )
+        .set("X-Evidence-Template", result.origin.templateId)
+        .set(
+          "X-Evidence-Template-Version",
+          String(result.origin.templateVersion),
+        )
+        .set("X-Evidence-Template-Digest", result.origin.templateDigest);
+    }
     res
       .type(result.mediaType)
       .set("Content-Disposition", `attachment; filename="${result.name}"`)
@@ -1468,6 +1486,14 @@ export function app(
       evidencePage(
         await evidence.owned(res.locals.token as string),
         res.locals.csrf as string,
+        [],
+        undefined,
+        Boolean(options.preparedSamples) &&
+          preparedSamplesEnabled({
+            enabled: options.preparedReviewSamples,
+            mode: options.mode,
+            origin: options.origin,
+          }),
       ),
     );
   });
@@ -1768,6 +1794,7 @@ export function app(
     }
     res.redirect(303, "/evidence");
   });
+  mountPreparedSampleRoutes(app, options.preparedSamples, options);
   app.post("/evidence/:evidenceId/download", async (req, res) => {
     const result = await evidence.issueDownload(
       res.locals.token as string,

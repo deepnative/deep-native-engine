@@ -640,9 +640,11 @@ it("TESTISSUE-07 append-only owned fixture export discloses no administrator ide
     attribution: "Local platform administrator",
   });
   expect(owned![0]!.withdrawnAt).toBeInstanceOf(Date);
-  expect(Object.keys(result.payload.records).at(-1)).toBe(
+  expect(Object.keys(result.payload.records).slice(41)).toEqual([
     "studyFixtureRequests",
-  );
+    "providedEvidenceOrigins",
+    "preparedCopyReceipts",
+  ]);
   expect(JSON.stringify(result.payload)).not.toContain(f.administratorId);
   expect(JSON.stringify(result.payload)).not.toContain(f.issueKey);
   expect(JSON.stringify(result.payload)).not.toContain(f.requestKey);
