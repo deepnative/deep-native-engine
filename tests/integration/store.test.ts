@@ -3002,7 +3002,7 @@ it("keeps synthetic assignment submissions immutable across private revisions an
   expect(ownedExport).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v25",
+      version: "local-member-records-v26",
       records: {
         assignmentSubmissions: [
           { attemptId: id, sequence: 1, response: firstText },
@@ -3993,7 +3993,7 @@ it("exports only current owner evidence and withholds unsafe or deleted source b
   expect(await evidence.transitionQuarantine(unsafe.id, "rejected")).toBe(true);
   expect(await evidence.exportOwned(outsider.token)).toMatchObject({
     kind: "ready",
-    version: "local-evidence-v2",
+    version: "local-evidence-v3",
     items: [],
   });
   const first = await evidence.exportOwned(owner.token);
@@ -5886,7 +5886,7 @@ it("attributes deterministic adapter jobs only to an active member and keeps ide
   expect(await memberExportStore(pool).exportOwned(owner.token)).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v25",
+      version: "local-member-records-v26",
       records: { adapterJobs: [{ id: first.id, mode: "test" }] },
     },
   });

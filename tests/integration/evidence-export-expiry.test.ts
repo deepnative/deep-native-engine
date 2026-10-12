@@ -218,7 +218,7 @@ it("returns the unchanged source schema for a valid owner and excludes it from a
   const other = await member();
   expect(await f.evidence.exportOwned(f.owner.token)).toMatchObject({
     kind: "ready",
-    version: "local-evidence-v2",
+    version: "local-evidence-v3",
     items: [
       {
         id: f.id,
@@ -237,7 +237,7 @@ it("returns the unchanged source schema for a valid owner and excludes it from a
   });
   expect(await f.evidence.exportOwned(other.token)).toMatchObject({
     kind: "ready",
-    version: "local-evidence-v2",
+    version: "local-evidence-v3",
     items: [],
   });
 });
@@ -405,7 +405,7 @@ it.each(["storage failure", "size mismatch", "hash mismatch"] as const)(
     expect(await f.evidence.remove(f.owner.token, f.id)).toBe(true);
     expect(await f.evidence.exportOwned(f.owner.token)).toMatchObject({
       kind: "ready",
-      version: "local-evidence-v2",
+      version: "local-evidence-v3",
       items: [],
     });
   },

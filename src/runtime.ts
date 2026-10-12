@@ -22,6 +22,8 @@ import { migrate, store } from "./store.ts";
 import { app } from "./app.ts";
 import { authorizationStore } from "./authorization.ts";
 import { evidenceStore, fileObjectStorage } from "./evidence.ts";
+import { preparedObjectStorage } from "./prepared-sample-storage.ts";
+import { preparedSampleStore } from "./prepared-samples.ts";
 import { deterministicRegistry } from "./adapters.ts";
 import { localAiConsentStore } from "./local-ai-consent.ts";
 import { localAiControlStore } from "./local-ai-control.ts";
@@ -87,10 +89,18 @@ export async function start(env: NodeJS.ProcessEnv) {
   try {
     await migrate(pool);
     await seedDraftPack(pool);
-    const objects = fileObjectStorage(settings.privateStorageRoot);
+    const objects = preparedObjectStorage(
+      pool,
+      fileObjectStorage(settings.privateStorageRoot),
+    );
     const eventReader = eventCatalogReader();
     const options = {
       ...settings,
+      preparedSamples: preparedSampleStore(pool, {
+        mode: settings.mode,
+        enabled: settings.preparedReviewSamples,
+        origin: settings.origin,
+      }),
       studyUnitFixtures: studyUnitFixtureStore(pool, {
         mode: settings.mode,
         enabled: settings.localTestUnitIssuance,

@@ -1,4 +1,9 @@
 import { it, expect } from "vitest";
+import type { OwnedEvidence } from "../../src/evidence.ts";
+import {
+  PREPARED_SAMPLES,
+  PROVIDED_SAMPLE_LABEL,
+} from "../../src/prepared-sample-values.ts";
 import {
   escape,
   page,
@@ -54,6 +59,54 @@ const draft = {
   verification: "Check original notes",
   completed_at: null,
 };
+it("PREPARED-01/06 distinguishes fixed provided copies from legacy uploads and separately edited pending sources", () => {
+  const template = PREPARED_SAMPLES[0]!;
+  const item: OwnedEvidence = {
+    id: "11111111-1111-4111-8111-111111111111",
+    name: template.name,
+    mediaType: "text/plain",
+    quarantineState: "clean" as const,
+    privateReviewAllowed: true,
+    privateReviewRevokedAt: null,
+    submissionStatus: null,
+    createdAt: new Date(),
+    revisionNumber: 1,
+    revisionParentId: null,
+    revisionParentStatus: "none" as const,
+    hasRevision: false,
+    origin: {
+      kind: "platform-provided-invented" as const,
+      templateId: template.id,
+      templateVersion: 1,
+      templateDigest: template.digest,
+      acknowledgedAt: new Date(),
+      label: PROVIDED_SAMPLE_LABEL,
+    },
+  };
+  const html = evidencePage([item], "csrf", [], undefined, true);
+  expect(html).toContain("Use a prepared invented sample");
+  expect(html).toContain(PROVIDED_SAMPLE_LABEL);
+  expect(html).toContain(template.digest);
+  expect(html).toContain("trusted local synthetic source, no live scan");
+  expect(html).not.toContain("Safety check passed in this local preview");
+  const uploaded = { ...item };
+  delete uploaded.origin;
+  const edited = evidencePage(
+    [{ ...uploaded, quarantineState: "pending" }],
+    "csrf",
+  );
+  expect(edited).toContain(
+    "Pending safety check; no live scanner is connected",
+  );
+  expect(edited).not.toContain(PROVIDED_SAMPLE_LABEL);
+  expect(edited).not.toContain("Queue for local review consideration");
+  const blocked = evidencePage(
+    [{ ...item, quarantineState: "rejected" }],
+    "csrf",
+  );
+  expect(blocked).toContain("Rejected by safety check");
+  expect(blocked).not.toContain("trusted local synthetic source, no live scan");
+});
 it("offers exact-version withdrawal and preserves a text-free completion state", () => {
   const saved = {
     instruction: "Invented <private> instruction",
@@ -1790,7 +1843,7 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v25" as const,
+    version: "local-member-records-v26" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),

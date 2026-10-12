@@ -3,6 +3,11 @@ import { expect, it, vi } from "vitest";
 import type { Pool, PoolClient } from "pg";
 import type { ObjectStorage } from "../../src/evidence.ts";
 import {
+  PREPARED_SAMPLES,
+  PROVIDED_SAMPLE_LABEL,
+  type ProvidedSampleOrigin,
+} from "../../src/prepared-sample-values.ts";
+import {
   sampleFeedbackStore,
   type SampleFeedbackRecord,
 } from "../../src/sample-feedback.ts";
@@ -12,8 +17,10 @@ import {
   type SampleDraftInput,
 } from "../../src/sample-feedback-values.ts";
 const token = "a".repeat(64);
-function fixture(staff = true) {
-  const source = Buffer.from("Invented source");
+function fixture(staff = true, provided = false) {
+  const source = Buffer.from(
+    provided ? PREPARED_SAMPLES[0]!.text : "Invented source",
+  );
   const expiry = new Date(Date.now() + 60000);
   const state = {
     identity: {
@@ -42,6 +49,16 @@ function fixture(staff = true) {
     records: [] as SampleFeedbackRecord[],
     replay: undefined as { digest: string; revision: number } | undefined,
     throwQuery: false,
+    origin: provided
+      ? ({
+          kind: "platform-provided-invented",
+          templateId: PREPARED_SAMPLES[0]!.id,
+          templateVersion: 1,
+          templateDigest: PREPARED_SAMPLES[0]!.digest,
+          acknowledgedAt: new Date(),
+          label: PROVIDED_SAMPLE_LABEL,
+        } satisfies ProvidedSampleOrigin)
+      : null,
   };
   const calls: { sql: string; values?: unknown[] }[] = [];
   const query = vi.fn(async (sql: string, values?: unknown[]) => {
@@ -55,6 +72,8 @@ function fixture(staff = true) {
     else if (sql.includes("SELECT w.id FROM workspaces"))
       rows = state.workspace ? [state.workspace] : [];
     else if (sql.includes("original_name AS name")) rows = [state.evidence];
+    else if (sql.includes("provided_evidence_origins"))
+      rows = [{ origin: state.origin }];
     else if (sql.includes("SELECT id,status FROM evidence_review_submissions"))
       rows = state.submission ? [state.submission] : [];
     else if (sql.includes("FROM assignment_grants a"))
@@ -121,6 +140,25 @@ function record(f: ReturnType<typeof fixture>): SampleFeedbackRecord {
     answeredAt: null,
   };
 }
+it("PREPARED-03/06 owner and reviewer retain provided provenance on their exact source, without turning reading into feedback", async () => {
+  for (const staff of [false, true]) {
+    const f = fixture(staff, true);
+    const result = await (staff
+      ? f.store.reviewer(token, id)
+      : f.store.owner(token, id));
+    expect(result).toMatchObject({
+      kind: "ready",
+      origin: f.state.origin,
+      source: PREPARED_SAMPLES[0]!.text,
+      records: [],
+    });
+    expect(
+      f.calls.some((c) =>
+        /^INSERT INTO private_sample_feedback(?:\s|\()/.test(c.sql),
+      ),
+    ).toBe(false);
+  }
+});
 it("rejects malformed identities and cursors without opening a connection", async () => {
   const f = fixture();
   expect(await f.store.reviewer("bad", id)).toEqual({ kind: "denied" });

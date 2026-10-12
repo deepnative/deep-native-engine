@@ -6,7 +6,7 @@ const { bindEvidenceExport } = await import("../../public/evidence-export.js");
 afterAll(() => vi.unstubAllGlobals());
 const payload = (page = {}) => ({
   kind: "ready",
-  version: "local-evidence-v2",
+  version: "local-evidence-v3",
   page: {
     number: 1,
     itemCount: 2,

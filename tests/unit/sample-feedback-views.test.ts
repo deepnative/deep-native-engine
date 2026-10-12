@@ -1,5 +1,9 @@
 import { expect, it } from "vitest";
 import {
+  PREPARED_SAMPLES,
+  PROVIDED_SAMPLE_LABEL,
+} from "../../src/prepared-sample-values.ts";
+import {
   sampleFeedbackPage,
   sampleFeedbackPath,
   sampleFeedbackRecovery,
@@ -53,6 +57,30 @@ function view(): SampleFeedbackView {
     next: null,
   };
 }
+it("PREPARED-03 identifies a provided unreviewed source to member and reviewer without claiming authorship or assessment", () => {
+  const template = PREPARED_SAMPLES[0]!;
+  for (const reviewer of [false, true]) {
+    const html = sampleFeedbackPage(
+      {
+        ...view(),
+        source: template.text,
+        origin: {
+          kind: "platform-provided-invented",
+          templateId: template.id,
+          templateVersion: 1,
+          templateDigest: template.digest,
+          acknowledgedAt: new Date(),
+          label: PROVIDED_SAMPLE_LABEL,
+        },
+      },
+      "csrf",
+      reviewer,
+    );
+    expect(html).toContain(PROVIDED_SAMPLE_LABEL);
+    expect(html).toContain(template.digest);
+    expect(html).not.toContain("Provided-example origin is not recorded");
+  }
+});
 it("encodes path identifiers instead of allowing injected query or markup", () => {
   expect(sampleFeedbackPath("a/b?c")).toBe("/evidence/a%2Fb%3Fc/feedback");
   expect(sampleFeedbackPath(id, true)).toBe(`/review/evidence/${id}/feedback`);

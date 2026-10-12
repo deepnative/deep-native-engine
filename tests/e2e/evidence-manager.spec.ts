@@ -82,7 +82,7 @@ test("[L59] a member manages invented private evidence with honest safety and co
       "deep-native-evidence-page-1.json",
     );
     expect(await pendingExport.json()).toMatchObject({
-      version: "local-evidence-v2",
+      version: "local-evidence-v3",
       items: [{ id, quarantineState: "pending", sourceBase64: null }],
     });
     await otherPage.goto("/evidence");
@@ -531,7 +531,7 @@ test("[L92] owner downloads bounded evidence pages from current bytes with priva
       const downloaded = JSON.parse(
         await readFile((await download.path())!, "utf8"),
       ) as Extract<EvidenceExport, { kind: "ready" }>;
-      expect(downloaded.version).toBe("local-evidence-v2");
+      expect(downloaded.version).toBe("local-evidence-v3");
       expect(downloaded.page).toMatchObject({
         number,
         consistency: "live-pages",

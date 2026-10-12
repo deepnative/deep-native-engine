@@ -389,6 +389,27 @@ const sections = {
      WHERE r.member_id=$1 AND w.deleting_at IS NULL`,
     "r.id",
   ),
+  // Append both sections: existing cursor v2 positions keep their meaning.
+  providedEvidenceOrigins: section(
+    `o.evidence_id AS "evidenceId",o.template_id AS "templateId",o.template_version AS "templateVersion",
+     o.template_digest AS "templateDigest",o.acknowledged_at AS "acknowledgedAt",
+     'platform-provided-invented' AS kind,'Provided invented example · local synthetic · unreviewed' AS label`,
+    `provided_evidence_origins o JOIN evidence_objects e ON e.id=o.evidence_id
+     AND e.workspace_id=o.workspace_id AND e.owner_principal_id=o.member_id
+     WHERE o.member_id=$1 AND e.quarantine_state<>'deleting' AND e.id=ANY($4::uuid[])`,
+    "o.evidence_id",
+  ),
+  preparedCopyReceipts: section(
+    `r.id AS "receiptId",r.created_at AS "createdAt",r.evidence_id AS "evidenceId",
+     CASE WHEN r.evidence_id IS NULL THEN 'removed'
+       WHEN EXISTS(SELECT 1 FROM evidence_objects e WHERE e.id=r.evidence_id AND e.quarantine_state='deleting') THEN 'removed'
+       WHEN EXISTS(SELECT 1 FROM evidence_objects e WHERE e.id=r.evidence_id AND NOT e.private_review_allowed) THEN 'withdrawn'
+       ELSE 'available' END AS state`,
+    `provided_evidence_operations r WHERE r.member_id=$1
+     AND (r.evidence_id IS NULL OR r.evidence_id=ANY($4::uuid[]))`,
+    "r.id",
+    true,
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -402,7 +423,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v25";
+  version: "local-member-records-v26";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -536,7 +557,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v25",
+          version: "local-member-records-v26",
           profile: owner.rows[0],
           records,
           testUnitHistory: {
@@ -633,6 +654,28 @@ export function memberExportStore(
                  WHERE s.evidence_id=e.id AND f.published_at IS NOT NULL
                    AND jsonb_build_array(e.id,f.id)>$3::jsonb)
                ORDER BY e.id LIMIT $2 FOR SHARE OF e`,
+              values,
+            );
+            values.push(parents.rows.map((row) => row.id));
+          }
+          if (
+            name === "providedEvidenceOrigins" ||
+            name === "preparedCopyReceipts"
+          ) {
+            // A continuation can start here. Source first, then receipt/metadata,
+            // matching withdrawal and ON DELETE SET NULL; never lock children first.
+            const sourceTable =
+              name === "providedEvidenceOrigins"
+                ? "provided_evidence_origins"
+                : "provided_evidence_operations";
+            const rowKey =
+              name === "providedEvidenceOrigins" ? "r.evidence_id" : "r.id";
+            const parents = await client.query<{ id: string }>(
+              `SELECT e.id FROM evidence_objects e WHERE e.owner_principal_id=$1 AND e.id IN(
+                SELECT r.evidence_id FROM ${sourceTable} r WHERE r.member_id=$1
+                  AND jsonb_build_array(${rowKey})>$3::jsonb
+                ORDER BY jsonb_build_array(${rowKey}) LIMIT $2)
+               ORDER BY e.id FOR SHARE OF e`,
               values,
             );
             values.push(parents.rows.map((row) => row.id));
