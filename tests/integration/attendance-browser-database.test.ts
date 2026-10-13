@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
-import { beforeEach, expect, it, type TestContext } from "vitest";
+import { afterEach, beforeEach, expect, it, type TestContext } from "vitest";
 import {
   dropAttendanceBrowserDatabase,
   waitForAttendanceBrowserDatabaseDrain,
@@ -42,26 +42,27 @@ function currentFixture(context: TestContext) {
 beforeEach(async (context) => {
   const f: AttendanceFixture = await fixture();
   fixtures.set(context.task, f);
-  // Vitest may advance after a hook deadline while its promise is still pending.
-  // This closure and the test context retain only this invocation's resources.
-  return async () => {
-    if (f.releaseTimer) clearTimeout(f.releaseTimer);
-    try {
-      f.ended ??= f.own.end();
-      await f.ended;
-      await dropAttendanceBrowserDatabase(f.control, f.name);
-      expect(
-        (
-          await f.control.query(
-            "SELECT datname FROM pg_database WHERE datname=$1",
-            [f.name],
-          )
-        ).rows,
-      ).toHaveLength(0);
-    } finally {
-      await f.control.end();
-    }
-  };
+});
+afterEach(async (context) => {
+  // Snapshot only this test's resources before awaiting. Keep cleanup in the
+  // original afterEach lifecycle so its configured hook deadline still applies.
+  const f = currentFixture(context);
+  if (f.releaseTimer) clearTimeout(f.releaseTimer);
+  try {
+    f.ended ??= f.own.end();
+    await f.ended;
+    await dropAttendanceBrowserDatabase(f.control, f.name);
+    expect(
+      (
+        await f.control.query(
+          "SELECT datname FROM pg_database WHERE datname=$1",
+          [f.name],
+        )
+      ).rows,
+    ).toHaveLength(0);
+  } finally {
+    await f.control.end();
+  }
 });
 it("CI-ATTEND-02 waits for the observed owned PostgreSQL session to disconnect before deletion", async (context) => {
   const f = currentFixture(context);

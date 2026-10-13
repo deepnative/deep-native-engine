@@ -122,8 +122,8 @@ test("DRAIN-01 an earlier timed-out fixture teardown cannot close or delete a la
   );
   const first = { task: {} },
     second = { task: {} };
-  const cleanup = await before(first);
-  const older = (cleanup ? cleanup() : after(first)).then(
+  await before(first);
+  const older = after(first).then(
     () => ({ ok: true }),
     (e) => ({ ok: false, message: e.message }),
   );
