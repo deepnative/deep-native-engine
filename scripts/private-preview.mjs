@@ -100,7 +100,7 @@ export async function launchPreview(env) {
     runtimeRoot,
     provider: "deterministic local test only; no live services",
     fixture:
-      "One invented non-qualified lesson and three finite synthetic staff identities only; no member, grant, queue, feedback, completion, allowance or participation seeded.",
+      "One invented non-qualified lesson and four finite synthetic staff identities only; no member, grant, queue, feedback, completion, allowance, discussion, proposal, event schedule or participation seeded.",
   };
   const save = () =>
     writeFile(metadataFile, JSON.stringify(metadata, null, 2) + "\n", {
@@ -137,20 +137,33 @@ export async function launchPreview(env) {
           clean = false;
         }
       }
-      if (made) {
+      if (made && clean) {
         try {
           // Client pool.end() confirms local shutdown, not when PostgreSQL has
-          // processed every socket close. A separate count can falsely retain
-          // already-closing owned backends. Use the single ordinary DROP as the
-          // database's authority check; it never terminates another connection.
-          if (clean) {
-            await control.query(`DROP DATABASE "${database}"`);
-            made = false;
-          }
-        } catch {
+          // processed every socket close. Under a loaded gate a closing backend
+          // can outlast PostgreSQL's own five-second DROP wait, so observe the
+          // database until its sessions leave (bounded, read-only, nothing is
+          // terminated). The single ordinary DROP stays the authority check.
+          const deadline = Date.now() + 20000;
+          while (
+            Date.now() < deadline &&
+            (
+              await control.query(
+                "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=$1",
+                [database],
+              )
+            ).rows[0].n > 0
+          )
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          await control.query(`DROP DATABASE "${database}"`);
+          made = false;
+        } catch (error) {
           clean = false;
+          // SQLSTATE only: diagnosable from the private record, never secrets.
+          metadata.cleanupCode =
+            typeof error?.code === "string" ? error.code : "unknown";
         }
-      }
+      } else if (made) metadata.cleanupCode = "shutdown incomplete";
       try {
         await control?.end();
       } catch {
@@ -217,6 +230,13 @@ export async function launchPreview(env) {
       DNE_LOCAL_STAFF_ENTRY: "enabled",
       DNE_PREPARED_REVIEW_SAMPLES: "enabled",
       DNE_SAMPLE_ASSIGNMENT_ADMINISTRATION: "enabled",
+      // Participate and contribute: existing exact-grant circle moderation,
+      // proposal moderation and invented event rehearsal. Nothing is seeded.
+      DNE_CIRCLE_DISCUSSION: "enabled",
+      DNE_LOCAL_CIRCLE_ADMIN: "enabled",
+      DNE_EVENT_REGISTRATION: "enabled",
+      DNE_LOCAL_EVENT_SCHEDULING: "enabled",
+      DNE_LOCAL_EVENT_ADMIN: "enabled",
     });
     fixturePool = new Pool({
       connectionString: databaseUrl.href,
@@ -236,6 +256,7 @@ export async function launchPreview(env) {
     const expiry = new Date(Date.now() + 4 * 3600000);
     const administratorCredential = randomBytes(32).toString("hex"),
       reviewerCredential = randomBytes(32).toString("hex"),
+      moderatorCredential = randomBytes(32).toString("hex"),
       editorCredential = randomBytes(32).toString("hex");
     const administratorId = await auth.provisionStaff(
       administratorCredential,
@@ -245,6 +266,11 @@ export async function launchPreview(env) {
     const reviewerId = await auth.provisionStaff(
       reviewerCredential,
       "reviewer",
+      expiry,
+    );
+    const moderatorId = await auth.provisionStaff(
+      moderatorCredential,
+      "moderator",
       expiry,
     );
     await auth.provisionStaff(editorCredential, "editor", expiry);
@@ -279,6 +305,8 @@ export async function launchPreview(env) {
       administratorCredential,
       reviewerId,
       reviewerCredential,
+      moderatorId,
+      moderatorCredential,
     });
     await save();
     return {

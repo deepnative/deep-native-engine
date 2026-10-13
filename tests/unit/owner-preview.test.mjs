@@ -37,6 +37,7 @@ it.each([
   "DNE_APP_MODE",
   "DNE_AI_PROVIDER",
   "DNE_LOCAL_STAFF_ENTRY",
+  "DNE_CIRCLE_DISCUSSION",
 ])("PREVIEW-03 rejects inherited application setting %s", (key) => {
   expect(() =>
     controlConnection({ [key]: "synthetic-private-secret" }),

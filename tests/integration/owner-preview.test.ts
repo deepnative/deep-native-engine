@@ -59,12 +59,44 @@ function start(controlUrl = process.env.DNE_TEST_DATABASE_URL) {
   });
   return { child, ready, exited, output: () => stdout + stderr };
 }
+async function staffSession(origin: string, credential: string) {
+  const form = await fetch(origin + "/staff/sign-in");
+  const entry = form.headers
+    .getSetCookie()
+    .find((value) => value.startsWith("dne_staff_entry="))!
+    .split(";")[0]!;
+  const csrf = (await form.text()).match(
+    /name="csrf" value="([a-f0-9]+)"/,
+  )![1]!;
+  const signedIn = await fetch(origin + "/staff/sign-in", {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      Cookie: entry,
+      Origin: origin,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({ csrf, credential }),
+  });
+  expect(signedIn.status).toBe(303);
+  const staff = signedIn.headers
+    .getSetCookie()
+    .find((value) => value.startsWith("dne_staff="))!
+    .split(";")[0]!;
+  return async (path: string) => {
+    const response = await fetch(origin + path, {
+      headers: { Cookie: staff },
+      redirect: "manual",
+    });
+    return { status: response.status, text: await response.text() };
+  };
+}
 async function stop(child: ChildProcess, exited: Promise<number | null>) {
   child.kill("SIGTERM");
   return exited;
 }
 
-it("PREVIEW-01/02 starts current-code isolated fixtures and normal member pages, then removes only owned resources", async () => {
+it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, participation tools and normal member pages, then removes only owned resources", async () => {
   const before = (await control.query("SELECT current_database() AS name"))
     .rows[0].name;
   const proc = start();
@@ -104,7 +136,26 @@ it("PREVIEW-01/02 starts current-code isolated fixtures and normal member pages,
       (
         await db.query("SELECT role FROM staff_profiles ORDER BY role")
       ).rows.map((r) => r.role),
-    ).toEqual(["editor", "platform_admin", "reviewer"]);
+    ).toEqual(["editor", "moderator", "platform_admin", "reviewer"]);
+    expect(metadata.moderatorId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(metadata.moderatorCredential).toMatch(/^[a-f0-9]{64}$/);
+    // PART-01: participation tools are enabled, but no activity is seeded.
+    for (const table of [
+      "preview_circle_memberships",
+      "preview_circle_choices",
+      "preview_circle_posts",
+      "preview_circle_reports",
+      "preview_circle_moderator_grants",
+      "member_proposals",
+      "private_event_rehearsals",
+      "private_event_enrollments",
+      "private_event_cancellations",
+      "private_event_attendance_permissions",
+    ])
+      expect(
+        (await db.query(`SELECT count(*)::int n FROM ${table}`)).rows[0].n,
+        table,
+      ).toBe(0);
     expect(
       (
         await db.query(
@@ -157,10 +208,51 @@ it("PREVIEW-01/02 starts current-code isolated fixtures and normal member pages,
     expect(
       (await db.query("SELECT count(*)::int n FROM learners")).rows[0].n,
     ).toBe(1);
+    // PART-02/05: member pages offer discussion and event rehearsal.
+    const circles = await fetch(ready.origin + "/circles", {
+      headers: { Cookie: cookie },
+    });
+    expect(await circles.text()).toContain(
+      "Invented discussion is available only after a separate circle sharing choice.",
+    );
+    const events = await fetch(ready.origin + "/events?all=1", {
+      headers: { Cookie: cookie },
+    });
+    expect(await events.text()).toContain(
+      "Explicitly labelled local registration rehearsals use invented data only.",
+    );
     expect(
       (await db.query("SELECT count(*)::int n FROM staff_profiles")).rows[0].n,
-    ).toBe(3);
-    expect((await fetch(ready.origin + "/staff/sign-in")).status).toBe(200);
+    ).toBe(4);
+    // PART-03/04/05: normal staff entry opens enabled tools; no grant exists.
+    const admin = await staffSession(
+      ready.origin,
+      metadata.administratorCredential,
+    );
+    const grants = await admin("/operator/circle-grants");
+    expect(grants.status).toBe(200);
+    expect(grants.text).toContain(metadata.administratorId);
+    expect(grants.text).not.toContain("paused");
+    expect((await admin("/operator/event-rehearsals")).text).toContain(
+      "Check a proposed schedule before deliberately confirming it.",
+    );
+    expect((await admin("/operator/event-cancellations")).text).toContain(
+      "Check an exact future opted-in event before confirming cancellation.",
+    );
+    const moderator = await staffSession(
+      ready.origin,
+      metadata.moderatorCredential,
+    );
+    const reference = await moderator("/moderate/circle-reference");
+    expect(reference.status).toBe(200);
+    expect(reference.text).toContain(metadata.moderatorId);
+    expect((await moderator("/moderate/proposals")).status).toBe(200);
+    // PART-06: the moderator has no circle grant and no administrator tools.
+    expect(
+      (await moderator("/moderate/circles/everyday-ai/reports")).status,
+    ).toBe(403);
+    expect((await moderator("/operator/circle-grants")).status).toBe(403);
+    expect(proc.output().includes(metadata.moderatorCredential)).toBe(false);
     expect((await fetch(ready.origin + "/runtime-private.json")).status).toBe(
       404,
     );
@@ -213,6 +305,8 @@ it("PREVIEW-04 refuses to force-drop its database when a separate connection rem
     expect(existsSync(privateRoot!)).toBe(true);
     const retained = JSON.parse(await readFile(ready.staffSetupFile, "utf8"));
     expect(retained.cleanup).toContain("Cleanup blocked");
+    // The held session outlasts the bounded wait; the single DROP refuses.
+    expect(retained.cleanupCode).toBe("55006");
     expect(proc.output().includes(metadata.database)).toBe(false);
     expect(proc.output()).toContain("Do not force-drop other connections");
   } finally {
@@ -224,6 +318,42 @@ it("PREVIEW-04 refuses to force-drop its database when a separate connection rem
     if (own && /^dne_test_[a-f0-9]{32}$/.test(own))
       await control.query(`DROP DATABASE "${own}"`);
     if (privateRoot) await rm(privateRoot, { recursive: true, force: true });
+  }
+}, 90000);
+
+it("PREVIEW-04 waits for a slowly closing session before its single ordinary drop", async () => {
+  // A loaded gate can leave a just-closed backend alive for longer than
+  // PostgreSQL's own five-second DROP wait. Model that with a session that
+  // leaves ten seconds after the stop request.
+  const proc = start();
+  let lingering: Pool | undefined, held: PoolClient | undefined;
+  try {
+    const ready = await proc.ready;
+    const metadata = JSON.parse(await readFile(ready.staffSetupFile, "utf8"));
+    const own = new URL(metadata.database).pathname.slice(1);
+    lingering = new Pool({ connectionString: metadata.database });
+    held = await lingering.connect();
+    await held.query("SELECT 1");
+    const stopped = stop(proc.child, proc.exited);
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+    held.release();
+    held = undefined;
+    await lingering.end();
+    lingering = undefined;
+    expect(await stopped).toBe(0);
+    expect(existsSync(metadata.privateRoot)).toBe(false);
+    expect(
+      (
+        await control.query(
+          "SELECT count(*)::int n FROM pg_database WHERE datname=$1",
+          [own],
+        )
+      ).rows[0].n,
+    ).toBe(0);
+  } finally {
+    held?.release();
+    await lingering?.end();
+    if (proc.child.exitCode === null) await stop(proc.child, proc.exited);
   }
 }, 90000);
 
