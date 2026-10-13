@@ -34,6 +34,7 @@ try {
     "tests/support",
     "vitest.config.ts",
     "package.json",
+    "Makefile",
   ]) {
     mkdirSync(path.dirname(path.join(sandbox, name)), { recursive: true });
     cpSync(name, path.join(sandbox, name), { recursive: true });

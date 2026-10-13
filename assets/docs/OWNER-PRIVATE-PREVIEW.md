@@ -1,0 +1,37 @@
+# Run one private MVP rehearsal
+
+`make preview` builds this checkout and opens a fresh, dedicated loopback runtime for the delivered learning, provided-sample feedback and private participation screens. Use invented information only. It needs the supported Node version, installed locked dependencies and the running local PostgreSQL container from `make setup`.
+
+```sh
+make preview
+```
+
+Open the printed `origin` on this computer. Each invocation owns a new random database, private temporary directory and port; it does not change `.env`, the development database, an existing demo or port 4317. The launcher copies built code, public assets and installed dependencies into its private runtime, so later checkout changes do not change that running preview. It builds before every start and identifies the source revision/tree and whether the working tree was modified. For a modified checkout, the revision names its base commit, not a verified build. The output does not establish CI, full-MVP or qualified acceptance.
+
+## Try the three paths in the same runtime
+
+1. **Learn and track.** Onboard with any of the three backgrounds and a learning goal. Open the suggested **Invented preview: clarify a sample request** lesson, read it, mark self-assessed completion and reload your private learning activity. The one added lesson is an invented rehearsal fixture; foundation assets requiring qualified review remain drafts.
+2. **Submit and receive private feedback.** Open private samples, choose a prepared invented example, inspect its text/version and separately permit a private copy. Explicitly queue it. In separate browser sessions, sign in as the invented administrator and reviewer through `/staff/sign-in`. The reviewer obtains their own reviewer reference; the administrator inspects the member's exact queued sample and explicitly grants finite permission. The reviewer opens their worklist, quotes the source and publishes a human-authored comment. Return to the member's browser to read it, ask a clarification and receive an answer. Use the existing [sample assignment guide](PRIVATE-SAMPLE-ASSIGNMENTS.md) and [feedback guide](PRIVATE-SAMPLE-FEEDBACK.md) for the normal forms. No review permission, submission or feedback is seeded.
+3. **Participate privately.** Return to the learning dashboard, open Local circles and join/leave a suitable invented circle. Alternatively save a private contribution draft. These are existing bounded local paths; there is no live community, staffed moderation or public publication.
+
+The output names a **staffSetupFile** in the private temporary directory. Read that file locally to obtain the two invented staff credentials, IDs and four-hour expiry; enter credentials only in the existing password fields. Do not put them in links, screenshots or shared logs. The file has mode 0600 and its containing directory mode 0700. A third finite editor identity prepares only the labelled invented lesson and is not exposed for staff sign-in. Member onboarding creates no staff role. The sample lesson's synthetic catalog preparation is not qualified review or approval of foundation assets.
+
+Existing permission expiry, revocation, exact-source consent, arbitrary-upload quarantine and provider boundaries still apply. Only local staff entry, provided invented examples and exact sample-assignment administration are enabled for this rehearsal. No allowance, queue, grant, member history, discussion or contribution is prepopulated. AI remains deterministic/local; no payment, real appointment or live provider is configured.
+
+## Stop and restart
+
+Keep the terminal running while inspecting the preview. Press Ctrl+C once to stop its server and close its pools. With no remaining connections, it drops only its newly created database and removes its private directory, including credentials and sample work. This rehearsal is temporary: stopping normally erases its data. Run `make preview` again for a fresh port, fresh identities and empty member activity; the old browser session will not carry over.
+
+If another connection remains, the launcher stops with a nonzero result and retains a private cleanup record instead of forcing a database drop or terminating another process. After checking that record against this invocation's process/database/directory and closing the remaining connection deliberately, a trusted local database operator can drop only that recorded generated database and remove only its recorded temporary directory. Do not delete unrelated previews, the development database or an active quality-gate resource. A cleanup refusal is not a successful cleanup.
+
+If a database creation acknowledgement is lost, the launcher observes its generated name but does not assume the database is absent or delete an unconfirmed database. It retains a private recovery record when ownership/removal cannot be confirmed.
+
+Startup failures use fixed diagnostics rather than echoing database errors or credentials. A stop requested during startup is honored after owned setup unwinds. There are no automatic retries. If setup/build fails, fix the reported prerequisite and start a new invocation; retain the first failure when gathering delivery evidence.
+
+The default control connection uses the documented loopback development PostgreSQL credentials. If your local database uses a different control account, set only `DNE_PREVIEW_CONTROL_URL` to its loopback PostgreSQL URL. The launcher connects to its `postgres` control database and creates its own generated database; it never migrates the selected control/development database. The operating system temporary directory must be outside the checkout, including through symlinks, so staff credentials cannot be copied into or served from repository assets. Remote hosts, query/hash overrides and inherited `DNE_*` application flags are rejected. Do not add settings to `.env` for this command; it intentionally does not load that file. An account must be able to create/drop its own rehearsal database.
+
+## Scope and rollback
+
+This is opt-in repository rehearsal tooling under [#509](https://github.com/deepnative/deep-native-engine/issues/509). It reuses delivered application behavior and preserves the existing application gates and approved journey IDs. It does not finish the full [Phase B rehearsal #44](https://github.com/deepnative/deep-native-engine/issues/44), deploy the product, establish qualified acceptance or reopen parked policy. Removing the command/helper reverses the tooling change without changing application defaults, schema or stored development data.
+
+The launcher is explicitly admitted as repository rehearsal tooling in the gate scope. Existing lint/format checks and `owner-preview` unit/native PostgreSQL tests exercise its entrypoint, isolation, denial and cleanup behavior. First-party member application code retains the unchanged coverage inclusion and thresholds; no application behavior has been moved into this helper.
