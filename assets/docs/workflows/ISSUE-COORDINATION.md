@@ -21,8 +21,8 @@ These are workflow conventions, not an installed label-to-project automation or 
 ## Claim before work
 
 1. Read the live issue, assignees, lifecycle/blocker labels, recent claim/handoff comments, linked PRs and project status. Verify authorization and the specific scope to be claimed. An existing assignee or active claim requires coordination with its owner; do not silently replace it or start overlapping work.
-2. Identify one accountable GitHub assignee and the actual worker. For agents using a shared GitHub account, also record a unique task/claim ID and branch or worktree. Two agents using the same account are different workers.
-3. Assign the agreed owner, replace the previous lifecycle label with `status:in-progress`, and set the project to In progress. Publish a claim note using the fields below. Use a `codex/` branch or isolated worktree for edits.
+2. Identify one accountable GitHub assignee and the actual worker. For agents using a shared GitHub account, record the actual worker/tool (for example, Codex or Claude Code), unique task/claim ID, owned files/scope, branch and worktree path. Two agents using the same account are different workers; an assignee alone does not identify which worker owns the scope.
+3. Assign the agreed owner, replace the previous lifecycle label with `status:in-progress`, and set the project to In progress. Publish a claim note using the fields below. Use a suitable isolated Git worktree with a `codex/` branch for every new implementation or repository edit; keep the primary checkout out of delivery editing. Check ownership, clean state and pending cleanup before reusing a worktree. Read-only work does not require a new worktree.
 4. Re-read the issue, recent comments and project immediately afterward. Confirm the assignee, claim ID, one lifecycle label and matching status; check for a competing claim. Labels and assignments alone cannot prevent simultaneous starts. If a conflict appears, pause overlapping work and resolve it with the owner/coordinator before editing.
 
 Claim note:
@@ -32,11 +32,14 @@ Claim ID / worker or task:
 Accountable GitHub owner:
 Started at (with timezone):
 Authorized scope and issue AC subset:
-Branch/worktree or existing PR:
+Owned files/scope:
+Branch and worktree path, or existing PR for read-only work:
 Next checkpoint:
 ```
 
 For a read-only planner, reviewer or verifier, the authorized coordinator publishes the claim/status and records that worker's role and bounded scope. The read-only worker returns status/handoff information to the coordinator without changing GitHub or its own permissions. An explicitly read-only user request remains read only. Independent review of an existing claim is coordinated under that claim; it does not replace the delivery owner.
+
+For concurrent work across issues, compare owned files and dependencies before editing and re-read live claims when resuming. Preserve other workers' branches, worktrees and processes. Coordinate the full local gate owner/process as described in [the team workflow](TEAM-WORKFLOW.md#3-deliver-a-reviewable-slice); worktree isolation does not isolate the shared browser port. An observation timeout does not release a claim or authorize restarting a live gate.
 
 For concurrent work on one larger issue, the owner agrees on non-overlapping scopes and records each worker/branch. Use bounded child issues when separate ownership is needed, and check shared files/dependencies before work. Claiming a parent does not automatically claim every child; starting a child does not mark an entire epic complete. This procedure does not itself authorize spawning agents or starting application work.
 
