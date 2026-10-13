@@ -27,6 +27,7 @@ export interface StaffTools {
   assignments: boolean;
   sampleAssignments: boolean;
   reviewTimeGrants?: boolean;
+  supportTimeGrants?: boolean;
   reviewTimeGrantReference?: boolean;
   experts: boolean;
   metrics: boolean;
@@ -143,6 +144,11 @@ function links(role: StaffRole, tools: StaffTools) {
         tools.reviewTimeGrants === true,
         "/operator/review-time-grants",
         "Private review-minute permissions",
+      ],
+      [
+        tools.supportTimeGrants === true,
+        "/operator/support-time-grants",
+        "Private support-minute permissions",
       ],
       [
         tools.sampleAssignments,

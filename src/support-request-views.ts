@@ -90,7 +90,7 @@ export function supportMemberDetailPage(
 ) {
   const base = `/support/${encodeURIComponent(value.requestId)}`;
   const receipt = timeReceipt
-    ? `<section aria-labelledby="support-time-heading"><h2 id="support-time-heading">Private support test minutes</h2><p role="status">${timeReceipt.held} support test minutes held</p><p>Confirmed ceiling: ${timeReceipt.ceiling}. Consumed: ${timeReceipt.consumed}. Released: ${timeReceipt.released}. State: ${escape(timeReceipt.state)}.</p><p>Recorded support: ${timeReceipt.supportMinutes} minutes; preparation: ${timeReceipt.preparationMinutes} minutes. These are private invented test records, not paid staff time or a service promise.</p></section>`
+    ? `<section aria-labelledby="support-time-heading"><h2 id="support-time-heading">Private support test minutes</h2><dl><dt>Request reference</dt><dd>${escape(value.requestId)}</dd><dt>Allocation reference</dt><dd data-support-time-allocation-reference>${escape(timeReceipt.allocationId)}</dd></dl><p role="status">${timeReceipt.held} support test minutes held</p><p>Confirmed ceiling: ${timeReceipt.ceiling}. Consumed: ${timeReceipt.consumed}. Released: ${timeReceipt.released}. State: ${escape(timeReceipt.state)}.</p><p>Recorded support: ${timeReceipt.supportMinutes} minutes; preparation: ${timeReceipt.preparationMinutes} minutes. These are private invented test records, not paid staff time or a service promise.</p></section>`
     : "";
   const allocationForm =
     timeWrites &&

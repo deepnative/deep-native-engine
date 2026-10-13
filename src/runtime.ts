@@ -5,6 +5,7 @@ import { sampleAssignmentStore } from "./sample-assignment.ts";
 import { workflowReviewStore } from "./workflow-review.ts";
 import { reviewerWorklistStore } from "./reviewer-worklist.ts";
 import { reviewTimeGrantAdminStore } from "./review-time-grant-admin.ts";
+import { supportTimeGrantAdminStore } from "./support-time-grant-admin.ts";
 import { reviewTimeStore } from "./review-time-store.ts";
 import { eventCancellationStore } from "./event-cancellations.ts";
 import { eventEnrollmentStore } from "./event-enrollments.ts";
@@ -126,6 +127,11 @@ export async function start(env: NodeJS.ProcessEnv) {
         catalogReader: eventReader,
       }),
       supportAssignment: supportAssignmentStore(pool, settings.secret),
+      supportTimeGrantAdmin: supportTimeGrantAdminStore(pool, {
+        mode: settings.mode,
+        administration: settings.supportTimeGrantAdministration,
+        writes: settings.supportTimeWrites,
+      }),
       sampleAssignments: sampleAssignmentStore(pool, {
         enabled: settings.sampleAssignmentAdministration,
         mode: settings.mode,
