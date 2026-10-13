@@ -33,3 +33,5 @@ The default control connection uses the documented loopback development PostgreS
 ## Scope and rollback
 
 This is opt-in repository rehearsal tooling under [#509](https://github.com/deepnative/deep-native-engine/issues/509). It reuses delivered application behavior and preserves the existing application gates and approved journey IDs. It does not finish the full [Phase B rehearsal #44](https://github.com/deepnative/deep-native-engine/issues/44), deploy the product, establish qualified acceptance or reopen parked policy. Removing the command/helper reverses the tooling change without changing application defaults, schema or stored development data.
+
+The launcher is explicitly admitted as repository rehearsal tooling in the gate scope. Existing lint/format checks and `owner-preview` unit/native PostgreSQL tests exercise its entrypoint, isolation, denial and cleanup behavior. First-party member application code retains the unchanged coverage inclusion and thresholds; no application behavior has been moved into this helper.

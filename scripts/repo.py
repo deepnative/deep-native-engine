@@ -46,6 +46,9 @@ APP_FILES = {
     ".env.example", ".nvmrc", "compose.yaml", "eslint.config.mjs", "package.json", "package-lock.json",
     "playwright.config.ts", "playwright.cross-browser.config.ts", "playwright.provisional.config.ts", "playwright.full.config.ts", "tsconfig.json", "tsconfig.build.json", "vitest.config.ts",
     "vitest.integration.config.ts", "scripts/quality-gates.mjs", "scripts/gate-probes.mjs",
+    # Opt-in rehearsal provisioning, not member application logic; exercised by
+    # owner-preview unit/native tests and the existing JS lint/format gate.
+    "scripts/private-preview.mjs",
     "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "scripts/full-release-evidence.mjs", "tests/e2e/scenarios.json", "tests/e2e/cross-browser-scenarios.json", "tests/e2e/full-mvp-approval.json", "src/main.ts", "migrations/001-learning.sql",
     "assets/docs/content/circles/preview-circles.json", "public/attempt-save.js", "public/member-export.js", "public/evidence-export.js",
     "assets/docs/content/events/preview-events.json",
