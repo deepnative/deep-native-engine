@@ -305,6 +305,8 @@ it("PREVIEW-04 refuses to force-drop its database when a separate connection rem
     expect(existsSync(privateRoot!)).toBe(true);
     const retained = JSON.parse(await readFile(ready.staffSetupFile, "utf8"));
     expect(retained.cleanup).toContain("Cleanup blocked");
+    // The held session outlasts the bounded wait; the single DROP refuses.
+    expect(retained.cleanupCode).toBe("55006");
     expect(proc.output().includes(metadata.database)).toBe(false);
     expect(proc.output()).toContain("Do not force-drop other connections");
   } finally {
@@ -316,6 +318,42 @@ it("PREVIEW-04 refuses to force-drop its database when a separate connection rem
     if (own && /^dne_test_[a-f0-9]{32}$/.test(own))
       await control.query(`DROP DATABASE "${own}"`);
     if (privateRoot) await rm(privateRoot, { recursive: true, force: true });
+  }
+}, 90000);
+
+it("PREVIEW-04 waits for a slowly closing session before its single ordinary drop", async () => {
+  // A loaded gate can leave a just-closed backend alive for longer than
+  // PostgreSQL's own five-second DROP wait. Model that with a session that
+  // leaves ten seconds after the stop request.
+  const proc = start();
+  let lingering: Pool | undefined, held: PoolClient | undefined;
+  try {
+    const ready = await proc.ready;
+    const metadata = JSON.parse(await readFile(ready.staffSetupFile, "utf8"));
+    const own = new URL(metadata.database).pathname.slice(1);
+    lingering = new Pool({ connectionString: metadata.database });
+    held = await lingering.connect();
+    await held.query("SELECT 1");
+    const stopped = stop(proc.child, proc.exited);
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+    held.release();
+    held = undefined;
+    await lingering.end();
+    lingering = undefined;
+    expect(await stopped).toBe(0);
+    expect(existsSync(metadata.privateRoot)).toBe(false);
+    expect(
+      (
+        await control.query(
+          "SELECT count(*)::int n FROM pg_database WHERE datname=$1",
+          [own],
+        )
+      ).rows[0].n,
+    ).toBe(0);
+  } finally {
+    held?.release();
+    await lingering?.end();
+    if (proc.child.exitCode === null) await stop(proc.child, proc.exited);
   }
 }, 90000);
 

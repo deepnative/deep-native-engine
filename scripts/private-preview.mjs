@@ -137,20 +137,33 @@ export async function launchPreview(env) {
           clean = false;
         }
       }
-      if (made) {
+      if (made && clean) {
         try {
           // Client pool.end() confirms local shutdown, not when PostgreSQL has
-          // processed every socket close. A separate count can falsely retain
-          // already-closing owned backends. Use the single ordinary DROP as the
-          // database's authority check; it never terminates another connection.
-          if (clean) {
-            await control.query(`DROP DATABASE "${database}"`);
-            made = false;
-          }
-        } catch {
+          // processed every socket close. Under a loaded gate a closing backend
+          // can outlast PostgreSQL's own five-second DROP wait, so observe the
+          // database until its sessions leave (bounded, read-only, nothing is
+          // terminated). The single ordinary DROP stays the authority check.
+          const deadline = Date.now() + 20000;
+          while (
+            Date.now() < deadline &&
+            (
+              await control.query(
+                "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=$1",
+                [database],
+              )
+            ).rows[0].n > 0
+          )
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          await control.query(`DROP DATABASE "${database}"`);
+          made = false;
+        } catch (error) {
           clean = false;
+          // SQLSTATE only: diagnosable from the private record, never secrets.
+          metadata.cleanupCode =
+            typeof error?.code === "string" ? error.code : "unknown";
         }
-      }
+      } else if (made) metadata.cleanupCode = "shutdown incomplete";
       try {
         await control?.end();
       } catch {
