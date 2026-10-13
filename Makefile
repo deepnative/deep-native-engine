@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: bootstrap setup db dev verify
+.PHONY: bootstrap setup db dev preview verify
 bootstrap:
 	$(PYTHON) scripts/repo.py bootstrap
 
@@ -15,6 +15,9 @@ db:
 
 dev:
 	npm run dev
+
+preview:
+	npm run preview
 
 verify:
 	$(PYTHON) scripts/repo.py verify

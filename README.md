@@ -29,6 +29,10 @@ Deep Native Engine helps curious learners, IT practitioners and professionals in
 
 This is a **local learning preview**, not a launched service. Lessons and participation examples are synthetic. There is no live AI provider, public community, staffed moderation, qualified assessment, real booking or payment flow. Use invented or sample information only. See the [product direction](assets/docs/PRODUCT-DIRECTION.md) for the wider vision and the [project board](https://github.com/orgs/deepnative/projects/1/views/1) for work still in progress.
 
+## Rehearse the core paths together
+
+After `make setup`, run `make preview` and open its printed local address. In one fresh private runtime, learn and track a labelled invented lesson, submit a provided sample and receive feedback through separate member/admin/reviewer browsers, and join or leave a local circle. No member activity or review permission is prefilled. Staff setup stays in a private local file; Ctrl+C removes this temporary rehearsal when its connections are closed. See the [owner-run preview guide](assets/docs/OWNER-PRIVATE-PREVIEW.md) for the normal journey, restart instructions and limits.
+
 ## Run the local learning preview
 
 Your preview work is stored in local PostgreSQL and accessed through your browser session. Use it on your own computer with sample data.
