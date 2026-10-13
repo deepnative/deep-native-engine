@@ -18,7 +18,7 @@ This is a **local learning preview**, not a launched service. Use invented infor
 
 ## Rehearse the core paths together
 
-After `make setup`, run `make preview` and open its printed local address. In one fresh private runtime, learn and track a labelled invented lesson, submit a provided sample and receive feedback through separate member/admin/reviewer browsers, and join or leave a local circle. No member activity or review permission is prefilled. Staff setup stays in a private local file; Ctrl+C removes this temporary rehearsal when its connections are closed. See the [owner-run preview guide](assets/docs/OWNER-PRIVATE-PREVIEW.md) for the normal journey, restart instructions and limits.
+After `make setup`, run `make preview` and open its printed local address. In one fresh private runtime, learn and track a labelled invented lesson, submit a provided sample and receive feedback through separate member/admin/reviewer browsers, then participate: discuss and report in a local circle that a granted moderator handles, submit a contribution the moderator returns for correction, and enroll in an invented event. No member activity or review permission is prefilled. Staff setup stays in a private local file; Ctrl+C removes this temporary rehearsal when its connections are closed. See the [owner-run preview guide](assets/docs/OWNER-PRIVATE-PREVIEW.md) for the normal journey, restart instructions and limits.
 
 ## Developer setup
 
