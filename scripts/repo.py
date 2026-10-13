@@ -33,7 +33,7 @@ ROLES = {
 }
 SKILLS = {"dne-plan-issue", "dne-deliver-issue", "dne-review-change", "dne-handoff"}
 SETUP_FILES = {
-    "AGENTS.md", "README.md", "CONTRIBUTING.md", ".gitignore", "Makefile",
+    "AGENTS.md", "CLAUDE.md", "README.md", "CONTRIBUTING.md", ".gitignore", "Makefile",
     ".githooks/pre-push", ".github/pull_request_template.md",
     ".github/ISSUE_TEMPLATE/delivery.md", ".github/workflows/repository-checks.yml",
     "docs/planning/README.md", "scripts/repo.py", "tests/repository/test_repo.py",
