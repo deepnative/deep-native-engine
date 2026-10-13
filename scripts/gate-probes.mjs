@@ -32,6 +32,8 @@ try {
     "tests/unit",
     "tests/e2e",
     "tests/support",
+    // DRAIN-01 reads these real fixture hooks as source; unit selection is unchanged.
+    "tests/integration/attendance-browser-database.test.ts",
     "vitest.config.ts",
     "package.json",
     "Makefile",
