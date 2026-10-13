@@ -143,20 +143,30 @@ export async function launchPreview(env) {
           // processed every socket close. Under a loaded gate a closing backend
           // can outlast PostgreSQL's own five-second DROP wait, so observe the
           // database until its sessions leave (bounded, read-only, nothing is
-          // terminated). The single ordinary DROP stays the authority check.
+          // terminated). After an observed zero, the single ordinary DROP stays
+          // the authority check for a connection racing with that observation.
           const deadline = Date.now() + 20000;
-          while (
-            Date.now() < deadline &&
+          const observedSessions = async () =>
             (
               await control.query(
                 "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=$1",
                 [database],
               )
-            ).rows[0].n > 0
-          )
+            ).rows[0].n;
+          let remaining = await observedSessions();
+          while (Date.now() < deadline && remaining > 0) {
             await new Promise((resolve) => setTimeout(resolve, 250));
-          await control.query(`DROP DATABASE "${database}"`);
-          made = false;
+            if (Date.now() < deadline) remaining = await observedSessions();
+          }
+          if (remaining > 0) {
+            // This is an observed refusal, not a fabricated driver SQLSTATE.
+            // Keep the owned resource without racing DROP's own wait/timeout.
+            clean = false;
+            metadata.cleanupKind = "owned-session-present";
+          } else {
+            await control.query(`DROP DATABASE "${database}"`);
+            made = false;
+          }
         } catch (error) {
           clean = false;
           // SQLSTATE only: diagnosable from the private record, never secrets.

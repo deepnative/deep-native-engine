@@ -305,8 +305,10 @@ it("PREVIEW-04 refuses to force-drop its database when a separate connection rem
     expect(existsSync(privateRoot!)).toBe(true);
     const retained = JSON.parse(await readFile(ready.staffSetupFile, "utf8"));
     expect(retained.cleanup).toContain("Cleanup blocked");
-    // The held session outlasts the bounded wait; the single DROP refuses.
-    expect(retained.cleanupCode).toBe("55006");
+    // A positive owned-session observation is a deliberate refusal, not a
+    // fabricated PostgreSQL error or a race between its DROP/statement timers.
+    expect(retained.cleanupKind).toBe("owned-session-present");
+    expect(retained.cleanupCode).toBeUndefined();
     expect(proc.output().includes(metadata.database)).toBe(false);
     expect(proc.output()).toContain("Do not force-drop other connections");
   } finally {
