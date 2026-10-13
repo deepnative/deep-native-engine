@@ -139,15 +139,11 @@ export async function launchPreview(env) {
       }
       if (made) {
         try {
-          const count = (
-            await control.query(
-              "SELECT count(*)::integer n FROM pg_stat_activity WHERE datname=$1",
-              [database],
-            )
-          ).rows[0].n;
-          // A normal DROP also refuses a connection arriving after this observation.
-          if (!clean || count !== 0) clean = false;
-          else {
+          // Client pool.end() confirms local shutdown, not when PostgreSQL has
+          // processed every socket close. A separate count can falsely retain
+          // already-closing owned backends. Use the single ordinary DROP as the
+          // database's authority check; it never terminates another connection.
+          if (clean) {
             await control.query(`DROP DATABASE "${database}"`);
             made = false;
           }
