@@ -19,6 +19,9 @@ import { selectedStaffToken } from "./staff-entry-selection.ts";
 import { mountReviewerWorklistRoutes } from "./reviewer-worklist-routes.ts";
 import type { ReviewerWorklistStore } from "./reviewer-worklist.ts";
 import { mountReviewTimeGrantRoutes } from "./review-time-grant-routes.ts";
+import { mountSupportTimeGrantRoutes } from "./support-time-grant-routes.ts";
+import type { supportTimeGrantAdminStore } from "./support-time-grant-admin.ts";
+import type { SupportGrantAdministration } from "./support-time-grant-values.ts";
 import type { reviewTimeGrantAdminStore } from "./review-time-grant-admin.ts";
 import type { ReviewGrantAdministration } from "./review-time-grant-values.ts";
 import { mountReviewTimeRoutes } from "./review-time-routes.ts";
@@ -349,6 +352,8 @@ export function app(
     reviewTimeWrites?: boolean;
     reviewTimeGrantAdmin?: ReturnType<typeof reviewTimeGrantAdminStore>;
     reviewTimeGrantAdministration?: ReviewGrantAdministration;
+    supportTimeGrantAdmin?: ReturnType<typeof supportTimeGrantAdminStore>;
+    supportTimeGrantAdministration?: SupportGrantAdministration;
     eventEnrollments?: EventEnrollmentStore;
     eventAttendance?: EventAttendanceRuntimeStore;
     memberEvents?: MemberEventCatalog;
@@ -462,6 +467,10 @@ export function app(
       Boolean(options.reviewTimeGrantAdmin) &&
       options.reviewTimeGrantAdministration !== undefined &&
       options.reviewTimeGrantAdministration !== "disabled",
+    supportTimeGrants:
+      Boolean(options.supportTimeGrantAdmin) &&
+      options.supportTimeGrantAdministration !== undefined &&
+      options.supportTimeGrantAdministration !== "disabled",
     reviewTimeGrantReference:
       Boolean(options.reviewTimeGrantAdmin) &&
       options.reviewTimeGrantAdministration === "enabled",
@@ -1263,6 +1272,15 @@ export function app(
     mountSampleFeedbackRoutes(app, options.sampleFeedback);
   mountWorkflowReviewStaffRoutes(app, options.workflowReviewStaff, options);
   mountSupportAssignmentRoutes(app, options.supportAssignment, options);
+  mountSupportTimeGrantRoutes(app, options.supportTimeGrantAdmin, {
+    get origin() {
+      return options.origin;
+    },
+    secret: options.secret,
+    mode: options.mode,
+    administration: options.supportTimeGrantAdministration,
+    localStaffEntry: options.localStaffEntry,
+  });
   mountCircleGrantRoutes(app, options.circleGrantAdmin, options);
   mountEventCancellationRoutes(app, options.eventCancellations, options);
   mountEventAttendanceRoutes(app, options.eventAttendance, options);

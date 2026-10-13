@@ -1,4 +1,8 @@
 import {
+  createSupportTimeGrantRecord,
+  revokeSupportTimeGrantRecord,
+} from "./support-time-grant-records.ts";
+import {
   createSupportGrantRecord,
   revokeSupportGrantRecord,
   sameSupportGrant,
@@ -1272,29 +1276,11 @@ export function supportRequestStore(
           if (row.resolvedAt || allocation.state !== "allocated")
             return { kind: "conflict" as const };
           ctx.deadlines.push(input.expiresAt);
-          const id = randomUUID();
-          await ctx.client.query(
-            "INSERT INTO support_time_grants(id,allocation_id,request_id,staff_id,staff_role,starts_at,expires_at,granted_by,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-            [
-              id,
-              input.allocationId,
-              input.requestId,
-              input.staffId,
-              input.role,
-              input.startsAt,
-              input.expiresAt,
-              ctx.actor.id,
-              input.idempotencyKey,
-            ],
-          );
-          await ctx.client.query(
-            "INSERT INTO support_time_events(id,allocation_id,member_id,actor_id,action) VALUES($1,$2,$3,$4,'grant-created')",
-            [
-              randomUUID(),
-              input.allocationId,
-              discovered.memberId,
-              ctx.actor.id,
-            ],
+          const id = await createSupportTimeGrantRecord(
+            ctx.client,
+            ctx.actor.id,
+            discovered.memberId,
+            input,
           );
           return { kind: "created" as const, grantId: id };
         });
@@ -1344,18 +1330,12 @@ export function supportRequestStore(
             [grant.allocationId],
           );
           if (grant.revokedAt) return { kind: "already-revoked" as const };
-          await ctx.client.query(
-            "UPDATE support_time_grants SET revoked_at=clock_timestamp() WHERE id=$1",
-            [id],
-          );
-          await ctx.client.query(
-            "INSERT INTO support_time_events(id,allocation_id,member_id,actor_id,action) VALUES($1,$2,$3,$4,'grant-revoked')",
-            [
-              randomUUID(),
-              grant.allocationId,
-              discovered.memberId,
-              ctx.actor.id,
-            ],
+          await revokeSupportTimeGrantRecord(
+            ctx.client,
+            ctx.actor.id,
+            discovered.memberId,
+            grant.allocationId,
+            id,
           );
           return { kind: "revoked" as const };
         });

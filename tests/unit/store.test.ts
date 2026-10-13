@@ -245,6 +245,12 @@ it("applies the transactional migration and surfaces database failures to the ca
   expect(p.query.mock.calls[0]![0]).toContain(
     "schema_migrations(version) VALUES(69)",
   );
+  expect(p.query.mock.calls[0]![0]).toContain(
+    "CREATE TABLE IF NOT EXISTS support_time_grant_revocations",
+  );
+  expect(p.query.mock.calls[0]![0]).toContain(
+    "schema_migrations(version) VALUES(71)",
+  );
   p.query.mockRejectedValueOnce(new Error("offline"));
   await expect(store(p.value).remove("a")).rejects.toThrow("offline");
 });
