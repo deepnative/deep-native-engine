@@ -1,7 +1,7 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, readdir, rm, stat } from "node:fs/promises";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { tmpdir } from "node:os";
 import { createServer, connect, type Socket } from "node:net";
 import { join } from "node:path";
@@ -193,6 +193,7 @@ it("PREVIEW-01/02 starts current-code isolated fixtures and normal member pages,
 it("PREVIEW-04 refuses to force-drop its database when a separate connection remains", async () => {
   const proc = start();
   let foreign: Pool | undefined;
+  let heldConnection: PoolClient | undefined;
   let privateRoot: string | undefined, own: string | undefined;
   try {
     const ready = await proc.ready;
@@ -200,10 +201,14 @@ it("PREVIEW-04 refuses to force-drop its database when a separate connection rem
     privateRoot = metadata.privateRoot;
     own = new URL(metadata.database).pathname.slice(1);
     foreign = new Pool({ connectionString: metadata.database });
-    await foreign.query("SELECT 1");
+    // Keep the foreign connection checked out until explicit recovery. An idle
+    // pooled connection otherwise expires after ten seconds under a slow gate.
+    heldConnection = await foreign.connect();
+    await heldConnection.query("SELECT 1");
     expect(await stop(proc.child, proc.exited)).toBe(1);
     expect(
-      (await foreign.query("SELECT current_database() AS name")).rows[0].name,
+      (await heldConnection.query("SELECT current_database() AS name")).rows[0]
+        .name,
     ).toBe(own);
     expect(existsSync(privateRoot!)).toBe(true);
     const retained = JSON.parse(await readFile(ready.staffSetupFile, "utf8"));
@@ -211,6 +216,7 @@ it("PREVIEW-04 refuses to force-drop its database when a separate connection rem
     expect(proc.output().includes(metadata.database)).toBe(false);
     expect(proc.output()).toContain("Do not force-drop other connections");
   } finally {
+    heldConnection?.release();
     await foreign?.end();
     if (proc.child.exitCode === null) await stop(proc.child, proc.exited);
     // Explicit test-owned recovery after the foreign connection closes. The
