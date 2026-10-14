@@ -20,6 +20,17 @@ vi.mock("node:child_process", async (importOriginal) => {
   return {
     ...original,
     spawnSync(executable, args, ...rest) {
+      // These lifecycle cases simulate build/runtime metadata too. Gate probes
+      // intentionally copy sources without .git; native tests cover real Git.
+      if (lifecycle.enabled && executable === "git") {
+        const metadata = {
+          "rev-parse HEAD": "a".repeat(40),
+          "rev-parse HEAD^{tree}": "b".repeat(40),
+          "status --porcelain": "",
+        };
+        if (Object.hasOwn(metadata, args.join(" ")))
+          return { status: 0, stdout: metadata[args.join(" ")] };
+      }
       if (
         lifecycle.enabled &&
         ((executable === "npm" && args[0] === "run" && args[1] === "build") ||
