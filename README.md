@@ -10,6 +10,7 @@ Deep Native Engine helps curious learners, IT practitioners and professionals in
 - **Practise with AI examples.** Try private prompts, sample exercises and locally simulated study conversations. These use deterministic examples rather than a live model provider.
 - **Submit and receive feedback.** Inspect a provided invented sample, create your own private copy and separately queue it. An explicitly assigned local reviewer can quote it, publish a human-authored comment and answer one clarification through the normal member/staff screens. Arbitrary uploads retain their safety checks.
 - **Participate and contribute.** Join or leave local circles, try deliberately enabled invented discussion, or draft and revise a private contribution. Joining never publishes your private learning work. Contributions require their own review before publication.
+- **Explore workflow drafts.** Search invented manual examples, copy their text or download the displayed draft version. If that version is unavailable, choose the current draft explicitly. These Markdown files do not execute or connect to a provider.
 - **Control your private work.** Inspect and download your own retained activity, withdraw sharing and delete local preview records through the existing controls.
 
 Optional local rehearsals also cover study/support test units, sample support requests and invented event registration. The [product guides](assets/docs/README.md) explain their separate setup and limits; they are not universal paid membership features.
