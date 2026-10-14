@@ -44,8 +44,10 @@ beforeEach(async (context) => {
   fixtures.set(context.task, f);
 });
 afterEach(async (context) => {
-  // Snapshot only this test's resources before awaiting. Keep cleanup in the
-  // original afterEach lifecycle so its configured hook deadline still applies.
+  // Snapshot only this test's resources before awaiting. Native ordinary DROP
+  // can await a server checkpoint after the unchanged three-second session
+  // barrier. Keep actual deletion/absence in this bounded administrative hook;
+  // its allowance is not a product deadline or a PostgreSQL completion guarantee.
   const f = currentFixture(context);
   if (f.releaseTimer) clearTimeout(f.releaseTimer);
   try {
@@ -63,7 +65,7 @@ afterEach(async (context) => {
   } finally {
     await f.control.end();
   }
-});
+}, 60000);
 it("CI-ATTEND-02 waits for the observed owned PostgreSQL session to disconnect before deletion", async (context) => {
   const f = currentFixture(context);
   let disconnected = false;
