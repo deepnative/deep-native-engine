@@ -104,7 +104,6 @@ it("restores only a synthetic snapshot into a new database and preserves private
   if (
     url.protocol !== "postgresql:" ||
     url.hostname !== "127.0.0.1" ||
-    url.port !== "54329" ||
     url.username !== "dne" ||
     url.search ||
     url.hash ||
@@ -113,7 +112,20 @@ it("restores only a synthetic snapshot into a new database and preserves private
     throw new Error(
       "Restore rehearsal requires the repository loopback Compose test fixture.",
     );
-  const { mode: toolMode, execute: postgres } = postgresArchiveTools(url);
+  const {
+    DNE_TEST_POSTGRES_CONTAINER: container,
+    DNE_TEST_POSTGRES_VOLUME: volume,
+    DNE_TEST_POSTGRES_CLAIM: claim,
+  } = process.env;
+  // Validate the exact optional creation record before creating restore resources.
+  // Partial options fail closed; absent options preserve the Compose/host fixture.
+  const { mode: toolMode, execute: postgres } = postgresArchiveTools(
+    url,
+    undefined,
+    container !== undefined || volume !== undefined || claim !== undefined
+      ? { container: container ?? "", volume: volume ?? "", claim: claim ?? "" }
+      : undefined,
+  );
   const admin = new Pool({ connectionString: url.toString() });
   const owned: string[] = [];
   const pools: Pool[] = [];

@@ -48,4 +48,48 @@ Fix failures, then regenerate evidence on the changed revision. Preserve archive
 
 ## Synthetic restore rehearsal
 
-The integration gate also runs [the isolated restore rehearsal](../CTP-025-SYNTHETIC-RESTORE.md) using PostgreSQL tools inside the existing Compose fixture. It creates fresh source/target databases, restores a synthetic archive plus private object copy, verifies corruption rejection and restored privacy/deletion behavior, and removes its owned resources. `artifacts/restore-drill.json` records exact revision/tree, fixture counts and measured local durations after successful cleanup. It is local synthetic evidence, not approved production RPO/RTO or a production backup/retention policy. Custom database overrides outside the documented Compose fixture do not satisfy this rehearsal.
+The integration gate also runs [the isolated restore rehearsal](../CTP-025-SYNTHETIC-RESTORE.md) using PostgreSQL tools inside the existing Compose fixture or the explicitly attested dedicated fixture below. It creates fresh source/target databases, restores a synthetic archive plus private object copy, verifies corruption rejection and restored privacy/deletion behavior, and removes its owned resources. `artifacts/restore-drill.json` records exact revision/tree, fixture counts and measured local durations after successful cleanup. It is local synthetic evidence, not approved production RPO/RTO or a production backup/retention policy. Arbitrary database overrides do not satisfy this rehearsal.
+
+### Optional dedicated verification instance
+
+When the shared local PostgreSQL instance has accumulated state or is serving other workers' previews, use a separately owned instance for the **complete unchanged gate**. Keep full browser verification serialized: a separate database server does not isolate port4317. Do not reset, stop, tune or delete the shared Compose server/volume. This option changes neither native cleanup deadlines nor coverage/test requirements; it reduces server-state interference without guaranteeing a10s native DROP or proving the cause of an earlier failure.
+
+Before creation, publish the claim and record an unused loopback port, a unique container name and a newly generated volume identity. The example uses64329; verify it is free and adapt the port if necessary. The image must match the digest in `compose.yaml`. Use a durable local volume and default PostgreSQL durability/checkpoint settings, never tmpfs or disabled fsync. Preserve the successful creation result, exact full container ID, volume identity, claim, image, endpoint and timestamp in a private ownership record outside the repo. Labels support consistency checks; they do not establish freshness or authorize deletion by prefix.
+
+```sh
+set -eu
+# Replace this example with your published unique claim before creation.
+export DNE_TEST_POSTGRES_CLAIM='DNE-2026-10-14-513-your-worker-unique-claim'
+dne_verify_nonce=$(node -e 'process.stdout.write(require("node:crypto").randomBytes(16).toString("hex"))')
+export DNE_TEST_POSTGRES_VOLUME="dne-verify-$dne_verify_nonce"
+dne_verify_name="dne-verify-$dne_verify_nonce"
+if docker volume inspect "$DNE_TEST_POSTGRES_VOLUME" >/dev/null 2>&1 || \
+   docker container inspect "$dne_verify_name" >/dev/null 2>&1; then
+  printf '%s\n' 'Recorded verification resources must be newly created.' >&2
+  exit 1
+fi
+docker volume create \
+  --label io.deepnative.verification-owner=gate \
+  --label "io.deepnative.verification-claim=$DNE_TEST_POSTGRES_CLAIM" \
+  "$DNE_TEST_POSTGRES_VOLUME"
+dne_verify_container=$(docker run -d \
+  --name "$dne_verify_name" \
+  --label io.deepnative.verification-owner=gate \
+  --label "io.deepnative.verification-claim=$DNE_TEST_POSTGRES_CLAIM" \
+  -e POSTGRES_USER=dne -e POSTGRES_PASSWORD=local-preview-only -e POSTGRES_DB=dne_dev \
+  -p 127.0.0.1:64329:5432 \
+  --mount "type=volume,source=$DNE_TEST_POSTGRES_VOLUME,target=/var/lib/postgresql" \
+  postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873)
+export DNE_TEST_POSTGRES_CONTAINER="$dne_verify_container"
+export DNE_DATABASE_URL='postgresql://dne:local-preview-only@127.0.0.1:64329/dne_dev'
+docker exec "$DNE_TEST_POSTGRES_CONTAINER" pg_isready -U dne -d dne_dev
+# Proceed only after readiness and ownership/durability readback succeed.
+make verify
+# The same per-command environment must reach the ordinary, unbypassed pre-push hook.
+```
+
+Do not continue after a failed creation command or reuse an existing resource merely because its name/label matches. Keep the record for this verification campaign; a later run must preserve failures and must follow an actual source/environment remedy, not reset the instance to seek green. Read back `fsync`, `full_page_writes`, `checkpoint_timeout` and `checkpoint_completion_target`, and retain safe environment evidence. Never put a real hosting password, credentials or private member files in command arguments or reports; the displayed password is the existing disposable local fixture only.
+
+Before creating restore resources, the restore adapter checks the explicit `DNE_TEST_POSTGRES_CONTAINER`, `DNE_TEST_POSTGRES_VOLUME` and `DNE_TEST_POSTGRES_CLAIM` together. It requires a full exact container ID, matching running pinned image, matching labels, only one published5432 binding at the exact127.0.0.1 fixture port, and the exact recorded writable local volume mounted at `/var/lib/postgresql`. Partial, malformed, mismatched or failed inspection refuses the rehearsal; it never falls back to shared Compose/host tooling. Actual binary pg_dump/pg_restore run through `docker exec -i` against that ID with the original limits. Without these options, exact54329 Compose/host validation is unchanged. All existing archive, corruption, manifest, privacy and cleanup assertions still run.
+
+After verification, retain any failed fixture needed for diagnosis and its exact cleanup responsibility. A matching generated name alone is not ownership. Only when no gate/preview/session uses this instance, all databases created in the campaign have been ordinarily removed with actual absence confirmed, and the creation record and mount identities still match, orderly stop and remove **this recorded container**. Use `docker stop --timeout -1 "$DNE_TEST_POSTGRES_CONTAINER"` to wait for shutdown, then `docker rm "$DNE_TEST_POSTGRES_CONTAINER"`. Confirm no remaining container references the exact recorded volume before `docker volume rm "$DNE_TEST_POSTGRES_VOLUME"`. Do not force removal, prune by prefix or conceal a failed DROP by deleting the instance. Remove only these per-command environment options to return to the default fixture; no persistent Git, Docker or PostgreSQL configuration changes are required.
