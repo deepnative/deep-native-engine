@@ -6,7 +6,7 @@ Deep Native Engine helps curious learners, IT practitioners and professionals in
 
 ## What you can do
 
-- **Learn and track.** Choose a goal, follow a private starter plan, read sample lessons and retain self-assessed progress. Change direction while keeping earlier goal history.
+- **Learn and track.** Choose a goal, follow a private starter plan, read sample lessons and retain self-assessed progress. Change direction while keeping earlier goal history. Return to recorded lessons without silently switching to replacement versions.
 - **Practise with AI examples.** Try private prompts, sample exercises and locally simulated study conversations. These use deterministic examples rather than a live model provider.
 - **Submit and receive feedback.** Inspect a provided invented sample, create your own private copy and separately queue it. An explicitly assigned local reviewer can quote it, publish a human-authored comment and answer one clarification through the normal member/staff screens. Arbitrary uploads retain their safety checks.
 - **Participate and contribute.** Join or leave local circles, try deliberately enabled invented discussion, or draft and revise a private contribution. Joining never publishes your private learning work. Contributions require their own review before publication.

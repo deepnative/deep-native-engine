@@ -2377,6 +2377,100 @@ it("preserves private synthetic lesson activity across goal changes, versions an
   ).toBe("0");
 });
 
+it("PROGRESS-RET-01/02/03 preserves recorded lesson activity when a cached progress return becomes stale", async () => {
+  const owner = await member(),
+    outsider = await member();
+  const catalog = catalogStore(pool),
+    auth = authorizationStore(pool);
+  const editor = randomBytes(32).toString("hex"),
+    reviewer = randomBytes(32).toString("hex");
+  const expiry = new Date(Date.now() + 86_400_000);
+  await auth.provisionStaff(editor, "editor", expiry);
+  await auth.provisionStaff(reviewer, "reviewer", expiry);
+  const draft = {
+    ...contentDraft,
+    id: "SYN-105",
+    kind: "lesson" as const,
+    title: "Invented recorded-version reading",
+    goals: ["everyday"],
+    rubric: null,
+    rubricVersion: null,
+  };
+  const publish = async (version: number, body: string) => {
+    expect(await catalog.createDraft(editor, { ...draft, version, body })).toBe(
+      true,
+    );
+    expect(await catalog.submit(editor, draft.id, version)).toBe(true);
+    expect(await catalog.approve(reviewer, draft.id, version, true)).toBe(true);
+    expect(await catalog.publish(editor, draft.id, version)).toBe(true);
+  };
+  const facts = async () =>
+    (
+      await pool.query(
+        `SELECT content_id,content_version,opened_at,started_at,self_assessed_at
+         FROM lesson_activity WHERE member_id=$1 ORDER BY content_version`,
+        [owner.learner.id],
+      )
+    ).rows;
+  await publish(1, "First invented lesson version.");
+  await withLoopback(
+    app(db, {
+      origin: "http://127.0.0.1:3000",
+      secret: "synthetic-progress-return-secret",
+      catalog,
+    }),
+    async (server) => {
+      const get = (path: string, token = owner.token) =>
+        request(server)
+          .get(path)
+          .set("Host", "127.0.0.1:3000")
+          .set("Cookie", `${COOKIE}=${token}`);
+      await get(`/library/${draft.id}`).expect(200);
+      const before = await facts();
+      expect(before).toHaveLength(1);
+      expect(before[0]).toMatchObject({
+        content_version: 1,
+        started_at: null,
+        self_assessed_at: null,
+      });
+      const progress = await get("/progress").expect(200);
+      const href = progress.text.match(
+        new RegExp('href="([^"]*/library/' + draft.id + '[^"]*)"'),
+      )?.[1];
+      expect(href).toBeDefined();
+      await get(href!).expect(200);
+      expect(await facts()).toEqual(before);
+
+      const replacement = "Replacement invented lesson, version two only.";
+      await publish(2, replacement);
+      const stale = await get(href!);
+      expect.soft(stale.status).toBe(409);
+      expect.soft(stale.text).toContain("Content version unavailable");
+      expect.soft(stale.text).not.toContain(replacement);
+      expect.soft(await facts()).toEqual(before);
+
+      const refreshed = await get("/progress").expect(200);
+      expect(refreshed.text).toContain("Historical version unavailable");
+      expect.soft(refreshed.text).not.toContain(`href="${href}"`);
+      await get(`/library/${draft.id}`).expect(200);
+      const recovered = await facts();
+      expect(recovered.map((row) => row.content_version)).toEqual([1, 2]);
+      expect(recovered[0]).toEqual(before[0]);
+      expect(recovered[1]).toMatchObject({
+        started_at: null,
+        self_assessed_at: null,
+      });
+      expect((await get("/progress", outsider.token)).text).not.toContain(
+        draft.title,
+      );
+      expect(await db.lessonActivities(outsider.learner.id)).toEqual([]);
+      expect(await catalog.retire(editor, draft.id)).toBe(true);
+      await get(`/library/${draft.id}?version=2`).expect(404);
+      expect(await facts()).toEqual(recovered);
+    },
+  );
+});
+
 function wrappedPool(wrap: (client: PoolClient) => PoolClient) {
   return {
     query: pool.query.bind(pool),
