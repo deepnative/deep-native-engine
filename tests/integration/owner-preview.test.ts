@@ -1,13 +1,17 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, readdir, rm, stat } from "node:fs/promises";
-import { Pool, type PoolClient } from "pg";
+import { Client, Pool, type PoolClient, type QueryResult } from "pg";
 import { tmpdir } from "node:os";
 import { createServer, connect, type Socket } from "node:net";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { afterAll, expect, it } from "vitest";
-import { cleanupDiagnostic } from "../../scripts/private-preview.mjs";
+import { performance } from "node:perf_hooks";
+import { afterAll, expect, it, vi } from "vitest";
+import {
+  cleanupDiagnostic,
+  launchPreview,
+} from "../../scripts/private-preview.mjs";
 import { testPool } from "../support/database.ts";
 
 const control = testPool();
@@ -324,6 +328,11 @@ it("PREVIEW-04 refuses to force-drop its database when a separate connection rem
   const proc = start();
   let foreign: Pool | undefined;
   let heldConnection: PoolClient | undefined;
+  let observer: Client | undefined, sampling: Promise<void> | undefined;
+  let observing = false,
+    observationFailed = false,
+    removalObserved = false;
+  let samples = 0;
   let privateRoot: string | undefined, own: string | undefined;
   try {
     const ready = await proc.ready;
@@ -335,7 +344,45 @@ it("PREVIEW-04 refuses to force-drop its database when a separate connection rem
     // pooled connection otherwise expires after ten seconds under a slow gate.
     heldConnection = await foreign.connect();
     await heldConnection.query("SELECT 1");
-    expect(await stop(proc.child, proc.exited)).toBe(1);
+    // CLOSE-DDL-02: bounded observation supplements source review of the
+    // positive-session branch before dedicated Client construction. Sampling
+    // cannot prove that no transient connection ever existed.
+    const observerUrl = new URL(metadata.database);
+    observerUrl.pathname = "/postgres";
+    observer = new Client({
+      connectionString: observerUrl.href,
+      connectionTimeoutMillis: 3000,
+      statement_timeout: 1000,
+      query_timeout: 2000,
+      application_name: "dne-preview-refusal-observer",
+    });
+    observer.on("error", () => {
+      observationFailed = true;
+    });
+    await observer.connect();
+    observing = true;
+    const observationDeadline = Date.now() + 25000;
+    const ownDrop = `DROP DATABASE "${own}"`;
+    const activeObserver = observer;
+    sampling = (async () => {
+      try {
+        while (observing && Date.now() < observationDeadline) {
+          const observed = await activeObserver.query(
+            "SELECT count(*)::int AS n FROM pg_stat_activity WHERE application_name=$1 AND query=$2",
+            ["dne-owner-preview-drop", ownDrop],
+          );
+          samples++;
+          removalObserved ||= observed.rows[0].n > 0;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      } catch {
+        observationFailed = true;
+      }
+    })();
+    const refusalExit = await stop(proc.child, proc.exited);
+    observing = false;
+    await sampling;
+    expect(refusalExit).toBe(1);
     expect(
       (await heldConnection.query("SELECT current_database() AS name")).rows[0]
         .name,
@@ -351,7 +398,23 @@ it("PREVIEW-04 refuses to force-drop its database when a separate connection rem
     expect(retained.cleanupCode).toBeUndefined();
     expect(proc.output().includes(metadata.database)).toBe(false);
     expect(proc.output()).toContain("Do not force-drop other connections");
+    console.info(
+      "CLOSE-DDL-02 observation",
+      JSON.stringify({
+        removal: removalObserved ? "observed" : "none observed",
+        samples,
+        observationFailed,
+      }),
+    );
+    expect(observationFailed).toBe(false);
+    expect(samples).toBeGreaterThan(0);
+    expect(removalObserved).toBe(false);
   } finally {
+    observing = false;
+    await sampling;
+    await observer?.end().catch(() => {
+      observationFailed = true;
+    });
     heldConnection?.release();
     await foreign?.end();
     if (proc.child.exitCode === null) await stop(proc.child, proc.exited);
@@ -360,6 +423,7 @@ it("PREVIEW-04 refuses to force-drop its database when a separate connection rem
     if (own && /^dne_test_[a-f0-9]{32}$/.test(own))
       await control.query(`DROP DATABASE "${own}"`);
     if (privateRoot) await rm(privateRoot, { recursive: true, force: true });
+    expect(observationFailed).toBe(false);
   }
 }, 90000);
 
@@ -541,4 +605,310 @@ it("PREVIEW-04 retains an owned recovery record when PostgreSQL committed CREATE
       await control.query(`DROP DATABASE "${own}"`);
     if (privateRoot) await rm(privateRoot, { recursive: true, force: true });
   }
+}, 90000);
+
+it("CLOSE-DDL-01/04 awaits native owned removal past five seconds with exact lock evidence", async () => {
+  let ownedPreview: Awaited<ReturnType<typeof launchPreview>> | undefined;
+  let unexpectedFixtureFailure = false;
+  try {
+    const preview = await launchPreview({
+      DNE_PREVIEW_CONTROL_URL: process.env.DNE_TEST_DATABASE_URL,
+    });
+    ownedPreview = preview;
+    const record = JSON.parse(await readFile(preview.metadataFile, "utf8"));
+    const own = new URL(record.database).pathname.slice(1);
+    if (!/^dne_test_[a-f0-9]{32}$/.test(own))
+      throw new Error("Invalid owned launcher fixture identity");
+    const adminUrl = new URL(record.database);
+    adminUrl.pathname = "/postgres";
+    const holder = new Client({
+      connectionString: adminUrl.href,
+      connectionTimeoutMillis: 3000,
+      statement_timeout: 5000,
+    });
+    // These are test-owned read-only observations. Neither observer deadline
+    // nor an observer failure controls the independently scheduled lock release.
+    const observer = new Client({
+      connectionString: adminUrl.href,
+      connectionTimeoutMillis: 3000,
+      statement_timeout: 1000,
+      query_timeout: 2000,
+    });
+    const originalQuery = Client.prototype.query;
+    const native = (client: Client, text: string) =>
+      Reflect.apply(originalQuery, client, [text]) as Promise<QueryResult>;
+    const alias = "dne_test_" + randomBytes(16).toString("hex");
+    let locked = false,
+      releaseTask: Promise<void> | undefined;
+    let observationTask: Promise<void> | undefined;
+    let settled = false,
+      dropPid = 0,
+      holderPid = 0,
+      ownOid = 0;
+    let calls = 0,
+      proof = false,
+      clean = false,
+      nativeCode = "absent";
+    let controlBudget = "unknown",
+      dropBudget = "unknown",
+      elapsedMs = 0;
+    let recoveryDrops = 0,
+      backendTerminal = false,
+      absent = false;
+    let fixtureCause = "absent";
+    const fixtureFailed = (cause: string) => {
+      if (fixtureCause === "absent") fixtureCause = cause;
+    };
+    holder.on("error", () => fixtureFailed("holder-client-error"));
+    observer.on("error", () => fixtureFailed("observer-client-error"));
+    const hook = vi
+      .spyOn(Client.prototype, "query")
+      .mockImplementation(function (
+        this: Client,
+        text: unknown,
+        ...rest: unknown[]
+      ) {
+        if (text !== `DROP DATABASE "${own}"`)
+          return Reflect.apply(originalQuery, this, [text, ...rest]);
+        calls++;
+        const operation = async () => {
+          const settings = (
+            await native(
+              this,
+              "SELECT pg_backend_pid() AS pid, current_setting('statement_timeout') AS budget",
+            )
+          ).rows[0];
+          dropPid = settings.pid;
+          dropBudget = settings.budget;
+          await native(holder, "BEGIN");
+          locked = true;
+          // Only the launcher's acknowledged generated database is renamed, and
+          // the transaction is always rolled back. No target connection is held.
+          await native(holder, `ALTER DATABASE "${own}" RENAME TO "${alias}"`);
+          const began = performance.now();
+          const result = native(this, text as string);
+          releaseTask = (async () => {
+            // This task does not await any observation. Six seconds is fixture
+            // release, never a client timeout, native receipt or DROP retry.
+            await new Promise((resolve) => setTimeout(resolve, 6000));
+            try {
+              await native(holder, "ROLLBACK");
+              locked = false;
+            } catch {
+              fixtureFailed("holder-rollback");
+            }
+          })();
+          observationTask = (async () => {
+            try {
+              const deadline = Date.now() + 4000;
+              while (Date.now() < deadline) {
+                const observed = (
+                  await observer.query(
+                    `SELECT
+                  EXISTS(SELECT 1 FROM pg_locks WHERE locktype='object' AND classid='pg_database'::regclass AND objid=$1 AND pid=$2 AND mode='AccessExclusiveLock' AND granted) AS held,
+                  EXISTS(SELECT 1 FROM pg_locks WHERE locktype='object' AND classid='pg_database'::regclass AND objid=$1 AND pid=$3 AND mode='AccessExclusiveLock' AND NOT granted) AS waiting,
+                  $2::int = ANY(pg_blocking_pids($3::int)) AS blocked,
+                  (SELECT count(*)::int FROM pg_stat_activity WHERE datname=$4) AS sessions`,
+                    [ownOid, holderPid, dropPid, own],
+                  )
+                ).rows[0];
+                if (
+                  observed.held &&
+                  observed.waiting &&
+                  observed.blocked &&
+                  observed.sessions === 0
+                ) {
+                  proof = true;
+                  break;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 50));
+              }
+            } catch {
+              fixtureFailed("lock-observation");
+            }
+          })();
+          try {
+            return await result;
+          } catch (error) {
+            nativeCode = cleanupDiagnostic({
+              cleanupCode: (error as { code?: unknown }).code,
+            }).code;
+            throw error;
+          } finally {
+            settled = true;
+            elapsedMs = performance.now() - began;
+          }
+        };
+        // The unchanged Pool delegates a callback; the administrative Client uses
+        // a promise. Preserve both actual pg signatures and native settlement.
+        const callback = rest.at(-1);
+        if (typeof callback === "function") {
+          void operation().then(
+            (result) => callback(null, result),
+            (error: unknown) => callback(error),
+          );
+          return;
+        }
+        return operation();
+      } as Client["query"]);
+    try {
+      await observer.connect();
+      await holder.connect();
+      holderPid = (await native(holder, "SELECT pg_backend_pid() AS pid"))
+        .rows[0].pid;
+      ownOid = (
+        await observer.query("SELECT oid FROM pg_database WHERE datname=$1", [
+          own,
+        ])
+      ).rows[0].oid;
+      const poolQuery = Pool.prototype.query;
+      const poolHook = vi
+        .spyOn(Pool.prototype, "query")
+        .mockImplementation(function (
+          this: Pool,
+          text: unknown,
+          ...rest: unknown[]
+        ) {
+          if (
+            text ===
+              "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=$1" &&
+            Array.isArray(rest[0]) &&
+            rest[0][0] === own
+          ) {
+            return (async () => {
+              // SHOW uses the same configured control pool; it does not claim
+              // that two pool checkouts are the same physical connection.
+              const setting = await Reflect.apply(poolQuery, this, [
+                "SHOW statement_timeout",
+              ]);
+              controlBudget = setting.rows[0].statement_timeout;
+              return Reflect.apply(poolQuery, this, [text, ...rest]);
+            })();
+          }
+          return Reflect.apply(poolQuery, this, [text, ...rest]);
+        } as Pool["query"]);
+      try {
+        const first = preview.close();
+        const second = preview.close();
+        [clean] = await Promise.all([first, second]);
+      } finally {
+        poolHook.mockRestore();
+      }
+      await Promise.all([releaseTask, observationTask]);
+    } finally {
+      // Close shares its existing promise; this never starts a second DROP.
+      await preview.close().catch(() => {
+        fixtureFailed("preview-close");
+      });
+      await Promise.all([releaseTask, observationTask]);
+      hook.mockRestore();
+      try {
+        if (locked) {
+          try {
+            await native(holder, "ROLLBACK");
+            locked = false;
+          } catch {
+            fixtureFailed("holder-rollback");
+          }
+        }
+      } finally {
+        // Attempt end even after an uncertain/failed connection receipt.
+        await holder.end().catch(() => fixtureFailed("holder-close"));
+      }
+      try {
+        if (settled) {
+          const deadline = Date.now() + 3000;
+          do {
+            backendTerminal = !(
+              await observer.query(
+                "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid=$1) AS present",
+                [dropPid],
+              )
+            ).rows[0].present;
+            if (backendTerminal) break;
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          } while (Date.now() < deadline);
+        }
+        if (settled && backendTerminal && !locked) {
+          const present = (
+            await observer.query(
+              "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname=$1) AS present",
+              [own],
+            )
+          ).rows[0].present;
+          if (present) {
+            // Separate ordinary operator recovery only after actual native
+            // settlement/backend absence. It has its own finite server budget.
+            const recovery = new Client({
+              connectionString: adminUrl.href,
+              connectionTimeoutMillis: 3000,
+              statement_timeout: 30000,
+            });
+            recovery.on("error", () => fixtureFailed("recovery-client-error"));
+            try {
+              await recovery.connect();
+              recoveryDrops++;
+              await recovery.query(`DROP DATABASE "${own}"`);
+            } finally {
+              await recovery.end();
+            }
+          }
+          absent = !(
+            await observer.query(
+              "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname=$1) AS present",
+              [own],
+            )
+          ).rows[0].present;
+          if (absent && !clean)
+            await rm(preview.privateRoot, { recursive: true, force: true });
+        }
+      } finally {
+        await observer.end().catch(() => fixtureFailed("observer-close"));
+      }
+    }
+    const summary = {
+      scenario: "CLOSE-DDL-01/04",
+      proof,
+      calls,
+      nativeCode,
+      elapsedMs: Math.floor(elapsedMs),
+      controlBudget,
+      dropBudget,
+      clean,
+      backendTerminal,
+      recoveryDrops,
+      absent,
+      fixtureCause,
+      diagnostic: preview.cleanupDiagnostic(),
+    };
+    console.info(JSON.stringify(summary));
+    expect(
+      proof,
+      "Exact owned database holder/waiter/blocker/zero-session proof",
+    ).toBe(true);
+    expect(fixtureCause).toBe("absent");
+    expect(clean, JSON.stringify(summary)).toBe(true);
+    expect(calls).toBe(1);
+    expect(nativeCode).toBe("absent");
+    expect(elapsedMs).toBeGreaterThan(5000);
+    expect(controlBudget).toBe("5s");
+    expect(dropBudget).toBe("30s");
+    expect(backendTerminal).toBe(true);
+    expect(recoveryDrops).toBe(0);
+    expect(absent).toBe(true);
+    expect(existsSync(preview.privateRoot)).toBe(false);
+  } catch (error) {
+    if (error instanceof Error && error.name === "AssertionError") throw error;
+    unexpectedFixtureFailure = true;
+  } finally {
+    // Protect the returned runtime even if metadata parsing or fixture setup
+    // fails before the inner lock/observer cleanup is established.
+    await ownedPreview?.close().catch(() => {
+      throw new Error("CLOSE-DDL owned preview cleanup remains incomplete");
+    });
+  }
+  if (unexpectedFixtureFailure)
+    throw new Error(
+      "CLOSE-DDL native fixture failed; inspect its private owned recovery record",
+    );
 }, 90000);

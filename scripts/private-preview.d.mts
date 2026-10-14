@@ -7,6 +7,7 @@ export interface CleanupDiagnostic {
     | "session-observation"
     | "session-refusal"
     | "owned-drop"
+    | "drop-client-close"
     | "control-pool-close"
     | "directory-removal"
     | "recovery-record-write"
@@ -16,6 +17,18 @@ export interface CleanupDiagnostic {
   elapsedMs: number | "unknown";
 }
 export function cleanupDiagnostic(record: unknown): CleanupDiagnostic;
+export function launchPreview(
+  env: Record<string, string | undefined>,
+): Promise<{
+  origin: string;
+  revision: string;
+  tree: string;
+  workingTreeModified: boolean;
+  privateRoot: string;
+  metadataFile: string;
+  close(): Promise<boolean>;
+  cleanupDiagnostic(): CleanupDiagnostic;
+}>;
 export function recordCleanupFailure(
   record: Record<string, unknown>,
   stage: string,
