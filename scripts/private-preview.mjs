@@ -6,7 +6,7 @@ import { cp, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { Pool } from "pg";
+import { Client, Pool } from "pg";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const fallback = "postgresql://dne:local-preview-only@127.0.0.1:54329/dne_dev";
@@ -24,6 +24,7 @@ const cleanupStages = new Set([
   "session-observation",
   "session-refusal",
   "owned-drop",
+  "drop-client-close",
   "control-pool-close",
   "directory-removal",
   "recovery-record-write",
@@ -248,8 +249,34 @@ export async function launchPreview(env) {
             failed("session-refusal");
           } else {
             operation = "owned-drop";
-            await control.query(`DROP DATABASE "${database}"`);
-            made = false;
+            // Only this invocation's acknowledged database reaches this branch.
+            // Administrative DDL has its own finite server budget; control reads
+            // and the observed-session refusal retain their existing limits.
+            const drop = new Client({
+              connectionString: controlUrl.href,
+              connectionTimeoutMillis: 3000,
+              statement_timeout: 30000,
+              application_name: "dne-owner-preview-drop",
+            });
+            drop.on("error", (error) => {
+              clean = false;
+              failed("owned-drop", error);
+            });
+            try {
+              await drop.connect();
+              await drop.query(`DROP DATABASE "${database}"`);
+              made = false;
+            } catch (error) {
+              clean = false;
+              failed("owned-drop", error);
+            } finally {
+              try {
+                await drop.end();
+              } catch (error) {
+                clean = false;
+                failed("drop-client-close", error);
+              }
+            }
           }
         } catch (error) {
           clean = false;
