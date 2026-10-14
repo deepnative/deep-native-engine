@@ -7,6 +7,7 @@ import { createServer, connect, type Socket } from "node:net";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { afterAll, expect, it } from "vitest";
+import { cleanupDiagnostic } from "../../scripts/private-preview.mjs";
 import { testPool } from "../support/database.ts";
 
 const control = testPool();
@@ -263,7 +264,44 @@ it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, partic
     expect(proc.output().includes(metadata.database)).toBe(false);
     await db.end();
     db = undefined;
-    expect(await stop(proc.child, proc.exited)).toBe(0);
+    const shutdownExit = await stop(proc.child, proc.exited);
+    let shutdownDiagnostic: unknown;
+    if (shutdownExit !== 0) {
+      try {
+        shutdownDiagnostic = cleanupDiagnostic(
+          JSON.parse(await readFile(ready.staffSetupFile, "utf8")),
+        );
+      } catch {
+        shutdownDiagnostic = { record: "missing-or-unreadable" };
+        // A directory/save failure may leave only the launcher's bounded
+        // in-memory diagnostic. Never include its raw stderr or private path.
+        const prefix = "Preview cleanup diagnostic: ";
+        const line = proc
+          .output()
+          .split("\n")
+          .filter((line) => line.startsWith(prefix))
+          .at(-1);
+        if (line) {
+          try {
+            const summary = JSON.parse(line.slice(prefix.length));
+            shutdownDiagnostic = {
+              source: "memory-console",
+              ...cleanupDiagnostic({
+                cleanupStage: summary.stage,
+                cleanupKind:
+                  summary.kind === "absent" ? undefined : summary.kind,
+                cleanupCode:
+                  summary.code === "absent" ? undefined : summary.code,
+                cleanupElapsedMs: summary.elapsedMs,
+              }),
+            };
+          } catch {
+            /* The original nonzero exit remains a failure. */
+          }
+        }
+      }
+    }
+    expect(shutdownExit, JSON.stringify(shutdownDiagnostic)).toBe(0);
     expect(existsSync(metadata.privateRoot)).toBe(false);
     expect(
       (
@@ -308,6 +346,8 @@ it("PREVIEW-04 refuses to force-drop its database when a separate connection rem
     // A positive owned-session observation is a deliberate refusal, not a
     // fabricated PostgreSQL error or a race between its DROP/statement timers.
     expect(retained.cleanupKind).toBe("owned-session-present");
+    expect(retained.cleanupStage).toBe("session-refusal");
+    expect(cleanupDiagnostic(retained).code).toBe("absent");
     expect(retained.cleanupCode).toBeUndefined();
     expect(proc.output().includes(metadata.database)).toBe(false);
     expect(proc.output()).toContain("Do not force-drop other connections");
