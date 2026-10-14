@@ -1,4 +1,5 @@
 // Opt-in owner-run rehearsal tooling. Application behavior stays in src/.
+import { performance } from "node:perf_hooks";
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { cp, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
@@ -15,6 +16,73 @@ const failure = (stage) =>
   new PreviewError(
     `Private preview failed at ${stage}. See the local preview guide; private details are not logged.`,
   );
+
+const cleanupStages = new Set([
+  "runtime-close",
+  "fixture-pool-close",
+  "creation-observation",
+  "session-observation",
+  "session-refusal",
+  "owned-drop",
+  "control-pool-close",
+  "directory-removal",
+  "recovery-record-write",
+]);
+const unavailable = Symbol("unavailable cleanup field");
+function cleanupField(record, key) {
+  if (!record || typeof record !== "object") return undefined;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(record, key);
+    if (!descriptor) return undefined;
+    return Object.hasOwn(descriptor, "value") ? descriptor.value : unavailable;
+  } catch {
+    return unavailable;
+  }
+}
+export function cleanupDiagnostic(record) {
+  const stage = cleanupField(record, "cleanupStage");
+  const kind = cleanupField(record, "cleanupKind");
+  const code = cleanupField(record, "cleanupCode");
+  const elapsedMs = cleanupField(record, "cleanupElapsedMs");
+  return {
+    record: record && typeof record === "object" ? "present" : "missing",
+    stage: cleanupStages.has(stage) ? stage : "unknown",
+    kind:
+      kind === undefined
+        ? "absent"
+        : kind === "owned-session-present"
+          ? kind
+          : "unknown",
+    code:
+      code === undefined
+        ? "absent"
+        : typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)
+          ? code
+          : "unknown",
+    elapsedMs:
+      Number.isFinite(elapsedMs) && elapsedMs >= 0 && elapsedMs <= 600000
+        ? Math.floor(elapsedMs)
+        : "unknown",
+  };
+}
+export function recordCleanupFailure(record, stage, error, elapsedMs) {
+  try {
+    if (cleanupField(record, "cleanupStage") !== undefined) return;
+    const code = cleanupField(error, "code");
+    record.cleanupStage = cleanupStages.has(stage) ? stage : "unknown";
+    record.cleanupElapsedMs =
+      Number.isFinite(elapsedMs) && elapsedMs >= 0 && elapsedMs <= 600000
+        ? elapsedMs
+        : "unknown";
+    if (error !== undefined)
+      record.cleanupCode =
+        typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)
+          ? code
+          : "unknown";
+  } catch {
+    // Diagnostics must never interrupt the remaining owned cleanup steps.
+  }
+}
 
 export function controlConnection(env) {
   // No inherited application flags, provider choices, ports or storage roots.
@@ -111,15 +179,25 @@ export async function launchPreview(env) {
     closing = (async () => {
       if (closed) return true;
       let clean = true;
+      const cleanupStart = performance.now();
+      const failed = (stage, error) =>
+        recordCleanupFailure(
+          metadata,
+          stage,
+          error,
+          performance.now() - cleanupStart,
+        );
       try {
         await running?.close();
-      } catch {
+      } catch (error) {
         clean = false;
+        failed("runtime-close", error);
       }
       try {
         await fixturePool?.end();
-      } catch {
+      } catch (error) {
         clean = false;
+        failed("fixture-pool-close", error);
       }
       if (creationPending) {
         // A lost CREATE acknowledgement is not proof that nothing committed.
@@ -131,50 +209,76 @@ export async function launchPreview(env) {
               [database],
             )
           ).rows[0].present;
-          if (exists) clean = false;
-          else creationPending = false;
-        } catch {
+          if (exists) {
+            clean = false;
+            failed("creation-observation");
+          } else creationPending = false;
+        } catch (error) {
           clean = false;
+          failed("creation-observation", error);
         }
       }
       if (made && clean) {
+        let operation = "session-observation";
         try {
           // Client pool.end() confirms local shutdown, not when PostgreSQL has
           // processed every socket close. Under a loaded gate a closing backend
           // can outlast PostgreSQL's own five-second DROP wait, so observe the
           // database until its sessions leave (bounded, read-only, nothing is
-          // terminated). The single ordinary DROP stays the authority check.
+          // terminated). After an observed zero, the single ordinary DROP stays
+          // the authority check for a connection racing with that observation.
           const deadline = Date.now() + 20000;
-          while (
-            Date.now() < deadline &&
+          const observedSessions = async () =>
             (
               await control.query(
                 "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=$1",
                 [database],
               )
-            ).rows[0].n > 0
-          )
+            ).rows[0].n;
+          let remaining = await observedSessions();
+          while (Date.now() < deadline && remaining > 0) {
             await new Promise((resolve) => setTimeout(resolve, 250));
-          await control.query(`DROP DATABASE "${database}"`);
-          made = false;
+            if (Date.now() < deadline) remaining = await observedSessions();
+          }
+          if (remaining > 0) {
+            // This is an observed refusal, not a fabricated driver SQLSTATE.
+            // Keep the owned resource without racing DROP's own wait/timeout.
+            clean = false;
+            metadata.cleanupKind = "owned-session-present";
+            failed("session-refusal");
+          } else {
+            operation = "owned-drop";
+            await control.query(`DROP DATABASE "${database}"`);
+            made = false;
+          }
         } catch (error) {
           clean = false;
-          // SQLSTATE only: diagnosable from the private record, never secrets.
-          metadata.cleanupCode =
-            typeof error?.code === "string" ? error.code : "unknown";
+          failed(operation, error);
         }
-      } else if (made) metadata.cleanupCode = "shutdown incomplete";
+      }
       try {
         await control?.end();
-      } catch {
+      } catch (error) {
         clean = false;
+        failed("control-pool-close", error);
       }
       closed = true;
-      if (clean) await rm(privateRoot, { recursive: true, force: true });
-      else {
+      if (clean) {
+        try {
+          await rm(privateRoot, { recursive: true, force: true });
+        } catch (error) {
+          failed("directory-removal", error);
+          throw error;
+        }
+      } else {
         metadata.cleanup =
           "Cleanup blocked. Shutdown/removal or database creation acknowledgement is incomplete; do not force-drop or terminate other connections. After checking this invocation's identity and closing its remaining connections, use this private record to remove only its database and directory.";
-        await save();
+        try {
+          await save();
+        } catch (error) {
+          failed("recovery-record-write", error);
+          throw error;
+        }
       }
       return clean;
     })();
@@ -315,6 +419,7 @@ export async function launchPreview(env) {
       privateRoot,
       metadataFile,
       close,
+      cleanupDiagnostic: () => cleanupDiagnostic(metadata),
     };
   } catch {
     const clean = await close().catch(() => false);
@@ -338,10 +443,17 @@ export async function main(env = process.env) {
         console.error(
           `Owned cleanup blocked; inspect ${preview.metadataFile} locally. Do not force-drop other connections.`,
         );
+      if (!clean)
+        console.error(
+          `Preview cleanup diagnostic: ${JSON.stringify(preview.cleanupDiagnostic())}`,
+        );
       process.exitCode = clean ? 0 : 1;
     } catch {
       console.error(
         "Owned preview shutdown failed; inspect its private setup file locally.",
+      );
+      console.error(
+        `Preview cleanup diagnostic: ${JSON.stringify(preview.cleanupDiagnostic())}`,
       );
       process.exitCode = 1;
     }

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, type TestContext } from "vitest";
 import {
   dropAttendanceBrowserDatabase,
   waitForAttendanceBrowserDatabaseDrain,
@@ -29,19 +29,30 @@ async function fixture() {
   return { name, control, own };
 }
 
-let f: Awaited<ReturnType<typeof fixture>>;
-let ended: Promise<void> | undefined;
-let releaseTimer: ReturnType<typeof setTimeout> | undefined;
-beforeEach(async () => {
-  f = await fixture();
-  ended = undefined;
-  releaseTimer = undefined;
+type AttendanceFixture = Awaited<ReturnType<typeof fixture>> & {
+  ended?: Promise<void>;
+  releaseTimer?: ReturnType<typeof setTimeout>;
+};
+const fixtures = new WeakMap<object, AttendanceFixture>();
+function currentFixture(context: TestContext) {
+  const current = fixtures.get(context.task);
+  if (!current) throw Error("Attendance fixture setup required");
+  return current;
+}
+beforeEach(async (context) => {
+  const f: AttendanceFixture = await fixture();
+  fixtures.set(context.task, f);
 });
-afterEach(async () => {
-  if (releaseTimer) clearTimeout(releaseTimer);
+afterEach(async (context) => {
+  // Snapshot only this test's resources before awaiting. Native ordinary DROP
+  // can await a server checkpoint after the unchanged three-second session
+  // barrier. Keep actual deletion/absence in this bounded administrative hook;
+  // its allowance is not a product deadline or a PostgreSQL completion guarantee.
+  const f = currentFixture(context);
+  if (f.releaseTimer) clearTimeout(f.releaseTimer);
   try {
-    ended ??= f.own.end();
-    await ended;
+    f.ended ??= f.own.end();
+    await f.ended;
     await dropAttendanceBrowserDatabase(f.control, f.name);
     expect(
       (
@@ -54,16 +65,17 @@ afterEach(async () => {
   } finally {
     await f.control.end();
   }
-});
-it("CI-ATTEND-02 waits for the observed owned PostgreSQL session to disconnect before deletion", async () => {
+}, 60000);
+it("CI-ATTEND-02 waits for the observed owned PostgreSQL session to disconnect before deletion", async (context) => {
+  const f = currentFixture(context);
   let disconnected = false;
-  releaseTimer = setTimeout(() => {
-    ended = f.own.end().then(() => {
+  f.releaseTimer = setTimeout(() => {
+    f.ended = f.own.end().then(() => {
       disconnected = true;
     });
     // The lifecycle awaits this same promise; avoid an unobserved rejection
     // if the drain assertion fails before teardown begins.
-    void ended.catch(() => {});
+    void f.ended.catch(() => {});
   }, 150);
   await waitForAttendanceBrowserDatabaseDrain(f.control, f.name);
   expect(disconnected).toBe(true);
@@ -76,7 +88,8 @@ it("CI-ATTEND-02 waits for the observed owned PostgreSQL session to disconnect b
     ).rows,
   ).toHaveLength(1);
 });
-it("CI-ATTEND-02 refuses to drop an owned database whose observed session remains active", async () => {
+it("CI-ATTEND-02 refuses to drop an owned database whose observed session remains active", async (context) => {
+  const f = currentFixture(context);
   await expect(
     dropAttendanceBrowserDatabase(f.control, f.name),
   ).rejects.toThrow("Owned browser database still active; no forced deletion");
@@ -90,7 +103,8 @@ it("CI-ATTEND-02 refuses to drop an owned database whose observed session remain
   ).toHaveLength(1);
   expect((await f.own.query("SELECT 1 AS retained")).rows[0].retained).toBe(1);
 });
-it("CI-ATTEND-02 rejects a non-owned database identity before issuing deletion", async () => {
+it("CI-ATTEND-02 rejects a non-owned database identity before issuing deletion", async (context) => {
+  const f = currentFixture(context);
   await expect(
     dropAttendanceBrowserDatabase(f.control, "postgres"),
   ).rejects.toThrow("Generated owned browser database required");
