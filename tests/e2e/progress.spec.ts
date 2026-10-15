@@ -180,6 +180,27 @@ test("[L62] member sees only their exact-version activity with truthful progress
     attempts: "1",
   });
 
+  const lessonFacts = async () =>
+    (
+      await pool.query(
+        `SELECT content_id,content_version,opened_at,started_at,self_assessed_at
+         FROM lesson_activity WHERE member_id=$1 ORDER BY content_version`,
+        [ownerId],
+      )
+    ).rows;
+  const recordedLesson = await lessonFacts();
+  // PROGRESS-RET-01: an unchanged return preserves the recorded activity.
+  await expect(reading.getByRole("link")).toHaveAttribute(
+    "href",
+    `/library/${lessonId}?version=1`,
+  );
+  await reading.getByRole("link").click();
+  await expect(page).toHaveURL(`${origin}/library/${lessonId}?version=1`);
+  expect(await lessonFacts()).toEqual(recordedLesson);
+  await page.goto("/progress");
+  const capturedReturn = await reading.getByRole("link").getAttribute("href");
+  expect(capturedReturn).toBe(`/library/${lessonId}?version=1`);
+
   const replacement: DraftContent = {
     id: lessonId,
     version: 2,
@@ -206,6 +227,22 @@ test("[L62] member sees only their exact-version activity with truthful progress
     true,
   );
   expect(await actors.catalog.publish(actors.editor, lessonId, 2)).toBe(true);
+  // PROGRESS-RET-02: activate the actual anchor still on the cached page.
+  const [staleReturn] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().isNavigationRequest() &&
+        response.url() === new URL(capturedReturn!, origin).href,
+    ),
+    reading.getByRole("link").click(),
+  ]);
+  expect(staleReturn.status()).toBe(409);
+  await expect(
+    page.getByRole("heading", { name: "Content version unavailable" }),
+  ).toBeVisible();
+  await expect(page.getByText(replacement.body)).toHaveCount(0);
+  expect(await lessonFacts()).toEqual(recordedLesson);
+  // PROGRESS-RET-03: refresh retained history, then choose current content explicitly.
   await page.goto("/progress");
   await expect(reading).toContainText("version 1");
   await expect(reading).toContainText("Historical version unavailable");

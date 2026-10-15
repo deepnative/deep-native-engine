@@ -66,7 +66,7 @@ export function activityItems(
         ? "Current published sample; no qualified review"
         : "Historical version unavailable; activity retained",
       href: lesson.available
-        ? `/library/${encodeURIComponent(lesson.contentId)}`
+        ? `/library/${encodeURIComponent(lesson.contentId)}?version=${lesson.contentVersion}`
         : null,
       contentId: lesson.contentId,
       reportable: lesson.reportable ?? false,

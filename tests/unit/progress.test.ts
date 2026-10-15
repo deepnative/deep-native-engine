@@ -44,7 +44,7 @@ it("keeps an empty member's next action useful without inventing completion", ()
   expect(html).not.toContain("Self-reported complete");
 });
 
-it("distinguishes a starter draft and observed lesson opening from completion", () => {
+it("PROGRESS-RET-01 distinguishes recorded-version lesson return from completion", () => {
   const items = activityItems(
     { instruction: "invented", verification: "check", completed_at: null },
     [lesson()],
@@ -56,7 +56,10 @@ it("distinguishes a starter draft and observed lesson opening from completion", 
     "Started",
   ]);
   expect(items.map((item) => item.version)).toEqual([1, 2, 3]);
-  expect(items[1]?.href).toBe("/library/synthetic-lesson");
+  expect(items[1]?.href).toBe("/library/synthetic-lesson?version=2");
+  expect(privateProgressPage(items)).toContain(
+    'href="/library/synthetic-lesson?version=2"',
+  );
   expect(items[2]?.href).toContain("/assignments/attempts/");
 });
 
