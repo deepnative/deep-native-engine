@@ -4,7 +4,8 @@ import type { Pool, PoolClient } from "pg";
 import { attendanceInspect } from "../../src/event-attendance-inspection.ts";
 import { attendanceHistory } from "../../src/event-attendance-history.ts";
 import { eventCancellationStore } from "../../src/event-cancellations.ts";
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
+import { attendanceExportObservation } from "../support/attendance-export-observation.ts";
 import { migrate, store } from "../../src/store.ts";
 import { authorizationStore } from "../../src/authorization.ts";
 import { eventRehearsalStore } from "../../src/event-rehearsals.ts";
@@ -30,7 +31,27 @@ beforeAll(() => migrate(pool));
 beforeEach(() =>
   pool.query("TRUNCATE principals,private_event_inventory CASCADE"),
 );
-afterAll(() => pool.end());
+const observations = new Map<
+  string,
+  ReturnType<typeof attendanceExportObservation>
+>();
+let targetObservation:
+  ReturnType<typeof attendanceExportObservation> | undefined;
+afterEach(({ task }) =>
+  observations.get(task.id)?.snapshot("runner-checkpoint"),
+);
+afterAll(async () => {
+  targetObservation?.teardown("running");
+  targetObservation?.snapshot("teardown-start");
+  let fulfilled = false;
+  try {
+    await pool.end();
+    fulfilled = true;
+  } finally {
+    targetObservation?.teardown(fulfilled ? "fulfilled" : "rejected");
+    targetObservation?.snapshot("teardown-finalization");
+  }
+});
 async function fixture() {
   const token = randomBytes(32).toString("hex"),
     admin = randomBytes(32).toString("hex");
@@ -809,90 +830,127 @@ it("ATTEND-04 replacement registration never inherits old permission or original
   if (added.kind !== "ready") throw Error("Distinct new permission required");
   expect(added.value.permission.id).not.toBe(saved.value.permission.id);
 });
-it("ATTEND-07 exports every retained permission over bounded live pages with owner-bound continuation and erasure", async () => {
-  const f = await fixture(),
-    options = { mode: "test" as const, enabled: true, registration: true },
-    ids: string[] = [];
-  for (let index = 0; index < 105; index++) {
-    const checked = await attendancePermissionCheck(pool, options, f.token, {
-      registrationId: f.registration,
-      administratorId: f.administrator,
-    });
-    if (checked.kind !== "ready")
-      throw Error("Current deliberately checked exact scope required");
-    const saved = await attendancePermit(
-      pool,
-      options,
-      f.token,
-      randomUUID(),
-      checked.value,
+it("ATTEND-07 exports every retained permission over bounded live pages with owner-bound continuation and erasure", async ({
+  task,
+}) => {
+  const observation = attendanceExportObservation("artifacts");
+  observations.set(task.id, observation);
+  targetObservation = observation;
+  observation.snapshot("callback-start");
+  const phase = observation.phase;
+  let fulfilled = false;
+  try {
+    const f = await phase("fixture", 0, () => fixture()),
+      options = { mode: "test" as const, enabled: true, registration: true },
+      ids: string[] = [];
+    for (let index = 0; index < 105; index++) {
+      const checked = await phase("check", index, () =>
+        attendancePermissionCheck(pool, options, f.token, {
+          registrationId: f.registration,
+          administratorId: f.administrator,
+        }),
+      );
+      if (checked.kind !== "ready")
+        throw Error("Current deliberately checked exact scope required");
+      const saved = await phase("permit", index, () =>
+        attendancePermit(pool, options, f.token, randomUUID(), checked.value),
+      );
+      if (saved.kind !== "ready")
+        throw Error("Actual saved permission required");
+      ids.push(saved.value.permission.id);
+      expect(
+        (
+          await phase("withdraw", index, () =>
+            attendanceWithdraw(
+              pool,
+              options,
+              f.token,
+              randomUUID(),
+              saved.value.permission.id,
+            ),
+          )
+        ).kind,
+      ).toBe("ready");
+    }
+    const exports = memberExportStore(pool),
+      seen: string[] = [];
+    let cursor: string | undefined,
+      firstCursor: string | undefined,
+      pages = 0;
+    do {
+      const result = await phase("export", pages, () =>
+        exports.exportOwned(f.token, cursor),
+      );
+      expect(result.kind).toBe("ready");
+      if (result.kind !== "ready") throw Error("Owned bounded export required");
+      expect(result.payload.page.recordCount).toBeLessThanOrEqual(100);
+      expect(
+        Buffer.byteLength(JSON.stringify(result.payload)),
+      ).toBeLessThanOrEqual(256 * 1024);
+      expect(JSON.stringify(result.payload)).not.toContain(f.administrator);
+      expect(JSON.stringify(result.payload)).not.toContain(f.admin);
+      const facts = result.payload.records.eventAttendancePermissions as {
+        permissionId: string;
+        withdrawnAt: Date;
+        registrationId: string;
+      }[];
+      for (const fact of facts) {
+        expect(fact.registrationId).toBe(f.registration);
+        expect(fact.withdrawnAt).toBeInstanceOf(Date);
+        seen.push(fact.permissionId);
+      }
+      cursor = result.payload.page.nextCursor ?? undefined;
+      firstCursor ??= cursor;
+      pages++;
+    } while (cursor);
+    expect(pages).toBeGreaterThan(1);
+    expect(seen.sort()).toEqual(ids.sort());
+    expect(new Set(seen).size).toBe(105);
+    if (!firstCursor) throw Error("Actual continued export required");
+    const foreign = randomBytes(32).toString("hex");
+    await phase("foreign-token", 0, () =>
+      store(pool).create(foreign, {
+        background: "explorer",
+        goal: "everyday",
+      }),
     );
-    if (saved.kind !== "ready") throw Error("Actual saved permission required");
-    ids.push(saved.value.permission.id);
     expect(
       (
-        await attendanceWithdraw(
-          pool,
-          options,
-          f.token,
-          randomUUID(),
-          saved.value.permission.id,
+        await phase("foreign-denial", 0, () =>
+          exports.exportOwned(foreign, firstCursor),
         )
       ).kind,
-    ).toBe("ready");
-  }
-  const exports = memberExportStore(pool),
-    seen: string[] = [];
-  let cursor: string | undefined,
-    firstCursor: string | undefined,
-    pages = 0;
-  do {
-    const result = await exports.exportOwned(f.token, cursor);
-    expect(result.kind).toBe("ready");
-    if (result.kind !== "ready") throw Error("Owned bounded export required");
-    expect(result.payload.page.recordCount).toBeLessThanOrEqual(100);
+    ).toBe("denied");
     expect(
-      Buffer.byteLength(JSON.stringify(result.payload)),
-    ).toBeLessThanOrEqual(256 * 1024);
-    expect(JSON.stringify(result.payload)).not.toContain(f.administrator);
-    expect(JSON.stringify(result.payload)).not.toContain(f.admin);
-    const facts = result.payload.records.eventAttendancePermissions as {
-      permissionId: string;
-      withdrawnAt: Date;
-      registrationId: string;
-    }[];
-    for (const fact of facts) {
-      expect(fact.registrationId).toBe(f.registration);
-      expect(fact.withdrawnAt).toBeInstanceOf(Date);
-      seen.push(fact.permissionId);
-    }
-    cursor = result.payload.page.nextCursor ?? undefined;
-    firstCursor ??= cursor;
-    pages++;
-  } while (cursor);
-  expect(pages).toBeGreaterThan(1);
-  expect(seen.sort()).toEqual(ids.sort());
-  expect(new Set(seen).size).toBe(105);
-  if (!firstCursor) throw Error("Actual continued export required");
-  const foreign = randomBytes(32).toString("hex");
-  await store(pool).create(foreign, {
-    background: "explorer",
-    goal: "everyday",
-  });
-  expect((await exports.exportOwned(foreign, firstCursor)).kind).toBe("denied");
-  expect(
-    (await exports.exportOwned(f.token, firstCursor + "forged")).kind,
-  ).toBe("denied");
-  await store(pool).remove(f.member);
-  expect((await exports.exportOwned(f.token, firstCursor)).kind).toBe("denied");
-  expect(
-    (
-      await pool.query(
-        "SELECT id FROM private_event_attendance_permissions WHERE member_id=$1",
-        [f.member],
-      )
-    ).rows,
-  ).toHaveLength(0);
+      (
+        await phase("forged-denial", 0, () =>
+          exports.exportOwned(f.token, firstCursor + "forged"),
+        )
+      ).kind,
+    ).toBe("denied");
+    await phase("erase", 0, () => store(pool).remove(f.member));
+    expect(
+      (
+        await phase("erased-denial", 0, () =>
+          exports.exportOwned(f.token, firstCursor),
+        )
+      ).kind,
+    ).toBe("denied");
+    expect(
+      (
+        await phase("absence", 0, () =>
+          pool.query(
+            "SELECT id FROM private_event_attendance_permissions WHERE member_id=$1",
+            [f.member],
+          ),
+        )
+      ).rows,
+    ).toHaveLength(0);
+    fulfilled = true;
+  } finally {
+    observation.finishBody(fulfilled ? "fulfilled" : "rejected");
+    observation.snapshot("body-finalization");
+  }
 });
 
 it.each(["same-key", "different-key"] as const)(
