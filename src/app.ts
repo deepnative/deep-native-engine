@@ -62,6 +62,7 @@ import {
   libraryPage,
   workflowRegistryPage,
   workflowDetailPage,
+  workflowUnavailablePage,
   workflowFeedbackPage,
   circlesPage,
   eventDiscoveryPage,
@@ -2432,38 +2433,64 @@ export function app(
     const q = typeof req.query.q === "string" ? req.query.q : "";
     res.send(workflowRegistryPage(await workflowRegistry(q), q.slice(0, 100)));
   });
-  app.get("/workflows/:id", async (req, res) => {
-    const item = await workflowBundle(req.params.id as string);
-    if (!item) {
-      res
-        .status(404)
-        .send(
-          errorPage(
-            "Workflow unavailable",
-            "This demonstration does not exist.",
-          ),
-        );
-      return;
-    }
-    res.send(workflowDetailPage(item));
-  });
-  app.get("/workflows/:id/download", async (req, res) => {
-    const item = await workflowBundle(req.params.id as string);
-    if (!item) {
-      res
-        .status(404)
-        .send(
-          errorPage(
-            "Workflow unavailable",
-            "This demonstration does not exist.",
-          ),
-        );
-      return;
-    }
-    res.type("text/markdown; charset=utf-8");
-    res.attachment(`${item.id}-v${item.version}.md`);
-    res.send(item.download);
-  });
+  const workflowPage =
+    (download: boolean): express.RequestHandler =>
+    async (req, res) => {
+      const item = await workflowBundle(req.params.id as string);
+      if (!item) {
+        res
+          .status(404)
+          .send(
+            workflowUnavailablePage(
+              "Workflow unavailable",
+              "This demonstration does not exist.",
+            ),
+          );
+        return;
+      }
+      const query = req.query;
+      const version = query.version;
+      const malformedShape = Object.keys(query).some((key) =>
+        /^version(?:\[|\.)/.test(key),
+      );
+      if (
+        malformedShape ||
+        ((download || version !== undefined) &&
+          (typeof version !== "string" ||
+            !/^[1-9][0-9]*$/.test(version) ||
+            !Number.isSafeInteger(Number(version))))
+      ) {
+        res
+          .status(400)
+          .send(
+            workflowUnavailablePage(
+              "Workflow version required",
+              "Choose a current draft, then use its versioned link to read or download it.",
+            ),
+          );
+        return;
+      }
+      if (version !== undefined && Number(version) !== item.version) {
+        res
+          .status(409)
+          .send(
+            workflowUnavailablePage(
+              "Workflow version unavailable",
+              "The requested draft version is unavailable here. Choose the current draft from the workflow list to continue.",
+            ),
+          );
+        return;
+      }
+      if (!download) {
+        res.send(workflowDetailPage(item));
+        return;
+      }
+      res.type("text/markdown; charset=utf-8");
+      res.attachment(`${item.id}-v${item.version}.md`);
+      res.send(item.download);
+    };
+  app.get("/workflows/:id", workflowPage(false));
+  app.get("/workflows/:id/download", workflowPage(true));
   mountWorkflowReviewRoutes(app, options.workflowReviews);
   app.get("/workflow-feedback/:id", async (req, res) => {
     const id = req.params.id as string;
