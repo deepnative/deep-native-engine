@@ -348,15 +348,22 @@ it("REHSCHED-04 an observed uncommitted inventory write crossing the two-minute 
         ])
       ).rows[0].state,
     ).toBe("idle in transaction");
-    expect(await pending).toEqual({ kind: "denied" });
-    expect(
-      (
+    // A conservative denial can precede the database boundary. Keep the write
+    // held until that boundary itself is observed, rather than inferring it.
+    const until = performance.now() + 3000;
+    let crossed = false;
+    while (performance.now() < until) {
+      crossed = (
         await pool.query(
           "SELECT clock_timestamp()>=$1::timestamptz-interval '2 minutes' crossed",
           [snapshot.startsAt],
         )
-      ).rows[0].crossed,
-    ).toBe(true);
+      ).rows[0].crossed;
+      if (crossed) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(crossed).toBe(true);
+    expect(await pending).toEqual({ kind: "denied" });
   } finally {
     holder.release();
   }
