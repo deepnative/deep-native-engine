@@ -1,5 +1,18 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+async function expectKeyboardFocus(target: Locator) {
+  await expect(target).toBeFocused();
+  const focus = await target.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      visible: element.matches(":focus-visible"),
+      width: parseFloat(style.outlineWidth),
+      style: style.outlineStyle,
+    };
+  });
+  expect(focus).toEqual({ visible: true, width: 3, style: "solid" });
+}
+
 async function tabTo(page: Page, target: Locator) {
   // macOS WebKit uses Option+Tab to include links in keyboard traversal when
   // the host's full keyboard-navigation preference is off. Linux WebKit and
@@ -14,16 +27,7 @@ async function tabTo(page: Page, target: Locator) {
     if (
       await target.evaluate((element) => element === document.activeElement)
     ) {
-      await expect(target).toBeFocused();
-      const focus = await target.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return {
-          visible: element.matches(":focus-visible"),
-          width: parseFloat(style.outlineWidth),
-          style: style.outlineStyle,
-        };
-      });
-      expect(focus).toEqual({ visible: true, width: 3, style: "solid" });
+      await expectKeyboardFocus(target);
       return;
     }
   }
@@ -128,7 +132,20 @@ test("[L53] three learner paths retain visible keyboard focus, actionable errors
     await page.keyboard.type(
       "Use only invented notes to make a short plan with actions and unknowns.",
     );
-    await tabTo(page, verification);
+    // QA109-INPUT01: immediate typing into an empty field after its error link.
+    await tabTo(page, page.getByRole("button", { name: "Complete exercise" }));
+    await page.keyboard.press("Enter");
+    const missingCheckLink = page.getByRole("link", {
+      name: /How will you check the result\?/,
+    });
+    await tabTo(page, missingCheckLink);
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("x");
+    await expect(verification).toHaveValue("x");
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.press("Backspace");
+    // The error link already focused this field; keep typing in it directly.
+    await expectKeyboardFocus(verification);
     await page.keyboard.type("Check notes");
     const checked = page.getByLabel("I checked the context");
     await tabTo(page, checked);

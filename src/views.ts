@@ -957,7 +957,7 @@ export function lesson(
   const verificationError = fieldError("verification");
   const checkedError = fieldError("checked");
   const summary = errors.length
-    ? `<div class="notice" role="alert"><h2>Fix the exercise form</h2><ul>${errors.map((error) => `<li>${error.field ? `<a href="#${error.field}">${escape(error.message)}</a>` : escape(error.message)}</li>`).join("")}</ul></div>`
+    ? `<div class="notice" role="alert" data-exercise-errors><h2>Fix the exercise form</h2><ul>${errors.map((error) => `<li>${error.field ? `<a href="#${error.field}">${escape(error.message)}</a>` : escape(error.message)}</li>`).join("")}</ul></div><script type="module" src="/assets/exercise-error-focus.js"></script>`
     : "";
   const withdrawal = (version: number, goal = learner.goal as string) =>
     starterWithdrawal(csrf, version, goal);
