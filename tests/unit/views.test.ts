@@ -1398,6 +1398,10 @@ it("links each exercise error to only its affected field and clears error state 
     },
   ]);
   expect(invalid).toContain("<title>Error in your exercise");
+  expect(invalid).toContain('role="alert" data-exercise-errors');
+  expect(invalid).toContain(
+    '<script type="module" src="/assets/exercise-error-focus.js"></script>',
+  );
   expect(invalid).toContain('href="#verification"');
   expect(invalid).toContain('id="verification" name="verification"');
   expect(invalid).toContain('aria-invalid="true"');
@@ -1413,6 +1417,8 @@ it("links each exercise error to only its affected field and clears error state 
   expect(corrected).not.toContain('aria-invalid="true"');
   expect(corrected).not.toContain('id="verification-error"');
   expect(corrected).not.toContain("<title>Error in your exercise");
+  expect(corrected).not.toContain("data-exercise-errors");
+  expect(corrected).not.toContain("/assets/exercise-error-focus.js");
 });
 it("shows optional profile choices and retains the exercise context after a goal change", () => {
   const profile = {

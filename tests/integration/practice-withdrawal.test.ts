@@ -256,6 +256,19 @@ async function unlocked(ownerId: string) {
     client.release();
   }
 }
+async function backendClosed(pid: number) {
+  const deadline = Date.now() + 3000;
+  for (;;) {
+    const result = await pool.query<{ present: boolean }>(
+      "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND datname=current_database()) AS present",
+      [pid],
+    );
+    if (!result.rows[0]!.present) return;
+    if (Date.now() >= deadline)
+      throw Error("Failed rollback connection did not close");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
 it.each(["save-first", "withdraw-first"] as const)(
   "serializes %s with observed blocking and no response resurrection",
   async (order) => {
@@ -546,16 +559,23 @@ it("discards a failed rollback connection so redaction and authorization locks c
     "Preserve on rollback failure",
   );
   const isolated = testPool();
+  let backendPid = 0;
+  let discardRequested = false;
   const wrapper = {
     async connect() {
       const client = await isolated.connect();
+      backendPid = (await client.query("SELECT pg_backend_pid() AS pid"))
+        .rows[0].pid as number;
       return {
         async query(sql: string, values?: unknown[]) {
           if (sql === "COMMIT" || sql === "ROLLBACK")
             throw Error("Synthetic disconnected commit");
           return client.query(sql, values);
         },
-        release: client.release.bind(client),
+        release(error?: Error | boolean) {
+          discardRequested = Boolean(error);
+          client.release(error);
+        },
       };
     },
   } as unknown as Pool;
@@ -563,6 +583,12 @@ it("discards a failed rollback connection so redaction and authorization locks c
     await expect(
       practiceStore(wrapper).withdraw(owner.token, source.id, 1),
     ).rejects.toThrow("Synthetic disconnected commit");
+    expect(discardRequested).toBe(true);
+    expect(backendPid).toBeGreaterThan(0);
+    expect(isolated.totalCount).toBe(0);
+    // release(error) is void; local pool removal precedes native close.
+    // Observe that same backend, then retain both original NOWAIT assertions.
+    await backendClosed(backendPid);
     await unlocked(owner.id);
     expect(await practice.history(owner.token)).toMatchObject([
       { response: "Preserve on rollback failure", withdrawnAt: null },
