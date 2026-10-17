@@ -60,6 +60,7 @@ APP_FILES = {
 INFRA_FILES = {
     "infra/main.tf", "infra/app.tf", "infra/.terraform.lock.hcl", "infra/.gitignore",
     "infra/proxy/Dockerfile", "infra/proxy/default.conf.template", "Dockerfile", ".dockerignore",
+    ".github/workflows/deploy-azure.yml",
 }
 
 # Bounded, high-confidence source scan. These signatures are intentionally

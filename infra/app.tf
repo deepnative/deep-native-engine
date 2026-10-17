@@ -4,8 +4,9 @@
 # demo mode, and an nginx front that maps the public origin to loopback.
 
 variable "app_image_tag" {
-  description = "Tag of the app and proxy images in the platform ACR."
+  description = "Image tag used only when the Container App is first created. Afterwards the deploy-azure workflow owns the app and proxy images."
   type        = string
+  default     = "0b0ee74-202610171227"
 }
 
 resource "random_password" "postgres" {
@@ -20,12 +21,27 @@ locals {
   postgres_image = "${local.acr}/library/postgres:18-alpine"
 }
 
+# The app identity also deploys from GitHub Actions (OIDC, main branch): it
+# pushes images to the platform ACR and updates this Container App, which its
+# resource-group Contributor role from app-onboard already allows.
+resource "azurerm_role_assignment" "acr_push" {
+  scope                = data.terraform_remote_state.platform.outputs.acr_resource_id
+  role_definition_name = "AcrPush"
+  principal_id         = module.onboard.identity_principal_id
+  principal_type       = "ServicePrincipal"
+}
+
 resource "azurerm_container_app_environment" "app" {
   name                       = "cae-deepnative-dev"
   location                   = module.onboard.location
   resource_group_name        = module.onboard.resource_group_name
   log_analytics_workspace_id = data.terraform_remote_state.platform.outputs.log_analytics_workspace_id
   tags                       = module.onboard.tags
+
+  workload_profile {
+    name                  = "Consumption"
+    workload_profile_type = "Consumption"
+  }
 }
 
 resource "azurerm_container_app" "app" {
@@ -33,6 +49,7 @@ resource "azurerm_container_app" "app" {
   container_app_environment_id = azurerm_container_app_environment.app.id
   resource_group_name          = module.onboard.resource_group_name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
   tags                         = module.onboard.tags
 
   identity {
@@ -123,6 +140,14 @@ resource "azurerm_container_app" "app" {
         value = local.public_host
       }
     }
+  }
+
+  lifecycle {
+    # .github/workflows/deploy-azure.yml rolls these to the verified main SHA.
+    ignore_changes = [
+      template[0].container[1].image,
+      template[0].container[2].image,
+    ]
   }
 }
 

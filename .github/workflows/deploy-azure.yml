@@ -1,0 +1,249 @@
+name: Deploy Azure demo preview
+
+# Rolls the synthetic demo preview on Azure Container Apps (see infra/app.tf and
+# assets/docs/workflows/AZURE-DEMO-DEPLOYMENT.md) to the current main revision,
+# only after Repository checks passed for that exact revision.
+on:
+  workflow_run:
+    workflows: [Repository checks]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-azure-demo
+  cancel-in-progress: false
+
+env:
+  ACR_NAME: acralzyhpx31oc
+  RESOURCE_GROUP: rg-deepnative-dev-canadacentral
+  CONTAINER_APP: ca-deepnative-dev
+
+jobs:
+  deploy:
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - name: Select the verified current main revision
+        id: revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DNE_REPOSITORY: ${{ github.repository }}
+          DNE_REPOSITORY_ID: ${{ github.repository_id }}
+          DNE_EVENT_NAME: ${{ github.event_name }}
+          DNE_EVENT_RUN_ID: ${{ github.event.workflow_run.id }}
+          DNE_EVENT_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          DNE_EVENT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+
+          ERROR = 'Cannot verify current main; inspect the completed Repository checks run and API access.'
+          WORKFLOW_PATH = '.github/workflows/repository-checks.yml'
+
+
+          def positive_id(value):
+              return type(value) is int and value > 0
+
+
+          def env_id(name):
+              value = os.environ.get(name, '')
+              if not re.fullmatch(r'[1-9][0-9]*', value):
+                  raise ValueError()
+              return int(value)
+
+
+          def api(endpoint):
+              result = subprocess.run(
+                  ['gh', 'api', '--method', 'GET', '-H', 'Accept: application/vnd.github+json',
+                   '-H', 'X-GitHub-Api-Version: 2026-03-10', endpoint],
+                  capture_output=True, text=True, timeout=20, check=True,
+              )
+              return json.loads(result.stdout)
+
+
+          def main_revision(repository):
+              value = api(f'repos/{repository}/commits/main')
+              sha = value.get('sha') if isinstance(value, dict) else None
+              if not isinstance(sha, str) or not re.fullmatch(r'[0-9a-f]{40}', sha):
+                  raise ValueError()
+              return sha
+
+
+          def same_repository(value, repository, repository_id):
+              return (isinstance(value, dict) and positive_id(value.get('id'))
+                      and value['id'] == repository_id and value.get('full_name') == repository)
+
+
+          def verified_run(value, repository, repository_id, workflow_id, sha):
+              return (isinstance(value, dict) and positive_id(value.get('id'))
+                      and positive_id(value.get('run_attempt'))
+                      and positive_id(value.get('workflow_id')) and value['workflow_id'] == workflow_id
+                      and value.get('path') in (WORKFLOW_PATH, WORKFLOW_PATH + '@main')
+                      and value.get('event') == 'push' and value.get('head_branch') == 'main'
+                      and value.get('head_sha') == sha and value.get('status') == 'completed'
+                      and value.get('conclusion') == 'success'
+                      and same_repository(value.get('repository'), repository, repository_id)
+                      and same_repository(value.get('head_repository'), repository, repository_id))
+
+
+          def emit(sha=None):
+              with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+                  if sha is not None:
+                      output.write(f'sha={sha}\neligible=true\n')
+                  else:
+                      output.write('eligible=false\n')
+              if sha is None:
+                  print('A newer main revision exists; this deployment is skipped.')
+
+
+          def select():
+              repository = os.environ.get('DNE_REPOSITORY', '')
+              if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*', repository):
+                  raise ValueError()
+              repository_id = env_id('DNE_REPOSITORY_ID')
+              event = os.environ.get('DNE_EVENT_NAME', '')
+              if event not in ('workflow_run', 'workflow_dispatch'):
+                  raise ValueError()
+              event_sha = os.environ.get('DNE_EVENT_SHA', '')
+              if not re.fullmatch(r'[0-9a-f]{40}', event_sha):
+                  raise ValueError()
+              run_id = env_id('DNE_EVENT_RUN_ID') if event == 'workflow_run' else None
+              attempt = env_id('DNE_EVENT_ATTEMPT') if event == 'workflow_run' else None
+              sha = main_revision(repository)
+              if event_sha != sha:
+                  emit()
+                  return
+              workflow = api(f'repos/{repository}/actions/workflows/repository-checks.yml')
+              if (not isinstance(workflow, dict) or not positive_id(workflow.get('id'))
+                      or workflow.get('path') != WORKFLOW_PATH or workflow.get('state') != 'active'):
+                  raise ValueError()
+              workflow_id = workflow['id']
+              if event == 'workflow_run':
+                  # Compare the attempt too: a later rerun is not evidence for this event.
+                  run = api(f'repos/{repository}/actions/runs/{run_id}')
+                  if (not verified_run(run, repository, repository_id, workflow_id, sha)
+                          or run['id'] != run_id or run['run_attempt'] != attempt):
+                      raise ValueError()
+              else:
+                  listing = api(f'repos/{repository}/actions/workflows/repository-checks.yml/runs'
+                                f'?branch=main&event=push&status=success&head_sha={sha}&per_page=100')
+                  runs = listing.get('workflow_runs') if isinstance(listing, dict) else None
+                  if not isinstance(runs, list) or len(runs) > 100:
+                      raise ValueError()
+                  for candidate in runs:
+                      if not verified_run(candidate, repository, repository_id, workflow_id, sha):
+                          continue
+                      run = api(f'repos/{repository}/actions/runs/{candidate["id"]}')
+                      if (verified_run(run, repository, repository_id, workflow_id, sha)
+                              and run['id'] == candidate['id'] and run['run_attempt'] == candidate['run_attempt']):
+                          break
+                  else:
+                      raise ValueError()
+              # Do not emit a SHA if main changed during the verification lookups.
+              if main_revision(repository) != sha:
+                  emit()
+                  return
+              emit(sha)
+
+
+          try:
+              select()
+          except Exception:
+              # API output and exception details may contain sensitive data. Never print them.
+              print(ERROR, file=sys.stderr)
+              sys.exit(1)
+          PY
+      - name: Check out the verified revision
+        if: steps.revision.outputs.eligible == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ steps.revision.outputs.sha }}
+          persist-credentials: false
+      - name: Sign in to Azure with GitHub OIDC
+        if: steps.revision.outputs.eligible == 'true'
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Build and push the app and proxy images
+        if: steps.revision.outputs.eligible == 'true'
+        env:
+          DNE_REVISION: ${{ steps.revision.outputs.sha }}
+        run: |
+          set -euo pipefail
+          registry="$ACR_NAME.azurecr.io"
+          az acr login --name "$ACR_NAME"
+          docker build --platform linux/amd64 -t "$registry/deepnative/app:$DNE_REVISION" .
+          docker build --platform linux/amd64 -t "$registry/deepnative/proxy:$DNE_REVISION" infra/proxy
+          docker push "$registry/deepnative/app:$DNE_REVISION"
+          docker push "$registry/deepnative/proxy:$DNE_REVISION"
+      - name: Roll the Container App to the verified images
+        if: steps.revision.outputs.eligible == 'true'
+        env:
+          DNE_REVISION: ${{ steps.revision.outputs.sha }}
+        run: |
+          set -euo pipefail
+          registry="$ACR_NAME.azurecr.io"
+          az config set extension.use_dynamic_install=yes_without_prompt --only-show-errors
+          # One update with both images yields one new revision; the in-replica
+          # demo database is ephemeral and restarts empty.
+          # Read and write with one API version so the template shape round-trips.
+          app_url="https://management.azure.com$(az containerapp show -n "$CONTAINER_APP" -g "$RESOURCE_GROUP" --query id -o tsv)?api-version=2024-03-01"
+          az rest --method get --url "$app_url" -o json > app.json
+          python3 - "$registry" "$DNE_REVISION" <<'PY'
+          import json
+          import sys
+          registry, revision = sys.argv[1], sys.argv[2]
+          app = json.load(open('app.json'))
+          images = {'app': f'{registry}/deepnative/app:{revision}',
+                    'proxy': f'{registry}/deepnative/proxy:{revision}'}
+          containers = app['properties']['template']['containers']
+          if sorted(c['name'] for c in containers) != ['app', 'postgres', 'proxy']:
+              sys.exit('Unexpected Container App containers; refusing to deploy.')
+          for container in containers:
+              if container['name'] in images:
+                  container['image'] = images[container['name']]
+          patch = {'properties': {'template': app['properties']['template']}}
+          json.dump(patch, open('patch.json', 'w'))
+          PY
+          az rest --method patch --url "$app_url" --body @patch.json -o none
+          rm -f app.json patch.json
+      - name: Wait for the revision and smoke-test the public URL
+        if: steps.revision.outputs.eligible == 'true'
+        env:
+          DNE_REVISION: ${{ steps.revision.outputs.sha }}
+        run: |
+          set -euo pipefail
+          fqdn=$(az containerapp show -n "$CONTAINER_APP" -g "$RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
+          url="https://$fqdn"
+          for _ in $(seq 1 40); do
+            images=$(az containerapp show -n "$CONTAINER_APP" -g "$RESOURCE_GROUP" \
+              --query "properties.template.containers[?name!='postgres'].image" -o tsv)
+            state=$(az containerapp show -n "$CONTAINER_APP" -g "$RESOURCE_GROUP" \
+              --query properties.latestReadyRevisionName -o tsv)
+            latest=$(az containerapp show -n "$CONTAINER_APP" -g "$RESOURCE_GROUP" \
+              --query properties.latestRevisionName -o tsv)
+            code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 "$url/" || true)
+            if [ "$state" = "$latest" ] && [ "$code" = "200" ] \
+              && [ "$(printf '%s\n' "$images" | grep -c ":$DNE_REVISION$")" = "2" ]; then
+              echo "Deployed $DNE_REVISION to $url"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo 'The new revision did not become ready with a healthy public page.' >&2
+          exit 1
