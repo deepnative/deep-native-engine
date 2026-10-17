@@ -43,8 +43,33 @@ async function create(
     await form.getByLabel("Local reminder date (optional)").fill("2028-02-29");
     await form.getByLabel("Local reminder time (optional)").fill("14:30");
   } else {
-    await form.getByLabel("Local reminder date (optional)").fill("");
-    await form.getByLabel("Local reminder time (optional)").fill("");
+    for (const label of [
+      "Local reminder date (optional)",
+      "Local reminder time (optional)",
+    ]) {
+      const input = form.getByLabel(label);
+      if (await input.inputValue()) {
+        // Preserve the native segment focus between keys; locator.press()
+        // refocuses the first segment in macOS WebKit.
+        await input.focus();
+        for (const key of [
+          "ArrowLeft",
+          "ArrowLeft",
+          "Backspace",
+          "ArrowRight",
+          "Backspace",
+          "ArrowRight",
+          "Backspace",
+        ])
+          await page.keyboard.press(key);
+      }
+      await expect(input).toHaveValue("");
+      expect(
+        await input.evaluate(
+          (node) => (node as HTMLInputElement).validity.valid,
+        ),
+      ).toBe(true);
+    }
   }
   if (options.complete)
     await form.getByLabel(/Mark this milestone complete/).check();
