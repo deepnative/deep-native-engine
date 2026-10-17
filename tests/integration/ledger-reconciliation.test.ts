@@ -639,9 +639,24 @@ describe.each(["fresh", "after member erasure"] as const)(
   "large retained ledger snapshot %s",
   (history) => {
     let f: Awaited<ReturnType<typeof fixture>>;
+    async function ownedHistory(memberId: string) {
+      const result = await pool.query<{
+        members: number;
+        grants: number;
+        events: number;
+      }>(
+        `SELECT
+          (SELECT count(*)::integer FROM principals WHERE id=$1 AND kind='member') AS members,
+          (SELECT count(*)::integer FROM synthetic_entitlement_grants WHERE member_id=$1) AS grants,
+          (SELECT count(*)::integer FROM synthetic_entitlement_events WHERE member_id=$1) AS events`,
+        [memberId],
+      );
+      return result.rows[0];
+    }
+    // QA109-GATE04/05: independent histories share preparation, never ownership.
     // Prepare the retained dataset under the existing hook deadline. The actual
-    // authorized snapshot and every assertion retain the default 5-second test
-    // deadline; production statements independently remain bounded to 5 seconds.
+    // authorized snapshot and original report assertions retain the 5-second
+    // test deadline; production statements independently remain bounded to 5s.
     beforeEach(async () => {
       async function seed(ownerId: string) {
         await pool.query(
@@ -656,14 +671,31 @@ describe.each(["fresh", "after member erasure"] as const)(
       }
       if (history === "after member erasure") {
         const retired = await member();
-        await seed(retired.id);
+        f = await fixture();
+        await Promise.all([seed(retired.id), seed(f.owner.id)]);
+        const full = { members: 1, grants: 22000, events: 22000 };
+        // fixture() also creates one existing review-minutes grant/event.
+        const survivor = { members: 1, grants: 22001, events: 22001 };
+        expect(
+          await Promise.all([
+            ownedHistory(retired.id),
+            ownedHistory(f.owner.id),
+          ]),
+        ).toEqual([full, survivor]);
         await db.remove(retired.id);
+        expect(
+          await Promise.all([
+            ownedHistory(retired.id),
+            ownedHistory(f.owner.id),
+          ]),
+        ).toEqual([{ members: 0, grants: 0, events: 0 }, survivor]);
         await pool.query(
           "ANALYZE synthetic_entitlement_grants; ANALYZE synthetic_entitlement_events",
         );
+      } else {
+        f = await fixture();
+        await seed(f.owner.id);
       }
-      f = await fixture();
-      await seed(f.owner.id);
     });
     it("keeps aggregate arithmetic exact beyond a 32-bit integer without returning source records", async () => {
       const result = await snapshot(f.operator.token),
