@@ -53,10 +53,14 @@ APP_FILES = {
     "assets/docs/content/circles/preview-circles.json", "public/attempt-save.js", "public/member-export.js", "public/evidence-export.js", "public/exercise-error-focus.js",
     "assets/docs/content/events/preview-events.json",
 }
-# Azure landing-zone onboarding (issue #525): declarative Terraform only. CI
-# checks formatting; `terraform validate` runs locally because the vended
-# module lives in a private repository.
-INFRA_FILES = {"infra/main.tf", "infra/.terraform.lock.hcl", "infra/.gitignore"}
+# Azure landing-zone onboarding and synthetic demo preview (issue #525):
+# declarative Terraform plus the container build. CI checks formatting;
+# `terraform validate` runs locally because the vended module lives in a
+# private repository.
+INFRA_FILES = {
+    "infra/main.tf", "infra/app.tf", "infra/.terraform.lock.hcl", "infra/.gitignore",
+    "infra/proxy/Dockerfile", "infra/proxy/default.conf.template", "Dockerfile", ".dockerignore",
+}
 
 # Bounded, high-confidence source scan. These signatures are intentionally
 # narrower than a production secret-scanning service and never print matches.
