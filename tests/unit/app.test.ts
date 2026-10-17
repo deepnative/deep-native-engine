@@ -3316,6 +3316,24 @@ it("keeps a failed private evidence revision editable and never copies consent o
     .expect(422)
     .expect(/Invented &lt;private&gt; revision/);
   expect(files.upload).not.toHaveBeenCalled();
+  // TITLE-01: unsupported titles identify the field, preserve the draft and
+  // never ask the store to write. Consent must be confirmed again on recovery.
+  files.upload.mockResolvedValue({ kind: "invalid" });
+  for (const name of [
+    "Reading group, revised",
+    "../revision.txt",
+    "漢字",
+    "A".repeat(201),
+  ]) {
+    const rejected = await post({ ...fields, name }).expect(422);
+    expect(rejected.text).toContain("Check the sample title.");
+    expect(rejected.text).toContain("start with an English letter or digit");
+    expect(rejected.text).toContain("Invented &lt;private&gt; revision");
+    expect(rejected.text).not.toContain("eligibility may have changed");
+    expect(rejected.text).not.toMatch(/type="checkbox"[^>]*checked/);
+  }
+  expect(files.upload).not.toHaveBeenCalled();
+  files.upload.mockResolvedValue({ kind: "denied" });
   files.upload.mockResolvedValueOnce({ kind: "denied" });
   await post(fields)
     .expect(409)
@@ -3450,6 +3468,17 @@ it("keeps evidence form writes owner-scoped, confirmed and truthful", async () =
     rights_confirmed: "yes",
     private_review_consent: "yes",
   };
+  // TITLE-01 also applies when creating the first private sample.
+  files.upload.mockResolvedValue({ kind: "invalid" });
+  const badTitle = await post("/evidence", {
+    ...form,
+    name: "Reading group, first",
+  }).expect(422);
+  expect(badTitle.text).toContain("Check the sample title.");
+  expect(badTitle.text).toContain('value="Reading group, first"');
+  expect(badTitle.text).toContain("Invented text");
+  expect(badTitle.text).not.toMatch(/type="checkbox"[^>]*checked/);
+  expect(files.upload).not.toHaveBeenCalled();
   files.upload
     .mockResolvedValueOnce({ kind: "invalid" })
     .mockResolvedValueOnce({ kind: "denied" })
