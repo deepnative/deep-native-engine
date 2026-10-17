@@ -53,6 +53,15 @@ APP_FILES = {
     "assets/docs/content/circles/preview-circles.json", "public/attempt-save.js", "public/member-export.js", "public/evidence-export.js", "public/exercise-error-focus.js",
     "assets/docs/content/events/preview-events.json",
 }
+# Azure landing-zone onboarding and synthetic demo preview (issue #525):
+# declarative Terraform plus the container build. CI checks formatting;
+# `terraform validate` runs locally because the vended module lives in a
+# private repository.
+INFRA_FILES = {
+    "infra/main.tf", "infra/app.tf", "infra/.terraform.lock.hcl", "infra/.gitignore",
+    "infra/proxy/Dockerfile", "infra/proxy/default.conf.template", "Dockerfile", ".dockerignore",
+    ".github/workflows/deploy-azure.yml",
+}
 
 # Bounded, high-confidence source scan. These signatures are intentionally
 # narrower than a production secret-scanning service and never print matches.
@@ -117,7 +126,7 @@ def validate_scope(root, files):
     for name in files:
         p = Path(name)
         allowed = (
-            name in SETUP_FILES or name in APP_FILES or name in PRODUCT_SITE_FILES
+            name in SETUP_FILES or name in APP_FILES or name in PRODUCT_SITE_FILES or name in INFRA_FILES
             or (p.is_relative_to(Path("src")) and p.suffix == ".ts")
             or (p.is_relative_to(Path("public")) and p.suffix == ".css")
             or (p.parent == Path("migrations") and p.suffix == ".sql")

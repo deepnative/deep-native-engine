@@ -1,0 +1,21 @@
+# The app binds 127.0.0.1 and accepts only its loopback Host and, for writes,
+# its loopback Origin. Map exactly the public origin to the loopback one; any
+# other Origin passes through unchanged so the app's checks still reject it.
+map_hash_bucket_size 128;
+map $http_origin $dne_origin {
+  default $http_origin;
+  "https://${PUBLIC_HOST}" "http://127.0.0.1:3000";
+}
+
+server {
+  listen 8080;
+  client_max_body_size 16m;
+
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host 127.0.0.1:3000;
+    proxy_set_header Origin $dne_origin;
+    proxy_redirect http://127.0.0.1:3000/ /;
+  }
+}
