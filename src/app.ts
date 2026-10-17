@@ -1502,6 +1502,13 @@ export function app(
       .status(409)
       .send(tailoredReviewUnavailablePage(service, domain as Domain));
   });
+  const preparedSampleChoice =
+    Boolean(options.preparedSamples) &&
+    preparedSamplesEnabled({
+      enabled: options.preparedReviewSamples,
+      mode: options.mode,
+      origin: options.origin,
+    });
   app.get("/evidence", async (_req, res) => {
     res.send(
       evidencePage(
@@ -1509,12 +1516,7 @@ export function app(
         res.locals.csrf as string,
         [],
         undefined,
-        Boolean(options.preparedSamples) &&
-          preparedSamplesEnabled({
-            enabled: options.preparedReviewSamples,
-            mode: options.mode,
-            origin: options.origin,
-          }),
+        preparedSampleChoice,
       ),
     );
   });
@@ -1543,6 +1545,7 @@ export function app(
             res.locals.csrf as string,
             errors,
             { name, sample },
+            preparedSampleChoice,
           ),
         );
       return;
@@ -1574,6 +1577,7 @@ export function app(
               "This text sample could not be saved. Check its title and contents.",
             ],
             { name, sample },
+            preparedSampleChoice,
           ),
         );
       return;

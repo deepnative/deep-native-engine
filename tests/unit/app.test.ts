@@ -1162,8 +1162,27 @@ it("PREPARED-01/08 evidence entry reflects explicit creation configuration witho
         preparedReviewSamples: enabled,
       }),
     );
+    memberStore.session.mockResolvedValueOnce({ kind: "new" });
+    await agent.get("/").set("Host", host).expect(200);
     const response = await agent.get("/evidence").set("Host", host).expect(200);
     expect(response.text.includes('href="/evidence/prepared"')).toBe(enabled);
+    const csrfValue = response.text.match(
+      /name="csrf" value="([a-f0-9]+)"/,
+    )![1];
+    const rejected = await agent
+      .post("/evidence")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf: csrfValue,
+        name: "Reading group, first",
+        sample: "Invented text",
+        rights_confirmed: "yes",
+        private_review_consent: "yes",
+      })
+      .expect(422);
+    expect(rejected.text.includes('href="/evidence/prepared"')).toBe(enabled);
   }
   expect(prepared.create).not.toHaveBeenCalled();
 });
