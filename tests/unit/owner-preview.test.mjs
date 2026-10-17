@@ -178,11 +178,15 @@ it.each([
   "DNE_AI_PROVIDER",
   "DNE_LOCAL_STAFF_ENTRY",
   "DNE_CIRCLE_DISCUSSION",
-])("PREVIEW-03 rejects inherited application setting %s", (key) => {
-  expect(() =>
-    controlConnection({ [key]: "synthetic-private-secret" }),
-  ).toThrow("failed at configuration");
-});
+  "DNE_LOCAL_SUPPORT_ASSIGNMENT",
+])(
+  "PREVIEW-03 SUPPREVIEW-01 rejects inherited application setting %s",
+  (key) => {
+    expect(() =>
+      controlConnection({ [key]: "synthetic-private-secret" }),
+    ).toThrow("failed at configuration");
+  },
+);
 
 it.each(["127.0.0.1", "localhost", "[::1]"])(
   "PREVIEW-03 permits loopback control at %s but never its selected database",
