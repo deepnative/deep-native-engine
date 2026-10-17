@@ -454,6 +454,17 @@ class RepositoryFixture(unittest.TestCase):
                     gate.validate_scope(self.root, gate.repository_files(self.root))
                 path.unlink()
 
+    def test_infra_accepts_only_the_reviewed_terraform_files(self):
+        gate.validate_scope(self.root, gate.repository_files(self.root))
+        for name in ("infra/extra.tf", "infra/deploy.sh", "infra/modules/app/main.tf", "infra/terraform.tfvars"):
+            with self.subTest(name=name):
+                path = self.root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("unreviewed infra")
+                with self.assertRaisesRegex(gate.GateError, "Outside verified"):
+                    gate.validate_scope(self.root, gate.repository_files(self.root))
+                path.unlink()
+
     def test_product_site_accepts_only_the_reviewed_static_assets(self):
         gate.validate(self.root)
         for name in ("site/extra.js", "site/tracker.html", "site/images/remote.svg"):
