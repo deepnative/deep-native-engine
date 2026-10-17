@@ -169,7 +169,7 @@ export async function launchPreview(env) {
     runtimeRoot,
     provider: "deterministic local test only; no live services",
     fixture:
-      "One invented non-qualified lesson and four finite synthetic staff identities only; no member, grant, queue, feedback, completion, allowance, discussion, proposal, event schedule or participation seeded.",
+      "One invented non-qualified lesson and five finite synthetic staff identities only; no member, grant, queue, feedback, completion, allowance, support request, discussion, proposal, event schedule or participation seeded.",
   };
   const save = () =>
     writeFile(metadataFile, JSON.stringify(metadata, null, 2) + "\n", {
@@ -368,6 +368,9 @@ export async function launchPreview(env) {
       DNE_EVENT_REGISTRATION: "enabled",
       DNE_LOCAL_EVENT_SCHEDULING: "enabled",
       DNE_LOCAL_EVENT_ADMIN: "enabled",
+      // Submit and receive feedback: existing exact support-request assignment
+      // by an administrator to a distinct operator. Nothing is seeded.
+      DNE_LOCAL_SUPPORT_ASSIGNMENT: "enabled",
     });
     fixturePool = new Pool({
       connectionString: databaseUrl.href,
@@ -388,7 +391,8 @@ export async function launchPreview(env) {
     const administratorCredential = randomBytes(32).toString("hex"),
       reviewerCredential = randomBytes(32).toString("hex"),
       moderatorCredential = randomBytes(32).toString("hex"),
-      editorCredential = randomBytes(32).toString("hex");
+      editorCredential = randomBytes(32).toString("hex"),
+      operatorCredential = randomBytes(32).toString("hex");
     const administratorId = await auth.provisionStaff(
       administratorCredential,
       "platform_admin",
@@ -405,6 +409,12 @@ export async function launchPreview(env) {
       expiry,
     );
     await auth.provisionStaff(editorCredential, "editor", expiry);
+    // A distinct operator: administrators cannot assign support to themselves.
+    const operatorId = await auth.provisionStaff(
+      operatorCredential,
+      "operator",
+      expiry,
+    );
     const draft = {
       id: fixtureId,
       version: 1,
@@ -438,6 +448,8 @@ export async function launchPreview(env) {
       reviewerCredential,
       moderatorId,
       moderatorCredential,
+      operatorId,
+      operatorCredential,
     });
     await save();
     return {
