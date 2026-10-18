@@ -158,6 +158,11 @@ const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const tokenPattern = /^[a-f0-9]{64}$/;
 const namePattern = /^[A-Za-z0-9][A-Za-z0-9._ ()-]{0,199}$/;
+export const EVIDENCE_NAME_HELP =
+  "Use 1–200 characters: start with an English letter or digit, then use English letters, digits, spaces, periods, underscores, parentheses or hyphens.";
+export function validEvidenceName(name: string) {
+  return name === basename(name) && namePattern.test(name);
+}
 const circlePattern = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 function validSignature(mediaType: EvidenceType, data: Buffer) {
@@ -179,8 +184,7 @@ export function validUpload(input: EvidenceUpload) {
     input.data.length <= MAX_EVIDENCE_BYTES &&
     EVIDENCE_TYPES.includes(mediaType) &&
     validSignature(mediaType, input.data) &&
-    input.name === basename(input.name) &&
-    namePattern.test(input.name) &&
+    validEvidenceName(input.name) &&
     (input.revisesId === undefined || uuidPattern.test(input.revisesId)) &&
     (input.revisesId === undefined ||
       (mediaType === "text/plain" &&

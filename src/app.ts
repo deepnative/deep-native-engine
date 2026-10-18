@@ -138,6 +138,8 @@ import {
 } from "./authorization.ts";
 import {
   disabledEvidenceStore,
+  EVIDENCE_NAME_HELP,
+  validEvidenceName,
   MAX_EVIDENCE_BYTES,
   type EvidenceStore,
 } from "./evidence.ts";
@@ -1500,6 +1502,13 @@ export function app(
       .status(409)
       .send(tailoredReviewUnavailablePage(service, domain as Domain));
   });
+  const preparedSampleChoice =
+    Boolean(options.preparedSamples) &&
+    preparedSamplesEnabled({
+      enabled: options.preparedReviewSamples,
+      mode: options.mode,
+      origin: options.origin,
+    });
   app.get("/evidence", async (_req, res) => {
     res.send(
       evidencePage(
@@ -1507,12 +1516,7 @@ export function app(
         res.locals.csrf as string,
         [],
         undefined,
-        Boolean(options.preparedSamples) &&
-          preparedSamplesEnabled({
-            enabled: options.preparedReviewSamples,
-            mode: options.mode,
-            origin: options.origin,
-          }),
+        preparedSampleChoice,
       ),
     );
   });
@@ -1520,24 +1524,28 @@ export function app(
     const fields = req.body as Fields;
     const name = typeof fields.name === "string" ? fields.name : "";
     const sample = typeof fields.sample === "string" ? fields.sample : "";
-    const invalid =
-      !name.trim() ||
-      name.length > 200 ||
+    const errors: string[] = [];
+    if (!validEvidenceName(name))
+      errors.push(`Check the sample title. ${EVIDENCE_NAME_HELP}`);
+    if (
       !sample.trim() ||
       sample.length > 4000 ||
       fields.rights_confirmed !== "yes" ||
-      fields.private_review_consent !== "yes";
-    if (invalid) {
+      fields.private_review_consent !== "yes"
+    )
+      errors.push(
+        "Enter invented text, then confirm your rights and private-review consent.",
+      );
+    if (errors.length) {
       res
         .status(422)
         .send(
           evidencePage(
             await evidence.owned(res.locals.token as string),
             res.locals.csrf as string,
-            [
-              "Enter a title and invented text, then confirm your rights and private-review consent.",
-            ],
+            errors,
             { name, sample },
+            preparedSampleChoice,
           ),
         );
       return;
@@ -1569,6 +1577,7 @@ export function app(
               "This text sample could not be saved. Check its title and contents.",
             ],
             { name, sample },
+            preparedSampleChoice,
           ),
         );
       return;
@@ -1763,23 +1772,26 @@ export function app(
         );
       return;
     }
+    const errors: string[] = [];
+    if (!validEvidenceName(name))
+      errors.push(`Check the sample title. ${EVIDENCE_NAME_HELP}`);
     if (
-      !name.trim() ||
-      name.length > 200 ||
       !sample.trim() ||
       sample.length > 4000 ||
       fields.rights_confirmed !== "yes" ||
       fields.private_review_consent !== "yes"
-    ) {
+    )
+      errors.push(
+        "Enter invented text and confirm fresh rights and review consent. Nothing was saved.",
+      );
+    if (errors.length) {
       res
         .status(422)
         .send(
           evidenceRevisionPage(
             parent,
             res.locals.csrf as string,
-            [
-              "Enter invented text and confirm fresh rights and review consent. Nothing was saved.",
-            ],
+            errors,
             attempted,
           ),
         );
