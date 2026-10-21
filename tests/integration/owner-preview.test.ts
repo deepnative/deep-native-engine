@@ -141,7 +141,15 @@ function browserFor(origin: string) {
         ...form.matchAll(
           /<input type="hidden" name="([A-Za-z]+)" value="([^"]*)">/g,
         ),
-      ].map((match) => [match[1]!, match[2]!]),
+      ].map((match) => [
+        match[1]!,
+        match[2]!
+          .replaceAll("&quot;", '"')
+          .replaceAll("&#39;", "'")
+          .replaceAll("&lt;", "<")
+          .replaceAll("&gt;", ">")
+          .replaceAll("&amp;", "&"),
+      ]),
     );
     const response = await fetch(origin + action, {
       method: "POST",
@@ -168,7 +176,7 @@ function browserFor(origin: string) {
   return { open, submit, signIn };
 }
 
-it("PREVIEW-01/02 PART-01/02/05/06 ASSIGN-PREVIEW-01/02/03 starts isolated fixtures and normal private learner journeys, then removes only owned resources", async () => {
+it("PREVIEW-01/02 PART-01/02/05/06 ASSIGN-PREVIEW-01/02/03 STUDY-PREVIEW-01/02/03 starts isolated fixtures and normal private learner journeys, then removes only owned resources", async () => {
   const before = (await control.query("SELECT current_database() AS name"))
     .rows[0].name;
   const proc = start();
@@ -229,6 +237,10 @@ it("PREVIEW-01/02 PART-01/02/05/06 ASSIGN-PREVIEW-01/02/03 starts isolated fixtu
       "private_event_enrollments",
       "private_event_cancellations",
       "private_event_attendance_permissions",
+      "browser_study_fixture_requests",
+      "synthetic_entitlement_grants",
+      "local_ai_receipts",
+      "adapter_jobs",
     ])
       expect(
         (await db.query(`SELECT count(*)::int n FROM ${table}`)).rows[0].n,
@@ -280,6 +292,13 @@ it("PREVIEW-01/02 PART-01/02/05/06 ASSIGN-PREVIEW-01/02/03 starts isolated fixtu
     expect(await memberPage.text()).toContain(
       "Invented preview: clarify a sample request",
     );
+    // STUDY-PREVIEW-01: the opt-in launcher makes the existing request usable.
+    const studyRequest = await fetch(
+      ready.origin + "/member/test-unit-request",
+      { headers: { Cookie: cookie } },
+    );
+    expect(studyRequest.status).toBe(200);
+    expect(await studyRequest.text()).toContain('name="administratorId"');
     const samples = await fetch(ready.origin + "/evidence", {
       headers: { Cookie: cookie },
     });
@@ -296,6 +315,20 @@ it("PREVIEW-01/02 PART-01/02/05/06 ASSIGN-PREVIEW-01/02/03 starts isolated fixtu
     const assignmentTitle = "Invented preview: check a sample plan";
     const privateResponse =
       "I will compare an invented two-hour plan with the sample constraints.";
+    const issuer = browserFor(ready.origin);
+    await issuer.signIn(metadata.administratorCredential);
+    const issuerPage = await issuer.open("/operator/study-test-units");
+    expect(issuerPage.status).toBe(200);
+    expect(issuerPage.text).not.toContain(
+      "New requests and issuance are paused",
+    );
+    const administratorReference = issuerPage.text.match(
+      /<code>([0-9a-f-]{36})<\/code>/,
+    )![1]!;
+    const studyBalances = (html: string) =>
+      html.match(
+        /<section data-test-unit-category="study_requests">([\s\S]*?)<\/section>/,
+      )![1]!;
     for (const background of ["technical", "professional", "explorer"]) {
       const actor = browserFor(ready.origin);
       const entry = await actor.open("/");
@@ -351,6 +384,119 @@ it("PREVIEW-01/02 PART-01/02/05/06 ASSIGN-PREVIEW-01/02/03 starts isolated fixtu
       });
       expect(denied.status).toBe(404);
       expect(await denied.text()).not.toContain(privateResponse);
+
+      // STUDY-PREVIEW-02: use the existing finite fixture only through forms.
+      const emptyBalance = await actor.open("/member/test-units");
+      expect(studyBalances(emptyBalance.text)).toContain(
+        'data-field="usable">0</span>',
+      );
+      const fixture = await actor.open("/member/test-unit-request");
+      const checkedRequest = await actor.submit(
+        fixture.text,
+        "/member/test-unit-request/check",
+        { administratorId: administratorReference },
+      );
+      expect(checkedRequest.status).toBe(200);
+      const requested = await actor.submit(
+        checkedRequest.text,
+        "/member/test-unit-request/request",
+        { confirm: "yes" },
+      );
+      expect(requested.status).toBe(200);
+      const requestReference = requested.text.match(
+        /<dt>Request reference<\/dt><dd>([0-9a-f-]{36})<\/dd>/,
+      )![1]!;
+      const checkedIssue = await issuer.submit(
+        (await issuer.open("/operator/study-test-units")).text,
+        "/operator/study-test-units/check",
+        { requestId: requestReference },
+      );
+      expect(checkedIssue.status).toBe(200);
+      expect(
+        (
+          await issuer.submit(
+            checkedIssue.text,
+            "/operator/study-test-units/issue",
+            { confirm: "yes" },
+          )
+        ).status,
+      ).toBe(200);
+      const issued = await actor.open("/member/test-units");
+      expect(studyBalances(issued.text)).toContain(
+        'data-field="usable">3</span>',
+      );
+
+      // The fixed provided copy is already clean; no quarantine store or SQL
+      // transition manufactures a source, permission, unit or job for this path.
+      const prepared = await actor.open("/evidence/prepared");
+      const template = prepared.text.match(
+        /<article data-prepared-template="everyday-options">([\s\S]*?)<\/article>/,
+      )![1]!;
+      const copied = await actor.submit(template, "/evidence/prepared", {
+        providedExample: "yes",
+        privateReview: "yes",
+      });
+      expect(copied.status).toBe(200);
+      const permission = await actor.open("/evidence/local-ai");
+      const permissionAction = permission.text.match(
+        /action="(\/evidence\/local-ai\/[0-9a-f-]{36}\/grant)"/,
+      )![1]!;
+      expect(
+        (
+          await actor.submit(permission.text, permissionAction, {
+            confirm: "yes",
+          })
+        ).status,
+      ).toBe(303);
+      const permitted = await actor.open("/evidence/local-ai");
+      const holdAction = permitted.text.match(
+        /action="(\/evidence\/local-ai\/[0-9a-f-]{36}\/queue-metered)"/,
+      )![1]!;
+      expect(
+        (await actor.submit(permitted.text, holdAction, { confirm: "yes" }))
+          .status,
+      ).toBe(303);
+      const held = await actor.open("/evidence/local-ai");
+      expect(held.text).toContain("One local test request: held.");
+      const runAction = held.text.match(
+        /action="(\/evidence\/local-ai\/[0-9a-f-]{36}\/run)"/,
+      )![1]!;
+      expect((await actor.submit(held.text, runAction)).status).toBe(303);
+      const consumed = await actor.open("/evidence/local-ai");
+      expect(consumed.text).toContain("One local test request: consumed.");
+      const checkedWithdrawal = await actor.submit(
+        (await actor.open("/member/test-unit-request")).text,
+        "/member/test-unit-request/withdraw/check",
+      );
+      expect(checkedWithdrawal.status).toBe(200);
+      expect(
+        (
+          await actor.submit(
+            checkedWithdrawal.text,
+            "/member/test-unit-request/withdraw",
+            { confirm: "yes" },
+          )
+        ).status,
+      ).toBe(200);
+      const finalBalance = studyBalances(
+        (await actor.open("/member/test-units")).text,
+      );
+      for (const [field, quantity] of [
+        ["usable", 0],
+        ["held", 0],
+        ["consumed", 1],
+        ["expired", 2],
+      ])
+        expect(finalBalance).toContain(
+          `data-field="${field}">${quantity}</span>`,
+        );
+      // STUDY-PREVIEW-03: another member's normal receipt page discloses none.
+      const otherFixture = await fetch(
+        ready.origin + "/member/test-unit-request",
+        { headers: { Cookie: cookie } },
+      );
+      expect(otherFixture.status).toBe(200);
+      expect(await otherFixture.text()).not.toContain(requestReference);
     }
     // PART-02/05: member pages offer discussion and event rehearsal.
     const circles = await fetch(ready.origin + "/circles", {
@@ -396,6 +542,7 @@ it("PREVIEW-01/02 PART-01/02/05/06 ASSIGN-PREVIEW-01/02/03 starts isolated fixtu
       (await moderator("/moderate/circles/everyday-ai/reports")).status,
     ).toBe(403);
     expect((await moderator("/operator/circle-grants")).status).toBe(403);
+    expect((await moderator("/operator/study-test-units")).status).toBe(403);
     expect(proc.output().includes(metadata.moderatorCredential)).toBe(false);
     expect((await fetch(ready.origin + "/runtime-private.json")).status).toBe(
       404,

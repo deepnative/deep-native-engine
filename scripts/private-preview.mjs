@@ -359,6 +359,7 @@ export async function launchPreview(env) {
       DNE_PORT: "0",
       DNE_PRIVATE_STORAGE_ROOT: storage,
       DNE_LOCAL_STAFF_ENTRY: "enabled",
+      DNE_LOCAL_TEST_UNIT_ISSUANCE: "enabled",
       DNE_PREPARED_REVIEW_SAMPLES: "enabled",
       DNE_SAMPLE_ASSIGNMENT_ADMINISTRATION: "enabled",
       // Participate and contribute: existing exact-grant circle moderation,
