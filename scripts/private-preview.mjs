@@ -432,13 +432,27 @@ export async function launchPreview(env) {
       rubric: null,
       rubricVersion: null,
     };
-    if (
-      !(await catalog.createDraft(editorCredential, draft)) ||
-      !(await catalog.submit(editorCredential, fixtureId, 1)) ||
-      !(await catalog.approve(reviewerCredential, fixtureId, 1, true)) ||
-      !(await catalog.publish(editorCredential, fixtureId, 1))
-    )
-      throw failure(stage);
+    const assignment = {
+      ...draft,
+      id: "DEMO-544",
+      kind: "assignment",
+      title: "Invented preview: check a sample plan",
+      body: "Invented private rehearsal only, not qualified curriculum or formal assessment. Plan a two-hour sample reading event for twelve invented volunteers. Write a short instruction an AI could use to suggest a checklist, then explain how you would check its suggestions against the two-hour limit and twelve-volunteer context. Use no real personal or client information.",
+    };
+    for (const item of [draft, assignment]) {
+      if (
+        !(await catalog.createDraft(editorCredential, item)) ||
+        !(await catalog.submit(editorCredential, item.id, item.version)) ||
+        !(await catalog.approve(
+          reviewerCredential,
+          item.id,
+          item.version,
+          true,
+        )) ||
+        !(await catalog.publish(editorCredential, item.id, item.version))
+      )
+        throw failure(stage);
+    }
     Object.assign(metadata, {
       origin: running.origin,
       expiry: expiry.toISOString(),
