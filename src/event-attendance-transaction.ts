@@ -61,17 +61,18 @@ export async function attendanceActors(
   role: "member" | "platform_admin",
 ) {
   const ordered = [...new Set([context.actorId, ...ids])].sort();
-  const principals = new Map<string, AttendanceActor>();
-  for (const id of ordered) {
-    const row = (
+  // UUIDs are canonical at this boundary. PostgreSQL locks the complete actor
+  // set in the same immutable-id order before profiles or source rows.
+  const principals = new Map(
+    (
       await context.tx.query<AttendanceActor>(
         `SELECT id,kind,expires_at AS expires,revoked_at AS revoked FROM principals
-         WHERE id=$1 AND ($2::text IS NULL OR token_hash=$2) FOR SHARE`,
-        [id, id === context.actorId ? context.credentialHash : null],
+         WHERE id=ANY($1::uuid[]) AND (id<>$2::uuid OR token_hash=$3)
+         ORDER BY id FOR SHARE`,
+        [ordered, context.actorId, context.credentialHash],
       )
-    ).rows[0];
-    if (row) principals.set(id, row);
-  }
+    ).rows.map((row) => [row.id, row]),
+  );
   const actor = principals.get(context.actorId);
   if (
     !actor ||

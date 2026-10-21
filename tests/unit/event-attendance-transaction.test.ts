@@ -28,12 +28,9 @@ function context() {
     calls.push({ sql, values });
     let rows: object[];
     if (sql.includes("FROM principals"))
-      rows =
-        values?.[0] === member
-          ? state.actor
-            ? [state.actor]
-            : []
-          : [state.other];
+      rows = (values?.[0] as string[]).flatMap((id) =>
+        id === member ? (state.actor ? [state.actor] : []) : [state.other],
+      );
     else if (sql.includes("FROM staff_profiles"))
       rows = [
         { id: member, role: state.role },
@@ -76,13 +73,14 @@ it("ATTEND-05 actors are locked once in sorted order before profiles and exact s
     "member",
   );
   expect([...result.principals.keys()]).toEqual([member, staff]);
-  expect(f.calls.slice(0, 2).map((item) => item.values?.[0])).toEqual([
+  expect(f.calls[0]!.values).toEqual([
+    [member, staff],
     member,
-    staff,
+    "invented-hash",
   ]);
-  expect(f.calls[0]!.values?.[1]).toBe("invented-hash");
-  expect(f.calls[1]!.values?.[1]).toBeNull();
-  expect(f.calls[2]!.sql).toContain("ORDER BY principal_id FOR SHARE");
+  expect(f.calls[0]!.sql).toContain("ORDER BY id FOR SHARE");
+  expect(f.calls[0]!.sql).toContain("id<>$2::uuid OR token_hash=$3");
+  expect(f.calls[1]!.sql).toContain("ORDER BY principal_id FOR SHARE");
   expect(f.ctx.expires).toHaveLength(2);
   expect(f.observe).toHaveBeenCalledWith(f.ctx.expires);
 });

@@ -95,13 +95,15 @@ beforeEach(() => {
       return { rows: state.active };
     if (sql.includes("FROM private_event_attendance_observations"))
       return { rows: state.observations };
-    if (sql.startsWith("INSERT INTO private_event_attendance_permissions")) {
-      state.permission!.id = String(values![0]);
-      return { rows: [] };
+    if (sql.includes("INSERT INTO private_event_attendance_permissions")) {
+      if (!state.permission) return { rows: [] };
+      state.permission.id = String(values![0]);
+      return { rows: [state.permission] };
     }
-    if (sql.startsWith("UPDATE private_event_attendance_permissions")) {
+    if (sql.includes("UPDATE private_event_attendance_permissions")) {
+      if (state.permission!.withdrawnAt) return { rows: [] };
       state.permission!.withdrawnAt = now;
-      return { rows: [] };
+      return { rows: [state.permission] };
     }
     const row = sql.includes('SELECT registration_id AS "registrationId"')
       ? state.locator
@@ -158,7 +160,9 @@ beforeEach(() => {
 const writes = () =>
   vi
     .mocked(context.tx.query)
-    .mock.calls.filter(([sql]) => /^\s*(INSERT|UPDATE|DELETE)\b/.test(sql));
+    .mock.calls.filter(([sql]) =>
+      /^\s*(INSERT|UPDATE|DELETE|WITH)\b/.test(sql),
+    );
 it("ATTEND-01 deliberate checked permission creates one finite selected grant and reserves its original key", async () => {
   const result = await attendancePermit(
     pool,
@@ -179,7 +183,7 @@ it("ATTEND-01 deliberate checked permission creates one finite selected grant an
       },
     },
   });
-  expect(writes()).toHaveLength(2);
+  expect(writes()).toHaveLength(1);
   expect(writes()[0]![1]?.slice(1)).toEqual([
     member,
     member,
@@ -187,16 +191,19 @@ it("ATTEND-01 deliberate checked permission creates one finite selected grant an
     admin,
     checked.startsAt,
     checked.expiresAt,
-  ]);
-  expect(writes()[1]![1]).toEqual([
     id,
-    member,
-    member,
-    member,
-    "permit",
     hash(JSON.stringify(checked)),
-    state.permission!.id,
   ]);
+  expect(writes()[0]![0]).toContain(
+    "INSERT INTO private_event_attendance_operations",
+  );
+  expect(writes()[0]![0]).toContain("'permit'");
+});
+it("ATTEND-01 a missing database-written receipt cannot acknowledge a new permission", async () => {
+  state.permission = undefined;
+  expect(
+    await attendancePermit(pool, options, "credential", id, checked),
+  ).toEqual({ kind: "denied" });
 });
 it("ATTEND-06 retained withdrawn original receipt repeats without new grant even after selected staff erasure", async () => {
   state.originalLocator = { permissionId: id };
@@ -318,7 +325,7 @@ it("ATTEND-04 owning withdrawal works while creation is paused and retains its o
     kind: "ready",
     value: { kind: "withdraw", permission: { id, withdrawnAt: now } },
   });
-  expect(writes()).toHaveLength(2);
+  expect(writes()).toHaveLength(1);
   state.operation = {
     ...original,
     kind: "withdraw",
@@ -332,6 +339,16 @@ it("ATTEND-04 owning withdrawal works while creation is paused and retains its o
     value: { permission: { withdrawnAt: now } },
   });
   expect(writes()).toHaveLength(count);
+});
+it("ATTEND-04 a distinct withdrawal key preserves an already-withdrawn receipt timestamp", async () => {
+  const withdrawnAt = new Date(+now - 1000);
+  state.permission!.withdrawnAt = withdrawnAt;
+  expect(
+    await attendanceWithdraw(pool, options, "credential", id, id),
+  ).toMatchObject({
+    kind: "ready",
+    value: { kind: "withdraw", permission: { id, withdrawnAt } },
+  });
 });
 it("ATTEND-04 foreign or removed permission cannot be withdrawn or read as another owned source", async () => {
   state.locator = undefined;
