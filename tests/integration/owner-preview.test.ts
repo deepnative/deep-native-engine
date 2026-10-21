@@ -168,7 +168,7 @@ function browserFor(origin: string) {
   return { open, submit, signIn };
 }
 
-it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, participation tools and normal member pages, then removes only owned resources", async () => {
+it("PREVIEW-01/02 PART-01/02/05/06 ASSIGN-PREVIEW-01/02/03 starts isolated fixtures and normal private learner journeys, then removes only owned resources", async () => {
   const before = (await control.query("SELECT current_database() AS name"))
     .rows[0].name;
   const proc = start();
@@ -237,11 +237,12 @@ it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, partic
     expect(
       (
         await db.query(
-          "SELECT id,state,requires_qualified_signoff FROM content_versions WHERE state='published'",
+          "SELECT id,state,requires_qualified_signoff FROM content_versions WHERE state='published' ORDER BY id",
         )
       ).rows,
     ).toEqual([
       { id: "DEMO-509", state: "published", requires_qualified_signoff: false },
+      { id: "DEMO-544", state: "published", requires_qualified_signoff: false },
     ]);
     expect(
       (
@@ -286,6 +287,71 @@ it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, partic
     expect(
       (await db.query("SELECT count(*)::int n FROM learners")).rows[0].n,
     ).toBe(1);
+    // ASSIGN-PREVIEW-01: a fresh preview supplies catalog choices, not activity.
+    for (const table of ["learner_assignment_choices", "assignment_attempts"])
+      expect(
+        (await db.query(`SELECT count(*)::int n FROM ${table}`)).rows[0].n,
+        table,
+      ).toBe(0);
+    const assignmentTitle = "Invented preview: check a sample plan";
+    const privateResponse =
+      "I will compare an invented two-hour plan with the sample constraints.";
+    for (const background of ["technical", "professional", "explorer"]) {
+      const actor = browserFor(ready.origin);
+      const entry = await actor.open("/");
+      expect(
+        (
+          await actor.submit(entry.text, "/start", {
+            background,
+            goal: "everyday",
+            synthetic: "yes",
+          })
+        ).status,
+      ).toBe(303);
+      const learning = await actor.open("/learn");
+      expect(learning.status).toBe(200);
+      expect(learning.text).toContain(`Choose ${assignmentTitle}</button>`);
+      const chosen = await actor.submit(learning.text, "/assignments/select", {
+        content_id: "DEMO-544",
+        content_version: "1",
+      });
+      expect(chosen.status).toBe(303);
+      const selected = await actor.open("/learn");
+      expect(selected.text).toContain(
+        "Start or return to this private attempt",
+      );
+      // ASSIGN-PREVIEW-02: only ordinary deliberate forms create and save work.
+      const started = await actor.submit(
+        selected.text,
+        "/assignments/attempts/start",
+        { content_id: "DEMO-544", content_version: "1" },
+      );
+      expect(started.status).toBe(303);
+      expect(started.location).toMatch(
+        /^\/assignments\/attempts\/[0-9a-f-]{36}$/,
+      );
+      const attempt = await actor.open(started.location!);
+      expect(attempt.text).toContain("Assignment version 1");
+      expect(attempt.text).toContain("started only");
+      const saved = await actor.submit(
+        attempt.text,
+        started.location! + "/save",
+        { response: privateResponse, sample_confirmed: "yes" },
+      );
+      expect(saved.status).toBe(303);
+      const reloaded = await actor.open(started.location!);
+      expect(reloaded.text).toContain(privateResponse);
+      expect(reloaded.text).toContain("private draft saved");
+      const history = await actor.open("/assignments/attempts");
+      expect(history.text).toContain(assignmentTitle);
+      expect(history.text).toContain("version 1");
+      // ASSIGN-PREVIEW-03: the original learner cannot read another actor's work.
+      const denied = await fetch(ready.origin + started.location!, {
+        headers: { Cookie: cookie },
+      });
+      expect(denied.status).toBe(404);
+      expect(await denied.text()).not.toContain(privateResponse);
+    }
     // PART-02/05: member pages offer discussion and event rehearsal.
     const circles = await fetch(ready.origin + "/circles", {
       headers: { Cookie: cookie },
