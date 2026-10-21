@@ -59,6 +59,15 @@ it("PREPARED-07 leaves ordinary file operations and absent erased bindings with 
   await f.storage.remove(key);
   expect(f.files.remove).toHaveBeenCalledWith(key);
 });
+it("HOSTED-06 preserves the private provider's durable-write recovery requirement through prepared-source wrapping", () => {
+  const f = fixture();
+  expect(
+    preparedObjectStorage({ query: f.query } as unknown as Pool, {
+      ...f.files,
+      requiresWriteRecovery: true,
+    }).requiresWriteRecovery,
+  ).toBe(true);
+});
 it.each([
   { templateId: "unknown" },
   { templateVersion: 2 },

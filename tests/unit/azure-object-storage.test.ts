@@ -5,6 +5,10 @@ const sdk = vi.hoisted(() => ({
   credential: vi.fn(),
   service: vi.fn(),
   container: vi.fn(),
+  identitySend: vi.fn(),
+}));
+vi.mock("@azure/core-rest-pipeline", () => ({
+  createDefaultHttpClient: () => ({ sendRequest: sdk.identitySend }),
 }));
 vi.mock("@azure/identity", () => ({
   ManagedIdentityCredential: class {
@@ -57,7 +61,17 @@ it("HOSTED-03 uses only the selected managed identity and existing private conta
     managedIdentityClientId: key,
   };
   const objects = azureObjectStorage(hosted);
-  expect(sdk.credential).toHaveBeenCalledExactlyOnceWith({ clientId: key });
+  expect(sdk.credential).toHaveBeenCalledExactlyOnceWith({
+    clientId: key,
+    retryOptions: { maxRetries: 0 },
+    httpClient: { sendRequest: expect.any(Function) },
+  });
+  const identityRequest = { timeout: 0 };
+  await sdk.credential.mock.calls[0]![0].httpClient.sendRequest(
+    identityRequest,
+  );
+  expect(identityRequest.timeout).toBe(5_000);
+  expect(sdk.identitySend).toHaveBeenCalledExactlyOnceWith(identityRequest);
   expect(sdk.service).toHaveBeenCalledExactlyOnceWith(
     hosted.blobAccountUrl,
     expect.anything(),
@@ -82,6 +96,10 @@ it("HOSTED-03 reads bounded private bytes and closes the response stream", async
     abortSignal: expect.any(AbortSignal),
   });
   expect(body.destroyed).toBe(true);
+});
+it("HOSTED-03 treats UUID case aliases as the same private key", async () => {
+  await store().get(key.toUpperCase());
+  expect(container.getBlobClient).toHaveBeenCalledExactlyOnceWith(key);
 });
 
 it("HOSTED-03 removes the exact private object idempotently without listing or public capabilities", async () => {

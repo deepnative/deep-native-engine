@@ -1,4 +1,5 @@
 import { ManagedIdentityCredential } from "@azure/identity";
+import { createDefaultHttpClient } from "@azure/core-rest-pipeline";
 import { BlobServiceClient, type ContainerClient } from "@azure/storage-blob";
 import type { Readable } from "node:stream";
 import { MAX_EVIDENCE_BYTES, type ObjectStorage } from "./evidence.ts";
@@ -9,12 +10,13 @@ const unavailable = () =>
   Error("Private object operation could not be confirmed.");
 const keyFor = (key: string) => {
   if (!sampleUuid(key)) throw Error("Invalid private object key.");
-  return key;
+  return key.toLowerCase();
 };
 
 /** No container creation, public links, fallback files or SDK write retries. */
 export function blobObjectStorage(container: ContainerClient): ObjectStorage {
   return {
+    requiresWriteRecovery: true,
     async put(key, data) {
       const blob = container.getBlockBlobClient(keyFor(key));
       if (
@@ -70,8 +72,16 @@ export function blobObjectStorage(container: ContainerClient): ObjectStorage {
 }
 
 export function azureObjectStorage(settings: HostedConfig): ObjectStorage {
+  const identityTransport = createDefaultHttpClient();
   const credential = new ManagedIdentityCredential({
     clientId: settings.managedIdentityClientId,
+    retryOptions: { maxRetries: 0 },
+    httpClient: {
+      sendRequest(request) {
+        request.timeout = 5_000;
+        return identityTransport.sendRequest(request);
+      },
+    },
   });
   const client = new BlobServiceClient(settings.blobAccountUrl, credential, {
     retryOptions: { maxTries: 1, tryTimeoutInMs: 5_000 },

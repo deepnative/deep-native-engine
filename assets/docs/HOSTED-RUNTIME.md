@@ -48,6 +48,22 @@ public-link fallback. Existing ownership, quarantine, exact grants, revocation,
 deletion recovery and digest checks continue to govern access. Prepared source
 bindings retain their existing immutable-source implementation.
 
+Managed-identity HTTP requests also have a five-second timeout and no credential
+retries; the Blob operation's abort signal alone does not bound authentication
+in the pinned SDK. A stalled-endpoint native regression checks this transport.
+
+Azure storage requires durable write recovery. Migration 072 adds a key-only
+intent table. Before private bytes are written, the same checked-out database
+client commits an intent while holding a per-key session advisory lock. The
+business transaction commits the evidence/derivative metadata and removes the
+intent together. A lost storage acknowledgement, rollback or disconnected
+writer leaves its key discoverable. The existing periodic recovery cycle uses
+nonblocking advisory locks and its own bounded cursor: active writers are
+skipped, referenced objects are preserved, and unreferenced objects are removed.
+An unsuccessful cleanup retains its intent for a later cycle. An unconfirmed
+session unlock discards the connection. There is no second pool checkout during
+a write, automatic upload retry, bucket scan or source-authorization bypass.
+
 ## Cutover and recovery
 
 Before changing the existing app revision, preserve its database and private
@@ -73,6 +89,7 @@ revision migrations concurrently or silently fall back to a sidecar database.
 | HOSTED-03 | `azure-object-storage.test.ts`: official SDK identity selection, bounded reads, immutable writes, errors and no fallback. | Actual attached Azure identity and private container, including denial checks. |
 | HOSTED-04 | Native PostgreSQL plus owned Azurite protocol fixture: private evidence remains accessible only to its owner after storage-process and database-client restart. | Preserved existing data through migration and Azure revision restart. |
 | HOSTED-05 | Existing complete prescribed verification gates remain required. | Current verified build, member/staff journeys, environment descriptions, persistence, rollback/restart instructions and captures at the existing domain. |
+| HOSTED-06 | Native lost upload/derivative acknowledgement, owner deletion, active writer, key collision, disconnected writer and failed-cleanup continuation; unit journal/transaction/cursor/error boundaries. | Recovery remains operational with the real Azure identity and durable database through revision changes. |
 
 The native protocol fixture uses Azurite 3.37.0 with service-version validation
 enabled and the pinned Blob SDK 12.33.0. Its temporary account/container/process

@@ -8,6 +8,7 @@ import {
 import { basename, join, resolve } from "node:path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import type { Pool, PoolClient } from "pg";
+import { objectWriteJournal } from "./object-write-recovery.ts";
 import { hash } from "./store.ts";
 import {
   PROVIDED_ORIGIN_SQL,
@@ -45,6 +46,7 @@ export interface EvidenceUpload {
 }
 
 export interface ObjectStorage {
+  readonly requiresWriteRecovery?: true;
   put(key: string, data: Buffer): Promise<void>;
   get(key: string): Promise<Buffer>;
   remove(key: string): Promise<void>;
@@ -757,6 +759,8 @@ export function evidenceStore(
         released = false,
         releaseError: Error | undefined;
       try {
+        if (objects.requiresWriteRecovery)
+          await objectWriteJournal.prepare(client, storageKey);
         await client.query("BEGIN");
         const owner = (
           await client.query<{ principal_id: string; workspace_id: string }>(
@@ -826,6 +830,8 @@ export function evidenceStore(
             revisionNumber,
           ],
         );
+        if (objects.requiresWriteRecovery)
+          await objectWriteJournal.complete(client, storageKey);
         commitAttempted = true;
         await client.query("COMMIT");
         return { kind: "created", id, state: "pending" };
@@ -845,7 +851,16 @@ export function evidenceStore(
         }
         throw error;
       } finally {
-        if (!released) client.release(releaseError);
+        if (!released) {
+          if (objects.requiresWriteRecovery) {
+            try {
+              await objectWriteJournal.release(client, storageKey);
+            } catch (error) {
+              releaseError = error as Error;
+            }
+          }
+          client.release(releaseError);
+        }
       }
     },
     async transitionQuarantine(evidenceId, result) {
@@ -1003,6 +1018,8 @@ export function evidenceStore(
         released = false,
         releaseError: Error | undefined;
       try {
+        if (objects.requiresWriteRecovery)
+          await objectWriteJournal.prepare(client, storageKey);
         await client.query("BEGIN");
         const source = (
           await client.query<{ id: string }>(
@@ -1030,6 +1047,8 @@ export function evidenceStore(
             createHash("sha256").update(data).digest("hex"),
           ],
         );
+        if (objects.requiresWriteRecovery)
+          await objectWriteJournal.complete(client, storageKey);
         commitAttempted = true;
         await client.query("COMMIT");
         return id;
@@ -1049,7 +1068,16 @@ export function evidenceStore(
         }
         throw error;
       } finally {
-        if (!released) client.release(releaseError);
+        if (!released) {
+          if (objects.requiresWriteRecovery) {
+            try {
+              await objectWriteJournal.release(client, storageKey);
+            } catch (error) {
+              releaseError = error as Error;
+            }
+          }
+          client.release(releaseError);
+        }
       }
     },
     async remove(token, evidenceId) {
