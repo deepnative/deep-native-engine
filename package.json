@@ -26,6 +26,8 @@
     "preview": "node scripts/private-preview.mjs"
   },
   "dependencies": {
+    "@azure/identity": "4.14.0",
+    "@azure/storage-blob": "12.33.0",
     "cookie-parser": "1.4.7",
     "express": "5.2.1",
     "helmet": "8.3.0",
