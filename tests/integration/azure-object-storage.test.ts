@@ -4,6 +4,11 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  createServer,
+  request as httpRequest,
+  type IncomingHttpHeaders,
+} from "node:http";
 import type { Pool } from "pg";
 import {
   BlobServiceClient,
@@ -223,7 +228,9 @@ it("HOSTED-06 skips an active writer and preserves a committed source after an o
     });
     expect(await actual.get(key)).toEqual(bytes);
     resume();
-    expect(await pending).toMatchObject({ kind: "created" });
+    const saved = await pending;
+    if (saved.kind !== "created")
+      throw Error("Native active upload did not commit.");
     expect(
       (
         await pool.query(
@@ -242,10 +249,21 @@ it("HOSTED-06 skips an active writer and preserves a committed source after an o
       lease.release();
     }
     expect(await recoverPendingObjectWrites(pool, actual)).toMatchObject({
-      completed: 1,
+      completed: 0,
       failed: 0,
     });
     expect(await actual.get(key)).toEqual(bytes);
+    expect(
+      await evidenceStore(pool, actual, "native-active-writer").remove(
+        token,
+        saved.id,
+      ),
+    ).toBe(true);
+    expect(await recoverPendingObjectWrites(pool, actual)).toMatchObject({
+      completed: 1,
+      failed: 0,
+    });
+    await expect(actual.get(key)).rejects.toThrow("could not be confirmed");
   } finally {
     resume();
     await pending.catch(() => {});
@@ -284,10 +302,10 @@ it("HOSTED-06 retains disconnected-writer intent and advances past a failed clea
     }
     const failing = {
       ...actual,
-      async remove(key: string) {
+      async abandon(key: string) {
         if (key === keys[0])
           throw Error("Controlled provider deletion failure.");
-        await actual.remove(key);
+        await actual.abandon!(key);
       },
     };
     const first = await recoverPendingObjectWrites(pool, failing, null, 1);
@@ -325,6 +343,148 @@ it("HOSTED-06 retains disconnected-writer intent and advances past a failed clea
     await pool.end();
   }
 }, 30_000);
+
+it("HOSTED-06 prevents a delayed create-only upload from restoring private bytes after recovery", async () => {
+  const pool = testPool();
+  let allowLate!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    allowLate = resolve;
+  });
+  let lateResolve!: (result: {
+    status: number;
+    code: string | string[] | undefined;
+  }) => void;
+  let lateReject!: (error: Error) => void;
+  const lateStatus = new Promise<{
+    status: number;
+    code: string | string[] | undefined;
+  }>((resolve, reject) => {
+    lateResolve = resolve;
+    lateReject = reject;
+  });
+  void lateStatus.catch(() => {});
+  let privateWrites = 0;
+  let storageKey = "";
+  async function forward(
+    method: string,
+    path: string,
+    headers: IncomingHttpHeaders,
+    data: Buffer,
+  ) {
+    const target = new URL(path, endpoint);
+    return new Promise<{
+      status: number;
+      headers: IncomingHttpHeaders;
+      data: Buffer;
+    }>((resolve, reject) => {
+      const outgoing = httpRequest(
+        target,
+        {
+          method,
+          headers: { ...headers, host: target.host, connection: "close" },
+        },
+        (response) => {
+          void (async () => {
+            const chunks: Buffer[] = [];
+            for await (const chunk of response) chunks.push(Buffer.from(chunk));
+            resolve({
+              status: response.statusCode!,
+              headers: response.headers,
+              data: Buffer.concat(chunks),
+            });
+          })().catch(reject);
+        },
+      );
+      outgoing.once("error", reject);
+      outgoing.end(data);
+    });
+  }
+  const proxy = createServer((req, res) => {
+    void (async () => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(Buffer.from(chunk));
+      const data = Buffer.concat(chunks);
+      const delayed =
+        req.method === "PUT" &&
+        req.headers["if-none-match"] === "*" &&
+        data.length > 0;
+      if (delayed) {
+        privateWrites++;
+        storageKey = new URL(req.url!, endpoint).pathname.split("/").at(-1)!;
+        await gate;
+      }
+      const reply = await forward(req.method!, req.url!, req.headers, data);
+      if (delayed)
+        lateResolve({
+          status: reply.status,
+          code: reply.headers["x-ms-error-code"],
+        });
+      if (!res.destroyed)
+        res.writeHead(reply.status, reply.headers).end(reply.data);
+    })().catch((error: Error) => {
+      lateReject(error);
+      if (!res.destroyed) res.writeHead(502).end();
+    });
+  });
+  try {
+    await migrate(pool);
+    const token = randomBytes(32).toString("hex");
+    await store(pool).create(token, {
+      background: "explorer",
+      goal: "everyday",
+    });
+    const name = `late-${randomBytes(8).toString("hex")}`;
+    await client().getContainerClient(name).create();
+    await new Promise<void>((resolve, reject) => {
+      proxy.once("error", reject);
+      proxy.listen(0, "127.0.0.1", resolve);
+    });
+    const address = proxy.address();
+    if (!address || typeof address === "string")
+      throw Error("Owned delay fixture did not bind TCP.");
+    const delayed = new BlobServiceClient(
+      `http://127.0.0.1:${address.port}/${account}`,
+      new StorageSharedKeyCredential(account, key),
+      { retryOptions: { maxTries: 1 } },
+    );
+    const objects = blobObjectStorage(delayed.getContainerClient(name));
+    await expect(
+      evidenceStore(pool, objects, "late-private-write").upload(token, {
+        name: "late.txt",
+        mediaType: "text/plain",
+        data: Buffer.from("Invented delayed private bytes."),
+        consent: {
+          rightsConfirmed: true,
+          privateReview: true,
+          communityPublication: false,
+        },
+      }),
+    ).rejects.toThrow("could not be confirmed");
+    expect(privateWrites).toBe(1);
+    expect(
+      (await recoverPendingMemberDeletions(pool, objects)).objectWrites,
+    ).toMatchObject({ completed: 1, failed: 0 });
+    allowLate();
+    expect([
+      { status: 409, code: "BlobAlreadyExists" },
+      { status: 412, code: "ConditionNotMet" },
+    ]).toContainEqual(await lateStatus);
+    const actual = client().getContainerClient(name);
+    expect(
+      (await actual.getBlobClient(storageKey).getProperties()).contentLength,
+    ).toBe(0);
+    await expect(blobObjectStorage(actual).get(storageKey)).rejects.toThrow(
+      "could not be confirmed",
+    );
+  } finally {
+    allowLate();
+    if (privateWrites) await lateStatus.catch(() => {});
+    proxy.closeAllConnections();
+    if (proxy.listening)
+      await new Promise<void>((resolve) => proxy.close(() => resolve()));
+    await pool.end();
+  }
+}, 20_000);
 
 it("HOSTED-03/04 preserves owned PostgreSQL evidence and private Blob bytes across client and storage-process restart", async () => {
   let pool: Pool | undefined = testPool();

@@ -34,6 +34,7 @@ export function preparedObjectStorage(
   }
   return {
     requiresWriteRecovery: files.requiresWriteRecovery,
+    abandon: files.abandon?.bind(files),
     async put(key, data) {
       if (await binding(key))
         throw Error("Provided private source is immutable.");

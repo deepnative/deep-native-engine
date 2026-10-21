@@ -101,6 +101,25 @@ it("HOSTED-03 treats UUID case aliases as the same private key", async () => {
   await store().get(key.toUpperCase());
   expect(container.getBlobClient).toHaveBeenCalledExactlyOnceWith(key);
 });
+it("HOSTED-06 fences uncertain writes with only empty private bytes and no DELETE or conditional-create gap", async () => {
+  await store().abandon!(key);
+  await store().abandon!(key);
+  expect(blob.uploadData).toHaveBeenCalledTimes(2);
+  expect(blob.uploadData).toHaveBeenCalledWith(Buffer.alloc(0), {
+    metadata: {},
+    blobHTTPHeaders: { blobContentType: "application/octet-stream" },
+    abortSignal: expect.any(AbortSignal),
+  });
+  expect(blob.deleteIfExists).not.toHaveBeenCalled();
+});
+it("HOSTED-06 leaves an unconfirmed empty fence operation unavailable without retry or private provider details", async () => {
+  blob.uploadData.mockRejectedValue(Error("private fence provider detail"));
+  await expect(store().abandon!(key)).rejects.toThrow(
+    /^Private object operation could not be confirmed\.$/,
+  );
+  expect(blob.uploadData).toHaveBeenCalledOnce();
+  expect(blob.deleteIfExists).not.toHaveBeenCalled();
+});
 
 it("HOSTED-03 removes the exact private object idempotently without listing or public capabilities", async () => {
   await store().remove(key);
@@ -120,6 +139,9 @@ it.each(["../secret", "https://other.example/blob", "", "not-an-object-key"])(
       "Invalid private object key.",
     );
     await expect(store().remove(invalid)).rejects.toThrow(
+      "Invalid private object key.",
+    );
+    await expect(store().abandon!(invalid)).rejects.toThrow(
       "Invalid private object key.",
     );
     expect(blob.uploadData).not.toHaveBeenCalled();

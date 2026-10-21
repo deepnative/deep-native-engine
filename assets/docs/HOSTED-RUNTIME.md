@@ -59,10 +59,18 @@ business transaction commits the evidence/derivative metadata and removes the
 intent together. A lost storage acknowledgement, rollback or disconnected
 writer leaves its key discoverable. The existing periodic recovery cycle uses
 nonblocking advisory locks and its own bounded cursor: active writers are
-skipped, referenced objects are preserved, and unreferenced objects are removed.
+skipped and referenced objects and their uncertain intents are preserved.
+Unreferenced bytes are replaced atomically by a permanent empty object at the
+same key. This blocks an outstanding create-only upload from creating private
+bytes after recovery. Only a confirmed empty fence allows intent removal;
+failure or missing provider fence support retains the intent without falling
+back to DELETE. Empty fences contain no member payload, name or identity and
+must be preserved during storage migration rather than swept as orphan files.
 An unsuccessful cleanup retains its intent for a later cycle. An unconfirmed
 session unlock discards the connection. There is no second pool checkout during
 a write, automatic upload retry, bucket scan or source-authorization bypass.
+The protocol uses Azure's [conditional-create guarantee](https://learn.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations)
+and [whole-object replacement](https://learn.microsoft.com/en-us/rest/api/storageservices/put-blob).
 
 ## Cutover and recovery
 
@@ -72,6 +80,9 @@ private records. Provision durable destinations and validate network access,
 verified database TLS and managed-identity object access before directing traffic
 to a new revision. Keep the current domain/certificate and a data-preserving
 rollback path. Never replace current data with a fresh rehearsal database.
+The old preview-only image is not automatically compatible with these durable
+backends. Protect post-cutover work before rollback; do not direct traffic back
+to an older ephemeral database.
 
 Restart a configured hosted runtime with the same durable database/container
 and attached identity. Refresh an open form after a restart: CSRF form tokens are

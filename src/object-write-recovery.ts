@@ -71,7 +71,15 @@ async function reconcile(pool: Pool, objects: ObjectStorage, key: string) {
        OR EXISTS(SELECT 1 FROM evidence_derivatives WHERE storage_key=$1) AS referenced`,
       [key],
     );
-    if (!source.rows[0]!.referenced) await objects.remove(key);
+    if (source.rows[0]!.referenced) {
+      // Preserve both the source and its uncertain-write intent. A later
+      // owner deletion must still fence any outstanding colliding request.
+      await client.query("ROLLBACK");
+      return false;
+    }
+    if (!objects.abandon)
+      throw Error("Private object abandonment unavailable.");
+    await objects.abandon(key);
     await objectWriteJournal.complete(client, key);
     commitAttempted = true;
     await client.query("COMMIT");

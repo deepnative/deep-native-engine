@@ -48,6 +48,7 @@ function fixture(
     put: vi.fn(),
     get: vi.fn(),
     remove: vi.fn().mockResolvedValue(undefined),
+    abandon: vi.fn().mockResolvedValue(undefined),
   };
   return { pool, client, query, release, listing, connect, objects };
 }
@@ -91,13 +92,20 @@ it.each([false, true])(
     const f = fixture({ referenced });
     expect(await recoverPendingObjectWrites(f.pool, f.objects)).toEqual({
       examined: 1,
-      completed: 1,
+      completed: referenced ? 0 : 1,
       failed: 0,
       nextCursor: null,
     });
-    expect(f.objects.remove).toHaveBeenCalledTimes(referenced ? 0 : 1);
-    if (!referenced) expect(f.objects.remove).toHaveBeenCalledWith(key);
-    expect(f.query).toHaveBeenLastCalledWith("COMMIT");
+    expect(f.objects.abandon).toHaveBeenCalledTimes(referenced ? 0 : 1);
+    if (!referenced) expect(f.objects.abandon).toHaveBeenCalledWith(key);
+    expect(f.objects.remove).not.toHaveBeenCalled();
+    expect(f.query).toHaveBeenLastCalledWith(
+      referenced ? "ROLLBACK" : "COMMIT",
+    );
+    if (referenced)
+      expect(f.query.mock.calls.some(([sql]) => sql.startsWith("DELETE"))).toBe(
+        false,
+      );
     expect(f.release).toHaveBeenCalledExactlyOnceWith();
   },
 );
@@ -113,14 +121,28 @@ it.each([{ locked: false }, { present: false }])(
     expect(f.query).toHaveBeenLastCalledWith("ROLLBACK");
   },
 );
+it("HOSTED-06 retains intent when a provider cannot fence late writes, without falling back to DELETE", async () => {
+  const f = fixture();
+  expect(
+    await recoverPendingObjectWrites(f.pool, {
+      ...f.objects,
+      abandon: undefined,
+    }),
+  ).toMatchObject({ completed: 0, failed: 1 });
+  expect(f.objects.remove).not.toHaveBeenCalled();
+  expect(f.query.mock.calls.some(([sql]) => sql.startsWith("DELETE"))).toBe(
+    false,
+  );
+});
 it("HOSTED-06 retains failed object removal for a later cycle without a repeated storage call", async () => {
   const f = fixture();
-  f.objects.remove.mockRejectedValue(Error("private provider detail"));
+  f.objects.abandon.mockRejectedValue(Error("private provider detail"));
   expect(await recoverPendingObjectWrites(f.pool, f.objects)).toMatchObject({
     completed: 0,
     failed: 1,
   });
-  expect(f.objects.remove).toHaveBeenCalledExactlyOnceWith(key);
+  expect(f.objects.abandon).toHaveBeenCalledExactlyOnceWith(key);
+  expect(f.objects.remove).not.toHaveBeenCalled();
   expect(f.query.mock.calls.some(([sql]) => sql.startsWith("DELETE"))).toBe(
     false,
   );

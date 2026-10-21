@@ -17,6 +17,20 @@ const keyFor = (key: string) => {
 export function blobObjectStorage(container: ContainerClient): ObjectStorage {
   return {
     requiresWriteRecovery: true,
+    async abandon(key) {
+      const blob = container.getBlockBlobClient(keyFor(key));
+      try {
+        // Never delete this empty fence: an outstanding create-only private
+        // upload must not be able to recreate bytes after reconciliation.
+        await blob.uploadData(Buffer.alloc(0), {
+          metadata: {},
+          blobHTTPHeaders: { blobContentType: "application/octet-stream" },
+          abortSignal: AbortSignal.timeout(5_000),
+        });
+      } catch {
+        throw unavailable();
+      }
+    },
     async put(key, data) {
       const blob = container.getBlockBlobClient(keyFor(key));
       if (
