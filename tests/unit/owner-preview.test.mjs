@@ -179,8 +179,9 @@ it.each([
   "DNE_LOCAL_STAFF_ENTRY",
   "DNE_CIRCLE_DISCUSSION",
   "DNE_LOCAL_SUPPORT_ASSIGNMENT",
+  "DNE_WORKFLOW_REVIEW_REQUESTS",
 ])(
-  "PREVIEW-03 SUPPREVIEW-01 rejects inherited application setting %s",
+  "PREVIEW-03 SUPPREVIEW-01 WFPREVIEW-01 rejects inherited application setting %s",
   (key) => {
     expect(() =>
       controlConnection({ [key]: "synthetic-private-secret" }),

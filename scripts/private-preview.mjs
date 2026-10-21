@@ -372,6 +372,9 @@ export async function launchPreview(env) {
       // Submit and receive feedback: existing exact support-request assignment
       // by an administrator to a distinct operator. Nothing is seeded.
       DNE_LOCAL_SUPPORT_ASSIGNMENT: "enabled",
+      // Participate and contribute: existing exact-revision workflow-note
+      // review requests, read only by an exactly assigned moderator.
+      DNE_WORKFLOW_REVIEW_REQUESTS: "enabled",
     });
     fixturePool = new Pool({
       connectionString: databaseUrl.href,
