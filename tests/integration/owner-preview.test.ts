@@ -100,8 +100,83 @@ async function stop(child: ChildProcess, exited: Promise<number | null>) {
   child.kill("SIGTERM");
   return exited;
 }
+// A minimal form-submitting browser for one actor: it keeps its own cookies,
+// sends the hidden fields the page actually rendered and never follows redirects.
+function browserFor(origin: string) {
+  const jar = new Map<string, string>();
+  const keep = (response: Response) => {
+    for (const cookie of response.headers.getSetCookie()) {
+      const [pair] = cookie.split(";");
+      const at = pair!.indexOf("=");
+      // A cleared cookie (empty or Max-Age=0) is removed as a browser would.
+      if (at + 1 === pair!.length || /;\s*max-age=0/i.test(cookie))
+        jar.delete(pair!.slice(0, at));
+      else jar.set(pair!.slice(0, at), pair!.slice(at + 1));
+    }
+  };
+  const cookie = () =>
+    [...jar].map(([name, value]) => `${name}=${value}`).join("; ");
+  async function open(path: string) {
+    const response = await fetch(origin + path, {
+      headers: { Cookie: cookie() },
+      redirect: "manual",
+    });
+    keep(response);
+    return {
+      status: response.status,
+      location: response.headers.get("location"),
+      text: await response.text(),
+    };
+  }
+  async function submit(
+    html: string,
+    action: string,
+    fields: Record<string, string> = {},
+  ) {
+    const start = html.indexOf(`action="${action}"`);
+    expect(start, `form ${action}`).toBeGreaterThan(-1);
+    const form = html.slice(start, html.indexOf("</form>", start));
+    const hidden = Object.fromEntries(
+      [
+        ...form.matchAll(
+          /<input type="hidden" name="([A-Za-z]+)" value="([^"]*)">/g,
+        ),
+      ].map((match) => [
+        match[1]!,
+        match[2]!
+          .replaceAll("&quot;", '"')
+          .replaceAll("&#39;", "'")
+          .replaceAll("&lt;", "<")
+          .replaceAll("&gt;", ">")
+          .replaceAll("&amp;", "&"),
+      ]),
+    );
+    const response = await fetch(origin + action, {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        Cookie: cookie(),
+        Origin: origin,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ ...hidden, ...fields }),
+    });
+    keep(response);
+    return {
+      status: response.status,
+      location: response.headers.get("location"),
+      text: await response.text(),
+    };
+  }
+  async function signIn(credential: string) {
+    const form = await open("/staff/sign-in");
+    const signed = await submit(form.text, "/staff/sign-in", { credential });
+    expect(signed.status).toBe(303);
+  }
+  return { open, submit, signIn };
+}
 
-it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, participation tools and normal member pages, then removes only owned resources", async () => {
+it("PREVIEW-01/02 PART-01/02/05/06 ASSIGN-PREVIEW-01/02/03 STUDY-PREVIEW-01/02/03 starts isolated fixtures and normal private learner journeys, then removes only owned resources", async () => {
   const before = (await control.query("SELECT current_database() AS name"))
     .rows[0].name;
   const proc = start();
@@ -141,7 +216,13 @@ it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, partic
       (
         await db.query("SELECT role FROM staff_profiles ORDER BY role")
       ).rows.map((r) => r.role),
-    ).toEqual(["editor", "moderator", "platform_admin", "reviewer"]);
+    ).toEqual([
+      "editor",
+      "moderator",
+      "operator",
+      "platform_admin",
+      "reviewer",
+    ]);
     expect(metadata.moderatorId).toMatch(/^[0-9a-f-]{36}$/);
     expect(metadata.moderatorCredential).toMatch(/^[a-f0-9]{64}$/);
     // PART-01: participation tools are enabled, but no activity is seeded.
@@ -156,6 +237,10 @@ it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, partic
       "private_event_enrollments",
       "private_event_cancellations",
       "private_event_attendance_permissions",
+      "browser_study_fixture_requests",
+      "synthetic_entitlement_grants",
+      "local_ai_receipts",
+      "adapter_jobs",
     ])
       expect(
         (await db.query(`SELECT count(*)::int n FROM ${table}`)).rows[0].n,
@@ -164,11 +249,12 @@ it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, partic
     expect(
       (
         await db.query(
-          "SELECT id,state,requires_qualified_signoff FROM content_versions WHERE state='published'",
+          "SELECT id,state,requires_qualified_signoff FROM content_versions WHERE state='published' ORDER BY id",
         )
       ).rows,
     ).toEqual([
       { id: "DEMO-509", state: "published", requires_qualified_signoff: false },
+      { id: "DEMO-544", state: "published", requires_qualified_signoff: false },
     ]);
     expect(
       (
@@ -206,6 +292,13 @@ it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, partic
     expect(await memberPage.text()).toContain(
       "Invented preview: clarify a sample request",
     );
+    // STUDY-PREVIEW-01: the opt-in launcher makes the existing request usable.
+    const studyRequest = await fetch(
+      ready.origin + "/member/test-unit-request",
+      { headers: { Cookie: cookie } },
+    );
+    expect(studyRequest.status).toBe(200);
+    expect(await studyRequest.text()).toContain('name="administratorId"');
     const samples = await fetch(ready.origin + "/evidence", {
       headers: { Cookie: cookie },
     });
@@ -213,6 +306,198 @@ it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, partic
     expect(
       (await db.query("SELECT count(*)::int n FROM learners")).rows[0].n,
     ).toBe(1);
+    // ASSIGN-PREVIEW-01: a fresh preview supplies catalog choices, not activity.
+    for (const table of ["learner_assignment_choices", "assignment_attempts"])
+      expect(
+        (await db.query(`SELECT count(*)::int n FROM ${table}`)).rows[0].n,
+        table,
+      ).toBe(0);
+    const assignmentTitle = "Invented preview: check a sample plan";
+    const privateResponse =
+      "I will compare an invented two-hour plan with the sample constraints.";
+    const issuer = browserFor(ready.origin);
+    await issuer.signIn(metadata.administratorCredential);
+    const issuerPage = await issuer.open("/operator/study-test-units");
+    expect(issuerPage.status).toBe(200);
+    expect(issuerPage.text).not.toContain(
+      "New requests and issuance are paused",
+    );
+    const administratorReference = issuerPage.text.match(
+      /<code>([0-9a-f-]{36})<\/code>/,
+    )![1]!;
+    const studyBalances = (html: string) =>
+      html.match(
+        /<section data-test-unit-category="study_requests">([\s\S]*?)<\/section>/,
+      )![1]!;
+    for (const background of ["technical", "professional", "explorer"]) {
+      const actor = browserFor(ready.origin);
+      const entry = await actor.open("/");
+      expect(
+        (
+          await actor.submit(entry.text, "/start", {
+            background,
+            goal: "everyday",
+            synthetic: "yes",
+          })
+        ).status,
+      ).toBe(303);
+      const learning = await actor.open("/learn");
+      expect(learning.status).toBe(200);
+      expect(learning.text).toContain(`Choose ${assignmentTitle}</button>`);
+      const chosen = await actor.submit(learning.text, "/assignments/select", {
+        content_id: "DEMO-544",
+        content_version: "1",
+      });
+      expect(chosen.status).toBe(303);
+      const selected = await actor.open("/learn");
+      expect(selected.text).toContain(
+        "Start or return to this private attempt",
+      );
+      // ASSIGN-PREVIEW-02: only ordinary deliberate forms create and save work.
+      const started = await actor.submit(
+        selected.text,
+        "/assignments/attempts/start",
+        { content_id: "DEMO-544", content_version: "1" },
+      );
+      expect(started.status).toBe(303);
+      expect(started.location).toMatch(
+        /^\/assignments\/attempts\/[0-9a-f-]{36}$/,
+      );
+      const attempt = await actor.open(started.location!);
+      expect(attempt.text).toContain("Assignment version 1");
+      expect(attempt.text).toContain("started only");
+      const saved = await actor.submit(
+        attempt.text,
+        started.location! + "/save",
+        { response: privateResponse, sample_confirmed: "yes" },
+      );
+      expect(saved.status).toBe(303);
+      const reloaded = await actor.open(started.location!);
+      expect(reloaded.text).toContain(privateResponse);
+      expect(reloaded.text).toContain("private draft saved");
+      const history = await actor.open("/assignments/attempts");
+      expect(history.text).toContain(assignmentTitle);
+      expect(history.text).toContain("version 1");
+      // ASSIGN-PREVIEW-03: the original learner cannot read another actor's work.
+      const denied = await fetch(ready.origin + started.location!, {
+        headers: { Cookie: cookie },
+      });
+      expect(denied.status).toBe(404);
+      expect(await denied.text()).not.toContain(privateResponse);
+
+      // STUDY-PREVIEW-02: use the existing finite fixture only through forms.
+      const emptyBalance = await actor.open("/member/test-units");
+      expect(studyBalances(emptyBalance.text)).toContain(
+        'data-field="usable">0</span>',
+      );
+      const fixture = await actor.open("/member/test-unit-request");
+      const checkedRequest = await actor.submit(
+        fixture.text,
+        "/member/test-unit-request/check",
+        { administratorId: administratorReference },
+      );
+      expect(checkedRequest.status).toBe(200);
+      const requested = await actor.submit(
+        checkedRequest.text,
+        "/member/test-unit-request/request",
+        { confirm: "yes" },
+      );
+      expect(requested.status).toBe(200);
+      const requestReference = requested.text.match(
+        /<dt>Request reference<\/dt><dd>([0-9a-f-]{36})<\/dd>/,
+      )![1]!;
+      const checkedIssue = await issuer.submit(
+        (await issuer.open("/operator/study-test-units")).text,
+        "/operator/study-test-units/check",
+        { requestId: requestReference },
+      );
+      expect(checkedIssue.status).toBe(200);
+      expect(
+        (
+          await issuer.submit(
+            checkedIssue.text,
+            "/operator/study-test-units/issue",
+            { confirm: "yes" },
+          )
+        ).status,
+      ).toBe(200);
+      const issued = await actor.open("/member/test-units");
+      expect(studyBalances(issued.text)).toContain(
+        'data-field="usable">3</span>',
+      );
+
+      // The fixed provided copy is already clean; no quarantine store or SQL
+      // transition manufactures a source, permission, unit or job for this path.
+      const prepared = await actor.open("/evidence/prepared");
+      const template = prepared.text.match(
+        /<article data-prepared-template="everyday-options">([\s\S]*?)<\/article>/,
+      )![1]!;
+      const copied = await actor.submit(template, "/evidence/prepared", {
+        providedExample: "yes",
+        privateReview: "yes",
+      });
+      expect(copied.status).toBe(200);
+      const permission = await actor.open("/evidence/local-ai");
+      const permissionAction = permission.text.match(
+        /action="(\/evidence\/local-ai\/[0-9a-f-]{36}\/grant)"/,
+      )![1]!;
+      expect(
+        (
+          await actor.submit(permission.text, permissionAction, {
+            confirm: "yes",
+          })
+        ).status,
+      ).toBe(303);
+      const permitted = await actor.open("/evidence/local-ai");
+      const holdAction = permitted.text.match(
+        /action="(\/evidence\/local-ai\/[0-9a-f-]{36}\/queue-metered)"/,
+      )![1]!;
+      expect(
+        (await actor.submit(permitted.text, holdAction, { confirm: "yes" }))
+          .status,
+      ).toBe(303);
+      const held = await actor.open("/evidence/local-ai");
+      expect(held.text).toContain("One local test request: held.");
+      const runAction = held.text.match(
+        /action="(\/evidence\/local-ai\/[0-9a-f-]{36}\/run)"/,
+      )![1]!;
+      expect((await actor.submit(held.text, runAction)).status).toBe(303);
+      const consumed = await actor.open("/evidence/local-ai");
+      expect(consumed.text).toContain("One local test request: consumed.");
+      const checkedWithdrawal = await actor.submit(
+        (await actor.open("/member/test-unit-request")).text,
+        "/member/test-unit-request/withdraw/check",
+      );
+      expect(checkedWithdrawal.status).toBe(200);
+      expect(
+        (
+          await actor.submit(
+            checkedWithdrawal.text,
+            "/member/test-unit-request/withdraw",
+            { confirm: "yes" },
+          )
+        ).status,
+      ).toBe(200);
+      const finalBalance = studyBalances(
+        (await actor.open("/member/test-units")).text,
+      );
+      for (const [field, quantity] of [
+        ["usable", 0],
+        ["held", 0],
+        ["consumed", 1],
+        ["expired", 2],
+      ])
+        expect(finalBalance).toContain(
+          `data-field="${field}">${quantity}</span>`,
+        );
+      // STUDY-PREVIEW-03: another member's normal receipt page discloses none.
+      const otherFixture = await fetch(
+        ready.origin + "/member/test-unit-request",
+        { headers: { Cookie: cookie } },
+      );
+      expect(otherFixture.status).toBe(200);
+      expect(await otherFixture.text()).not.toContain(requestReference);
+    }
     // PART-02/05: member pages offer discussion and event rehearsal.
     const circles = await fetch(ready.origin + "/circles", {
       headers: { Cookie: cookie },
@@ -228,7 +513,7 @@ it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, partic
     );
     expect(
       (await db.query("SELECT count(*)::int n FROM staff_profiles")).rows[0].n,
-    ).toBe(4);
+    ).toBe(5);
     // PART-03/04/05: normal staff entry opens enabled tools; no grant exists.
     const admin = await staffSession(
       ready.origin,
@@ -257,6 +542,7 @@ it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, partic
       (await moderator("/moderate/circles/everyday-ai/reports")).status,
     ).toBe(403);
     expect((await moderator("/operator/circle-grants")).status).toBe(403);
+    expect((await moderator("/operator/study-test-units")).status).toBe(403);
     expect(proc.output().includes(metadata.moderatorCredential)).toBe(false);
     expect((await fetch(ready.origin + "/runtime-private.json")).status).toBe(
       404,
@@ -318,6 +604,251 @@ it("PREVIEW-01/02 PART-01/02/05/06 starts current-code isolated fixtures, partic
     expect(
       (await control.query("SELECT current_database() AS name")).rows[0].name,
     ).toBe(before);
+  } finally {
+    await db?.end();
+    if (proc.child.exitCode === null) await stop(proc.child, proc.exited);
+  }
+}, 90000);
+
+it("SUPPREVIEW-01/02/03/04 rehearses member support intake, exact administrator assignment, separate operator actions and revocation through ordinary forms", async () => {
+  const proc = start();
+  let db: Pool | undefined;
+  try {
+    const ready = await proc.ready;
+    const metadata = JSON.parse(await readFile(ready.staffSetupFile, "utf8"));
+    db = new Pool({ connectionString: metadata.database });
+    // SUPPREVIEW-01: one distinct finite operator; zero seeded support facts.
+    expect(metadata.operatorId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(metadata.operatorCredential).toMatch(/^[a-f0-9]{64}$/);
+    expect(
+      new Set([
+        metadata.operatorId,
+        metadata.administratorId,
+        metadata.reviewerId,
+        metadata.moderatorId,
+      ]).size,
+    ).toBe(4);
+    expect(
+      (
+        await db.query(
+          "SELECT role, expires_at=$1::timestamptz AS finite FROM staff_profiles JOIN principals ON principals.id=staff_profiles.principal_id WHERE principal_id=$2",
+          [metadata.expiry, metadata.operatorId],
+        )
+      ).rows,
+    ).toEqual([{ role: "operator", finite: true }]);
+    const supportTables = [
+      "support_requests",
+      "support_request_events",
+      "support_request_grants",
+      "support_request_mutations",
+      "support_request_notes",
+      "support_request_replies",
+      "support_access_grants",
+      "support_time_units",
+      "support_time_allocations",
+      "support_time_entries",
+      "support_time_grants",
+    ];
+    for (const table of supportTables)
+      expect(
+        (await db.query(`SELECT count(*)::int n FROM ${table}`)).rows[0].n,
+        table,
+      ).toBe(0);
+    for (const secret of [metadata.operatorCredential, metadata.operatorId])
+      expect(proc.output().includes(secret)).toBe(false);
+
+    // SUPPREVIEW-02: a member sends a request through the normal form.
+    const member = browserFor(ready.origin);
+    const welcome = await member.open("/");
+    expect(
+      (
+        await member.submit(welcome.text, "/start", {
+          background: "professional",
+          goal: "work",
+          synthetic: "yes",
+        })
+      ).status,
+    ).toBe(303);
+    const intake = await member.open("/support/new");
+    const sent = await member.submit(intake.text, "/support", {
+      subject: "Invented preview support question",
+      body: "PREVIEW-SUPPORT-PRIVATE-BODY",
+      synthetic: "yes",
+    });
+    expect(sent.status).toBe(303);
+    const requestId = sent.location!.split("/").at(-1)!;
+    expect(requestId).toMatch(/^[0-9a-f-]{36}$/);
+    const receipt = await member.open(`/support/${requestId}`);
+    expect(receipt.text).toContain(requestId);
+    expect(receipt.text).toContain("No separate acknowledgement recorded");
+
+    const operator = browserFor(ready.origin);
+    await operator.signIn(metadata.operatorCredential);
+    const operatorHome = await operator.open("/staff");
+    expect(operatorHome.text).toContain("My local assignment ID");
+    const reference = await operator.open("/operator/assignment-id");
+    expect(reference.status).toBe(200);
+    const staffId = reference.text.match(
+      /data-assignment-id>([0-9a-f-]{36})</,
+    )![1]!;
+    expect(staffId).toBe(metadata.operatorId);
+    // Having an identity grants nothing: no request appears before assignment.
+    const unassigned = await operator.open("/operator/support");
+    expect(unassigned.status).toBe(200);
+    expect(unassigned.text).not.toContain("PREVIEW-SUPPORT-PRIVATE-BODY");
+    expect(unassigned.text).not.toContain(requestId);
+    expect((await operator.open("/operator/support-assignment")).status).toBe(
+      403,
+    );
+
+    const admin = browserFor(ready.origin);
+    await admin.signIn(metadata.administratorCredential);
+    expect((await admin.open("/staff")).text).toContain(
+      "Support request assignments",
+    );
+    const assignment = await admin.open("/operator/support-assignment");
+    expect(assignment.status).toBe(200);
+    const checked = await admin.submit(
+      assignment.text,
+      "/operator/support-assignment/check",
+      { requestId, staffId },
+    );
+    expect(checked.status).toBe(200);
+    expect(checked.text).toContain("Confirm support assignment");
+    expect(checked.text).not.toContain("PREVIEW-SUPPORT-PRIVATE-BODY");
+    // The administrator cannot assign the request to itself.
+    expect(
+      (
+        await admin.submit(
+          assignment.text,
+          "/operator/support-assignment/check",
+          { requestId, staffId: metadata.administratorId },
+        )
+      ).status,
+    ).toBe(403);
+    const assigned = await admin.submit(
+      checked.text,
+      "/operator/support-assignment/assign",
+      {
+        startsAt: new Date(Date.now() - 60000).toISOString(),
+        expiresAt: new Date(Date.parse(metadata.expiry) - 1000).toISOString(),
+        confirm: "yes",
+      },
+    );
+    expect(assigned.status).toBe(200);
+    expect(assigned.text).toContain("Support assignment recorded");
+    const grantId = assigned.text.match(
+      /data-assignment-grant>([0-9a-f-]{36})</,
+    )![1]!;
+    const detailPath = `/operator/support/${requestId}?grant=${grantId}`;
+    const worklist = await operator.open("/operator/support");
+    expect(worklist.text).toContain(
+      `/operator/support/${requestId}?grant=${grantId}`,
+    );
+    let detail = await operator.open(detailPath);
+    expect(detail.status).toBe(200);
+    expect(detail.text).toContain("PREVIEW-SUPPORT-PRIVATE-BODY");
+    // Opening is not an acknowledgement.
+    expect(detail.text).toContain("No separate acknowledgement recorded");
+
+    // SUPPREVIEW-03: separate note, acknowledgement, reply and resolution.
+    const base = `/operator/support/${requestId}`;
+    expect(
+      (
+        await operator.submit(detail.text, `${base}/notes`, {
+          body: "PREVIEW-INTERNAL-NOTE-ONLY",
+          confirm: "yes",
+        })
+      ).location,
+    ).toBe(detailPath);
+    detail = await operator.open(detailPath);
+    expect(
+      (
+        await operator.submit(detail.text, `${base}/acknowledge`, {
+          confirm: "yes",
+        })
+      ).location,
+    ).toBe(detailPath);
+    detail = await operator.open(detailPath);
+    expect(detail.text).toContain("Acknowledged locally");
+    expect(
+      (
+        await operator.submit(detail.text, `${base}/replies`, {
+          body: "PREVIEW-VISIBLE-REPLY",
+          confirm: "yes",
+        })
+      ).location,
+    ).toBe(detailPath);
+    const memberBeforeResolution = await member.open(`/support/${requestId}`);
+    expect(memberBeforeResolution.text).toContain("PREVIEW-VISIBLE-REPLY");
+    expect(memberBeforeResolution.text).toContain("Acknowledged locally");
+    expect(memberBeforeResolution.text).toContain(
+      "Open; no resolution recorded",
+    );
+    detail = await operator.open(detailPath);
+    expect(
+      (
+        await operator.submit(detail.text, `${base}/resolve`, {
+          confirm: "yes",
+        })
+      ).location,
+    ).toBe(detailPath);
+    const resolved = await member.open(`/support/${requestId}`);
+    expect(resolved.text).toContain("PREVIEW-VISIBLE-REPLY");
+    expect(resolved.text).toContain("Resolved locally");
+    expect(resolved.text).toContain("does not establish member satisfaction");
+    expect(resolved.text).not.toContain("PREVIEW-INTERNAL-NOTE-ONLY");
+    const exported = await member.open("/api/member/export");
+    expect(exported.status).toBe(200);
+    expect(exported.text).toContain("PREVIEW-VISIBLE-REPLY");
+    expect(exported.text).not.toContain("PREVIEW-INTERNAL-NOTE-ONLY");
+
+    // SUPPREVIEW-04: revoking the exact grant denies fresh operator reads.
+    const history = await admin.open(
+      `/operator/support-assignment/history?requestId=${requestId}`,
+    );
+    const revoked = await admin.submit(
+      history.text,
+      "/operator/support-assignment/revoke",
+      { confirm: "yes" },
+    );
+    expect(revoked.status).toBe(200);
+    expect(revoked.text).toContain("Support assignment revoked");
+    const writes = async () =>
+      (
+        await db!.query(
+          "SELECT (SELECT count(*) FROM support_request_notes)::int + (SELECT count(*) FROM support_request_replies)::int + (SELECT count(*) FROM support_request_events)::int AS n",
+        )
+      ).rows[0].n;
+    const before = await writes();
+    const denied = await operator.open(detailPath);
+    expect(denied.status).toBe(403);
+    expect(denied.text).not.toContain("PREVIEW-SUPPORT-PRIVATE-BODY");
+    expect(
+      (
+        await operator.submit(detail.text, `${base}/notes`, {
+          body: "PREVIEW-AFTER-REVOCATION",
+          confirm: "yes",
+        })
+      ).status,
+    ).toBe(403);
+    expect(await writes()).toBe(before);
+    expect((await operator.open("/operator/support")).text).not.toContain(
+      requestId,
+    );
+    const retained = await member.open(`/support/${requestId}`);
+    expect(retained.status).toBe(200);
+    expect(retained.text).toContain("PREVIEW-VISIBLE-REPLY");
+    expect(retained.text).toContain("Resolved locally");
+    for (const secret of [
+      metadata.operatorCredential,
+      metadata.administratorCredential,
+    ])
+      expect(proc.output().includes(secret)).toBe(false);
+    await db.end();
+    db = undefined;
+    expect(await stop(proc.child, proc.exited)).toBe(0);
+    expect(existsSync(metadata.privateRoot)).toBe(false);
   } finally {
     await db?.end();
     if (proc.child.exitCode === null) await stop(proc.child, proc.exited);

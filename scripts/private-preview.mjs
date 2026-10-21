@@ -169,7 +169,7 @@ export async function launchPreview(env) {
     runtimeRoot,
     provider: "deterministic local test only; no live services",
     fixture:
-      "One invented non-qualified lesson and four finite synthetic staff identities only; no member, grant, queue, feedback, completion, allowance, discussion, proposal, event schedule or participation seeded.",
+      "One invented non-qualified lesson and five finite synthetic staff identities only; no member, grant, queue, feedback, completion, allowance, support request, discussion, proposal, event schedule or participation seeded.",
   };
   const save = () =>
     writeFile(metadataFile, JSON.stringify(metadata, null, 2) + "\n", {
@@ -359,6 +359,7 @@ export async function launchPreview(env) {
       DNE_PORT: "0",
       DNE_PRIVATE_STORAGE_ROOT: storage,
       DNE_LOCAL_STAFF_ENTRY: "enabled",
+      DNE_LOCAL_TEST_UNIT_ISSUANCE: "enabled",
       DNE_PREPARED_REVIEW_SAMPLES: "enabled",
       DNE_SAMPLE_ASSIGNMENT_ADMINISTRATION: "enabled",
       // Participate and contribute: existing exact-grant circle moderation,
@@ -368,6 +369,9 @@ export async function launchPreview(env) {
       DNE_EVENT_REGISTRATION: "enabled",
       DNE_LOCAL_EVENT_SCHEDULING: "enabled",
       DNE_LOCAL_EVENT_ADMIN: "enabled",
+      // Submit and receive feedback: existing exact support-request assignment
+      // by an administrator to a distinct operator. Nothing is seeded.
+      DNE_LOCAL_SUPPORT_ASSIGNMENT: "enabled",
     });
     fixturePool = new Pool({
       connectionString: databaseUrl.href,
@@ -388,7 +392,8 @@ export async function launchPreview(env) {
     const administratorCredential = randomBytes(32).toString("hex"),
       reviewerCredential = randomBytes(32).toString("hex"),
       moderatorCredential = randomBytes(32).toString("hex"),
-      editorCredential = randomBytes(32).toString("hex");
+      editorCredential = randomBytes(32).toString("hex"),
+      operatorCredential = randomBytes(32).toString("hex");
     const administratorId = await auth.provisionStaff(
       administratorCredential,
       "platform_admin",
@@ -405,6 +410,12 @@ export async function launchPreview(env) {
       expiry,
     );
     await auth.provisionStaff(editorCredential, "editor", expiry);
+    // A distinct operator: administrators cannot assign support to themselves.
+    const operatorId = await auth.provisionStaff(
+      operatorCredential,
+      "operator",
+      expiry,
+    );
     const draft = {
       id: fixtureId,
       version: 1,
@@ -422,13 +433,27 @@ export async function launchPreview(env) {
       rubric: null,
       rubricVersion: null,
     };
-    if (
-      !(await catalog.createDraft(editorCredential, draft)) ||
-      !(await catalog.submit(editorCredential, fixtureId, 1)) ||
-      !(await catalog.approve(reviewerCredential, fixtureId, 1, true)) ||
-      !(await catalog.publish(editorCredential, fixtureId, 1))
-    )
-      throw failure(stage);
+    const assignment = {
+      ...draft,
+      id: "DEMO-544",
+      kind: "assignment",
+      title: "Invented preview: check a sample plan",
+      body: "Invented private rehearsal only, not qualified curriculum or formal assessment. Plan a two-hour sample reading event for twelve invented volunteers. Write a short instruction an AI could use to suggest a checklist, then explain how you would check its suggestions against the two-hour limit and twelve-volunteer context. Use no real personal or client information.",
+    };
+    for (const item of [draft, assignment]) {
+      if (
+        !(await catalog.createDraft(editorCredential, item)) ||
+        !(await catalog.submit(editorCredential, item.id, item.version)) ||
+        !(await catalog.approve(
+          reviewerCredential,
+          item.id,
+          item.version,
+          true,
+        )) ||
+        !(await catalog.publish(editorCredential, item.id, item.version))
+      )
+        throw failure(stage);
+    }
     Object.assign(metadata, {
       origin: running.origin,
       expiry: expiry.toISOString(),
@@ -438,6 +463,8 @@ export async function launchPreview(env) {
       reviewerCredential,
       moderatorId,
       moderatorCredential,
+      operatorId,
+      operatorCredential,
     });
     await save();
     return {

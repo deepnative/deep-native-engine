@@ -329,6 +329,38 @@ for (const [index, [background, goal]] of audiences.entries()) {
         })
         .click();
       const revisedName = example.name + " revised";
+      // TITLE-01/02: correct an unsupported title without losing the response.
+      await page
+        .getByLabel("Revised sample title")
+        .fill(example.name + ", revised");
+      await page
+        .getByLabel("New invented text", { exact: true })
+        .fill("A member-edited invented example with separately changed text.");
+      await page.getByLabel("I created this new invented text").check();
+      await page.getByLabel("I separately allow this revision").check();
+      await page
+        .getByRole("button", { name: "Save new private revision" })
+        .click();
+      await expect(page.getByRole("alert")).toContainText(
+        "Check the sample title.",
+      );
+      await expect(page.getByRole("alert")).not.toContainText(
+        "eligibility may have changed",
+      );
+      await expect(page.getByLabel("Revised sample title")).toHaveValue(
+        example.name + ", revised",
+      );
+      await expect(
+        page.getByLabel("New invented text", { exact: true }),
+      ).toHaveValue(
+        "A member-edited invented example with separately changed text.",
+      );
+      await expect(
+        page.getByLabel("I created this new invented text"),
+      ).not.toBeChecked();
+      await expect(
+        page.getByLabel("I separately allow this revision"),
+      ).not.toBeChecked();
       await page.getByLabel("Revised sample title").fill(revisedName);
       await page
         .getByLabel("New invented text", { exact: true })

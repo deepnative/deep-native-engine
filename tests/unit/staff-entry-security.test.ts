@@ -351,21 +351,29 @@ it("STAFF-04-RECOVERY clears expired/revoked authority locally without admission
     .send({ credential, csrf: entryCsrf(fresh, secret) })
     .expect(303);
 });
-it("STAFF-01-ENTRY preserves secure-cookie handling for an HTTPS configured origin", async () => {
-  await fixture({ origin: "https://127.0.0.1:3000" });
-  const form = await get("/staff/sign-in").expect(200);
-  expect((form.headers["set-cookie"] as unknown as string[])[0]).toContain(
-    "Secure",
-  );
-  const nonce = (form.headers["set-cookie"] as unknown as string[])[0]!.split(
-    ";",
-  )[0]!;
-  await request(server)
-    .post("/staff/sign-in")
-    .set("Host", host)
-    .set("Origin", "https://127.0.0.1:3000")
-    .set("Cookie", nonce)
-    .type("form")
-    .send({ credential, csrf: fields(form.text) })
-    .expect(303);
-});
+it.each(["https://127.0.0.1:3000", "https://engine.deepnative.io"])(
+  "HOSTED-02 STAFF-01-ENTRY preserves secure staff cookies at %s",
+  async (publicOrigin) => {
+    const publicHost = new URL(publicOrigin).host;
+    await fixture({ origin: publicOrigin });
+    const form = await get("/staff/sign-in")
+      .set("Host", publicHost)
+      .expect(200);
+    expect((form.headers["set-cookie"] as unknown as string[])[0]).toContain(
+      "Secure",
+    );
+    const nonce = (form.headers["set-cookie"] as unknown as string[])[0]!.split(
+      ";",
+    )[0]!;
+    const admitted = await request(server)
+      .post("/staff/sign-in")
+      .set("Host", publicHost)
+      .set("Origin", publicOrigin)
+      .set("Cookie", nonce)
+      .type("form")
+      .send({ credential, csrf: fields(form.text) })
+      .expect(303);
+    for (const cookie of admitted.headers["set-cookie"] as unknown as string[])
+      expect(cookie).toMatch(/HttpOnly; Secure; SameSite=Strict/);
+  },
+);

@@ -103,6 +103,62 @@ const member = {
   background: "explorer" as const,
   goal: "everyday" as const,
 };
+it("HOSTED-02 accepts exact HTTPS member forms with secure cookies and rejects forwarded-origin spoofing", async () => {
+  const hostedOrigin = "https://engine.deepnative.io";
+  const hostedHost = "engine.deepnative.io";
+  const db = storage();
+  const files = evidenceStorage();
+  const agent = await managedAgent(
+    app(db, { origin: hostedOrigin, secret: "hosted-secret", evidence: files }),
+  );
+  const home = await agent.get("/").set("Host", hostedHost).expect(200);
+  const setCookie = home.headers["set-cookie"] as unknown as string[];
+  expect(setCookie[0]).toMatch(/; Path=\/;.*HttpOnly; Secure; SameSite=Strict/);
+  const cookie = setCookie[0]!.split(";")[0]!;
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  const form = {
+    csrf,
+    background: "explorer",
+    goal: "everyday",
+    synthetic: "yes",
+  };
+  const post = (path: string, from = hostedOrigin, token = csrf) =>
+    agent
+      .post(path)
+      .set("Host", hostedHost)
+      .set("Origin", from)
+      .set("Cookie", cookie)
+      .type("form")
+      .send({ ...form, csrf: token });
+  await agent
+    .get("/")
+    .set("Host", "attacker.invalid")
+    .set("X-Forwarded-Host", hostedHost)
+    .set("X-Forwarded-Proto", "https")
+    .expect(403);
+  await post("/start", "https://attacker.invalid")
+    .set("X-Forwarded-Host", hostedHost)
+    .set("X-Forwarded-Proto", "https")
+    .expect(403);
+  await post("/start", hostedOrigin, "0".repeat(64)).expect(403);
+  expect(db.create).not.toHaveBeenCalled();
+  await post("/start").expect(303).expect("Location", "/learn");
+  expect(db.create).toHaveBeenCalledOnce();
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const deleted = await agent
+    .post("/delete")
+    .set("Host", hostedHost)
+    .set("Origin", hostedOrigin)
+    .set("Cookie", cookie)
+    .type("form")
+    .send({ csrf, confirm: "yes" })
+    .expect(303);
+  expect(files.removeWorkspace).toHaveBeenCalledOnce();
+  expect(db.remove).toHaveBeenCalledWith(member.id);
+  expect((deleted.headers["set-cookie"] as unknown as string[])[0]).toMatch(
+    /Expires=Thu, 01 Jan 1970.*HttpOnly; Secure; SameSite=Strict/,
+  );
+});
 it("keeps personalized assignment preparation private, exact and read-only", async () => {
   const db = storage();
   const blocked = {
@@ -1162,8 +1218,27 @@ it("PREPARED-01/08 evidence entry reflects explicit creation configuration witho
         preparedReviewSamples: enabled,
       }),
     );
+    memberStore.session.mockResolvedValueOnce({ kind: "new" });
+    await agent.get("/").set("Host", host).expect(200);
     const response = await agent.get("/evidence").set("Host", host).expect(200);
     expect(response.text.includes('href="/evidence/prepared"')).toBe(enabled);
+    const csrfValue = response.text.match(
+      /name="csrf" value="([a-f0-9]+)"/,
+    )![1];
+    const rejected = await agent
+      .post("/evidence")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf: csrfValue,
+        name: "Reading group, first",
+        sample: "Invented text",
+        rights_confirmed: "yes",
+        private_review_consent: "yes",
+      })
+      .expect(422);
+    expect(rejected.text.includes('href="/evidence/prepared"')).toBe(enabled);
   }
   expect(prepared.create).not.toHaveBeenCalled();
 });
@@ -3316,6 +3391,24 @@ it("keeps a failed private evidence revision editable and never copies consent o
     .expect(422)
     .expect(/Invented &lt;private&gt; revision/);
   expect(files.upload).not.toHaveBeenCalled();
+  // TITLE-01: unsupported titles identify the field, preserve the draft and
+  // never ask the store to write. Consent must be confirmed again on recovery.
+  files.upload.mockResolvedValue({ kind: "invalid" });
+  for (const name of [
+    "Reading group, revised",
+    "../revision.txt",
+    "漢字",
+    "A".repeat(201),
+  ]) {
+    const rejected = await post({ ...fields, name }).expect(422);
+    expect(rejected.text).toContain("Check the sample title.");
+    expect(rejected.text).toContain("start with an English letter or digit");
+    expect(rejected.text).toContain("Invented &lt;private&gt; revision");
+    expect(rejected.text).not.toContain("eligibility may have changed");
+    expect(rejected.text).not.toMatch(/type="checkbox"[^>]*checked/);
+  }
+  expect(files.upload).not.toHaveBeenCalled();
+  files.upload.mockResolvedValue({ kind: "denied" });
   files.upload.mockResolvedValueOnce({ kind: "denied" });
   await post(fields)
     .expect(409)
@@ -3450,6 +3543,17 @@ it("keeps evidence form writes owner-scoped, confirmed and truthful", async () =
     rights_confirmed: "yes",
     private_review_consent: "yes",
   };
+  // TITLE-01 also applies when creating the first private sample.
+  files.upload.mockResolvedValue({ kind: "invalid" });
+  const badTitle = await post("/evidence", {
+    ...form,
+    name: "Reading group, first",
+  }).expect(422);
+  expect(badTitle.text).toContain("Check the sample title.");
+  expect(badTitle.text).toContain('value="Reading group, first"');
+  expect(badTitle.text).toContain("Invented text");
+  expect(badTitle.text).not.toMatch(/type="checkbox"[^>]*checked/);
+  expect(files.upload).not.toHaveBeenCalled();
   files.upload
     .mockResolvedValueOnce({ kind: "invalid" })
     .mockResolvedValueOnce({ kind: "denied" })

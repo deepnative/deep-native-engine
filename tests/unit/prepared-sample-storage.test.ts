@@ -59,6 +59,19 @@ it("PREPARED-07 leaves ordinary file operations and absent erased bindings with 
   await f.storage.remove(key);
   expect(f.files.remove).toHaveBeenCalledWith(key);
 });
+it("HOSTED-06 preserves the private provider's durable-write recovery requirement through prepared-source wrapping", async () => {
+  const f = fixture();
+  const abandon = vi.fn(async () => {});
+  const wrapped = preparedObjectStorage({ query: f.query } as unknown as Pool, {
+    ...f.files,
+    requiresWriteRecovery: true,
+    abandon,
+  });
+  expect(wrapped.requiresWriteRecovery).toBe(true);
+  const key = randomUUID();
+  await wrapped.abandon!(key);
+  expect(abandon).toHaveBeenCalledExactlyOnceWith(key);
+});
 it.each([
   { templateId: "unknown" },
   { templateVersion: 2 },

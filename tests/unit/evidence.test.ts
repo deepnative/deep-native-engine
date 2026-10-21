@@ -89,6 +89,10 @@ function database(...results: unknown[]) {
       throw failure.error;
     }
     if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(statement)) return { rows: [] };
+    if (statement.includes("pg_advisory_"))
+      return { rows: [{ unlocked: true }] };
+    if (statement.includes("private_object_write_intents"))
+      return { rows: [], rowCount: 1 };
     if (statement.includes("FROM workspaces WHERE owner_principal_id"))
       return { rows: [{ id: evidenceId }] };
     const result = queued.shift();
@@ -106,6 +110,87 @@ function database(...results: unknown[]) {
     pool: { query, connect } as unknown as Pool,
   };
 }
+it.each(["upload", "derivative"] as const)(
+  "HOSTED-06 journals the %s transaction and discards an unconfirmed lock release",
+  async (kind) => {
+    const owner =
+      kind === "upload"
+        ? { principal_id: evidenceId, workspace_id: evidenceId }
+        : { id: evidenceId };
+    for (const unlockFails of [false, true]) {
+      const db = database(owner);
+      if (unlockFails)
+        db.failOn(/pg_advisory_unlock/, Error("unlock unavailable"));
+      const objects = {
+        ...objectStorage(),
+        requiresWriteRecovery: true as const,
+      };
+      const evidence = evidenceStore(db.pool, objects, "journal-test");
+      if (kind === "upload")
+        expect(await evidence.upload(token, base)).toMatchObject({
+          kind: "created",
+        });
+      else
+        expect(
+          await evidence.addDerivative(
+            evidenceId,
+            "text-extract",
+            Buffer.from("invented"),
+          ),
+        ).toMatch(/^[a-f0-9-]{36}$/);
+      const statements = db.query.mock.calls.map(([sql]) => sql);
+      expect(
+        statements.findIndex((sql) =>
+          sql.startsWith("INSERT INTO private_object_write_intents"),
+        ),
+      ).toBeLessThan(statements.indexOf("BEGIN"));
+      expect(
+        statements.findIndex((sql) =>
+          sql.startsWith("DELETE FROM private_object_write_intents"),
+        ),
+      ).toBeLessThan(statements.indexOf("COMMIT"));
+      expect(db.client.release).toHaveBeenCalledWith(
+        unlockFails ? expect.any(Error) : undefined,
+      );
+    }
+  },
+);
+it.each(["upload", "derivative"] as const)(
+  "HOSTED-06 retains the %s intent after an unacknowledged object write without retry",
+  async (kind) => {
+    const db = database(
+      kind === "upload"
+        ? { principal_id: evidenceId, workspace_id: evidenceId }
+        : { id: evidenceId },
+    );
+    const objects = {
+      ...objectStorage(),
+      requiresWriteRecovery: true as const,
+    };
+    objects.put.mockRejectedValue(Error("unconfirmed object write"));
+    const evidence = evidenceStore(db.pool, objects, "journal-test");
+    await expect(
+      kind === "upload"
+        ? evidence.upload(token, base)
+        : evidence.addDerivative(
+            evidenceId,
+            "text-extract",
+            Buffer.from("invented"),
+          ),
+    ).rejects.toThrow("unconfirmed object write");
+    expect(objects.put).toHaveBeenCalledOnce();
+    expect(objects.remove).not.toHaveBeenCalled();
+    expect(
+      db.query.mock.calls.some(([sql]) =>
+        sql.startsWith("DELETE FROM private_object_write_intents"),
+      ),
+    ).toBe(false);
+    expect(db.query).toHaveBeenLastCalledWith(
+      expect.stringContaining("pg_advisory_unlock"),
+      expect.any(Array),
+    );
+  },
+);
 it("PREPARED-07 owned metadata, downloaded bytes and bounded export retain exact provided provenance", async () => {
   const template = PREPARED_SAMPLES[0]!,
     data = Buffer.from(template.text);
