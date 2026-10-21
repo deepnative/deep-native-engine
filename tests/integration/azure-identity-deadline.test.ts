@@ -1,8 +1,9 @@
+import { azureDatabasePassword } from "../../src/azure-database.ts";
 import { expect, it, vi } from "vitest";
 import { createServer, type ServerResponse } from "node:http";
 import { azureObjectStorage } from "../../src/azure-object-storage.ts";
 
-it("HOSTED-03 bounds a stalled managed-identity exchange without a Blob request or authentication retry", async () => {
+it("HOSTED-03/11 bounds stalled Blob and database identity exchanges without a provider request or authentication retry", async () => {
   const responses: ServerResponse[] = [];
   const server = createServer((_req, res) => responses.push(res));
   await new Promise<void>((resolve, reject) => {
@@ -22,35 +23,45 @@ it("HOSTED-03 bounds a stalled managed-identity exchange without a Blob request 
     "AZURE_TENANT_ID",
   ])
     vi.stubEnv(key, undefined);
-  const objects = azureObjectStorage({
-    origin: "https://engine.deepnative.io",
-    blobAccountUrl: "https://dnenativenevercontact.blob.core.windows.net",
-    blobContainer: "private-evidence",
-    managedIdentityClientId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-  });
-  const operation = objects.get("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa").then(
-    () => "unexpected-bytes",
-    () => "unavailable",
-  );
-  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    const outcome = await Promise.race([
-      operation,
-      new Promise<string>((resolve) => {
-        timeout = setTimeout(() => resolve("still-pending"), 6_500);
-      }),
-    ]);
-    expect(responses).toHaveLength(1);
-    expect(outcome).toBe("unavailable");
+    const objects = azureObjectStorage({
+      origin: "https://engine.deepnative.io",
+      blobAccountUrl: "https://dnenativenevercontact.blob.core.windows.net",
+      blobContainer: "private-evidence",
+      managedIdentityClientId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    for (const target of ["blob", "database"] as const) {
+      const before = responses.length;
+      const operation = (
+        target === "blob"
+          ? objects.get("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+          : azureDatabasePassword("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")()
+      ).then(
+        () => "unexpected-bytes",
+        () => "unavailable",
+      );
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const outcome = await Promise.race([
+          operation,
+          new Promise<string>((resolve) => {
+            timeout = setTimeout(() => resolve("still-pending"), 6_500);
+          }),
+        ]);
+        expect(responses.length - before).toBe(1);
+        expect(outcome).toBe("unavailable");
+      } finally {
+        clearTimeout(timeout);
+        for (const response of responses.slice(before))
+          response.writeHead(400).end('{"error":"invalid_request"}');
+        await operation;
+      }
+    }
   } finally {
-    clearTimeout(timeout);
-    for (const response of responses)
-      response.writeHead(400).end('{"error":"invalid_request"}');
-    await operation;
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
     );
     vi.unstubAllEnvs();
   }
-}, 15_000);
+}, 20_000);

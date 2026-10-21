@@ -1,5 +1,5 @@
-# Synthetic demo preview image. Runs the app in demo mode against a loopback
-# PostgreSQL sidecar; see infra/app.tf.
+# Application image. Explicit hosted settings select durable Azure storage;
+# demo describes disabled/simulated external providers, not storage durability.
 FROM node:24.21.0-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json tsconfig.build.json ./

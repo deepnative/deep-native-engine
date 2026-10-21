@@ -130,3 +130,30 @@ it("HOSTED-01 keeps hosted-mode test databases isolated to generated loopback na
       config({ ...hosted, DNE_APP_MODE: "test", DNE_DATABASE_URL: database }),
     ).toThrow();
 });
+
+it("HOSTED-11 accepts only explicit passwordless managed-identity database authentication", () => {
+  const passwordless = {
+    ...hosted,
+    DNE_DATABASE_AUTH: "managed-identity",
+    DNE_DATABASE_URL:
+      "postgresql://dne_engine@pg-deepnative.postgres.database.azure.com/deepnative?sslmode=verify-full",
+  };
+  expect(config(passwordless)).toHaveProperty(
+    "hosted.databaseAuthentication",
+    "managed-identity",
+  );
+  for (const overrides of [
+    { DNE_DATABASE_AUTH: "typo" },
+    { DNE_DATABASE_URL: hosted.DNE_DATABASE_URL },
+    { DNE_PUBLIC_ORIGIN: undefined },
+    {
+      DNE_DATABASE_URL:
+        "postgresql://dne_engine@attacker.example/deepnative?sslmode=verify-full",
+    },
+    {
+      DNE_DATABASE_URL:
+        "postgresql://dne_engine@pg-deepnative.postgres.database.azure.com/deepnative?sslmode=require",
+    },
+  ])
+    expect(() => config({ ...passwordless, ...overrides })).toThrow();
+});

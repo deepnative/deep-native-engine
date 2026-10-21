@@ -5611,3 +5611,28 @@ it("ATTEND-08 configured private attendance cannot expose member receipt routes 
     .expect(404);
   expect(query).not.toHaveBeenCalled();
 });
+
+it("HOSTED-12 presents accurate hosted persistence while concurrent local rendering stays local", async () => {
+  const hosted = app(storage(), {
+    origin: "https://engine.deepnative.io",
+    hostedOrigin: "https://engine.deepnative.io",
+    secret: "hosting-copy-test",
+  });
+  const local = app(storage(), { origin, secret: "hosting-copy-test" });
+  const [publicHome, localHome] = await Promise.all([
+    request(hosted).get("/").set("Host", "engine.deepnative.io"),
+    request(local).get("/").set("Host", host),
+  ]);
+  expect(publicHome.status).toBe(200);
+  expect(publicHome.text).toContain("AZURE HOSTED LEARNING");
+  expect(publicHome.text).toContain(
+    "Your learning work is stored on this Azure-hosted service.",
+  );
+  expect(publicHome.text).not.toContain("Your work stays on this computer");
+  expect(publicHome.text).not.toContain("LOCAL LEARNING PREVIEW");
+  expect(publicHome.text).toContain(
+    "No AI provider, payment or formal assessment is connected.",
+  );
+  expect(localHome.text).toContain("Your work stays on this computer");
+  expect(localHome.text).toContain("LOCAL LEARNING PREVIEW");
+});

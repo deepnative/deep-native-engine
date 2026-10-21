@@ -58,9 +58,9 @@ APP_FILES = {
 # `terraform validate` runs locally because the vended module lives in a
 # private repository.
 INFRA_FILES = {
-    "infra/main.tf", "infra/app.tf", "infra/.terraform.lock.hcl", "infra/.gitignore",
+    "infra/main.tf", "infra/app.tf", "infra/durable.tf", "infra/.terraform.lock.hcl", "infra/.gitignore",
     "infra/proxy/Dockerfile", "infra/proxy/default.conf.template", "Dockerfile", ".dockerignore",
-    ".github/workflows/deploy-azure.yml",
+    ".github/workflows/deploy-azure.yml", "scripts/azure-release.py",
 }
 
 # Bounded, high-confidence source scan. These signatures are intentionally

@@ -1,20 +1,26 @@
-name: Deploy Azure demo preview
+name: Deploy Azure application
 
-# Rolls the synthetic demo preview on Azure Container Apps (see infra/app.tf and
-# assets/docs/workflows/AZURE-DEMO-DEPLOYMENT.md) to the current main revision,
-# only after Repository checks passed for that exact revision.
+# Deploy only an exact verified current main. The first durable cutover also
+# requires the operator's fresh frozen-snapshot/restore receipt; never reset the
+# inherited ephemeral database as an image-roll side effect.
 on:
   workflow_run:
     workflows: [Repository checks]
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      cutover_receipt:
+        description: 'First durable cutover only: fresh nonsecret preservation receipt JSON'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-azure-demo
+  group: deploy-azure-application
   cancel-in-progress: false
 
 env:
@@ -24,7 +30,7 @@ env:
 
 jobs:
   deploy:
-    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && vars.DNE_DURABLE_RELEASE_ENABLED == 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -179,6 +185,24 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Validate the preserved target before building
+        if: steps.revision.outputs.eligible == 'true'
+        env:
+          DNE_REVISION: ${{ steps.revision.outputs.sha }}
+          DNE_CUTOVER_RECEIPT: ${{ inputs.cutover_receipt }}
+        run: |
+          set -euo pipefail
+          umask 077
+          app_url="https://management.azure.com/subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.App/containerApps/$CONTAINER_APP?api-version=2024-03-01"
+          az rest --method get --url "$app_url" -o json > preflight-app.json
+          python3 scripts/azure-release.py prepare preflight-app.json "$DNE_REVISION" preflight-patch.json
+          rm preflight-patch.json
+          if [ -n "$DNE_CUTOVER_RECEIPT" ]; then
+            replica_url="${app_url%%\?*}/revisions/ca-deepnative-dev--0000001/replicas?api-version=2024-03-01"
+            az rest --method get --url "$replica_url" -o json > preflight-replicas.json
+            python3 scripts/azure-release.py replicas preflight-replicas.json
+            python3 scripts/azure-release.py maintenance
+          fi
       - name: Build and push the app and proxy images
         if: steps.revision.outputs.eligible == 'true'
         env:
@@ -195,44 +219,41 @@ jobs:
         if: steps.revision.outputs.eligible == 'true'
         env:
           DNE_REVISION: ${{ steps.revision.outputs.sha }}
+          DNE_CUTOVER_RECEIPT: ${{ inputs.cutover_receipt }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          registry="$ACR_NAME.azurecr.io"
-          az config set extension.use_dynamic_install=yes_without_prompt --only-show-errors
-          # One update with both images yields one new revision; the in-replica
-          # demo database is ephemeral and restarts empty.
-          # Read and write with one API version so the template shape round-trips.
-          app_url="https://management.azure.com$(az containerapp show -n "$CONTAINER_APP" -g "$RESOURCE_GROUP" --query id -o tsv)?api-version=2024-03-01"
+          umask 077
+          app_url="https://management.azure.com/subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.App/containerApps/$CONTAINER_APP?api-version=2024-03-01"
+          trap 'rm -f app.json patch.json current-app.json preflight-app.json preflight-replicas.json current-replicas.json' EXIT
           az rest --method get --url "$app_url" -o json > app.json
-          python3 - "$registry" "$DNE_REVISION" <<'PY'
-          import json
-          import sys
-          registry, revision = sys.argv[1], sys.argv[2]
-          app = json.load(open('app.json'))
-          images = {'app': f'{registry}/deepnative/app:{revision}',
-                    'proxy': f'{registry}/deepnative/proxy:{revision}'}
-          containers = app['properties']['template']['containers']
-          if sorted(c['name'] for c in containers) != ['app', 'postgres', 'proxy']:
-              sys.exit('Unexpected Container App containers; refusing to deploy.')
-          for container in containers:
-              if container['name'] in images:
-                  container['image'] = images[container['name']]
-          patch = {'properties': {'template': app['properties']['template']}}
-          json.dump(patch, open('patch.json', 'w'))
-          PY
+          python3 "$GITHUB_WORKSPACE/scripts/azure-release.py" unchanged preflight-app.json app.json
+          python3 "$GITHUB_WORKSPACE/scripts/azure-release.py" prepare app.json "$DNE_REVISION" patch.json
+          # A new main or an external template/config change invalidates this roll.
+          current_main=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$current_main" != "$DNE_REVISION" ]; then
+            echo 'Main changed during build; no deployment performed.'
+            exit 1
+          fi
+          az rest --method get --url "$app_url" -o json > current-app.json
+          python3 "$GITHUB_WORKSPACE/scripts/azure-release.py" unchanged app.json current-app.json
+          if [ -n "$DNE_CUTOVER_RECEIPT" ]; then
+            replica_url="${app_url%%\?*}/revisions/ca-deepnative-dev--0000001/replicas?api-version=2024-03-01"
+            az rest --method get --url "$replica_url" -o json > current-replicas.json
+            python3 "$GITHUB_WORKSPACE/scripts/azure-release.py" replicas current-replicas.json
+            python3 "$GITHUB_WORKSPACE/scripts/azure-release.py" maintenance
+          fi
           az rest --method patch --url "$app_url" --body @patch.json -o none
-          rm -f app.json patch.json
       - name: Wait for the revision and smoke-test the public URL
         if: steps.revision.outputs.eligible == 'true'
         env:
           DNE_REVISION: ${{ steps.revision.outputs.sha }}
         run: |
           set -euo pipefail
-          fqdn=$(az containerapp show -n "$CONTAINER_APP" -g "$RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
-          url="https://$fqdn"
+          url="https://engine.deepnative.io"
           for _ in $(seq 1 40); do
             images=$(az containerapp show -n "$CONTAINER_APP" -g "$RESOURCE_GROUP" \
-              --query "properties.template.containers[?name!='postgres'].image" -o tsv)
+              --query "properties.template.containers[].image" -o tsv)
             state=$(az containerapp show -n "$CONTAINER_APP" -g "$RESOURCE_GROUP" \
               --query properties.latestReadyRevisionName -o tsv)
             latest=$(az containerapp show -n "$CONTAINER_APP" -g "$RESOURCE_GROUP" \

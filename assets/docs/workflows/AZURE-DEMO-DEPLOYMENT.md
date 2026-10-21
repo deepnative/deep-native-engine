@@ -1,48 +1,41 @@
-# Azure synthetic demo preview
+# Azure application release
 
-On 17 October 2026 the owner authorized deploying the app to Azure as a **synthetic demo preview** through the shared landing zone ([tomqwu/cloud_landing_zone_for_ai_coding](https://github.com/tomqwu/cloud_landing_zone_for_ai_coding)). This covers only the preview described here. It does not authorize live mode, real member data, payments, provider connections, extra Azure services or another environment. Those still need separate owner authorization.
+The owner requested the fully hosted application at [engine.deepnative.io](https://engine.deepnative.io) on21 October2026 and explicitly reassigned #525 deployment completion to Codex, preserving Claude’s original work and existing data. This guide describes the supported durable cutover and subsequent releases. Current executed revision, original CI, preservation and public journey evidence are recorded on [#45](https://github.com/deepnative/deep-native-engine/issues/45) and [#525](https://github.com/deepnative/deep-native-engine/issues/525); source or green CI alone does not establish deployment.
 
-Public URL: https://ca-deepnative-dev.ambitiouscoast-ac447ad9.canadacentral.azurecontainerapps.io
+## Hosting and remaining product limits
 
-## What runs
+The existing Container App and managed certificate stay in place. Canonical entry is `https://engine.deepnative.io`. The exact original Azure hostname remains a supported entry for the original member’s host-only cookie. DNS does not transfer a session to another hostname; do not extract cookies or provision a replacement identity to claim preservation.
 
-| Layer | Where | Notes |
-| --- | --- | --- |
-| Resource group, identity, Key Vault, GitHub OIDC | `infra/main.tf` via the landing zone `app-onboard` module | `rg-deepnative-dev-canadacentral`, UAMI `uami-deepnative-dev` |
-| Container Apps environment and app | `infra/app.tf` | `cae-deepnative-dev`, `ca-deepnative-dev`, one replica (min = max = 1) |
-| App image | `Dockerfile` | `tsc` build, `DNE_APP_MODE=demo`, impersonation off |
-| Public front | `infra/proxy/` | nginx sends the loopback Host and maps only the public HTTPS Origin to the loopback Origin |
-| Database | `postgres` container in the same replica | Loopback only, `dne_demo`, **ephemeral**: it resets on every restart or deploy |
+The app binds loopback inside its container group. The public nginx proxy validates the exact incoming Host/Origin pair before normalizing only the original owned alias to the canonical application origin. Canonical traffic stays canonical. Foreign/cross-paired/missing write origins are refused; forwarded Host/Proto headers grant no access. Application CSRF, private ownership, finite staff grants and source permissions remain required. Readiness performs a real application HTTP request with the canonical Host after migrations.
 
-The app's own safety checks (loopback database, loopback Host/Origin, no `live` mode) stay in force. Do not weaken them to make hosting easier. Change the hosting layer instead, or ask the owner for a separately authorized configuration.
+Member records use Azure PostgreSQL18/B1ms/32GiB with verified certificate/hostname and per-connection Entra tokens from the existing explicitly selected UAMI. Private physical evidence uses a private StorageV2/LRS container through the same UAMI, with shared keys and anonymous access disabled. Fixed provided examples retain their exact bundled provenance. No PostgreSQL sidecar or local-file fallback exists after cutover. The [runtime contract](../HOSTED-RUNTIME.md) describes failure recovery and permanent empty object fences.
 
-Cost is about $20–30/month for one warm 1 vCPU / 2 GiB replica. Before any `terraform apply`, state the expected monthly cost change, as the landing zone requires.
+Azure hosting does not activate an external AI provider, payments, real bookings, staffed moderation or qualified assessment. The provider setting remains `demo` because those integrations remain simulated or disabled; it is separate from whether database/files are durably hosted. Use invented information for acceptance. Existing member/staff browser flows remain permission controlled. No new member activity or paid allowances are seeded at startup.
 
-## Continuous deployment
+## Provision destinations without resetting the app
 
-[`deploy-azure.yml`](../../../.github/workflows/deploy-azure.yml) runs after **Repository checks** succeeds on `main`, or by manual dispatch on `main`. It:
+`infra/main.tf` reuses the landing zone. `infra/durable.tf` adds the dedicated database and private container. Terraform ignores the complete existing app template and secrets, so provisioning destinations cannot restart the original ephemeral PostgreSQL group. It preserves the provider-managed existing engine certificate. The deployment workflow owns the compatible template and images.
 
-1. Uses the same verified-current-main selection as the product site. It skips the run when a newer `main` exists.
-2. Signs in with GitHub OIDC as the app UAMI. The repository variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` hold public identifiers, not secrets.
-3. Builds the app and proxy images tagged with the verified SHA and pushes them to the platform ACR (`AcrPush`).
-4. Patches both images into the Container App in one update, producing one revision.
-5. Waits until that revision is ready, both images carry the SHA, and the public page returns 200.
+Use an isolated Azure CLI context pinned to subscription `81e891a1-b374-4898-8fed-0871de418dae`, tenant `72e3b797-967a-4279-ab8c-448b08fec738`; never change or assume another worker’s shared CLI default. State remains `apps/deepnative-dev.tfstate` in the existing backend. Run Terraform fmt, init-backend=false and validate locally. Reinitialize the backend explicitly for a real plan. Keep plan/state/credentials private; report only aggregate actions and cost.
 
-Only `main` has a federated credential, so deploys from other branches cannot sign in. The demo data resets on each deploy.
+Read the Container App’s actual current outbound IPv4 set immediately before planning. Supply only those exact addresses as `app_egress_ipv4`; no world or all-Azure firewall rule is accepted. The unchanged no-VNet environment has a changing egress set rather than guaranteed static NAT. PostgreSQL access must be proved from the actual UAMI/application before cutover. The Blob HTTPS endpoint is internet reachable, while its data requires the exact container-scoped UAMI authorization: anonymous access and shared keys are disabled. Azure Storage cannot identify same-region clients using these public IP rules; this design is not a private endpoint. Prove actual UAMI read/write and anonymous/unrelated-identity denial. An optional exact `migration_ipv4` permits the preservation operator and is removed after migration. Do not silently substitute a new environment or broader firewall if reachability fails.
 
-## Infrastructure changes
+Expected incremental baseline is approximately US$18/month for B1ms+32GiB, plus Blob storage/operations, traffic, excess backups/tax and existing compute/log/registry charges. No HA, replica, large tier or automatic upward storage scaling is proposed. Surface the current actual plan/cost before apply. Existing app/environment must have no create/update/replace/delete in the destination provisioning plan; no unexpected destroys are acceptable. Preserve Claude’s resource state and authorship. Do not apply the platform backbone from this app checkout.
 
-The workflow changes images only. Terraform owns everything else and ignores the two image fields. For infrastructure changes:
+## First durable cutover
 
-1. Edit `infra/`, then run `terraform fmt -check -recursive` and `terraform validate` locally. CI checks only formatting, because the landing zone module repository is private.
-2. With an owner-authorized `az login`, run `terraform plan` from `infra/`. Confirm there are no unexpected replacements or destroys, and state the cost change.
-3. Apply, then open a PR with the plan summary and evidence. New files under `infra/` must also be added to the reviewed `INFRA_FILES` allowlist in `scripts/repo.py`.
+1. Complete exact-source full verification, ordinary pre-push hook, author and required local Codex review, original PR checks, guarded merge and original resulting-main checks. Use that exact current successful main only.
+2. Provision destinations under the reviewed app plan without rolling current0000001. Configure the existing UAMI as a nonadministrator Entra database role `dne_engine` using the documented object-ID function, and ownership/permissions appropriate for this app’s migrations. Do not give the app subscription, server-administrator or anonymous storage privileges. Prove verified TLS, actual identity access and private denial; keep tokens out of logs. A local/Azurite test is not live proof.
+3. Stage the maintenance procedure first on the owned native nginx fixture. On the actual exact old revision/replica, preserve its current proxy configuration, atomically install an all-path503 response `Deployment maintenance. Existing work is preserved.\n`, validate nginx then reload it IN PLACE. This must not create a revision or restart PostgreSQL. Wait for old workers/in-flight requests to drain; pause only the verified application Node process, inspect its database transactions and close only its own remaining writer connections. Do not stop/restart its database, another worker or the app group. Retain the exact replica/container IDs and restart counts.
+4. Confirm exact503 maintenance at BOTH owned public URLs. Take a NEW consistent final database dump and complete private physical-key/digest archive, preserve them outside source with700/600 permissions and restore to the actual durable database. Retain principals/token hashes, workspaces, work, grants, revocations, provided-source bindings and any empty fences; do not seed a member or extend an expiry. Compare actual complete table manifests before migrations and every physical reference/digest. Zero missing references is required. Earlier preliminary restoration is not the cutover snapshot.
+5. Generate the nonsecret preservation receipt consumed by `scripts/azure-release.py`: version1, exact sourceRevision, sourceReplicaFingerprint, snapshotSha256, sourceManifestSha256/restoredManifestSha256 equal, databaseHost/databaseName/managedIdentityClientId, sourceObjectCount/targetObjectCount equal, missingPhysicalReferences0, tokenHashesPreserved/sourceFreezeConfirmed/destinationAccessVerified true, frozenAt/restoredAt within30minutes. The receipt attests the actual retained evidence; populating booleans is not a substitute for it.
+6. Dispatch `deploy-azure.yml` on current verified main with that receipt. It validates the exact old images/configuration, current engine certificate/identity, matching frozen replica fingerprint and actual maintenance pages before building and again before patching. It rechecks main and source template/configuration. One template patch installs both images, public origin, managed-identity database/private Blob configuration and real application readiness; it leaves ingress/certificate/secrets unchanged. No receipt means no ephemeral target roll.
+7. Observe the same actual Azure revision until terminal readiness, not a guessed timeout. If it fails BEFORE accepting new work, keep preserved data and diagnose the specific failure. Lifting old maintenance requires confirming no divergence and resuming only the verified paused app process. Never restart old PostgreSQL to recover access. After cutover accepts work, rollback must use a compatible verified image against the SAME durable database/container; never return traffic to stale ephemeral data or run Terraform destroy.
+8. In normal browsers, prove the original member’s saved work/access, then actual invented learner save/reload, provided-copy/queue/exact staff assignment/demonstration feedback/clarification and participation/contribution. Use finite explicit staff entry and normal permission screens, no qualified-review claim. Prove a controlled revision restart retains the SAME identities/work/private bytes/feedback/permissions. Refresh process-bound forms normally. Record actual images/revision/date, captures, direct access and remaining limits on45/525.
+9. Remove only temporary migration network access. Enable repository variable `DNE_DURABLE_RELEASE_ENABLED=true` only after successful durable acceptance. Keep final private recovery artifacts and rollback instructions, reconcile issues truthfully and clean only owned merged delivery branches/worktrees after main CI.
 
-Rollback: re-run the workflow from an earlier verified `main` SHA, or `terraform destroy` in `infra/` to remove the preview entirely.
+## Subsequent releases and restart
 
-## Checking a deployment
+The workflow runs after successful `Repository checks` on current main only when `DNE_DURABLE_RELEASE_ENABLED=true`, or by manual dispatch. It uses OIDC, verifies source revision and durable configuration, builds SHA-tagged app/proxy images, rechecks current main and app state immediately before the patch, then changes both images while preserving the durable environment, database, container, grants and ingress. A new preservation receipt is refused for an already durable image-only roll. It does not run Terraform destroy or reset a database.
 
-- Open the URL and confirm the landing page renders.
-- Write-path check without saving data: with a session cookie and its CSRF token, an empty `POST /start` from the public Origin returns 422 (validation), and the same request from a foreign Origin returns 403.
-- Logs: `az containerapp logs show -n ca-deepnative-dev -g rg-deepnative-dev-canadacentral --container app`.
-- Use only invented data. Never enter real member, payment or credential data.
+An ordinary Container App revision restart reconnects to the same managed PostgreSQL and Blob container; it must not recreate empty data. Existing member cookies remain on their original hostname. Finite staff credentials/grants still expire; do not renew them silently. The explicit support administration command uses the same database identity boundary and writes private credentials only to its guarded private operator directory. Local `make preview` is a separate temporary rehearsal and is never a recovery substitute for hosted data.

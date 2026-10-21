@@ -1,7 +1,7 @@
-# Synthetic demo preview on Container Apps. The app only accepts a loopback
-# database and Host/Origin, so one single-replica app runs three containers
-# that share localhost: PostgreSQL (ephemeral, invented data only), the app in
-# demo mode, and an nginx front that maps the public origin to loopback.
+# Durable hosted application. Existing template is guarded during initial
+# preservation: infrastructure provisioning alone does not roll the app.
+# The reviewed deploy workflow owns the compatible complete template after
+# the final frozen snapshot has been restored and verified.
 
 variable "app_image_tag" {
   description = "Image tag used only when the Container App is first created. Afterwards the deploy-azure workflow owns the app and proxy images."
@@ -9,6 +9,8 @@ variable "app_image_tag" {
   default     = "0b0ee74-202610171227"
 }
 
+# Retain the original legacy credential in state until preservation/cutover is
+# complete. It is never used by the new identity-authenticated database.
 resource "random_password" "postgres" {
   length  = 32
   special = false
@@ -84,70 +86,99 @@ resource "azurerm_container_app" "app" {
   }
 
   template {
-    # The database lives in the replica, so there must be exactly one.
+    # One warm application replica; PostgreSQL and private files are external.
     min_replicas = 1
     max_replicas = 1
-
-    container {
-      name   = "postgres"
-      image  = local.postgres_image
-      cpu    = 0.25
-      memory = "0.5Gi"
-      args   = ["-c", "listen_addresses=127.0.0.1"]
-
-      env {
-        name  = "POSTGRES_USER"
-        value = "dne"
-      }
-      env {
-        name  = "POSTGRES_DB"
-        value = "dne_demo"
-      }
-      env {
-        name        = "POSTGRES_PASSWORD"
-        secret_name = "postgres-password"
-      }
-    }
 
     container {
       name   = "app"
       image  = "${local.acr}/deepnative/app:${var.app_image_tag}"
       cpu    = 0.5
       memory = "1Gi"
-
-      env {
-        name        = "DNE_DATABASE_URL"
-        secret_name = "database-url"
-      }
-      env {
-        name  = "DNE_APP_MODE"
-        value = "demo"
-      }
-      env {
-        name  = "DNE_DEMO_IMPERSONATION"
-        value = "false"
+      dynamic "env" {
+        for_each = {
+          DNE_DATABASE_URL                     = "postgresql://${local.database_role}@${azurerm_postgresql_flexible_server.durable.fqdn}/${local.durable_database}?sslmode=verify-full"
+          DNE_DATABASE_AUTH                    = "managed-identity"
+          DNE_PUBLIC_ORIGIN                    = "https://engine.deepnative.io"
+          DNE_AZURE_BLOB_ACCOUNT_URL           = trimsuffix(azurerm_storage_account.evidence.primary_blob_endpoint, "/")
+          DNE_AZURE_BLOB_CONTAINER             = azurerm_storage_container.evidence.name
+          DNE_AZURE_MANAGED_IDENTITY_CLIENT_ID = module.onboard.identity_client_id
+          DNE_APP_MODE                         = "demo"
+          DNE_DEMO_IMPERSONATION               = "false"
+          DNE_LOCAL_STAFF_ENTRY                = "enabled"
+          DNE_PREPARED_REVIEW_SAMPLES          = "enabled"
+          DNE_SAMPLE_ASSIGNMENT_ADMINISTRATION = "enabled"
+          DNE_REVIEW_TIME_WRITES               = "enabled"
+          DNE_REVIEW_TIME_GRANT_ADMINISTRATION = "enabled"
+          DNE_CIRCLE_DISCUSSION                = "enabled"
+          DNE_LOCAL_CIRCLE_ADMIN               = "enabled"
+          DNE_EVENT_REGISTRATION               = "enabled"
+          DNE_LOCAL_EVENT_ADMIN                = "enabled"
+          DNE_LOCAL_EVENT_SCHEDULING           = "enabled"
+          DNE_WORKFLOW_REVIEW_REQUESTS         = "enabled"
+          DNE_LOCAL_SUPPORT_ASSIGNMENT         = "enabled"
+        }
+        content {
+          name  = env.key
+          value = env.value
+        }
       }
     }
-
     container {
       name   = "proxy"
       image  = "${local.acr}/deepnative/proxy:${var.app_image_tag}"
       cpu    = 0.25
       memory = "0.5Gi"
-
       env {
         name  = "PUBLIC_HOST"
+        value = "engine.deepnative.io"
+      }
+      env {
+        name  = "LEGACY_HOST"
         value = local.public_host
+      }
+      readiness_probe {
+        transport               = "HTTP"
+        port                    = 8080
+        path                    = "/"
+        interval_seconds        = 5
+        timeout                 = 3
+        failure_count_threshold = 3
+        initial_delay           = 5
+        header {
+          name  = "Host"
+          value = "engine.deepnative.io"
+        }
+      }
+      startup_probe {
+        transport               = "HTTP"
+        port                    = 8080
+        path                    = "/"
+        interval_seconds        = 5
+        timeout                 = 3
+        failure_count_threshold = 60
+        initial_delay           = 5
+        header {
+          name  = "Host"
+          value = "engine.deepnative.io"
+        }
+      }
+      liveness_probe {
+        transport               = "TCP"
+        port                    = 8080
+        interval_seconds        = 10
+        timeout                 = 3
+        failure_count_threshold = 3
       }
     }
   }
 
   lifecycle {
-    # .github/workflows/deploy-azure.yml rolls these to the verified main SHA.
-    ignore_changes = [
-      template[0].container[1].image,
-      template[0].container[2].image,
-    ]
+    # The guarded deployment workflow owns the complete compatible image/config
+    # template. Initial provisioning must NEVER restart the old ephemeral replica.
+    # Preserve its secrets and the already-bound managed engine certificate too.
+    ignore_changes  = [template, secret]
+    prevent_destroy = true
   }
 }
 

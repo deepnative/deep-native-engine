@@ -996,5 +996,142 @@ class PagesRevisionSelection(unittest.TestCase):
         self.assertEqual(output, "eligible=false\n")
 
 
+class AzureReleasePreservation(unittest.TestCase):
+    @staticmethod
+    def release():
+        spec = importlib.util.spec_from_file_location("azure_release", SOURCE / "scripts/azure-release.py")
+        release = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(release)
+        return release
+
+    def app(self):
+        r = self.release()
+        return {
+            "id": f"/subscriptions/{r.SUBSCRIPTION}/resourceGroups/{r.GROUP}/providers/Microsoft.App/containerApps/{r.APP}",
+            "identity": {"userAssignedIdentities": {r.IDENTITY_ID: {}}},
+            "properties": {
+                "latestRevisionName": r.APP+"--0000001", "latestReadyRevisionName": r.APP+"--0000001",
+                "configuration": {"ingress": {"external": True, "allowInsecure": False, "targetPort": 8080, "customDomains": [{"name": r.HOST, "bindingType": "SniEnabled", "certificateId": "/environments/owned/managedCertificates/mc-engine-deepnative-io"}]}},
+                "template": {"scale": {"minReplicas": 1, "maxReplicas": 1}, "containers": [
+                    {"name": "app", "image": r.REGISTRY+"/deepnative/app:0b0ee74-202610171227"},
+                    {"name": "postgres", "image": "original-owned-postgres"},
+                    {"name": "proxy", "image": r.REGISTRY+"/deepnative/proxy:0b0ee74-202610171227", "env": [{"name": "PUBLIC_HOST", "value": r.LEGACY}]}]},
+            },
+        }
+
+    def receipt(self):
+        import datetime
+        r = self.release()
+        instant = (datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(minutes=1)).isoformat()
+        return {"version": 1, "sourceRevision": r.APP+"--0000001", "databaseHost": r.DATABASE_HOST, "databaseName": r.DATABASE, "managedIdentityClientId": r.IDENTITY, "sourceReplicaFingerprint": "c"*64, "snapshotSha256": "a"*64, "sourceManifestSha256": "b"*64, "restoredManifestSha256": "b"*64, "sourceObjectCount": 0, "targetObjectCount": 0, "missingPhysicalReferences": 0, "tokenHashesPreserved": True, "sourceFreezeConfirmed": True, "destinationAccessVerified": True, "frozenAt": instant, "restoredAt": instant}
+
+    def test_hosted14_verified_restore_permits_only_durable_template_cutover(self):
+        r = self.release()
+        app = self.app()
+        original = json.dumps(app, sort_keys=True)
+        patch = r.prepare(app, "a"*40, self.receipt())
+        self.assertEqual(set(patch), {"properties"})
+        self.assertEqual(set(patch['properties']), {"template"})
+        self.assertEqual(json.dumps(app, sort_keys=True), original, 'Do not mutate the read-back control-plane object.')
+        containers = {c['name']: c for c in patch['properties']['template']['containers']}
+        self.assertEqual(set(containers), {'app','proxy'})
+        values = r.env_values(containers['app'])
+        self.assertEqual(values['DNE_DATABASE_AUTH'], 'managed-identity')
+        self.assertIn('sslmode=verify-full', values['DNE_DATABASE_URL'])
+        self.assertTrue(r.digest(values['DNE_PRESERVATION_RECEIPT_SHA256']))
+        self.assertEqual(values['DNE_PUBLIC_ORIGIN'], 'https://engine.deepnative.io')
+        self.assertNotIn('configuration', patch['properties'], 'Never overwrite domain, certificate or secrets.')
+
+    def test_hosted13_14_refuses_stale_divergent_or_unconfirmed_preservation(self):
+        import datetime
+        r = self.release()
+        for change in [None, {}, {'restoredManifestSha256': 'c'*64}, {'missingPhysicalReferences': 1}, {'targetObjectCount': 1}, {'tokenHashesPreserved': False}, {'sourceFreezeConfirmed': False}, {'destinationAccessVerified': False}, {'sourceRevision':'unexpected'}, {'databaseHost':'attacker.example'}, {'managedIdentityClientId':'unexpected'}, {'snapshotSha256':'invalid'}, {'sourceObjectCount':True}, {'frozenAt': (datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=1)).isoformat()}, {'restoredAt': (datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(hours=1)).isoformat()}]:
+            with self.subTest(change=change), self.assertRaises((ValueError, KeyError, TypeError)):
+                r.prepare(self.app(), 'a'*40, change if change is None or change == {} else dict(self.receipt(), **change))
+
+    def test_hosted14_subsequent_image_roll_keeps_exact_durable_configuration(self):
+        r = self.release()
+        app = self.app()
+        app['properties']['template'] = r.prepare(app, 'a'*40, self.receipt())['properties']['template']
+        before = app['properties']['template']['containers'][0]
+        patch = r.prepare(app, 'b'*40)
+        after = patch['properties']['template']['containers'][0]
+        self.assertEqual(after['image'], r.REGISTRY+'/deepnative/app:'+'b'*40)
+        before_values = r.env_values(before); after_values = r.env_values(after)
+        before_values.pop('DNE_RELEASE_REVISION'); after_values.pop('DNE_RELEASE_REVISION')
+        self.assertEqual(before_values, after_values)
+        self.assertEqual(len(patch['properties']['template']['containers']), 2)
+        self.assertEqual(patch['properties']['template']['scale'], app['properties']['template']['scale'])
+        with self.assertRaises(ValueError): r.prepare(app, 'b'*40, self.receipt())
+        app['properties']['template']['containers'][0]['env'].append({'name':'DNE_DATABASE_URL', 'value':'unexpected-duplicate'})
+        with self.assertRaises(ValueError): r.prepare(app, 'b'*40)
+
+    def test_hosted14_refuses_foreign_target_lost_certificate_and_concurrent_changes(self):
+        r = self.release()
+        for path, value in [('id','foreign'), ('identity', {}), ('properties', {})]:
+            app = self.app(); app[path] = value
+            with self.subTest(path=path), self.assertRaises((ValueError, KeyError)):
+                r.prepare(app, 'a'*40, self.receipt())
+        app = self.app(); app['properties']['configuration']['ingress']['customDomains'] = []
+        with self.assertRaises(ValueError): r.prepare(app, 'a'*40, self.receipt())
+        r.unchanged(self.app(), self.app())
+        app = self.app(); app['properties']['latestRevisionName'] = 'externally-changed'
+        with self.assertRaises(ValueError): r.unchanged(self.app(), app)
+
+    def test_hosted13_restarted_source_replica_invalidates_the_frozen_capture(self):
+        import copy
+        r = self.release()
+        value = {'value': [{'name': r.APP+'--0000001-owned', 'properties': {'containers': [{'name': name, 'containerId':'containerd://owned-'+name, 'restartCount': 0} for name in ['app','proxy','postgres']]}}]}
+        fingerprint = r.replica_fingerprint(value)
+        self.assertTrue(r.digest(fingerprint))
+        changed = copy.deepcopy(value); changed['value'][0]['properties']['containers'][0]['restartCount'] = 1
+        self.assertNotEqual(fingerprint, r.replica_fingerprint(changed))
+        changed = copy.deepcopy(value); changed['value'][0]['properties']['containers'][0]['containerId'] = 'new-runtime'
+        self.assertNotEqual(fingerprint, r.replica_fingerprint(changed))
+        for invalid in [{'value':[]}, {'value':[{},{}]}]:
+            with self.assertRaises(ValueError): r.replica_fingerprint(invalid)
+
+    def test_hosted13_requires_exact_public_maintenance_on_both_existing_entry_points(self):
+        r = self.release()
+        class Response(io.BytesIO):
+            status = 503
+        calls = []
+        def opener(url, timeout):
+            calls.append((url,timeout))
+            return Response(b'Deployment maintenance. Existing work is preserved.\n')
+        r.maintenance(opener)
+        self.assertEqual([v[0] for v in calls], ['https://'+r.HOST+'/', 'https://'+r.LEGACY+'/'])
+        with self.assertRaises(ValueError): r.maintenance(lambda *a, **k: Response(b'unknown upstream failure'))
+        class Healthy(Response):
+            status = 200
+        with self.assertRaises(ValueError): r.maintenance(lambda *a, **k: Healthy(b'Deployment maintenance. Existing work is preserved.\n'))
+
+    def test_hosted14_inherited_roll_refuses_ephemeral_target_without_preservation(self):
+        import textwrap
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workflow = (SOURCE / ".github/workflows/deploy-azure.yml").read_text()
+            step = workflow.split("      - name: Roll the Container App to the verified images\n", 1)[1]
+            body = step.split("        run: |\n", 1)[1].split("      - name: Wait for the revision", 1)[0]
+            (root / "roll.sh").write_text(textwrap.dedent(body))
+            app = self.app()
+            (root / "source.json").write_text(json.dumps(app))
+            (root / "preflight-app.json").write_text(json.dumps(app))
+            fake = root / "az"
+            fake.write_text("#!" + sys.executable + "\n" + textwrap.dedent("""\
+                import sys, pathlib
+                p = pathlib.Path.cwd()
+                args = sys.argv[1:]
+                if args[:2] == ['containerapp','show']: print('/subscriptions/owned/resourceGroups/owned/providers/Microsoft.App/containerApps/ca-deepnative-dev')
+                elif args[:2] == ['rest','--method'] and args[2] == 'get': print((p/'source.json').read_text())
+                elif args[:2] == ['rest','--method'] and args[2] == 'patch': (p/'mutated').write_text('yes')
+            """))
+            fake.chmod(0o755)
+            env = dict(os.environ, PATH=str(root)+os.pathsep+os.environ['PATH'], ACR_NAME="acralzyhpx31oc", RESOURCE_GROUP="rg-deepnative-dev-canadacentral", CONTAINER_APP="ca-deepnative-dev", DNE_REVISION="a"*40, DNE_CUTOVER_RECEIPT="", GITHUB_WORKSPACE=str(SOURCE))
+            result = subprocess.run(['bash', str(root/'roll.sh')], cwd=root, env=env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0, 'An inherited ephemeral deployment must not silently reset current work.')
+            self.assertFalse((root/'mutated').exists())
+
+
 if __name__ == "__main__":
     unittest.main()
