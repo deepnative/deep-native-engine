@@ -100,10 +100,12 @@ export async function start(env: NodeJS.ProcessEnv) {
     const eventReader = eventCatalogReader();
     const options = {
       ...settings,
+      hostedOrigin: settings.hosted?.origin,
       preparedSamples: preparedSampleStore(pool, {
         mode: settings.mode,
         enabled: settings.preparedReviewSamples,
         origin: settings.origin,
+        hostedOrigin: settings.hosted?.origin,
       }),
       studyUnitFixtures: studyUnitFixtureStore(pool, {
         mode: settings.mode,

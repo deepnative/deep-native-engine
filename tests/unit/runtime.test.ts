@@ -108,6 +108,9 @@ it("HOSTED-01/03 retains the public HTTPS address after binding and selects only
     expect(doubles.app.mock.calls[0]![1].origin).toBe(
       settings.DNE_PUBLIC_ORIGIN,
     );
+    expect(doubles.app.mock.calls[0]![1].hostedOrigin).toBe(
+      settings.DNE_PUBLIC_ORIGIN,
+    );
     expect(doubles.azureStorage).toHaveBeenCalledExactlyOnceWith({
       origin: settings.DNE_PUBLIC_ORIGIN,
       blobAccountUrl: settings.DNE_AZURE_BLOB_ACCOUNT_URL,

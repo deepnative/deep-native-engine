@@ -317,6 +317,7 @@ export function app(
     localHoldInspectionReads?: boolean;
     reviewerWorklistReads?: boolean;
     origin: string;
+    hostedOrigin?: string;
     secret: string;
     mode?: ApplicationMode;
     adapters?: AdapterReadiness[];
@@ -1508,6 +1509,7 @@ export function app(
       enabled: options.preparedReviewSamples,
       mode: options.mode,
       origin: options.origin,
+      hostedOrigin: options.hostedOrigin,
     });
   app.get("/evidence", async (_req, res) => {
     res.send(

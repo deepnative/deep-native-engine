@@ -48,6 +48,18 @@ public-link fallback. Existing ownership, quarantine, exact grants, revocation,
 deletion recovery and digest checks continue to govern access. Prepared source
 bindings retain their existing immutable-source implementation.
 
+The existing `DNE_PREPARED_REVIEW_SAMPLES=enabled` opt-in also admits the provided
+copy journey at the exact validated `DNE_PUBLIC_ORIGIN`. Runtime passes that
+trusted origin separately to the application, route and store gates. A public
+URL or flag alone does not enable it; absent, different or noncanonical hosting
+context is refused. The existing HTTP loopback demo/test contract is unchanged,
+and live-provider mode remains refused. Members still choose an exact supplied
+template and separately acknowledge its provided origin and private review.
+Copying creates only an owned immutable source binding, never an arbitrary clean
+upload, queued review, staff role, assignment or entitlement. General uploads
+retain their existing quarantine checks. Existing source labels are unchanged;
+the separately owned hosted-copy finding must be resolved before public release.
+
 Managed-identity HTTP requests also have a five-second timeout and no credential
 retries; the Blob operation's abort signal alone does not bound authentication
 in the pinned SDK. A stalled-endpoint native regression checks this transport.
@@ -101,6 +113,8 @@ revision migrations concurrently or silently fall back to a sidecar database.
 | HOSTED-04 | Native PostgreSQL plus owned Azurite protocol fixture: private evidence remains accessible only to its owner after storage-process and database-client restart. | Preserved existing data through migration and Azure revision restart. |
 | HOSTED-05 | Existing complete prescribed verification gates remain required. | Current verified build, member/staff journeys, environment descriptions, persistence, rollback/restart instructions and captures at the existing domain. |
 | HOSTED-06 | Native lost upload/derivative acknowledgement, owner deletion, active writer, key collision, disconnected writer and failed-cleanup continuation; unit journal/transaction/cursor/error boundaries. | Recovery remains operational with the real Azure identity and durable database through revision changes. |
+| HOSTED-07 | `hosted-provided-samples.test.ts`: ordinary native HTTP onboarding, explicit copy/replay/reload and exact owned bytes for all three audiences; no raw upload or automatic review/grant. | The same deliberate member journey through public HTTPS and private durable storage. |
+| HOSTED-08 | Hosted eligibility denial table, native missing acknowledgements/tampering/Host/Origin/CSRF and other-member denial; existing loopback cases stay required. | Configured public origin, exact cookies and authorized member/staff boundaries on Azure. |
 
 The native protocol fixture uses Azurite 3.37.0 with service-version validation
 enabled and the pinned Blob SDK 12.33.0. Its temporary account/container/process
