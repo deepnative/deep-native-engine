@@ -28,17 +28,23 @@ async function proxyRequest(
 ) {
   return new Promise<{ status: number; text: () => Promise<string> }>(
     (resolve, reject) => {
-      const request = httpRequest(url, options, (response) => {
-        const chunks: Buffer[] = [];
-        response.on("data", (chunk: Buffer) => chunks.push(chunk));
-        response.on("end", () =>
-          resolve({
-            status: response.statusCode!,
-            text: async () => Buffer.concat(chunks).toString("utf8"),
-          }),
-        );
-        response.on("error", reject);
-      });
+      // Each probe is an independent real HTTP request, not a pooled socket
+      // that nginx may close while an old worker drains during reload.
+      const request = httpRequest(
+        url,
+        { ...options, agent: false },
+        (response) => {
+          const chunks: Buffer[] = [];
+          response.on("data", (chunk: Buffer) => chunks.push(chunk));
+          response.on("end", () =>
+            resolve({
+              status: response.statusCode!,
+              text: async () => Buffer.concat(chunks).toString("utf8"),
+            }),
+          );
+          response.on("error", reject);
+        },
+      );
       request.on("error", reject);
       request.setTimeout(5_000, () =>
         request.destroy(Error("Owned proxy request timed out.")),
