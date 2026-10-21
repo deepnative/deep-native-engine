@@ -50,7 +50,7 @@ async function proxyRequest(
 beforeAll(async () => {
   writeFileSync(
     join(directory, "upstream.conf"),
-    'server { listen 3000; location / { default_type text/plain; return 200 "$http_host|$http_origin|$http_cookie|$http_x_forwarded_host|$http_x_forwarded_proto"; } }',
+    'server { listen 3000; access_log off; error_log /dev/null; location / { default_type text/plain; return 200 "$http_host|$http_origin|$http_cookie|$http_x_forwarded_host|$http_x_forwarded_proto"; } }',
   );
   chmodSync(join(directory, "upstream.conf"), 0o644);
   docker("build", "--tag", name, "infra/proxy");
@@ -230,4 +230,44 @@ it("HOSTED-13 enters and leaves verified maintenance in place without restarting
   expect(await receipt.text()).toContain(
     "dne_session=same-original-invented-credential",
   );
+});
+
+it("HOSTED-10 keeps signed URLs and member/referrer credentials out of proxy logs on success, denial and upstream failure", async () => {
+  const marker = `invented-private-${randomUUID()}`;
+  const headers = {
+    Host: canonical,
+    Cookie: `dne_preview=${marker}`,
+    Referer: `https://${canonical}/private?capability=${marker}`,
+  };
+  const path = `/api/evidence/invented/download?capability=${marker}`;
+  expect((await proxyRequest(address + path, { headers })).status).toBe(200);
+  expect(
+    (
+      await proxyRequest(address + path, {
+        headers: { ...headers, Host: "attacker.example" },
+      })
+    ).status,
+  ).toBe(403);
+  try {
+    docker("exec", name, "rm", "/etc/nginx/conf.d/upstream.conf");
+    docker("exec", name, "nginx", "-t");
+    docker("exec", name, "nginx", "-s", "reload");
+    const deadline = Date.now() + 10000;
+    while ((await proxyRequest(address + path, { headers })).status !== 502) {
+      if (Date.now() >= deadline)
+        throw Error("Owned proxy did not observe the unavailable upstream.");
+      await new Promise((done) => setTimeout(done, 50));
+    }
+    const logs = spawnSync("docker", ["logs", name], { encoding: "utf8" });
+    expect(logs.status).toBe(0);
+    expect(logs.stdout + logs.stderr).not.toContain(marker);
+  } finally {
+    docker(
+      "cp",
+      join(directory, "upstream.conf"),
+      `${name}:/etc/nginx/conf.d/upstream.conf`,
+    );
+    docker("exec", name, "nginx", "-t");
+    docker("exec", name, "nginx", "-s", "reload");
+  }
 });

@@ -38,17 +38,15 @@ it("requires current member, deliberate opt-in, valid private content and versio
     goal: "everyday" as const,
   };
   const db = {
-    session: vi
-      .fn<Store["session"]>()
-      .mockImplementation(async () =>
-        active
-          ? {
-              kind: "active",
-              expiresAt: new Date(Date.now() + 3600000),
-              learner: member,
-            }
-          : { kind: "new" },
-      ),
+    session: vi.fn<Store["session"]>().mockImplementation(async () =>
+      active
+        ? {
+            kind: "active",
+            expiresAt: new Date(Date.now() + 3600000),
+            learner: member,
+          }
+        : { kind: "new" },
+    ),
   } as unknown as Store;
   const career = {
     ...disabledCareerStore(),

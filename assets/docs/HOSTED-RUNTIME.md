@@ -41,6 +41,9 @@ this contract. The application accepts only the exact configured Host and write
 Origin and still requires its normal CSRF token. Forwarded headers cannot grant
 access. On an authenticated HTTPS page read, the same inherited bearer cookie is
 reissued with its existing database deadline and Secure/HttpOnly/SameSite=Strict.
+The proxy suppresses request access/error logs because private download URLs
+and referrers can carry signed capabilities; startup/configuration logs and the
+application's sanitized errors remain available.
 This upgrades transport protection without creating a principal or renewing the
 session, saved work or finite staff grants. HTTP loopback behavior is unchanged;
 expired/revoked members receive no active-cookie upgrade. HTTPS member cookies,

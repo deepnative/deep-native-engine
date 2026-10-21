@@ -18,6 +18,10 @@ map $http_origin $dne_origin {
 }
 server {
   listen 8080;
+  # Request URIs/referrers can carry signed private-download capabilities.
+  # Keep nginx startup/configuration logs, but never log request contents.
+  access_log off;
+  error_log /dev/null;
   client_max_body_size 16m;
   if ($dne_owned_pair = 0) { return 403; }
   if ($dne_missing_write_origin = 1) { return 403; }
