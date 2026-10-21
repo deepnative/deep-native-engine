@@ -41,7 +41,13 @@ it("requires current member, deliberate opt-in, valid private content and versio
     session: vi
       .fn<Store["session"]>()
       .mockImplementation(async () =>
-        active ? { kind: "active", learner: member } : { kind: "new" },
+        active
+          ? {
+              kind: "active",
+              expiresAt: new Date(Date.now() + 3600000),
+              learner: member,
+            }
+          : { kind: "new" },
       ),
   } as unknown as Store;
   const career = {
@@ -209,6 +215,7 @@ it("denies career pages and every validation rerender after read authorization i
   const db = {
     session: async () => ({
       kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
       learner: { id: "member", background: "explorer", goal: "everyday" },
     }),
   } as unknown as Store;
@@ -259,6 +266,7 @@ it("returns a content-free 403 for each otherwise-valid denied career mutation",
   const db = {
     session: async () => ({
       kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
       learner: { id: "member", background: "explorer", goal: "everyday" },
     }),
   } as unknown as Store;

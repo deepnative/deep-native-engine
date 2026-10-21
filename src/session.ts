@@ -6,8 +6,14 @@ export const COOKIE_OPTIONS = {
   path: "/",
   maxAge: 30 * 24 * 60 * 60 * 1000,
 };
-export function cookieOptions(origin: string) {
-  return { ...COOKIE_OPTIONS, secure: new URL(origin).protocol === "https:" };
+export function cookieOptions(origin: string, expiresAt?: Date) {
+  return {
+    httpOnly: COOKIE_OPTIONS.httpOnly,
+    sameSite: COOKIE_OPTIONS.sameSite,
+    path: COOKIE_OPTIONS.path,
+    secure: new URL(origin).protocol === "https:",
+    ...(expiresAt ? { expires: expiresAt } : { maxAge: COOKIE_OPTIONS.maxAge }),
+  };
 }
 export function token(value: unknown) {
   return typeof value === "string" && /^[a-f0-9]{64}$/.test(value)

@@ -1166,6 +1166,12 @@ export function app(
   app.get("/", async (req, res) => {
     const session = await store.session(res.locals.token as string);
     if (session.kind === "active") {
+      if (req.method === "GET" && cookieOptions(options.origin).secure)
+        res.cookie(
+          COOKIE,
+          res.locals.token as string,
+          cookieOptions(options.origin, session.expiresAt),
+        );
       res.redirect(303, "/learn");
       return;
     }
@@ -1271,6 +1277,12 @@ export function app(
         return;
       }
       res.locals.learner = session.learner;
+      if (req.method === "GET" && cookieOptions(options.origin).secure)
+        res.cookie(
+          COOKIE,
+          res.locals.token as string,
+          cookieOptions(options.origin, session.expiresAt),
+        );
       next();
     },
   );

@@ -42,6 +42,7 @@ const returned: OwnerProposal = {
 function fixture() {
   const session = vi.fn<Store["session"]>().mockResolvedValue({
     kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
     learner: { id: "owned", background: "explorer", goal: "everyday" },
   });
   const proposals = {

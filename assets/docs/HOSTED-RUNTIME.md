@@ -39,7 +39,12 @@ validating its original matching Host/Origin pair, preserving its host-only
 member cookie; all other addresses and crossed pairs are refused. Do not use the older proxy's loopback Host/Origin translation for
 this contract. The application accepts only the exact configured Host and write
 Origin and still requires its normal CSRF token. Forwarded headers cannot grant
-access. HTTPS member cookies, including deletion cookies, use Secure, HttpOnly
+access. On an authenticated HTTPS page read, the same inherited bearer cookie is
+reissued with its existing database deadline and Secure/HttpOnly/SameSite=Strict.
+This upgrades transport protection without creating a principal or renewing the
+session, saved work or finite staff grants. HTTP loopback behavior is unchanged;
+expired/revoked members receive no active-cookie upgrade. HTTPS member cookies,
+including deletion cookies, use Secure, HttpOnly
 and SameSite=Strict; TLS termination must remain enabled at Azure ingress.
 
 PostgreSQL stores member identities, work and permissions. Evidence bytes use

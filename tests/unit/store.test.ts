@@ -22,10 +22,19 @@ it("binds the hash rather than raw bearer tokens and distinguishes new, expired 
   });
   expect(await db.session("private-token")).toEqual({ kind: "expired" });
   p.query.mockResolvedValueOnce({
-    rows: [{ id: "a", background: "explorer", goal: "work", active: true }],
+    rows: [
+      {
+        id: "a",
+        background: "explorer",
+        goal: "work",
+        active: true,
+        expiresAt: new Date("2026-11-01T10:11:12.345Z"),
+      },
+    ],
   });
   expect(await db.session("private-token")).toEqual({
     kind: "active",
+    expiresAt: new Date("2026-11-01T10:11:12.345Z"),
     learner: { id: "a", background: "explorer", goal: "work" },
   });
   p.query.mockResolvedValueOnce({
@@ -42,11 +51,13 @@ it("binds the hash rather than raw bearer tokens and distinguishes new, expired 
         timezone: "America/Toronto",
         weeklyMinutes: 30,
         active: true,
+        expiresAt: new Date("2026-11-01T10:11:12.345Z"),
       },
     ],
   });
   expect(await db.session("private-token")).toMatchObject({
     kind: "active",
+    expiresAt: new Date("2026-11-01T10:11:12.345Z"),
     learner: {
       backgroundTags: ["professional"],
       domainTags: ["education"],
@@ -57,6 +68,27 @@ it("binds the hash rather than raw bearer tokens and distinguishes new, expired 
       weeklyMinutes: 30,
     },
   });
+});
+it("HOSTED-09 returns the authoritative active principal expiry without changing its deadline", async () => {
+  const p = pool();
+  const expiresAt = new Date("2026-11-01T10:11:12.345Z");
+  p.query.mockResolvedValueOnce({
+    rows: [
+      {
+        id: "a",
+        background: "explorer",
+        goal: "work",
+        active: true,
+        expiresAt,
+      },
+    ],
+  });
+  expect(await store(p.value).session("private-token")).toMatchObject({
+    kind: "active",
+    expiresAt,
+  });
+  expect(p.query).toHaveBeenCalledOnce();
+  expect(p.query.mock.calls[0]![0]).toContain('p.expires_at AS "expiresAt"');
 });
 it("passes untrusted answers as bound parameters and scopes versioned reads and deletes by learner", async () => {
   const p = pool(),

@@ -99,6 +99,53 @@ const contentDraft: DraftContent = {
   rubric: "Check source and uncertainty.",
   rubricVersion: 1,
 };
+it("HOSTED-09 upgrades an inherited HTTPS cookie without changing its original database deadline or identity", async () => {
+  const m = await member();
+  const expiresAt = new Date(Date.now() + 1234567);
+  await pool.query("UPDATE principals SET expires_at=$1 WHERE token_hash=$2", [
+    expiresAt,
+    hash(m.token),
+  ]);
+  await db.save(m.learner.id, input);
+  const before = await db.session(m.token);
+  expect(before).toMatchObject({
+    kind: "active",
+    learner: { id: m.learner.id },
+    expiresAt,
+  });
+  const application = app(db, {
+    origin: "https://engine.deepnative.io",
+    secret: "invented-hosted-cookie-secret",
+  });
+  await withLoopback(application, async (origin) => {
+    for (const path of ["/", "/learn"]) {
+      const result = await request(origin)
+        .get(path)
+        .set("Host", "engine.deepnative.io")
+        .set("Cookie", `${COOKIE}=${m.token}`)
+        .expect(path === "/" ? 303 : 200);
+      expect((result.headers["set-cookie"] as unknown as string[])[0]).toBe(
+        `${COOKIE}=${m.token}; Path=/; Expires=${expiresAt.toUTCString()}; HttpOnly; Secure; SameSite=Strict`,
+      );
+    }
+  });
+  expect(await db.session(m.token)).toEqual(before);
+  expect((await db.progress(m.learner.id))?.instruction).toBe(
+    input.instruction,
+  );
+  await pool.query(
+    "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE token_hash=$1",
+    [hash(m.token)],
+  );
+  await withLoopback(application, async (origin) => {
+    const denied = await request(origin)
+      .get("/learn")
+      .set("Host", "engine.deepnative.io")
+      .set("Cookie", `${COOKIE}=${m.token}`)
+      .expect(303);
+    expect(denied.headers["set-cookie"]).toBeUndefined();
+  });
+});
 it("recommends only current eligible published lessons without rewriting private history", async () => {
   const auth = authorizationStore(pool);
   const catalog = catalogStore(pool);
