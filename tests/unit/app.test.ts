@@ -103,6 +103,62 @@ const member = {
   background: "explorer" as const,
   goal: "everyday" as const,
 };
+it("HOSTED-02 accepts exact HTTPS member forms with secure cookies and rejects forwarded-origin spoofing", async () => {
+  const hostedOrigin = "https://engine.deepnative.io";
+  const hostedHost = "engine.deepnative.io";
+  const db = storage();
+  const files = evidenceStorage();
+  const agent = await managedAgent(
+    app(db, { origin: hostedOrigin, secret: "hosted-secret", evidence: files }),
+  );
+  const home = await agent.get("/").set("Host", hostedHost).expect(200);
+  const setCookie = home.headers["set-cookie"] as unknown as string[];
+  expect(setCookie[0]).toMatch(/; Path=\/;.*HttpOnly; Secure; SameSite=Strict/);
+  const cookie = setCookie[0]!.split(";")[0]!;
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  const form = {
+    csrf,
+    background: "explorer",
+    goal: "everyday",
+    synthetic: "yes",
+  };
+  const post = (path: string, from = hostedOrigin, token = csrf) =>
+    agent
+      .post(path)
+      .set("Host", hostedHost)
+      .set("Origin", from)
+      .set("Cookie", cookie)
+      .type("form")
+      .send({ ...form, csrf: token });
+  await agent
+    .get("/")
+    .set("Host", "attacker.invalid")
+    .set("X-Forwarded-Host", hostedHost)
+    .set("X-Forwarded-Proto", "https")
+    .expect(403);
+  await post("/start", "https://attacker.invalid")
+    .set("X-Forwarded-Host", hostedHost)
+    .set("X-Forwarded-Proto", "https")
+    .expect(403);
+  await post("/start", hostedOrigin, "0".repeat(64)).expect(403);
+  expect(db.create).not.toHaveBeenCalled();
+  await post("/start").expect(303).expect("Location", "/learn");
+  expect(db.create).toHaveBeenCalledOnce();
+  db.session.mockResolvedValue({ kind: "active", learner: member });
+  const deleted = await agent
+    .post("/delete")
+    .set("Host", hostedHost)
+    .set("Origin", hostedOrigin)
+    .set("Cookie", cookie)
+    .type("form")
+    .send({ csrf, confirm: "yes" })
+    .expect(303);
+  expect(files.removeWorkspace).toHaveBeenCalledOnce();
+  expect(db.remove).toHaveBeenCalledWith(member.id);
+  expect((deleted.headers["set-cookie"] as unknown as string[])[0]).toMatch(
+    /Expires=Thu, 01 Jan 1970.*HttpOnly; Secure; SameSite=Strict/,
+  );
+});
 it("keeps personalized assignment preparation private, exact and read-only", async () => {
   const db = storage();
   const blocked = {

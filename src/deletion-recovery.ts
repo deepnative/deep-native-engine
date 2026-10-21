@@ -1,11 +1,16 @@
 import type { Pool, PoolClient } from "pg";
 import type { ObjectStorage } from "./evidence.ts";
+import {
+  recoverPendingObjectWrites,
+  type ObjectWriteRecoveryPage,
+} from "./object-write-recovery.ts";
 
 export interface DeletionRecoveryPage {
   examined: number;
   completed: number;
   failed: number;
   nextCursor: string | null;
+  objectWrites?: ObjectWriteRecoveryPage;
 }
 
 async function rollback(client: PoolClient) {
@@ -93,9 +98,13 @@ export async function recoverPendingMemberDeletions(
   objects: ObjectStorage,
   cursor: string | null = null,
   limit = 10,
+  objectWriteCursor: string | null = null,
 ): Promise<DeletionRecoveryPage> {
   if (!Number.isInteger(limit) || limit < 1 || limit > 100)
     throw new Error("Invalid deletion recovery batch size.");
+  const objectWrites = objects.requiresWriteRecovery
+    ? await recoverPendingObjectWrites(pool, objects, objectWriteCursor, limit)
+    : undefined;
   const candidates = await pool.query<{ id: string }>(
     `SELECT p.id FROM principals p
      JOIN workspaces w ON w.owner_principal_id=p.id
@@ -116,6 +125,7 @@ export async function recoverPendingMemberDeletions(
     }
   }
   return {
+    ...(objectWrites ? { objectWrites } : {}),
     examined: candidates.rows.length,
     completed,
     failed,

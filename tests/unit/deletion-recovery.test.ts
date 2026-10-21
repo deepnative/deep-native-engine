@@ -82,6 +82,33 @@ function database(ids: string[], options: Options = {}) {
   };
 }
 
+it("HOSTED-06 gives durable object cleanup its own bounded cursor without changing member deletion counts", async () => {
+  const db = database([]);
+  const query = db.query.getMockImplementation()!;
+  db.query.mockImplementation(async (sql, values) =>
+    sql.includes("private_object_write_intents")
+      ? { rows: [] }
+      : query(sql, values),
+  );
+  const page = await recoverPendingMemberDeletions(
+    db.pool,
+    { ...db.objects, requiresWriteRecovery: true },
+    first,
+    1,
+    second,
+  );
+  expect(page).toEqual({
+    examined: 0,
+    completed: 0,
+    failed: 0,
+    nextCursor: null,
+    objectWrites: { examined: 0, completed: 0, failed: 0, nextCursor: null },
+  });
+  expect(db.query).toHaveBeenCalledWith(
+    expect.stringContaining("private_object_write_intents"),
+    [second, 1],
+  );
+});
 it("selects only bounded marked candidates and removes bytes before principal rows", async () => {
   const db = database([first, second]);
   const page = await recoverPendingMemberDeletions(

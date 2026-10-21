@@ -33,7 +33,7 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { COOKIE, COOKIE_OPTIONS, token, csrf, validCsrf } from "./session.ts";
+import { COOKIE, cookieOptions, token, csrf, validCsrf } from "./session.ts";
 import {
   disabledSupportRequestStore,
   type SupportRequestStore,
@@ -317,6 +317,7 @@ export function app(
     localHoldInspectionReads?: boolean;
     reviewerWorklistReads?: boolean;
     origin: string;
+    hostedOrigin?: string;
     secret: string;
     mode?: ApplicationMode;
     adapters?: AdapterReadiness[];
@@ -1161,7 +1162,7 @@ export function app(
       session.kind === "expired"
         ? token(undefined)
         : (res.locals.token as string);
-    res.cookie(COOKIE, fresh, COOKIE_OPTIONS);
+    res.cookie(COOKIE, fresh, cookieOptions(options.origin));
     res.send(welcome(csrf(fresh, options.secret)));
   });
   app.post("/start", async (req, res) => {
@@ -1508,6 +1509,7 @@ export function app(
       enabled: options.preparedReviewSamples,
       mode: options.mode,
       origin: options.origin,
+      hostedOrigin: options.hostedOrigin,
     });
   app.get("/evidence", async (_req, res) => {
     res.send(
@@ -4870,7 +4872,12 @@ export function app(
     }
     await evidence.removeWorkspace(res.locals.token as string);
     await store.remove((res.locals.learner as Learner).id);
-    res.clearCookie(COOKIE, { httpOnly: true, sameSite: "strict", path: "/" });
+    res.clearCookie(COOKIE, {
+      httpOnly: true,
+      sameSite: "strict",
+      path: "/",
+      secure: cookieOptions(options.origin).secure,
+    });
     res.redirect(303, "/");
   });
   app.use((_req, res) =>

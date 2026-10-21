@@ -31,6 +31,7 @@ export function mountPreparedSampleRoutes(
     preparedReviewSamples?: boolean;
     mode?: ApplicationMode;
     origin: string;
+    hostedOrigin?: string;
   },
 ) {
   const failure = (
@@ -71,6 +72,7 @@ export function mountPreparedSampleRoutes(
       enabled: options.preparedReviewSamples,
       mode: options.mode,
       origin: options.origin,
+      hostedOrigin: options.hostedOrigin,
     });
   function send(
     res: Response,

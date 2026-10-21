@@ -6,6 +6,9 @@ export const COOKIE_OPTIONS = {
   path: "/",
   maxAge: 30 * 24 * 60 * 60 * 1000,
 };
+export function cookieOptions(origin: string) {
+  return { ...COOKIE_OPTIONS, secure: new URL(origin).protocol === "https:" };
+}
 export function token(value: unknown) {
   return typeof value === "string" && /^[a-f0-9]{64}$/.test(value)
     ? value
