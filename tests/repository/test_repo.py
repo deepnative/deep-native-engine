@@ -491,6 +491,13 @@ class RepositoryFixture(unittest.TestCase):
         original = page.read_text()
         for payload in (
             '<script src="https://example.invalid/track.js"></script>',
+            '<script type="module" src="./demo.js">sendData()</script>',
+            '<script type="module" src="./other.js"></script>',
+            '<script type="module" src="./demo.js"></script>',
+            '<button type="submit">Send</button>',
+            '<input type="password">',
+            '<textarea rows="7" maxlength="9000"></textarea>',
+            '<a href="https://engine.deepnative.io/collect">Collect</a>',
             '<a href="#preview" onclick="sendData()">Preview</a>',
             '<img src="https://example.invalid/pixel" alt="">',
             '<form action="https://example.invalid/collect"><input name="email"></form>',
@@ -501,6 +508,21 @@ class RepositoryFixture(unittest.TestCase):
                 with self.assertRaisesRegex(gate.GateError, "Unsafe product site"):
                     gate.validate(self.root)
         page.write_text(original)
+
+    def test_pages_stages_only_the_reviewed_sample_module(self):
+        import textwrap
+        workflow = (self.root / ".github/workflows/product-pages.yml").read_text()
+        stamp = workflow.split("      - name: Stamp the public build revision\n", 1)[1]
+        script = textwrap.dedent(stamp.split("        run: |\n", 1)[1].split("      - name: Configure Pages\n", 1)[0])
+        (self.root / "public/private-example.txt").write_text("must not be published")
+        result = subprocess.run(["sh", "-eu", "-c", script], cwd=self.root,
+                                env={**os.environ, "DNE_REVISION": "a" * 40}, capture_output=True)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual({p.name for p in (self.root / "site").iterdir()},
+                         {"index.html", "styles.css", "favicon.svg", "demo.js", "build.json"})
+        self.assertEqual((self.root / "site/demo.js").read_bytes(),
+                         (self.root / "public/pages-demo.js").read_bytes())
+        self.assertEqual(json.loads((self.root / "site/build.json").read_text()), {"revision": "a" * 40})
 
     def test_product_site_rejects_svg_script_and_css_remote_resources(self):
         icon = self.root / "site/favicon.svg"
