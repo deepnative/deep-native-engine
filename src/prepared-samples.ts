@@ -64,12 +64,27 @@ export function preparedSamplesEnabled(options: {
   enabled?: boolean;
   mode?: ApplicationMode;
   origin: string;
+  hostedOrigin?: string;
 }) {
+  if (
+    options.enabled !== true ||
+    (options.mode !== "demo" && options.mode !== "test")
+  )
+    return false;
   try {
     const url = new URL(options.origin);
+    if (options.hostedOrigin !== undefined)
+      return (
+        options.origin === options.hostedOrigin &&
+        url.origin === options.origin &&
+        url.protocol === "https:" &&
+        url.port === "" &&
+        /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(
+          url.hostname,
+        ) &&
+        !url.hostname.endsWith(".localhost")
+      );
     return (
-      options.enabled === true &&
-      (options.mode === "demo" || options.mode === "test") &&
       url.protocol === "http:" &&
       ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) &&
       url.username === "" &&
@@ -84,7 +99,12 @@ export function preparedSamplesEnabled(options: {
 }
 export function preparedSampleStore(
   pool: Pool,
-  options: { enabled: boolean; mode: ApplicationMode; origin: string },
+  options: {
+    enabled: boolean;
+    mode: ApplicationMode;
+    origin: string;
+    hostedOrigin?: string;
+  },
 ): PreparedSampleStore {
   const enabled = preparedSamplesEnabled(options);
   async function execute<T extends object>(

@@ -830,6 +830,73 @@ it("ATTEND-04 replacement registration never inherits old permission or original
   if (added.kind !== "ready") throw Error("Distinct new permission required");
   expect(added.value.permission.id).not.toBe(saved.value.permission.id);
 });
+it("ATTEND-04/06 returns database-written receipts and journals a distinct no-op withdrawal without renewing it", async () => {
+  const f = await fixture();
+  const options = { mode: "test" as const, enabled: true, registration: true };
+  const checked = await attendancePermissionCheck(pool, options, f.token, {
+    registrationId: f.registration,
+    administratorId: f.administrator,
+  });
+  if (checked.kind !== "ready")
+    throw Error("Exact checked permission required");
+  const key = randomUUID();
+  const created = await attendancePermit(
+    pool,
+    options,
+    f.token,
+    key,
+    checked.value,
+  );
+  expect(created.kind).toBe("ready");
+  if (created.kind !== "ready") throw Error("Created permission required");
+  const permission = created.value.permission;
+  const original = (
+    await pool.query(
+      "SELECT created_at,starts_at,expires_at FROM private_event_attendance_permissions WHERE id=$1",
+      [permission.id],
+    )
+  ).rows[0]!;
+  expect(permission.createdAt).toEqual(original.created_at);
+  expect(permission.startsAt).toEqual(original.starts_at);
+  expect(permission.expiresAt).toEqual(original.expires_at);
+  const firstKey = randomUUID(),
+    secondKey = randomUUID();
+  const first = await attendanceWithdraw(
+    pool,
+    options,
+    f.token,
+    firstKey,
+    permission.id,
+  );
+  if (first.kind !== "ready") throw Error("First withdrawal required");
+  const second = await attendanceWithdraw(
+    pool,
+    options,
+    f.token,
+    secondKey,
+    permission.id,
+  );
+  expect(second.kind).toBe("ready");
+  if (second.kind !== "ready")
+    throw Error("Distinct withdrawal receipt required");
+  expect(second.value.permission).toEqual(first.value.permission);
+  expect(
+    (
+      await pool.query(
+        "SELECT operation_id,kind,permission_id FROM private_event_attendance_operations WHERE operation_id=ANY($1::uuid[]) ORDER BY operation_id",
+        [[key, firstKey, secondKey]],
+      )
+    ).rows,
+  ).toHaveLength(3);
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*)::int AS n FROM private_event_attendance_permissions WHERE registration_id=$1",
+        [f.registration],
+      )
+    ).rows[0]!.n,
+  ).toBe(1);
+});
 it("ATTEND-07 exports every retained permission over bounded live pages with owner-bound continuation and erasure", async ({
   task,
 }) => {

@@ -11,14 +11,24 @@ const doubles = vi.hoisted(() => ({
   listen: vi.fn(),
   app: vi.fn(),
   recover: vi.fn(),
+  azureStorage: vi.fn(),
   pool: undefined as EventEmitter | undefined,
+  poolOptions: {} as Record<string, unknown>,
+  databasePassword: vi.fn(),
+}));
+vi.mock("../../src/azure-object-storage.ts", () => ({
+  azureObjectStorage: doubles.azureStorage,
+}));
+vi.mock("../../src/azure-database.ts", () => ({
+  azureDatabasePassword: doubles.databasePassword,
 }));
 vi.mock("pg", async () => {
   const { EventEmitter } = await import("node:events");
   return {
     Pool: class extends EventEmitter {
-      constructor() {
+      constructor(options: Record<string, unknown>) {
         super();
+        doubles.poolOptions = options;
         doubles.pool = this;
       }
       end = doubles.end;
@@ -46,6 +56,16 @@ const env = {
   DNE_PORT: "4567",
   DNE_APP_MODE: "test",
 };
+const hostedEnv = {
+  ...env,
+  DNE_APP_MODE: "demo",
+  DNE_PUBLIC_ORIGIN: "https://engine.deepnative.io",
+  DNE_DATABASE_URL:
+    "postgresql://member:secret@database.postgres.database.azure.com/engine?sslmode=verify-full",
+  DNE_AZURE_BLOB_ACCOUNT_URL: "https://enginefiles.blob.core.windows.net",
+  DNE_AZURE_BLOB_CONTAINER: "private-evidence",
+  DNE_AZURE_MANAGED_IDENTITY_CLIENT_ID: "be45b9bd-d4b8-4a5c-bc6a-4feb40f9ea3c",
+};
 it("ATTEND-08 runtime attendance creation requires actual local staff entry alongside its explicit flag", async () => {
   server();
   const running = await start({
@@ -72,12 +92,66 @@ beforeEach(() => {
   doubles.end.mockResolvedValue(undefined);
   doubles.migrate.mockResolvedValue(undefined);
   doubles.seed.mockResolvedValue(12);
+  doubles.azureStorage.mockReturnValue({
+    requiresWriteRecovery: true,
+    put: vi.fn(),
+    get: vi.fn(),
+    remove: vi.fn(),
+  });
   doubles.recover.mockResolvedValue({
     examined: 0,
     completed: 0,
     failed: 0,
     nextCursor: null,
   });
+});
+it("HOSTED-01/03 retains the public HTTPS address after binding and selects only configured Azure objects", async () => {
+  server();
+  const settings = hostedEnv;
+  const running = await start(settings);
+  try {
+    expect(running.origin).toBe(settings.DNE_PUBLIC_ORIGIN);
+    expect(doubles.app.mock.calls[0]![1].origin).toBe(
+      settings.DNE_PUBLIC_ORIGIN,
+    );
+    expect(doubles.app.mock.calls[0]![1].hostedOrigin).toBe(
+      settings.DNE_PUBLIC_ORIGIN,
+    );
+    expect(doubles.azureStorage).toHaveBeenCalledExactlyOnceWith({
+      origin: settings.DNE_PUBLIC_ORIGIN,
+      blobAccountUrl: settings.DNE_AZURE_BLOB_ACCOUNT_URL,
+      blobContainer: settings.DNE_AZURE_BLOB_CONTAINER,
+      managedIdentityClientId: settings.DNE_AZURE_MANAGED_IDENTITY_CLIENT_ID,
+    });
+    expect(doubles.listen).toHaveBeenCalledWith(4567, "127.0.0.1");
+  } finally {
+    await running.close();
+  }
+});
+it("HOSTED-06 advances private-object cleanup independently and reports unconfirmed cleanup without private data", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    server();
+    const next = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    doubles.recover.mockResolvedValueOnce({
+      examined: 0,
+      completed: 0,
+      failed: 0,
+      nextCursor: null,
+      objectWrites: { examined: 10, completed: 8, failed: 1, nextCursor: next },
+    });
+    const running = await start(hostedEnv);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(doubles.recover.mock.calls[1]?.[4]).toBe(next);
+    expect(log).toHaveBeenCalledExactlyOnceWith(
+      "Private object cleanup remains unconfirmed.",
+    );
+    await running.close();
+  } finally {
+    log.mockRestore();
+    vi.useRealTimers();
+  }
 });
 it("controls only test evidence capabilities with a validated private clock file", () => {
   const root = mkdtempSync(join(tmpdir(), "dne-test-clock-"));
@@ -316,3 +390,34 @@ it("still ends the pool if listener cleanup fails after a bound startup failure"
   expect(doubles.end).toHaveBeenCalledOnce();
   expect(doubles.recover).not.toHaveBeenCalled();
 });
+
+it.each(["", ":5432"])(
+  "HOSTED-11 runtime wires per-connection database identity only for explicit hosted authentication %s",
+  async (port) => {
+    server();
+    const password = vi.fn();
+    doubles.databasePassword.mockReturnValue(password);
+    const running = await start({
+      ...hostedEnv,
+      DNE_DATABASE_AUTH: "managed-identity",
+      DNE_DATABASE_URL: `postgresql://dne_engine@pg-deepnative.postgres.database.azure.com${port}/deepnative?sslmode=verify-full`,
+    });
+    try {
+      expect(doubles.poolOptions.password).toBe(password);
+      const { Client } = await vi.importActual<typeof import("pg")>("pg");
+      expect(new Client(doubles.poolOptions).password).toBe(password);
+      expect(doubles.databasePassword).toHaveBeenCalledExactlyOnceWith(
+        hostedEnv.DNE_AZURE_MANAGED_IDENTITY_CLIENT_ID,
+      );
+    } finally {
+      await running.close();
+    }
+    server();
+    const local = await start(env);
+    try {
+      expect(doubles.poolOptions).not.toHaveProperty("password");
+    } finally {
+      await local.close();
+    }
+  },
+);

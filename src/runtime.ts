@@ -15,10 +15,12 @@ import { memberEventCatalog } from "./member-event-catalog.ts";
 import { eventRehearsalStore } from "./event-rehearsals.ts";
 import { sampleFeedbackStore } from "./sample-feedback.ts";
 import { Pool } from "pg";
+import { databaseConnection } from "./database-connection.ts";
 import type { Server } from "node:http";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.ts";
+import { azureObjectStorage } from "./azure-object-storage.ts";
 import { migrate, store } from "./store.ts";
 import { app } from "./app.ts";
 import { authorizationStore } from "./authorization.ts";
@@ -78,8 +80,10 @@ export function evidenceCapabilityClock(
 export async function start(env: NodeJS.ProcessEnv) {
   const settings = config(env);
   const pool = new Pool({
-    connectionString: settings.databaseUrl,
-    application_name: "deep-native-preview",
+    ...databaseConnection(settings),
+    application_name: settings.hosted
+      ? "deep-native-engine"
+      : "deep-native-preview",
     connectionTimeoutMillis: 3000,
     statement_timeout: 5000,
   });
@@ -92,15 +96,19 @@ export async function start(env: NodeJS.ProcessEnv) {
     await seedDraftPack(pool);
     const objects = preparedObjectStorage(
       pool,
-      fileObjectStorage(settings.privateStorageRoot),
+      settings.hosted
+        ? azureObjectStorage(settings.hosted)
+        : fileObjectStorage(settings.privateStorageRoot),
     );
     const eventReader = eventCatalogReader();
     const options = {
       ...settings,
+      hostedOrigin: settings.hosted?.origin,
       preparedSamples: preparedSampleStore(pool, {
         mode: settings.mode,
         enabled: settings.preparedReviewSamples,
         origin: settings.origin,
+        hostedOrigin: settings.hosted?.origin,
       }),
       studyUnitFixtures: studyUnitFixtureStore(pool, {
         mode: settings.mode,
@@ -246,19 +254,28 @@ export async function start(env: NodeJS.ProcessEnv) {
     // app() reads this shared options object for every Host/Origin check.
     // Publish the bound address synchronously before recovery or another await.
     options.port = address.port;
-    options.origin = new URL("http://127.0.0.1:" + address.port).origin;
+    if (!settings.hosted)
+      options.origin = new URL("http://127.0.0.1:" + address.port).origin;
     let cursor: string | null = null;
+    let objectWriteCursor: string | null = null;
     let activeRecovery: Promise<void> | undefined;
     const recover = () => {
       if (activeRecovery) return;
       activeRecovery = (async () => {
         try {
-          const result = await recoverPendingMemberDeletions(
-            pool,
-            objects,
-            cursor,
-          );
+          const result = settings.hosted
+            ? await recoverPendingMemberDeletions(
+                pool,
+                objects,
+                cursor,
+                10,
+                objectWriteCursor,
+              )
+            : await recoverPendingMemberDeletions(pool, objects, cursor);
           cursor = result.nextCursor;
+          objectWriteCursor = result.objectWrites?.nextCursor ?? null;
+          if (result.objectWrites?.failed)
+            console.error("Private object cleanup remains unconfirmed.");
           if (result.failed)
             console.error("A pending local deletion will be retried.");
         } catch {

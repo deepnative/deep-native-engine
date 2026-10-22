@@ -64,3 +64,30 @@ On 14 October 2026 UTC, one unchanged complete native-workload diagnostic identi
 [Issue #513](https://github.com/deepnative/deep-native-engine/issues/513) explicitly supersedes only this native fixture's administrative `afterEach` allowance to60000ms. Its unchanged three-second session-refusal barrier,500ms bounded reads, five-second bodies, ten-second setup hook, task ownership, one ordinary DROP and actual absence assertion remain required. The finite administrative cap accommodates the observed native wait; it is not a PostgreSQL guarantee or a maximum derived from `checkpoint_timeout`. Exceeding it still fails and retains exact cleanup responsibility; it never cancels SQL, forces deletion, automatically retries or moves cleanup outside enforcement. Every browser/global deadline, selection, denominator, retry policy and99%/100% gate remains unchanged. Older incidents without exact backend observations remain explicitly uncertain; this observation does not retrospectively identify them.
 
 The real failing case and native deferred-completion/absence trace provide behavioral red evidence; no constant-mirroring test is added merely to assert the new allowance. Changed-source focused checks and fresh clean exact-commit local verification, unbypassed pre-push, author review, original PR CI and resulting-main CI are required before scoped closeout. Native-hook correction does not establish immunity for browser cleanup under its existing deadlines, product/full-MVP/qualified acceptance or deployment.
+
+
+## Hosted-release database round trips
+
+The #525 release gate retained two original ATTEND-07 five-second failures
+while the unchanged 105 genuine check/permit/withdraw cycles were still being
+prepared inside that body. A passing isolated comparison did not establish a
+remedy. HOSTED-15 keeps every cycle, assertion, original five-second body and
+service/SQL deadline; fixture work stays in the same measured body.
+
+The existing backend now locks the complete canonical actor set in one
+`ORDER BY id FOR SHARE` statement before profiles and source locks, with the
+same current-credential predicate. Permission mutation and its original-key
+journal reservation use one data-modifying statement and return database-written
+receipt timestamps. A distinct no-op withdrawal still journals its own key and
+returns the prelocked original receipt without renewing it. Every authority,
+source, lifetime, COMMIT and handback fence remains. No row cache, direct fixture
+seeding, retry, timeout override, runner or approved journey change is introduced.
+
+Existing permission/transaction unit cases and the complete native migration
+file cover actor denial/order, exact receipts/replay/conflict, rollback,
+expiry/concurrency and all 105 cycles/export/foreign-cursor/erasure assertions.
+The added native receipt case also verifies all three original instruction keys
+are journaled after a distinct no-op withdrawal. These are regression and bounded
+release-gate results, not a general latency SLA, qualified review or proof that
+prior environment latency has been causally explained. Full exact-source gates,
+original CI and actual Azure acceptance remain separate requirements.

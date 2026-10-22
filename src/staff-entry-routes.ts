@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import type { Express, Request, Response } from "express";
 import type { ApplicationMode } from "./adapters.ts";
 import type { StaffRole } from "./authorization.ts";
@@ -188,7 +189,10 @@ function links(role: StaffRole, tools: StaffTools) {
   const available = choices.filter(([enabled]) => enabled);
   return available.length
     ? `<ul>${available.map(([, url, label]) => `<li><a href="${escape(url)}">${escape(label)}</a></li>`).join("")}</ul>`
-    : "<p>No browser tools are available for your current role in this local preview.</p>";
+    : hostingText(
+        "<p>No browser tools are available for your current role in this local preview.</p>",
+        "<p>No browser tools are available for your current role in this hosted service.</p>",
+      );
 }
 const signout = (csrf: string) =>
   `<form method="post" action="/staff/sign-out">${hidden(csrf)}<button type="submit">Sign out of staff tools</button></form>`;

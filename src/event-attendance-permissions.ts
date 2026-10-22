@@ -96,29 +96,6 @@ async function original(
     throw new EventCancellationFailure("conflict");
   return permission(context, source, row.permissionId);
 }
-async function reserve(
-  context: AttendanceContext,
-  source: AttendanceSource,
-  key: string,
-  kind: "permit" | "withdraw",
-  instructionHash: string,
-  permissionId: string,
-) {
-  await context.tx.query(
-    `INSERT INTO private_event_attendance_operations(operation_id,actor_id,workspace_id,registration_id,kind,instruction_hash,permission_id)
-     VALUES($1,$2,$3,$4,$5,$6,$7)`,
-    [
-      key,
-      context.actorId,
-      source.workspaceId,
-      source.registrationId,
-      kind,
-      instructionHash,
-      permissionId,
-    ],
-  );
-}
-
 export async function attendancePermit(
   pool: Pool,
   options: AttendanceOptions,
@@ -185,23 +162,43 @@ export async function attendancePermit(
     if (existing.length || observed.length)
       throw new EventCancellationFailure("conflict");
     const id = randomUUID();
-    await context.tx.query(
-      `INSERT INTO private_event_attendance_permissions(id,registration_id,workspace_id,member_id,administrator_id,starts_at,expires_at)
-       VALUES($1,$2,$3,$4,$5,$6,$7)`,
-      [
-        id,
-        source.registrationId,
-        source.workspaceId,
-        context.actorId,
-        checked.administratorId,
-        checked.startsAt,
-        checked.expiresAt,
-      ],
-    );
-    await reserve(context, source, key, "permit", digest, id);
+    // The new row is already locked by our INSERT. Return its actual database
+    // defaults and reserve the instruction in the same atomic SQL command.
+    const written = (
+      await context.tx.query<
+        Omit<AttendancePermission, "eventId" | "eventVersion" | "title">
+      >(
+        `WITH saved AS (
+          INSERT INTO private_event_attendance_permissions(id,registration_id,workspace_id,member_id,administrator_id,starts_at,expires_at)
+          VALUES($1,$2,$3,$4,$5,$6,$7)
+          RETURNING id,registration_id AS "registrationId",administrator_id AS "administratorId",
+          starts_at AS "startsAt",expires_at AS "expiresAt",created_at AS "createdAt",withdrawn_at AS "withdrawnAt"
+        ), operation AS (
+          INSERT INTO private_event_attendance_operations(operation_id,actor_id,workspace_id,registration_id,kind,instruction_hash,permission_id)
+          SELECT $8,$4,$3,$2,'permit',$9,id FROM saved RETURNING operation_id
+        ) SELECT saved.* FROM saved JOIN operation ON operation.operation_id=$8`,
+        [
+          id,
+          source.registrationId,
+          source.workspaceId,
+          context.actorId,
+          checked.administratorId,
+          checked.startsAt,
+          checked.expiresAt,
+          key,
+          digest,
+        ],
+      )
+    ).rows[0];
+    if (!written) return attendanceDeny();
     return {
       kind: "permit" as const,
-      permission: await permission(context, source, id),
+      permission: {
+        ...written,
+        eventId: source.eventId,
+        eventVersion: source.eventVersion,
+        title: source.title,
+      },
     };
   });
 }
@@ -231,17 +228,42 @@ export async function attendanceWithdraw(
       context.actorId,
     );
     const digest = hash(JSON.stringify({ permissionId }));
-    await permission(context, source, permissionId);
+    const before = await permission(context, source, permissionId);
     const saved = await original(context, source, key, "withdraw", digest);
     if (saved) return { kind: "withdraw" as const, permission: saved };
-    await context.tx.query(
-      "UPDATE private_event_attendance_permissions SET withdrawn_at=clock_timestamp() WHERE id=$1 AND withdrawn_at IS NULL",
-      [permissionId],
-    );
-    await reserve(context, source, key, "withdraw", digest, permissionId);
+    const written = (
+      await context.tx.query<
+        Omit<AttendancePermission, "eventId" | "eventVersion" | "title">
+      >(
+        `WITH saved AS (
+          UPDATE private_event_attendance_permissions SET withdrawn_at=clock_timestamp()
+          WHERE id=$1 AND withdrawn_at IS NULL
+          RETURNING id,registration_id AS "registrationId",administrator_id AS "administratorId",
+          starts_at AS "startsAt",expires_at AS "expiresAt",created_at AS "createdAt",withdrawn_at AS "withdrawnAt"
+        ), operation AS (
+          INSERT INTO private_event_attendance_operations(operation_id,actor_id,workspace_id,registration_id,kind,instruction_hash,permission_id)
+          VALUES($2,$3,$4,$5,'withdraw',$6,$1) RETURNING operation_id
+        ) SELECT saved.* FROM saved JOIN operation ON operation.operation_id=$2`,
+        [
+          permissionId,
+          key,
+          context.actorId,
+          source.workspaceId,
+          source.registrationId,
+          digest,
+        ],
+      )
+    ).rows[0];
     return {
       kind: "withdraw" as const,
-      permission: await permission(context, source, permissionId),
+      // A distinct withdrawal instruction cannot renew an already-withdrawn
+      // receipt: its prelocked original row remains authoritative.
+      permission: {
+        ...(written ?? before),
+        eventId: source.eventId,
+        eventVersion: source.eventVersion,
+        title: source.title,
+      },
     };
   });
 }

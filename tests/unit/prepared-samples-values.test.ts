@@ -17,6 +17,44 @@ const valid = () => ({
   providedExample: true as const,
   privateReview: true as const,
 });
+it("HOSTED-07 admits provided copies only with the deliberate flag and exact trusted HTTPS hosting origin", () => {
+  const options = {
+    enabled: true,
+    mode: "test" as const,
+    origin: "https://engine.deepnative.io",
+    hostedOrigin: "https://engine.deepnative.io",
+  };
+  expect(preparedSamplesEnabled(options)).toBe(true);
+  expect(preparedSamplesEnabled({ ...options, mode: "demo" })).toBe(true);
+  for (const override of [
+    { enabled: false },
+    { mode: "live" as const },
+    { mode: undefined },
+    { hostedOrigin: undefined },
+    { hostedOrigin: "https://other.deepnative.io" },
+    { origin: "http://127.0.0.1" },
+  ])
+    expect(preparedSamplesEnabled({ ...options, ...override })).toBe(false);
+  for (const origin of [
+    "bad",
+    "http://engine.deepnative.io",
+    "https://engine.deepnative.io/",
+    "https://engine.deepnative.io/path",
+    "https://engine.deepnative.io?value=1",
+    "https://engine.deepnative.io#fragment",
+    "https://engine.deepnative.io:443",
+    "https://engine.deepnative.io:8443",
+    "https://private@engine.deepnative.io",
+    "https://ENGINE.deepnative.io",
+    "https://127.0.0.1",
+    "https://[::1]",
+    "https://localhost",
+    "https://app.localhost",
+  ])
+    expect(
+      preparedSamplesEnabled({ ...options, origin, hostedOrigin: origin }),
+    ).toBe(false);
+});
 it("PREPARED-01 fixes three inspectable small invented texts independently of member goals", () => {
   expect(PREPARED_SAMPLES.map((s) => s.goal)).toEqual([
     "everyday",

@@ -31,9 +31,10 @@ import type { SampleFeedbackStore } from "./sample-feedback.ts";
 import express, { type ErrorRequestHandler } from "express";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
+import { withHosting, hostingText } from "./hosting-presentation.ts";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { COOKIE, COOKIE_OPTIONS, token, csrf, validCsrf } from "./session.ts";
+import { COOKIE, cookieOptions, token, csrf, validCsrf } from "./session.ts";
 import {
   disabledSupportRequestStore,
   type SupportRequestStore,
@@ -317,6 +318,7 @@ export function app(
     localHoldInspectionReads?: boolean;
     reviewerWorklistReads?: boolean;
     origin: string;
+    hostedOrigin?: string;
     secret: string;
     mode?: ApplicationMode;
     adapters?: AdapterReadiness[];
@@ -411,6 +413,13 @@ export function app(
   const assignmentReadiness =
     options.assignmentReadiness ?? disabledAssignmentReadinessStore();
   app.disable("x-powered-by");
+  app.use((_req, _res, next) =>
+    withHosting(
+      options.hostedOrigin === options.origin &&
+        options.origin.startsWith("https://"),
+      next,
+    ),
+  );
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -431,7 +440,10 @@ export function app(
         .send(
           errorPage(
             "Unrecognized address",
-            "Open this preview using its configured loopback address.",
+            hostingText(
+              "Open this preview using its configured loopback address.",
+              "Open this service using its configured HTTPS address.",
+            ),
           ),
         );
       return;
@@ -1154,6 +1166,12 @@ export function app(
   app.get("/", async (req, res) => {
     const session = await store.session(res.locals.token as string);
     if (session.kind === "active") {
+      if (req.method === "GET" && cookieOptions(options.origin).secure)
+        res.cookie(
+          COOKIE,
+          res.locals.token as string,
+          cookieOptions(options.origin, session.expiresAt),
+        );
       res.redirect(303, "/learn");
       return;
     }
@@ -1161,7 +1179,7 @@ export function app(
       session.kind === "expired"
         ? token(undefined)
         : (res.locals.token as string);
-    res.cookie(COOKIE, fresh, COOKIE_OPTIONS);
+    res.cookie(COOKIE, fresh, cookieOptions(options.origin));
     res.send(welcome(csrf(fresh, options.secret)));
   });
   app.post("/start", async (req, res) => {
@@ -1259,6 +1277,12 @@ export function app(
         return;
       }
       res.locals.learner = session.learner;
+      if (req.method === "GET" && cookieOptions(options.origin).secure)
+        res.cookie(
+          COOKIE,
+          res.locals.token as string,
+          cookieOptions(options.origin, session.expiresAt),
+        );
       next();
     },
   );
@@ -1493,7 +1517,10 @@ export function app(
         .send(
           errorPage(
             "Availability unavailable",
-            "No request was accepted. Please try the local preview later.",
+            hostingText(
+              "No request was accepted. Please try the local preview later.",
+              "No request was accepted. Please try the hosted service later.",
+            ),
           ),
         );
       return;
@@ -1508,6 +1535,7 @@ export function app(
       enabled: options.preparedReviewSamples,
       mode: options.mode,
       origin: options.origin,
+      hostedOrigin: options.hostedOrigin,
     });
   app.get("/evidence", async (_req, res) => {
     res.send(
@@ -2052,7 +2080,10 @@ export function app(
           .send(
             errorPage(
               "Event version unavailable",
-              "This exact event version is not in the local preview. Browse current sample events separately.",
+              hostingText(
+                "This exact event version is not in the local preview. Browse current sample events separately.",
+                "This exact event version is not available. Browse current sample events separately.",
+              ),
             ),
           );
         return;
@@ -4140,7 +4171,10 @@ export function app(
       const reason = !latest.currentEligible
         ? "This assignment or your direction changed. No revision was started."
         : (latest.submissionCount ?? 0) >= 10
-          ? "This local preview reached its ten-submission limit. Earlier work remains private and readable."
+          ? hostingText(
+              "This local preview reached its ten-submission limit. Earlier work remains private and readable.",
+              "This sample reached its ten-submission limit. Earlier work remains private and readable.",
+            )
           : "This attempt changed in another tab. Reload it before starting another revision.";
       res
         .status(409)
@@ -4870,7 +4904,12 @@ export function app(
     }
     await evidence.removeWorkspace(res.locals.token as string);
     await store.remove((res.locals.learner as Learner).id);
-    res.clearCookie(COOKIE, { httpOnly: true, sameSite: "strict", path: "/" });
+    res.clearCookie(COOKIE, {
+      httpOnly: true,
+      sameSite: "strict",
+      path: "/",
+      secure: cookieOptions(options.origin).secure,
+    });
     res.redirect(303, "/");
   });
   app.use((_req, res) =>

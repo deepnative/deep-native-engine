@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
 import { basename, dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { hostedConfig } from "./hosted-config.ts";
 import {
   adapterReadiness,
   applicationMode,
@@ -26,18 +27,20 @@ export function config(env: NodeJS.ProcessEnv) {
     throw new Error("Set DNE_DATABASE_URL to the local preview database.");
   const url = new URL(databaseUrl);
   const mode = applicationMode(env.DNE_APP_MODE);
+  const hosted = hostedConfig(env, url, mode);
   if (
-    url.search !== "" ||
-    url.hash !== "" ||
-    !["postgres:", "postgresql:"].includes(url.protocol) ||
-    !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)
+    !hosted &&
+    (url.search !== "" ||
+      url.hash !== "" ||
+      !["postgres:", "postgresql:"].includes(url.protocol) ||
+      !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname))
   )
     throw new Error("The preview requires a loopback PostgreSQL database.");
   if (mode === "live")
     throw new Error(
       "Live application hosting requires a separately authorized configuration.",
     );
-  validateDatabaseIsolation(mode, url);
+  if (!hosted) validateDatabaseIsolation(mode, url);
   const port = Number(env.DNE_PORT ?? 3000);
   const ephemeralTestPort = mode === "test" && env.DNE_PORT === "0";
   if (
@@ -155,7 +158,8 @@ export function config(env: NodeJS.ProcessEnv) {
     supportTimeWrites: supportTimeWrites === "enabled",
     databaseUrl,
     port,
-    origin: new URL(`http://127.0.0.1:${port}`).origin,
+    origin: hosted?.origin ?? new URL(`http://127.0.0.1:${port}`).origin,
+    hosted,
     secret: randomBytes(32).toString("hex"),
     mode,
     adapters: adapterReadiness(env, mode),
