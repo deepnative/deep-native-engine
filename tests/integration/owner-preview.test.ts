@@ -139,7 +139,7 @@ function browserFor(origin: string) {
     const hidden = Object.fromEntries(
       [
         ...form.matchAll(
-          /<input type="hidden" name="([A-Za-z]+)" value="([^"]*)">/g,
+          /<input type="hidden" name="([A-Za-z_]+)" value="([^"]*)">/g,
         ),
       ].map((match) => [
         match[1]!,
@@ -842,6 +842,138 @@ it("SUPPREVIEW-01/02/03/04 rehearses member support intake, exact administrator 
     expect(retained.text).toContain("Resolved locally");
     for (const secret of [
       metadata.operatorCredential,
+      metadata.administratorCredential,
+    ])
+      expect(proc.output().includes(secret)).toBe(false);
+    await db.end();
+    db = undefined;
+    expect(await stop(proc.child, proc.exited)).toBe(0);
+    expect(existsSync(metadata.privateRoot)).toBe(false);
+  } finally {
+    await db?.end();
+    if (proc.child.exitCode === null) await stop(proc.child, proc.exited);
+  }
+}, 90000);
+
+it("WFPREVIEW-01/02/03 rehearses an exact private workflow-note review request, administrator assignment, moderator reading and member withdrawal through ordinary forms", async () => {
+  const proc = start();
+  let db: Pool | undefined;
+  try {
+    const ready = await proc.ready;
+    const metadata = JSON.parse(await readFile(ready.staffSetupFile, "utf8"));
+    db = new Pool({ connectionString: metadata.database });
+    // WFPREVIEW-01: reuses the existing identities; nothing is seeded.
+    const staff = (await db.query("SELECT count(*)::int n FROM staff_profiles"))
+      .rows[0].n;
+    for (const table of [
+      "workflow_feedback",
+      "workflow_review_requests",
+      "workflow_review_grants",
+      "workflow_review_operations",
+    ])
+      expect(
+        (await db.query(`SELECT count(*)::int n FROM ${table}`)).rows[0].n,
+        table,
+      ).toBe(0);
+    const moderator = browserFor(ready.origin);
+    await moderator.signIn(metadata.moderatorCredential);
+    const reference = await moderator.open(
+      "/moderate/workflow-review-reference",
+    );
+    expect(reference.status).toBe(200);
+    expect(reference.text).toContain(metadata.moderatorId);
+    const emptyWorklist = await moderator.open("/moderate/workflow-reviews");
+    expect(emptyWorklist.status).toBe(200);
+    expect(emptyWorklist.text).not.toContain("/moderate/workflow-reviews/");
+
+    // WFPREVIEW-02: member saves a note and explicitly requests review.
+    const member = browserFor(ready.origin);
+    const welcome = await member.open("/");
+    expect(
+      (
+        await member.submit(welcome.text, "/start", {
+          background: "technical",
+          goal: "build",
+          synthetic: "yes",
+        })
+      ).status,
+    ).toBe(303);
+    const note = "PREVIEW-WORKFLOW-NOTE: clarify the checking step";
+    const feedback = await member.open("/workflow-feedback/WF-001");
+    expect(
+      (
+        await member.submit(feedback.text, "/workflow-feedback/WF-001/save", {
+          note,
+          confirm: "yes",
+        })
+      ).status,
+    ).toBe(303);
+    const preview = await member.open("/workflow-feedback/WF-001/review");
+    expect(preview.status).toBe(200);
+    expect(preview.text).toContain(note);
+    let requested = await member.submit(
+      preview.text,
+      "/workflow-feedback/review/request",
+      { confirm: "yes" },
+    );
+    if (requested.status === 303)
+      requested = await member.open(requested.location!);
+    const requestId = requested.text.match(/data-request-id="([^"]+)"/)![1]!;
+
+    const admin = browserFor(ready.origin);
+    await admin.signIn(metadata.administratorCredential);
+    const assignment = await admin.open("/operator/workflow-reviews");
+    expect(assignment.status).toBe(200);
+    const checked = await admin.submit(
+      assignment.text,
+      "/operator/workflow-reviews/check",
+      { requestId, moderatorId: metadata.moderatorId },
+    );
+    expect(checked.status).toBe(200);
+    expect(checked.text).not.toContain(note);
+    const assigned = await admin.submit(
+      checked.text,
+      "/operator/workflow-reviews/assign",
+      { confirm: "yes" },
+    );
+    expect(assigned.status).toBe(200);
+    expect(assigned.text).not.toContain(note);
+    const grantId = assigned.text.match(/data-grant-id="([^"]+)"/)![1]!;
+    const worklist = await moderator.open("/moderate/workflow-reviews");
+    expect(worklist.text).toContain(`/moderate/workflow-reviews/${grantId}`);
+    const read = await moderator.open(`/moderate/workflow-reviews/${grantId}`);
+    expect(read.status).toBe(200);
+    expect(read.text).toContain(note);
+    expect(read.text).toContain("WF-001 · version 1 · revision 1");
+    // A learner cannot use the moderator reader.
+    expect(
+      (await member.open(`/moderate/workflow-reviews/${grantId}`)).status,
+    ).toBe(403);
+
+    // WFPREVIEW-03: withdrawal keeps the note and denies fresh reads.
+    const receipt = await member.open(
+      `/workflow-feedback/review/receipts/${requestId}`,
+    );
+    const withdrawn = await member.submit(
+      receipt.text,
+      "/workflow-feedback/review/withdraw",
+      { confirm: "yes" },
+    );
+    expect([200, 303]).toContain(withdrawn.status);
+    const denied = await moderator.open(
+      `/moderate/workflow-reviews/${grantId}`,
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.text).not.toContain(note);
+    expect((await member.open("/workflow-feedback/WF-001")).text).toContain(
+      note,
+    );
+    // No identity was added for this rehearsal.
+    expect(
+      (await db.query("SELECT count(*)::int n FROM staff_profiles")).rows[0].n,
+    ).toBe(staff);
+    for (const secret of [
+      metadata.moderatorCredential,
       metadata.administratorCredential,
     ])
       expect(proc.output().includes(secret)).toBe(false);
