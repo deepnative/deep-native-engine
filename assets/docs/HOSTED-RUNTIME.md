@@ -13,7 +13,8 @@ through the deployment's protected configuration and secret references:
 | Setting | Contract |
 | --- | --- |
 | `DNE_PUBLIC_ORIGIN` | Exact public HTTPS origin, such as `https://engine.deepnative.io`; no trailing slash, path, credentials, query or custom port. |
-| `DNE_DATABASE_URL` | PostgreSQL connection URL with a dedicated application database, user and password, and exactly `sslmode=verify-full`. Store the value as a secret. |
+| `DNE_DATABASE_URL` | Dedicated application PostgreSQL URL with exactly `sslmode=verify-full`. Azure uses the passwordless `dne_engine` role and verified hostname/certificate. Existing explicit credentialed configurations remain supported; keep their values secret. |
+| `DNE_DATABASE_AUTH` | Azure deployment sets `managed-identity`, requires a passwordless Azure PostgreSQL URL and uses fresh per-connection tokens from the selected UAMI. No static-password or credential-chain fallback. Omit only for an existing credentialed configuration. |
 | `DNE_AZURE_BLOB_ACCOUNT_URL` | Canonical `https://ACCOUNT.blob.core.windows.net` URL, without a SAS token. |
 | `DNE_AZURE_BLOB_CONTAINER` | Existing private container. The application does not create it or enable anonymous access. |
 | `DNE_AZURE_MANAGED_IDENTITY_CLIENT_ID` | Exact user-assigned managed identity attached to the app, with object access restricted to the selected container. |
@@ -32,11 +33,21 @@ preserved; this change does not authorize a provider or change permissions.
 ## Request and storage boundaries
 
 The listener binds loopback within the container group. A deployment proxy must
-forward the configured public `Host` and the caller's unchanged `Origin` to the
-application. Do not use the older proxy's loopback Host/Origin translation for
+forward canonical traffic with the configured public `Host` and unchanged
+`Origin`. Only the exact original owned Azure alias may be normalized after
+validating its original matching Host/Origin pair, preserving its host-only
+member cookie; all other addresses and crossed pairs are refused. Do not use the older proxy's loopback Host/Origin translation for
 this contract. The application accepts only the exact configured Host and write
 Origin and still requires its normal CSRF token. Forwarded headers cannot grant
-access. HTTPS member cookies, including deletion cookies, use Secure, HttpOnly
+access. On an authenticated HTTPS page read, the same inherited bearer cookie is
+reissued with its existing database deadline and Secure/HttpOnly/SameSite=Strict.
+The proxy suppresses request access/error logs because private download URLs
+and referrers can carry signed capabilities; startup/configuration logs and the
+application's sanitized errors remain available.
+This upgrades transport protection without creating a principal or renewing the
+session, saved work or finite staff grants. HTTP loopback behavior is unchanged;
+expired/revoked members receive no active-cookie upgrade. HTTPS member cookies,
+including deletion cookies, use Secure, HttpOnly
 and SameSite=Strict; TLS termination must remain enabled at Azure ingress.
 
 PostgreSQL stores member identities, work and permissions. Evidence bytes use

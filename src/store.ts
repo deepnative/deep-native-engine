@@ -61,7 +61,9 @@ export interface Milestone extends MilestoneInput {
   updatedAt: Date;
 }
 export type Session =
-  { kind: "new" } | { kind: "expired" } | { kind: "active"; learner: Learner };
+  | { kind: "new" }
+  | { kind: "expired" }
+  | { kind: "active"; learner: Learner; expiresAt: Date };
 export interface Store {
   session(token: string): Promise<Session>;
   create(
@@ -271,11 +273,12 @@ export function store(pool: Pool): Store {
   return {
     async session(token) {
       const row = (
-        await pool.query<Learner & { active: boolean }>(
+        await pool.query<Learner & { active: boolean; expiresAt: Date }>(
           `SELECT l.id,l.background,l.goal,l.background_tags AS "backgroundTags",
                   l.domain_tags AS "domainTags",l.it_roles AS "itRoles",
                   l.experience,l.exploratory,l.time_zone AS timezone,
                   l.weekly_minutes AS "weeklyMinutes",
+                  p.expires_at AS "expiresAt",
                   p.expires_at>CURRENT_TIMESTAMP AND p.revoked_at IS NULL AS active
            FROM principals p JOIN learners l ON l.id=p.id
            WHERE p.kind='member' AND p.token_hash=$1`,
@@ -286,6 +289,7 @@ export function store(pool: Pool): Store {
       if (!row.active) return { kind: "expired" };
       return {
         kind: "active",
+        expiresAt: row.expiresAt,
         learner: {
           id: row.id,
           background: row.background,

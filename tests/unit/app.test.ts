@@ -67,7 +67,11 @@ import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 it("serves goal-matched event previews only to active members and never accepts enrollment", async () => {
   const db = storage();
   const agent = await managedAgent(app(db, { origin, secret: "secret" }));
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const listing = await agent.get("/events").set("Host", host).expect(200);
   expect(listing.text).toContain("Synthetic preview; enrollment unavailable");
   expect(listing.text).toContain("/events/everyday-ai-preview/2");
@@ -144,7 +148,11 @@ it("HOSTED-02 accepts exact HTTPS member forms with secure cookies and rejects f
   expect(db.create).not.toHaveBeenCalled();
   await post("/start").expect(303).expect("Location", "/learn");
   expect(db.create).toHaveBeenCalledOnce();
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const deleted = await agent
     .post("/delete")
     .set("Host", hostedHost)
@@ -158,6 +166,49 @@ it("HOSTED-02 accepts exact HTTPS member forms with secure cookies and rejects f
   expect((deleted.headers["set-cookie"] as unknown as string[])[0]).toMatch(
     /Expires=Thu, 01 Jan 1970.*HttpOnly; Secure; SameSite=Strict/,
   );
+});
+it("HOSTED-09 upgrades the same inherited HTTPS member cookie at its original expiry without renewing identity", async () => {
+  const hostedOrigin = "https://engine.deepnative.io";
+  const db = storage();
+  const expiresAt = new Date(Date.now() + 1234567);
+  const active = { kind: "active" as const, learner: member, expiresAt };
+  db.session.mockResolvedValue(active);
+  const application = app(db, {
+    origin: hostedOrigin,
+    secret: "hosted-secret",
+  });
+  const agent = await managedAgent(application);
+  const bearer = "a".repeat(64);
+  for (const path of ["/", "/learn"]) {
+    const result = await agent
+      .get(path)
+      .set("Host", "engine.deepnative.io")
+      .set("Cookie", `dne_preview=${bearer}`)
+      .expect(path === "/" ? 303 : 200);
+    const cookie = (result.headers["set-cookie"] as unknown as string[])[0]!;
+    expect(cookie).toBe(
+      `dne_preview=${bearer}; Path=/; Expires=${expiresAt.toUTCString()}; HttpOnly; Secure; SameSite=Strict`,
+    );
+    expect(cookie).not.toContain("Max-Age");
+  }
+  expect(db.create).not.toHaveBeenCalled();
+  expect(db.save).not.toHaveBeenCalled();
+  expect(db.session).toHaveBeenCalledWith(bearer);
+  db.session.mockResolvedValue({ kind: "expired" });
+  const expired = await agent
+    .get("/learn")
+    .set("Host", "engine.deepnative.io")
+    .set("Cookie", `dne_preview=${bearer}`)
+    .expect(303);
+  expect(expired.headers["set-cookie"]).toBeUndefined();
+  db.session.mockResolvedValue(active);
+  const local = await managedAgent(app(db, { origin, secret: "local-secret" }));
+  const loopback = await local
+    .get("/learn")
+    .set("Host", host)
+    .set("Cookie", `dne_preview=${bearer}`)
+    .expect(200);
+  expect(loopback.headers["set-cookie"]).toBeUndefined();
 });
 it("keeps personalized assignment preparation private, exact and read-only", async () => {
   const db = storage();
@@ -184,7 +235,11 @@ it("keeps personalized assignment preparation private, exact and read-only", asy
     .set("Host", host)
     .expect(303);
   expect(readiness.get).not.toHaveBeenCalled();
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const path = await agent.get("/learn").set("Host", host).expect(200);
   expect(path.text).toContain("Prepare Invented sample");
   const detail = await agent
@@ -254,7 +309,11 @@ it("rejects stale pinned lesson links before opening or changing activity", asyn
   );
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   await agent.get("/library/SYN-830?version=1").set("Host", host).expect(409);
   await agent
     .get("/library/SYN-830?version=wrong")
@@ -296,7 +355,11 @@ it("keeps workflow feedback owner-only and never claims a failed or stale write"
   await agent.get("/workflows/WF-001").set("Host", host).expect(200);
   await agent.get("/workflow-feedback/WF-001").set("Host", host).expect(303);
   expect(feedback.list).not.toHaveBeenCalled();
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const form = await agent
     .get("/workflow-feedback/WF-001")
     .set("Host", host)
@@ -427,6 +490,7 @@ it("keeps optional slot discovery private and reports read failures without impl
   expect(availability.list).not.toHaveBeenCalled();
   db.session.mockResolvedValue({
     kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
     learner: { ...member, timezone: "America/Toronto" },
   });
   const shown = await agent.get("/availability").set("Host", host).expect(200);
@@ -440,7 +504,11 @@ it("keeps optional slot discovery private and reports read failures without impl
     "Availability or receipts could not be checked",
   );
   expect(failed.text).not.toContain("private database detail");
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const noZone = await agent.get("/availability").set("Host", host).expect(200);
   expect(noZone.text).toContain("Choose a valid time zone");
 });
@@ -727,7 +795,11 @@ it("keeps member proposals private and moderation unable to publish", async () =
   );
   const entry = await memberAgent.get("/").set("Host", host).expect(200);
   const memberCsrf = entry.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const memberPost = (path: string, fields: Record<string, string>) =>
     memberAgent
       .post(path)
@@ -1208,7 +1280,11 @@ it("PREPARED-01/08 evidence entry reflects explicit creation configuration witho
   } satisfies PreparedSampleStore;
   for (const enabled of [false, true]) {
     const memberStore = storage();
-    memberStore.session.mockResolvedValue({ kind: "active", learner: member });
+    memberStore.session.mockResolvedValue({
+      kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
+      learner: member,
+    });
     const agent = await managedAgent(
       app(memberStore, {
         origin,
@@ -1476,7 +1552,11 @@ it("renders only local circle state and handles join, full, denied, and leave ou
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   await agent.get("/circles").set("Host", host).expect(303);
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const page = await agent.get("/circles").set("Host", host).expect(200);
   expect(page.text).toContain("NO LIVE COMMUNITY");
   expect(page.text).toContain("Matches your current goal");
@@ -1542,7 +1622,11 @@ async function client(evidence?: EvidenceStore) {
   return { agent, csrf };
 }
 function active() {
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
 }
 it("denies a member tailored-review request without accepting a service", async () => {
   const tracks = {
@@ -2436,6 +2520,7 @@ it("offers ephemeral source-grounded study reflection only for the current publi
   for (const goal of ["everyday", "work", "build"] as const) {
     db.session.mockResolvedValue({
       kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
       learner: { ...member, goal },
     });
     const study = await agent
@@ -3909,6 +3994,7 @@ it("keeps private milestones local, validates edits and refuses stale or foreign
   await agent.get("/milestones").set("Host", host).expect(303);
   db.session.mockResolvedValue({
     kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
     learner: { ...member, timezone: "America/Toronto" },
   });
   const empty = await agent.get("/milestones").set("Host", host).expect(200);
@@ -4004,7 +4090,11 @@ it("keeps private milestones local, validates edits and refuses stale or foreign
 
 it("withholds saved and attempted milestone content on every unavailable route branch", async () => {
   const { agent, csrf } = await client();
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   db.milestones.mockResolvedValue(null);
   db.createMilestone.mockResolvedValue(null);
   db.updateMilestone.mockResolvedValue(null);
@@ -4077,7 +4167,11 @@ it("compares only two selected submissions from an owned private attempt", async
     app(db, { origin, secret: "secret", attempts }),
   );
   await agent.get("/").set("Host", host).expect(200);
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const get = (query: string) =>
     agent.get(`/assignments/attempts/${id}/compare${query}`).set("Host", host);
   const result = await get("?from=1&to=2").expect(200);
@@ -4144,7 +4238,11 @@ it("keeps synthetic assignment attempts private through start, validation, confl
   );
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const post = (path: string, fields: Record<string, unknown>) =>
     agent
       .post(path)
@@ -4423,7 +4521,11 @@ it("preserves attempted text and separates stale, ineligible, expired and uncert
   );
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const post = (action: string, fields: Record<string, string>) =>
     agent
       .post(`/assignments/attempts/${id}/${action}`)
@@ -4594,7 +4696,11 @@ it("keeps assignment self-reflection saves, deletion and recovery tied to an own
   );
   const home = await agent.get("/").set("Host", host).expect(200);
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const path = `/assignments/attempts/${id}/reflections/1`;
   const values = {
     evidence: "Attempted <private> evidence",
@@ -4739,7 +4845,11 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
     app(db, { origin, secret: "secret", attempts }),
   );
   await agent.get("/").set("Host", host).expect(200);
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const get = (sequence: string) =>
     agent
       .get(`/assignments/attempts/${id}/portfolio/${sequence}`)
@@ -4903,6 +5013,7 @@ it("keeps member sample-hold request parameters, receipts and uncertain outcomes
   expect(holds.get).not.toHaveBeenCalled();
   db.session.mockResolvedValue({
     kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
     learner: { ...member, timezone: "America/Toronto" },
   });
   const listing = await agent
@@ -5000,7 +5111,11 @@ it("keeps member sample-hold request parameters, receipts and uncertain outcomes
       ).text,
     ).toContain("held");
   }
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   await agent.get(`/availability/holds/${id}`).set("Host", host).expect(200);
   holds.snapshot.mockRejectedValueOnce(new Error("private detail"));
   expect(
@@ -5223,7 +5338,11 @@ it("mounts private support with member authentication and separate exact-granted
   await agent.get("/").set("Host", host).expect(200);
   await agent.get("/support/new").set("Host", host).expect(303);
   expect(history).not.toHaveBeenCalled();
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const intake = await agent.get("/support/new").set("Host", host).expect(200);
   expect(intake.text).toContain("Send private sample request");
   await agent.get("/support").set("Host", host).expect(200);
@@ -5269,7 +5388,11 @@ it.each([undefined, false, true])(
     await agent.get("/").set("Host", host).expect(200);
     await agent.get("/review-minutes").set("Host", host).expect(303);
     expect(reviewTime.history).not.toHaveBeenCalled();
-    db.session.mockResolvedValue({ kind: "active", learner: member });
+    db.session.mockResolvedValue({
+      kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
+      learner: member,
+    });
     await agent.get("/review-minutes").set("Host", host).expect(200);
     expect(reviewTime.history).toHaveBeenCalledOnce();
     const allocation = await agent
@@ -5300,7 +5423,11 @@ it.each([undefined, false, true])(
 
 it("withholds an unconfirmed private attempt read and offers only fresh-state recovery", async () => {
   const db = storage();
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const attempts = {
     ...disabledAttemptStore(),
     list: vi
@@ -5347,7 +5474,11 @@ it.each(["/events", "/events/everyday-ai-preview/2"])(
           eventRegistration: true,
         }),
       );
-      db.session.mockResolvedValue({ kind: "active", learner: member });
+      db.session.mockResolvedValue({
+        kind: "active",
+        expiresAt: new Date(Date.now() + 3600000),
+        learner: member,
+      });
       const response = await agent.get(path).set("Host", host).expect(503);
       expect(response.text).toContain(
         "No availability or registration is confirmed",
@@ -5375,7 +5506,11 @@ it("EVCANCEL-03 exact cancelled member detail remains readable without offering 
       eventRegistration: true,
     }),
   );
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const response = await agent
     .get("/events/local-registration-rehearsal/1")
     .set("Host", host)
@@ -5385,7 +5520,11 @@ it("EVCANCEL-03 exact cancelled member detail remains readable without offering 
 });
 it("REHSCHED-05 invalid catalog deadlines must withhold member discovery and exact detail", async () => {
   const db = storage();
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const event = {
     ...EVENT_PREVIEWS.find((e) => e.status === "current")!,
     goals: [member.goal],
@@ -5415,7 +5554,11 @@ it("REHSCHED-05 invalid catalog deadlines must withhold member discovery and exa
 });
 it("REHSCHED-02 shared catalog supplies an exact dated member event instead of the static fixture", async () => {
   const db = storage();
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const event = {
     ...EVENT_PREVIEWS.find((e) => e.status === "current")!,
     id: "local-rehearsal-33333333-3333-4333-8333-333333333333",
@@ -5451,7 +5594,11 @@ it.each(["denied", "unavailable", "invalid"] as const)(
   "REHSCHED-04/05 catalog %s does not confirm discovery or detail availability",
   async (kind) => {
     const db = storage();
-    db.session.mockResolvedValue({ kind: "active", learner: member });
+    db.session.mockResolvedValue({
+      kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
+      learner: member,
+    });
     const catalog = {
       list: vi.fn(async () => ({ kind })),
       find: vi.fn(async () => ({ kind })),
@@ -5468,7 +5615,11 @@ it.each(["denied", "unavailable", "invalid"] as const)(
 );
 it("REHSCHED-04 absent exact catalog version is404 and lookup failures are503 without private diagnostics", async () => {
   const db = storage();
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   const catalog = {
     list: vi.fn(async () => ({
       kind: "ready" as const,
@@ -5501,7 +5652,11 @@ it.each(["already-expired", "expires-during-cancellation"])(
   "REHSCHED-05 catalog %s withholds discovery and detail handback",
   async (timing) => {
     const db = storage();
-    db.session.mockResolvedValue({ kind: "active", learner: member });
+    db.session.mockResolvedValue({
+      kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
+      learner: member,
+    });
     const event = EVENT_PREVIEWS.find((e) => e.status === "current")!;
     const listing = {
       kind: "ready" as const,
@@ -5548,7 +5703,11 @@ it.each(["expired", "nonfinite"])(
   "REHSCHED-05 %s catalog lifetime during rendering withholds discovery and detail",
   async (timing) => {
     const db = storage();
-    db.session.mockResolvedValue({ kind: "active", learner: member });
+    db.session.mockResolvedValue({
+      kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
+      learner: member,
+    });
     const event = structuredClone(
       EVENT_PREVIEWS.find((e) => e.localRegistration === true)!,
     );
@@ -5602,7 +5761,11 @@ it("ATTEND-08 configured private attendance cannot expose member receipt routes 
       eventAttendance: attendance,
     }),
   );
-  db.session.mockResolvedValue({ kind: "active", learner: member });
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
   await agent
     .get(
       "/events/registrations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/attendance",
@@ -5610,4 +5773,29 @@ it("ATTEND-08 configured private attendance cannot expose member receipt routes 
     .set("Host", host)
     .expect(404);
   expect(query).not.toHaveBeenCalled();
+});
+
+it("HOSTED-12 presents accurate hosted persistence while concurrent local rendering stays local", async () => {
+  const hosted = app(storage(), {
+    origin: "https://engine.deepnative.io",
+    hostedOrigin: "https://engine.deepnative.io",
+    secret: "hosting-copy-test",
+  });
+  const local = app(storage(), { origin, secret: "hosting-copy-test" });
+  const [publicHome, localHome] = await Promise.all([
+    request(hosted).get("/").set("Host", "engine.deepnative.io"),
+    request(local).get("/").set("Host", host),
+  ]);
+  expect(publicHome.status).toBe(200);
+  expect(publicHome.text).toContain("AZURE HOSTED LEARNING");
+  expect(publicHome.text).toContain(
+    "Your learning work is stored on this Azure-hosted service.",
+  );
+  expect(publicHome.text).not.toContain("Your work stays on this computer");
+  expect(publicHome.text).not.toContain("LOCAL LEARNING PREVIEW");
+  expect(publicHome.text).toContain(
+    "No AI provider, payment or formal assessment is connected.",
+  );
+  expect(localHome.text).toContain("Your work stays on this computer");
+  expect(localHome.text).toContain("LOCAL LEARNING PREVIEW");
 });

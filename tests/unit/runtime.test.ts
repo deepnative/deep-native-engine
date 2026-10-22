@@ -13,16 +13,22 @@ const doubles = vi.hoisted(() => ({
   recover: vi.fn(),
   azureStorage: vi.fn(),
   pool: undefined as EventEmitter | undefined,
+  poolOptions: {} as Record<string, unknown>,
+  databasePassword: vi.fn(),
 }));
 vi.mock("../../src/azure-object-storage.ts", () => ({
   azureObjectStorage: doubles.azureStorage,
+}));
+vi.mock("../../src/azure-database.ts", () => ({
+  azureDatabasePassword: doubles.databasePassword,
 }));
 vi.mock("pg", async () => {
   const { EventEmitter } = await import("node:events");
   return {
     Pool: class extends EventEmitter {
-      constructor() {
+      constructor(options: Record<string, unknown>) {
         super();
+        doubles.poolOptions = options;
         doubles.pool = this;
       }
       end = doubles.end;
@@ -384,3 +390,34 @@ it("still ends the pool if listener cleanup fails after a bound startup failure"
   expect(doubles.end).toHaveBeenCalledOnce();
   expect(doubles.recover).not.toHaveBeenCalled();
 });
+
+it.each(["", ":5432"])(
+  "HOSTED-11 runtime wires per-connection database identity only for explicit hosted authentication %s",
+  async (port) => {
+    server();
+    const password = vi.fn();
+    doubles.databasePassword.mockReturnValue(password);
+    const running = await start({
+      ...hostedEnv,
+      DNE_DATABASE_AUTH: "managed-identity",
+      DNE_DATABASE_URL: `postgresql://dne_engine@pg-deepnative.postgres.database.azure.com${port}/deepnative?sslmode=verify-full`,
+    });
+    try {
+      expect(doubles.poolOptions.password).toBe(password);
+      const { Client } = await vi.importActual<typeof import("pg")>("pg");
+      expect(new Client(doubles.poolOptions).password).toBe(password);
+      expect(doubles.databasePassword).toHaveBeenCalledExactlyOnceWith(
+        hostedEnv.DNE_AZURE_MANAGED_IDENTITY_CLIENT_ID,
+      );
+    } finally {
+      await running.close();
+    }
+    server();
+    const local = await start(env);
+    try {
+      expect(doubles.poolOptions).not.toHaveProperty("password");
+    } finally {
+      await local.close();
+    }
+  },
+);

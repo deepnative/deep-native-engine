@@ -15,6 +15,7 @@ import { memberEventCatalog } from "./member-event-catalog.ts";
 import { eventRehearsalStore } from "./event-rehearsals.ts";
 import { sampleFeedbackStore } from "./sample-feedback.ts";
 import { Pool } from "pg";
+import { databaseConnection } from "./database-connection.ts";
 import type { Server } from "node:http";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -79,8 +80,10 @@ export function evidenceCapabilityClock(
 export async function start(env: NodeJS.ProcessEnv) {
   const settings = config(env);
   const pool = new Pool({
-    connectionString: settings.databaseUrl,
-    application_name: "deep-native-preview",
+    ...databaseConnection(settings),
+    application_name: settings.hosted
+      ? "deep-native-engine"
+      : "deep-native-preview",
     connectionTimeoutMillis: 3000,
     statement_timeout: 5000,
   });

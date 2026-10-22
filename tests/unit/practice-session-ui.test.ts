@@ -56,6 +56,7 @@ const appendFields = {
 function fixture() {
   const session = vi.fn<Store["session"]>().mockResolvedValue({
     kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
     learner: { id: "member", background: "explorer", goal: "everyday" },
   });
   const db = { session } as unknown as Store;

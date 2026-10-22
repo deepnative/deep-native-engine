@@ -1,0 +1,9 @@
+*
+!package.json
+!package-lock.json
+!src/
+!public/
+!migrations/
+!assets/docs/content/
+!tsconfig.json
+!tsconfig.build.json

@@ -5,6 +5,7 @@ export interface HostedConfig {
   blobAccountUrl: string;
   blobContainer: string;
   managedIdentityClientId: string;
+  databaseAuthentication?: "managed-identity";
 }
 
 const blobKeys = [
@@ -23,8 +24,17 @@ export function hostedConfig(
   database: URL,
   mode: ApplicationMode,
 ): HostedConfig | undefined {
+  if (
+    env.DNE_DATABASE_AUTH !== undefined &&
+    env.DNE_DATABASE_AUTH !== "managed-identity"
+  )
+    throw invalid();
   if (env.DNE_PUBLIC_ORIGIN === undefined) {
-    if (blobKeys.some((key) => env[key] !== undefined)) throw invalid();
+    if (
+      env.DNE_DATABASE_AUTH !== undefined ||
+      blobKeys.some((key) => env[key] !== undefined)
+    )
+      throw invalid();
     return undefined;
   }
   let origin: URL;
@@ -47,11 +57,18 @@ export function hostedConfig(
 
   const parameters = [...database.searchParams];
   const name = database.pathname.slice(1);
+  const identityDatabase = env.DNE_DATABASE_AUTH === "managed-identity";
   if (
     !["postgres:", "postgresql:"].includes(database.protocol) ||
     database.hash !== "" ||
     database.username === "" ||
-    database.password === "" ||
+    (identityDatabase
+      ? database.password !== "" ||
+        !/^[a-z][a-z0-9_]{0,62}$/.test(database.username) ||
+        !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]\.postgres\.database\.azure\.com$/.test(
+          database.hostname,
+        )
+      : database.password === "") ||
     parameters.length !== 1 ||
     parameters[0]![0] !== "sslmode" ||
     parameters[0]![1] !== "verify-full" ||
@@ -84,5 +101,8 @@ export function hostedConfig(
     blobAccountUrl,
     blobContainer,
     managedIdentityClientId,
+    ...(identityDatabase
+      ? { databaseAuthentication: "managed-identity" as const }
+      : {}),
   };
 }

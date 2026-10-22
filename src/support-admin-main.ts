@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { lstat, readFile, writeFile, mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { config } from "./config.ts";
+import { databaseConnection } from "./database-connection.ts";
 import { migrate } from "./store.ts";
 import { authorizationStore } from "./authorization.ts";
 import { circleDiscussionStore } from "./circle-discussion.ts";
@@ -96,7 +97,7 @@ try {
     }
   }
   pool = new Pool({
-    connectionString: settings.databaseUrl,
+    ...databaseConnection(settings),
     application_name: "deep-native-local-support-admin",
     connectionTimeoutMillis: 3000,
     statement_timeout: 5000,

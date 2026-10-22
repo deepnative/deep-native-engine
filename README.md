@@ -35,6 +35,8 @@ make dev
 
 Open `http://127.0.0.1:3000`. Setup installs locked dependencies, Chromium, Firefox and WebKit for browser checks, the local database and the pre-push hook. It preserves an existing `.env`. See [verification and troubleshooting](assets/docs/workflows/VERIFICATION.md).
 
+The Azure release targets [engine.deepnative.io](https://engine.deepnative.io) with durable PostgreSQL, private evidence storage and guarded deployments from verified `main`. The [Azure release guide](assets/docs/workflows/AZURE-DEMO-DEPLOYMENT.md) covers preservation, restart and rollback; [#45](https://github.com/deepnative/deep-native-engine/issues/45) records the actual deployed revision and public acceptance evidence. Hosting does not activate external AI, payments or qualified assessment. The first durable cutover requires verified preservation of the existing deployment; source/CI alone is not deployment proof.
+
 The [quality gates](assets/docs/context/QUALITY-GATES.md) and [scope and acceptance](assets/docs/INITIAL-LEARNING-SLICE.md) explain what is tested in this preview and what remains for the full MVP.
 
 ## Team setup
