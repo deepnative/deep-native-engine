@@ -18,6 +18,42 @@ const docker = (...args: string[]) =>
     timeout: 120_000,
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
+function workers() {
+  const rows = docker(
+    "exec",
+    name,
+    "sh",
+    "-c",
+    'for p in /proc/[0-9]*/cmdline; do title=$(tr "\\000" " " < "$p" 2>/dev/null) || { [ ! -e "$p" ] && continue; exit 1; }; case "$title" in "nginx: worker process"*) stat="${p%/cmdline}/stat"; cat "$stat" 2>/dev/null || { [ ! -e "$stat" ] || exit 1; };; esac; done',
+  );
+  return rows
+    ? rows.split("\n").map((row) => {
+        const pid = row.slice(0, row.indexOf(" "));
+        const fields = row.slice(row.lastIndexOf(")") + 2).split(/\s+/);
+        const started = fields[19];
+        if (!/^\d+$/.test(pid) || !/^\d+$/.test(started ?? ""))
+          throw Error("Owned proxy worker identity unavailable.");
+        return `${pid}:${started}`;
+      })
+    : [];
+}
+async function reloadProxy() {
+  const previous = workers();
+  if (previous.length === 0) throw Error("Owned proxy has no current workers.");
+  docker("exec", name, "nginx", "-t");
+  docker("exec", name, "nginx", "-s", "reload");
+  const deadline = Date.now() + 10_000;
+  while (true) {
+    const current = workers();
+    // A response from one worker does not prove the old generation drained.
+    // Observe the same reload, without retrying any HTTP assertion or error.
+    if (current.length > 0 && previous.every((pid) => !current.includes(pid)))
+      return;
+    if (Date.now() >= deadline)
+      throw Error("Owned proxy reload did not drain its previous workers.");
+    await new Promise((done) => setTimeout(done, 50));
+  }
+}
 async function proxyRequest(
   url: string,
   options: {
@@ -187,23 +223,14 @@ it("HOSTED-13 enters and leaves verified maintenance in place without restarting
   );
   chmodSync(maintenance, 0o644);
   const before = JSON.parse(docker("inspect", name))[0];
-  const waitFor = async (status: number) => {
-    const deadline = Date.now() + 10_000;
-    while (true) {
-      const response = await proxyRequest(address, {
-        headers: { Host: canonical },
-      });
-      if (response.status === status) return response;
-      if (Date.now() >= deadline)
-        throw Error("Owned proxy reload did not reach its expected state.");
-      await new Promise((done) => setTimeout(done, 50));
-    }
-  };
   try {
     docker("cp", maintenance, `${name}:/etc/nginx/conf.d/default.conf`);
-    docker("exec", name, "nginx", "-t");
-    docker("exec", name, "nginx", "-s", "reload");
-    expect(await (await waitFor(503)).text()).toBe(
+    await reloadProxy();
+    const paused = await proxyRequest(address, {
+      headers: { Host: canonical },
+    });
+    expect(paused.status).toBe(503);
+    expect(await paused.text()).toBe(
       "Deployment maintenance. Existing work is preserved.\n",
     );
     expect(
@@ -217,9 +244,10 @@ it("HOSTED-13 enters and leaves verified maintenance in place without restarting
     ).toBe(503);
   } finally {
     docker("cp", original, `${name}:/etc/nginx/conf.d/default.conf`);
-    docker("exec", name, "nginx", "-t");
-    docker("exec", name, "nginx", "-s", "reload");
-    await waitFor(200);
+    await reloadProxy();
+    expect(
+      (await proxyRequest(address, { headers: { Host: canonical } })).status,
+    ).toBe(200);
   }
   const after = JSON.parse(docker("inspect", name))[0];
   expect(after.Id).toBe(before.Id);
@@ -233,6 +261,7 @@ it("HOSTED-13 enters and leaves verified maintenance in place without restarting
       Cookie: "dne_session=same-original-invented-credential",
     },
   });
+  expect(receipt.status).toBe(200);
   expect(await receipt.text()).toContain(
     "dne_session=same-original-invented-credential",
   );
@@ -256,14 +285,8 @@ it("HOSTED-10 keeps signed URLs and member/referrer credentials out of proxy log
   ).toBe(403);
   try {
     docker("exec", name, "rm", "/etc/nginx/conf.d/upstream.conf");
-    docker("exec", name, "nginx", "-t");
-    docker("exec", name, "nginx", "-s", "reload");
-    const deadline = Date.now() + 10000;
-    while ((await proxyRequest(address + path, { headers })).status !== 502) {
-      if (Date.now() >= deadline)
-        throw Error("Owned proxy did not observe the unavailable upstream.");
-      await new Promise((done) => setTimeout(done, 50));
-    }
+    await reloadProxy();
+    expect((await proxyRequest(address + path, { headers })).status).toBe(502);
     const logs = spawnSync("docker", ["logs", name], { encoding: "utf8" });
     expect(logs.status).toBe(0);
     expect(logs.stdout + logs.stderr).not.toContain(marker);
@@ -273,7 +296,6 @@ it("HOSTED-10 keeps signed URLs and member/referrer credentials out of proxy log
       join(directory, "upstream.conf"),
       `${name}:/etc/nginx/conf.d/upstream.conf`,
     );
-    docker("exec", name, "nginx", "-t");
-    docker("exec", name, "nginx", "-s", "reload");
+    await reloadProxy();
   }
 });
