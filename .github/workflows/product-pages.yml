@@ -174,6 +174,7 @@ jobs:
           DNE_REVISION: ${{ steps.revision.outputs.sha }}
         run: |
           test -f site/index.html
+          cp public/pages-demo.js site/demo.js
           printf '{"revision":"%s"}\n' "$DNE_REVISION" > site/build.json
       - name: Configure Pages
         if: steps.revision.outputs.eligible == 'true'

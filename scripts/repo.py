@@ -50,7 +50,7 @@ APP_FILES = {
     # owner-preview unit/native tests and the existing JS lint/format gate.
     "scripts/private-preview.mjs", "scripts/private-preview.d.mts",
     "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "scripts/full-release-evidence.mjs", "tests/e2e/scenarios.json", "tests/e2e/cross-browser-scenarios.json", "tests/e2e/full-mvp-approval.json", "src/main.ts", "migrations/001-learning.sql",
-    "assets/docs/content/circles/preview-circles.json", "public/attempt-save.js", "public/member-export.js", "public/evidence-export.js", "public/exercise-error-focus.js",
+    "assets/docs/content/circles/preview-circles.json", "public/pages-demo.js", "public/attempt-save.js", "public/member-export.js", "public/evidence-export.js", "public/exercise-error-focus.js",
     "assets/docs/content/events/preview-events.json",
 }
 # Azure landing-zone onboarding and synthetic demo preview (issue #525):
@@ -144,13 +144,15 @@ def validate_scope(root, files):
 
 
 class ProductSiteHTML(HTMLParser):
-    """The public introduction has navigation and local assets, but no active content."""
+    """The public sample permits reviewed controls, but no collection or arbitrary active content."""
 
     TAGS = {"html", "head", "meta", "title", "link", "body", "a", "div", "span", "header",
             "nav", "main", "section", "h1", "h2", "h3", "p", "em", "strong", "small",
-            "article", "details", "summary", "ol", "li", "footer", "br", "i", "b"}
+            "article", "details", "summary", "ol", "li", "footer", "br", "i", "b",
+            "label", "select", "option", "textarea", "input", "button", "noscript"}
     ATTRS = {"class", "id", "role", "lang", "aria-hidden", "aria-label", "aria-labelledby",
-             "href", "rel", "type", "name", "property", "content", "charset"}
+             "href", "rel", "type", "name", "property", "content", "charset",
+             "for", "value", "rows", "maxlength", "disabled", "aria-describedby"}
 
     def handle_starttag(self, tag, attrs):
         require(tag in self.TAGS, "Unsafe product site HTML element")
@@ -160,7 +162,19 @@ class ProductSiteHTML(HTMLParser):
         values = dict(attrs)
         require(("href" not in values or tag in {"a", "link"}) and
                 ("rel" not in values or tag == "link") and
-                ("type" not in values or tag == "link"), "Unsafe product site HTML attribute")
+                ("type" not in values or tag in {"link", "input", "button"}) and
+                ("for" not in values or tag == "label") and
+                ("value" not in values or tag == "option") and
+                ("rows" not in values or tag == "textarea") and
+                ("maxlength" not in values or tag == "textarea") and
+                ("disabled" not in values or (tag in {"select", "textarea", "input", "button"}
+                 and values["disabled"] == "disabled")), "Unsafe product site HTML attribute")
+        if tag in {"input", "button"}:
+            require(values.get("type") == {"input": "checkbox", "button": "button"}[tag],
+                    "Unsafe product site control")
+        if tag == "textarea":
+            require(values.get("maxlength") == "1200" and values.get("rows") == "7",
+                    "Unsafe product site text control")
         if tag == "link":
             require((values.get("rel"), values.get("href")) in {
                 ("icon", "./favicon.svg"), ("stylesheet", "./styles.css")},
@@ -171,6 +185,7 @@ class ProductSiteHTML(HTMLParser):
             require((href.startswith("#") and len(href) > 1) or
                     (url.scheme == "https" and url.netloc == "github.com" and
                      url.path.startswith("/deepnative/deep-native-engine")) or
+                    (href == "https://engine.deepnative.io/learn") or
                     (url.scheme == "mailto" and url.path == "info@deepnative.io"),
                     "Unsafe product site navigation link")
 
@@ -187,7 +202,12 @@ def validate_product_site(root):
     """Keep the Pages publication local, static and free of collection surfaces."""
     message = "Unsafe product site asset"
     page = ProductSiteHTML()
-    page.feed((root / "site/index.html").read_text(encoding="utf-8"))
+    html = (root / "site/index.html").read_text(encoding="utf-8")
+    # Only this exact, covered local module is staged by the Pages workflow.
+    # Removing it before parsing keeps all inline/other script elements forbidden.
+    module = '<script type="module" src="./demo.js"></script>'
+    require(html.count(module) == 1, "Unsafe product site demo module")
+    page.feed(html.replace(module, ""))
     page.close()
     css = (root / "site/styles.css").read_text(encoding="utf-8")
     require(not re.search(r"@import\b|@font-face\b|url\s*\(|image-set\s*\(|expression\s*\(|"
