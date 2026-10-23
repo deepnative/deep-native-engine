@@ -57,6 +57,13 @@ function view(): SampleFeedbackView {
     next: null,
   };
 }
+function expectUnverifiedAuthorship(html: string) {
+  expect(html).not.toContain("HUMAN-AUTHORED");
+  expect(html).toContain("PRIVATE SAMPLE FEEDBACK · NOT FORMAL ASSESSMENT");
+  expect(html).toContain(
+    "Reviewer account attribution does not verify human authorship.",
+  );
+}
 it("PREPARED-03 identifies a provided unreviewed source to member and reviewer without claiming authorship or assessment", () => {
   const template = PREPARED_SAMPLES[0]!;
   for (const reviewer of [false, true]) {
@@ -79,6 +86,7 @@ it("PREPARED-03 identifies a provided unreviewed source to member and reviewer w
     expect(html).toContain(PROVIDED_SAMPLE_LABEL);
     expect(html).toContain(template.digest);
     expect(html).not.toContain("Provided-example origin is not recorded");
+    expectUnverifiedAuthorship(html);
   }
 });
 it("encodes path identifiers instead of allowing injected query or markup", () => {
@@ -89,6 +97,7 @@ it("reopens the saved draft at its exact quote occurrence and publishes only tha
   const v = view();
   v.records = [record()];
   const html = sampleFeedbackPage(v, "csrf", true);
+  expectUnverifiedAuthorship(html);
   expect(html).toContain(
     'name="occurrence0" type="number" min="1" max="1048576" value="2"',
   );
@@ -103,6 +112,7 @@ it("reopens the saved draft at its exact quote occurrence and publishes only tha
 });
 it("renders an empty draft without a publish action", () => {
   const html = sampleFeedbackPage(view(), "csrf", true);
+  expectUnverifiedAuthorship(html);
   expect(html).toContain('name="revision" value="0"');
   expect(html).not.toContain("Publish saved feedback");
 });
@@ -110,6 +120,11 @@ it("lets the owner ask one clarification on published feedback", () => {
   const v = view();
   v.records = [{ ...record(), publishedAt: new Date("2026-10-03T12:00:00Z") }];
   const html = sampleFeedbackPage(v, "csrf", false);
+  expectUnverifiedAuthorship(html);
+  expect(html).toContain("Reviewer reference invented-reviewer");
+  expect(html).toContain(
+    "source version 1 · published 2026-10-03T12:00:00.000Z",
+  );
   expect(html).toContain("Send clarification");
   expect(html).not.toContain("Send answer");
   expect(html).toContain(
@@ -141,9 +156,12 @@ it("offers only the original reviewer's answer form after a clarification", () =
 });
 it("shows completed exchange without another answer or clarification form", () => {
   const v = view();
+  const original = record();
+  original.criteria[0]!.comment =
+    "Codex-generated demonstration feedback; not a human assessment.";
   v.records = [
     {
-      ...record(),
+      ...original,
       publishedAt: new Date(),
       clarification: "Question",
       answer: "<Answer>",
@@ -151,6 +169,9 @@ it("shows completed exchange without another answer or clarification form", () =
   ];
   for (const reviewer of [true, false]) {
     const html = sampleFeedbackPage(v, "csrf", reviewer);
+    expectUnverifiedAuthorship(html);
+    expect(html).toContain(original.criteria[0]!.comment);
+    expect(html).toContain("Reviewer reference invented-reviewer");
     expect(html).toContain("&lt;Answer&gt;");
     expect(html).not.toContain("Send answer");
     expect(html).not.toContain("Send clarification");
@@ -162,6 +183,7 @@ it("withdrawal retains published feedback but disables new exchanges", () => {
   v.records = [{ ...record(), publishedAt: new Date() }];
   v.next = id;
   const html = sampleFeedbackPage(v, "csrf", false);
+  expectUnverifiedAuthorship(html);
   expect(html).toContain("Consent withdrawn");
   expect(html).toContain("Published sample feedback");
   expect(html).not.toContain("Send clarification");

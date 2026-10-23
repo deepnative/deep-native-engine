@@ -2,6 +2,8 @@
 
 Issue [#450](https://github.com/deepnative/deep-native-engine/issues/450) advances parent #38 with a private, invented-data learning loop. No qualified rubric, score, paid service, booking, automatic routing or notification is provided.
 
+Member and reviewer pages label this **private sample feedback, not formal assessment**. A reviewer reference records the account that published the feedback; it does not verify human authorship or qualifications. Existing source quotes, comments, publication times and clarification exchanges retain their original values. No human or AI provenance is inferred from a role or from comment text. This distinction applies to empty, draft, published and consent-withdrawn views.
+
 ## Use the local preview
 
 Run the normal local application with a dedicated preview database and private object-storage directory. A member creates an invented text sample under **Manage private evidence**, explicitly confirms rights and private-review consent, and queues it after a separately performed synthetic safety transition. Uploading does not certify safety or qualification.
