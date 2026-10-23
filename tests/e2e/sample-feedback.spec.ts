@@ -13,6 +13,15 @@ const sampleText = `An invented team checks every factual claim.
 ${"invented".repeat(70)}`;
 const feedbackText = `Explain how each claim is checked. ${"reference".repeat(30)}`;
 async function readableFeedback(page: Page) {
+  await expect(page.locator(".sample-feedback > .eyebrow")).toHaveText(
+    "PRIVATE SAMPLE FEEDBACK · NOT FORMAL ASSESSMENT",
+  );
+  await expect(
+    page.getByText(
+      "Reviewer account attribution does not verify human authorship.",
+      { exact: false },
+    ),
+  ).toBeVisible();
   await expect(page.locator("details pre")).toHaveText(sampleText, {
     useInnerText: false,
   });
@@ -164,6 +173,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
       await expect(
         page.getByText("No published feedback is available for this sample."),
       ).toBeVisible();
+      await readableFeedback(page);
       const forbidden = await staff.request.post(staffPath + "/publish", {
         headers: { Origin: origin },
         form: { csrf: "forged", revision: "1", confirm: "yes" },
@@ -245,6 +255,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
       await expect(
         page.getByText("Consent withdrawn:", { exact: false }),
       ).toBeVisible();
+      await readableFeedback(page);
       await page.goto("/evidence");
       await page
         .getByLabel(`Delete ${name} and its configured active derivatives`, {
