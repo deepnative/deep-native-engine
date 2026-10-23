@@ -134,13 +134,14 @@ it.each(cases)(
       secret = "invented-proposal-lifetime",
       read = ["owned", "preview", "queue"].includes(operation);
     try {
-      await pool.query(
-        "UPDATE principals SET expires_at=clock_timestamp()+interval '400 milliseconds' WHERE id=$1",
-        [actor],
-      );
       const response = await withLoopback(
         app(db, { origin, secret, proposals: backend, authorization: auth }),
-        (server) => {
+        async (server) => {
+          // Arm the request lifetime only after application/server setup.
+          await pool.query(
+            "UPDATE principals SET expires_at=clock_timestamp()+interval '400 milliseconds' WHERE id=$1",
+            [actor],
+          );
           const call = (
             read
               ? request(server).get(paths[operation])

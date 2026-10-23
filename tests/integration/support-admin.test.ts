@@ -12,7 +12,15 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest";
 import { migrate, store } from "../../src/store.ts";
 import { supportRequestStore } from "../../src/support-requests.ts";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -121,13 +129,23 @@ it("bootstraps into private regular files without printing tokens and preserves 
   }
 });
 
-it("grants and revokes an exact real request using current private administrator credentials", async () => {
-  const root = await mkdtemp(join(tmpdir(), "dne-support-admin-grant-"));
-  try {
+describe("private support administrator request actions", () => {
+  let root: string;
+  let directory: string;
+  let memberToken: string;
+  let support: ReturnType<typeof supportRequestStore>;
+  let instruction: {
+    requestId: string;
+    idempotencyKey: string;
+    startsAt: string;
+    expiresAt: string;
+  };
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "dne-support-admin-grant-"));
     expect((await run(root)).code).toBe(0);
-    const directory = join(root, "support-admin"),
-      memberToken = randomBytes(32).toString("hex"),
-      support = supportRequestStore(pool);
+    directory = join(root, "support-admin");
+    memberToken = randomBytes(32).toString("hex");
+    support = supportRequestStore(pool);
     await store(pool).create(memberToken, {
       background: "professional",
       goal: "work",
@@ -138,7 +156,7 @@ it("grants and revokes an exact real request using current private administrator
       body: "Private sample",
     });
     if (!("receipt" in created)) throw Error("Missing synthetic request");
-    const instruction = {
+    instruction = {
       requestId: created.receipt.requestId,
       idempotencyKey: randomUUID(),
       startsAt: new Date(Date.now() - 1000).toISOString(),
@@ -149,6 +167,11 @@ it("grants and revokes an exact real request using current private administrator
       JSON.stringify(instruction),
       { flag: "wx", mode: 0o600 },
     );
+  });
+  afterEach(async () => {
+    if (root) await rm(root, { recursive: true, force: true });
+  });
+  it("grants and revokes an exact real request using current private administrator credentials", async () => {
     const granted = await run(root, ["grant", "grant.json"]);
     expect(granted.code).toBe(0);
     const grant = JSON.parse(granted.out);
@@ -193,9 +216,7 @@ it("grants and revokes an exact real request using current private administrator
       (await pool.query("SELECT count(*)::int n FROM support_request_grants"))
         .rows[0].n,
     ).toBe(1);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+  });
 });
 
 it("creates and revokes separate support-time purpose grants from protected local instructions without enabling note access", async () => {
