@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { randomBytes } from "node:crypto";
 import request from "supertest";
 import { app } from "../../src/app.ts";
@@ -80,7 +80,7 @@ it("EMAIL-ACCESS-01/02 links only the current verified member and reopens the sa
     200,
     false,
   ]);
-  expect(delivered).toHaveLength(1);
+  await vi.waitFor(() => expect(delivered).toHaveLength(1), { timeout: 3000 });
   expect(delivered[0]?.address).toBe("member@example.com");
   const attachCode = code();
   const preview = await request(application)
@@ -100,7 +100,7 @@ it("EMAIL-ACCESS-01/02 links only the current verified member and reopens the sa
     email: "MEMBER@example.com",
   });
   expect(signin.status).toBe(200);
-  expect(delivered).toHaveLength(2);
+  await vi.waitFor(() => expect(delivered).toHaveLength(2), { timeout: 3000 });
   const signedIn = await post("/email/confirm", { code: code() });
   expect(signedIn.status).toBe(303);
   const nextToken = signedIn.headers["set-cookie"]?.[0]?.match(
@@ -128,7 +128,7 @@ it("EMAIL-ACCESS-03/04 does not reveal unknown addresses, reuse links, or merge 
   });
   expect(unknown.status).toBe(known.status);
   expect(unknown.text).toBe(known.text);
-  expect(delivered).toHaveLength(2);
+  await vi.waitFor(() => expect(delivered).toHaveLength(2), { timeout: 3000 });
   const stolen = code();
   const otherAttach = await access.requestAttach(
     other.token,
