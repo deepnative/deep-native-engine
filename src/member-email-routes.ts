@@ -14,6 +14,25 @@ export function mountMemberEmailRoutes(
   access: MemberEmailAccess | undefined,
   origin: string,
 ) {
+  let pendingRequests = 0;
+  function dispatch(request: () => Promise<unknown>) {
+    // Acknowledgement must not wait for an account lookup or mail delivery:
+    // either delay would reveal whether an address belongs to a member.
+    if (pendingRequests >= 32) return;
+    pendingRequests++;
+    setImmediate(() => {
+      void Promise.resolve()
+        .then(request)
+        .catch(() => {
+          process.stderr.write(
+            "Member email request could not be confirmed.\n",
+          );
+        })
+        .finally(() => {
+          pendingRequests--;
+        });
+    });
+  }
   app.get("/email/sign-in", (_req, res) => {
     res.cookie(COOKIE, res.locals.token as string, cookieOptions(origin));
     res.send(
@@ -33,11 +52,12 @@ export function mountMemberEmailRoutes(
             '<section class="error-page"><h1>Email unavailable</h1><p>Try again later. Your saved work is unchanged.</p></section>',
           ),
         );
-    await access.requestSignIn(String(req.body.email ?? ""));
+    const address = String(req.body.email ?? "");
+    dispatch(() => access.requestSignIn(address));
     return res.send(
       page(
         "Check your email",
-        '<section class="error-page"><h1>Check your email</h1><p>If this address is linked to a learning record, a private sign-in link has been sent. Check your inbox. The link expires after 15 minutes.</p></section>',
+        '<section class="error-page"><h1>Check your email</h1><p>If this address is linked to a learning record, a private sign-in link will arrive shortly. Check your inbox and request a fresh link if it does not arrive. The link expires after 15 minutes.</p></section>',
       ),
     );
   });
@@ -80,14 +100,13 @@ export function mountMemberEmailRoutes(
             '<section class="error-page"><h1>Email unavailable</h1><p>Try again later. Your saved work is unchanged.</p></section>',
           ),
         );
-    await access.requestAttach(
-      res.locals.token as string,
-      String(req.body.email ?? ""),
-    );
+    const memberToken = res.locals.token as string;
+    const address = String(req.body.email ?? "");
+    dispatch(() => access.requestAttach(memberToken, address));
     return res.send(
       page(
         "Check your email",
-        '<section class="error-page"><h1>Check your email</h1><p>If this address can be linked, open its private verification link within 15 minutes. Your saved work is unchanged until you confirm the link.</p></section>',
+        '<section class="error-page"><h1>Check your email</h1><p>If this address can be linked, a private verification link will arrive shortly. Request a fresh link if it does not arrive, and open it within 15 minutes. Your saved work is unchanged until you confirm the link.</p></section>',
       ),
     );
   });

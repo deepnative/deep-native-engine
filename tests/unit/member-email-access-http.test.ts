@@ -119,6 +119,101 @@ it("returns the same generic sign-in response for any address and requires CSRF"
   expect(email.requestSignIn).toHaveBeenLastCalledWith("");
 });
 
+it.each([
+  ["/email/sign-in", "sign-in"],
+  ["/email/attach", "attachment"],
+])("acknowledges %s without waiting for email delivery", async (path, kind) => {
+  const { application, email } = fixture();
+  let finish!: () => void;
+  const pending = new Promise<unknown>((resolve) => {
+    finish = () => resolve(kind === "attachment" ? "sent" : undefined);
+  });
+  if (kind === "attachment")
+    email.requestAttach.mockReturnValueOnce(pending as never);
+  else email.requestSignIn.mockReturnValueOnce(pending as never);
+  const responsePromise = post(application, path, {
+    email: "saved@example.com",
+  }).then((response) => response);
+  let timer: NodeJS.Timeout | undefined;
+  let first: unknown;
+  try {
+    first = await Promise.race([
+      responsePromise,
+      new Promise<"waiting">((resolve) => {
+        timer = setTimeout(() => resolve("waiting"), 1000);
+      }),
+    ]);
+  } finally {
+    finish();
+    if (timer) clearTimeout(timer);
+  }
+  const response = await responsePromise;
+  expect(first).not.toBe("waiting");
+  expect(response.status).toBe(200);
+  expect(response.text).not.toContain("saved@example.com");
+});
+
+it("keeps email delivery work bounded while every requester gets the same acknowledgement", async () => {
+  const { application, email } = fixture(false);
+  let finish!: () => void;
+  const pending = new Promise<undefined>((resolve) => {
+    finish = () => resolve(undefined);
+  });
+  email.requestSignIn.mockImplementation(() => pending);
+  try {
+    const responses = await Promise.all(
+      Array.from({ length: 33 }, () =>
+        post(application, "/email/sign-in", {
+          email: "saved@example.com",
+        }).then((response) => response),
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(email.requestSignIn).toHaveBeenCalledTimes(32),
+    );
+    expect(responses.every((response) => response.status === 200)).toBe(true);
+    expect(
+      responses.every((response) =>
+        response.text.includes("<h1>Check your email</h1>"),
+      ),
+    ).toBe(true);
+    expect(
+      responses.every(
+        (response) => !response.text.includes("saved@example.com"),
+      ),
+    ).toBe(true);
+  } finally {
+    finish();
+  }
+});
+
+it("keeps a delivery error out of the generic response and private logs", async () => {
+  const { application, email } = fixture(false);
+  const stderr = vi
+    .spyOn(process.stderr, "write")
+    .mockImplementation(() => true);
+  try {
+    email.requestSignIn.mockRejectedValueOnce(
+      new Error("private saved@example.com"),
+    );
+    const response = await post(application, "/email/sign-in", {
+      email: "saved@example.com",
+    });
+    await vi.waitFor(() =>
+      expect(stderr).toHaveBeenCalledWith(
+        "Member email request could not be confirmed.\n",
+      ),
+    );
+    expect(response.status).toBe(200);
+    expect(response.text).not.toContain("saved@example.com");
+    expect(JSON.stringify(stderr.mock.calls)).not.toContain(
+      "saved@example.com",
+    );
+  } finally {
+    stderr.mockRestore();
+  }
+});
+
 it("makes attachment available only to an active member without revealing whether an address is bound", async () => {
   const inactive = fixture(false);
   expect((await get(inactive.application, "/email/attach")).status).toBe(303);

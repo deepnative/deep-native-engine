@@ -73,7 +73,7 @@ test("[L213] email verification restores the exact saved member in another brows
     await expect(
       page.getByRole("heading", { name: "Check your email" }),
     ).toBeVisible();
-    expect(messages).toHaveLength(1);
+    await expect.poll(() => messages.length).toBe(1);
     expect(messages[0]?.address).toBe(emailAddress);
     returning = await browser.newContext();
     const fresh = await returning.newPage();
@@ -88,7 +88,7 @@ test("[L213] email verification restores the exact saved member in another brows
     await fresh.goto(`${origin}/email/sign-in`);
     await fresh.getByLabel("Email address").fill(emailAddress);
     await fresh.getByRole("button", { name: "Send sign-in link" }).click();
-    expect(messages).toHaveLength(2);
+    await expect.poll(() => messages.length).toBe(2);
     await fresh.goto(messages[1]!.link);
     await fresh.getByRole("button", { name: "Continue" }).click();
     await expect(fresh).toHaveURL(`${origin}/learn`);
