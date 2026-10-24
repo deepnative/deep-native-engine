@@ -80,23 +80,14 @@ export function mountMemberEmailRoutes(
             '<section class="error-page"><h1>Email unavailable</h1><p>Try again later. Your saved work is unchanged.</p></section>',
           ),
         );
-    const result = await access.requestAttach(
+    await access.requestAttach(
       res.locals.token as string,
       String(req.body.email ?? ""),
     );
-    if (result === "unavailable")
-      return res
-        .status(409)
-        .send(
-          page(
-            "Email not linked",
-            '<section class="error-page"><h1>Email not linked</h1><p>Check the address or try later. Your saved work is unchanged.</p></section>',
-          ),
-        );
     return res.send(
       page(
         "Check your email",
-        '<section class="error-page"><h1>Check your email</h1><p>Open the private verification link within 15 minutes to connect this learning record.</p></section>',
+        '<section class="error-page"><h1>Check your email</h1><p>If this address can be linked, open its private verification link within 15 minutes. Your saved work is unchanged until you confirm the link.</p></section>',
       ),
     );
   });

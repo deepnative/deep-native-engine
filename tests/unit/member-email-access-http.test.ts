@@ -119,7 +119,7 @@ it("returns the same generic sign-in response for any address and requires CSRF"
   expect(email.requestSignIn).toHaveBeenLastCalledWith("");
 });
 
-it("makes attachment available only to an active member and reports an unavailable address without mutation", async () => {
+it("makes attachment available only to an active member without revealing whether an address is bound", async () => {
   const inactive = fixture(false);
   expect((await get(inactive.application, "/email/attach")).status).toBe(303);
   expect(
@@ -143,9 +143,11 @@ it("makes attachment available only to an active member and reports an unavailab
     "x@example.com",
   );
   active.email.requestAttach.mockResolvedValueOnce("unavailable" as never);
-  expect((await post(active.application, "/email/attach", {})).status).toBe(
-    409,
-  );
+  const unavailable = await post(active.application, "/email/attach", {
+    email: "x@example.com",
+  });
+  expect(unavailable.status).toBe(sent.status);
+  expect(unavailable.text).toBe(sent.text);
 });
 
 it("fails closed when no sender is configured", async () => {
