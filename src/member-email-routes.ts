@@ -121,7 +121,10 @@ export function mountMemberEmailRoutes(
             '<section class="error-page"><h1>Link unavailable</h1><p>Request a fresh email link.</p></section>',
           ),
         );
-    const result = await access.consume(String(req.body.code ?? ""));
+    const result = await access.consume(
+      String(req.body.code ?? ""),
+      res.locals.token as string,
+    );
     if (result.kind === "unavailable")
       return res
         .status(409)

@@ -184,7 +184,7 @@ it("opens a confirmation page without consuming the code, then handles attach, s
   expect(email.consume).not.toHaveBeenCalled();
   const linked = await post(application, "/email/confirm", { code }, false);
   expect(linked.status).toBe(200);
-  expect(email.consume).toHaveBeenCalledWith(code);
+  expect(email.consume).toHaveBeenCalledWith(code, credential);
   email.consume.mockResolvedValueOnce({ kind: "unavailable" } as never);
   expect((await post(application, "/email/confirm", {}, false)).status).toBe(
     409,

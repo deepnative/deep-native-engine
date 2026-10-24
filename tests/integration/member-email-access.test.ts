@@ -148,6 +148,45 @@ it("EMAIL-ACCESS-03/04 does not reveal unknown addresses, reuse links, or merge 
   ).toBe(owner.id);
 });
 
+it("EMAIL-ACCESS-03 does not switch another active member or consume their link", async () => {
+  const owner = await member();
+  const other = await member();
+  await access.requestAttach(owner.token, "owner@example.com");
+  const attachCode = code();
+  expect(
+    (await post("/email/confirm", { code: attachCode }, other.token)).status,
+  ).toBe(409);
+  expect(
+    (await pool.query("SELECT 1 FROM member_email_identities")).rowCount,
+  ).toBe(0);
+  expect(
+    (await post("/email/confirm", { code: attachCode }, owner.token)).status,
+  ).toBe(200);
+  await access.requestSignIn("owner@example.com");
+  const signInCode = code();
+
+  const foreignSession = await post(
+    "/email/confirm",
+    { code: signInCode },
+    other.token,
+  );
+  expect(foreignSession.status).toBe(409);
+  expect((await members.session(owner.token)).kind).toBe("active");
+  expect((await members.session(other.token)).kind).toBe("active");
+  expect(
+    (
+      await pool.query(
+        "SELECT consumed_at FROM member_email_links WHERE token_hash=$1",
+        [hash(signInCode)],
+      )
+    ).rows[0]?.consumed_at,
+  ).toBeNull();
+
+  const rightfulSession = await post("/email/confirm", { code: signInCode });
+  expect(rightfulSession.status).toBe(303);
+  expect((await members.session(other.token)).kind).toBe("active");
+});
+
 it("EMAIL-ACCESS-03 bounds concurrent requests for one address across different members", async () => {
   const owners = await Promise.all(Array.from({ length: 6 }, () => member()));
   const results = await Promise.all(

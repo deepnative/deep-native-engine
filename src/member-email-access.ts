@@ -12,7 +12,10 @@ export interface MemberEmailAccess {
     address: string,
   ): Promise<"sent" | "unavailable">;
   requestSignIn(address: string): Promise<void>;
-  consume(code: string): Promise<{
+  consume(
+    code: string,
+    currentToken?: string,
+  ): Promise<{
     kind: "attached" | "signed_in" | "unavailable";
     token?: string;
   }>;
@@ -146,7 +149,7 @@ export function memberEmailAccess(
     async requestSignIn(address) {
       await request("sign_in", address);
     },
-    async consume(code) {
+    async consume(code, currentToken) {
       if (!/^[a-f0-9]{64}$/.test(code)) return { kind: "unavailable" };
       const result = await transaction(pool, async (client) => {
         const candidate = (
@@ -165,6 +168,17 @@ export function memberEmailAccess(
           )
         ).rows[0];
         if (!principal) return { kind: "unavailable" as const };
+        if (currentToken) {
+          const current = (
+            await client.query<{ id: string }>(
+              `SELECT id FROM principals WHERE token_hash=$1 AND kind='member'
+                 AND revoked_at IS NULL AND expires_at>clock_timestamp()`,
+              [hash(currentToken)],
+            )
+          ).rows[0];
+          if (current && current.id !== principal.id)
+            return { kind: "unavailable" as const };
+        }
         const link = (
           await client.query<{
             email_hash: string;
