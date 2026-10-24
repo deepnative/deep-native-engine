@@ -217,12 +217,16 @@ test("[L177] SUPADM-05-BOUNDARIES SUPADM-08-READS-ROLLBACK actual staff roles, e
         JSON.stringify({ grantId: grant.grantId }),
         { mode: 0o600, flag: "wx" },
       );
+      const cliEnv = { ...process.env };
+      // Playwright may force terminal colors while the host requests NO_COLOR.
+      // Keep the child CLI's stderr assertion about the CLI itself.
+      delete cliEnv.FORCE_COLOR;
       const command = await promisify(execFile)(
         process.execPath,
         ["src/support-admin-main.ts", "revoke", "revoke.json"],
         {
           env: {
-            ...process.env,
+            ...cliEnv,
             DNE_DATABASE_URL: process.env.DNE_TEST_DATABASE_URL,
             DNE_APP_MODE: "test",
             DNE_PRIVATE_STORAGE_ROOT: privateRoot,
