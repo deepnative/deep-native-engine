@@ -123,6 +123,10 @@ export function memberEmailAccess(
       );
       if (limited.rowCount) return false;
       await client.query(
+        "UPDATE member_email_links SET consumed_at=clock_timestamp() WHERE principal_id=$1 AND consumed_at IS NULL",
+        [principalId],
+      );
+      await client.query(
         `INSERT INTO member_email_links(token_hash,email_hash,principal_id,purpose,expires_at)
          VALUES($1,$2,$3,$4,clock_timestamp()+INTERVAL '15 minutes')`,
         [hash(code), digest, principalId, purpose],

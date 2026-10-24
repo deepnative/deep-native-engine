@@ -133,6 +133,31 @@ it("keeps an email link available when another active member tries to confirm it
   expect((await members.session(other.token)).kind).toBe("active");
 });
 
+it("supersedes an earlier unconsumed link when the member requests a fresh one", async () => {
+  const owner = await member();
+  expect(await access.requestAttach(owner.token, "first@example.com")).toBe(
+    "sent",
+  );
+  const firstAttach = code();
+  expect(await access.requestAttach(owner.token, "second@example.com")).toBe(
+    "sent",
+  );
+  const secondAttach = code();
+  expect(await access.consume(firstAttach, owner.token)).toEqual({
+    kind: "unavailable",
+  });
+  expect(await access.consume(secondAttach, owner.token)).toEqual({
+    kind: "attached",
+  });
+
+  await access.requestSignIn("second@example.com");
+  const firstSignIn = code();
+  await access.requestSignIn("second@example.com");
+  const secondSignIn = code();
+  expect(await access.consume(firstSignIn)).toEqual({ kind: "unavailable" });
+  expect((await access.consume(secondSignIn)).kind).toBe("signed_in");
+});
+
 it("does not disclose unknown addresses or issue a link for an invalid, expired or deleted member", async () => {
   const owner = await member();
   expect(await access.requestAttach("f".repeat(64), "member@example.com")).toBe(
