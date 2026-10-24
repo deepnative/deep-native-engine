@@ -105,6 +105,34 @@ it("links by proof of email possession and signs in the same saved member withou
   expect((await members.session(other.token)).kind).toBe("active");
 });
 
+it("keeps an email link available when another active member tries to confirm it", async () => {
+  const owner = await member();
+  const other = await member();
+  expect(await access.requestAttach(owner.token, "owner@example.com")).toBe(
+    "sent",
+  );
+  const attachCode = code();
+  expect(await access.consume(attachCode, other.token)).toEqual({
+    kind: "unavailable",
+  });
+  expect(
+    (await pool.query("SELECT 1 FROM member_email_identities")).rowCount,
+  ).toBe(0);
+  expect(await access.consume(attachCode, owner.token)).toEqual({
+    kind: "attached",
+  });
+
+  await access.requestSignIn("owner@example.com");
+  const signInCode = code();
+  expect(await access.consume(signInCode, other.token)).toEqual({
+    kind: "unavailable",
+  });
+  const returned = await access.consume(signInCode, "f".repeat(64));
+  expect(returned.kind).toBe("signed_in");
+  expect((await members.session(returned.token!)).kind).toBe("active");
+  expect((await members.session(other.token)).kind).toBe("active");
+});
+
 it("does not disclose unknown addresses or issue a link for an invalid, expired or deleted member", async () => {
   const owner = await member();
   expect(await access.requestAttach("f".repeat(64), "member@example.com")).toBe(

@@ -148,6 +148,11 @@ it("makes attachment available only to an active member without revealing whethe
   });
   expect(unavailable.status).toBe(sent.status);
   expect(unavailable.text).toBe(sent.text);
+  active.email.requestAttach.mockResolvedValueOnce("unavailable" as never);
+  const malformed = await post(active.application, "/email/attach", {});
+  expect(malformed.status).toBe(sent.status);
+  expect(malformed.text).toBe(sent.text);
+  expect(active.email.requestAttach).toHaveBeenLastCalledWith(credential, "");
 });
 
 it("fails closed when no sender is configured", async () => {
