@@ -28,6 +28,24 @@ export function config(env: NodeJS.ProcessEnv) {
   const url = new URL(databaseUrl);
   const mode = applicationMode(env.DNE_APP_MODE);
   const hosted = hostedConfig(env, url, mode);
+  const emailEndpoint = env.DNE_EMAIL_ENDPOINT;
+  const emailSender = env.DNE_EMAIL_SENDER;
+  if ((emailEndpoint === undefined) !== (emailSender === undefined))
+    throw new Error(
+      "Email delivery requires both endpoint and sender address.",
+    );
+  if (emailEndpoint !== undefined) {
+    if (
+      !hosted ||
+      !/^https:\/\/[a-z0-9-]+\.communication\.azure\.com$/.test(
+        emailEndpoint,
+      ) ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailSender ?? "")
+    )
+      throw new Error(
+        "Email delivery requires a hosted Azure email configuration.",
+      );
+  }
   if (
     !hosted &&
     (url.search !== "" ||
@@ -160,6 +178,8 @@ export function config(env: NodeJS.ProcessEnv) {
     port,
     origin: hosted?.origin ?? new URL(`http://127.0.0.1:${port}`).origin,
     hosted,
+    emailEndpoint,
+    emailSender,
     secret: randomBytes(32).toString("hex"),
     mode,
     adapters: adapterReadiness(env, mode),

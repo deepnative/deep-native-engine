@@ -35,6 +35,8 @@ import { withHosting, hostingText } from "./hosting-presentation.ts";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { COOKIE, cookieOptions, token, csrf, validCsrf } from "./session.ts";
+import type { MemberEmailAccess } from "./member-email-access.ts";
+import { mountMemberEmailRoutes } from "./member-email-routes.ts";
 import {
   disabledSupportRequestStore,
   type SupportRequestStore,
@@ -376,6 +378,7 @@ export function app(
     memberSlotHolds?: MemberSlotHolds;
     manualObservations?: ManualObservationStore;
     assignmentReadiness?: AssignmentReadinessStore;
+    memberEmail?: MemberEmailAccess;
   },
 ) {
   const app = express();
@@ -538,14 +541,17 @@ export function app(
       req.originalUrl.split("?")[0]!,
     );
     const proposalWrite = proposalEditPath.exec(req.originalUrl.split("?")[0]!);
+    // The emailed one-use code is the confirmation capability; an email app's
+    // first cross-site GET may not carry this site's Strict session cookie.
     if (
       ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) &&
       (req.get("origin") !== options.origin ||
-        !validCsrf(
-          req.get("x-csrf-token") ?? (req.body as Fields | undefined)?.csrf,
-          session,
-          options.secret,
-        ))
+        (req.path !== "/email/confirm" &&
+          !validCsrf(
+            req.get("x-csrf-token") ?? (req.body as Fields | undefined)?.csrf,
+            session,
+            options.secret,
+          )))
     ) {
       if (req.get("origin") === options.origin && write) {
         res
@@ -613,6 +619,7 @@ export function app(
     next();
   });
   app.get("/readiness", (_req, res) => res.send(readinessPage(mode, adapters)));
+  mountMemberEmailRoutes(app, store, options.memberEmail, options.origin);
   app.get("/readiness/offers", (_req, res) => res.send(offerHypothesesPage()));
   app.get("/readiness/tracks", async (_req, res) =>
     res.send(trackReadinessPage(await tracks.snapshot())),
@@ -1180,7 +1187,15 @@ export function app(
         ? token(undefined)
         : (res.locals.token as string);
     res.cookie(COOKIE, fresh, cookieOptions(options.origin));
-    res.send(welcome(csrf(fresh, options.secret)));
+    const html = welcome(csrf(fresh, options.secret));
+    res.send(
+      options.memberEmail
+        ? html.replace(
+            "clearing its cookie loses access.",
+            'clearing its cookie loses access unless you link an email after starting. <a href="/email/sign-in">Return to saved learning by email</a>.',
+          )
+        : html,
+    );
   });
   app.post("/start", async (req, res) => {
     const start = profileStart(req.body as Fields);
@@ -3469,18 +3484,24 @@ export function app(
         );
       return;
     }
+    const html = dashboard(
+      member,
+      progress,
+      res.locals.csrf as string,
+      [],
+      eligibleAssignments(published, member, progress, activity),
+      choice,
+      recommendLesson(published, member, progress, activity),
+      undefined,
+      readiness,
+    );
     res.send(
-      dashboard(
-        member,
-        progress,
-        res.locals.csrf as string,
-        [],
-        eligibleAssignments(published, member, progress, activity),
-        choice,
-        recommendLesson(published, member, progress, activity),
-        undefined,
-        readiness,
-      ),
+      options.memberEmail
+        ? html.replace(
+            "</main>",
+            '<p><a class="button secondary" href="/email/attach">Link email to keep access to this learning record</a></p></main>',
+          )
+        : html,
     );
   });
   app.get("/assignments/readiness/:id", async (req, res) => {

@@ -10,6 +10,39 @@ const hosted = {
   DNE_AZURE_MANAGED_IDENTITY_CLIENT_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
 };
 
+it("EMAIL-ACCESS-04 enables email only with a complete hosted sender configuration", () => {
+  const configured = config({
+    ...hosted,
+    DNE_EMAIL_ENDPOINT: "https://synthetic.communication.azure.com",
+    DNE_EMAIL_SENDER: "noreply@example.com",
+  });
+  expect(configured.emailEndpoint).toBe(
+    "https://synthetic.communication.azure.com",
+  );
+  expect(configured.emailSender).toBe("noreply@example.com");
+  expect(config(hosted).emailEndpoint).toBeUndefined();
+  for (const changes of [
+    { DNE_EMAIL_ENDPOINT: "https://synthetic.communication.azure.com" },
+    { DNE_EMAIL_SENDER: "noreply@example.com" },
+    {
+      DNE_EMAIL_ENDPOINT: "https://attacker.example",
+      DNE_EMAIL_SENDER: "noreply@example.com",
+    },
+    {
+      DNE_EMAIL_ENDPOINT: "https://synthetic.communication.azure.com",
+      DNE_EMAIL_SENDER: "invalid",
+    },
+  ])
+    expect(() => config({ ...hosted, ...changes })).toThrow("Email delivery");
+  expect(() =>
+    config({
+      DNE_DATABASE_URL: "postgresql://localhost/dne_demo",
+      DNE_EMAIL_ENDPOINT: "https://synthetic.communication.azure.com",
+      DNE_EMAIL_SENDER: "noreply@example.com",
+    }),
+  ).toThrow("Email delivery");
+});
+
 it("HOSTED-01 admits an explicitly configured HTTPS application with verified-TLS PostgreSQL and private managed storage", () => {
   const settings = config(hosted);
   expect(settings.origin).toBe("https://engine.deepnative.io");

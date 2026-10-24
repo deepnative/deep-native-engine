@@ -15,6 +15,14 @@ const doubles = vi.hoisted(() => ({
   pool: undefined as EventEmitter | undefined,
   poolOptions: {} as Record<string, unknown>,
   databasePassword: vi.fn(),
+  emailSender: vi.fn(),
+  memberEmail: vi.fn(),
+}));
+vi.mock("../../src/azure-email-sender.ts", () => ({
+  azureEmailSender: doubles.emailSender,
+}));
+vi.mock("../../src/member-email-access.ts", () => ({
+  memberEmailAccess: doubles.memberEmail,
 }));
 vi.mock("../../src/azure-object-storage.ts", () => ({
   azureObjectStorage: doubles.azureStorage,
@@ -124,6 +132,33 @@ it("HOSTED-01/03 retains the public HTTPS address after binding and selects only
       managedIdentityClientId: settings.DNE_AZURE_MANAGED_IDENTITY_CLIENT_ID,
     });
     expect(doubles.listen).toHaveBeenCalledWith(4567, "127.0.0.1");
+  } finally {
+    await running.close();
+  }
+});
+it("EMAIL-ACCESS-04 connects only an explicitly configured hosted sender", async () => {
+  server();
+  doubles.emailSender.mockReturnValue({ send: vi.fn() });
+  doubles.memberEmail.mockReturnValue({ requestSignIn: vi.fn() });
+  const running = await start({
+    ...hostedEnv,
+    DNE_EMAIL_ENDPOINT: "https://synthetic.communication.azure.com",
+    DNE_EMAIL_SENDER: "noreply@example.com",
+  });
+  try {
+    expect(doubles.emailSender).toHaveBeenCalledExactlyOnceWith(
+      "https://synthetic.communication.azure.com",
+      "noreply@example.com",
+      hostedEnv.DNE_AZURE_MANAGED_IDENTITY_CLIENT_ID,
+    );
+    expect(doubles.memberEmail).toHaveBeenCalledWith(
+      doubles.pool,
+      expect.anything(),
+      hostedEnv.DNE_PUBLIC_ORIGIN,
+    );
+    expect(doubles.app.mock.calls[0]![1].memberEmail).toBe(
+      doubles.memberEmail.mock.results[0]?.value,
+    );
   } finally {
     await running.close();
   }

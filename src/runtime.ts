@@ -20,6 +20,8 @@ import type { Server } from "node:http";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.ts";
+import { memberEmailAccess } from "./member-email-access.ts";
+import { azureEmailSender } from "./azure-email-sender.ts";
 import { azureObjectStorage } from "./azure-object-storage.ts";
 import { migrate, store } from "./store.ts";
 import { app } from "./app.ts";
@@ -104,6 +106,18 @@ export async function start(env: NodeJS.ProcessEnv) {
     const options = {
       ...settings,
       hostedOrigin: settings.hosted?.origin,
+      memberEmail:
+        settings.emailEndpoint && settings.emailSender && settings.hosted
+          ? memberEmailAccess(
+              pool,
+              azureEmailSender(
+                settings.emailEndpoint,
+                settings.emailSender,
+                settings.hosted.managedIdentityClientId,
+              ),
+              settings.origin,
+            )
+          : undefined,
       preparedSamples: preparedSampleStore(pool, {
         mode: settings.mode,
         enabled: settings.preparedReviewSamples,
