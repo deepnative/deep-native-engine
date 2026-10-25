@@ -1911,6 +1911,15 @@
       "expected": "Honest recovery and unsaved messages; no automatic deletion or false persistence; readable brief and actual portal link; disabled controls without script",
       "issues": [535],
       "critical": true
+    },
+    {
+      "id": "L213",
+      "actor": "Existing member returning from another browser",
+      "preconditions": "Existing private learning record, email link sender replaced with deterministic invented outbox",
+      "steps": "EMAIL-ACCESS-01/02: open learning, request and confirm email verification, request a sign-in link in another browser, confirm once and inspect the exact saved exercise",
+      "expected": "The same member and saved completion reopen; the prior session token is invalidated and no workspace is copied",
+      "issues": [538],
+      "critical": true
     }
   ],
   "fullMvp": [

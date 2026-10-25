@@ -8,8 +8,10 @@ export async function waitForAttendanceBrowserDatabaseDrain(
   if (!/^dne_test_[a-f0-9]{32}$/.test(name))
     throw Error("Generated owned browser database required");
   const deadline = performance.now() + 3000;
-  const refused = () =>
-    Error("Owned browser database still active; no forced deletion");
+  const refused = (cause?: unknown) =>
+    new Error("Owned browser database still active; no forced deletion", {
+      cause,
+    });
   for (;;) {
     const remaining = deadline - performance.now();
     // Do not enqueue a final read whose remaining budget is below the polling interval.
@@ -20,8 +22,17 @@ export async function waitForAttendanceBrowserDatabaseDrain(
       values: [name],
       query_timeout: Math.max(1, Math.min(500, Math.floor(remaining))),
     };
-    const active = (await control.query<{ count: number }>(connectionQuery))
-      .rows[0]!.count;
+    let active: number;
+    try {
+      active = (await control.query<{ count: number }>(connectionQuery))
+        .rows[0]!.count;
+    } catch (error) {
+      // An unreadable session count cannot prove that deletion is safe.
+      // Preserve the read failure as the cause and refuse before DROP.
+      if (error instanceof Error && error.message === "Query read timeout")
+        throw refused(error);
+      throw error;
+    }
     if (performance.now() >= deadline) throw refused();
     if (active === 0) break;
     await new Promise((resolve) =>
