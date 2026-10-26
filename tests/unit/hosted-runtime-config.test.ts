@@ -43,6 +43,25 @@ it("EMAIL-ACCESS-04 enables email only with a complete hosted sender configurati
   ).toThrow("Email delivery");
 });
 
+it("EMAIL-HOST-05 accepts a regional Azure Communication endpoint and rejects lookalikes", () => {
+  const sender = { DNE_EMAIL_SENDER: "donotreply@preview.azurecomm.net" };
+  const regional =
+    "https://acs-dne-preview-81e891a1.canada.communication.azure.com";
+  expect(
+    config({ ...hosted, ...sender, DNE_EMAIL_ENDPOINT: regional })
+      .emailEndpoint,
+  ).toBe(regional);
+  for (const endpoint of [
+    "https://acs-dne-preview-81e891a1.canada.communication.azure.com.evil.test",
+    "https://acs-dne-preview-81e891a1..communication.azure.com",
+    "https://acs-dne-preview-81e891a1.canada.communication.azure.com/path",
+    "https://user@acs-dne-preview-81e891a1.canada.communication.azure.com",
+  ])
+    expect(() =>
+      config({ ...hosted, ...sender, DNE_EMAIL_ENDPOINT: endpoint }),
+    ).toThrow("Email delivery");
+});
+
 it("HOSTED-01 admits an explicitly configured HTTPS application with verified-TLS PostgreSQL and private managed storage", () => {
   const settings = config(hosted);
   expect(settings.origin).toBe("https://engine.deepnative.io");

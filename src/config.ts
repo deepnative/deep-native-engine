@@ -37,7 +37,7 @@ export function config(env: NodeJS.ProcessEnv) {
   if (emailEndpoint !== undefined) {
     if (
       !hosted ||
-      !/^https:\/\/[a-z0-9-]+\.communication\.azure\.com$/.test(
+      !/^https:\/\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)?\.communication\.azure\.com$/.test(
         emailEndpoint,
       ) ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailSender ?? "")
