@@ -133,7 +133,26 @@ it("keeps an email link available when another active member tries to confirm it
   expect((await members.session(other.token)).kind).toBe("active");
 });
 
-it("supersedes an earlier unconsumed link when the member requests a fresh one", async () => {
+it("EMAIL-ACCESS-04 preserves the first link and sends once for concurrent duplicate requests", async () => {
+  const owner = await member();
+  const attempts = await Promise.all(
+    Array.from({ length: 6 }, () =>
+      access.requestAttach(owner.token, "member@example.com"),
+    ),
+  );
+  expect(attempts.filter((result) => result === "sent")).toHaveLength(1);
+  expect(sent).toHaveLength(1);
+  expect(await access.consume(code(), owner.token)).toEqual({
+    kind: "attached",
+  });
+  await Promise.all(
+    Array.from({ length: 6 }, () => access.requestSignIn("member@example.com")),
+  );
+  expect(sent).toHaveLength(2);
+  expect((await access.consume(code())).kind).toBe("signed_in");
+});
+
+it("EMAIL-ACCESS-04 replaces a changed address or expired sign-in link without reviving old links", async () => {
   const owner = await member();
   expect(await access.requestAttach(owner.token, "first@example.com")).toBe(
     "sent",
@@ -152,6 +171,10 @@ it("supersedes an earlier unconsumed link when the member requests a fresh one",
 
   await access.requestSignIn("second@example.com");
   const firstSignIn = code();
+  await pool.query(
+    "UPDATE member_email_links SET created_at=clock_timestamp()-INTERVAL '20 minutes', expires_at=clock_timestamp()-INTERVAL '5 minutes' WHERE token_hash=$1",
+    [hash(firstSignIn)],
+  );
   await access.requestSignIn("second@example.com");
   const secondSignIn = code();
   expect(await access.consume(firstSignIn)).toEqual({ kind: "unavailable" });
@@ -202,10 +225,17 @@ it("limits outgoing links and invalidates failed sends and expired links", async
     ).rowCount,
   ).toBe(1);
   failSend = false;
-  for (let i = 0; i < 4; i++)
+  for (let i = 0; i < 4; i++) {
+    await pool.query(
+      "UPDATE member_email_links SET created_at=clock_timestamp()-INTERVAL '20 minutes', expires_at=clock_timestamp()-INTERVAL '5 minutes'",
+    );
     expect(await access.requestAttach(owner.token, "member@example.com")).toBe(
       "sent",
     );
+  }
+  await pool.query(
+    "UPDATE member_email_links SET created_at=clock_timestamp()-INTERVAL '20 minutes', expires_at=clock_timestamp()-INTERVAL '5 minutes'",
+  );
   expect(await access.requestAttach(owner.token, "member@example.com")).toBe(
     "unavailable",
   );
