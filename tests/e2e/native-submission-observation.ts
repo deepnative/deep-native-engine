@@ -66,21 +66,21 @@ function route(value: string) {
 
 /** Shape-only evidence: no form values, text, arbitrary attributes or URLs. */
 export function nativeSubmissionCollector() {
-  const events: unknown[] = [];
+  const events: { value: unknown; bytes: number }[] = [];
   let bytes = 0,
-    truncated = false,
+    evicted = 0,
     discarded = 0;
   let lastObservedState: unknown = null,
     captureFailed = false;
   function append(event: unknown) {
     const size = Buffer.byteLength(JSON.stringify(event)) + 1;
     // Reserve room for schema, final state and explicit observation limits.
-    if (events.length >= 256 || bytes + size > 60 * 1024) {
-      truncated = true;
-      return;
-    }
-    events.push(event);
+    events.push({ value: event, bytes: size });
     bytes += size;
+    while (events.length > 256 || bytes > 60 * 1024) {
+      bytes -= events.shift()!.bytes;
+      evicted++;
+    }
   }
   return {
     native(value: unknown) {
@@ -131,10 +131,12 @@ export function nativeSubmissionCollector() {
     },
     evidence() {
       return {
-        schema: "native-submission-observation-v1",
-        events,
+        schema: "native-submission-observation-v2",
+        retention: "newest-bounded-tail",
+        events: events.map((event) => event.value),
         lastObservedState,
-        truncated,
+        truncated: evicted > 0,
+        evicted,
         discarded,
         captureFailed,
         navigationDeliveryGuaranteed: false,

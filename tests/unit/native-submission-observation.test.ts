@@ -145,6 +145,70 @@ it("L102-OBS-02 reports incomplete capture without retaining error details", asy
   expect(attachment.body.toString()).not.toContain("private");
 });
 
+it("L102-OBS-TAIL-01 retains the latest audience's keyboard action after the event-count limit", () => {
+  const collector = nativeSubmissionCollector();
+  for (let audience = 1; audience <= 3; audience++) {
+    for (let index = 0; index < 84; index++) {
+      collector.request("GET", "http://127.0.0.1/lesson");
+    }
+    for (let index = 0; index < 27; index++) {
+      collector.native({ type: "focusin", document: audience, at: index });
+    }
+    collector.native({
+      type: "keydown",
+      key: "Enter",
+      document: audience,
+      at: 28,
+      target: { tag: "BUTTON", type: "submit" },
+    });
+  }
+  const evidence = collector.evidence();
+  expect(evidence.events).toContainEqual(
+    expect.objectContaining({
+      type: "keydown",
+      key: "Enter",
+      document: 3,
+      target: { tag: "BUTTON", type: "submit" },
+    }),
+  );
+  expect(evidence.truncated).toBe(true);
+  expect(evidence.events).toHaveLength(256);
+  expect(evidence.evicted).toBe(80);
+  expect(Buffer.byteLength(JSON.stringify(evidence))).toBeLessThan(64 * 1024);
+});
+
+it("L102-OBS-TAIL-01 retains the latest submit when the byte limit is reached before the count limit", () => {
+  const collector = nativeSubmissionCollector();
+  for (let index = 0; index < 256; index++) {
+    collector.native({
+      type: "submit",
+      phase: "microtask",
+      key: "Spacebar",
+      document: Number.MAX_SAFE_INTEGER,
+      at: index,
+      target: { tag: "TEXTAREA", type: "checkbox" },
+      active: { tag: "TEXTAREA", type: "checkbox" },
+      trusted: false,
+      hasFocus: false,
+      defaultPrevented: false,
+      formValid: false,
+      withdrawalForm: false,
+      deliveryFailed: false,
+    });
+  }
+  const evidence = collector.evidence();
+  expect(evidence.events).toContainEqual(
+    expect.objectContaining({ type: "submit", at: 255 }),
+  );
+  expect(evidence.events).not.toContainEqual(
+    expect.objectContaining({ type: "submit", at: 0 }),
+  );
+  expect(evidence.truncated).toBe(true);
+  expect(evidence.events.length).toBeLessThan(256);
+  expect(evidence.evicted).toBeGreaterThan(0);
+  expect(Buffer.byteLength(JSON.stringify(evidence))).toBeLessThan(64 * 1024);
+});
+
 it("L102-OBS-01 adds no attachment to an expected passing result", async () => {
   const attach = vi.fn();
   await attachNativeSubmissionFailure(
