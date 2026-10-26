@@ -1,9 +1,11 @@
 import request from "supertest";
-import { expect, it, vi } from "vitest";
+import { createServer, type Server } from "node:http";
+import { afterEach, expect, it, vi } from "vitest";
 import { app } from "../../src/app.ts";
 import type { Store } from "../../src/store.ts";
 import type { MemberEmailAccess } from "../../src/member-email-access.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 
 const origin = "http://127.0.0.1:3000";
 const secret = "synthetic-email-access-test";
@@ -43,19 +45,35 @@ function fixture(active = true, enabled = true) {
     store,
   };
 }
-function get(application: ReturnType<typeof app>, path: string) {
-  return request(application)
+const listeners = new WeakMap<ReturnType<typeof app>, Promise<Server>>();
+const managedServers: Promise<Server>[] = [];
+afterEach(async () => {
+  await Promise.all(
+    managedServers.splice(0).map(async (server) => closeLoopback(await server)),
+  );
+});
+async function http(application: ReturnType<typeof app>) {
+  let server = listeners.get(application);
+  if (!server) {
+    server = listenLoopback(application);
+    listeners.set(application, server);
+    managedServers.push(server);
+  }
+  return request(await server);
+}
+async function get(application: ReturnType<typeof app>, path: string) {
+  return (await http(application))
     .get(path)
     .set("Host", "127.0.0.1:3000")
     .set("Cookie", `${COOKIE}=${credential}`);
 }
-function post(
+async function post(
   application: ReturnType<typeof app>,
   path: string,
   body: Record<string, string>,
   includeCsrf = true,
 ) {
-  return request(application)
+  return (await http(application))
     .post(path)
     .set("Host", "127.0.0.1:3000")
     .set("Origin", origin)
@@ -68,11 +86,13 @@ function post(
 }
 
 it("lets a returning member request a private email sign-in link without an existing cookie", async () => {
-  const response = await request(
-    app({} as Store, {
-      origin: "http://127.0.0.1:3000",
-      secret: "synthetic-email-access-test",
-    }),
+  const response = await (
+    await http(
+      app({} as Store, {
+        origin: "http://127.0.0.1:3000",
+        secret: "synthetic-email-access-test",
+      }),
+    )
   )
     .get("/email/sign-in")
     .set("Host", "127.0.0.1:3000");
@@ -203,12 +223,15 @@ it("keeps a delivery error out of the generic response and private logs", async 
     const response = await post(application, "/email/sign-in", {
       email: "saved@example.com",
     });
-    await vi.waitFor(() =>
+    expect(response.status).toBe(200);
+    await vi.waitFor(() => {
+      expect(email.requestSignIn).toHaveBeenCalledExactlyOnceWith(
+        "saved@example.com",
+      );
       expect(stderr).toHaveBeenCalledWith(
         "Member email request could not be confirmed.\n",
-      ),
-    );
-    expect(response.status).toBe(200);
+      );
+    });
     expect(response.text).not.toContain("saved@example.com");
     expect(JSON.stringify(stderr.mock.calls)).not.toContain(
       "saved@example.com",
@@ -306,4 +329,63 @@ it("opens a confirmation page without consuming the code, then handles attach, s
   expect(signedIn.headers["set-cookie"]?.[0]).toContain(
     `${COOKIE}=${credential}`,
   );
+});
+
+it("EMAIL-HTTP-01 keeps a competing listener out of the exact email error request", async () => {
+  const { application, email } = fixture(false);
+  email.requestSignIn.mockRejectedValueOnce(
+    new Error("private saved@example.com"),
+  );
+  const stderr = vi
+    .spyOn(process.stderr, "write")
+    .mockImplementation(() => true);
+  const call = (await http(application))
+    .post("/email/sign-in")
+    .set("Host", "127.0.0.1:3000")
+    .set("Origin", origin)
+    .set("Cookie", `${COOKIE}=${credential}`)
+    .type("form")
+    .send({ email: "saved@example.com", csrf: csrf(credential, secret) });
+  const owned = (call as unknown as { app: Server }).app;
+  const address = owned.address();
+  if (!address || typeof address === "string")
+    throw Error("Owned listener unavailable");
+  let ownedHits = 0,
+    foreignHits = 0;
+  owned.on("request", () => ownedHits++);
+  const foreign = createServer((_req, res) => {
+    foreignHits++;
+    res.writeHead(400).end("Synthetic foreign response");
+  });
+  let foreignBound = false;
+  try {
+    foreignBound = await new Promise<boolean>((resolve, reject) => {
+      foreign.once("error", (error: NodeJS.ErrnoException) =>
+        error.code === "EADDRINUSE" ? resolve(false) : reject(error),
+      );
+      foreign.listen(address.port, "127.0.0.1", () => resolve(true));
+    });
+    const response = await call;
+    expect(response.status).toBe(200);
+    expect(ownedHits).toBe(1);
+    expect(foreignHits).toBe(0);
+    await vi.waitFor(() => {
+      expect(email.requestSignIn).toHaveBeenCalledExactlyOnceWith(
+        "saved@example.com",
+      );
+      expect(stderr).toHaveBeenCalledWith(
+        "Member email request could not be confirmed.\n",
+      );
+    });
+    expect(response.text).not.toContain("saved@example.com");
+    expect(JSON.stringify(stderr.mock.calls)).not.toContain(
+      "saved@example.com",
+    );
+  } finally {
+    stderr.mockRestore();
+    if (foreignBound)
+      await new Promise<void>((resolve, reject) =>
+        foreign.close((error) => (error ? reject(error) : resolve())),
+      );
+  }
 });
