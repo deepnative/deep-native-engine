@@ -12,10 +12,12 @@ const members = store(pool);
 const origin = "http://127.0.0.1:3000";
 const secret = "synthetic-email-sign-in-secret";
 const delivered: { address: string; link: string }[] = [];
+let failDelivery = false;
 const access = memberEmailAccess(
   pool,
   {
     async send(address, link) {
+      if (failDelivery) throw new Error("Synthetic delivery unavailable");
       delivered.push({ address, link });
     },
   },
@@ -26,6 +28,7 @@ const application = app(members, { origin, secret, memberEmail: access });
 beforeAll(() => migrate(pool));
 beforeEach(async () => {
   delivered.length = 0;
+  failDelivery = false;
   await pool.query("TRUNCATE principals CASCADE");
 });
 afterAll(() => pool.end());
@@ -202,4 +205,55 @@ it("EMAIL-ACCESS-03 bounds concurrent requests for one address across different 
   expect(
     (await pool.query("SELECT 1 FROM member_email_identities")).rowCount,
   ).toBe(1);
+});
+
+it("EMAIL-ACCESS-04 preserves duplicate-request links and recovers after expiry or failed delivery", async () => {
+  const owner = await member();
+  await members.save(owner.id, {
+    instruction: "Retain my invented work",
+    verification: "Compare the invented source",
+    complete: true,
+  });
+  failDelivery = true;
+  expect(await access.requestAttach(owner.token, "member@example.com")).toBe(
+    "unavailable",
+  );
+  expect(delivered).toHaveLength(0);
+  failDelivery = false;
+  expect(await access.requestAttach(owner.token, "member@example.com")).toBe(
+    "sent",
+  );
+  const original = code();
+  const duplicates = await Promise.all(
+    Array.from({ length: 4 }, () =>
+      access.requestAttach(owner.token, "member@example.com"),
+    ),
+  );
+  expect(duplicates).toEqual(Array(4).fill("unavailable"));
+  expect(delivered).toHaveLength(1);
+  expect(
+    (await post("/email/confirm", { code: original }, owner.token)).status,
+  ).toBe(200);
+  await access.requestSignIn("member@example.com");
+  const expired = code();
+  await Promise.all(
+    Array.from({ length: 4 }, () => access.requestSignIn("member@example.com")),
+  );
+  expect(delivered).toHaveLength(2);
+  await pool.query(
+    "UPDATE member_email_links SET created_at=clock_timestamp()-INTERVAL '20 minutes', expires_at=clock_timestamp()-INTERVAL '5 minutes' WHERE token_hash=$1",
+    [hash(expired)],
+  );
+  await access.requestSignIn("member@example.com");
+  expect(delivered).toHaveLength(3);
+  expect((await access.consume(expired)).kind).toBe("unavailable");
+  const returned = await access.consume(code());
+  expect(returned.kind).toBe("signed_in");
+  expect(await members.session(returned.token!)).toMatchObject({
+    kind: "active",
+    learner: { id: owner.id },
+  });
+  expect(await members.progress(owner.id)).toMatchObject({
+    instruction: "Retain my invented work",
+  });
 });

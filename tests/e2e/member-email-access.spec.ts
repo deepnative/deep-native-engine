@@ -44,12 +44,24 @@ test("[L213] email verification restores the exact saved member in another brows
     },
     origin,
   );
+  let completedRequests = 0;
   const settings = {
     get origin() {
       return origin;
     },
     secret: "synthetic-browser-email-secret",
-    memberEmail: email,
+    memberEmail: {
+      ...email,
+      async requestAttach(token: string, address: string) {
+        const result = await email.requestAttach(token, address);
+        completedRequests++;
+        return result;
+      },
+      async requestSignIn(address: string) {
+        await email.requestSignIn(address);
+        completedRequests++;
+      },
+    },
   };
   const server = await listenLoopback(app(members, settings));
   const address = server.address();
@@ -75,6 +87,14 @@ test("[L213] email verification restores the exact saved member in another brows
     ).toBeVisible();
     await expect.poll(() => messages.length).toBe(1);
     expect(messages[0]?.address).toBe(emailAddress);
+    await page.goto(`${origin}/email/attach`);
+    await page.getByLabel("Email address").fill(emailAddress);
+    await page.getByRole("button", { name: "Send verification link" }).click();
+    await expect(
+      page.getByText(/wait 15 minutes before requesting again/),
+    ).toBeVisible();
+    await expect.poll(() => completedRequests).toBe(2);
+    expect(messages).toHaveLength(1);
     returning = await browser.newContext();
     const fresh = await returning.newPage();
     await fresh.goto(messages[0]!.link);
@@ -89,6 +109,14 @@ test("[L213] email verification restores the exact saved member in another brows
     await fresh.getByLabel("Email address").fill(emailAddress);
     await fresh.getByRole("button", { name: "Send sign-in link" }).click();
     await expect.poll(() => messages.length).toBe(2);
+    await fresh.goto(`${origin}/email/sign-in`);
+    await fresh.getByLabel("Email address").fill(emailAddress);
+    await fresh.getByRole("button", { name: "Send sign-in link" }).click();
+    await expect(
+      fresh.getByText(/wait 15 minutes before requesting again/),
+    ).toBeVisible();
+    await expect.poll(() => completedRequests).toBe(4);
+    expect(messages).toHaveLength(2);
     await fresh.goto(messages[1]!.link);
     await fresh.getByRole("button", { name: "Continue" }).click();
     await expect(fresh).toHaveURL(`${origin}/learn`);

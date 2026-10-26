@@ -57,7 +57,7 @@ export function mountMemberEmailRoutes(
     return res.send(
       page(
         "Check your email",
-        '<section class="error-page"><h1>Check your email</h1><p>If this address is linked to a learning record, a private sign-in link will arrive shortly. Check your inbox and request a fresh link if it does not arrive. The link expires after 15 minutes.</p></section>',
+        '<section class="error-page"><h1>Check your email</h1><p>If this address is linked to a learning record, a private sign-in link will arrive shortly. Check your inbox and spam folder. Repeating this request will not send another message while a link is pending. Use that link within 15 minutes; if it has not arrived, wait 15 minutes before requesting again.</p></section>',
       ),
     );
   });
@@ -106,7 +106,7 @@ export function mountMemberEmailRoutes(
     return res.send(
       page(
         "Check your email",
-        '<section class="error-page"><h1>Check your email</h1><p>If this address can be linked, a private verification link will arrive shortly. Request a fresh link if it does not arrive, and open it within 15 minutes. Your saved work is unchanged until you confirm the link.</p></section>',
+        '<section class="error-page"><h1>Check your email</h1><p>If this address can be linked, a private verification link will arrive shortly. Check your inbox and spam folder. Repeating this request will not send another message while a link is pending. Use that link within 15 minutes; if it has not arrived, wait 15 minutes before requesting again. Your saved work is unchanged until you confirm the link.</p></section>',
       ),
     );
   });

@@ -114,6 +114,15 @@ export function memberEmailAccess(
         if (!principal) return false;
         principalId = principal.id;
       }
+      // The principal lock also serializes duplicate requests while delivery is
+      // in flight. Preserve the usable link instead of replacing inbox messages.
+      const pending = await client.query(
+        `SELECT 1 FROM member_email_links
+         WHERE principal_id=$1 AND email_hash=$2 AND purpose=$3
+           AND consumed_at IS NULL AND expires_at>clock_timestamp()`,
+        [principalId, digest, purpose],
+      );
+      if (pending.rowCount) return false;
       const limited = await client.query(
         `SELECT 1 FROM member_email_links
          WHERE (email_hash=$1 OR principal_id=$2)

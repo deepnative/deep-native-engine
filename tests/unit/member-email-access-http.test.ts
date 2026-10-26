@@ -114,6 +114,10 @@ it("returns the same generic sign-in response for any address and requires CSRF"
   });
   expect(response.status).toBe(200);
   expect(response.text).not.toContain("x@example.com");
+  expect(response.text).toContain("wait 15 minutes before requesting again");
+  expect(response.text).toContain(
+    "will not send another message while a link is pending",
+  );
   expect(email.requestSignIn).toHaveBeenCalledExactlyOnceWith("x@example.com");
   await post(application, "/email/sign-in", {});
   expect(email.requestSignIn).toHaveBeenLastCalledWith("");
@@ -233,6 +237,10 @@ it("makes attachment available only to an active member without revealing whethe
     email: "x@example.com",
   });
   expect(sent.status).toBe(200);
+  expect(sent.text).toContain("wait 15 minutes before requesting again");
+  expect(sent.text).toContain(
+    "will not send another message while a link is pending",
+  );
   expect(active.email.requestAttach).toHaveBeenCalledWith(
     credential,
     "x@example.com",
