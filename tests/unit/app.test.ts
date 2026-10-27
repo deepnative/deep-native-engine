@@ -1014,7 +1014,7 @@ it("keeps member proposals private and moderation unable to publish", async () =
     .set("Host", host)
     .expect(200);
   expect(workflowForm.text).toContain(
-    "Private improvement for WF-001 version 1",
+    "Private improvement for WF-001 version 2",
   );
   await memberAgent
     .get("/contribute?workflow=WF-999")

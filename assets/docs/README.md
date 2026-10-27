@@ -1,5 +1,6 @@
 # Documentation and assets
 
+- [Reviewed workflows](REVIEWED-WORKFLOWS.md): ordinary editorially reviewed manual examples, source and rights facts, exact downloads, maintenance and retained private version history.
 - [Prepared private examples](PRIVATE-PREPARED-SAMPLES.md): fixed invented-source choice, separate acknowledgements, normal browser feedback, original-instruction recovery, provenance and compatible creation rollback.
 - [Private support-minute permissions](PRIVATE-SUPPORT-MINUTE-PERMISSIONS.md): exact member-held request/allocation references, finite administrator browser permission, original-operation recovery and native operator settlement.
 - [Private review-minute permissions](PRIVATE-REVIEW-TIME-PERMISSIONS.md): member allocation and reviewer references, administrator browser grant/history/recovery and exact revocation, with retained accounting and creation rollback.

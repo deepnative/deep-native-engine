@@ -2501,7 +2501,7 @@ export function app(
           .send(
             workflowUnavailablePage(
               "Workflow unavailable",
-              "This demonstration does not exist.",
+              "This workflow does not exist or is not currently available.",
             ),
           );
         return;
@@ -2523,7 +2523,7 @@ export function app(
           .send(
             workflowUnavailablePage(
               "Workflow version required",
-              "Choose a current draft, then use its versioned link to read or download it.",
+              "Choose a current workflow, then use its versioned link to read or download it.",
             ),
           );
         return;
@@ -2534,7 +2534,7 @@ export function app(
           .send(
             workflowUnavailablePage(
               "Workflow version unavailable",
-              "The requested draft version is unavailable here. Choose the current draft from the workflow list to continue.",
+              "The requested workflow version is unavailable here. Choose the current version from the workflow list to continue.",
             ),
           );
         return;

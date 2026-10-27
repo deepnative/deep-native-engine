@@ -36,7 +36,7 @@ test("[L74] member submits and withdraws a version-pinned private workflow impro
     .click();
   await expect(
     page.getByRole("heading", {
-      name: "Private improvement for WF-001 version 1",
+      name: "Private improvement for WF-001 version 2",
     }),
   ).toBeVisible();
   const csrf = await page.locator('input[name="csrf"]').first().inputValue();
@@ -51,7 +51,7 @@ test("[L74] member submits and withdraws a version-pinned private workflow impro
       sources: "Original invented suggestion",
       sample_confirmed: "yes",
       workflow_id: "WF-001",
-      workflow_version: "2",
+      workflow_version: "1",
     },
   });
   expect(invalid.status()).toBe(422);
@@ -64,12 +64,12 @@ test("[L74] member submits and withdraws a version-pinned private workflow impro
   await page.getByRole("button", { name: "Save private draft" }).click();
   const id = new URL(page.url()).pathname.split("/").at(-1)!;
   await expect(
-    page.getByText("Workflow reference: WF-001 version 1"),
+    page.getByText("Workflow reference: WF-001 version 2"),
   ).toBeVisible();
   const exportBefore = await context.request.get("/api/member/export");
   expect(exportBefore.status()).toBe(200);
   expect((await exportBefore.json()).records.proposals).toMatchObject([
-    { id, workflowId: "WF-001", workflowVersion: 1, state: "draft" },
+    { id, workflowId: "WF-001", workflowVersion: 2, state: "draft" },
   ]);
   const other = await browser.newContext({ baseURL: origin });
   const reviewer = await browser.newContext({ baseURL: origin });
@@ -142,7 +142,7 @@ test("[L74] member submits and withdraws a version-pinned private workflow impro
       .locator("main li")
       .filter({ hasText: title });
     await expect(queueItem).toContainText(
-      "Workflow reference: WF-001 version 1",
+      "Workflow reference: WF-001 version 2",
     );
     await expect(
       queueItem.getByRole("button", { name: /publish|approve/i }),

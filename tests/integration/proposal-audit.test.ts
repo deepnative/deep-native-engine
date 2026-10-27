@@ -82,7 +82,7 @@ async function fixture(role: "moderator" | "platform_admin" = "moderator") {
   };
   const id = (await proposals.createDraft(owner.token, value, true, {
     id: "WF-001",
-    version: 1,
+    version: 2,
   }))!;
   expect(id).toBeTruthy();
   expect(await proposals.submit(owner.token, id, true, 1)).toBe("submitted");
@@ -322,7 +322,7 @@ it.each(["insert", "commit"] as const)(
         state: "submitted",
         ...f.value,
         workflowId: "WF-001",
-        workflowVersion: 1,
+        workflowVersion: 2,
       });
     } finally {
       await pool.query(

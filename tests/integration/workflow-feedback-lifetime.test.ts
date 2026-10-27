@@ -30,7 +30,7 @@ it.each(cases)(
     const id = session.learner.id;
     if (operation !== "create")
       expect(
-        await normal.save(token, "WF-001", 1, "Invented private original", 0),
+        await normal.save(token, "WF-001", 2, "Invented private original", 0),
       ).toBe(true);
     const client = await pool.connect();
     let committed = false,
@@ -102,7 +102,7 @@ it.each(cases)(
                 .type("form")
                 .send({
                   csrf: csrf(token, secret),
-                  workflow_version: "1",
+                  workflow_version: "2",
                   revision: operation === "create" ? "0" : "1",
                   note: "Invented replacement",
                   confirm: "yes",
@@ -168,7 +168,7 @@ it.each(["before", "after"] as const)(
     const token = randomBytes(32).toString("hex");
     await db.create(token, { background: "professional", goal: "work" });
     expect(
-      await normal.save(token, "WF-001", 1, "Invented retained note", 0),
+      await normal.save(token, "WF-001", 2, "Invented retained note", 0),
     ).toBe(true);
     const backend = workflowFeedbackStore({
       connect: async () => {
@@ -198,7 +198,7 @@ it.each(["before", "after"] as const)(
           .type("form")
           .send({
             csrf: csrf(token, secret),
-            workflow_version: "1",
+            workflow_version: "2",
             revision: "1",
             confirm: "yes",
           }),

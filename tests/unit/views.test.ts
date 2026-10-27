@@ -479,7 +479,7 @@ it("shows a private workflow improvement with an exact version and a stale-safe 
   expect(workflow).not.toBeNull();
   const form = proposalListPage([], "csrf", workflow);
   expect(form).toContain('name="workflow_id" value="WF-001"');
-  expect(form).toContain('name="workflow_version" value="1"');
+  expect(form).toContain('name="workflow_version" value="2"');
   expect(form).toContain("no public reuse rights are granted");
   const proposal: OwnerProposal = {
     feedback: null,
