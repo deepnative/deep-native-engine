@@ -3,6 +3,7 @@ import {
   SAMPLE_ASSIGNMENT_PATH as base,
   SAMPLE_ASSIGNMENT_PAGE_SIZE,
   type SampleAssignmentCheck,
+  type SampleAssignmentPendingItem,
   type SampleAssignmentHistory,
   type SampleAssignmentInput,
   type SampleAssignmentReferences,
@@ -11,7 +12,7 @@ import {
   type SampleReviewerReference,
 } from "./sample-assignment-values.ts";
 
-const notice = `<p class="eyebrow">PRIVATE LOCAL SAMPLE FEEDBACK</p><p>This assigns access to one exact invented sample version. It is not qualified review or funded service. It does not provide staff credentials, review minutes or access to other samples.</p>`;
+const notice = `<p class="eyebrow">PRIVATE FEEDBACK</p><p>This assigns access to one exact consented source version. It is not qualified review or funded service. It does not provide staff credentials, review minutes or access to other samples.</p>`;
 const navigation = `<p><a href="${base}">Private sample assignments</a> · <a href="/staff">Your staff tools</a> · <a href="/learn">Your learning space</a></p>`;
 const alert = (message: string) => `<p role="alert">${escape(message)}</p>`;
 const time = (value: string) =>
@@ -54,7 +55,7 @@ export function sampleAssignmentForm(
 ): string {
   return page(
     "Assign private sample feedback",
-    `<section class="reading">${notice}<h1>Assign private sample feedback</h1>${message === undefined ? "" : alert(message)}<p>Ask the member for the exact sample ID and version from their private evidence page, and ask the reviewer for their own reviewer reference. This page does not list members, reviewers or private samples.</p><form method="post" action="${base}/check">${hidden(escape(csrf))}<label for="evidenceId">Exact sample ID</label><input id="evidenceId" name="evidenceId" type="text" value="${escape(attemptRefs?.evidenceId ?? "")}" maxlength="36" required><label for="sourceRevision">Exact source version</label><input id="sourceRevision" name="sourceRevision" type="number" min="1" max="20" value="${escape(String(attemptRefs?.sourceRevision ?? ""))}" required><label for="reviewerId">Reviewer reference</label><input id="reviewerId" name="reviewerId" type="text" value="${escape(attemptRefs?.reviewerId ?? "")}" maxlength="36" required><button type="submit">Check exact sample references</button></form><h2>Inspect exact sample history</h2><form method="get" action="${base}/history"><label for="historyEvidenceId">Sample ID to inspect</label><input id="historyEvidenceId" name="evidenceId" type="text" maxlength="36" required><label for="historyRevision">Source version to inspect</label><input id="historyRevision" name="sourceRevision" type="number" min="1" max="20" required><button type="submit">Inspect exact sample history</button></form><h2>Inspect an original operation</h2>${recoveryForm(csrf)}${navigation}</section>`,
+    `<section class="reading">${notice}<h1>Assign private sample feedback</h1>${message === undefined ? "" : alert(message)}<p>Choose a <a href="${base}/pending">pending feedback request</a>, or enter an exact reference supplied by the member. Ask the reviewer for their own reviewer reference. No member content or reviewer directory is shown.</p><form method="post" action="${base}/check">${hidden(escape(csrf))}<label for="evidenceId">Exact sample ID</label><input id="evidenceId" name="evidenceId" type="text" value="${escape(attemptRefs?.evidenceId ?? "")}" maxlength="36" required><label for="sourceRevision">Exact source version</label><input id="sourceRevision" name="sourceRevision" type="number" min="1" max="20" value="${escape(String(attemptRefs?.sourceRevision ?? ""))}" required><label for="reviewerId">Reviewer reference</label><input id="reviewerId" name="reviewerId" type="text" value="${escape(attemptRefs?.reviewerId ?? "")}" maxlength="36" required><button type="submit">Check exact sample references</button></form><h2>Inspect exact sample history</h2><form method="get" action="${base}/history"><label for="historyEvidenceId">Sample ID to inspect</label><input id="historyEvidenceId" name="evidenceId" type="text" maxlength="36" required><label for="historyRevision">Source version to inspect</label><input id="historyRevision" name="sourceRevision" type="number" min="1" max="20" required><button type="submit">Inspect exact sample history</button></form><h2>Inspect an original operation</h2>${recoveryForm(csrf)}${navigation}</section>`,
   );
 }
 
@@ -122,5 +123,15 @@ export function reviewerSampleReference(
   return page(
     "Your reviewer reference",
     `<section class="reading"><h1>Your reviewer reference</h1><p>Share this exact reference with your trusted local administrator for one private sample version. It is not a sign-in credential and does not itself grant access or establish qualification.</p><dl><dt>Your reviewer reference</dt><dd data-reviewer-reference>${escape(reference.reviewerId)}</dd><dt>Credential expires at (UTC)</dt><dd>${time(reference.expiresAt)}</dd></dl><p>An administrator must explicitly confirm a finite exact assignment. Current role, source permission and exact grants still govern later access.</p><p><a href="/staff">Your staff tools</a> · <a href="/learn">Your learning space</a></p></section>`,
+  );
+}
+
+export function sampleAssignmentPending(
+  items: SampleAssignmentPendingItem[],
+  next: string | null,
+) {
+  return page(
+    "Pending feedback requests",
+    `<section class="reading"><h1>Pending feedback requests</h1><p>Members deliberately requested private feedback. Only exact references and request times appear here; choosing a request shares no content and assigns no reviewer.</p>${items.length ? `<ul>${items.map((item) => `<li data-pending-evidence="${escape(item.evidenceId)}"><h2>Awaiting assignment</h2><p>Exact reference ${escape(item.evidenceId)} · Source version ${item.sourceRevision}</p><p>Requested ${time(item.submittedAt)}</p><a href="${base}/pending/${escape(item.evidenceId)}/${item.sourceRevision}">Choose this request</a></li>`).join("")}</ul>` : "<p>No pending feedback requests are available on this page.</p>"}${next ? `<p><a href="${base}/pending?after=${encodeURIComponent(next)}">Next pending requests</a></p>` : ""}<p>At most ${SAMPLE_ASSIGNMENT_PAGE_SIZE} references per page. Current and scheduled exact assignments are excluded. Each page checks current permissions again. Reviewer availability and response times are not promised.</p>${navigation}</section>`,
   );
 }

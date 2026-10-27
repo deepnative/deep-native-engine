@@ -83,7 +83,29 @@ export type SampleAssignmentRevokeResult =
       deadline: number;
     }
   | SampleAssignmentFailure;
+export interface SampleAssignmentPendingItem extends SampleAssignmentSource {
+  submittedAt: string;
+}
+export type SampleAssignmentPendingResult =
+  | {
+      kind: "ready";
+      items: SampleAssignmentPendingItem[];
+      next: string | null;
+      deadline: number;
+    }
+  | SampleAssignmentFailure;
+export type SampleAssignmentPendingSelection =
+  | { kind: "ready"; source: SampleAssignmentSource; deadline: number }
+  | SampleAssignmentFailure;
 export interface SampleAssignmentStore {
+  pending(
+    token: string,
+    after?: string,
+  ): Promise<SampleAssignmentPendingResult>;
+  selectPending(
+    token: string,
+    source: SampleAssignmentSource,
+  ): Promise<SampleAssignmentPendingSelection>;
   open(token: string): Promise<SampleAssignmentOpenResult>;
   selfReference(token: string): Promise<SampleReviewerReferenceResult>;
   check(

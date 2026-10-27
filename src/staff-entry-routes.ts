@@ -157,6 +157,11 @@ function links(role: StaffRole, tools: StaffTools) {
       ],
       [
         tools.sampleAssignments,
+        "/operator/sample-assignments/pending",
+        "Pending feedback requests",
+      ],
+      [
+        tools.sampleAssignments,
         "/operator/sample-assignments",
         "Private sample assignments",
       ],

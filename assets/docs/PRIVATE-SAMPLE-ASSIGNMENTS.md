@@ -1,16 +1,16 @@
 # Exact private sample assignments
 
-Private synthetic local workflow for [#480](https://github.com/deepnative/deep-native-engine/issues/480). The guide describes the bounded interface; current verification and remaining delivery work belong in the [evidence record](PRIVATE-SAMPLE-ASSIGNMENTS-EVIDENCE.md).
+Exact assignment workflow from [#480](https://github.com/deepnative/deep-native-engine/issues/480), extended by [#38](https://github.com/deepnative/deep-native-engine/issues/38) with current-administrator pending feedback intake. The guide describes the bounded interface; current verification and remaining delivery work belong in the [evidence record](PRIVATE-SAMPLE-ASSIGNMENTS-EVIDENCE.md).
 
-This local workflow lets a current platform administrator assign one already consented, clean, queued private text revision to a current reviewer. It reuses the [reviewer worklist](PRIVATE-REVIEWER-WORKLIST.md) and [private sample feedback](PRIVATE-SAMPLE-FEEDBACK.md). It does not approve source safety, appoint qualified reviewers, allocate review minutes or grant general workspace access.
+This private workflow lets a current platform administrator assign one already consented, clean, queued private text revision to a current reviewer. It reuses the [reviewer worklist](PRIVATE-REVIEWER-WORKLIST.md) and [private sample feedback](PRIVATE-SAMPLE-FEEDBACK.md). It does not approve source safety, appoint qualified reviewers, allocate review minutes or grant general workspace access.
 
 ## Use the browser
 
-Enable both `DNE_LOCAL_STAFF_ENTRY=enabled` and `DNE_SAMPLE_ASSIGNMENT_ADMINISTRATION=enabled` in the local preview environment, then restart. Assignment administration defaults to disabled and all new ports independently deny live mode. Use invented data and existing finite trusted staff identities; these pages neither provision credentials nor list members or reviewers.
+Enable both `DNE_LOCAL_STAFF_ENTRY=enabled` and `DNE_SAMPLE_ASSIGNMENT_ADMINISTRATION=enabled` in the intended test/demo runtime, then restart. Assignment administration defaults to disabled; these controls continue to deny live application mode. Existing finite trusted staff identities are required. Tests and demonstrations use invented data. The separately enabled [assignment handoff](ASSIGNMENT-PRIVATE-FEEDBACK.md) can carry a member’s own submitted text into the same consented workflow. These pages neither provision credentials nor list members or reviewers.
 
-1. The member opens the ordinary private evidence page and shares its displayed exact evidence UUID and version. A revised upload needs its own consent, safety transition and review submission.
+1. The member deliberately creates or uploads a private source, permits private review and separately requests feedback. A revised upload needs its own consent, safety transition and review submission. Creating a copy alone does not enter intake.
 2. The reviewer uses the actual [staff sign-in form](PRIVATE-LOCAL-STAFF-ENTRY.md), then **My reviewer reference** to obtain their own noncredential UUID.
-3. The administrator signs in and opens **Private sample assignments**. Enter those exact references and check them. The result contains only eligibility and the reviewer's current credential expiry. It does not contain the sample's title, source, member identity, feedback or credentials.
+3. The administrator signs in and opens **Pending feedback requests** from staff tools. Each row shows only an exact source UUID/version, request time and waiting state. **Choose this request** prefills the existing assignment form without granting access. Enter the reviewer’s own reference and check it. The result contains only eligibility and the reviewer’s current credential expiry. Neither page contains source text, title, filename, rubric, member identity, workspace identity, feedback or credentials. The existing **Private sample assignments** form still accepts an exact member-supplied reference for manual assignment and historical inspection.
 4. Enter an explicit finite UTC window in canonical millisecond form, for example `2030-01-02T12:00:00.000Z`. Check the confirmation box and submit. A window beyond the reviewer's expiry is rejected, not shortened. The server derives the submission, workspace, owner, actor, roles and exact purpose.
 5. The reviewer finds the exact source in the existing worklist and uses existing feedback controls. Opening an assignment does not reserve or consume review time. A scheduled window grants no early access.
 6. The administrator can inspect exact-source history and explicitly revoke one exact sample grant. Another valid overlap remains effective; the paired workspace assignment and other samples are untouched. Previously published feedback remains owner-readable while its source exists.
@@ -29,6 +29,16 @@ History has at most 20 rows per page, ordered by exact creation timestamp and gr
 
 Existing exact sample grants appear without fabricated receipts. Actual operation receipts remain after source/grant deletion and report removed or ineffective state. Expired historical reviewers or grants do not prevent a current administrator from seeing safe structural history or revoking an extant exact grant. A deleting workspace or expired current administrator denies access. Inspection creates no grants, audits, feedback or accounting events.
 
+## Pending intake boundaries
+
+The queue shows at most 20 currently eligible requests per page, ordered by request time and source UUID. **Next pending requests** carries a signed continuation scoped to the current administrator session for at most 15 minutes; pagination does not extend that expiry. Pages do not claim a stable total. Reload to begin a fresh traversal after changes.
+
+Only deliberately queued, clean text with current review consent and a current owner/workspace appears. An active **or scheduled** valid exact reviewer/assignment pair excludes the request. Revoking one overlap does not make it pending while another valid pair remains. Previously reviewed sources never automatically reopen. Withdrawal, quarantine, source/account deletion, or deleting/expired/revoked ownership removes eligibility. Both listing and selection recheck current authority and source state after acquiring the existing ordered locks; expired response authority withholds metadata. Selecting a stale row denies without exposing its source. Reading makes no grant, receipt, audit or queue-state write.
+
+Intake creates no schema, export section, directory, automated routing, reviewer capacity or promised response time. The existing explicit check, finite-window confirmation, uncertain-write inspection and exact revocation remain the only assignment actions. Disabling assignment administration also hides intake; existing privacy/export controls remain available.
+
+Stable acceptance mapping: INTAKE-01/02/06 → L224–L226 in `tests/e2e/sample-assignment-intake.spec.ts` (three audiences, desktop/mobile); INTAKE-03/04/05 → native cases in `tests/integration/sample-assignment.test.ts` (active/scheduled overlap, stale references, current actors, actual lock-wait withdrawal/deletion/revocation and 23-request traversal); route/store/cursor unit cases cover data projection, response lifetime, invalid continuation and failure handling. These checks supplement all existing assignment/recovery scenarios. They do not establish qualified staffing or full-MVP acceptance.
+
 ## Storage, export and rollback
 
 The additive `private_sample_assignment_operations` table stores historical UUID relationships, exact revision and confirmed UTC window. Its only cascading reference is the workspace. It contains no source/title/digest/feedback/token/consent copy and no pending-job state. Its immutability rule permits removal through workspace erasure, matching existing authorization history. No legacy operations are backfilled.
@@ -39,4 +49,4 @@ To roll back new browser entry and assignments, set `DNE_SAMPLE_ASSIGNMENT_ADMIN
 
 The transaction locks sorted principals and profiles before workspace, evidence, submission, assignment and exact grant. Its bounded authority is retained through PostgreSQL COMMIT, connection handback, HTML construction and HTTP acceptance. A valid ordered completion before a later revocation is distinct from fresh access after that revocation. No retry hides a lock/timeout failure or an uncertain commit.
 
-This remains private synthetic local behavior. Original parent criteria, qualified staffing, formal assessment, full-MVP acceptance and deployment are separate.
+The pending-intake extension is a private member workflow; synthetic tests and local demonstrations do not establish hosted enablement, qualified staffing, formal assessment, full-MVP acceptance or deployment. Broader reviewer operating criteria remain under #38/#193.

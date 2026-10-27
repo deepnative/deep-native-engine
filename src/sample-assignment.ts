@@ -10,6 +10,7 @@ import {
   sampleAssignmentReferences,
   sampleAssignmentSource,
 } from "./sample-assignment-input.ts";
+import { sampleAssignmentIntake } from "./sample-assignment-intake.ts";
 import { sampleAssignmentCursor } from "./sample-assignment-cursor.ts";
 import {
   sampleAssignmentActors,
@@ -61,6 +62,7 @@ export function sampleAssignmentStore(
   const cursor = sampleAssignmentCursor(secret);
   const enabled = options.enabled && options.mode !== "live";
   return {
+    ...sampleAssignmentIntake(pool, enabled, secret),
     async open(token) {
       if (!enabled) return { kind: "unavailable" };
       return sampleAssignmentExecute(pool, token, false, async (context) => {
