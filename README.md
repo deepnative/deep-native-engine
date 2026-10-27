@@ -48,6 +48,8 @@ Private support intake is off by default. `DNE_PRIVATE_SUPPORT_INTAKE=enabled` a
 
 The [quality gates](assets/docs/context/QUALITY-GATES.md) and [scope and acceptance](assets/docs/INITIAL-LEARNING-SLICE.md) explain what is tested in this preview and what remains for the full MVP.
 
+Current operators and administrators can open **Learning and participation snapshot** from staff tools for a readable retained-account report: observed activity, self-assessed completion, the bounded return proxy and suppressed/coarse member-reported usefulness. Definitions and deletion limits stay visible, and the existing JSON API remains available. This is a synthetic preview snapshot, not a live business report; see the [metric definitions](assets/docs/CTP-022-LOCAL-METRICS.md).
+
 ## Team setup
 
 Read [AGENTS.md](AGENTS.md) and the [team workflow](assets/docs/workflows/TEAM-WORKFLOW.md) before taking an issue. Codex discovers the repo-local skills and custom agents when this repository is opened as a trusted project; reload the project after adding them if needed. Use the same written workflow in other assistants.

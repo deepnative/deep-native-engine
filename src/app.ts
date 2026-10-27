@@ -193,6 +193,7 @@ import {
 } from "./attempts.ts";
 import { compareResponses } from "./attempt-compare.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
+import { registerMetricsReportRoutes } from "./metrics-report-routes.ts";
 import {
   disabledLedgerReconciliationStore,
   type LedgerReconciliationStore,
@@ -661,6 +662,7 @@ export function app(
     }
     res.send(expertRegistryPage(records));
   });
+  registerMetricsReportRoutes(app, metrics);
   app.get("/operator/metrics", async (_req, res) => {
     const snapshot = await metrics.snapshot(res.locals.token as string);
     if (!snapshot) {

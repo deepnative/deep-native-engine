@@ -1992,6 +1992,24 @@
       "expected": "One private uncharged receipt; administrator sees no member identity, subject or body; no automatic grant or response SLA; distinct acknowledgement and resolution; internal notes absent from member UI and download; revoked operator denied; withdrawal removes text and replies while retaining metadata, and account deletion removes the inbox receipt",
       "issues": [195, 427, 477],
       "critical": true
+    },
+    {
+      "id": "L222",
+      "actor": "Current operator or platform administrator; retained general, professional and technical member fixtures",
+      "preconditions": "Isolated invented-data database and native runtime; existing metrics sources and finite staff credentials",
+      "steps": "Sign in through staff UI; follow the readable snapshot link; inspect zero/undefined/suppressed state; create retained three-audience activity fixtures with a historical 7–14-day return window; reload counts, definitions and coarse usefulness band; follow unchanged JSON link; delete an owning member; reload and inspect reduced counts and renewed suppression",
+      "expected": "Readable same-statement counts preserve all existing definitions and synthetic scope; no private identities/source text or false success rates; expired/deleted/withdrawn retention limits explicit; deletion removes the member contribution; original JSON contract unchanged",
+      "issues": [121, 41, 305, 309],
+      "critical": true
+    },
+    {
+      "id": "L223",
+      "actor": "Current operator/admin, unrelated reviewer and ordinary member",
+      "preconditions": "Isolated invented-data database and native runtime with staff entry; finite role-specific credentials",
+      "steps": "Sign in normally; reject forged report filters; temporarily make the real PostgreSQL source unavailable and open the report; restore the source and deliberately reload; revoke current operator, expire administrator, select unrelated reviewer, sign out and use member credentials; attempt report reads",
+      "expected": "Generic recoverable 503 without partial metrics or diagnostics; explicit reload succeeds after recovery; member/reviewer/revoked/expired/signed-out reads deny without aggregate data; no automatic write or retry",
+      "issues": [121, 41],
+      "critical": true
     }
   ],
   "fullMvp": [
