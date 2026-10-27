@@ -154,7 +154,7 @@ test("[L62] member sees only their exact-version activity with truthful progress
       exact: true,
     }),
   });
-  await expect(reading).toContainText("sample lesson · version 1 · Started");
+  await expect(reading).toContainText("lesson · version 1 · Started");
   await expect(reading).not.toContainText("Self-reported complete");
   const assignment = page.getByRole("listitem").filter({
     has: page.getByRole("heading", {
@@ -262,7 +262,7 @@ test("[L62] member sees only their exact-version activity with truthful progress
   await expect(replacementReading).toContainText(
     "version 2 · Opened in reader",
   );
-  await expect(replacementReading).toContainText("Current published sample");
+  await expect(replacementReading).toContainText("Current published version");
   await expect(page.locator("main ol > li")).toHaveCount(4);
 
   await page.goto("/learn");

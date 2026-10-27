@@ -152,6 +152,7 @@ import {
 } from "./local-ai-consent.ts";
 import type { LocalAiControlStore } from "./local-ai-control.ts";
 import { FOUNDATION_ACCESS, COACHING_OFFERS } from "./offers.ts";
+import type { FoundationImportStore } from "./foundation-import.ts";
 import {
   disabledCatalogStore,
   type CatalogStore,
@@ -331,6 +332,7 @@ export function app(
     localAiConsent?: LocalAiConsentStore;
     localAiControl?: LocalAiControlStore;
     catalog?: CatalogStore;
+    foundationImport?: FoundationImportStore;
     tracks?: TrackStore;
     proposals?: ProposalStore;
     career?: CareerStore;
@@ -3300,6 +3302,41 @@ export function app(
       return;
     }
     res.send(staffLibraryPage(items, res.locals.csrf as string));
+  });
+  app.post("/editor/library/foundation", async (req, res) => {
+    if (req.body.confirm !== "yes") {
+      res
+        .status(422)
+        .send(
+          errorPage(
+            "Import not requested",
+            "Confirm the six reviewed drafts before importing. Nothing was imported by this request.",
+          ),
+        );
+      return;
+    }
+    let result;
+    try {
+      result =
+        (await options.foundationImport?.import(res.locals.token as string)) ??
+        "unavailable";
+    } catch {
+      result = "unavailable";
+    }
+    if (result === "imported" || result === "existing") {
+      res.redirect(303, "/editor/library");
+      return;
+    }
+    res
+      .status(result === "denied" ? 403 : result === "conflict" ? 409 : 503)
+      .send(
+        errorPage(
+          "Foundation import unconfirmed",
+          result === "conflict"
+            ? "Existing versions differ or have been retired. Inspect the staff library before making another change."
+            : "Current editor access and the reviewed pack are required. The request may have completed; inspect the staff library before trying again.",
+        ),
+      );
   });
   app.get("/editor/library/:id/:version", async (req, res) => {
     const item = await catalog.preview(
