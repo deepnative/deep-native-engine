@@ -36,6 +36,9 @@ function fixture(
   } = {},
 ) {
   const port = {
+    inbox: vi
+      .fn<SupportAssignmentStore["inbox"]>()
+      .mockResolvedValue(ready({ items: [], nextCursor: null })),
     admin: vi
       .fn<SupportAssignmentStore["admin"]>()
       .mockResolvedValue(ready(null)),
@@ -93,6 +96,38 @@ const payload = () => ({
   startsAt: "2026-10-06T12:00:00.000Z",
   expiresAt: "2026-10-06T13:00:00.000Z",
   confirm: "yes",
+});
+it("SI-01-03 current administrators browse only bounded intake metadata; forged navigation is rejected before store access", async () => {
+  const f = fixture();
+  await withLoopback(f.application, async (s) => {
+    await request(s)
+      .get(`${base}/inbox?after=opaque`)
+      .set("Host", host)
+      .set("Cookie", cookie)
+      .expect(200)
+      .expect((r) => expect(r.text).toContain("Support intake inbox"));
+    expect(f.port.inbox).toHaveBeenCalledWith(staff, "opaque");
+    f.port.inbox.mockClear();
+    await request(s)
+      .get(`${base}/inbox?memberId=forged`)
+      .set("Host", host)
+      .set("Cookie", cookie)
+      .expect(403);
+    expect(f.port.inbox).not.toHaveBeenCalled();
+    f.port.inbox.mockResolvedValueOnce({ kind: "denied" });
+    await request(s)
+      .get(`${base}/inbox`)
+      .set("Host", host)
+      .set("Cookie", cookie)
+      .expect(403);
+    f.port.inbox.mockRejectedValueOnce(Error("private-db-text"));
+    await request(s)
+      .get(`${base}/inbox`)
+      .set("Host", host)
+      .set("Cookie", cookie)
+      .expect(503)
+      .expect((r) => expect(r.text).not.toContain("private-db-text"));
+  });
 });
 it("SUPADM-01 opens exact-reference forms and operator own ID through explicitly selected staff", async () => {
   const f = fixture();

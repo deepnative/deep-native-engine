@@ -14,6 +14,7 @@ import {
   assignmentHistoryPage,
   assignmentReceiptPage,
   assignmentNoticePage,
+  supportIntakeInboxPage,
   type AssignmentAttempt,
   type AssignmentRecovery,
 } from "./support-assignment-views.ts";
@@ -134,6 +135,17 @@ export function mountSupportAssignmentRoutes(
       }
     };
   const empty = (req: Request) => fields(req.query, []);
+  app.get(
+    `${base}/inbox`,
+    route(async (req, res) => {
+      if (!fields(req.query, ["after"])) return failure(res, "denied");
+      return ready(
+        res,
+        await store!.inbox(res.locals.assignmentCredential, req.query.after),
+        (value) => supportIntakeInboxPage(res.locals.csrf, value),
+      );
+    }),
+  );
   app.get(
     base,
     route(async (req, res) => {

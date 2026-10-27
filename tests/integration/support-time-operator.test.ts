@@ -1029,7 +1029,7 @@ it("exports only owned support allocation and interval facts without accounting 
     requestId: f.requestId,
     supportMinutes: 10,
     preparationMinutes: 5,
-    attribution: "Synthetic operator",
+    attribution: "Support operator",
   });
   const raw =
     JSON.stringify(result.payload.records.supportTimeAllocations) +

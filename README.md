@@ -43,6 +43,8 @@ Email access is off by default. A hosted preview can set both `DNE_EMAIL_ENDPOIN
 
 Assignment handoff is off by default. Set `DNE_ASSIGNMENT_HANDOFF=enabled` only in the intended runtime to accept a member’s own private assignment text and show the exact-version copy controls. Copies do not grant reviewer access or publish work. Disabling creation preserves existing copy inspection, export and deletion. The [assignment feedback guide](assets/docs/ASSIGNMENT-PRIVATE-FEEDBACK.md) describes consent, source-linked deletion and recovery. Local tests and demonstrations use invented data; hosted availability must be verified separately.
 
+Private support intake is off by default. `DNE_PRIVATE_SUPPORT_INTAKE=enabled` accepts a member's own private request without an invented-data attestation; sending has no charge or guaranteed response time. With existing staff entry and support assignment enabled, a current administrator discovers receipt/lifecycle metadata in the **Support intake inbox** and deliberately assigns a finite exact operator grant. The operator separately acknowledges, keeps internal notes, sends visible replies and resolves; the member can reload replies, export or withdraw. Disabling private intake preserves receipts and privacy controls. See the [private support guide](assets/docs/HOSTED-PRIVATE-SUPPORT.md); hosted staffing still requires an actual named operator, and no identity is provisioned automatically.
+
 The [quality gates](assets/docs/context/QUALITY-GATES.md) and [scope and acceptance](assets/docs/INITIAL-LEARNING-SLICE.md) explain what is tested in this preview and what remains for the full MVP.
 
 ## Team setup

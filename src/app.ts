@@ -353,6 +353,7 @@ export function app(
     practice?: PracticeStore;
     practiceSessions?: PracticeSessionStore;
     supportRequests?: SupportRequestStore;
+    privateSupportIntake?: boolean;
     supportAssignment?: SupportAssignmentStore;
     localSupportAssignment?: boolean;
     sampleAssignments?: SampleAssignmentStore;
@@ -1359,6 +1360,7 @@ export function app(
   mountSupportRequestRoutes(
     app,
     options.supportRequests ?? disabledSupportRequestStore(),
+    options.privateSupportIntake,
   );
   app.get("/availability", async (_req, res) => {
     const member = res.locals.learner as Learner;

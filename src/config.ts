@@ -93,6 +93,9 @@ export function config(env: NodeJS.ProcessEnv) {
   if (!["enabled", "disabled"].includes(localTestUnitIssuance))
     throw Error("DNE_LOCAL_TEST_UNIT_ISSUANCE must be enabled or disabled.");
   const localSupportAssignment = env.DNE_LOCAL_SUPPORT_ASSIGNMENT ?? "disabled";
+  const privateSupportIntake = env.DNE_PRIVATE_SUPPORT_INTAKE ?? "disabled";
+  if (!["enabled", "disabled"].includes(privateSupportIntake))
+    throw Error("DNE_PRIVATE_SUPPORT_INTAKE must be enabled or disabled.");
   if (!["enabled", "disabled"].includes(localSupportAssignment))
     throw Error("DNE_LOCAL_SUPPORT_ASSIGNMENT must be enabled or disabled.");
   const sampleAssignmentAdministration =
@@ -162,6 +165,7 @@ export function config(env: NodeJS.ProcessEnv) {
     localTestUnitIssuance: localTestUnitIssuance === "enabled",
     workflowReviewRequests: workflowReviewRequests === "enabled",
     localSupportAssignment: localSupportAssignment === "enabled",
+    privateSupportIntake: privateSupportIntake === "enabled",
     sampleAssignmentAdministration:
       sampleAssignmentAdministration === "enabled",
     localHoldInspectionReads: localHoldInspectionReads === "enabled",

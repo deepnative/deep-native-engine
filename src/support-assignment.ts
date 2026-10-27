@@ -60,8 +60,23 @@ export interface AssignmentReceipt {
   grantId: string;
   disposition: "created" | "replayed" | "revoked" | "already-revoked";
 }
+export interface SupportIntakeSummary {
+  requestId: string;
+  receivedAt: Date;
+  acknowledgedAt: Date | null;
+  resolvedAt: Date | null;
+  withdrawnAt: Date | null;
+}
+export interface SupportIntakeInbox {
+  items: SupportIntakeSummary[];
+  nextCursor: string | null;
+}
 export interface SupportAssignmentStore {
   admin(token: string): Promise<AssignmentResult<null>>;
+  inbox(
+    token: string,
+    after?: string,
+  ): Promise<AssignmentResult<SupportIntakeInbox>>;
   reference(token: string): Promise<AssignmentResult<AssignmentReference>>;
   check(
     token: string,
@@ -278,6 +293,103 @@ export function supportAssignmentStore(
     ).rows;
   }
   return {
+    inbox(token, after) {
+      return run(token, false, async (ctx) => {
+        const domain = "support-intake-inbox";
+        const cursor = readAssignmentCursor(after, ctx.actorId, domain, secret);
+        // Discover metadata only; lock all principals before workspaces and
+        // requests, matching assignment/deletion authority order. Recheck under
+        // those fences so concurrent erasure never returns a stale receipt.
+        const candidates = (
+          await ctx.tx.query<
+            RequestMeta & SupportIntakeSummary & { cursorAt: string }
+          >(
+            `SELECT r.id AS "requestId",r.member_id AS "memberId",r.workspace_id AS "workspaceId",
+            r.received_at AS "receivedAt",r.acknowledged_at AS "acknowledgedAt",r.resolved_at AS "resolvedAt",r.withdrawn_at AS "withdrawnAt",
+            to_char(r.received_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "cursorAt"
+           FROM support_requests r JOIN workspaces w ON w.id=r.workspace_id AND w.owner_principal_id=r.member_id
+           JOIN principals p ON p.id=r.member_id AND p.kind='member'
+           WHERE w.deleting_at IS NULL AND p.revoked_at IS NULL AND p.expires_at>clock_timestamp()
+             AND ($1::timestamptz IS NULL OR (r.received_at,r.id)<($1::timestamptz,$2::uuid))
+           ORDER BY r.received_at DESC,r.id DESC LIMIT 21`,
+            [cursor?.at ?? null, cursor?.id ?? null],
+          )
+        ).rows;
+        const owners = [...new Set(candidates.map((r) => r.memberId))];
+        const scope = await locks(ctx, owners, [], "platform_admin");
+        for (const id of owners) {
+          const owner = scope.people.get(id)!;
+          requireState(owner.active);
+          ctx.deadlines.push(owner.expiresAt);
+        }
+        const spaces = [
+          ...new Set(candidates.map((r) => r.workspaceId)),
+        ].sort();
+        const workspaces = (
+          await ctx.tx.query<{
+            id: string;
+            memberId: string;
+            deletingAt: Date | null;
+          }>(
+            `SELECT id,owner_principal_id AS "memberId",deleting_at AS "deletingAt" FROM workspaces WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE`,
+            [spaces],
+          )
+        ).rows;
+        requireState(
+          workspaces.length === spaces.length &&
+            candidates.every((r) =>
+              workspaces.some(
+                (w) =>
+                  w.id === r.workspaceId &&
+                  w.memberId === r.memberId &&
+                  !w.deletingAt,
+              ),
+            ),
+        );
+        const locked = (
+          await ctx.tx.query<RequestMeta & SupportIntakeSummary>(
+            `SELECT id AS "requestId",member_id AS "memberId",workspace_id AS "workspaceId",received_at AS "receivedAt",
+             acknowledged_at AS "acknowledgedAt",resolved_at AS "resolvedAt",withdrawn_at AS "withdrawnAt"
+           FROM support_requests WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE`,
+            [candidates.map((r) => r.requestId).sort()],
+          )
+        ).rows;
+        requireState(
+          locked.length === candidates.length &&
+            candidates.every((r) =>
+              locked.some(
+                (l) =>
+                  l.requestId === r.requestId &&
+                  l.memberId === r.memberId &&
+                  l.workspaceId === r.workspaceId,
+              ),
+            ),
+        );
+        const items = candidates.slice(0, 20).map((r) => {
+          const row = locked.find((l) => l.requestId === r.requestId)!;
+          return {
+            requestId: row.requestId,
+            receivedAt: row.receivedAt,
+            acknowledgedAt: row.acknowledgedAt,
+            resolvedAt: row.resolvedAt,
+            withdrawnAt: row.withdrawnAt,
+          };
+        });
+        const last = candidates[19];
+        return () => ({
+          items,
+          nextCursor:
+            candidates.length > 20
+              ? assignmentCursor(
+                  { at: last!.cursorAt, id: last!.requestId },
+                  ctx.actorId,
+                  domain,
+                  secret,
+                )
+              : null,
+        });
+      });
+    },
     admin(token) {
       return run(token, false, async (ctx) => {
         await locks(ctx, [], [], "platform_admin");

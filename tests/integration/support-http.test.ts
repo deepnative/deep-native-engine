@@ -112,7 +112,7 @@ it("accepts full-size encoded Unicode forms for every audience and reloads exact
     const page = await get(owner, location).expect(200);
     expect(page.text).toContain(subject);
     expect(page.text).toContain(body);
-    expect(page.text).toContain("coverage unverified");
+    expect(page.text).toContain("no guaranteed response time");
     await get(owner, "/support/receipts/" + key)
       .expect(303)
       .expect("Location", location);

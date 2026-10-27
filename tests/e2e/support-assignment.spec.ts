@@ -77,7 +77,7 @@ for (const [index, [background, goal]] of audiences.entries())
         .click();
       await expect(
         page.getByRole("heading", {
-          name: "Private sample support receipt",
+          name: "Private support receipt",
           exact: true,
         }),
       ).toBeVisible();

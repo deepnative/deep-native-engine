@@ -185,7 +185,7 @@ const sections = {
   ),
   supportReplies: section(
     `e.id,e.request_id AS "requestId",e.body,e.created_at AS "createdAt",
-    'Synthetic operator' AS attribution`,
+    'Support operator' AS attribution`,
     `support_request_replies e JOIN support_requests r ON r.id=e.request_id
     WHERE r.member_id=$1 AND r.withdrawn_at IS NULL AND r.id=ANY($4::uuid[])`,
     "e.request_id,e.id",
@@ -194,7 +194,7 @@ const sections = {
   supportTimeAllocations: section(
     `a.id,a.request_id AS "requestId",a.policy,a.ceiling,a.state,
     a.created_at AS "createdAt",a.begun_at AS "begunAt",a.settled_at AS "settledAt",
-    CASE WHEN a.begun_by IS NULL THEN NULL ELSE 'Synthetic operator' END AS attribution,
+    CASE WHEN a.begun_by IS NULL THEN NULL ELSE 'Support operator' END AS attribution,
     (SELECT count(*)::integer FROM support_time_units u JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id WHERE u.allocation_id=a.id AND r.state='reserved') AS held,
     (SELECT count(*)::integer FROM support_time_units u JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id WHERE u.allocation_id=a.id AND r.state='consumed') AS consumed,
     (SELECT count(*)::integer FROM support_time_units u JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id WHERE u.allocation_id=a.id AND r.state='released') AS released`,
@@ -207,7 +207,7 @@ const sections = {
     e.support_start AS "supportStart",e.support_end AS "supportEnd",
     e.preparation_start AS "preparationStart",e.preparation_end AS "preparationEnd",
     e.support_minutes AS "supportMinutes",e.preparation_minutes AS "preparationMinutes",
-    e.created_at AS "createdAt",'Synthetic operator' AS attribution`,
+    e.created_at AS "createdAt",'Support operator' AS attribution`,
     "support_time_entries e JOIN support_time_allocations a ON a.id=e.allocation_id WHERE a.member_id=$1",
     "e.allocation_id",
   ),
