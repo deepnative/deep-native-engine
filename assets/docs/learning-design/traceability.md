@@ -13,6 +13,8 @@ The original baseline's manual observation covers the #548 everyday walkthrough.
 
 **Later local checkpoint:** [E7, the standalone prototype](prototype/README.md), adds runnable request/claim-check/repair behavior for the new content and its own PROTO-001–008 evidence. Its browser storage is not member-account persistence and its before/after sample is not a submitted member version. The original table below remains a map of the broader application scenarios; use the E7 mapping below for the exact local subset. No broad scenario is promoted to an application pass.
 
+**Complete-reader checkpoint:** [E9](reader/README.md) adds the six-lesson sequence and final practice, with READER-001–009 mapped to its focused checks. The original application requirements remain broader than this browser-local experiment.
+
 ## Existing evidence anchors
 
 | Anchor | Inspected source / recorded observation | Limit |
@@ -25,6 +27,7 @@ The original baseline's manual observation covers the #548 everyday walkthrough.
 | E6 | [L71 workflow feedback](../../../tests/e2e/workflow-feedback.spec.ts); [native version/privacy/conflict behavior](../../../tests/integration/workflow-feedback.test.ts); [L151–153 unconfirmed-save recovery](../../../tests/e2e/workflow-feedback-recovery.spec.ts). | Private workflow-feedback notes and recovery. Does not establish identical failure handling for a new learner artifact editor. |
 | E7 | [Local walkthrough](prototype/index.html), [eight local BDD scenarios](prototype/learning.feature), [focused browser checks](prototype/checks.mjs). | Three complete local routes at desktop/mobile widths, correction/hint/transfer, browser save/reload and failure recovery. No server persistence, account identity, actual prior submission or staff review is tested. See the scoped mapping in the prototype README. |
 | E8 | [Lessons 4–6 and final practice](README.md), [13 applied-learning specifications](features/applied-learning.feature). | Authored content and source/answer review only. It does not extend the E7 walkthrough or establish application navigation, saving or observed learning outcomes. |
+| E9 | [Complete local reader](reader/README.md), [nine scoped BDD scenarios](reader/learning.feature), [browser checks](reader/checks.mjs). | All six lessons and final practice across three routes, with seventeen focused Chromium cases. Explicit browser saves, source-version checks and self-reflection remain local; no member account, submission or reviewer exchange is tested. The exact per-scenario map is in the reader README. |
 
 ## Content creation / refinement scenarios
 
@@ -37,7 +40,7 @@ The original baseline's manual observation covers the #548 everyday walkthrough.
 | CREF-005 | 3 | Routine local editorial readiness. | Proposed workflow; E3 staff lifecycle is an analogue, not this working state. | Local procedural walkthrough; application role checks only if catalog UI changes. |
 | CREF-006 | 3 | Specific change request and before/after wording. | Proposed workflow; simultaneous staffing wording authored in Lesson 2. | Local revision comparison tied to question/version. |
 | CREF-007 | 3 | Replace uncertain-rights source and continue independent authoring. | Authored source/rights policy in workflows; no actual third-party rights dispute tested. | Procedural example with excluded passage and original replacement. |
-| CREF-008 | 2, 3 | Inspect all teaching stages in all routes. | Authored reading material; E7 demonstrates only the request/check/revision subset. A full six-lesson reader remains proposed. | Walkthrough of each new route and wrong/correct/hint/transfer paths. |
+| CREF-008 | 2, 3 | Inspect all teaching stages in all routes. | E9 makes the six-lesson sequence usable locally; E7 retains its narrower request/check/revision walkthrough. | E9 focused route/stage checks; later application adoption still requires its own evidence. |
 | CREF-009 | 3, 4 | Preserve lesson/rubric version of prior work. | Existing analogue E3; new lesson adoption integration proposed. | Real PostgreSQL version pinning plus member history browser check. |
 | CREF-010 | 3, 4 | Retirement and retained private history. | Existing analogue E3/E4; replacement recommendation proposed. | Retire item, inspect search and owner history; check applicable deletion path. |
 | CREF-011 | 3 | Conflicting author saves preserve both edits for reconciliation. | Proposed; E6 concerns different private-note objects. | Concurrent native integration writes and browser conflict/recovery. |
@@ -47,7 +50,7 @@ The original baseline's manual observation covers the #548 everyday walkthrough.
 | Scenario | AC | Artifact / behavior | Current evidence | Planned verification if implemented |
 | --- | --- | --- | --- | --- |
 | LEARN-FLOW-001 | 1, 4 | Relevant example without admission barrier. | Authored three routes; E1 observed subset. | Browser open each new route with general/non-IT/technical backgrounds. |
-| LEARN-FLOW-002 | 1, 4 | One recommended next lesson using prior artifact. | Proposed course path; existing starter guide is narrower. | Browser saved Lesson 1 → return → Lesson 2 with correct source. |
+| LEARN-FLOW-002 | 1, 4 | One recommended next lesson using prior artifact. | E9 has a local next-lesson path and earlier notes; account-linked course progression remains proposed. | E9 local sequence/save checks; later member persistence needs native/browser evidence. |
 | LEARN-FLOW-003 | 2, 4 | Complete example before own writing. | Authored Lesson 2; E1 observed analogous first guide. | Browser worked request → repair question in the selected route. |
 | LEARN-FLOW-004 | 2, 4 | Date misconception, retry and draft preservation. | Authored L2-W-P; E1/E2 narrower choice/retry behavior. | Per-choice unit and browser checks; native no draft mutation. |
 | LEARN-FLOW-005 | 2, 4 | Hint without correctness/completion claim. | Authored Lesson 3 hint; E1 observed narrower hint. | Browser hint before answer; progress unchanged in database. |
@@ -93,7 +96,7 @@ The bounded scope extension is recorded in [the authoring claim](https://github.
 | APPLIED-LEARN-012 | 1, 2, 4 | CAP-E / W / T: connect source, request, check, scope, workflow and feedback in one record. | Every route permits a contradiction/missing-fact comparison; Everyday has a complete worked record. Later verify sequence and criterion-based reflection, without a mastery score. |
 | APPLIED-LEARN-013 | 2, 4 | Lesson 5, L5-T-X: distinguish expected rejection from interrupted execution. | 3 MB exceeds 2 MB; no response observed, so actual behavior is unconfirmed. Later verify expected/actual labels stay separate. |
 
-The original 32 broad scenarios retain their IDs and scope. These thirteen add teaching-specific cases. The eight PROTO scenarios remain a separate local subset with their earlier focused evidence; this authoring change does not rerun or extend them. The approved application L-series register is unchanged.
+The original 32 broad scenarios retain their IDs and scope. These thirteen add teaching-specific cases. The eight PROTO scenarios remain a separate local subset with their earlier evidence. E9 adds nine READER scenarios for the complete local reading/practice sequence, mapped to its own focused evidence. The approved application L-series register is unchanged; no broader scenario becomes an application pass.
 
 ## Acceptance and author check
 
@@ -108,4 +111,4 @@ The original 32 broad scenarios retain their IDs and scope. These thirteen add t
 
 Author review checks answer correctness, not just presence of sections. Everyday numerical limits and unknowns match their sources; work examples keep task-specific owners/dates; technical examples separate requirements from execution. Fresh cases have different supplied facts. All six lesson drafts and the final practice are complete. Review changed the workplace sharing example into a genuinely different fictional problem and added a directly contradicted trial date to the Work final-practice sample so its rubric can be satisfied. The author performed this review; no independent learner study or independent review was performed.
 
-The Lesson 2 → Lesson 3 storyboard is available as E7. The next bounded action under #549 is a separate local reader for the six lessons and final practice, preserving E7's interactive behavior and keeping canonical source/shared reader changes coordinated with #93/#117. Lead recommendation: Sol / High; author design/self-review High. Later private-data or authority changes require the applicable scope and Astra / High routing. Production work remains parked by the owner's direction.
+The Lesson 2 → Lesson 3 storyboard is E7; the complete six-lesson local reader is E9. Next under #549: perform a complete Everyday walkthrough with substantive answers and refine any confusing teaching or transitions revealed by the resulting artifacts. This addresses content quality beyond automated interaction checks. Lead Sol / High; author design/self-review High. Preserve #93/#117 canonical source/shared reader ownership. Production remains parked.

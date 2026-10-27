@@ -21,7 +21,7 @@ Lessons 4–6 now have full sources, worked examples, answer-specific feedback, 
 
 The [foundation practice](foundation-practice.md) gives three new briefs and a complete worked record that connects task selection, request writing, claim checking, sharing scope, workflow recovery and feedback-to-revision. Its self-check points to observable work rather than time spent, word count or a proficiency score.
 
-The standalone interactive prototype demonstrates only the Lesson 2 → 3 middle sequence. The new six-lesson scripts and final practice are inspectable authored content, not evidence of integrated course navigation or member-account persistence.
+The [complete local reader](reader/README.md) now connects all six lessons and the final practice with route-specific sources, practice feedback and a browser-local notebook. The earlier prototype retains its detailed Lesson 2 → 3 sequence. Neither establishes hosted course integration or member-account persistence.
 
 ## What changes from the inspected baseline
 
