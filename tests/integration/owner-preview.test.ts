@@ -772,7 +772,7 @@ it("SUPPREVIEW-01/02/03/04 rehearses member support intake, exact administrator 
       ).location,
     ).toBe(detailPath);
     detail = await operator.open(detailPath);
-    expect(detail.text).toContain("Acknowledged locally");
+    expect(detail.text).toContain("Acknowledged <time datetime=");
     expect(
       (
         await operator.submit(detail.text, `${base}/replies`, {
@@ -783,7 +783,9 @@ it("SUPPREVIEW-01/02/03/04 rehearses member support intake, exact administrator 
     ).toBe(detailPath);
     const memberBeforeResolution = await member.open(`/support/${requestId}`);
     expect(memberBeforeResolution.text).toContain("PREVIEW-VISIBLE-REPLY");
-    expect(memberBeforeResolution.text).toContain("Acknowledged locally");
+    expect(memberBeforeResolution.text).toContain(
+      "Acknowledged <time datetime=",
+    );
     expect(memberBeforeResolution.text).toContain(
       "Open; no resolution recorded",
     );
@@ -797,7 +799,7 @@ it("SUPPREVIEW-01/02/03/04 rehearses member support intake, exact administrator 
     ).toBe(detailPath);
     const resolved = await member.open(`/support/${requestId}`);
     expect(resolved.text).toContain("PREVIEW-VISIBLE-REPLY");
-    expect(resolved.text).toContain("Resolved locally");
+    expect(resolved.text).toContain("Resolved <time datetime=");
     expect(resolved.text).toContain("does not establish member satisfaction");
     expect(resolved.text).not.toContain("PREVIEW-INTERNAL-NOTE-ONLY");
     const exported = await member.open("/api/member/export");
@@ -841,7 +843,7 @@ it("SUPPREVIEW-01/02/03/04 rehearses member support intake, exact administrator 
     const retained = await member.open(`/support/${requestId}`);
     expect(retained.status).toBe(200);
     expect(retained.text).toContain("PREVIEW-VISIBLE-REPLY");
-    expect(retained.text).toContain("Resolved locally");
+    expect(retained.text).toContain("Resolved <time datetime=");
     for (const secret of [
       metadata.operatorCredential,
       metadata.administratorCredential,
