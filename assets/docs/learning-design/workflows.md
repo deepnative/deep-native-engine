@@ -24,14 +24,14 @@ The proposed path entry shows a useful outcome, the learner's last saved work an
 
 The course has several distinct kinds of progress:
 
-| State | What it means | What it does not establish |
-| --- | --- | --- |
-| Opened | The lesson was opened. | That it was read or understood. |
-| Tried | An answer was attempted. | That it was correct. |
-| Practised with feedback | A learner used correction or a hint. | An unaided correct answer. |
-| Applied | A learner wrote or revised an artifact. | That every criterion was met. |
-| Self-checked | The learner marked criteria and gave a reason. | Independent mastery or a credential. |
-| Saved | Persistence was confirmed. | That a reviewer has seen the work. |
+| State                   | What it means                                  | What it does not establish           |
+| ----------------------- | ---------------------------------------------- | ------------------------------------ |
+| Opened                  | The lesson was opened.                         | That it was read or understood.      |
+| Tried                   | An answer was attempted.                       | That it was correct.                 |
+| Practised with feedback | A learner used correction or a hint.           | An unaided correct answer.           |
+| Applied                 | A learner wrote or revised an artifact.        | That every criterion was met.        |
+| Self-checked            | The learner marked criteria and gave a reason. | Independent mastery or a credential. |
+| Saved                   | Persistence was confirmed.                     | That a reviewer has seen the work.   |
 
 This vocabulary is proposed for the course; it is not a claim that all these states are stored today. The existing activity record already distinguishes opening, starting and self-reported completion. Reuse it where its semantics match.
 
@@ -67,3 +67,5 @@ First use a separate local reader/storyboard to evaluate the wording, then choos
 **Content checkpoint, 27 October:** all six lessons and the [connected final practice](foundation-practice.md) are now authored. Lessons 4–6 add explicit use/share decisions, source/tool failure recovery, mistaken feedback and older-draft feedback. [APPLIED-LEARN-001–013](features/applied-learning.feature) specify those teaching outcomes; they are not application test passes. The next local reader should make the whole sequence easy to browse while preserving the existing request/check/revision walkthrough.
 
 **Reader checkpoint, 27 October:** the [complete local reader](reader/README.md) now makes that sequence usable in all three routes. READER-001–009 cover the local interaction scope. Learners can retain earlier notes, write a connected final record, explicitly save in their browser or download it. An actual transfer-source mismatch was reproduced and corrected: the reference panel now follows the fresh exercise. Member-account persistence and canonical source adoption remain separate work.
+
+**Authoring checkpoint, 27 October:** the [content workshop](authoring/README.md) makes two editorial changes runnable: correcting the budget/room keys and making simultaneous staffing inspectable. The author sees the source and exact question, edits the deliberate practice draft, tries the updated learner preview, compares wording and records a reason/self-check before saving a local revision. AUTHOR-001–008 cover the scope with 12 passing focused browser cases. Manual author rehearsal retained both corrected v2 records after reload/export. Editing invalidates prior checks; failed saves and competing local revisions preserve recoverable writing. Current course text and learner notebooks are separate from this workshop. Catalog adoption, retirement and account-linked review remain proposed.
