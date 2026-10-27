@@ -333,6 +333,7 @@ export function app(
     localAiControl?: LocalAiControlStore;
     catalog?: CatalogStore;
     foundationImport?: FoundationImportStore;
+    assignmentImport?: FoundationImportStore;
     tracks?: TrackStore;
     proposals?: ProposalStore;
     career?: CareerStore;
@@ -3303,41 +3304,55 @@ export function app(
     }
     res.send(staffLibraryPage(items, res.locals.csrf as string));
   });
-  app.post("/editor/library/foundation", async (req, res) => {
-    if (req.body.confirm !== "yes") {
+  for (const [path, label, pack, importer] of [
+    [
+      "foundation",
+      "Foundation",
+      "the six reviewed lesson drafts",
+      options.foundationImport,
+    ],
+    [
+      "assignments",
+      "Assignment",
+      "the two reviewed assignment drafts",
+      options.assignmentImport,
+    ],
+  ] as const) {
+    app.post(`/editor/library/${path}`, async (req, res) => {
+      if (req.body.confirm !== "yes") {
+        res
+          .status(422)
+          .send(
+            errorPage(
+              "Import not requested",
+              `Confirm ${pack} before importing. Nothing was imported by this request.`,
+            ),
+          );
+        return;
+      }
+      let result;
+      try {
+        result =
+          (await importer?.import(res.locals.token as string)) ?? "unavailable";
+      } catch {
+        result = "unavailable";
+      }
+      if (result === "imported" || result === "existing") {
+        res.redirect(303, "/editor/library");
+        return;
+      }
       res
-        .status(422)
+        .status(result === "denied" ? 403 : result === "conflict" ? 409 : 503)
         .send(
           errorPage(
-            "Import not requested",
-            "Confirm the six reviewed drafts before importing. Nothing was imported by this request.",
+            `${label} import unconfirmed`,
+            result === "conflict"
+              ? "Existing versions differ or have been retired. Inspect the staff library before making another change."
+              : "Current editor access and the reviewed pack are required. The request may have completed; inspect the staff library before trying again.",
           ),
         );
-      return;
-    }
-    let result;
-    try {
-      result =
-        (await options.foundationImport?.import(res.locals.token as string)) ??
-        "unavailable";
-    } catch {
-      result = "unavailable";
-    }
-    if (result === "imported" || result === "existing") {
-      res.redirect(303, "/editor/library");
-      return;
-    }
-    res
-      .status(result === "denied" ? 403 : result === "conflict" ? 409 : 503)
-      .send(
-        errorPage(
-          "Foundation import unconfirmed",
-          result === "conflict"
-            ? "Existing versions differ or have been retired. Inspect the staff library before making another change."
-            : "Current editor access and the reviewed pack are required. The request may have completed; inspect the staff library before trying again.",
-        ),
-      );
-  });
+    });
+  }
   app.get("/editor/library/:id/:version", async (req, res) => {
     const item = await catalog.preview(
       res.locals.token as string,

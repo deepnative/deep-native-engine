@@ -2076,3 +2076,26 @@ it("FOUND-03 distinguishes reviewed foundation text and progress from simulated 
   expect(reflection).toContain("optional reflection is simulated");
   expect(reflection).toContain("I used only invented or sample information.");
 });
+
+it("ASN103-01 distinguishes ordinary assignment publication from assessment and lesson progress", async () => {
+  const { reviewedAssignments } =
+    await import("../../src/reviewed-assignments.ts");
+  const item: ContentVersion = {
+    ...(await reviewedAssignments())[0]!,
+    state: "published",
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date(),
+    publishedAt: new Date(),
+  };
+  const reading = contentPreview(item, false, "csrf");
+  expect(reading).toContain("REVIEWED ASSIGNMENT");
+  expect(reading).toContain(
+    "Ordinary reviewed assignment with an invented brief",
+  );
+  expect(reading).toContain("Versioned rubric 1");
+  expect(reading).not.toContain("Start this lesson");
+  const staff = contentPreview(item, true, "csrf");
+  expect(staff).toContain("Approve editorial review");
+  expect(staff).toContain("Publish reviewed assignment");
+  expect(staff).toContain("ordinary educational assignment");
+});

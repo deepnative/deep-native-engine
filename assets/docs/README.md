@@ -14,6 +14,7 @@
 - [CTP-008 private starter plan](CTP-008-PRIVATE-PLAN.md): local goal, experience and weekly-time suggestions, profile revision and remaining live-access gates.
 - [CTP-009 private assignment choice](CTP-009-ASSIGNMENT-CHOICE.md): eligible published samples, exact saved version, conservative prerequisites and honest stale-choice recovery.
 - [Reviewed foundation reader](REVIEWED-FOUNDATION.md): explicit six-lesson version 2 import, separate editorial publication, ordinary learning and private exact-version history.
+- [Reviewed practice assignments](REVIEWED-ASSIGNMENTS.md): deliberate two-draft version 2 import, ordinary publication, exact preparation and private cross-audience assignment work.
 - [CTP-009 synthetic lesson reader](CTP-009-SYNTHETIC-READER.md): accessible sample text and private opened, started and self-assessed activity pinned to an exact published version.
 - [CTP-018 private goals and milestones](CTP-018-PRIVATE-MILESTONES.md): member-owned planning, evidence notes, versioned edits and local-only reminders.
 - [CTP-018 optional career planning](CTP-018-OPTIONAL-CAREER.md): opt-in private records, self-reported outcomes and versioned member approval of unsent drafts.
