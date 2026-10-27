@@ -255,7 +255,9 @@ export async function launchPreview(env) {
             const drop = new Client({
               connectionString: controlUrl.href,
               connectionTimeoutMillis: 3000,
-              statement_timeout: 30000,
+              // #546: native checkpoint took 55.426s while syncing 143108 files.
+              // Allow one 90s ordinary DROP; never retry or force removal.
+              statement_timeout: 90000,
               application_name: "dne-owner-preview-drop",
             });
             drop.on("error", (error) => {

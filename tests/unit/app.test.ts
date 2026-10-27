@@ -1120,7 +1120,7 @@ it("shows honest track states and restricts the expert evidence roster", async (
   );
   expect(roster.text).toContain("No expert commitments are recorded");
 });
-it("shows the approved no-purchase preview while keeping production terms undecided", async () => {
+it("FAC-01/03 shows no-charge foundation access consistently while coaching stays unavailable", async () => {
   const agent = await managedAgent(
     app(storage(), { origin, secret: "secret" }),
   );
@@ -1133,12 +1133,17 @@ it("shows the approved no-purchase preview while keeping production terms undeci
     .set("Host", host)
     .expect(200);
   expect(catalog.body.foundation).toMatchObject({
-    interimDecision: "approved-no-purchase-private-preview",
-    live: "pending-owner-decision",
-    liveActivationEnabled: false,
-    priceCents: null,
-    participationLimit: null,
-    aiAllowance: null,
+    policyVersion: "2026-10-27-initial-foundation-v1",
+    state: "available",
+    eligibility: "all-learner-backgrounds",
+    priceCents: 0,
+    currency: "CAD",
+    requiresPaidPlan: false,
+    term: "initial-access",
+    participationLimit: "per-space-capacity",
+    aiAllowance: 0,
+    paidServiceAllowance: 0,
+    staffAccess: false,
   });
   expect(catalog.body.coaching).toHaveLength(6);
   expect(
@@ -1146,12 +1151,13 @@ it("shows the approved no-purchase preview while keeping production terms undeci
       (offer: { livePurchasable: boolean }) => offer.livePurchasable === false,
     ),
   ).toBe(true);
-  expect(planning.text).toContain("NO LIVE PURCHASE");
-  expect(planning.text).toContain(
-    "approved a no-purchase private/local preview",
-  );
+  expect(planning.text).toContain("No-charge foundation access");
+  expect(planning.text).toContain(catalog.body.foundation.policyVersion);
+  expect(planning.text).toContain("No coaching plan or payment is required");
   expect(planning.text).toContain("IT, other professions and general learners");
-  expect(planning.text).toContain("production terms remain undecided");
+  expect(planning.text).toContain("not a promise of a permanent price or term");
+  expect(planning.text).not.toContain("production terms remain undecided");
+  expect(planning.text).toContain('href="/learn"');
   expect(planning.text).not.toContain("Buy now");
   for (const offer of catalog.body.coaching) {
     expect(planning.text).toContain(offer.termsVersion);

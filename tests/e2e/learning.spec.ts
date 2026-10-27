@@ -10,36 +10,44 @@ const instruction =
   "Using only the sample details, create a short plan with clear actions and flag any missing information.";
 const verification =
   "Compare every detail against the supplied sample, check the limits, and correct any unsupported claims.";
-test("[L24] foundation and coaching hypotheses agree across page and server", async ({
+test("[L24] no-charge foundation access agrees across pages and server without paid or staff rights", async ({
   page,
 }) => {
   await page.goto("/readiness");
   await page
-    .getByRole("link", { name: "Access and coaching planning" })
+    .getByRole("link", { name: "Foundation access and optional coaching" })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Access and coaching planning" }),
+    page.getByRole("heading", { name: "No-charge foundation access" }),
   ).toBeVisible();
-  await expect(page.getByText("NO LIVE PURCHASE")).toBeVisible();
   await expect(
-    page.getByText("approved a no-purchase private/local preview", {
+    page.getByText("No coaching plan or payment is required", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("not a promise of a permanent price or term", {
       exact: false,
     }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("production terms remain undecided", { exact: false }),
   ).toBeVisible();
   const response = await page.request.get("/api/offer-hypotheses");
   expect(response.ok()).toBe(true);
   const catalog = await response.json();
-  expect(catalog.foundation.interimDecision).toBe(
-    "approved-no-purchase-private-preview",
-  );
-  expect(catalog.foundation.live).toBe("pending-owner-decision");
-  expect(catalog.foundation.liveActivationEnabled).toBe(false);
-  expect(catalog.foundation.priceCents).toBeNull();
-  expect(catalog.foundation.participationLimit).toBeNull();
-  expect(catalog.foundation.aiAllowance).toBeNull();
+  expect(catalog.foundation).toMatchObject({
+    policyVersion: "2026-10-27-initial-foundation-v1",
+    state: "available",
+    eligibility: "all-learner-backgrounds",
+    priceCents: 0,
+    currency: "CAD",
+    requiresPaidPlan: false,
+    term: "initial-access",
+    participationLimit: "per-space-capacity",
+    aiAllowance: 0,
+    paidServiceAllowance: 0,
+    staffAccess: false,
+  });
+  await expect(
+    page.getByText(catalog.foundation.policyVersion, { exact: false }),
+  ).toBeVisible();
+  await page.getByText("View historical coaching plans (unavailable)").click();
   for (const offer of catalog.coaching) {
     expect(offer.livePurchasable).toBe(false);
     await expect(
@@ -57,6 +65,33 @@ test("[L24] foundation and coaching hypotheses agree across page and server", as
     page.getByRole("button", { name: /buy|purchase|accept/i }),
   ).toHaveCount(0);
   expect((await page.request.get("/checkout")).status()).toBe(404);
+  await page.getByRole("link", { name: "Start or return to learning" }).click();
+  await expect(
+    page.getByRole("button", { name: "Start my learning path" }),
+  ).toBeVisible();
+  for (const [background, goal] of [
+    ["explorer", "everyday"],
+    ["professional", "work"],
+    ["technical", "build"],
+  ]) {
+    await page.context().clearCookies();
+    await page.goto("/");
+    await expect(
+      page.getByText("No-charge foundation access.", { exact: false }),
+    ).toBeVisible();
+    await begin(page, background, goal);
+    await fill(page);
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await page.goto("/learn");
+    await expect(
+      page.getByText("No-charge foundation access.", { exact: false }),
+    ).toBeVisible();
+    await expect(page.getByText("Draft saved", { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByText("Draft saved", { exact: true })).toBeVisible();
+    expect((await page.request.get("/editor/library")).status()).toBe(403);
+    expect((await page.request.get("/checkout/pilot")).status()).toBe(404);
+  }
 });
 test.afterAll(async () => {
   await pool.end();

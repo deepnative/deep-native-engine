@@ -1,12 +1,14 @@
 # CTP-002: learning access and optional coaching hypotheses
 
-Date: 2026-09-23; interim decision recorded 2026-09-26. Scope: local synthetic preview and read-only offer planning. Accountable GitHub owner: `netcsc`. Production terms and qualified review are pending. Source: [current product direction](PRODUCT-DIRECTION.md), [CTP-001 architecture audit](CTP-001-ARCHITECTURE-AUDIT.md), live [CTP-002 #19](https://github.com/deepnative/deep-native-engine/issues/19), [owner decision in #95](https://github.com/deepnative/deep-native-engine/issues/95), and the immutable 15 September 2026 source package.
+Updated 27 October 2026. Accountable owner: `tomqwu`. The owner delegated routine product/design decisions and selected an initial no-charge common foundation. This supersedes the 26 September private/local-only interim decision for access policy. Source: [current #95](https://github.com/deepnative/deep-native-engine/issues/95). Historical commercial terms below remain hypotheses.
 
-## Boundary
+## Current foundation access
 
-The common learning and participation foundation is a product path for IT, other professionals and general learners. A learner's background is descriptive; `professional` is neither a paid plan nor a staff permission. On 26 September 2026, the owner approved an **interim no-purchase private/local preview** using sample information for all three audiences. Live activation and paid allowances remain disabled. Production foundation eligibility, free/paid/subsidized price, participation and AI limits, budget, legal/payment terms and qualified capacity still need separate approval under #95. No permanent free tier or unbudgeted entitlement is implied.
+Policy `2026-10-27-initial-foundation-v1` in [`src/offers.ts`](../../src/offers.ts) makes the common foundation available to all learner backgrounds for CAD 0 initially, without a coaching plan. Existing authenticated onboarding, learning and private saved progress supply that access; no new ledger grant, card, purchase or staff permission is created. Learning spaces retain their own capacity and explicit sharing rules. This is initial access, not a promise of a permanent price or service term.
 
-The six coaching rows in [`src/offers.ts`](../../src/offers.ts) are immutable **hypothesis version `2026-09-15-hypothesis-v1`**. All are `livePurchasable: false`. The read-only [`/readiness/offers`](../../src/app.ts) page and `/api/offer-hypotheses` expose the same catalog for planning and QA. They do not implement an acceptance, checkout, credit ledger or live grant. There is no live offer activation path in this slice. Before a future version can be sold, owners must approve the exact terms and version, foundation access rules, capacity, tax/payment behavior and buyer-facing disclosures, then implement and test a separate purchase/grant workflow. A UI label or annual prepayment must never itself issue credits.
+The public access page, onboarding page and saved learning page describe the same policy. `/api/offer-hypotheses` returns the versioned `foundation` object separately from six nonpurchasable historical `coaching` rows. The old `preview`, `interimDecision`, `live` and `liveActivationEnabled` fields are replaced by explicit policy version, state, eligibility, price/currency, paid-plan requirement and scope. A policy label is not evidence that email delivery, hosted storage or every broader product feature is live-verified.
+
+Foundation access grants zero live AI and paid-service units and no staff privileges. Existing separately seeded test units are not changed. Background `professional` does not select the historical Professional coaching offer. Optional coaching is unavailable; no acceptance, checkout, activation, reservation or service guarantee is introduced.
 
 ## Historical terms retained for planning
 
@@ -23,18 +25,14 @@ All amounts are **integer CAD cents** in code; the table displays CAD. Monthly f
 
 `billingMonth` computes each boundary from the **original** activation day in UTC, clipping only a short destination month. For example, 31 January 2026 → 28 February → 31 March; a timely continuation occupies months 3–12 and ends 31 January 2027. `plannedPeriods` returns one `planned-only` row per month. It does not create entitlements, reserve staff, invoke AI or bill. Clinic rows describe pooled group sessions, not four private bookings. The archived source's provider-specific cost, tax and cancellation details are not executable here.
 
-## Owner decisions and release blockers
+## Separate optional-service dependencies
 
-| Decision needed | Current state | Consequence |
-| --- | --- | --- |
-| Who may receive hosted foundation and participation access, with what price/subsidy, usage limits, AI allowance and moderation/support budget? | Interim no-purchase private/local sample preview approved 2026-09-26; production terms pending | No live foundation grant or purchase; sample preview only. |
-| Which coaching versions, if any, may be offered; exact service definitions, availability, cancellation/refund terms, payment schedule, taxes and disclosures? | Pending | Every row remains a nonpurchasable hypothesis. |
-| Is there qualified coach/reviewer/support coverage for each promised unit and relevant audience/specialty? | Unconfirmed; see [PLAN-003 capacity operations](PLAN-003-CAPACITY-OPERATIONS.md) | No paid promise or service booking. |
-| How will accepted terms, payment events, monthly credit issuance, failed installments, refunds and late return be persisted and audited? | Future implementation; see CTP-011/CTP-017 and ROADMAP-04 | No sale, charge or credit ledger in this slice. |
-| Who approves the foundation model and each live offer version and reviews privacy, operations and rollback? | Named owner/reviewer and dated approval pending | This document and code are planning evidence, not release authorization. |
+Actual paid offers require their own accepted terms, available human capacity, payment/issuer/tax facts and implemented reconciliation. Those remain in #27/#29/#32/#35 and #316–319 and do not block initial common-member access. No historical hypothesis becomes an offer merely because the foundation has no charge.
 
 ## Verification and limits
 
-[`tests/unit/offers.test.ts`](../../tests/unit/offers.test.ts) checks table amounts, quotas, versions, month boundaries, validation and continuation timing. [`tests/unit/app.test.ts`](../../tests/unit/app.test.ts) and browser journey **L24** compare the page with the server catalog and assert the live purchase boundary. The shared `make verify` gate records exact commit/tree, raw 99% unit metrics, repository tests, PostgreSQL integration, both Chromium viewports and the full approved slice register. The register retains all 27 outstanding full-MVP requirements. Passing this local gate proves only the synthetic planning slice; it cannot establish approved commercial terms, real capacity, billing correctness, hosted access or launch readiness.
+FAC-01 compares the versioned API and visible access policy; FAC-02 exercises ordinary general/professional/IT onboarding, saved progress/reload and staff denial; FAC-03 retains historical offer values and purchase/privilege separation. Unit/API tests cover the policy and page contract. Existing browser journey **L24** is amended under register `initial-learning-v108` without adding/removing IDs or reducing its critical flag; it uses real application/PostgreSQL behavior and both existing Chromium viewports.
 
-Rollback for this slice is removal of the read-only routes and catalog; no migrations, external payment events or live grants are introduced. The catalog contains no member information. The `/readiness/offers` page states that the figures are historical hypotheses and offers no purchase action.
+The meaningful pre-change FAC-01/03 tests failed because the unchanged application returned the old pending-decision policy. Focused and full validation evidence is recorded on #95; this document does not claim an unexecuted gate or deployed result. Existing prescribed verification and merge/main-CI gates remain.
+
+No database migration or external provider is added. Reverting this change restores earlier policy presentation without deleting accounts or private progress; no charge, paid grant or service reservation must be reversed.

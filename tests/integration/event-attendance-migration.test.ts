@@ -4,7 +4,15 @@ import type { Pool, PoolClient } from "pg";
 import { attendanceInspect } from "../../src/event-attendance-inspection.ts";
 import { attendanceHistory } from "../../src/event-attendance-history.ts";
 import { eventCancellationStore } from "../../src/event-cancellations.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest";
 import { attendanceExportObservation } from "../support/attendance-export-observation.ts";
 import { migrate, store } from "../../src/store.ts";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -897,19 +905,20 @@ it("ATTEND-04/06 returns database-written receipts and journals a distinct no-op
     ).rows[0]!.n,
   ).toBe(1);
 });
-it("ATTEND-07 exports every retained permission over bounded live pages with owner-bound continuation and erasure", async ({
-  task,
-}) => {
-  const observation = attendanceExportObservation("artifacts");
-  observations.set(task.id, observation);
-  targetObservation = observation;
-  observation.snapshot("callback-start");
-  const phase = observation.phase;
-  let fulfilled = false;
-  try {
-    const f = await phase("fixture", 0, () => fixture()),
-      options = { mode: "test" as const, enabled: true, registration: true },
-      ids: string[] = [];
+// FIXTURE-01: native fixture writes have a bounded setup budget; the export,
+// denial and erasure assertions retain the default five-second body deadline.
+describe("ATTEND-07 full retained permission export", () => {
+  let f: Awaited<ReturnType<typeof fixture>>;
+  let ids: string[];
+  let observation: ReturnType<typeof attendanceExportObservation>;
+  const options = { mode: "test" as const, enabled: true, registration: true };
+  beforeEach(async ({ task }) => {
+    observation = attendanceExportObservation("artifacts");
+    observations.set(task.id, observation);
+    targetObservation = observation;
+    const phase = observation.phase;
+    f = await phase("fixture", 0, () => fixture());
+    ids = [];
     for (let index = 0; index < 105; index++) {
       const checked = await phase("check", index, () =>
         attendancePermissionCheck(pool, options, f.token, {
@@ -939,85 +948,93 @@ it("ATTEND-07 exports every retained permission over bounded live pages with own
         ).kind,
       ).toBe("ready");
     }
-    const exports = memberExportStore(pool),
-      seen: string[] = [];
-    let cursor: string | undefined,
-      firstCursor: string | undefined,
-      pages = 0;
-    do {
-      const result = await phase("export", pages, () =>
-        exports.exportOwned(f.token, cursor),
+  }, 30000);
+  it("ATTEND-07 exports every retained permission over bounded live pages with owner-bound continuation and erasure", async () => {
+    observation.snapshot("callback-start");
+    const phase = observation.phase;
+    let fulfilled = false;
+    try {
+      const exports = memberExportStore(pool),
+        seen: string[] = [];
+      let cursor: string | undefined,
+        firstCursor: string | undefined,
+        pages = 0;
+      do {
+        const result = await phase("export", pages, () =>
+          exports.exportOwned(f.token, cursor),
+        );
+        expect(result.kind).toBe("ready");
+        if (result.kind !== "ready")
+          throw Error("Owned bounded export required");
+        expect(result.payload.page.recordCount).toBeLessThanOrEqual(100);
+        expect(
+          Buffer.byteLength(JSON.stringify(result.payload)),
+        ).toBeLessThanOrEqual(256 * 1024);
+        expect(JSON.stringify(result.payload)).not.toContain(f.administrator);
+        expect(JSON.stringify(result.payload)).not.toContain(f.admin);
+        const facts = result.payload.records.eventAttendancePermissions as {
+          permissionId: string;
+          withdrawnAt: Date;
+          registrationId: string;
+        }[];
+        for (const fact of facts) {
+          expect(fact.registrationId).toBe(f.registration);
+          expect(fact.withdrawnAt).toBeInstanceOf(Date);
+          seen.push(fact.permissionId);
+        }
+        cursor = result.payload.page.nextCursor ?? undefined;
+        firstCursor ??= cursor;
+        pages++;
+      } while (cursor);
+      expect(pages).toBeGreaterThan(1);
+      expect(seen.sort()).toEqual(ids.sort());
+      expect(new Set(seen).size).toBe(105);
+      if (!firstCursor) throw Error("Actual continued export required");
+      const foreign = randomBytes(32).toString("hex");
+      await phase("foreign-token", 0, () =>
+        store(pool).create(foreign, {
+          background: "explorer",
+          goal: "everyday",
+        }),
       );
-      expect(result.kind).toBe("ready");
-      if (result.kind !== "ready") throw Error("Owned bounded export required");
-      expect(result.payload.page.recordCount).toBeLessThanOrEqual(100);
       expect(
-        Buffer.byteLength(JSON.stringify(result.payload)),
-      ).toBeLessThanOrEqual(256 * 1024);
-      expect(JSON.stringify(result.payload)).not.toContain(f.administrator);
-      expect(JSON.stringify(result.payload)).not.toContain(f.admin);
-      const facts = result.payload.records.eventAttendancePermissions as {
-        permissionId: string;
-        withdrawnAt: Date;
-        registrationId: string;
-      }[];
-      for (const fact of facts) {
-        expect(fact.registrationId).toBe(f.registration);
-        expect(fact.withdrawnAt).toBeInstanceOf(Date);
-        seen.push(fact.permissionId);
-      }
-      cursor = result.payload.page.nextCursor ?? undefined;
-      firstCursor ??= cursor;
-      pages++;
-    } while (cursor);
-    expect(pages).toBeGreaterThan(1);
-    expect(seen.sort()).toEqual(ids.sort());
-    expect(new Set(seen).size).toBe(105);
-    if (!firstCursor) throw Error("Actual continued export required");
-    const foreign = randomBytes(32).toString("hex");
-    await phase("foreign-token", 0, () =>
-      store(pool).create(foreign, {
-        background: "explorer",
-        goal: "everyday",
-      }),
-    );
-    expect(
-      (
-        await phase("foreign-denial", 0, () =>
-          exports.exportOwned(foreign, firstCursor),
-        )
-      ).kind,
-    ).toBe("denied");
-    expect(
-      (
-        await phase("forged-denial", 0, () =>
-          exports.exportOwned(f.token, firstCursor + "forged"),
-        )
-      ).kind,
-    ).toBe("denied");
-    await phase("erase", 0, () => store(pool).remove(f.member));
-    expect(
-      (
-        await phase("erased-denial", 0, () =>
-          exports.exportOwned(f.token, firstCursor),
-        )
-      ).kind,
-    ).toBe("denied");
-    expect(
-      (
-        await phase("absence", 0, () =>
-          pool.query(
-            "SELECT id FROM private_event_attendance_permissions WHERE member_id=$1",
-            [f.member],
-          ),
-        )
-      ).rows,
-    ).toHaveLength(0);
-    fulfilled = true;
-  } finally {
-    observation.finishBody(fulfilled ? "fulfilled" : "rejected");
-    observation.snapshot("body-finalization");
-  }
+        (
+          await phase("foreign-denial", 0, () =>
+            exports.exportOwned(foreign, firstCursor),
+          )
+        ).kind,
+      ).toBe("denied");
+      expect(
+        (
+          await phase("forged-denial", 0, () =>
+            exports.exportOwned(f.token, firstCursor + "forged"),
+          )
+        ).kind,
+      ).toBe("denied");
+      await phase("erase", 0, () => store(pool).remove(f.member));
+      expect(
+        (
+          await phase("erased-denial", 0, () =>
+            exports.exportOwned(f.token, firstCursor),
+          )
+        ).kind,
+      ).toBe("denied");
+      expect(
+        (
+          await phase("absence", 0, () =>
+            pool.query(
+              "SELECT id FROM private_event_attendance_permissions WHERE member_id=$1",
+              [f.member],
+            ),
+          )
+        ).rows,
+      ).toHaveLength(0);
+      fulfilled = true;
+    } finally {
+      observation.finishBody(fulfilled ? "fulfilled" : "rejected");
+      observation.snapshot("body-finalization");
+    }
+  });
 });
 
 it.each(["same-key", "different-key"] as const)(
