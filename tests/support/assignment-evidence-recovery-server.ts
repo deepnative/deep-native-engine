@@ -14,7 +14,8 @@ import { listenLoopback, closeLoopback } from "./loopback-server.ts";
 
 /** Test-only driver boundary: lose one reply AFTER an actual successful COMMIT.
  * Configuration rollback replaces the app on the same owned random-port server,
- * preserving original browser forms and their CSRF/session origin. No production
+ * retaining its database and origin. A restarted app gets a fresh secret, making
+ * old browser forms stale as they are after a runtime restart. No production
  * fault flag, fabricated receipt, automatic retry or shared gate server. */
 export async function startAssignmentEvidenceRecoveryServer(
   pool: Pool,
@@ -46,26 +47,25 @@ export async function startAssignmentEvidenceRecoveryServer(
       };
     },
   } as unknown as Pool;
-  const secret = randomBytes(32).toString("hex");
   const common = {
     origin: "http://127.0.0.1:0",
-    secret,
+    secret: randomBytes(32).toString("hex"),
     mode: "test" as const,
     attempts: attemptStore(pool),
     catalog: catalogStore(pool),
-    evidence: evidenceStore(
-      pool,
-      assignmentObjectStorage(
-        pool,
-        preparedObjectStorage(pool, fileObjectStorage(root)),
-      ),
-      secret,
-    ),
     memberExport: memberExportStore(pool),
   };
   const createApplication = (enabled: boolean) =>
     app(store(pool), {
       ...common,
+      evidence: evidenceStore(
+        pool,
+        assignmentObjectStorage(
+          pool,
+          preparedObjectStorage(pool, fileObjectStorage(root)),
+        ),
+        common.secret,
+      ),
       assignmentHandoff: enabled,
       assignmentEvidence: assignmentEvidenceStore(scoped, { enabled }),
     });
@@ -85,6 +85,10 @@ export async function startAssignmentEvidenceRecoveryServer(
     origin: common.origin,
     observed,
     setCreationEnabled(enabled: boolean) {
+      application = createApplication(enabled);
+    },
+    restartWithFreshSecret(enabled: boolean) {
+      common.secret = randomBytes(32).toString("hex");
       application = createApplication(enabled);
     },
     close: () => closeLoopback(server),

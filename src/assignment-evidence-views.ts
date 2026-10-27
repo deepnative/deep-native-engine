@@ -12,6 +12,13 @@ export const assignmentHandoffPath = (id: string) =>
 const input = (name: string, value: string | number) =>
   `<input type="hidden" name="${name}" value="${escape(String(value))}">`;
 
+export function assignmentInspectionPage(csrf: string) {
+  return page(
+    "Inspect an earlier copy request",
+    `<section class="reading"><h1>Inspect an earlier copy request</h1><p>Enter the original request reference shown when saving could not be confirmed. Inspection only reads a result belonging to your current learning account; it never creates a copy or grants review access.</p><form method="post" action="${ASSIGNMENT_INSPECT_PATH}">${hidden(csrf)}<label for="assignment-request-reference">Original copy request reference</label><input id="assignment-request-reference" name="operationId" maxlength="36" required autocomplete="off"><button>Inspect copy request</button></form><p>If the service restarted, reopen this page to use a fresh form.</p><p><a href="/evidence">Your private copies</a> · <a href="/assignments/attempts">Your assignments</a></p></section>`,
+  );
+}
+
 function copyForm(
   csrf: string,
   instruction: Omit<AssignmentEvidenceInstruction, "privateReview">,
@@ -48,6 +55,6 @@ export function assignmentRecoveryPage(
 ) {
   return page(
     "Assignment copy needs attention",
-    `<section class="reading"><h1>Assignment copy needs attention</h1><p role="alert">${escape(message)}</p>${instruction ? `<p>The copy may already have been saved. Inspect this request before deliberately repeating it. Inspection opens another tab so this original request stays available.</p><form method="post" action="${ASSIGNMENT_INSPECT_PATH}" target="_blank" rel="noopener">${hidden(csrf)}${input("operationId", instruction.operationId)}<button>Inspect this copy request</button></form>${copyForm(csrf, instruction, true)}` : ""}<p><a href="/assignments/attempts">Your assignments</a> · <a href="/evidence">Your private copies</a></p></section>`,
+    `<section class="reading"><h1>Assignment copy needs attention</h1><p role="alert">${escape(message)}</p>${instruction ? `<p>The copy may already have been saved. Inspect this request before deliberately repeating it. Inspection opens another tab so this original request stays available.</p><p>Original copy request reference: <code data-assignment-request-reference>${escape(instruction.operationId)}</code>. Keep this reference if the service restarts.</p><form method="post" action="${ASSIGNMENT_INSPECT_PATH}" target="_blank" rel="noopener">${hidden(csrf)}${input("operationId", instruction.operationId)}<button>Inspect this copy request</button></form>${copyForm(csrf, instruction, true)}` : ""}<p><a href="${ASSIGNMENT_INSPECT_PATH}">Inspect an earlier copy request</a></p><p><a href="/assignments/attempts">Your assignments</a> · <a href="/evidence">Your private copies</a></p></section>`,
   );
 }

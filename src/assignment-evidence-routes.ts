@@ -7,6 +7,7 @@ import {
 import {
   ASSIGNMENT_INSPECT_PATH,
   assignmentHandoffPage,
+  assignmentInspectionPage,
   assignmentReceiptPage,
   assignmentRecoveryPage,
 } from "./assignment-evidence-views.ts";
@@ -144,6 +145,11 @@ export function mountAssignmentEvidenceRoutes(
     } catch {
       return failure(res, "unavailable", instruction);
     }
+  });
+  app.get(ASSIGNMENT_INSPECT_PATH, (req, res) => {
+    if (!store) return failure(res, "disabled");
+    if (!exact(req.query, [])) return failure(res, "invalid");
+    return res.send(assignmentInspectionPage(res.locals.csrf as string));
   });
   app.post(ASSIGNMENT_INSPECT_PATH, async (req, res) => {
     // Inspection remains available when new creation is disabled.

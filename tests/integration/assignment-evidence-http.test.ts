@@ -188,4 +188,32 @@ it("AHO-01/02 previews one exact owned submitted sequence while a newer private 
   expect(foreignReceipt.text).not.toContain(evidenceId);
   expect(foreignReceipt.text).not.toContain(first.trim());
   expect(await ownedCount()).toBe(1);
+  // An actual runtime restart rotates the process-bound CSRF secret. Turning
+  // creation off must still leave a normal current-owner inspection entry.
+  const port = new URL(running.origin).port;
+  await running.close();
+  running = await start({
+    DNE_DATABASE_URL: url,
+    DNE_APP_MODE: "test",
+    DNE_PORT: port,
+    DNE_PRIVATE_STORAGE_ROOT: root,
+    DNE_ASSIGNMENT_HANDOFF: "disabled",
+  });
+  await post("/assignment-feedback/inspect", {
+    csrf: fields.csrf!,
+    operationId: fields.operationId!,
+  }).expect(403);
+  const fresh = await request(running.server)
+    .get("/assignment-feedback/inspect")
+    .set("Host", new URL(running.origin).host)
+    .set("Cookie", `${COOKIE}=${token}`)
+    .expect(200);
+  const currentNonce = fresh.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  expect(currentNonce).not.toBe(fields.csrf);
+  const recovered = await post("/assignment-feedback/inspect", {
+    csrf: currentNonce,
+    operationId: fields.operationId!,
+  }).expect(200);
+  expect(recovered.text).toContain(`data-assignment-evidence="${evidenceId}"`);
+  expect(await ownedCount()).toBe(1);
 });

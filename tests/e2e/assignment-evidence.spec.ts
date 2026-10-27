@@ -830,3 +830,191 @@ test("[L217] AHO-03-10 lost committed assignment copy is inspected during creati
     if (memberId) await store(pool).remove(memberId);
   }
 });
+
+test("[L218] AHO-10 a fresh inspection page recovers the original assignment receipt after a creation-off restart invalidates the old form, including after source deletion", async ({
+  page,
+  browser,
+}, info) => {
+  test.setTimeout(60000);
+  const recovery = await startAssignmentEvidenceRecoveryServer(pool, root);
+  const recoveryContext = await context(browser, page, info, recovery.origin);
+  const original = await recoveryContext.newPage();
+  let memberId: string | undefined;
+  const response =
+    "An invented restart example compares three activities and records an unchecked assumption.\n";
+  const submittedResponse = response.replace(/\n/g, "\r\n");
+  try {
+    const draft = await publishAssignment("explorer", "everyday");
+    memberId = await onboard(original, recovery.origin, "explorer", "everyday");
+    const attemptId = await submitAssignment(original, draft.title, response);
+    await (
+      await prepareCopy(
+        original,
+        recovery.origin,
+        attemptId,
+        submittedResponse,
+        draft,
+      )
+    ).check();
+    const lost = original.waitForResponse(
+      (reply) =>
+        new URL(reply.url()).pathname.endsWith("/handoff") &&
+        reply.request().method() === "POST",
+    );
+    await original
+      .getByRole("button", {
+        name: "Create private feedback copy",
+        exact: true,
+      })
+      .click();
+    expect((await lost).status()).toBe(503);
+    await expect(original.getByRole("alert")).toContainText(
+      "The saved result cannot be confirmed",
+    );
+    const reference = original.locator("[data-assignment-request-reference]");
+    await expect(reference).toBeVisible();
+    const operationId = (await reference.innerText()).trim();
+    expect(operationId).toMatch(/^[a-f0-9-]{36}$/);
+    const beforeRestart = await original.request.get(
+      recovery.origin + "/api/member/export",
+    );
+    expect(beforeRestart.status()).toBe(200);
+    const receipts = (await beforeRestart.json()).records
+      .assignmentCopyReceipts;
+    expect(receipts).toHaveLength(1);
+    const receipt = receipts[0];
+    expect(receipt.state).toBe("available");
+    expect(receipt.evidenceId).toMatch(/^[a-f0-9-]{36}$/);
+    recovery.restartWithFreshSecret(false);
+    const rejectedPage = recoveryContext.waitForEvent("page");
+    const rejectedResponse = recoveryContext.waitForEvent("response", {
+      predicate: (reply) =>
+        new URL(reply.url()).pathname === "/assignment-feedback/inspect" &&
+        reply.request().method() === "POST",
+    });
+    await original
+      .getByRole("button", { name: "Inspect this copy request", exact: true })
+      .click();
+    const other = await rejectedPage;
+    expect((await rejectedResponse).status()).toBe(403);
+    expect(await other.evaluate(() => window.opener === null)).toBe(true);
+    await expect(other.locator("body")).not.toContainText(response.trim());
+    await original
+      .getByRole("link", {
+        name: "Inspect an earlier copy request",
+        exact: true,
+      })
+      .click();
+    expect(new URL(original.url()).pathname).toBe(
+      "/assignment-feedback/inspect",
+    );
+    expect(new URL(original.url()).search).toBe("");
+    const inspectorUrl = original.url();
+    await original
+      .getByLabel("Original copy request reference", { exact: true })
+      .fill(operationId);
+    await original
+      .getByRole("button", { name: "Inspect copy request", exact: true })
+      .click();
+    await expect(
+      original.getByRole("heading", {
+        name: "Your assignment feedback copy",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(original.getByText(/^Receipt /)).toContainText(
+      receipt.receiptId,
+    );
+    await expect(original.getByText(/^Receipt /)).toContainText("· available");
+    await expect(
+      original.locator("[data-assignment-evidence]"),
+    ).toHaveAttribute("data-assignment-evidence", receipt.evidenceId);
+    expect(new URL(original.url()).search).toBe("");
+    await info.attach("invented-assignment-recovered-after-restart", {
+      body: await original.screenshot({ fullPage: true }),
+      contentType: "image/png",
+    });
+    const denied = await other.goto(
+      recovery.origin + `/assignments/attempts/${attemptId}/handoff?sequence=1`,
+    );
+    expect(denied!.status()).toBe(404);
+    await expect(other.getByRole("alert")).toContainText(
+      "currently unavailable",
+    );
+    await exportedCopy(
+      other,
+      recovery.origin,
+      receipt.evidenceId,
+      attemptId,
+      draft.id,
+      submittedResponse,
+    );
+    await other.goto(recovery.origin + `/assignments/attempts/${attemptId}`);
+    await other
+      .getByLabel("Delete this private attempt and all its submissions", {
+        exact: false,
+      })
+      .check();
+    await other
+      .getByRole("button", { name: "Delete attempt", exact: true })
+      .click();
+    await expect(
+      other.getByText("No private assignment attempts yet", { exact: false }),
+    ).toBeVisible();
+    // Return to the current read-only form for a fresh nonce. The old page's
+    // instruction is never reconstructed or submitted after the secret change.
+    await original.goto(inspectorUrl);
+    await original
+      .getByLabel("Original copy request reference", { exact: true })
+      .fill(operationId);
+    await original
+      .getByRole("button", { name: "Inspect copy request", exact: true })
+      .click();
+    await expect(original.getByText(/^Receipt /)).toContainText(
+      receipt.receiptId,
+    );
+    await expect(original.getByText(/^Receipt /)).toContainText("· removed");
+    await expect(original.locator("[data-assignment-evidence]")).toHaveCount(0);
+    await expect(original.locator("body")).toContainText(
+      "Repeating the original request cannot recreate it",
+    );
+    expect(new URL(original.url()).search).toBe("");
+    expect(recovery.observed).toEqual({
+      commits: 1,
+      lostReplies: 1,
+      rollbacksAfterCommit: 0,
+    });
+    const afterDeletion = await original.request.get(
+      recovery.origin + "/api/member/export",
+    );
+    expect(afterDeletion.status()).toBe(200);
+    expect(await afterDeletion.text()).not.toContain(operationId);
+    const records = (await afterDeletion.json()).records;
+    expect(records.assignmentAttempts).toEqual([]);
+    expect(records.assignmentSubmissions).toEqual([]);
+    expect(records.assignmentEvidenceOrigins).toEqual([]);
+    expect(records.assignmentCopyReceipts).toEqual([
+      { ...receipt, evidenceId: null, state: "removed" },
+    ]);
+    expect(
+      (
+        await pool.query(
+          `SELECT
+            (SELECT count(*)::int FROM evidence_objects WHERE owner_principal_id=$1) AS copies,
+            (SELECT count(*)::int FROM evidence_review_submissions WHERE submitted_by=$1) AS requests,
+            (SELECT count(*)::int FROM assignment_grants g JOIN workspaces w ON w.id=g.workspace_id
+              WHERE w.owner_principal_id=$1) AS grants`,
+          [memberId],
+        )
+      ).rows[0],
+    ).toEqual({ copies: 0, requests: 0, grants: 0 });
+    await info.attach("invented-assignment-restart-removed-receipt", {
+      body: await original.screenshot({ fullPage: true }),
+      contentType: "image/png",
+    });
+  } finally {
+    await recoveryContext.close();
+    await recovery.close();
+    if (memberId) await store(pool).remove(memberId);
+  }
+});

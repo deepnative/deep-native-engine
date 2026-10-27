@@ -156,6 +156,22 @@ it("AHO-02/04 rejects extra or missing fields and missing permission without a w
   expect(f.store.create).not.toHaveBeenCalled();
   expect(f.store.inspect).not.toHaveBeenCalled();
 });
+it("AHO-03/10 provides fresh read-only inspection forms while creation is disabled and never accepts a key in the URL", async () => {
+  const f = await fixture(false);
+  const form = await request(f.server).get(ASSIGNMENT_INSPECT_PATH).expect(200);
+  expect(form.text).toContain('name="csrf" value="nonce"');
+  expect(form.text).toContain("Original copy request reference");
+  expect(form.text).toContain('method="post"');
+  expect(f.store.create).not.toHaveBeenCalled();
+  expect(f.store.inspect).not.toHaveBeenCalled();
+  const operationId = randomUUID();
+  const rejected = await request(f.server)
+    .get(`${ASSIGNMENT_INSPECT_PATH}?operationId=${operationId}`)
+    .expect(422);
+  expect(rejected.text).not.toContain(operationId);
+  const absent = await fixture(false, false);
+  await request(absent.server).get(ASSIGNMENT_INSPECT_PATH).expect(404);
+});
 it("AHO-02/03 shows canonical created and replayed outcomes without requesting review", async () => {
   const f = await fixture(),
     b = input();
