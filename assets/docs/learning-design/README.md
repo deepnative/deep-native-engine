@@ -2,6 +2,8 @@
 
 A local content and workflow draft for [#549](https://github.com/deepnative/deep-native-engine/issues/549), prepared 27 October 2026. **Start with a lesson below.** These are written lessons with worked examples and feedback; the course-wide interactions are specified separately in BDD.
 
+The [local Lesson 2 → 3 walkthrough](prototype/README.md) now lets you try the sequence: write a request, classify a supplied answer, revise it and explain the change. Its saves are explicitly browser-local. The prototype includes eight additional scoped BDD scenarios and focused executable browser checks; it does not add application journey coverage.
+
 | Read as a learner | What you will make |
 | --- | --- |
 | [1. Choose a task you can check](lessons/01-choose-a-checkable-task.md) | A small task, its source and a check. |
@@ -44,6 +46,6 @@ Scenario: LEARN-FLOW-007 — Distinguish a contradiction from a missing fact
 
 Authored drafts: `LD-FND-001`, `LD-FND-002`, `LD-FND-003`, each revision `0.1`, corresponding to FND-001 through FND-003. These are proposal identifiers, not new published catalog versions. The source baseline is local commit `60c66677d939df8b1d0b59c43a1e8627f45223bc`.
 
-The existing #548 local guide demonstrates a narrower example/practice/transfer/writing loop. This package does not change the application or make these three new lessons available on the hosted site. The BDD files are specifications, not executed automated tests, and they do not alter the approved journey register.
+The existing #548 local guide demonstrates a narrower example/practice/transfer/writing loop. The standalone prototype now demonstrates the request → claim check → revision sequence. This package does not change the application or make these three new lessons available on the hosted site. The 32 broad BDD scenarios remain specifications; the eight PROTO scenarios identify only their tested local subsets. Neither changes the approved application journey register.
 
-Routine content and wording choices proceed under the owner's instruction. Production publication, release verification campaigns, merges, deployments and hosted setup are parked. The next bounded content experiment is the [Lesson 2 → Lesson 3 local prototype](workflows.md), using supplied answers and the existing private-writing behavior. Coordinate shared reader changes with #117 first; lead recommendation: Sol / High, with author self-review. A separate review is only required if explicitly requested or imposed by the selected implementation scope.
+Routine content and wording choices proceed under the owner's instruction. Production publication, release verification campaigns, merges, deployments and hosted setup are parked. The next bounded content task is fully authoring Lessons 4–6 from the [existing briefs](curriculum.md), using the same teaching pattern. Coordinate canonical source and shared reader changes with #93/#117 first; lead recommendation: Sol / High, with author self-review. A separate review is only required if explicitly requested or imposed by the selected implementation scope.

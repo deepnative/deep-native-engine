@@ -9,7 +9,9 @@ Scope: [#549](https://github.com/deepnative/deep-native-engine/issues/549), loca
 - **Existing analogue:** implementation and named test source were inspected, but those tests were not rerun for this document task. The new scenario is not automatically covered.
 - **Proposed:** an expected behavior or test still needs implementation/verification. No scenario below is newly claimed as an automated pass.
 
-Only the #548 everyday walkthrough has manual observation in this evidence set. Its previously recorded focused checks cover the three starter goals; they do not execute the new content. Existing sample-feedback tests exercise private evidence samples, not a new lesson-specific revision screen.
+The original baseline's manual observation covers the #548 everyday walkthrough. Its previously recorded focused checks cover the three starter goals; they do not execute the new content. Existing sample-feedback tests exercise private evidence samples, not a new lesson-specific revision screen.
+
+**Later local checkpoint:** [E7, the standalone prototype](prototype/README.md), adds runnable request/claim-check/repair behavior for the new content and its own PROTO-001–008 evidence. Its browser storage is not member-account persistence and its before/after sample is not a submitted member version. The original table below remains a map of the broader application scenarios; use the E7 mapping below for the exact local subset. No broad scenario is promoted to an application pass.
 
 ## Existing evidence anchors
 
@@ -21,6 +23,7 @@ Only the #548 everyday walkthrough has manual observation in this evidence set. 
 | E4 | [L62 activity/progress](../../../tests/e2e/progress.spec.ts). | Existing opened/started/self-reported states, not a new mastery model. |
 | E5 | [L139–141 sample feedback](../../../tests/e2e/sample-feedback.spec.ts). | Source-bound private evidence feedback, one clarification, new private revision and withdrawal. Not a criterion editor, lesson artifact comparison or formal assessment. |
 | E6 | [L71 workflow feedback](../../../tests/e2e/workflow-feedback.spec.ts); [native version/privacy/conflict behavior](../../../tests/integration/workflow-feedback.test.ts); [L151–153 unconfirmed-save recovery](../../../tests/e2e/workflow-feedback-recovery.spec.ts). | Private workflow-feedback notes and recovery. Does not establish identical failure handling for a new learner artifact editor. |
+| E7 | [Local walkthrough](prototype/index.html), [eight local BDD scenarios](prototype/learning.feature), [focused browser checks](prototype/checks.mjs). | Three complete local routes at desktop/mobile widths, correction/hint/transfer, browser save/reload and failure recovery. No server persistence, account identity, actual prior submission or staff review is tested. See the scoped mapping in the prototype README. |
 
 ## Content creation / refinement scenarios
 
@@ -82,4 +85,4 @@ Only the #548 everyday walkthrough has manual observation in this evidence set. 
 
 Author review checks answer correctness, not just presence of sections. Everyday numerical limits and unknowns match their sources; work examples keep task-specific owners/dates; technical examples separate requirements from execution. Fresh cases have different supplied facts. Three lesson drafts are complete; three later lessons remain briefs. No independent learner study or independent review was performed.
 
-The next bounded action remains under #549: evaluate one local Lesson 2 → Lesson 3 storyboard against LEARN-FLOW-006/007/008 and WORK-FLOW-004, then reconcile any shared reader work with the current #117 claim. Lead recommendation: Sol / High; author design/self-review High. Later private-data or authority changes require the applicable scope and Astra / High routing. Production work remains parked by the owner's direction.
+The Lesson 2 → Lesson 3 storyboard is now available as E7. The next bounded content action under #549 is fully authoring Lessons 4–6 from their existing exercise briefs, then reconciling any canonical source adoption with #93/#117. Lead recommendation: Sol / High; author design/self-review High. Later private-data or authority changes require the applicable scope and Astra / High routing. Production work remains parked by the owner's direction.

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="A local learning walkthrough: write a useful request, check claims and revise with a reason."
+    />
+    <title>Write, check, improve · Deep Native</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="module" src="./storyboard.mjs"></script>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">dn</span
+        ><span
+          >Deep Native <span class="brand-detail">/ Foundations</span></span
+        >
+      </div>
+      <span class="preview-label">Content preview</span>
+    </header>
+    <main>
+      <div class="path-heading">
+        <span>WRITE → CHECK → IMPROVE</span><span>Lessons 2–3</span>
+      </div>
+      <div class="route-bar">
+        <span>Choose your example</span>
+        <div role="group" aria-label="Example route" id="routes"></div>
+      </div>
+      <ol class="steps" aria-label="Learning steps" id="steps"></ol>
+      <div class="title-row">
+        <div>
+          <p class="eyebrow" id="step-label"></p>
+          <h1 id="heading"></h1>
+          <p class="lede" id="lede"></p>
+        </div>
+      </div>
+      <div class="workspace">
+        <aside class="source" aria-labelledby="source-title">
+          <p class="eyebrow" id="source-label"></p>
+          <h2 id="source-title">Source notes</h2>
+          <p id="source-text"></p>
+          <div class="source-foot">
+            Keep these facts beside your work.<br />
+            Everything in this exercise is invented.
+          </div>
+        </aside>
+        <section
+          class="lesson"
+          aria-label="Current learning step"
+          id="lesson"
+        ></section>
+      </div>
+      <p class="save-status" role="status" id="save-status"></p>
+      <footer class="page-footer">
+        <span>Practice stays in this browser when you choose Save.</span
+        ><span>No account save or AI call.</span>
+      </footer>
+    </main>
+    <noscript
+      >This local walkthrough needs JavaScript. The complete lessons are also
+      available in the accompanying Markdown files.</noscript
+    >
+  </body>
+</html>
