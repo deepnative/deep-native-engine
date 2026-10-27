@@ -28,6 +28,12 @@ Feature: Follow the complete authored foundation sequence
     And the example preserves unknown deadlines and decision ownership
     And ordinary date words in its table remain intact on a narrow screen
     And opening the comparison leaves the learner's own writing and self-check unchanged
+    When a Technical learner opens the final worked comparison
+    Then all six steps are demonstrated against CAP-T with candidate inputs, expectations, requirements and execution evidence
+    And the PNG boundary and above-limit cases remain not run with no observed result
+    And JPEG behavior stays unspecified rather than acquiring an invented acceptance or rejection rule
+    And a conditional later interruption has its own attempt record without changing the original no-tests-run brief
+    And the learner's writing and self-check remain unchanged at desktop and narrow widths
 
   Scenario: READER-004 — Deliberately save and resume one route's work
     Given an unsupported route in the URL falls back to Everyday

@@ -259,6 +259,71 @@ if (!process.argv.includes("--baseline")) {
       },
       { width, height: 950 },
     );
+    await check(
+      `READER-003 Technical final worked record at ${width}px`,
+      async (page) => {
+        await start(page, "Technical");
+        await page
+          .getByRole("button", { name: "Put it all together", exact: true })
+          .click();
+        const draft =
+          "My CAP-T plan: trace PNG expectations to the 3 MB rule and leave execution not run.";
+        await page.getByLabel("1. Task and check", { exact: true }).fill(draft);
+        const worked = page.locator(".lesson-body details");
+        await worked.locator("summary").click();
+        for (const title of [
+          "1. Task and check.",
+          "2. Request.",
+          "3. Claim check and repair.",
+          "4. Use/share decision.",
+          "5. Repeatable workflow.",
+          "6. Practice feedback and revision.",
+        ]) {
+          await expect(worked.getByText(title, { exact: true })).toBeVisible();
+        }
+        for (const row of [
+          "1 MB PNG Accept PNG up to 3 MB Not run None",
+          "PNG at the stated 3 MB limit Accept Inclusive 3 MB limit Not run None",
+          "4 MB PNG Reject 3 MB size limit Not run None",
+          "1 MB JPEG Unspecified Other formats unspecified Not run None",
+        ]) {
+          await expect(
+            worked.getByRole("row", { name: row, exact: true }),
+          ).toBeVisible();
+        }
+        await expect(worked).toContainText(
+          "Do not replace the unknown JPEG rule with either accept or reject",
+        );
+        await expect(worked).toContainText(
+          "If a later test starts but stops before a response",
+        );
+        await expect(worked).toContainText("interrupted/unconfirmed");
+        await expect(worked).toContainText(
+          "Keep that attempt separate from CAP-T's original no-tests-run brief",
+        );
+        await expect(worked).toContainText(
+          "This is self-written practice feedback",
+        );
+        await expect(worked).not.toContainText("UPLOAD-1");
+        await expect(worked).not.toContainText("2 MB");
+        await expect(
+          page.getByLabel("1. Task and check", { exact: true }),
+        ).toHaveValue(draft);
+        await expect(page.locator("#self-check")).not.toBeChecked();
+        await expect(page.locator("#source-text")).toContainText(
+          "No tests have been run",
+        );
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        await worked.screenshot({
+          path: path.join(output, `technical-record-${width}.png`),
+        });
+      },
+      { width, height: 950 },
+    );
   }
   await check(
     "READER-002 rehearsal correct feedback leads forward",

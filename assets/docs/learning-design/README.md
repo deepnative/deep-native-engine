@@ -16,7 +16,7 @@ The [local Lesson 2 → 3 walkthrough](prototype/README.md) now lets you try the
 
 Each lesson offers Everyday, Work and Technical routes. Choose one rather than reading all three. Every route has supplied facts, a worked example, a practice attempt, specific feedback, a fresh case and an own-work self-check. Learners can use the invented samples throughout, without an AI account.
 
-All six lessons in the [curriculum map](curriculum.md) now have full drafts. These proposals live separately from the canonical FND files owned by the ongoing #93/#117 work. The final practice contains complete Everyday and Work records, plus source-based checks for the Technical route.
+All six lessons in the [curriculum map](curriculum.md) now have full drafts. These proposals live separately from the canonical FND files owned by the ongoing #93/#117 work. The final practice contains complete source-to-revision worked records for Everyday, Work and Technical routes.
 
 ## What the study changes
 
@@ -53,4 +53,4 @@ Authored drafts: `LD-FND-001` through `LD-FND-006`, corresponding to FND-001 thr
 
 The existing #548 guide and standalone request/check prototype demonstrate narrower loops. The six-lesson reader makes the complete authored sequence locally usable. This package does not change the hosted application. The 32 original and 13 applied-learning BDD scenarios retain their broader scope; eight PROTO and twelve READER scenarios identify separately tested local behavior. None changes the approved application journey register.
 
-Routine content and wording choices proceed under the owner's instruction. Production work is parked. The Everyday rehearsal produced a complete book-swap artifact and a separate repair-café final record. The [Work rehearsal](work-author-rehearsal.md) carried a pilot action table through all six lessons and added a complete CAP-W worked comparison. Next under #549: rehearse the Technical route and inspect its requirement/expected-result/execution distinctions. Automated interaction checks do not prove learning quality. Lead Sol / High, with author self-review; coordinate canonical source or shared application reader adoption with #93/#117.
+Routine content and wording choices proceed under the owner's instruction. Production work is parked. Everyday, [Work](work-author-rehearsal.md) and [Technical](technical-author-rehearsal.md) author rehearsals now have complete connected artifacts and separate final records. The Technical example separates candidate tests, requirements, expectations and execution, including a conditional interrupted attempt. Next under #549: demonstrate the authoring/refinement workflow from one specific critique to corrected key/feedback and a before/after local preview. Automated interaction checks do not prove learning quality. Lead Sol / High, with author self-review; coordinate canonical source or shared application reader adoption with #93/#117.

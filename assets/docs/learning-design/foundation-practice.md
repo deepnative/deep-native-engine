@@ -78,11 +78,37 @@ Use these six steps. Keep the source beside every version; a neat answer is not 
 
 </details>
 
-<details><summary>Technical: what a faithful result must preserve</summary>
+<details><summary>Technical: a complete source-to-revision record</summary>
 
-The PNG format and 3 MB limit establish a requirement, not a passing test. A fictional 4 MB PNG case can have expected rejection under the size rule, with status “not run.” JPEG behavior stays unspecified. Candidate cases can include a PNG at the limit and above it; no result is observed until a test is actually executed.
+**1. Task and check.** Draft candidate upload tests using CAP-T. Check the file format, size and expected behavior against the brief, then check whether any actual execution evidence exists. The PNG requirement and 3 MB limit support expectations; the brief explicitly says no tests have run.
 
-A useful request separates input, expectation, requirement and execution. The workflow checks the proposed cases against the brief, preserves “not run” and recovers from drafting failure using the retained source. Feedback should remove the invented passing result and JPEG rule, with a reason for each change. If someone later provides new requirements or observed results, keep their source/version separate from this original brief.
+**2. Request.** “Use CAP-T to propose fictional PNG cases below, at and above the stated 3 MB limit. Include a JPEG case with its requirement still open. Use input, expected behavior, source requirement, execution and observed-result columns. Keep execution not run and observations none. Do not invent other-format support, error wording or passing results. I will trace each expectation to the brief and keep any new requirement or later execution record separate.”
+
+**3. Claim check and repair.** Retain the teaching sample as v1: “The PNG upload tests passed. JPEG files up to 3 MB are supported too.”
+
+| Claim in v1 | Evidence from CAP-T | Status and repair |
+| --- | --- | --- |
+| The PNG upload tests passed | No tests have been run. | Contradicted; record not run with no observed result. |
+| JPEG files up to 3 MB are supported | Other file formats are unspecified. | Not given; leave JPEG behavior open. |
+
+**Candidate test table — v2.** All inputs below are fictional proposals:
+
+| Input | Expected behavior | Source requirement | Execution | Observed result |
+| --- | --- | --- | --- | --- |
+| 1 MB PNG | Accept | PNG up to 3 MB | Not run | None |
+| PNG at the stated 3 MB limit | Accept | Inclusive 3 MB limit | Not run | None |
+| 4 MB PNG | Reject | 3 MB size limit | Not run | None |
+| 1 MB JPEG | Unspecified | Other formats unspecified | Not run | None |
+
+Do not replace the unknown JPEG rule with either accept or reject. That row needs a requirement before it can have a source-based pass/fail criterion. Exact rejection wording is also unspecified. Before turning the boundary case into an executable fixture, record how the stated MB limit maps to bytes; the brief does not choose that convention. These open details do not erase the useful PNG cases, and writing them does not execute them.
+
+**4. Use/share decision.** Keep this as a private learning record and test-planning example. CAP-T permits fictional files and excludes customer logs and credentials; none is needed to describe the proposed inputs. The brief names no external recipient. No file upload or real test is performed by this worked example.
+
+**5. Repeatable workflow.** Retain CAP-T and v1 → draft candidate rows → trace each expectation to its requirement and inspect execution evidence → keep v2 as a plan with unknowns visible → repair an unsupported expectation or result and check again. If the drafting tool fails, write the missing row manually from the retained brief. If the source is unavailable, keep an unverified draft and recover it before confirming the plan.
+
+**Conditional recovery example:** If a later test starts but stops before a response, record expected rejection for the 4 MB PNG, observed result “no response observed” and execution “interrupted/unconfirmed.” Keep that attempt separate from CAP-T's original no-tests-run brief. Investigate the interruption; when the setup is usable, record a new attempt and its actual evidence. Neither the interruption nor the expected rejection establishes an application pass or failure. This is a possible later situation, not something that happened in CAP-T.
+
+**6. Practice feedback and revision.** A useful comment on v1 is: “You report passed PNG tests, but CAP-T says no tests have run. Keep the expected PNG behavior and change execution to not run. JPEG support is unspecified; leave that requirement open. I checked the brief, not the form.” Decision: revise v1 into the candidate table above. Reason: “I separated requirements and expectations from execution, removed the fabricated pass, and kept the JPEG unknown visible.” Retain v1 and its comment; v2 has no new review. This is self-written practice feedback, not an actual test report or reviewer approval.
 
 </details>
 
@@ -101,4 +127,4 @@ Revisit the corresponding lesson for any “needs another try.” Finishing this
 
 Return to the [six-lesson reading map](README.md), or try the [interactive request/check/revision walkthrough](prototype/README.md). The interactive walkthrough currently covers that middle part of the sequence; it does not save this entire six-step practice to your member account.
 
-<!-- Author reference: foundation practice draft 0.2; CAP-W now has a complete worked record. Supplied briefs, flawed samples and rubric are unchanged. Original synthetic content. -->
+<!-- Author reference: foundation practice draft 0.3; all three routes now have complete worked records. Supplied briefs, flawed samples and rubric are unchanged. Original synthetic content. -->
