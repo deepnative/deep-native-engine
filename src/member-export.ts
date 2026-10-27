@@ -1,6 +1,10 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { hash } from "./store.ts";
+import {
+  ASSIGNMENT_ORIGIN_JOIN,
+  ASSIGNMENT_ORIGIN_SQL,
+} from "./assignment-evidence-values.ts";
 
 export const MAX_MEMBER_EXPORT_RECORDS = 100;
 export const MAX_MEMBER_EXPORT_BYTES = 256 * 1024;
@@ -410,6 +414,23 @@ const sections = {
     "r.id",
     true,
   ),
+  assignmentEvidenceOrigins: section(
+    `e.id AS "evidenceId",${ASSIGNMENT_ORIGIN_SQL}`,
+    `evidence_objects e ${ASSIGNMENT_ORIGIN_JOIN}
+     WHERE e.owner_principal_id=$1 AND e.quarantine_state<>'deleting'
+      AND ao.evidence_id IS NOT NULL AND e.id=ANY($4::uuid[])`,
+    "e.id",
+  ),
+  assignmentCopyReceipts: section(
+    `r.id AS "receiptId",r.created_at AS "createdAt",
+     CASE WHEN e.quarantine_state='deleting' THEN NULL ELSE r.evidence_id END AS "evidenceId",
+     CASE WHEN r.evidence_id IS NULL OR e.quarantine_state='deleting' THEN 'removed'
+       WHEN NOT e.private_review_allowed THEN 'withdrawn' ELSE 'available' END AS state`,
+    `assignment_evidence_operations r LEFT JOIN evidence_objects e ON e.id=r.evidence_id
+     ${ASSIGNMENT_ORIGIN_JOIN} WHERE r.member_id=$1
+     AND (r.evidence_id IS NULL OR (r.evidence_id=ANY($4::uuid[]) AND ao.evidence_id IS NOT NULL))`,
+    "r.id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -660,16 +681,25 @@ export function memberExportStore(
           }
           if (
             name === "providedEvidenceOrigins" ||
-            name === "preparedCopyReceipts"
+            name === "preparedCopyReceipts" ||
+            name === "assignmentEvidenceOrigins" ||
+            name === "assignmentCopyReceipts"
           ) {
             // A continuation can start here. Source first, then receipt/metadata,
             // matching withdrawal and ON DELETE SET NULL; never lock children first.
             const sourceTable =
               name === "providedEvidenceOrigins"
                 ? "provided_evidence_origins"
-                : "provided_evidence_operations";
+                : name === "preparedCopyReceipts"
+                  ? "provided_evidence_operations"
+                  : name === "assignmentEvidenceOrigins"
+                    ? "assignment_evidence_origins"
+                    : "assignment_evidence_operations";
             const rowKey =
-              name === "providedEvidenceOrigins" ? "r.evidence_id" : "r.id";
+              name === "providedEvidenceOrigins" ||
+              name === "assignmentEvidenceOrigins"
+                ? "r.evidence_id"
+                : "r.id";
             const parents = await client.query<{ id: string }>(
               `SELECT e.id FROM evidence_objects e WHERE e.owner_principal_id=$1 AND e.id IN(
                 SELECT r.evidence_id FROM ${sourceTable} r WHERE r.member_id=$1

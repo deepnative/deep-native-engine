@@ -29,6 +29,8 @@ import { authorizationStore } from "./authorization.ts";
 import { evidenceStore, fileObjectStorage } from "./evidence.ts";
 import { preparedObjectStorage } from "./prepared-sample-storage.ts";
 import { preparedSampleStore } from "./prepared-samples.ts";
+import { assignmentEvidenceStore } from "./assignment-evidence.ts";
+import { assignmentObjectStorage } from "./assignment-evidence-storage.ts";
 import { deterministicRegistry } from "./adapters.ts";
 import { localAiConsentStore } from "./local-ai-consent.ts";
 import { localAiControlStore } from "./local-ai-control.ts";
@@ -96,15 +98,21 @@ export async function start(env: NodeJS.ProcessEnv) {
   try {
     await migrate(pool);
     await seedDraftPack(pool);
-    const objects = preparedObjectStorage(
+    const objects = assignmentObjectStorage(
       pool,
-      settings.hosted
-        ? azureObjectStorage(settings.hosted)
-        : fileObjectStorage(settings.privateStorageRoot),
+      preparedObjectStorage(
+        pool,
+        settings.hosted
+          ? azureObjectStorage(settings.hosted)
+          : fileObjectStorage(settings.privateStorageRoot),
+      ),
     );
     const eventReader = eventCatalogReader();
     const options = {
       ...settings,
+      assignmentEvidence: assignmentEvidenceStore(pool, {
+        enabled: settings.assignmentHandoff,
+      }),
       hostedOrigin: settings.hosted?.origin,
       memberEmail:
         settings.emailEndpoint && settings.emailSender && settings.hosted

@@ -16,6 +16,12 @@ import {
   type ProvidedSampleOrigin,
 } from "./prepared-sample-values.ts";
 
+import {
+  ASSIGNMENT_ORIGIN_SQL,
+  ASSIGNMENT_ORIGIN_JOIN,
+  type AssignmentEvidenceOrigin,
+} from "./assignment-evidence-values.ts";
+
 export const MAX_EVIDENCE_BYTES = 1024 * 1024;
 export const MAX_EXPORT_ITEMS = 20;
 export const MAX_EXPORT_BYTES = 4 * MAX_EVIDENCE_BYTES;
@@ -62,10 +68,12 @@ type EvidenceMetadata = {
   media_type: EvidenceType;
   storage_key: string;
   origin?: ProvidedSampleOrigin;
+  assignmentOrigin?: AssignmentEvidenceOrigin;
 };
 
 export interface OwnedEvidence {
   origin?: ProvidedSampleOrigin;
+  assignmentOrigin?: AssignmentEvidenceOrigin;
   id: string;
   name: string;
   mediaType: EvidenceType;
@@ -81,6 +89,7 @@ export interface OwnedEvidence {
 }
 export interface ExportedEvidence {
   origin?: ProvidedSampleOrigin;
+  assignmentOrigin?: AssignmentEvidenceOrigin;
   id: string;
   name: string;
   mediaType: EvidenceType;
@@ -146,6 +155,7 @@ export interface EvidenceStore {
         mediaType: EvidenceType;
         data: Buffer;
         origin?: ProvidedSampleOrigin;
+        assignmentOrigin?: AssignmentEvidenceOrigin;
       }
   >;
   addDerivative(
@@ -398,8 +408,8 @@ export function evidenceStore(
         }
       >(
         `SELECT e.id,e.workspace_id,e.original_name,e.media_type,e.storage_key,
-              e.owner_principal_id,e.private_review_allowed,e.learning_circle_id,${PROVIDED_ORIGIN_SQL}
-       FROM evidence_objects e ${PROVIDED_ORIGIN_JOIN} WHERE e.id=$1 AND e.workspace_id=$2
+              e.owner_principal_id,e.private_review_allowed,e.learning_circle_id,${PROVIDED_ORIGIN_SQL},${ASSIGNMENT_ORIGIN_SQL}
+       FROM evidence_objects e ${PROVIDED_ORIGIN_JOIN} ${ASSIGNMENT_ORIGIN_JOIN} WHERE e.id=$1 AND e.workspace_id=$2
          AND e.quarantine_state='clean' FOR SHARE OF e`,
         [evidenceId, workspace.id],
       )
@@ -560,11 +570,11 @@ export function evidenceStore(
                     WHEN parent.quarantine_state='deleting' THEN 'deleting'
                     ELSE 'current' END AS "revisionParentStatus",
                   e.revision_number AS "revisionNumber",
-                  ${PROVIDED_ORIGIN_SQL},
+                  ${PROVIDED_ORIGIN_SQL},${ASSIGNMENT_ORIGIN_SQL},
                   EXISTS(SELECT 1 FROM evidence_objects child
                     WHERE child.revision_parent_id=e.id) AS "hasRevision"
            FROM evidence_objects e
-           ${PROVIDED_ORIGIN_JOIN}
+           ${PROVIDED_ORIGIN_JOIN} ${ASSIGNMENT_ORIGIN_JOIN}
            JOIN principals p ON p.id=e.owner_principal_id
            LEFT JOIN evidence_objects parent ON parent.id=e.revision_parent_id
            LEFT JOIN evidence_review_submissions s ON s.evidence_id=e.id
@@ -573,9 +583,10 @@ export function evidenceStore(
            ORDER BY e.created_at DESC,e.id`,
           [hash(token)],
         )
-      ).rows.map(({ origin, ...row }) => ({
+      ).rows.map(({ origin, assignmentOrigin, ...row }) => ({
         ...row,
         ...(origin ? { origin } : {}),
+        ...(assignmentOrigin ? { assignmentOrigin } : {}),
       }));
     },
     async exportOwned(token, continuation) {
@@ -627,6 +638,7 @@ export function evidenceStore(
           sha256: string;
           storageKey: string;
           origin?: ProvidedSampleOrigin;
+          assignmentOrigin?: AssignmentEvidenceOrigin;
         }>(
           `SELECT e.id,e.original_name AS name,e.media_type AS "mediaType",
                   e.quarantine_state AS "quarantineState",
@@ -640,9 +652,9 @@ export function evidenceStore(
                     WHEN parent.quarantine_state='deleting' THEN 'deleting'
                     ELSE 'current' END AS "revisionParentStatus",
                   e.revision_number AS "revisionNumber",e.byte_size AS "byteSize",
-                  e.sha256,e.storage_key AS "storageKey",${PROVIDED_ORIGIN_SQL}
+                  e.sha256,e.storage_key AS "storageKey",${PROVIDED_ORIGIN_SQL},${ASSIGNMENT_ORIGIN_SQL}
            FROM evidence_objects e
-           ${PROVIDED_ORIGIN_JOIN}
+           ${PROVIDED_ORIGIN_JOIN} ${ASSIGNMENT_ORIGIN_JOIN}
            LEFT JOIN evidence_objects parent ON parent.id=e.revision_parent_id
            WHERE e.owner_principal_id=$1 AND e.workspace_id=$2
              AND ($3::timestamptz IS NULL OR (e.created_at,e.id)>($3::timestamptz,$4::uuid))
@@ -703,6 +715,9 @@ export function evidenceStore(
             revisionNumber: row.revisionNumber,
             sourceBase64,
             ...(row.origin ? { origin: row.origin } : {}),
+            ...(row.assignmentOrigin
+              ? { assignmentOrigin: row.assignmentOrigin }
+              : {}),
           });
         }
         // BEGIN freezes CURRENT_TIMESTAMP; source reads can outlive the session.
@@ -790,7 +805,7 @@ export function evidenceStore(
               `SELECT e.revision_number FROM evidence_objects e
                JOIN evidence_review_submissions s ON s.evidence_id=e.id
                WHERE e.id=$1 AND e.owner_principal_id=$2
-                 AND e.workspace_id=$3 AND e.quarantine_state='clean'
+                 AND e.workspace_id=$3 AND e.quarantine_state='clean' AND NOT e.assignment_bound
                  AND e.private_review_allowed
                  AND s.status IN ('queued','reviewed')
                  AND e.revision_number<20
@@ -997,6 +1012,9 @@ export function evidenceStore(
             mediaType: row.media_type,
             data,
             ...(row.origin ? { origin: row.origin } : {}),
+            ...(row.assignmentOrigin
+              ? { assignmentOrigin: row.assignmentOrigin }
+              : {}),
           };
         },
         () => validCapability(evidenceId, capability, clock()),
@@ -1025,7 +1043,7 @@ export function evidenceStore(
         const source = (
           await client.query<{ id: string }>(
             `SELECT id FROM evidence_objects
-             WHERE id=$1 AND quarantine_state='clean' FOR UPDATE`,
+             WHERE id=$1 AND quarantine_state='clean' AND NOT assignment_bound FOR UPDATE`,
             [evidenceId],
           )
         ).rows[0];

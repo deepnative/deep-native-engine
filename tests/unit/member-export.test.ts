@@ -226,8 +226,8 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    // Original indices0..41 remain; new origin/receipt indices42/43 are valid.
-    [2, 44, ...valid.slice(2)],
+    // Original indices0..43 remain; assignment origin/receipt indices44/45 are valid.
+    [2, 46, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -842,3 +842,35 @@ it("TESTISSUE-07 original attendance index 40 and appended fixture index 41 reta
     expect(f.statements.some((sql) => sql.includes(source))).toBe(true);
   }
 });
+
+it.each([
+  [44, "assignmentEvidenceOrigins", "assignment_evidence_origins"],
+  [45, "assignmentCopyReceipts", "assignment_evidence_operations"],
+] as const)(
+  "AHO-09 preserves cursor v2 and appends assignment section %s with source-before-child fencing",
+  async (index, name, table) => {
+    const fake = fakePool({ id: "member-1" }, (sql) =>
+      sql.includes(`FROM ${table} r`)
+        ? [{ id: "source" }]
+        : sql.includes('AS "_key"') && sql.includes(table)
+          ? [{ evidenceId: "source", state: "available" }]
+          : [],
+    );
+    const result = await memberExportStore(fake.pool, secret).exportOwned(
+      "owner",
+      signed([2, index, ["before"], 2, Date.now() + 60000]),
+    );
+    expect(result.kind).toBe("ready");
+    const lock = fake.statements.findIndex(
+      (sql) =>
+        sql.includes(`FROM ${table} r`) && sql.includes("FOR SHARE OF e"),
+    );
+    const read = fake.statements.findIndex(
+      (sql) => sql.includes('AS "_key"') && sql.includes(table),
+    );
+    expect(lock).toBeGreaterThan(-1);
+    expect(read).toBeGreaterThan(lock);
+    if (result.kind === "ready")
+      expect(result.payload.records).toHaveProperty(name);
+  },
+);

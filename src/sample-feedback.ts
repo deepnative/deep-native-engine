@@ -1,4 +1,9 @@
 import {
+  ASSIGNMENT_ORIGIN_SQL,
+  ASSIGNMENT_ORIGIN_JOIN,
+  type AssignmentEvidenceOrigin,
+} from "./assignment-evidence-values.ts";
+import {
   PROVIDED_ORIGIN_SQL,
   PROVIDED_ORIGIN_JOIN,
   type ProvidedSampleOrigin,
@@ -60,6 +65,7 @@ export interface SampleFeedbackRecord extends QueryResultRow {
 }
 export interface SampleFeedbackView {
   origin?: ProvidedSampleOrigin;
+  assignmentOrigin?: AssignmentEvidenceOrigin;
   reviewAllocation?: {
     receipt: ReviewTimeReceipt;
     grantId: string;
@@ -129,6 +135,7 @@ const projection = `id,submission_id AS "submissionId",reviewer_id AS "authorId"
  answer,answer_operation_id AS "answerOperationId",answered_at AS "answeredAt"`;
 interface Scope {
   origin?: ProvidedSampleOrigin;
+  assignmentOrigin?: AssignmentEvidenceOrigin;
   tx: SampleTransaction;
   actorId: string;
   workspaceId: string;
@@ -234,12 +241,17 @@ export function sampleFeedbackStore(
           (staff && (!evidence.consent || evidence.state !== "clean"))
         )
           return fail("denied");
-        const origin = (
-          await tx.query<{ origin: ProvidedSampleOrigin | null }>(
-            `SELECT ${PROVIDED_ORIGIN_SQL} FROM evidence_objects e ${PROVIDED_ORIGIN_JOIN} WHERE e.id=$1`,
+        const provenance = (
+          await tx.query<{
+            origin: ProvidedSampleOrigin | null;
+            assignmentOrigin: AssignmentEvidenceOrigin | null;
+          }>(
+            `SELECT ${PROVIDED_ORIGIN_SQL},${ASSIGNMENT_ORIGIN_SQL} FROM evidence_objects e ${PROVIDED_ORIGIN_JOIN} ${ASSIGNMENT_ORIGIN_JOIN} WHERE e.id=$1`,
             [evidenceId],
           )
-        ).rows[0]?.origin;
+        ).rows[0];
+        const origin = provenance?.origin,
+          assignmentOrigin = provenance?.assignmentOrigin;
         const submission = (
           await tx.query<{ id: string; status: string }>(
             `SELECT id,status FROM evidence_review_submissions
@@ -314,6 +326,7 @@ export function sampleFeedbackStore(
           status: submission.status,
           title: evidence.name,
           ...(origin ? { origin } : {}),
+          ...(assignmentOrigin ? { assignmentOrigin } : {}),
           source,
           digest: evidence.digest,
           sourceRevision: evidence.revision,
@@ -392,6 +405,7 @@ export function sampleFeedbackStore(
     submissionId: s.submissionId,
     title: s.title,
     ...(s.origin ? { origin: s.origin } : {}),
+    ...(s.assignmentOrigin ? { assignmentOrigin: s.assignmentOrigin } : {}),
     source: s.source,
     sourceSha256: s.digest,
     sourceRevision: s.sourceRevision,

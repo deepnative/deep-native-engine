@@ -1,3 +1,7 @@
+import {
+  ASSIGNMENT_ORIGIN_LABEL,
+  type AssignmentEvidenceOrigin,
+} from "../../src/assignment-evidence-values.ts";
 import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import type { Pool, PoolClient } from "pg";
@@ -49,6 +53,7 @@ function fixture(staff = true, provided = false) {
     records: [] as SampleFeedbackRecord[],
     replay: undefined as { digest: string; revision: number } | undefined,
     throwQuery: false,
+    assignmentOrigin: null as AssignmentEvidenceOrigin | null,
     origin: provided
       ? ({
           kind: "platform-provided-invented",
@@ -73,7 +78,9 @@ function fixture(staff = true, provided = false) {
       rows = state.workspace ? [state.workspace] : [];
     else if (sql.includes("original_name AS name")) rows = [state.evidence];
     else if (sql.includes("provided_evidence_origins"))
-      rows = [{ origin: state.origin }];
+      rows = [
+        { origin: state.origin, assignmentOrigin: state.assignmentOrigin },
+      ];
     else if (sql.includes("SELECT id,status FROM evidence_review_submissions"))
       rows = state.submission ? [state.submission] : [];
     else if (sql.includes("FROM assignment_grants a"))
@@ -588,4 +595,32 @@ it("returns an empty owner page without a continuation or private draft", async 
     records: [],
     next: null,
   });
+});
+
+it("AHO-05 preserves submitted provenance for the owner and separately authorized reviewer without reclassifying it as provided content", async () => {
+  for (const staff of [false, true]) {
+    const f = fixture(staff);
+    f.state.assignmentOrigin = {
+      kind: "member-assignment-submission",
+      attemptId: id,
+      sequence: 1,
+      contentId: "SYN-545",
+      contentVersion: 1,
+      rubricVersion: 4,
+      sourceSha256: f.state.evidence.digest,
+      submittedAt: new Date(),
+      acknowledgedAt: new Date(),
+      label: ASSIGNMENT_ORIGIN_LABEL,
+    };
+    const result = await (staff
+      ? f.store.reviewer(token, id)
+      : f.store.owner(token, id));
+    expect(result).toMatchObject({
+      kind: "ready",
+      assignmentOrigin: f.state.assignmentOrigin,
+      source: "Invented source",
+      records: [],
+    });
+    expect(result).not.toHaveProperty("origin");
+  }
 });

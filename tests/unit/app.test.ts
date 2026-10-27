@@ -4205,6 +4205,78 @@ it("compares only two selected submissions from an owned private attempt", async
   await get("?from=1&to=2").expect(422);
 });
 
+it("AHO-01/10 offers exact submitted-version copies only with a configured, enabled handoff", async () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const submittedAt = new Date("2026-10-27T10:00:00Z");
+  const attempts = {
+    ...disabledAttemptStore(),
+    detail: vi.fn().mockResolvedValue({
+      id,
+      contentId: "ASSIGN-545",
+      contentVersion: 1,
+      title: "Owned assignment",
+      rubric: "Explain one check",
+      rubricVersion: 1,
+      goalAtStart: "everyday",
+      response: "My submitted response",
+      revision: 2,
+      startedAt: submittedAt,
+      savedAt: submittedAt,
+      submittedAt,
+      currentPublished: true,
+      currentEligible: true,
+      submissionCount: 1,
+      submissions: [
+        {
+          sequence: 1,
+          response: "My submitted response",
+          submittedAt: submittedAt.toISOString(),
+        },
+      ],
+    }),
+  };
+  const assignmentEvidence = {
+    open: vi.fn().mockResolvedValue({ kind: "denied" }),
+    create: vi.fn().mockResolvedValue({ kind: "denied" }),
+    inspect: vi.fn().mockResolvedValue({ kind: "denied" }),
+  };
+  for (const state of [
+    { enabled: false, configured: true },
+    { enabled: true, configured: false },
+    { enabled: true, configured: true },
+  ]) {
+    const db = storage();
+    db.session.mockResolvedValue({
+      kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
+      learner: member,
+    });
+    const agent = await managedAgent(
+      app(db, {
+        origin,
+        secret: "secret",
+        attempts,
+        assignmentHandoff: state.enabled,
+        assignmentEvidence: state.configured ? assignmentEvidence : undefined,
+      }),
+    );
+    const response = await agent
+      .get(`/assignments/attempts/${id}`)
+      .set("Host", host)
+      .expect(200);
+    if (state.enabled && state.configured) {
+      expect(response.text).toContain(
+        `/assignments/attempts/${id}/handoff?sequence=1`,
+      );
+      expect(response.text).toContain("submitted privately");
+      expect(response.text).toContain("Private submission history");
+    } else {
+      expect(response.text).not.toContain("/handoff?");
+      expect(response.text).toContain("submitted locally");
+    }
+  }
+  expect(assignmentEvidence.create).not.toHaveBeenCalled();
+});
 it("keeps synthetic assignment attempts private through start, validation, conflicts, submission and deletion", async () => {
   const id = "11111111-1111-4111-8111-111111111111";
   const item = {

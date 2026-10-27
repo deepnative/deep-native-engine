@@ -1,3 +1,4 @@
+import { ASSIGNMENT_ORIGIN_LABEL } from "../../src/assignment-evidence-values.ts";
 import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -191,66 +192,86 @@ it.each(["upload", "derivative"] as const)(
     );
   },
 );
-it("PREPARED-07 owned metadata, downloaded bytes and bounded export retain exact provided provenance", async () => {
-  const template = PREPARED_SAMPLES[0]!,
-    data = Buffer.from(template.text);
-  const origin = {
-    kind: "platform-provided-invented" as const,
-    templateId: template.id,
-    templateVersion: 1,
-    templateDigest: template.digest,
-    acknowledgedAt: new Date(),
-    label: PROVIDED_SAMPLE_LABEL,
-  };
-  const listing = database([{ id: evidenceId, name: template.name, origin }]);
-  expect(
-    await evidenceStore(listing.pool, objectStorage(), "secret").owned(token),
-  ).toMatchObject([{ origin }]);
-  const access = [
-    accessIdentity,
-    { id: evidenceId },
-    { ...accessMetadata, origin },
-    { valid: true },
-  ];
-  const db = database(...access, ...access),
-    objects = objectStorage();
-  objects.get.mockResolvedValue(data);
-  const evidence = evidenceStore(db.pool, objects, "secret");
-  const capability = await evidence.issueDownload(token, evidenceId);
-  if (capability.kind !== "issued") throw Error("Owned capability unavailable");
-  expect(
-    await evidence.download(token, evidenceId, capability.capability),
-  ).toMatchObject({ kind: "allowed", data, origin });
-  const exportDb = database(
-    { id: evidenceId, validUntil: new Date("2030-01-01") },
-    [
-      {
-        id: evidenceId,
-        name: template.name,
-        mediaType: "text/plain",
-        quarantineState: "clean",
-        privateReviewAllowed: true,
-        privateReviewRevokedAt: null,
-        createdAt: new Date(),
-        byteSize: data.length,
-        sha256: template.digest,
-        storageKey,
-        origin,
-      },
-    ],
-    { valid: true },
-  );
-  const exported = await evidenceStore(
-    exportDb.pool,
-    objects,
-    "secret",
-  ).exportOwned(token);
-  expect(exported).toMatchObject({
-    kind: "ready",
-    items: [{ origin, sourceBase64: data.toString("base64") }],
-  });
-  expect(JSON.stringify(exported)).not.toContain(storageKey);
-});
+it.each(["provided", "assignment"] as const)(
+  "AHO-09/PREPARED-07 owned metadata, download and export retain exact %s provenance",
+  async (kind) => {
+    const template = PREPARED_SAMPLES[0]!,
+      data = Buffer.from(template.text);
+    const origin = {
+      kind: "platform-provided-invented" as const,
+      templateId: template.id,
+      templateVersion: 1,
+      templateDigest: template.digest,
+      acknowledgedAt: new Date(),
+      label: PROVIDED_SAMPLE_LABEL,
+    };
+    const assignmentOrigin = {
+      kind: "member-assignment-submission",
+      attemptId: evidenceId,
+      sequence: 1,
+      contentId: "SYN-545",
+      contentVersion: 1,
+      rubricVersion: 4,
+      sourceSha256: template.digest,
+      submittedAt: new Date(),
+      acknowledgedAt: new Date(),
+      label: ASSIGNMENT_ORIGIN_LABEL,
+    };
+    const provenance =
+      kind === "assignment" ? { assignmentOrigin } : { origin };
+    const listing = database([
+      { id: evidenceId, name: template.name, ...provenance },
+    ]);
+    expect(
+      await evidenceStore(listing.pool, objectStorage(), "secret").owned(token),
+    ).toMatchObject([provenance]);
+    const access = [
+      accessIdentity,
+      { id: evidenceId },
+      { ...accessMetadata, ...provenance },
+      { valid: true },
+    ];
+    const db = database(...access, ...access),
+      objects = objectStorage();
+    objects.get.mockResolvedValue(data);
+    const evidence = evidenceStore(db.pool, objects, "secret");
+    const capability = await evidence.issueDownload(token, evidenceId);
+    if (capability.kind !== "issued")
+      throw Error("Owned capability unavailable");
+    expect(
+      await evidence.download(token, evidenceId, capability.capability),
+    ).toMatchObject({ kind: "allowed", data, ...provenance });
+    const exportDb = database(
+      { id: evidenceId, validUntil: new Date("2030-01-01") },
+      [
+        {
+          id: evidenceId,
+          name: template.name,
+          mediaType: "text/plain",
+          quarantineState: "clean",
+          privateReviewAllowed: true,
+          privateReviewRevokedAt: null,
+          createdAt: new Date(),
+          byteSize: data.length,
+          sha256: template.digest,
+          storageKey,
+          ...provenance,
+        },
+      ],
+      { valid: true },
+    );
+    const exported = await evidenceStore(
+      exportDb.pool,
+      objects,
+      "secret",
+    ).exportOwned(token);
+    expect(exported).toMatchObject({
+      kind: "ready",
+      items: [{ ...provenance, sourceBase64: data.toString("base64") }],
+    });
+    expect(JSON.stringify(exported)).not.toContain(storageKey);
+  },
+);
 
 it("accepts allowlisted text, PDF and PNG evidence with explicit rights and scope", () => {
   expect(validUpload(base)).toBe(true);

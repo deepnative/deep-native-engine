@@ -6,6 +6,8 @@ import { mountSupportAssignmentRoutes } from "./support-assignment-routes.ts";
 import type { SupportAssignmentStore } from "./support-assignment.ts";
 import { mountSampleAssignmentRoutes } from "./sample-assignment-routes.ts";
 import { preparedSamplesEnabled } from "./prepared-samples.ts";
+import type { AssignmentEvidenceStore } from "./assignment-evidence.ts";
+import { mountAssignmentEvidenceRoutes } from "./assignment-evidence-routes.ts";
 import { mountPreparedSampleRoutes } from "./prepared-sample-routes.ts";
 import type { PreparedSampleStore } from "./prepared-samples.ts";
 import type { SampleAssignmentStore } from "./sample-assignment-values.ts";
@@ -96,7 +98,7 @@ import {
   circleMembershipRecoveryPage,
   usefulnessRecoveryPage,
   assignmentAttemptsPage,
-  assignmentAttemptPage,
+  assignmentAttemptPage as assignmentAttemptView,
   assignmentComparisonPage,
   assignmentPortfolioStatement,
   assignmentWriteRecoveryPage,
@@ -328,6 +330,8 @@ export function app(
     evidence?: EvidenceStore;
     preparedSamples?: PreparedSampleStore;
     preparedReviewSamples?: boolean;
+    assignmentEvidence?: AssignmentEvidenceStore;
+    assignmentHandoff?: boolean;
     localAiConsent?: LocalAiConsentStore;
     localAiControl?: LocalAiControlStore;
     catalog?: CatalogStore;
@@ -382,6 +386,12 @@ export function app(
   },
 ) {
   const app = express();
+  const assignmentAttemptPage = (
+    ...args: Parameters<typeof assignmentAttemptView>
+  ) => {
+    args[6] = Boolean(options.assignmentHandoff && options.assignmentEvidence);
+    return assignmentAttemptView(...args);
+  };
   const mode = options.mode ?? "demo";
   const adapters = options.adapters ?? adapterReadiness({}, mode);
   const authorization = options.authorization ?? disabledAuthorizationStore();
@@ -1869,6 +1879,11 @@ export function app(
     res.redirect(303, "/evidence");
   });
   mountPreparedSampleRoutes(app, options.preparedSamples, options);
+  mountAssignmentEvidenceRoutes(
+    app,
+    options.assignmentEvidence,
+    options.assignmentHandoff === true,
+  );
   app.post("/evidence/:evidenceId/download", async (req, res) => {
     const result = await evidence.issueDownload(
       res.locals.token as string,
