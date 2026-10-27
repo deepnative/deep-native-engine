@@ -842,9 +842,13 @@ export function accountPage(
       : emailStatus === "unlinked"
         ? '<h2>This browser only</h2><p>Link and verify an email before clearing cookies or changing devices to keep access to this same saved work.</p><p><a class="button secondary" href="/email/attach">Link an email</a></p>'
         : "<h2>Email recovery is unavailable</h2><p>Keep this browser’s signed-in session to access your saved learning. Email recovery cannot be checked right now.</p>";
+  const signOut =
+    emailStatus === "linked"
+      ? `<section><h2>Sign out of your account</h2><p>This ends access for the current token, including any copied browser cookies. Your saved work stays in this account. Use your verified email to return; no email is sent automatically.</p><form method="post" action="/account/sign-out">${hidden(csrf)}<button type="submit">Sign out</button></form></section>`
+      : "<p>Sign-out requires a verified email so you can return to your saved work.</p>";
   return page(
     "My account",
-    `<section class="reading"><p class="eyebrow">Signed in</p><h1>My account</h1><p>Your learning profile and saved work belong to this account. Changing these preferences does not create another account or grant staff or paid-service access.</p><p><a href="/learn">Return to learning</a></p>${recovery}<section class="profile-form"><h2>Your learning profile</h2><p>Update your goals and preferences. Experience is self-reported; no job title or payment is required.</p><form method="post" action="/profile">${hidden(csrf)}${profileFields(learner)}<button type="submit">Save my profile</button></form></section></section>`,
+    `<section class="reading"><p class="eyebrow">Signed in</p><h1>My account</h1><p>Your learning profile and saved work belong to this account. Changing these preferences does not create another account or grant staff or paid-service access.</p><p><a href="/learn">Return to learning</a></p>${recovery}${signOut}<section class="profile-form"><h2>Your learning profile</h2><p>Update your goals and preferences. Experience is self-reported; no job title or payment is required.</p><form method="post" action="/profile">${hidden(csrf)}${profileFields(learner)}<button type="submit">Save my profile</button></form></section></section>`,
   );
 }
 export function dashboard(

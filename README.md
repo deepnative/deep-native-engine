@@ -1,5 +1,7 @@
 # Deep Native Engine
 
+Members with a verified email can sign out through **My account** and deliberately return by email to the same saved learning. Sign-out invalidates the current bearer, including copied cookies; browser-only accounts must verify email first. An uncertain result offers account inspection and email return without automatically repeating the action.
+
 Deep Native Engine helps curious learners, IT practitioners and professionals in other fields learn to use AI in practical ways. You can start without coding or a career plan: choose a direction, try a small exercise and decide what to learn next.
 
 [Try the GitHub Pages sample](https://deepnative.io/deep-native-engine/#sample-demo): choose a direction, practise with an invented brief, deliberately save a draft, self-check, and reload progress in the same browser tab. These simulated actions never change an account or call an AI provider. [Open the existing user portal](https://engine.deepnative.io/learn) for the separate Azure application and its saved sample work. See the [sample walkthrough and limits](assets/docs/PAGES-SAMPLE-DEMO.md).

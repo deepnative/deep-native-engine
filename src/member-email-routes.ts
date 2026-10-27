@@ -21,6 +21,58 @@ export function mountMemberEmailRoutes(
   access: MemberEmailAccess | undefined,
   origin: string,
 ) {
+  app.post("/account/sign-out", async (req, res) => {
+    if (
+      Object.keys(req.body ?? {}).some((key) => key !== "csrf") ||
+      Object.keys(req.query).length
+    )
+      return res
+        .status(400)
+        .send(
+          page(
+            "Sign-out unavailable",
+            '<section class="error-page"><h1>Sign-out unavailable</h1><p>Open My account and use its sign-out form.</p></section>',
+          ),
+        );
+    if (!access)
+      return res
+        .status(503)
+        .send(
+          page(
+            "Email recovery unavailable",
+            '<section class="error-page"><h1>Email recovery unavailable</h1><p>Keep this browser’s access. Email recovery cannot be checked right now.</p><p><a href="/account">My account</a></p></section>',
+          ),
+        );
+    let result: Awaited<ReturnType<MemberEmailAccess["signOut"]>>;
+    try {
+      result = await access.signOut(res.locals.token as string);
+    } catch {
+      return res
+        .status(503)
+        .send(
+          page(
+            "Sign-out could not be confirmed",
+            '<section class="error-page"><h1>Sign-out could not be confirmed</h1><p>The result is uncertain. Do not resend this form. Open My account to check access, or deliberately request an email sign-in link to return to your saved work.</p><p><a href="/account">Check My account</a> · <a href="/email/sign-in">Email sign-in</a></p></section>',
+          ),
+        );
+    }
+    if (result !== "signed_out")
+      return res
+        .status(409)
+        .send(
+          page(
+            "Sign-out unavailable",
+            `<section class="error-page"><h1>Sign-out unavailable</h1><p>${result === "recovery_required" ? "Link and verify an email before signing out. Your current access is unchanged." : "Current account access could not be verified. Open My account to check access, or use email sign-in."}</p><p><a href="/account">My account</a> · <a href="/email/attach">Link an email</a> · <a href="/email/sign-in">Email sign-in</a></p></section>`,
+          ),
+        );
+    res.clearCookie(COOKIE, cookieOptions(origin));
+    return res.send(
+      page(
+        "Signed out",
+        '<section class="error-page"><h1>Signed out</h1><p>Your saved work is still in your account. This access token, including any copied browser cookies, no longer opens it. No email was sent.</p><p><a href="/email/sign-in">Sign back in by email</a></p></section>',
+      ),
+    );
+  });
   let pendingRequests = 0;
   function dispatch(request: () => Promise<unknown>) {
     // Acknowledgement must not wait for an account lookup or mail delivery:

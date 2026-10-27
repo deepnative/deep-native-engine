@@ -2825,6 +2825,7 @@ it.each([true, false])(
   async (configured) => {
     const db = storage();
     const memberEmail = {
+      signOut: vi.fn(async () => "unavailable" as const),
       ownedStatus: vi.fn().mockResolvedValue("unlinked"),
       requestAttach: vi.fn().mockResolvedValue("sent"),
       requestSignIn: vi.fn().mockResolvedValue(undefined),
@@ -2881,6 +2882,7 @@ it.each(["linked", "unlinked", "unavailable", "disabled"] as const)(
       },
     });
     const memberEmail = {
+      signOut: vi.fn(async () => "unavailable" as const),
       ownedStatus: vi.fn().mockResolvedValue(emailState),
       requestAttach: vi.fn().mockResolvedValue("sent"),
       requestSignIn: vi.fn().mockResolvedValue(undefined),
@@ -2937,6 +2939,7 @@ it.each(["new", "expired"] as const)(
     const db = storage();
     db.session.mockResolvedValue({ kind });
     const memberEmail = {
+      signOut: vi.fn(async () => "unavailable" as const),
       ownedStatus: vi.fn().mockResolvedValue("linked"),
       requestAttach: vi.fn(),
       requestSignIn: vi.fn(),
@@ -2974,6 +2977,7 @@ it.each(["expired", "rotated", "replaced", "failed", "expired-reply"] as const)(
       release = resolve;
     });
     const memberEmail = {
+      signOut: vi.fn(async () => "unavailable" as const),
       ownedStatus: vi.fn(async () => {
         entered();
         return pending;
@@ -3047,6 +3051,7 @@ it.each(["lookup", "render"] as const)(
           },
         }));
       const memberEmail = {
+        signOut: vi.fn(async () => "unavailable" as const),
         ownedStatus: vi.fn(async () => {
           if (phase === "lookup") clock = 1001;
           return "linked" as const;

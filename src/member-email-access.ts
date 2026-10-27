@@ -7,6 +7,9 @@ export interface MemberEmailSender {
   send(address: string, link: string): Promise<void>;
 }
 export interface MemberEmailAccess {
+  signOut(
+    memberToken: string,
+  ): Promise<"signed_out" | "recovery_required" | "unavailable">;
   ownedStatus(
     memberToken: string,
   ): Promise<"linked" | "unlinked" | "unavailable">;
@@ -41,13 +44,22 @@ async function transaction<T>(
 ) {
   const client = await pool.connect();
   let discarded = false;
+  let commitAttempted = false;
   try {
     await client.query("BEGIN");
     await client.query("SET LOCAL lock_timeout='5s'");
     const result = await use(client);
+    commitAttempted = true;
     await client.query("COMMIT");
     return result;
   } catch (error) {
+    if (commitAttempted) {
+      // A missing acknowledgement does not prove rollback. Discard the client,
+      // propagate uncertainty and never replay the operation automatically.
+      client.release(new Error("Email access commit outcome uncertain"));
+      discarded = true;
+      throw error;
+    }
     try {
       await client.query("ROLLBACK");
     } catch {
@@ -161,6 +173,45 @@ export function memberEmailAccess(
     }
   }
   return {
+    async signOut(memberToken) {
+      return transaction(pool, async (client) => {
+        // Serialize with email sign-in and account deletion before locking any
+        // dependent row. PostgreSQL rechecks this exact bearer after a wait.
+        const principal = (
+          await client.query<{ id: string }>(
+            `SELECT id FROM principals WHERE token_hash=$1 AND kind='member'
+             AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR UPDATE`,
+            [hash(memberToken)],
+          )
+        ).rows[0];
+        if (!principal) return "unavailable";
+        const owner = await client.query(
+          `SELECT w.id FROM workspaces w JOIN principals p ON p.id=w.owner_principal_id
+           WHERE p.id=$1 AND p.token_hash=$2 AND p.revoked_at IS NULL
+             AND p.expires_at>clock_timestamp() AND w.deleting_at IS NULL FOR UPDATE OF w`,
+          [principal.id, hash(memberToken)],
+        );
+        if (!owner.rowCount) return "unavailable";
+        const linked = await client.query(
+          "SELECT 1 FROM member_email_identities WHERE principal_id=$1 FOR UPDATE",
+          [principal.id],
+        );
+        if (!linked.rowCount) return "recovery_required";
+        // No usable replacement bearer leaves this transaction. Keep durable
+        // identity, expiry and existing email challenges for deliberate recovery.
+        const discardedHash = hash(randomBytes(32).toString("hex"));
+        const changed = await client.query(
+          "UPDATE principals SET token_hash=$2 WHERE id=$1 AND expires_at>clock_timestamp() RETURNING id",
+          [principal.id, discardedHash],
+        );
+        if (!changed.rowCount) return "unavailable";
+        await client.query("UPDATE learners SET token_hash=$2 WHERE id=$1", [
+          principal.id,
+          discardedHash,
+        ]);
+        return "signed_out";
+      });
+    },
     async ownedStatus(memberToken) {
       try {
         // Observe only the current active owner's identity. An address is never
