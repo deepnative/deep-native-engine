@@ -2066,7 +2066,7 @@
       "issues": [97, 40]
     },
     {
-      "id": "L230",
+      "id": "L233",
       "actor": "Linked member with saved private learning and a copied bearer",
       "preconditions": "Dedicated synthetic PostgreSQL database, deterministic email outbox and port0 server; desktop/mobile Chromium",
       "steps": "MOUT-01/02: open My account, explicitly sign out, verify copied browser cannot open account, deliberately request and consume email sign-in, reopen saved profile/progress",
@@ -2075,7 +2075,7 @@
       "issues": [547, 28, 24]
     },
     {
-      "id": "L231",
+      "id": "L234",
       "actor": "Browser-only or pending-verification member and member with unavailable recovery",
       "preconditions": "Dedicated synthetic PostgreSQL database and port0 server; desktop/mobile Chromium",
       "steps": "MOUT-03: inspect account without and with pending verification; attempt direct signout; repeat with recovery unconfigured; remove a synthetic verified identity after rendering the linked account form and submit that stale control",
@@ -2084,7 +2084,7 @@
       "issues": [547, 28, 24]
     },
     {
-      "id": "L232",
+      "id": "L235",
       "actor": "Linked member facing storage failure or lost commit acknowledgement",
       "preconditions": "Dedicated synthetic PostgreSQL database with test-only driver boundary and port0 server; desktop/mobile Chromium",
       "steps": "MOUT-06: submit signout with precommit write failure and after a real successful COMMIT whose reply is lost; inspect My account deliberately and request email return",
