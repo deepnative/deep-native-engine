@@ -73,7 +73,18 @@ it("REVADM-08 upgrades populated migration059 without inventing receipts or rewr
     const before = await snapshot();
     await migrate(connection);
     await migrate(connection);
-    expect(await snapshot()).toEqual(before);
+    expect(await snapshot()).toEqual(
+      before.map((rows, index) =>
+        tables[index] === "evidence_objects"
+          ? rows.map((row) => ({ ...row, assignment_bound: false }))
+          : rows,
+      ),
+    );
+    for (const table of [
+      "assignment_evidence_origins",
+      "assignment_evidence_operations",
+    ])
+      expect((await client.query(`SELECT * FROM ${table}`)).rows).toEqual([]);
     expect(
       (await client.query("SELECT * FROM private_sample_assignment_operations"))
         .rows,
