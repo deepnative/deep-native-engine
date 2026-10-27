@@ -344,41 +344,106 @@ describe("maximum connected support history", () => {
       startsAt: f.startsAt.toISOString(),
       expiresAt: f.expiresAt.toISOString(),
     });
-    for (let n = 0; n < 105; n++) {
-      const created = await support.create(f.token, {
-        idempotencyKey: randomUUID(),
-        subject: `Invented page ${n}`,
-        body: "Invented pagination request",
-      });
-      if (!("receipt" in created)) throw Error("Missing page fixture");
-      ids.push(created.receipt.requestId);
-      const g = await support.grant(f.admin, {
-        requestId: created.receipt.requestId,
-        staffId: f.staffId,
-        role: "operator",
-        startsAt: f.startsAt,
-        expiresAt: f.expiresAt,
-        idempotencyKey: randomUUID(),
-      });
-      expect(g.kind).toBe("created");
-      if (n >= 84) {
-        const allocation = await support.time!.allocate(
-          f.token,
-          created.receipt.requestId,
-          randomUUID(),
-          120,
-        );
-        if (!("receipt" in allocation))
-          throw Error("Missing maximum page allocation");
-        await timeGrant({
-          ...f,
-          scope: {
-            requestId: created.receipt.requestId,
-            grantId: "unused-request-grant",
-          },
-          allocationId: allocation.receipt.allocationId,
-        });
-      }
+    // FIXTURE-03: fixture() and timeGrant() above retain representative native
+    // request/allocation/grant writes. The remaining history exercises reads:
+    // construct it in batches, with all native constraints and triggers enabled.
+    // This fixture is not evidence of the application's write authorization.
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL statement_timeout='20s'");
+      // Resolve only this fixture's already-created grant author.
+      const author = (
+        await client.query(
+          "SELECT granted_by FROM support_request_grants WHERE id=$1",
+          [f.scope.grantId],
+        )
+      ).rows[0].granted_by;
+      const grant = (
+        await client.query(
+          "SELECT id FROM synthetic_entitlement_grants WHERE member_id=$1 AND category='support_minutes' AND quantity=2520 AND available=2520 FOR UPDATE",
+          [f.memberId],
+        )
+      ).rows[0].id;
+      const requests = Array.from({ length: 105 }, () => randomUUID());
+      ids.push(...requests);
+      await client.query(
+        `INSERT INTO support_requests(id,member_id,workspace_id,intake_key,subject,body,received_at)
+         SELECT id,$2,$2,gen_random_uuid(),'Invented page ' || (ordinal-1),
+           'Invented pagination request',clock_timestamp()+ordinal*interval '1 microsecond'
+         FROM unnest($1::uuid[]) WITH ORDINALITY AS r(id,ordinal)`,
+        [requests, f.memberId],
+      );
+      await client.query(
+        `INSERT INTO support_request_grants(id,request_id,staff_id,staff_role,starts_at,expires_at,granted_by,idempotency_key)
+         SELECT gen_random_uuid(),id,$2,'operator',$3,$4,$5,gen_random_uuid() FROM unnest($1::uuid[]) AS r(id)`,
+        [requests, f.staffId, f.startsAt, f.expiresAt, author],
+      );
+      await client.query(
+        `INSERT INTO support_request_events(id,request_id,actor_id,grant_id,action)
+         SELECT gen_random_uuid(),id,$2::uuid,NULL,'received' FROM unnest($1::uuid[]) AS r(id)
+         UNION ALL SELECT gen_random_uuid(),request_id,$3::uuid,id,'grant-created'
+         FROM support_request_grants WHERE request_id=ANY($1::uuid[])`,
+        [requests, f.memberId, author],
+      );
+      const allocations = Array.from({ length: 21 }, () => randomUUID());
+      await client.query(
+        `INSERT INTO support_time_allocations(id,request_id,member_id,grant_id,ceiling,idempotency_key)
+         SELECT id,request,$3,$4,120,gen_random_uuid() FROM unnest($1::uuid[],$2::uuid[]) AS a(id,request)`,
+        [allocations, requests.slice(84), f.memberId, grant],
+      );
+      // One reservation and immutable reserve event per unit, matching the
+      // native allocation's 120 distinct one-minute units (21 * 120 = 2520).
+      await client.query(
+        `CREATE TEMP TABLE fixture_support_units ON COMMIT DROP AS
+         SELECT id AS allocation_id,ordinal,gen_random_uuid() AS reservation_id
+         FROM unnest($1::uuid[]) AS a(id) CROSS JOIN generate_series(1,120) AS u(ordinal)`,
+        [allocations],
+      );
+      await client.query(
+        "UPDATE synthetic_entitlement_grants SET available=available-2520,reserved=reserved+2520 WHERE id=$1",
+        [grant],
+      );
+      await client.query(
+        `INSERT INTO synthetic_entitlement_reservations(id,grant_id,quantity,state)
+         SELECT reservation_id,$1,1,'reserved' FROM fixture_support_units`,
+        [grant],
+      );
+      await client.query(
+        `INSERT INTO synthetic_entitlement_events(id,member_id,grant_id,reservation_id,operation,quantity,idempotency_key,request_fingerprint,result_id)
+         SELECT gen_random_uuid(),$1,$2,reservation_id,'reserve',1,
+           'fixture-support:' || reservation_id,repeat('0',64),reservation_id FROM fixture_support_units`,
+        [f.memberId, grant],
+      );
+      await client.query(
+        `INSERT INTO support_time_units(allocation_id,ordinal,reservation_id)
+         SELECT allocation_id,ordinal,reservation_id FROM fixture_support_units`,
+      );
+      await client.query(
+        `INSERT INTO support_time_grants(id,allocation_id,request_id,staff_id,staff_role,starts_at,expires_at,granted_by,idempotency_key)
+         SELECT gen_random_uuid(),id,request_id,$2,'operator',$3,$4,$5,gen_random_uuid()
+         FROM support_time_allocations WHERE id=ANY($1::uuid[])`,
+        [allocations, f.staffId, f.startsAt, f.expiresAt, author],
+      );
+      await client.query(
+        `INSERT INTO support_time_events(id,allocation_id,member_id,actor_id,action)
+         SELECT gen_random_uuid(),id,$2::uuid,$2::uuid,'allocated' FROM unnest($1::uuid[]) AS a(id)
+         UNION ALL SELECT gen_random_uuid(),id,$2::uuid,$3::uuid,'grant-created' FROM unnest($1::uuid[]) AS a(id)`,
+        [allocations, f.memberId, author],
+      );
+      // COMMIT executes the native deferred allocation/unit consistency checks.
+      await client.query("COMMIT");
+      expect(
+        (await pool.query("SELECT id FROM support_time_allocations")).rows,
+      ).toHaveLength(22);
+      expect(
+        (await pool.query("SELECT allocation_id FROM support_time_units")).rows,
+      ).toHaveLength(2640);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
     }
 
     fixturePreparationMs = performance.now() - started;
