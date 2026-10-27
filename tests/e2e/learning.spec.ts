@@ -704,6 +704,10 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         await expect(errorLink).toHaveAttribute("href", "#timezone");
         await page.locator("a.brand").focus();
         await page.keyboard.press("Tab");
+        await expect(
+          page.getByRole("link", { name: "View access details" }),
+        ).toBeFocused();
+        await page.keyboard.press("Tab");
         await expect(errorLink).toBeFocused();
         await page.keyboard.press("Enter");
         await expect(timezone).toBeFocused();
