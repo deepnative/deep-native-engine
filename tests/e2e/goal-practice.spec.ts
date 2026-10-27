@@ -1,4 +1,20 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { observeNativeSubmission } from "./native-submission-observation.ts";
+
+const observations = new WeakMap<
+  Page,
+  Awaited<ReturnType<typeof observeNativeSubmission>>
+>();
+test.beforeEach(async ({ page }) => {
+  observations.set(page, await observeNativeSubmission(page));
+});
+test.afterEach(async ({ page }, info) => {
+  try {
+    await observations.get(page)?.finish(info);
+  } finally {
+    observations.delete(page);
+  }
+});
 
 test("[L102] three audiences keep exact private starter practice when changing goals", async ({
   page,
