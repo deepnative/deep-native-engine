@@ -29,7 +29,7 @@ The executable register is [initial-learning-v52](../../tests/e2e/scenarios.json
 | Reviewer evidence access requires submission and revokes immediately | L19 | A workspace grant cannot expose a clean unsubmitted object; only submitted private-review evidence is downloadable, assignment revocation blocks an already-issued link, and editors remain denied |
 | Circle evidence and derived data follow lifecycle rules | L20 | Exact active membership works; revocation blocks access and owner deletion removes source, derivative and metadata |
 | Learners can revise interests without rewriting practice | L21–L23 | Explorer, professional and technical directions change independently of saved exercise context |
-| Access and coaching hypotheses stay separate | L24 | Read-only prices are not purchasable and foundation access remains an owner decision |
+| Initial foundation access and coaching stay separate | L24 | Versioned no-charge foundation requires no coaching plan; historical paid offers remain unavailable and background grants no staff rights |
 | Only reviewed synthetic content is published | L25–L26 | Unreviewed drafts stay private; reviewed versions, filters and assessment pins remain exact |
 | Track and expert readiness stay honest | L27 | Public tracks remain in preparation while only an operator sees the pending private roster |
 | Member proposals stay private and revocable | L28 | Sample attestations, moderator quarantine and withdrawal redaction without publication |
