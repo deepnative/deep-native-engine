@@ -14,6 +14,8 @@ import {
 } from "../../scripts/private-preview.mjs";
 import { testPool } from "../support/database.ts";
 
+// Lifecycle tests allow 150s for setup, the unchanged 20s zero-session wait,
+// and one 90s administrative DROP (#546); member request limits are unchanged.
 const control = testPool();
 afterAll(() => control.end());
 function previewEnvironment() {
@@ -608,7 +610,7 @@ it("PREVIEW-01/02 PART-01/02/05/06 ASSIGN-PREVIEW-01/02/03 STUDY-PREVIEW-01/02/0
     await db?.end();
     if (proc.child.exitCode === null) await stop(proc.child, proc.exited);
   }
-}, 90000);
+}, 150000);
 
 it("SUPPREVIEW-01/02/03/04 rehearses member support intake, exact administrator assignment, separate operator actions and revocation through ordinary forms", async () => {
   const proc = start();
@@ -853,7 +855,7 @@ it("SUPPREVIEW-01/02/03/04 rehearses member support intake, exact administrator 
     await db?.end();
     if (proc.child.exitCode === null) await stop(proc.child, proc.exited);
   }
-}, 90000);
+}, 150000);
 
 it("WFPREVIEW-01/02/03 rehearses an exact private workflow-note review request, administrator assignment, moderator reading and member withdrawal through ordinary forms", async () => {
   const proc = start();
@@ -985,7 +987,7 @@ it("WFPREVIEW-01/02/03 rehearses an exact private workflow-note review request, 
     await db?.end();
     if (proc.child.exitCode === null) await stop(proc.child, proc.exited);
   }
-}, 90000);
+}, 150000);
 
 it("PREVIEW-04 refuses to force-drop its database when a separate connection remains", async () => {
   const proc = start();
@@ -1088,7 +1090,7 @@ it("PREVIEW-04 refuses to force-drop its database when a separate connection rem
     if (privateRoot) await rm(privateRoot, { recursive: true, force: true });
     expect(observationFailed).toBe(false);
   }
-}, 90000);
+}, 150000);
 
 it("PREVIEW-04 waits for a slowly closing session before its single ordinary drop", async () => {
   // A loaded gate can leave a just-closed backend alive for longer than
@@ -1124,7 +1126,7 @@ it("PREVIEW-04 waits for a slowly closing session before its single ordinary dro
     await lingering?.end();
     if (proc.child.exitCode === null) await stop(proc.child, proc.exited);
   }
-}, 90000);
+}, 150000);
 
 it("PREVIEW-03/04 rejects unsafe configuration and cleans failed local resource setup without logging private driver details", async () => {
   const denied = spawnSync(process.execPath, ["scripts/private-preview.mjs"], {
@@ -1268,9 +1270,9 @@ it("PREVIEW-04 retains an owned recovery record when PostgreSQL committed CREATE
       await control.query(`DROP DATABASE "${own}"`);
     if (privateRoot) await rm(privateRoot, { recursive: true, force: true });
   }
-}, 90000);
+}, 150000);
 
-it("CLOSE-DDL-01/04 awaits native owned removal past five seconds with exact lock evidence", async () => {
+it("CLOSE-DDL-01/04 awaits native owned removal past the former thirty-second limit with exact lock evidence", async () => {
   let ownedPreview: Awaited<ReturnType<typeof launchPreview>> | undefined;
   let unexpectedFixtureFailure = false;
   try {
@@ -1351,9 +1353,9 @@ it("CLOSE-DDL-01/04 awaits native owned removal past five seconds with exact loc
           const began = performance.now();
           const result = native(this, text as string);
           releaseTask = (async () => {
-            // This task does not await any observation. Six seconds is fixture
-            // release, never a client timeout, native receipt or DROP retry.
-            await new Promise((resolve) => setTimeout(resolve, 6000));
+            // This task does not await any observation. 31 seconds exceeds the
+            // former 30s DDL budget; it is fixture release, not a DROP retry.
+            await new Promise((resolve) => setTimeout(resolve, 31000));
             try {
               await native(holder, "ROLLBACK");
               locked = false;
@@ -1505,7 +1507,7 @@ it("CLOSE-DDL-01/04 awaits native owned removal past five seconds with exact loc
             const recovery = new Client({
               connectionString: adminUrl.href,
               connectionTimeoutMillis: 3000,
-              statement_timeout: 30000,
+              statement_timeout: 90000,
             });
             recovery.on("error", () => fixtureFailed("recovery-client-error"));
             try {
@@ -1553,9 +1555,9 @@ it("CLOSE-DDL-01/04 awaits native owned removal past five seconds with exact loc
     expect(clean, JSON.stringify(summary)).toBe(true);
     expect(calls).toBe(1);
     expect(nativeCode).toBe("absent");
-    expect(elapsedMs).toBeGreaterThan(5000);
+    expect(elapsedMs).toBeGreaterThan(30000);
     expect(controlBudget).toBe("5s");
-    expect(dropBudget).toBe("30s");
+    expect(dropBudget).toBe("90s");
     expect(backendTerminal).toBe(true);
     expect(recoveryDrops).toBe(0);
     expect(absent).toBe(true);
@@ -1574,4 +1576,4 @@ it("CLOSE-DDL-01/04 awaits native owned removal past five seconds with exact loc
     throw new Error(
       "CLOSE-DDL native fixture failed; inspect its private owned recovery record",
     );
-}, 90000);
+}, 150000);

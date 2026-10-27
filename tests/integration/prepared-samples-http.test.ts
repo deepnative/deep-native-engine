@@ -2,7 +2,7 @@ import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { mkdtemp, rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeAll, beforeEach, afterAll, expect, it } from "vitest";
+import { beforeAll, beforeEach, afterAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import { start } from "../../src/runtime.ts";
 import { migrate, store } from "../../src/store.ts";
@@ -155,100 +155,109 @@ it("PREPARED-07 exports provided origins and safe receipt history without origin
   expect(exported.body.records.preparedCopyReceipts).toHaveLength(1);
   expect(JSON.stringify(exported.body)).not.toContain(m.input.operationId);
 });
-it("PREPARED-07 traverses new provenance sections and bounded evidence pages without duplicates, secret keys or another member's continuation", async () => {
-  const m = await member(),
+// FIXTURE-02: native copies are setup, not part of the five-second paging body.
+describe("PREPARED-07 complete provided-copy pagination", () => {
+  let m: Awaited<ReturnType<typeof member>>;
+  let other: Awaited<ReturnType<typeof member>>;
+  let ids: Set<string>;
+  let operations: string[];
+  beforeEach(async () => {
+    m = await member();
     other = await member();
-  const copies = preparedSampleStore(pool, {
-    enabled: true,
-    mode: "test",
-    origin: running.origin,
-  });
-  const ids = new Set<string>(),
-    operations: string[] = [];
-  for (let index = 0; index < 55; index++) {
-    const operationId = randomUUID();
-    operations.push(operationId);
-    const result = await copies.create(m.token, {
-      operationId,
-      templateId: "everyday-options",
-      templateVersion: 1,
-      templateDigest: digest,
-      providedExample: true,
-      privateReview: true,
+    const copies = preparedSampleStore(pool, {
+      enabled: true,
+      mode: "test",
+      origin: running.origin,
     });
-    expect(result.kind).toBe("created");
-    if (result.kind !== "created")
-      throw Error("Provided boundary copy unavailable");
-    ids.add(result.receipt.evidenceId!);
-  }
-  const evidenceIds: string[] = [],
-    originIds: string[] = [],
-    receiptIds: string[] = [];
-  let cursor: string | null = null,
-    pages = 0;
-  do {
-    const exported: request.Response = await m
-      .get(
-        "/api/evidence/export" +
-          (cursor ? "?cursor=" + encodeURIComponent(cursor) : ""),
-      )
-      .expect(200);
-    expect(exported.body.items.length).toBeLessThanOrEqual(20);
-    for (const item of exported.body.items) {
-      evidenceIds.push(item.id);
-      expect(item.origin.templateDigest).toBe(digest);
-      expect(Buffer.from(item.sourceBase64, "base64").toString()).toBe(text);
+    ids = new Set<string>();
+    operations = [];
+    for (let index = 0; index < 55; index++) {
+      const operationId = randomUUID();
+      operations.push(operationId);
+      const result = await copies.create(m.token, {
+        operationId,
+        templateId: "everyday-options",
+        templateVersion: 1,
+        templateDigest: digest,
+        providedExample: true,
+        privateReview: true,
+      });
+      expect(result.kind).toBe("created");
+      if (result.kind !== "created")
+        throw Error("Provided boundary copy unavailable");
+      ids.add(result.receipt.evidenceId!);
     }
-    cursor = exported.body.page.nextCursor;
-    if (cursor)
-      await other
-        .get("/api/evidence/export?cursor=" + encodeURIComponent(cursor))
-        .expect(403);
-    expect(++pages).toBeLessThanOrEqual(10);
-  } while (cursor);
-  expect(pages).toBe(3);
-  expect(new Set(evidenceIds)).toEqual(ids);
-  expect(evidenceIds).toHaveLength(55);
-  pages = 0;
-  cursor = null;
-  do {
-    const exported: request.Response = await m
-      .get(
-        "/api/member/export" +
-          (cursor ? "?cursor=" + encodeURIComponent(cursor) : ""),
-      )
-      .expect(200);
-    expect(exported.body.page.recordCount).toBeLessThanOrEqual(
-      MAX_MEMBER_EXPORT_RECORDS,
-    );
-    expect(Buffer.byteLength(exported.text)).toBeLessThanOrEqual(
-      MAX_MEMBER_EXPORT_BYTES,
-    );
-    originIds.push(
-      ...exported.body.records.providedEvidenceOrigins.map(
-        (r: { evidenceId: string }) => r.evidenceId,
-      ),
-    );
-    receiptIds.push(
-      ...exported.body.records.preparedCopyReceipts.map(
-        (r: { evidenceId: string }) => r.evidenceId,
-      ),
-    );
-    expect(exported.text).not.toContain("storageKey");
-    expect(exported.text).not.toContain("payloadDigest");
-    for (const key of operations) expect(exported.text).not.toContain(key);
-    cursor = exported.body.page.nextCursor;
-    if (cursor)
-      await other
-        .get("/api/member/export?cursor=" + encodeURIComponent(cursor))
-        .expect(403);
-    expect(++pages).toBeLessThanOrEqual(10);
-  } while (cursor);
-  expect(pages).toBeGreaterThan(1);
-  expect(new Set(originIds)).toEqual(ids);
-  expect(originIds).toHaveLength(55);
-  expect(new Set(receiptIds)).toEqual(ids);
-  expect(receiptIds).toHaveLength(55);
+  }, 30000);
+  it("PREPARED-07 traverses new provenance sections and bounded evidence pages without duplicates, secret keys or another member's continuation", async () => {
+    const evidenceIds: string[] = [],
+      originIds: string[] = [],
+      receiptIds: string[] = [];
+    let cursor: string | null = null,
+      pages = 0;
+    do {
+      const exported: request.Response = await m
+        .get(
+          "/api/evidence/export" +
+            (cursor ? "?cursor=" + encodeURIComponent(cursor) : ""),
+        )
+        .expect(200);
+      expect(exported.body.items.length).toBeLessThanOrEqual(20);
+      for (const item of exported.body.items) {
+        evidenceIds.push(item.id);
+        expect(item.origin.templateDigest).toBe(digest);
+        expect(Buffer.from(item.sourceBase64, "base64").toString()).toBe(text);
+      }
+      cursor = exported.body.page.nextCursor;
+      if (cursor)
+        await other
+          .get("/api/evidence/export?cursor=" + encodeURIComponent(cursor))
+          .expect(403);
+      expect(++pages).toBeLessThanOrEqual(10);
+    } while (cursor);
+    expect(pages).toBe(3);
+    expect(new Set(evidenceIds)).toEqual(ids);
+    expect(evidenceIds).toHaveLength(55);
+    pages = 0;
+    cursor = null;
+    do {
+      const exported: request.Response = await m
+        .get(
+          "/api/member/export" +
+            (cursor ? "?cursor=" + encodeURIComponent(cursor) : ""),
+        )
+        .expect(200);
+      expect(exported.body.page.recordCount).toBeLessThanOrEqual(
+        MAX_MEMBER_EXPORT_RECORDS,
+      );
+      expect(Buffer.byteLength(exported.text)).toBeLessThanOrEqual(
+        MAX_MEMBER_EXPORT_BYTES,
+      );
+      originIds.push(
+        ...exported.body.records.providedEvidenceOrigins.map(
+          (r: { evidenceId: string }) => r.evidenceId,
+        ),
+      );
+      receiptIds.push(
+        ...exported.body.records.preparedCopyReceipts.map(
+          (r: { evidenceId: string }) => r.evidenceId,
+        ),
+      );
+      expect(exported.text).not.toContain("storageKey");
+      expect(exported.text).not.toContain("payloadDigest");
+      for (const key of operations) expect(exported.text).not.toContain(key);
+      cursor = exported.body.page.nextCursor;
+      if (cursor)
+        await other
+          .get("/api/member/export?cursor=" + encodeURIComponent(cursor))
+          .expect(403);
+      expect(++pages).toBeLessThanOrEqual(10);
+    } while (cursor);
+    expect(pages).toBeGreaterThan(1);
+    expect(new Set(originIds)).toEqual(ids);
+    expect(originIds).toHaveLength(55);
+    expect(new Set(receiptIds)).toEqual(ids);
+    expect(receiptIds).toHaveLength(55);
+  });
 });
 it("PREPARED-02/06 cannot change bytes or publish an existing provided identity through later source updates", async () => {
   const m = await member();
