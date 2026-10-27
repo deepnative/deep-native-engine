@@ -3514,7 +3514,7 @@ export function app(
       options.memberEmail
         ? html.replace(
             "</main>",
-            '<p><a class="button secondary" href="/email/attach">Link email to keep access to this learning record</a></p></main>',
+            '<p><a class="button secondary" href="/email/attach">Email access</a></p></main>',
           )
         : html,
     );

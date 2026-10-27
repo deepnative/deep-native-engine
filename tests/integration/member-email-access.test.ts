@@ -257,3 +257,120 @@ it("EMAIL-ACCESS-04 preserves duplicate-request links and recovers after expiry 
     instruction: "Retain my invented work",
   });
 });
+
+it("EMAIL-ACCESS-05A shows the current member's linked status after native verification without another attachment form", async () => {
+  const owner = await member();
+  expect(
+    await access.requestAttach(owner.token, "owned-status@example.com"),
+  ).toBe("sent");
+  expect(await access.consume(code(), owner.token)).toEqual({
+    kind: "attached",
+  });
+  const response = await request(application)
+    .get("/email/attach")
+    .set("Host", "127.0.0.1:3000")
+    .set("Cookie", `${COOKIE}=${owner.token}`);
+  expect(response.status).toBe(200);
+  expect(response.text).toContain("Email already linked");
+  expect(response.text).not.toContain('action="/email/attach"');
+  expect(response.text).toContain('href="/email/sign-in"');
+  expect(response.text).not.toContain("owned-status@example.com");
+});
+
+it("EMAIL-ACCESS-05B rechecks an old attachment form after verification without dispatching another message", async () => {
+  const owner = await member();
+  const before = await request(application)
+    .get("/email/attach")
+    .set("Host", "127.0.0.1:3000")
+    .set("Cookie", `${COOKIE}=${owner.token}`);
+  expect(before.text).toContain('action="/email/attach"');
+  await access.requestAttach(owner.token, "linked-owner@example.com");
+  await access.consume(code(), owner.token);
+  const dispatch = vi.spyOn(access, "requestAttach");
+  try {
+    const stale = await post(
+      "/email/attach",
+      { email: "different@example.com" },
+      owner.token,
+    );
+    expect(stale.status).toBe(200);
+    expect(stale.text).toContain("Email already linked");
+    expect(stale.text).not.toContain('action="/email/attach"');
+    expect(stale.text).not.toContain("different@example.com");
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(delivered).toHaveLength(1);
+    expect(
+      (await pool.query("SELECT token_hash FROM member_email_links")).rows,
+    ).toHaveLength(1);
+  } finally {
+    dispatch.mockRestore();
+  }
+});
+
+it("EMAIL-ACCESS-05C keeps another owner's linked address private from an unlinked member", async () => {
+  const owner = await member(),
+    other = await member();
+  await access.requestAttach(owner.token, "private-owner@example.com");
+  await access.consume(code(), owner.token);
+  expect(await access.ownedStatus(owner.token)).toBe("linked");
+  expect(await access.ownedStatus(other.token)).toBe("unlinked");
+  const foreign = await post(
+    "/email/attach",
+    { email: "private-owner@example.com" },
+    other.token,
+  );
+  const unknown = await post(
+    "/email/attach",
+    { email: "not-linked@example.com" },
+    other.token,
+  );
+  expect(foreign.status).toBe(200);
+  expect(foreign.text).toBe(unknown.text);
+  expect(foreign.text).not.toContain("private-owner@example.com");
+  expect(foreign.text).not.toContain("Email already linked");
+  // Await the second dispatch before fixture teardown; the first never changes
+  // the existing identity, and a pending unknown-address link is not a binding.
+  await vi.waitFor(() => expect(delivered).toHaveLength(2));
+  expect(await access.ownedStatus(other.token)).toBe("unlinked");
+});
+
+it.each(["expired", "revoked", "deleting"] as const)(
+  "EMAIL-ACCESS-05D withholds owned linked state when the member is %s",
+  async (state) => {
+    const owner = await member();
+    await access.requestAttach(owner.token, "private-owner@example.com");
+    await access.consume(code(), owner.token);
+    if (state === "expired")
+      await pool.query(
+        "UPDATE principals SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+        [owner.id],
+      );
+    else if (state === "revoked")
+      await pool.query(
+        "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+        [owner.id],
+      );
+    else
+      await pool.query(
+        "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+        [owner.id],
+      );
+    expect(await access.ownedStatus(owner.token)).toBe("unavailable");
+    const get = await request(application)
+      .get("/email/attach")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${owner.token}`);
+    const submitted = await post(
+      "/email/attach",
+      { email: "new@example.com" },
+      owner.token,
+    );
+    expect([303, 503]).toContain(get.status);
+    expect([401, 503]).toContain(submitted.status);
+    for (const response of [get, submitted]) {
+      expect(response.text).not.toContain("Email already linked");
+      expect(response.text).not.toContain('action="/email/attach"');
+    }
+    expect(delivered).toHaveLength(1);
+  },
+);

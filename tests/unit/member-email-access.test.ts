@@ -322,3 +322,34 @@ it("releases a transaction client when rollback itself fails", async () => {
   ).rejects.toThrow("read failed");
   expect(release).toHaveBeenCalledOnce();
 });
+
+it("EMAIL-ACCESS-05A/05C/05D reports only an active owner's binding and fails closed after deletion or expiry", async () => {
+  const owner = await member(),
+    other = await member();
+  expect(await access.ownedStatus(owner.token)).toBe("unlinked");
+  await access.requestAttach(owner.token, "owned-status@example.com");
+  await access.consume(code(), owner.token);
+  expect(await access.ownedStatus(owner.token)).toBe("linked");
+  expect(await access.ownedStatus(other.token)).toBe("unlinked");
+  expect(await access.ownedStatus("unknown")).toBe("unavailable");
+  await pool.query(
+    "UPDATE principals SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+    [owner.id],
+  );
+  expect(await access.ownedStatus(owner.token)).toBe("unavailable");
+  await members.remove(other.id);
+  expect(await access.ownedStatus(other.token)).toBe("unavailable");
+});
+
+it("EMAIL-ACCESS-05D returns unavailable after an ownership read failure without exposing its private details", async () => {
+  const broken = {
+    query: vi.fn().mockRejectedValue(new Error("private database identity")),
+  } as unknown as Pool;
+  const trial = memberEmailAccess(
+    broken,
+    sender,
+    "https://engine.deepnative.io",
+  );
+  expect(await trial.ownedStatus("a".repeat(64))).toBe("unavailable");
+  expect(sent).toHaveLength(0);
+});

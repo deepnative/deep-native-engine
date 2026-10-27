@@ -7,6 +7,9 @@ export interface MemberEmailSender {
   send(address: string, link: string): Promise<void>;
 }
 export interface MemberEmailAccess {
+  ownedStatus(
+    memberToken: string,
+  ): Promise<"linked" | "unlinked" | "unavailable">;
   requestAttach(
     memberToken: string,
     address: string,
@@ -158,6 +161,24 @@ export function memberEmailAccess(
     }
   }
   return {
+    async ownedStatus(memberToken) {
+      try {
+        // Observe only the current active owner's identity. An address is never
+        // an input or output of this lookup, including for an unlinked owner.
+        const result = await pool.query<{ status: "linked" | "unlinked" }>(
+          `SELECT CASE WHEN EXISTS(
+             SELECT 1 FROM member_email_identities i WHERE i.principal_id=p.id
+           ) THEN 'linked' ELSE 'unlinked' END AS status
+           FROM principals p JOIN workspaces w ON w.owner_principal_id=p.id
+           WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
+             AND p.expires_at>clock_timestamp() AND w.deleting_at IS NULL`,
+          [hash(memberToken)],
+        );
+        return result.rows[0]?.status ?? "unavailable";
+      } catch {
+        return "unavailable";
+      }
+    },
     requestAttach: (token, address) => request("attach", address, token),
     async requestSignIn(address) {
       await request("sign_in", address);

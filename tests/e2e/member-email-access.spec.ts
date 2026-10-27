@@ -77,7 +77,7 @@ test("[L213] email verification restores the exact saved member in another brows
     await expect(page.getByText("1 / 1")).toBeVisible();
     await page
       .getByRole("link", {
-        name: "Link email to keep access to this learning record",
+        name: "Email access",
       })
       .click();
     await page.getByLabel("Email address").fill(emailAddress);
@@ -95,6 +95,11 @@ test("[L213] email verification restores the exact saved member in another brows
     ).toBeVisible();
     await expect.poll(() => completedRequests).toBe(2);
     expect(messages).toHaveLength(1);
+    const stale = await page.context().newPage();
+    await stale.goto(`${origin}/email/attach`);
+    await stale
+      .getByLabel("Email address")
+      .fill("different-invented@example.com");
     returning = await browser.newContext();
     const fresh = await returning.newPage();
     await fresh.goto(messages[0]!.link);
@@ -105,6 +110,29 @@ test("[L213] email verification restores the exact saved member in another brows
     await expect(
       fresh.getByRole("heading", { name: "Email linked" }),
     ).toBeVisible();
+    // EMAIL-ACCESS-05A/B: only the owning session sees linked status; its
+    // previously opened attachment form cannot request another message.
+    await page.goto(`${origin}/learn`);
+    await page.getByRole("link", { name: "Email access" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Email already linked" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Email address")).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Email sign-in" }),
+    ).toHaveAttribute("href", "/email/sign-in");
+    await stale.getByRole("button", { name: "Send verification link" }).click();
+    await expect(
+      stale.getByRole("heading", { name: "Email already linked" }),
+    ).toBeVisible();
+    await expect(stale.getByLabel("Email address")).toHaveCount(0);
+    expect(completedRequests).toBe(2);
+    expect(messages).toHaveLength(1);
+    await stale.close();
+    await page.screenshot({
+      path: `artifacts/email-owned-status-${test.info().project.name}.png`,
+      fullPage: true,
+    });
     await fresh.goto(`${origin}/email/sign-in`);
     await fresh.getByLabel("Email address").fill(emailAddress);
     await fresh.getByRole("button", { name: "Send sign-in link" }).click();

@@ -8,6 +8,13 @@ function form(action: string, csrf: string, button: string) {
   return `<form method="post" action="${action}"><input type="hidden" name="csrf" value="${csrf}"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" required><button type="submit">${button}</button></form>`;
 }
 
+function linkedPage() {
+  return page(
+    "Email already linked",
+    '<section class="error-page"><h1>Email already linked</h1><p>An email is already linked to this learning record. No new verification message is needed.</p><p>To return to this same saved work in another browser or on another device, open the email sign-in page there and enter your linked address.</p><p><a href="/email/sign-in">Email sign-in</a></p><p><a href="/learn">Return to learning</a></p></section>',
+  );
+}
+
 export function mountMemberEmailRoutes(
   app: Express,
   store: Store,
@@ -64,7 +71,10 @@ export function mountMemberEmailRoutes(
   app.get("/email/attach", async (_req, res) => {
     const session = await store.session(res.locals.token as string);
     if (session.kind !== "active") return res.redirect(303, "/email/sign-in");
-    if (!access)
+    const status = access
+      ? await access.ownedStatus(res.locals.token as string)
+      : "unavailable";
+    if (status === "unavailable")
       return res
         .status(503)
         .send(
@@ -73,6 +83,7 @@ export function mountMemberEmailRoutes(
             '<section class="error-page"><h1>Email unavailable</h1><p>Try again later. Your saved work is unchanged.</p></section>',
           ),
         );
+    if (status === "linked") return res.send(linkedPage());
     return res.send(
       page(
         "Keep access to your learning",
@@ -91,7 +102,10 @@ export function mountMemberEmailRoutes(
             '<section class="error-page"><h1>Session expired</h1><p>Reopen your learning path before linking an email.</p></section>',
           ),
         );
-    if (!access)
+    const status = access
+      ? await access.ownedStatus(res.locals.token as string)
+      : "unavailable";
+    if (status === "unavailable")
       return res
         .status(503)
         .send(
@@ -100,9 +114,10 @@ export function mountMemberEmailRoutes(
             '<section class="error-page"><h1>Email unavailable</h1><p>Try again later. Your saved work is unchanged.</p></section>',
           ),
         );
+    if (status === "linked") return res.send(linkedPage());
     const memberToken = res.locals.token as string;
     const address = String(req.body.email ?? "");
-    dispatch(() => access.requestAttach(memberToken, address));
+    dispatch(() => access!.requestAttach(memberToken, address));
     return res.send(
       page(
         "Check your email",

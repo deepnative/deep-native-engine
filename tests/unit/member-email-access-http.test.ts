@@ -31,6 +31,9 @@ function fixture(active = true, enabled = true) {
     lessonActivities: vi.fn(async () => []),
   } as unknown as Store;
   const email = {
+    ownedStatus: vi.fn(
+      async () => "unlinked" as "linked" | "unlinked" | "unavailable",
+    ),
     requestAttach: vi.fn(async () => "sent" as const),
     requestSignIn: vi.fn(async () => undefined),
     consume: vi.fn(async () => ({ kind: "attached" as const })),
@@ -388,4 +391,39 @@ it("EMAIL-HTTP-01 keeps a competing listener out of the exact email error reques
         foreign.close((error) => (error ? reject(error) : resolve())),
       );
   }
+});
+
+it("EMAIL-ACCESS-05A/05B shows only the current owner's linked state and refuses stale attachment dispatch", async () => {
+  const { application, email } = fixture();
+  email.ownedStatus.mockResolvedValue("linked");
+  const linked = await get(application, "/email/attach");
+  const stale = await post(application, "/email/attach", {
+    email: "foreign@example.com",
+  });
+  expect(linked.status).toBe(200);
+  expect(stale.status).toBe(200);
+  expect(stale.text).toBe(linked.text);
+  expect(linked.text).toContain("Email already linked");
+  expect(linked.text).toContain("another browser");
+  expect(linked.text).toContain('href="/email/sign-in"');
+  expect(linked.text).not.toContain('action="/email/attach"');
+  expect(linked.text).not.toContain("foreign@example.com");
+  expect(email.ownedStatus.mock.calls).toEqual([[credential], [credential]]);
+  expect(email.requestAttach).not.toHaveBeenCalled();
+});
+
+it("EMAIL-ACCESS-05D withholds attachment state and dispatch when current ownership cannot be verified", async () => {
+  const { application, email } = fixture();
+  email.ownedStatus.mockResolvedValue("unavailable");
+  const getResult = await get(application, "/email/attach");
+  const postResult = await post(application, "/email/attach", {
+    email: "private@example.com",
+  });
+  for (const response of [getResult, postResult]) {
+    expect(response.status).toBe(503);
+    expect(response.text).not.toContain("Email already linked");
+    expect(response.text).not.toContain('action="/email/attach"');
+    expect(response.text).not.toContain("private@example.com");
+  }
+  expect(email.requestAttach).not.toHaveBeenCalled();
 });
