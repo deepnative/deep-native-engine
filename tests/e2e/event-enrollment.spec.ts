@@ -25,7 +25,6 @@ async function onboard(
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
   await page.getByLabel("Time zone (optional)").fill("America/Toronto");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const token = (await page.context().cookies()).find(
     (cookie) => cookie.name === COOKIE,

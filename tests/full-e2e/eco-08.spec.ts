@@ -33,7 +33,6 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await page.getByLabel("What would you like to do?").selectOption("everyday");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
   const ownerId = await memberId(context);
@@ -94,9 +93,6 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
     await outsiderPage
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
-    await outsiderPage
-      .getByLabel("I'll use invented or sample information")
-      .check();
     await outsiderPage
       .getByRole("button", { name: "Start my learning path" })
       .click();

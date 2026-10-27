@@ -14,7 +14,6 @@ async function onboard(page: Page, background: "explorer" | "professional") {
   await page
     .getByLabel("What would you like to do?")
     .selectOption(background === "explorer" ? "everyday" : "work");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }

@@ -1517,10 +1517,7 @@ it("renders a failed onboarding attempt for correction without a saved member", 
     timezone: "Mars/Olympus",
     weekly_minutes: "30",
   });
-  const html = welcome("token", [], {
-    ...edit,
-    syntheticAcknowledged: true,
-  });
+  const html = welcome("token", [], edit);
   expect(html).toContain("<title>Error in your onboarding");
   expect(html).toContain("Your changes were not saved");
   expect(html).toContain('href="#timezone"');
@@ -1528,7 +1525,7 @@ it("renders a failed onboarding attempt for correction without a saved member", 
   expect(html).toContain('<option value="build" selected>');
   expect(html).toContain('name="it_roles" value="security" checked');
   expect(html).toContain('<option value="30" selected>');
-  expect(html).toContain('name="synthetic" value="yes" required checked');
+  expect(html).not.toContain('name="synthetic"');
   expect(html).toContain('id="timezone-error"');
   expect(html).toContain('aria-describedby="timezone-help timezone-error"');
 });

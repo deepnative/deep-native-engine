@@ -71,7 +71,6 @@ async function onboard(page: Page, path: Path) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(path.background);
   await page.getByLabel("What would you like to do?").selectOption(path.goal);
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }

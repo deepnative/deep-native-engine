@@ -2820,6 +2820,140 @@ it("does not expose the staff workflow page to a member", async () => {
   expect(receivedRequests).toBe(1);
   expect(denied.text).not.toContain("Create a synthetic draft");
 });
+it.each([true, false])(
+  "MON-02/07 keeps configured email recovery consistent on initial and invalid onboarding pages (%s)",
+  async (configured) => {
+    const db = storage();
+    const memberEmail = {
+      ownedStatus: vi.fn().mockResolvedValue("unlinked"),
+      requestAttach: vi.fn().mockResolvedValue("sent"),
+      requestSignIn: vi.fn().mockResolvedValue(undefined),
+      consume: vi.fn().mockResolvedValue({ kind: "unavailable" }),
+    };
+    const agent = await managedAgent(
+      app(db, {
+        origin,
+        secret: "secret",
+        ...(configured ? { memberEmail } : {}),
+      }),
+    );
+    const home = await agent.get("/").set("Host", host).expect(200);
+    const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+    const invalid = await agent
+      .post("/start")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf,
+        background: "professional",
+        goal: "work",
+        timezone: "Mars/Olympus",
+        synthetic: "yes",
+      })
+      .expect(422);
+    for (const response of [home, invalid]) {
+      expect(response.text.includes('href="/email/sign-in"')).toBe(configured);
+      expect(response.text.includes(">Sign in</a>")).toBe(configured);
+    }
+    expect(invalid.text).toContain('value="Mars/Olympus"');
+    expect(db.create).not.toHaveBeenCalled();
+    expect(memberEmail.requestAttach).not.toHaveBeenCalled();
+    expect(memberEmail.requestSignIn).not.toHaveBeenCalled();
+    expect(memberEmail.consume).not.toHaveBeenCalled();
+  },
+);
+it.each(["linked", "unlinked", "unavailable", "disabled"] as const)(
+  "MON-05/06 shows only the signed-in member's account and %s email state",
+  async (emailState) => {
+    const db = storage();
+    db.session.mockResolvedValue({
+      kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
+      learner: {
+        ...member,
+        background: "professional",
+        goal: "work",
+        timezone: "America/Toronto",
+        weeklyMinutes: 60,
+        domainTags: ["education"],
+      },
+    });
+    const memberEmail = {
+      ownedStatus: vi.fn().mockResolvedValue(emailState),
+      requestAttach: vi.fn().mockResolvedValue("sent"),
+      requestSignIn: vi.fn().mockResolvedValue(undefined),
+      consume: vi.fn().mockResolvedValue({ kind: "unavailable" }),
+    };
+    const agent = await managedAgent(
+      app(db, {
+        origin,
+        secret: "secret",
+        ...(emailState === "disabled" ? {} : { memberEmail }),
+      }),
+    );
+    const account = await agent
+      .get("/account?memberId=another-member")
+      .set("Host", host)
+      .expect(200);
+    expect(account.text).toContain("My account");
+    expect(account.text).toContain("Signed in");
+    expect(account.text).toContain('value="America/Toronto"');
+    expect(account.text).toContain('<option value="professional" selected>');
+    expect(account.text).toContain('<option value="work" selected>');
+    expect(account.text).toContain(
+      'name="domain_tags" value="education" checked',
+    );
+    expect(account.text).toContain('action="/profile"');
+    expect(account.text).toContain(
+      emailState === "linked"
+        ? "Verified email linked"
+        : emailState === "unlinked"
+          ? "This browser only"
+          : "Email recovery is unavailable",
+    );
+    expect(account.text.includes('href="/email/attach"')).toBe(
+      emailState === "unlinked",
+    );
+    if (emailState === "disabled")
+      expect(memberEmail.ownedStatus).not.toHaveBeenCalled();
+    else
+      expect(memberEmail.ownedStatus).toHaveBeenCalledWith(
+        db.session.mock.calls[0]![0],
+      );
+    expect(memberEmail.requestAttach).not.toHaveBeenCalled();
+    expect(memberEmail.requestSignIn).not.toHaveBeenCalled();
+    expect(memberEmail.consume).not.toHaveBeenCalled();
+    const learning = await agent.get("/learn").set("Host", host).expect(200);
+    expect(learning.text).toMatch(
+      /dashboard-head[\s\S]*?Signed in[\s\S]*?href="\/account"[\s\S]*?<h1>/,
+    );
+  },
+);
+it.each(["new", "expired"] as const)(
+  "MON-06 refuses account data for a %s session",
+  async (kind) => {
+    const db = storage();
+    db.session.mockResolvedValue({ kind });
+    const memberEmail = {
+      ownedStatus: vi.fn().mockResolvedValue("linked"),
+      requestAttach: vi.fn(),
+      requestSignIn: vi.fn(),
+      consume: vi.fn(),
+    };
+    const agent = await managedAgent(
+      app(db, { origin, secret: "secret", memberEmail }),
+    );
+    const denied = await agent
+      .get("/account?memberId=owned")
+      .set("Host", host)
+      .expect(303)
+      .expect("Location", "/");
+    expect(denied.text).not.toContain("America/Toronto");
+    expect(denied.text).not.toContain("Verified email linked");
+    expect(memberEmail.ownedStatus).not.toHaveBeenCalled();
+  },
+);
 it("onboards only valid profiles and ignores caller-controlled ownership", async () => {
   const { agent, csrf } = await client();
   await agent
@@ -2854,7 +2988,7 @@ it("onboards only valid profiles and ignores caller-controlled ownership", async
     .expect(303)
     .expect("Location", "/learn");
 });
-it("retains safe onboarding choices and acknowledgement on an unsaved field error", async () => {
+it("retains safe onboarding choices on an unsaved field error", async () => {
   const { agent, csrf } = await client();
   const attempted = {
     csrf,
@@ -2892,9 +3026,7 @@ it("retains safe onboarding choices and acknowledgement on an unsaved field erro
   expect(invalid.text).toContain(
     'aria-describedby="timezone-help timezone-error"',
   );
-  expect(invalid.text).toContain(
-    'name="synthetic" value="yes" required checked',
-  );
+  expect(invalid.text).not.toContain('name="synthetic"');
   await agent.get("/").set("Host", host).expect(200);
   const unrelated = await managedAgent(app(db, { origin, secret: "secret" }));
   const otherPage = await unrelated.get("/").set("Host", host).expect(200);
@@ -2921,7 +3053,7 @@ it("retains safe onboarding choices and acknowledgement on an unsaved field erro
     }),
   );
 });
-it("rejects forged onboarding inputs and never infers a missing sample-data acknowledgement", async () => {
+it("MON-01 rejects forged onboarding inputs while ordinary profiles need no sample pledge", async () => {
   const { agent, csrf } = await client();
   const invalid = await agent
     .post("/start")
@@ -2947,7 +3079,6 @@ it("rejects forged onboarding inputs and never infers a missing sample-data ackn
     "experience",
     "weekly_minutes",
     "timezone",
-    "synthetic",
   ])
     expect(invalid.text).toContain(`href="#${field}"`);
   expect(invalid.text).toContain('name="domain_tags" value="finance" checked');
@@ -2959,17 +3090,14 @@ it("rejects forged onboarding inputs and never infers a missing sample-data ackn
   expect(invalid.text).not.toContain(
     'name="synthetic" value="yes" required checked',
   );
-  const missing = await agent
+  await agent
     .post("/start")
     .set("Host", host)
     .set("Origin", origin)
     .type("form")
     .send({ csrf, background: "explorer", goal: "everyday" })
-    .expect(422);
-  expect(missing.text).toContain('href="#synthetic"');
-  expect(missing.text).toContain('id="synthetic" type="checkbox"');
-  expect(missing.text).toContain('aria-describedby="synthetic-error"');
-  expect(db.create).not.toHaveBeenCalled();
+    .expect(303);
+  expect(db.create).toHaveBeenCalledOnce();
 });
 it("lets an active member revise their direction without selecting another owner", async () => {
   const { agent, csrf } = await client();

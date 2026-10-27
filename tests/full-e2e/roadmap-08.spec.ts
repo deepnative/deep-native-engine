@@ -38,7 +38,6 @@ test("[F-ROADMAP-08-A] three IT specialties enter common foundation without spec
         .getByLabel(specialty.label)
         .check();
       await expect(page.getByLabel(/contract|client|employer/i)).toHaveCount(0);
-      await page.getByLabel("I'll use invented or sample information").check();
       await page
         .getByRole("button", { name: "Start my learning path" })
         .click();

@@ -25,7 +25,6 @@ async function startMember(page: Page) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await page.getByLabel("What would you like to do?").selectOption("everyday");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }
@@ -43,7 +42,6 @@ test("[F-BUILD-10-B] invalid input recovers and an empty member gets an honest n
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
     await page.getByLabel("Time zone (optional)").fill("Mars/Olympus");
-    await page.getByLabel("I'll use invented or sample information").check();
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await expect(page.getByRole("alert")).toContainText("time zone");
     await expect(page).not.toHaveURL(/\/learn$/);
@@ -64,7 +62,6 @@ test("[F-BUILD-10-B] invalid input recovers and an empty member gets an honest n
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
     await page.getByLabel("Time zone (optional)").fill("America/Toronto");
-    await page.getByLabel("I'll use invented or sample information").check();
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await expect(page).toHaveURL(/\/learn$/);
     ownerId = await memberId(context);

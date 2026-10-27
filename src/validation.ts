@@ -22,8 +22,7 @@ export type ProfileField =
   | "experience"
   | "timezone"
   | "weekly_minutes"
-  | "exploratory"
-  | "synthetic";
+  | "exploratory";
 export interface ProfileError {
   field: ProfileField;
   message: string;
@@ -44,9 +43,7 @@ export interface ProfileEditResult {
   attempted: ProfileFormState;
   errors: ProfileError[];
 }
-export interface ProfileStartResult extends ProfileEditResult {
-  syntheticAcknowledged: boolean;
-}
+export type ProfileStartResult = ProfileEditResult;
 function timeZone(value: unknown): string | null | undefined {
   if (value === undefined || value === "") return null;
   if (typeof value !== "string" || value.length > 64 || value.trim() !== value)
@@ -179,24 +176,9 @@ export function profileEdit(body: Fields): ProfileEditResult {
   return parseProfile(body);
 }
 export function profileStart(body: Fields): ProfileStartResult {
-  const result = parseProfile(body);
-  const syntheticAcknowledged = body.synthetic === "yes";
-  return {
-    ...result,
-    input: syntheticAcknowledged ? result.input : null,
-    errors: syntheticAcknowledged
-      ? result.errors
-      : [
-          ...result.errors,
-          {
-            field: "synthetic",
-            message:
-              "Confirm that you will use only invented or sample information.",
-          },
-        ],
-    syntheticAcknowledged,
-  };
+  return parseProfile(body);
 }
+
 export function submission(body: Fields) {
   const instruction =
     typeof body.instruction === "string" ? body.instruction.trim() : "";

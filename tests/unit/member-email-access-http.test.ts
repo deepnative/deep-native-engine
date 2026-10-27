@@ -110,7 +110,7 @@ it("shows configured email sign-in and links it from the welcome page", async ()
   expect(landing.status).toBe(200);
   expect(landing.text).toContain('action="/email/sign-in"');
   const welcome = await get(application, "/");
-  expect(welcome.text).toContain("Return to saved learning by email");
+  expect(welcome.text).toContain('href="/email/sign-in">Sign in</a>');
 });
 
 it("offers active members an email link from their learning path", async () => {

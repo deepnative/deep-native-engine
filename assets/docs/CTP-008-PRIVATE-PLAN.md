@@ -2,7 +2,20 @@
 
 **Issue:** [CTP-008 #28](https://github.com/deepnative/deep-native-engine/issues/28)
 **Prepared:** 23 September 2026
-**State:** local synthetic preview only; partial issue delivery
+**Original state (23 September):** local synthetic preview; partial issue delivery
+
+
+## Current ordinary-member onboarding and account scope — 27 October 2026
+
+The latest owner direction supersedes the original invented-only onboarding restriction and routine design/approval holds below. Common members may enter their own background, goals, interests, self-reported experience, time zone and weekly time. No global invented-data pledge, paid plan or staff right is inferred. Separately labelled lesson, AI, paid and community rehearsals retain their existing synthetic-input controls. No migration or new identity/email storage is introduced.
+
+The learning heading exposes **Signed in · My account**. The protected account page reads the session's existing profile and lets the owner edit it through the existing `/profile` handler. When email delivery is configured, a new visitor sees **Sign in** on both the initial and invalid onboarding page; the account shows verified-linked or browser-only guidance from the current owned email status. If email access is disabled or its status unavailable, the page says recovery is unavailable and advises preserving the browser session. It never invents a member name or displays a stored email address: the existing identity design stores an email hash. Reading account status sends nothing. The existing explicit email flow restores the same workspace and invalidates the earlier browser token.
+
+Acceptance mapping for [#28](https://github.com/deepnative/deep-native-engine/issues/28): MON-01 ordinary three-audience creation → existing L01–L03/L79 and domain/HTTP validation; MON-02 safe invalid-form/capability recovery → L79 and HTTP checks; MON-03 duplicate/forged start cannot replace identity → existing PostgreSQL idempotence baseline and L79; MON-04 separate rehearsal boundaries → preserved validators/journeys; MON-05 own account/profile → L79/L213 and HTTP checks; MON-06 owned linked/unlinked/unavailable status and visitor/expired denial → L79/L213 and HTTP checks; MON-07 visible configured sign-in → L213 and HTTP checks. All existing IDs and critical flags remain; the coordinator reconciles the register version with concurrent #195 work. Test and demonstration fixtures remain invented.
+
+This scope adds no signout implementation, paid offers, provider, credential claim, guarantee of human service or reviewed curriculum. Wider optional services remain separate issues; they do not block ordinary member onboarding. Required full verification, main CI and the runnable milestone demonstration remain delivery requirements, and this design note does not claim they passed.
+
+## Original starter-plan behavior
 
 The member can give a goal, self-reported AI experience, an optional IANA time zone and a weekly time choice of 15, 30, 60 or 120 minutes. The same private learner record stores those values. The dashboard suggests a first week using only the existing 12-minute foundation lesson and its goal-specific sample exercise. A 15-minute choice suggests just the lesson and leaves the exercise for a later session; 30 minutes adds the exercise; 60 or 120 minutes also adds a check. The total suggested time never exceeds the selected weekly amount. When no amount is supplied, the page shows a starter lesson and asks for availability rather than claiming a tailored schedule. A time zone is displayed for context; the preview schedules no appointment.
 

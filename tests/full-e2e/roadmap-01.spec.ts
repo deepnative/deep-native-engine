@@ -119,7 +119,6 @@ test("[F-ROADMAP-01-B] publishing content does not assess a learner", async ({
     await page
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
-    await page.getByLabel("I'll use invented or sample information").check();
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await expect(page).toHaveURL(/\/learn$/);
     ownerId = await memberId(context);

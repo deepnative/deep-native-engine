@@ -112,7 +112,6 @@ async function onboard(
   await page.goto(origin + "/");
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
-  await page.getByLabel("I'll use invented or sample information").check();
   await page
     .getByRole("button", { name: "Start my learning path", exact: true })
     .click();

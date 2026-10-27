@@ -75,10 +75,20 @@ test("[L213] email verification restores the exact saved member in another brows
       .addCookies([{ name: "dne_preview", value: token, url: origin }]);
     await page.goto(`${origin}/learn`);
     await expect(page.getByText("1 / 1")).toBeVisible();
+    // MON-05/06: account access and browser-only state are visible at the top.
+    await expect(page.locator(".dashboard-head")).toContainText("Signed in");
+    await page.getByRole("link", { name: "My account", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "My account", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "This browser only" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Your starting point")).toHaveValue(
+      "explorer",
+    );
     await page
-      .getByRole("link", {
-        name: "Email access",
-      })
+      .getByRole("link", { name: "Link an email", exact: true })
       .click();
     await page.getByLabel("Email address").fill(emailAddress);
     await page.getByRole("button", { name: "Send verification link" }).click();
@@ -102,6 +112,16 @@ test("[L213] email verification restores the exact saved member in another brows
       .fill("different-invented@example.com");
     returning = await browser.newContext();
     const fresh = await returning.newPage();
+    // MON-07: a returning visitor can find sign-in before starting another account.
+    await fresh.goto(origin);
+    await expect(
+      fresh.getByRole("link", { name: "Sign in", exact: true }),
+    ).toBeVisible();
+    await fresh.goto(`${origin}/account`);
+    await expect(fresh).toHaveURL(`${origin}/`);
+    await expect(
+      fresh.getByRole("heading", { name: "My account", exact: true }),
+    ).toHaveCount(0);
     await fresh.goto(messages[0]!.link);
     await expect(
       fresh.getByRole("heading", { name: "Confirm email link" }),
@@ -149,6 +169,28 @@ test("[L213] email verification restores the exact saved member in another brows
     await fresh.getByRole("button", { name: "Continue" }).click();
     await expect(fresh).toHaveURL(`${origin}/learn`);
     await expect(fresh.getByText("1 / 1")).toBeVisible();
+    await expect(fresh.locator(".dashboard-head")).toContainText("Signed in");
+    await fresh.getByRole("link", { name: "My account", exact: true }).click();
+    await expect(
+      fresh.getByRole("heading", { name: "Verified email linked" }),
+    ).toBeVisible();
+    await expect(
+      fresh.getByRole("link", { name: "Link an email", exact: true }),
+    ).toHaveCount(0);
+    await expect(fresh.getByLabel("Your starting point")).toHaveValue(
+      "explorer",
+    );
+    await expect(fresh.getByLabel("What would you like to do?")).toHaveValue(
+      "everyday",
+    );
+    await expect(fresh.getByText(emailAddress)).toHaveCount(0);
+    await fresh.screenshot({
+      path: `artifacts/member-account-${test.info().project.name}.png`,
+      fullPage: true,
+    });
+    await fresh
+      .getByRole("link", { name: "Return to learning", exact: true })
+      .click();
     await fresh.getByRole("link", { name: "Review your work" }).click();
     await expect(
       fresh.getByText("My invented learning plan has three careful steps."),

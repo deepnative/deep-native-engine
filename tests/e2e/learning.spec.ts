@@ -5,7 +5,7 @@ import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { readdir } from "node:fs/promises";
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
+const origin = process.env.DNE_E2E_ORIGIN ?? "http://127.0.0.1:4317";
 const instruction =
   "Using only the sample details, create a short plan with clear actions and flag any missing information.";
 const verification =
@@ -100,7 +100,6 @@ async function begin(page: Page, background = "explorer", goal = "everyday") {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
   await page.getByRole("link", { name: "Open lesson" }).click();
@@ -220,7 +219,6 @@ for (const [id, background, goal, extraName, extraValue] of [
       .check();
     await page.getByLabel("Experience with AI").selectOption("some");
     await page.getByLabel("Keep an exploratory path open").check();
-    await page.getByLabel("I'll use invented or sample information").check();
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await expect(page).toHaveURL(/\/learn$/);
     const { id: learnerId } = await session(context);
@@ -263,7 +261,6 @@ test("[L29] exploratory learner revises a time-fitting plan without rewriting sa
   await page.getByLabel("Time zone (optional)").fill("UTC");
   await page.getByLabel("Weekly time available").selectOption("15");
   await page.getByLabel("Keep an exploratory path open").check();
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const plan = page.getByRole("region", { name: "Your starter plan" });
   await expect(plan).toContainText("Plan a small community event");
@@ -304,7 +301,6 @@ test("[L101] completed starter plan advances without attributing an earlier goal
   await page.getByLabel("Your starting point").selectOption("explorer");
   await page.getByLabel("What would you like to do?").selectOption("everyday");
   await page.getByLabel("Weekly time available").selectOption("15");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const plan = page.getByRole("region", { name: "Your starter plan" });
   await expect(plan).toContainText("Next session: try the sample exercise");
@@ -338,7 +334,6 @@ test("[L101] completed starter plan advances without attributing an earlier goal
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
     await other.getByLabel("Weekly time available").selectOption("15");
-    await other.getByLabel("I'll use invented or sample information").check();
     await other.getByRole("button", { name: "Start my learning path" }).click();
     await expect(
       other.getByRole("region", { name: "Your starter plan" }),
@@ -366,7 +361,6 @@ test("[L30] professional can correct an invalid time zone and retain a noncoding
   await page.getByLabel("Experience with AI").selectOption("some");
   await page.getByLabel("Time zone (optional)").fill("Mars/Olympus");
   await page.getByLabel("Weekly time available").selectOption("30");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page).not.toHaveURL(/\/learn$/);
@@ -375,7 +369,6 @@ test("[L30] professional can correct an invalid time zone and retain a noncoding
   await page.getByLabel("Experience with AI").selectOption("some");
   await page.getByLabel("Time zone (optional)").fill("America/Toronto");
   await page.getByLabel("Weekly time available").selectOption("30");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const plan = page.getByRole("region", { name: "Your starter plan" });
   await expect(plan).toContainText("Turn meeting notes into next steps");
@@ -414,9 +407,6 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
         await page.getByLabel("Experience with AI").selectOption("some");
         await page.getByLabel("Time zone (optional)").fill("UTC");
         await page.getByLabel("Weekly time available").selectOption("30");
-        await page
-          .getByLabel("I'll use invented or sample information")
-          .check();
         await page
           .getByRole("button", { name: "Start my learning path" })
           .click();
@@ -624,9 +614,6 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
       .getByLabel("Time zone (optional)")
       .fill("America/Vancouver");
     await unrelatedPage
-      .getByLabel("I'll use invented or sample information")
-      .check();
-    await unrelatedPage
       .getByRole("button", { name: "Start my learning path" })
       .click();
     await expect(unrelatedPage).toHaveURL(/\/learn$/);
@@ -656,9 +643,6 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         await page.getByLabel("Experience with AI").selectOption("");
         await page.getByLabel("Weekly time available").selectOption("60");
         await page.getByLabel("Time zone (optional)").fill("Mars/Olympus");
-        await page
-          .getByLabel("I'll use invented or sample information")
-          .check();
 
         const invalidResponse = page.waitForResponse(
           (response) =>
@@ -687,9 +671,7 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         await expect(page.getByLabel("Weekly time available")).toHaveValue(
           "60",
         );
-        await expect(
-          page.getByLabel("I'll use invented or sample information"),
-        ).toBeChecked();
+        await expect(page.locator('input[name="synthetic"]')).toHaveCount(0);
         const timezone = page.getByLabel("Time zone (optional)");
         await expect(timezone).toHaveValue("Mars/Olympus");
         await expect(timezone).toHaveAttribute("aria-invalid", "true");
@@ -723,25 +705,8 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         await expect(page.getByText("America/Vancouver")).toHaveCount(0);
         expect((await session(unrelatedContext)).id).toBe(unrelated.id);
 
-        if (background === "explorer") {
-          const missingAcknowledgement = await page.request.post("/start", {
-            headers: { Origin: origin },
-            form: {
-              csrf: await csrfToken(page),
-              background,
-              goal,
-              domain_tags: "finance",
-              experience: "",
-              timezone: "America/Toronto",
-              weekly_minutes: "60",
-            },
-          });
-          expect(missingAcknowledgement.status()).toBe(422);
-          expect(await missingAcknowledgement.text()).not.toMatch(
-            /name="synthetic"[^>]*checked/,
-          );
-          expect((await session(context)).id).toBeUndefined();
-        }
+        // MON-01: the corrected ordinary form below creates the member without
+        // any global invented-data pledge; invalid fields still created no record.
 
         await timezone.fill("America/Toronto");
         await page
@@ -763,9 +728,84 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
           time_zone: "America/Toronto",
           weekly_minutes: 60,
         });
+        // MON-03: an old onboarding form cannot replace this member or select
+        // the unrelated member, even when it supplies different valid choices.
+        const replay = await page.request.post("/start", {
+          maxRedirects: 0,
+          headers: { Origin: origin },
+          form: {
+            csrf: await csrfToken(page),
+            background:
+              background === "technical" ? "professional" : "technical",
+            goal: goal === "build" ? "work" : "build",
+            id: unrelated.id,
+          },
+        });
+        expect(replay.status()).toBe(303);
+        expect((await session(context)).id).toBe(member.id);
+        expect(
+          (
+            await pool.query(
+              "SELECT background,goal,domain_tags,experience,time_zone,weekly_minutes FROM learners WHERE id=$1",
+              [member.id],
+            )
+          ).rows,
+        ).toEqual(saved.rows);
+        expect(
+          (
+            await pool.query(
+              "SELECT count(*)::int AS count FROM workspaces WHERE owner_principal_id=$1",
+              [member.id],
+            )
+          ).rows[0].count,
+        ).toBe(1);
         await expect(
           page.getByRole("region", { name: "Your starter plan" }),
         ).toContainText(expectedExercise);
+        // MON-05/06: the visible account form edits the same private profile.
+        await expect(page.locator(".dashboard-head")).toContainText(
+          "Signed in",
+        );
+        await page
+          .getByRole("link", { name: "My account", exact: true })
+          .click();
+        await expect(
+          page.getByRole("heading", { name: "My account", exact: true }),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("heading", { name: "Email recovery is unavailable" }),
+        ).toBeVisible();
+        await expect(page.getByLabel("Your starting point")).toHaveValue(
+          background,
+        );
+        await expect(page.getByLabel("What would you like to do?")).toHaveValue(
+          goal,
+        );
+        await expect(page.getByLabel("Time zone (optional)")).toHaveValue(
+          "America/Toronto",
+        );
+        await page.getByLabel("Experience with AI").selectOption("some");
+        await page
+          .getByRole("button", { name: "Save my profile", exact: true })
+          .click();
+        await expect(page).toHaveURL(/\/learn$/);
+        expect((await session(context)).id).toBe(member.id);
+        expect((await session(unrelatedContext)).id).toBe(unrelated.id);
+        expect(
+          (
+            await pool.query(
+              "SELECT experience,time_zone FROM learners WHERE id=$1",
+              [member.id],
+            )
+          ).rows[0],
+        ).toEqual({ experience: "some", time_zone: "America/Toronto" });
+        expect(
+          (
+            await pool.query("SELECT time_zone FROM learners WHERE id=$1", [
+              unrelated.id,
+            ])
+          ).rows[0].time_zone,
+        ).toBe("America/Vancouver");
         await page.reload();
         await expect(page.getByLabel("Your starting point")).toHaveValue(
           background,
@@ -797,7 +837,6 @@ test("[L31] technical learner sees an experienced, private plan without a coding
   await page.getByLabel("Experience with AI").selectOption("experienced");
   await page.getByLabel("Time zone (optional)").fill("America/Vancouver");
   await page.getByLabel("Weekly time available").selectOption("120");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const plan = page.getByRole("region", { name: "Your starter plan" });
   await expect(plan).toContainText("Review a sign-up flow");
@@ -814,9 +853,6 @@ test("[L31] technical learner sees an experienced, private plan without a coding
     await anotherPage
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
-    await anotherPage
-      .getByLabel("I'll use invented or sample information")
-      .check();
     await anotherPage
       .getByRole("button", { name: "Start my learning path" })
       .click();
@@ -1140,7 +1176,6 @@ test("[L11] multiple tabs, keyboard navigation, safe rendering and narrow layout
   await second.goto(origin);
   await page.getByLabel("Your starting point").selectOption("explorer");
   await page.getByLabel("What would you like to do?").selectOption("everyday");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/learn$/);

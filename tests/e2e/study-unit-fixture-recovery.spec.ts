@@ -194,9 +194,6 @@ test("[L200] TESTISSUE-06/08 all audiences deliberately inspect and recover orig
         await page.getByLabel("Your starting point").selectOption(background);
         await page.getByLabel("What would you like to do?").selectOption(goal);
         await page
-          .getByLabel("I'll use invented or sample information")
-          .check();
-        await page
           .getByRole("button", { name: "Start my learning path", exact: true })
           .click();
         await page.goto(options.origin + "/member/test-unit-request");

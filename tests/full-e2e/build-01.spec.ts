@@ -19,7 +19,6 @@ async function onboard(page: Page, specialty: "security" | "analysis") {
       specialty === "security" ? "Cybersecurity" : "Business analysis",
     )
     .check();
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
   await expect(

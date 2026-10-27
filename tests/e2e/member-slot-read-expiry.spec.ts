@@ -30,7 +30,6 @@ for (const [index, background] of [
         .getByLabel("What would you like to do?")
         .selectOption("everyday");
       await page.getByLabel("Time zone (optional)").fill("America/Toronto");
-      await page.getByLabel("I'll use invented or sample information").check();
       await page
         .getByRole("button", { name: "Start my learning path" })
         .click();

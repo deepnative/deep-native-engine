@@ -52,6 +52,7 @@ import {
 } from "./validation.ts";
 import {
   welcome,
+  accountPage,
   attemptOperationRecoveryPage,
   dashboard,
   privateProgressPage,
@@ -1198,20 +1199,28 @@ export function app(
         ? token(undefined)
         : (res.locals.token as string);
     res.cookie(COOKIE, fresh, cookieOptions(options.origin));
-    const html = welcome(csrf(fresh, options.secret));
     res.send(
-      options.memberEmail
-        ? html.replace(
-            "clearing its cookie loses access.",
-            'clearing its cookie loses access unless you link an email after starting. <a href="/email/sign-in">Return to saved learning by email</a>.',
-          )
-        : html,
+      welcome(
+        csrf(fresh, options.secret),
+        [],
+        undefined,
+        Boolean(options.memberEmail),
+      ),
     );
   });
   app.post("/start", async (req, res) => {
     const start = profileStart(req.body as Fields);
     if (!start.input) {
-      res.status(422).send(welcome(res.locals.csrf as string, [], start));
+      res
+        .status(422)
+        .send(
+          welcome(
+            res.locals.csrf as string,
+            [],
+            start,
+            Boolean(options.memberEmail),
+          ),
+        );
       return;
     }
     await store.create(res.locals.token as string, start.input);
@@ -1220,6 +1229,7 @@ export function app(
   app.use(
     [
       "/learn",
+      "/account",
       "/progress",
       "/lesson",
       "/exercise",
@@ -3479,6 +3489,18 @@ export function app(
       return;
     }
     res.redirect(303, "/editor/library");
+  });
+  app.get("/account", async (_req, res) => {
+    const status = options.memberEmail
+      ? await options.memberEmail.ownedStatus(res.locals.token as string)
+      : "unavailable";
+    res.send(
+      accountPage(
+        res.locals.learner as Learner,
+        res.locals.csrf as string,
+        status,
+      ),
+    );
   });
   app.get("/learn", async (_req, res) => {
     const member = res.locals.learner as Learner;
