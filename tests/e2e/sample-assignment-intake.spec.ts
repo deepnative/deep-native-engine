@@ -52,16 +52,16 @@ for (const [index, [background, goal]] of audiences.entries()) {
   test(`[L${224 + index}] INTAKE-01-02-03-04-06 ${background} requests feedback that an administrator discovers and explicitly assigns`, async ({
     page,
     browser,
-  }) => {
+  }, testInfo) => {
     test.setTimeout(60000);
     const origin = running.origin;
     const staffContext = await browser.newContext({
+      ...testInfo.project.use,
       baseURL: origin,
-      viewport: page.viewportSize(),
     });
     const reviewerContext = await browser.newContext({
+      ...testInfo.project.use,
       baseURL: origin,
-      viewport: page.viewportSize(),
     });
     const admin = await staffContext.newPage(),
       reviewer = await reviewerContext.newPage();
@@ -71,8 +71,6 @@ for (const [index, [background, goal]] of audiences.entries()) {
       reviewerCredential = randomBytes(32).toString("hex");
     const ids: string[] = [];
     const example = PREPARED_SAMPLES[index]!;
-    const feedback =
-      "Check the invented example against its stated information and flag unknowns.";
     try {
       // The only setup fixtures are finite staff identities. No source, clean
       // transition, review queue, grant, feedback or allowance is seeded.
