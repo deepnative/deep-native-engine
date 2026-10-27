@@ -386,7 +386,7 @@ th {
   text-align: left;
   padding: 12px;
   border-bottom: 1px solid var(--line);
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
 }
 th {
   font-size: 11px;

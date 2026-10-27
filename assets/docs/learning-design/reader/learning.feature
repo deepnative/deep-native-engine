@@ -23,6 +23,11 @@ Feature: Follow the complete authored foundation sequence
     Then the earlier notes remain available with their lesson names
     And the final practice uses its own fresh source and six-part record
     And example comparisons are explicitly separate from ungraded learner writing
+    When a Work learner opens the final worked comparison
+    Then all six steps are demonstrated against CAP-W with a repaired task-owner-date table
+    And the example preserves unknown deadlines and decision ownership
+    And ordinary date words in its table remain intact on a narrow screen
+    And opening the comparison leaves the learner's own writing and self-check unchanged
 
   Scenario: READER-004 — Deliberately save and resume one route's work
     Given an unsupported route in the URL falls back to Everyday

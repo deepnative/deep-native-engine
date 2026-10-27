@@ -178,6 +178,88 @@ async function downloadText(page, button) {
 }
 
 if (!process.argv.includes("--baseline")) {
+  for (const width of [1360, 390]) {
+    await check(
+      `READER-003 Work final worked record at ${width}px`,
+      async (page) => {
+        await start(page, "Work");
+        await page
+          .getByRole("button", { name: "Put it all together", exact: true })
+          .click();
+        const draft =
+          "My task: make a CAP-W action table; check each owner and date against the brief.";
+        await page.getByLabel("1. Task and check", { exact: true }).fill(draft);
+        const worked = page.locator(".lesson-body details");
+        await worked.locator("summary").click();
+        for (const title of [
+          "1. Task and check.",
+          "2. Request.",
+          "3. Claim check and repair.",
+          "4. Use/share decision.",
+          "5. Repeatable workflow.",
+          "6. Practice feedback and revision.",
+        ]) {
+          await expect(worked.getByText(title, { exact: true })).toBeVisible();
+        }
+        await expect(
+          worked.getByRole("row", {
+            name: "Write one page of instructions Noor Not specified",
+            exact: true,
+          }),
+        ).toBeVisible();
+        await expect(
+          worked.getByRole("row", {
+            name: "Gather four comments Lee Not specified",
+            exact: true,
+          }),
+        ).toBeVisible();
+        await expect(
+          worked.getByRole("row", {
+            name: "Try the check-in process Not specified Wednesday",
+            exact: true,
+          }),
+        ).toBeVisible();
+        const trialDay = worked.getByRole("cell", {
+          name: "Wednesday",
+          exact: true,
+        });
+        expect(
+          await trialDay.evaluate((cell) => {
+            const range = document.createRange();
+            range.selectNodeContents(cell);
+            return new Set(
+              [...range.getClientRects()].map((rect) => Math.round(rect.top)),
+            ).size;
+          }),
+          "The ordinary date word should remain on one line inside its cell",
+        ).toBe(1);
+        await expect(worked).toContainText(
+          "Who owns the continuation decision, and when will it be made?",
+        );
+        await expect(worked).toContainText(
+          "Recover the source before confirming the draft",
+        );
+        await expect(worked).toContainText("This is practice feedback");
+        await expect(
+          page.getByLabel("1. Task and check", { exact: true }),
+        ).toHaveValue(draft);
+        await expect(page.locator("#self-check")).not.toBeChecked();
+        await expect(page.locator("#source-text")).toContainText(
+          "Noor writes one page",
+        );
+        await expect(worked).not.toContainText("PILOT-1");
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        await worked.screenshot({
+          path: path.join(output, `work-record-${width}.png`),
+        });
+      },
+      { width, height: 950 },
+    );
+  }
   await check(
     "READER-002 rehearsal correct feedback leads forward",
     async (page) => {

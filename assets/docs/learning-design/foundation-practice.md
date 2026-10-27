@@ -45,11 +45,36 @@ Use these six steps. Keep the source beside every version; a neat answer is not 
 
 ## Checks for the other routes
 
-<details><summary>Work: what a faithful result must preserve</summary>
+<details><summary>Work: a complete source-to-revision record</summary>
 
-The known tasks are Noor's one-page instructions and Lee's four comments. The claimed Friday trial contradicts the supplied Wednesday date. Tuesday as the instruction deadline and Lee as the continuation-decision owner are not given. Wednesday is the process trial date, not every task's deadline. A useful table has the known task/owner rows with unknown dates, plus the Wednesday trial with owner not specified. The continuation decision remains open, with its owner and date unspecified.
+**1. Task and check.** Make an action table for the internal planning team using CAP-W. Check every task, owner, quantity and date against that brief. Wednesday belongs to the trial; it does not provide the instruction or comment deadline.
 
-A useful request asks for those columns and unknowns explicitly. A workflow checks each populated cell against the note, keeps the table for the stated internal audience and asks targeted questions about missing commitments. Feedback should point to one invented commitment and a source-based repair. “Noor's task is known but Tuesday is not” is more useful than “the table is wrong.”
+**2. Request.** “Turn CAP-W into a task/owner/agreed-date table. Preserve Noor's one-page instruction task, Lee's four-comment task and the Wednesday check-in trial. Use not specified for missing owners or dates; list the continuation-decision owner and date as open questions. Do not transfer Wednesday to other rows or treat a draft as a completed task. I will compare each populated cell and quantity with the source before using the table for internal planning.”
+
+**3. Claim check and repair.** Keep the supplied teaching draft as v1: “Noor's instructions are due Tuesday. The trial is Friday. Lee owns the continuation decision.” Split it where different claims need different checks.
+
+| Claim in v1 | Evidence from CAP-W | Status and repair |
+| --- | --- | --- |
+| Noor writes the instructions | Noor writes one page of instructions. | Supported; retain the task, owner and one-page quantity. |
+| The instructions are due Tuesday | The instruction deadline is unset. | Not given; use not specified. |
+| The trial is Friday | The team will try the process on Wednesday. | Contradicted; change Friday to Wednesday. |
+| Lee owns the continuation decision | Lee gathers four comments; no decision owner is supplied. | Not given; leave decision ownership open. |
+
+**Repaired action table — v2:**
+
+| Task | Owner | Agreed date |
+| --- | --- | --- |
+| Write one page of instructions | Noor | Not specified |
+| Gather four comments | Lee | Not specified |
+| Try the check-in process | Not specified | Wednesday |
+
+**Open questions:** When are the instructions and comments due? Who owns the trial? Who owns the continuation decision, and when will it be made? These are questions, not newly assigned actions. CAP-W does not state when comment collection happens relative to the trial, so the table adds no such sequence. The known tasks remain useful even while some commitments are open.
+
+**4. Use/share decision.** Keep this fictional table for the internal planning team named in CAP-W. Task, owner, quantity and timing facts are sufficient; no contact list or private complaint is needed. The brief does not establish a public announcement or use of real team notes in an outside tool. This worked record is teaching material, not an actual message to a team.
+
+**5. Repeatable workflow.** Retain CAP-W and v1 → draft task/owner/date rows → trace every filled cell to the source → keep v2 for internal planning with the open questions visible → repair a conflicting cell and check again. Recover the source before confirming the draft if the notes become unavailable; keep the draft labelled unverified meanwhile. If a drafting tool fails, use the retained brief to make the small table manually. No confirmed schedule or task completion is inferred from having a neat table.
+
+**6. Practice feedback and revision.** A useful note on v1 is: “The trial is Friday in your draft, but CAP-W says Wednesday. Correct that day; leave Noor's deadline and the continuation owner unspecified because the source does not supply them. I checked this brief, not later team agreements.” The decision is to revise v1 to the v2 table above. Revision reason: “I corrected the incompatible trial day, retained the known tasks and quantities, and turned unsupported commitments into open questions.” Keep v1 and its feedback identifiable. This is practice feedback written for the example; it does not establish a real review or approval of v2.
 
 </details>
 
@@ -75,3 +100,5 @@ A useful request separates input, expectation, requirement and execution. The wo
 Revisit the corresponding lesson for any “needs another try.” Finishing this record means you have an inspectable practice artifact. It is a starting point for another real or invented task, not a proficiency certificate.
 
 Return to the [six-lesson reading map](README.md), or try the [interactive request/check/revision walkthrough](prototype/README.md). The interactive walkthrough currently covers that middle part of the sequence; it does not save this entire six-step practice to your member account.
+
+<!-- Author reference: foundation practice draft 0.2; CAP-W now has a complete worked record. Supplied briefs, flawed samples and rubric are unchanged. Original synthetic content. -->
