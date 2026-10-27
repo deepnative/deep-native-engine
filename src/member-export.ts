@@ -431,6 +431,14 @@ const sections = {
      AND (r.evidence_id IS NULL OR (r.evidence_id=ANY($4::uuid[]) AND ao.evidence_id IS NOT NULL))`,
     "r.id",
   ),
+  // v27 appends owned publication decisions and explicit display permission.
+  proposalPublications: section(
+    `id,proposal_id AS "proposalId",revision,state,accepted_at AS "acceptedAt",
+    attribution,audience,permission_version AS "permissionVersion",published_at AS "publishedAt",withdrawn_at AS "withdrawnAt"`,
+    "proposal_publications WHERE member_id=$1",
+    "id",
+    true,
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -444,7 +452,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v26";
+  version: "local-member-records-v27";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -578,7 +586,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v26",
+          version: "local-member-records-v27",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

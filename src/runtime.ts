@@ -36,6 +36,7 @@ import { localAiConsentStore } from "./local-ai-consent.ts";
 import { localAiControlStore } from "./local-ai-control.ts";
 import { catalogStore, seedDraftPack } from "./catalog.ts";
 import { trackStore } from "./track-readiness.ts";
+import { publicationStore } from "./proposal-publication.ts";
 import { proposalStore } from "./proposals.ts";
 import { careerStore } from "./career.ts";
 import { circleDiscussionStore } from "./circle-discussion.ts";
@@ -169,7 +170,12 @@ export async function start(env: NodeJS.ProcessEnv) {
       authorization: authorizationStore(pool),
       catalog: catalogStore(pool),
       tracks: trackStore(pool),
-      proposals: proposalStore(pool),
+      proposals: proposalStore(pool, undefined, {
+        ordinaryEnabled: settings.memberContributions,
+      }),
+      publications: publicationStore(pool, {
+        enabled: settings.memberContributions,
+      }),
       career: careerStore(pool),
       circles: circleStore(pool),
       circleDiscussionEnabled: settings.circleDiscussion,

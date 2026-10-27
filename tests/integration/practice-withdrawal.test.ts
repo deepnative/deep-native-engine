@@ -679,7 +679,7 @@ it("exports v8 marker metadata with null response, keeps other notes private and
   expect(exported).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v26",
+      version: "local-member-records-v27",
       records: {
         privatePractice: [
           {

@@ -103,7 +103,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v26",
+      version: "local-member-records-v27",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -226,8 +226,8 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    // Original indices0..43 remain; assignment origin/receipt indices44/45 are valid.
-    [2, 46, ...valid.slice(2)],
+    // Original indices0..45 remain; owned publication index46 is valid.
+    [2, 47, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -281,7 +281,7 @@ it.each([
     expect(result).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v26",
+        version: "local-member-records-v27",
         records: { [name]: [{ record: "Invented owned metadata" }] },
       },
     });
@@ -518,7 +518,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v26",
+        version: "local-member-records-v27",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -726,7 +726,7 @@ it("appends owned review accounting at indices 33-35 without moving existing sec
     expect(value).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v26",
+        version: "local-member-records-v27",
         records: { [name]: [{ id: "owned-accounting" }] },
       },
     });
@@ -759,7 +759,7 @@ it("appends safe source-deleted assignment receipts at index36 without moving an
   expect(value).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v26",
+      version: "local-member-records-v27",
       records: { sampleAssignmentOperations: [record] },
     },
   });
@@ -874,3 +874,31 @@ it.each([
       expect(result.payload.records).toHaveProperty(name);
   },
 );
+
+it("CONPUB-04 appends owner-only publication permissions at cursor index46 with revocation fencing", async () => {
+  const f = fakePool({ id: "member-1" }, (sql) =>
+    sql.includes('AS "_key"') && sql.includes("FROM proposal_publications")
+      ? [{ _key: ["b"], state: "withdrawn", attribution: null }]
+      : [],
+  );
+  const result = await memberExportStore(f.pool, secret).exportOwned(
+    "owner",
+    signed([2, 46, ["a"], 2, Date.now() + 60000]),
+  );
+  expect(result).toMatchObject({
+    kind: "ready",
+    payload: {
+      version: "local-member-records-v27",
+      records: {
+        proposalPublications: [{ state: "withdrawn", attribution: null }],
+      },
+    },
+  });
+  const query = f.statements.find(
+    (sql) =>
+      sql.includes('AS "_key"') && sql.includes("FROM proposal_publications"),
+  )!;
+  expect(query).toContain("member_id=$1");
+  expect(query).toContain("FOR SHARE");
+  expect(query).not.toMatch(/accepted_by|accepted_role|operation_id/);
+});

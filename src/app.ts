@@ -1,3 +1,8 @@
+import {
+  mountPublicationRoutes,
+  mountPublicationStaffRoutes,
+} from "./proposal-publication-routes.ts";
+import type { PublicationStore } from "./proposal-publication.ts";
 import { mountWorkflowReviewStaffRoutes } from "./workflow-review-staff-routes.ts";
 import type { WorkflowReviewStaffStore } from "./workflow-review-staff.ts";
 import type { StaffEntryStore } from "./staff-entry.ts";
@@ -339,6 +344,8 @@ export function app(
     catalog?: CatalogStore;
     tracks?: TrackStore;
     proposals?: ProposalStore;
+    publications?: PublicationStore;
+    memberContributions?: boolean;
     career?: CareerStore;
     circles?: CircleStore;
     circleDiscussion?: CircleDiscussionStore;
@@ -813,6 +820,7 @@ export function app(
     }
     res.redirect(303, "/operator/test-receipts");
   });
+  mountPublicationStaffRoutes(app, options.publications);
   app.get("/moderate/proposals", async (req, res) => {
     const continuation = req.query.after;
     const queue = await proposals.moderationPage(
@@ -831,6 +839,7 @@ export function app(
       moderationPage(queue.items, res.locals.csrf as string, new Date(), {
         nextCursor: queue.nextCursor,
         continued: continuation !== undefined,
+        memberContributions: options.memberContributions === true,
       }),
     );
   });
@@ -1246,6 +1255,8 @@ export function app(
       "/milestones",
       "/career",
       "/contribute",
+      "/contributions",
+      "/contribution-requests",
       "/evidence",
       "/circles",
       "/events",
@@ -1896,6 +1907,11 @@ export function app(
     }
     res.redirect(303, "/evidence");
   });
+  mountPublicationRoutes(
+    app,
+    options.publications,
+    options.memberContributions === true,
+  );
   mountPreparedSampleRoutes(app, options.preparedSamples, options);
   mountAssignmentEvidenceRoutes(
     app,
@@ -2247,7 +2263,14 @@ export function app(
         );
       return;
     }
-    res.send(proposalListPage(owned, res.locals.csrf as string, workflow));
+    res.send(
+      proposalListPage(
+        owned,
+        res.locals.csrf as string,
+        workflow,
+        options.memberContributions === true,
+      ),
+    );
   });
   app.post("/contribute", async (req, res) => {
     const fields = (req.body ?? {}) as Fields;
@@ -2341,6 +2364,7 @@ export function app(
         proposal,
         res.locals.csrf as string,
         !proposal.workflowId || current?.version === proposal.workflowVersion,
+        Boolean(options.publications),
       ),
     );
   });

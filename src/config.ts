@@ -82,6 +82,9 @@ export function config(env: NodeJS.ProcessEnv) {
     throw new Error("Private evidence storage cannot be served publicly.");
   const localStaffEntry = env.DNE_LOCAL_STAFF_ENTRY ?? "disabled";
   const preparedReviewSamples = env.DNE_PREPARED_REVIEW_SAMPLES ?? "disabled";
+  const memberContributions = env.DNE_MEMBER_CONTRIBUTIONS ?? "disabled";
+  if (!["enabled", "disabled"].includes(memberContributions))
+    throw Error("DNE_MEMBER_CONTRIBUTIONS must be enabled or disabled.");
   const assignmentHandoff = env.DNE_ASSIGNMENT_HANDOFF ?? "disabled";
   if (!["enabled", "disabled"].includes(assignmentHandoff))
     throw Error("DNE_ASSIGNMENT_HANDOFF must be enabled or disabled.");
@@ -159,6 +162,7 @@ export function config(env: NodeJS.ProcessEnv) {
   if (!["enabled", "disabled"].includes(eventAttendance))
     throw Error("DNE_EVENT_ATTENDANCE must be enabled or disabled.");
   return {
+    memberContributions: memberContributions === "enabled",
     assignmentHandoff: assignmentHandoff === "enabled",
     preparedReviewSamples: preparedReviewSamples === "enabled",
     localStaffEntry: localStaffEntry === "enabled",
