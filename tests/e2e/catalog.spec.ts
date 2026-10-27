@@ -35,7 +35,10 @@ test("[L28] consented sample stays private, quarantines and redacts after withdr
     const id = new URL(page.url()).pathname.split("/").at(-1)!;
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
     await expect(
-      page.getByText("This is not published or licensed"),
+      page.getByText("This is your private source preview."),
+    ).toBeVisible();
+    await expect(
+      page.getByText("No public or external reuse license is granted."),
     ).toBeVisible();
 
     const otherPage = await other.newPage();
