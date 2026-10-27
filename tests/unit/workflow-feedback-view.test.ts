@@ -16,7 +16,7 @@ it("shows private current and historical notes without publishing them on the wo
     },
     {
       workflowId: "WF-001",
-      workflowVersion: bundle!.version + 1,
+      workflowVersion: bundle!.version - 1,
       note: "Historical invented response",
       revision: 1,
       createdAt: new Date(),
@@ -30,10 +30,10 @@ it("shows private current and historical notes without publishing them on the wo
   expect(privatePage).toContain('name="revision" value="2"');
   expect(privatePage).toContain("not a publication request");
   const publicPage = workflowDetailPage(bundle!);
-  expect(publicPage).toContain("Save private feedback about this draft");
+  expect(publicPage).toContain("Save private feedback about this version");
   expect(publicPage).not.toContain("Invented &amp; private");
   const unavailable = workflowFeedbackPage(null, reports, "csrf", "WF-001");
-  expect(unavailable).toContain("workflow draft is unavailable");
+  expect(unavailable).toContain("workflow version is unavailable");
   expect(unavailable).not.toContain("Save private feedback</button>");
   expect(workflowFeedbackPage(bundle, [], "csrf", "WF-001")).toContain(
     'name="revision" value="0"',

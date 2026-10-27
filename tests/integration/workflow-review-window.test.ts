@@ -35,7 +35,7 @@ it("WFREV-02/05 future canonical UTC assignment cannot expose the note before it
     await workflowFeedbackStore(pool).save(
       member,
       "WF-001",
-      1,
+      2,
       "Invented scheduled private note",
       0,
     ),

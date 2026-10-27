@@ -141,7 +141,7 @@ it.each(["draft", "submitted", "quarantined"] as const)(
     };
     const proposalId = await proposals.createDraft(ownerToken, value, true, {
       id: "WF-001",
-      version: 1,
+      version: 2,
     });
     expect(proposalId).toBeTruthy();
     if (initialState !== "draft") {
@@ -227,7 +227,7 @@ it.each(["withdraw", "reject"] as const)(
     };
     const proposalId = await proposals.createDraft(ownerToken, value, true, {
       id: "WF-001",
-      version: 1,
+      version: 2,
     });
     expect(proposalId).toBeTruthy();
     let moderatorToken = "";
@@ -387,7 +387,7 @@ it.each(["submitted", "quarantined"] as const)(
     };
     const proposalId = await proposals.createDraft(ownerToken, value, true, {
       id: "WF-001",
-      version: 1,
+      version: 2,
     });
     expect(proposalId).toBeTruthy();
     expect(await proposals.submit(ownerToken, proposalId!, true, 1)).toBe(
