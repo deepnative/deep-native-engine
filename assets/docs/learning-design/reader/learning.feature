@@ -15,6 +15,7 @@ Feature: Follow the complete authored foundation sequence
     Then the response explains the source-based answer and allows another attempt
     When they correct their response
     Then the reader acknowledges that practice response without a proficiency score
+    And it offers the fresh case without instructing them to retry a correct answer
 
   Scenario: READER-003 — Keep fresh practice and earlier work available
     Given the learner has written a fresh-case attempt and their own lesson work
@@ -69,5 +70,28 @@ Feature: Follow the complete authored foundation sequence
     Then the reference panel shows that fresh case's supplied source
     And it is labelled Fresh source rather than implying the earlier source applies
     When the learner moves to their own work
-    Then any supplied reference is labelled Example source
+    Then any fallback supplied reference is labelled Example source
     And the learner's own source is recorded in their writing rather than assumed
+
+  Scenario: READER-010 — Continue the learner's own project across lessons
+    Given the learner recorded their source and task in Lesson 1 own work
+    When they open Your work in Lessons 2 through 6
+    Then their starting work is visible beside the current exercise
+    And it is labelled learner-written notes to check against the original source
+    And it does not replace the separate fresh-case or final-practice source
+    And another route does not inherit these notes
+
+  Scenario: READER-011 — Inspect the draft named in a practice question
+    Given a practice question asks the learner to repair a schedule or compare drafts
+    When they open that question
+    Then the original schedule or draft versions are stated with the question
+    And they can compare the supplied source without navigating backwards
+
+  Scenario: READER-012 — Refine content without discarding earlier learning records
+    Given the learner saved a readable notebook for an earlier content version
+    When they open refined lessons
+    Then the earlier notebook remains separately downloadable with its original version
+    And current-version writing starts without inherited answers or self-checks
+    When they explicitly save current-version writing and reload
+    Then the current notebook is restored and the earlier bytes remain unchanged
+    And a failed save leaves current writing editable and the earlier copy intact

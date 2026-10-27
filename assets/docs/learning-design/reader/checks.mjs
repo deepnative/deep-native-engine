@@ -179,6 +179,232 @@ async function downloadText(page, button) {
 
 if (!process.argv.includes("--baseline")) {
   await check(
+    "READER-002 rehearsal correct feedback leads forward",
+    async (page) => {
+      await start(page);
+      await step(page, "Try it");
+      await page.locator('input[value="A"]').check();
+      await page
+        .getByRole("button", { name: "Check answer", exact: true })
+        .click();
+      await expect(page.locator(".answer-feedback")).toContainText(
+        "Try another choice",
+      );
+      await page.locator('input[value="B"]').check();
+      await page
+        .getByRole("button", { name: "Check answer", exact: true })
+        .click();
+      await expect(
+        page.getByRole("region", { name: "Try it", exact: true }),
+      ).not.toContainText(/try again/i);
+      await expect(page.locator("#practice-guidance")).toContainText(
+        "fresh case",
+      );
+      await page.locator('input[value="C"]').check();
+      await expect(page.locator("#practice-guidance")).not.toContainText(
+        "matches",
+      );
+    },
+  );
+
+  for (const width of [1360, 390])
+    await check(
+      `READER-010 rehearsal own project stays visible at ${width}px`,
+      async (page) => {
+        const source =
+          "BOOK-1: eight helpers, thirty books, free, Sunday afternoon; location unconfirmed. <draft>";
+        await start(page);
+        await step(page, "Your work");
+        await page.getByLabel("Your lesson work", { exact: true }).fill(source);
+        for (let i = 1; i < 6; i++) {
+          await page.locator(`[data-lesson="${i}"]`).click();
+          await step(page, "Your work");
+          await expect(page.locator("#source-text")).toHaveText(source);
+          await expect(page.locator(".source-card")).toContainText(
+            "Your starting work",
+          );
+          await expect(page.locator(".source-note")).toContainText(
+            "original source",
+          );
+          await expect(page.locator(".source-note")).toBeVisible();
+          await expect(
+            page.getByLabel("Your lesson work", { exact: true }),
+          ).toHaveValue("");
+          if (i === 1) {
+            await page
+              .getByLabel("Your lesson work", { exact: true })
+              .fill(
+                "Draft a headline and two-sentence invitation using BOOK-1. Keep the location unconfirmed; add no exact time or guarantee that everyone receives a book. I will check every fact against BOOK-1.",
+              );
+            expect(
+              await page.evaluate(
+                () => document.documentElement.scrollWidth <= innerWidth,
+              ),
+            ).toBe(true);
+            await page.screenshot({
+              path: path.join(output, `continuing-project-${width}.png`),
+              fullPage: true,
+            });
+          }
+        }
+        await step(page, "Fresh case");
+        await expect(page.locator("#source-text")).toContainText("nine people");
+        await page
+          .getByRole("button", { name: "Put it all together", exact: true })
+          .click();
+        await expect(page.locator("#source-text")).toContainText(
+          "five helpers for ninety minutes",
+        );
+        await page.getByRole("button", { name: "Work", exact: true }).click();
+        await page.locator('[data-lesson="1"]').click();
+        await step(page, "Your work");
+        await expect(page.locator("#source-text")).not.toContainText("BOOK-1");
+        await expect(page.locator(".source-card")).toContainText(
+          "Example source",
+        );
+      },
+      { width, height: 950 },
+    );
+
+  await check(
+    "READER-011 rehearsal questions include the compared drafts",
+    async (page) => {
+      await start(page);
+      await page.locator('[data-lesson="4"]').click();
+      await step(page, "Try it");
+      await expect(page.locator("fieldset legend")).toContainText(
+        "45 minutes with seven helpers",
+      );
+      await page.locator('[data-lesson="5"]').click();
+      await step(page, "Try it");
+      await expect(page.locator("fieldset legend")).toContainText(
+        "Eight helpers will start at 10 a.m.",
+      );
+      await page
+        .getByRole("button", { name: "Technical", exact: true })
+        .click();
+      await page.locator('[data-lesson="5"]').click();
+      await step(page, "Try it");
+      await expect(page.locator("fieldset legend")).toContainText(
+        "Maximum message length: 500",
+      );
+      await expect(page.locator("fieldset legend")).toContainText(
+        "Maximum message length: unspecified",
+      );
+    },
+  );
+
+  for (const [previousKind, storageFailure] of [
+    ["original", false],
+    ["versioned", false],
+    ["original", true],
+  ]) {
+    await check(
+      `READER-012 rehearsal ${previousKind} previous version with ${storageFailure ? "failed" : "successful"} current save`,
+      async (page) => {
+        await start(page);
+        await step(page, "Your work");
+        await page
+          .getByLabel("Your lesson work", { exact: true })
+          .fill("Earlier BOOK-1 source and work.");
+        await page
+          .getByLabel("I compared this work with the criteria above", {
+            exact: true,
+          })
+          .check();
+        await page.locator("#save").click();
+        const previous = await page.evaluate((kind) => {
+          const currentKey = Object.keys(localStorage).find((k) =>
+            k.startsWith("dne-course-reader-1:everyday"),
+          );
+          const value = JSON.parse(localStorage.getItem(currentKey));
+          const currentHash = value.contentHash;
+          value.contentHash = "a".repeat(64);
+          value.state.lessons[0].selections = ["a retired answer option"];
+          const raw = JSON.stringify(value);
+          localStorage.removeItem(currentKey);
+          const previousKey = `dne-course-reader-1:everyday${kind === "versioned" ? ":" + value.contentHash : ""}`;
+          localStorage.setItem(previousKey, raw);
+          return { raw, currentHash, previousKey };
+        }, previousKind);
+        await page.reload();
+        await expect(page.locator("#save")).toBeEnabled();
+        await expect(page.locator("#save-status")).toContainText(
+          "earlier content version",
+        );
+        await page.locator("#earlier-notebooks summary").click();
+        expect(
+          await downloadText(page, page.locator("#download-earlier")),
+        ).toBe(previous.raw);
+        await step(page, "Your work");
+        await expect(
+          page.getByLabel("Your lesson work", { exact: true }),
+        ).toHaveValue("");
+        await expect(page.locator("#self-check")).not.toBeChecked();
+        await page
+          .getByLabel("Your lesson work", { exact: true })
+          .fill("Current BOOK-1 draft, deliberately rechecked.");
+        if (storageFailure)
+          await page.evaluate(() => {
+            Storage.prototype.setItem = () => {
+              throw new Error("Test save unavailable");
+            };
+          });
+        await page.locator("#save").click();
+        if (storageFailure) {
+          await expect(page.locator("#save-status")).toContainText(
+            "Saving failed",
+          );
+          expect(await downloadText(page, page.locator("#download"))).toContain(
+            "Current BOOK-1 draft",
+          );
+        } else {
+          await page.reload();
+          await expect(
+            page.getByLabel("Your lesson work", { exact: true }),
+          ).toHaveValue("Current BOOK-1 draft, deliberately rechecked.");
+          await page.locator("#earlier-notebooks summary").click();
+          expect(
+            await downloadText(page, page.locator("#download-earlier")),
+          ).toBe(previous.raw);
+        }
+        expect(
+          await page.evaluate(
+            (k) => localStorage.getItem(k),
+            previous.previousKey,
+          ),
+        ).toBe(previous.raw);
+      },
+    );
+  }
+
+  await check(
+    "READER-006 rehearsal damaged current version is not overwritten",
+    async (page) => {
+      await start(page);
+      await step(page, "Your work");
+      await page
+        .getByLabel("Your lesson work", { exact: true })
+        .fill("Saved current notebook.");
+      await page.locator("#save").click();
+      const damagedKey = await page.evaluate(() => {
+        const storedKey = Object.keys(localStorage).find((k) =>
+          k.startsWith("dne-course-reader-1:everyday:"),
+        );
+        localStorage.setItem(storedKey, "{damaged current notebook");
+        return storedKey;
+      });
+      await page.reload();
+      await expect(page.locator("#save")).toBeDisabled();
+      expect(await downloadText(page, page.locator("#download-stored"))).toBe(
+        "{damaged current notebook",
+      );
+      expect(
+        await page.evaluate((k) => localStorage.getItem(k), damagedKey),
+      ).toBe("{damaged current notebook");
+    },
+  );
+  await check(
     "READER-004 leave warning protects writing without interrupting reading",
     async (page) => {
       let dialogs = 0;
@@ -476,17 +702,31 @@ if (!process.argv.includes("--baseline")) {
           raw,
         );
         await start(page);
-        await expect(page.locator("#save-status")).toContainText(
-          "Saved work could not be restored",
-        );
-        await expect(page.locator("#save")).toBeDisabled();
+        if (name === "malformed") {
+          await expect(page.locator("#save-status")).toContainText(
+            "Saved work could not be restored",
+          );
+          await expect(page.locator("#save")).toBeDisabled();
+        } else {
+          await expect(page.locator("#save-status")).toContainText(
+            "earlier content version",
+          );
+          await expect(page.locator("#save")).toBeEnabled();
+        }
         await step(page, "Your work");
         await page
           .getByLabel("Your lesson work", { exact: true })
           .fill("New separate practice writing.");
-        expect(await downloadText(page, page.locator("#download-stored"))).toBe(
-          raw,
-        );
+        if (name === "older content")
+          await page.locator("#earlier-notebooks summary").click();
+        expect(
+          await downloadText(
+            page,
+            page.locator(
+              name === "malformed" ? "#download-stored" : "#download-earlier",
+            ),
+          ),
+        ).toBe(raw);
         expect(await downloadText(page, page.locator("#download"))).toContain(
           "New separate practice writing.",
         );

@@ -105,7 +105,7 @@ Write a two-to-four-sentence request using one of these sources. Include all fou
 - **Work:** “Make a task/owner/date table for Mina's survey, Arun's wording check and Thursday's trial. Keep unagreed owners and dates not specified; list the launch date as an open question. I will compare each row with the notes.”
 - **Technical:** “Propose cases for the required email and message, including a blank message. List input, expected behavior, source requirement and execution status, using not run. Keep maximum length unspecified. I will check requirement coverage before executing the cases.”
 
-An answer is ready for the next step when the facts remain correct, the output can be inspected, uncertainty is visible and the check could catch an error. If your wording differs but achieves these, keep it. If it assigns a launch date or message limit, remove that invention.
+An answer is ready for the next step when the facts remain correct, the output can be inspected, uncertainty is visible and the check could catch an error. If your wording differs but achieves these, keep it. If it adds an unagreed date, place or limit, remove that invention.
 
 </details>
 
@@ -126,4 +126,4 @@ Keep the source beside the request. Save the version you want to work from; chec
 
 **Take forward:** [Lesson 3: Check an answer](03-check-an-answer.md) gives you a flawed answer to inspect, so you can practise even without calling an AI tool.
 
-<!-- Author reference: draft LD-FND-002 0.1; refines FND-002. Original synthetic examples. Question IDs are content IDs, not automated tests. -->
+<!-- Author reference: draft LD-FND-002 0.2; refines FND-002. Original synthetic examples. Question IDs are content IDs, not automated tests. -->

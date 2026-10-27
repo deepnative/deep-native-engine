@@ -107,7 +107,7 @@ For your route, write the sample you would use and identify its intended reader.
 - **Work:** “Eighteen support requests were resolved” fits the agreed update. Its audience is the public; copied request text and internal links do not belong in it. You do not need those details to preserve the aggregate result.
 - **Technical:** Describe an invented 3 MB PDF case with expected rejection under the 2 MB rule and status “not run.” Its reader is the maintainer requesting the fictional reproduction. No original logs, credentials or observed test result are needed.
 
-Notice that the first two cases explicitly allow a limited public statement. You should use that scope rather than assume everything must remain private. The decision follows the supplied facts and destination.
+Use the audience and scope explicitly given in your case. When the source permits a limited public statement, those facts can be used for that audience; when it names a particular recipient, keep that destination clear. The decision follows the supplied facts and destination.
 
 </details>
 
@@ -129,4 +129,4 @@ Use your Lesson 3 artifact or an invented case above. Write:
 
 **Take forward:** bring the sample and decision to [Lesson 5: Build a repeatable workflow](05-build-a-repeatable-workflow.md). You will decide when a draft is useful, when it needs repair and how to recover from missing information.
 
-<!-- Author reference: draft LD-FND-004 0.1; refines FND-004 without changing its canonical version. All text and case-specific permissions are original fictional teaching material. -->
+<!-- Author reference: draft LD-FND-004 0.2; refines FND-004 without changing its canonical version. All text and case-specific permissions are original fictional teaching material. -->

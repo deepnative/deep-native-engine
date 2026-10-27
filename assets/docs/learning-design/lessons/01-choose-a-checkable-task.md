@@ -54,7 +54,7 @@ Pick the best starting task for your example. Make your choice before opening th
 
 <details><summary>Check your answer</summary>
 
-**B is the best starting task.** It uses the supplied limits and names what is missing. **A** assumes a library booking and budget that the source never gives. **C** checks tone, but a confident plan could still require twenty people. Try again by naming one limit you can count.
+**B is the best starting task.** It uses the supplied limits and names what is missing. **A** assumes a library booking and budget that the source never gives. **C** checks tone, but a confident plan could still require twenty people. The two-hour total and twelve-person limit give you concrete checks.
 
 </details>
 
@@ -122,4 +122,4 @@ Use invented details, or reuse a source above. Keep this private while practisin
 
 **Take forward:** keep these four lines for [Lesson 2: Write a useful request](02-write-a-useful-request.md). You will turn them into instructions someone else can follow.
 
-<!-- Author reference: draft LD-FND-001 0.1; refines FND-001, does not replace its canonical version. Original synthetic examples. Question IDs are content IDs, not automated tests. -->
+<!-- Author reference: draft LD-FND-001 0.2; refines FND-001, does not replace its canonical version. Original synthetic examples. Question IDs are content IDs, not automated tests. -->

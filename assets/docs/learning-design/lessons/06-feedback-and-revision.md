@@ -57,7 +57,7 @@ This avoids making an unnecessary third edit or treating the old response as a r
 
 ### Everyday question — `L6-E-P`
 
-Which feedback would best help the writer repair E6's draft?
+Draft v1 says “Eight helpers will start at 10 a.m.” Which feedback would best help the writer repair it using E6?
 
 - **A.** “E6 says six helpers and leaves the start time open. Correct the count and mark the time to be confirmed; I have not checked the actual event.”
 - **B.** “Make it more professional; I give it 100% once it sounds confident.”
@@ -89,7 +89,7 @@ How should you handle the suggestion to give Mina a Thursday deadline?
 
 ### Technical question — `L6-T-P`
 
-Feedback on v1 requests changes that already appear in v2. What should your revision record say?
+Draft v1 says “Blank-message test: passed. Maximum message length: 500.” Draft v2 says “Blank-message test: not run. Maximum message length: unspecified.” Feedback on v1 requests those corrections. What should your revision record say?
 
 - **A.** “The reviewer has approved v2,” because the requested changes are now present.
 - **B.** “Already addressed in v2,” with the matching changes; retain the feedback's v1 scope.
@@ -145,4 +145,4 @@ Keep your practice record for yourself unless you deliberately choose an audienc
 
 **Take forward:** [complete the foundation practice](../foundation-practice.md) with one connected artifact. Keep what you can explain, mark what remains uncertain, and repeat the process with a fresh source.
 
-<!-- Author reference: draft LD-FND-006 0.1; refines FND-006. Original synthetic sources, comments and revisions; no real review, message or assessment is claimed. -->
+<!-- Author reference: draft LD-FND-006 0.2; refines FND-006. Original synthetic sources, comments and revisions; no real review, message or assessment is claimed. -->

@@ -633,6 +633,23 @@ textarea::placeholder {
   flex-shrink: 0;
   max-width: 350px;
 }
+#source-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+#earlier-notebooks label {
+  display: block;
+  margin: 16px 0 6px;
+}
+#earlier-record {
+  max-width: 100%;
+  padding: 10px;
+  margin: 0 10px 12px 0;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
 .loading {
   margin: 60px;
   font-size: 20px;
@@ -665,8 +682,7 @@ textarea::placeholder {
   .source-card {
     padding: 18px 20px;
   }
-  .source-card h2,
-  .source-note {
+  .source-card h2 {
     display: none;
   }
   .source-card p {

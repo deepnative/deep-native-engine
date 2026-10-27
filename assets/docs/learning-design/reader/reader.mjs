@@ -11,7 +11,8 @@ const finalLabels = [
   "Feedback and revision",
 ];
 const root = document.querySelector("#app");
-const key = (route) => `dne-course-reader-1:${route}`;
+const legacyKey = (route) => `dne-course-reader-1:${route}`;
+const key = (route) => `${legacyKey(route)}:${course.contentHash}`;
 const escape = (value) =>
   String(value).replace(
     /[&<>"']/g,
@@ -100,26 +101,55 @@ function getSession(chosenRoute) {
     dirty: false,
     blocked: false,
     raw: null,
+    earlier: [],
     message:
       "Nothing saved yet. Your writing stays here while this page is open.",
   };
+  let loadedKey;
   try {
-    session.raw = localStorage.getItem(key(chosenRoute));
+    const currentRaw = localStorage.getItem(key(chosenRoute));
+    loadedKey = currentRaw !== null ? key(chosenRoute) : legacyKey(chosenRoute);
+    session.raw = currentRaw ?? localStorage.getItem(loadedKey);
+    for (const storedKey of Object.keys(localStorage).sort()) {
+      if (
+        storedKey !== key(chosenRoute) &&
+        (storedKey === legacyKey(chosenRoute) ||
+          storedKey.startsWith(`${legacyKey(chosenRoute)}:`))
+      ) {
+        session.earlier.push({
+          key: storedKey,
+          raw: localStorage.getItem(storedKey),
+        });
+      }
+    }
     if (session.raw !== null) {
       const stored = JSON.parse(session.raw);
-      if (stored.version !== 1 || stored.contentHash !== course.contentHash)
+      if (stored.version !== 1 || typeof stored.contentHash !== "string")
         throw new Error("different version");
-      if (
-        stored.route !== chosenRoute ||
-        !validState(stored.state, chosenRoute)
-      )
-        throw new Error("unreadable");
-      session.state = stored.state;
-      session.message =
-        "Restored your explicit browser save. This is not a member-account save.";
+      if (stored.route !== chosenRoute) throw new Error("unreadable");
+      if (stored.contentHash !== course.contentHash) {
+        if (loadedKey === key(chosenRoute))
+          throw new Error("different version");
+        session.raw = null;
+      } else {
+        if (!validState(stored.state, chosenRoute))
+          throw new Error("unreadable");
+        session.state = stored.state;
+        session.earlier = session.earlier.filter(
+          (entry) => entry.key !== loadedKey,
+        );
+        session.message =
+          "Restored your explicit browser save. This is not a member-account save.";
+      }
     }
+    if (session.raw === null && session.earlier.length)
+      session.message =
+        "An earlier content version is saved separately below. Start a current notebook here; earlier answers and self-checks have not been copied.";
   } catch (error) {
     session.blocked = session.raw !== null;
+    session.earlier = session.earlier.filter(
+      (entry) => entry.key !== loadedKey,
+    );
     session.message = session.blocked
       ? `Saved work could not be restored${error.message === "different version" ? " because the lesson version differs" : " because the record is unreadable"}. The stored copy is unchanged. Download it before moving work to a new version.`
       : "Browser storage is unavailable. You can still practise and download your work.";
@@ -193,7 +223,27 @@ function practice(data) {
       return `<fieldset><legend>${escape(q.prompt)}</legend>${q.choices.map((c) => `<label class="choice ${current.checked && chosen === c.key ? (correct ? "correct" : "reconsider") : ""}"><input type="radio" name="q-${n}" data-question="${n}" value="${escape(c.key)}" ${chosen === c.key ? "checked" : ""}><span>${c.key.length === 1 ? `<b>${c.key}</b> ` : ""}${escape(c.label)}</span></label>`).join("")}<div class="answer-feedback ${correct ? "positive" : ""}" ${current.checked ? "" : "hidden"}><strong>${correct ? "This response matches the source." : "Try another choice after comparing with the source."}</strong><p>You chose ${escape(chosen ?? "no response")}.</p>${q.feedback}</div></fieldset>`;
     })
     .join("");
-  return `${data.intro}<details id="hint" ${current.hint ? "open" : ""}><summary>Show a hint</summary><p>${escape(data.hint)}</p></details><form id="practice-form">${responses}<p id="practice-notice" role="status"></p><button class="primary" type="submit">Check answer${data.questions.length > 1 ? "s" : ""}</button></form><p class="quiet">Use the explanation, then try again. This practice response is not a proficiency score.</p>`;
+  return `${data.intro}<details id="hint" ${current.hint ? "open" : ""}><summary>Show a hint</summary><p>${escape(data.hint)}</p></details><form id="practice-form">${responses}<p id="practice-notice" role="status"></p><button class="primary" type="submit">Check answer${data.questions.length > 1 ? "s" : ""}</button></form><p class="quiet" id="practice-guidance">${practiceGuidance(data)}</p>`;
+}
+
+function practiceGuidance(data) {
+  if (!item().checked)
+    return "Choose your response, then compare the explanation with the source.";
+  return data.questions.every((q, n) => item().selections[n] === q.answer)
+    ? "Your response matches the source. Continue to the fresh case when you can explain why. This is practice, not a proficiency score."
+    : "Use the explanation to revise your response, then check again. This is practice, not a proficiency score.";
+}
+
+function earlierNotebooks() {
+  if (!session().earlier.length) return "";
+  return `<details id="earlier-notebooks"><summary>Earlier notebooks (${session().earlier.length})</summary><p>These stored copies remain unchanged. Their answers and self-checks belong to their original content version; they are not copied into the current lessons. Downloads contain the stored record and version identifier, not a complete archive of the old lessons.</p><label for="earlier-record">Stored notebook</label><select id="earlier-record">${session()
+    .earlier.map(
+      (entry, i) =>
+        `<option value="${i}">Notebook ${i + 1} · ${entry.key === legacyKey(route) ? "original save" : escape(entry.key.slice(-12))}</option>`,
+    )
+    .join(
+      "",
+    )}</select><button class="secondary" id="download-earlier">Download earlier notebook</button></details>`;
 }
 
 function earlierNotes() {
@@ -210,6 +260,10 @@ function lessonContent() {
   const lesson = course.lessons[state().lesson];
   const data = lesson.routes[route];
   const current = item();
+  const startingWork =
+    state().step === 3 && state().lesson > 0 && state().lessons[0].work.trim()
+      ? state().lessons[0].work
+      : null;
   let body;
   if (state().step === 0) body = data.example;
   if (state().step === 1) body = practice(data.practice);
@@ -224,9 +278,16 @@ function lessonContent() {
         ? "Continue to the next lesson"
         : "Start the final practice";
   return {
-    source: state().step === 2 ? data.freshSource : data.source,
-    sourceLabel:
-      state().step === 2
+    source:
+      startingWork ?? (state().step === 2 ? data.freshSource : data.source),
+    sourceNote: startingWork
+      ? "These are your Lesson 1 notes. Check them against your original source; they have not been independently verified. Earlier drafts remain in your notebook below."
+      : state().step === 3
+        ? "Use this example if you need a source. Record your own source in your writing."
+        : "Compare each claim with these notes. Keep unknown details open.",
+    sourceLabel: startingWork
+      ? "Your starting work"
+      : state().step === 2
         ? "Fresh source"
         : state().step === 3
           ? "Example source"
@@ -263,7 +324,7 @@ function render(scroll = false) {
     )
     .join(
       "",
-    )}</div><div class="workspace"><article>${content.body}</article><aside class="reference"><div class="source-card"><p class="eyebrow">${content.sourceLabel ?? "Your source"} · ${routes[route]}</p><h2>Keep the facts close.</h2><p id="source-text">${escape(content.source)}</p><p class="source-note">${current.lesson < 6 && current.step === 3 ? "Use this example if you need a source. Record your own source in your writing." : "Compare each claim with these notes. Keep unknown details open."}</p></div>${earlierNotes()}<a class="extra-link" href="../prototype/" target="_blank" rel="noopener">Open the request/check walkthrough <span aria-hidden="true">↗</span></a></aside></div><footer class="save-bar"><div><strong>Your practice notebook</strong><p id="save-status" role="status">${escape(session().message)}</p><small>Saved only in this browser, at this address. Use invented information.</small></div><div class="save-actions"><button class="secondary" id="download">Download my work</button><button class="primary" id="save" ${session().blocked ? "disabled" : ""}>Save in this browser</button>${session().blocked ? '<button class="secondary" id="download-stored">Download stored copy</button>' : ""}</div></footer></main></div>`;
+    )}</div><div class="workspace"><article>${content.body}</article><aside class="reference"><div class="source-card"><p class="eyebrow">${content.sourceLabel ?? "Your source"} · ${routes[route]}</p><h2>Keep the facts close.</h2><p id="source-text">${escape(content.source)}</p><p class="source-note">${content.sourceNote ?? "Compare each claim with these notes. Keep unknown details open."}</p></div>${earlierNotes()}<a class="extra-link" href="../prototype/" target="_blank" rel="noopener">Open the request/check walkthrough <span aria-hidden="true">↗</span></a></aside></div><footer class="save-bar"><div><strong>Your practice notebook</strong><p id="save-status" role="status">${escape(session().message)}</p><small>Saved only in this browser, at this address. Use invented information.</small></div><div class="save-actions"><button class="secondary" id="download">Download my work</button><button class="primary" id="save" ${session().blocked ? "disabled" : ""}>Save in this browser</button>${session().blocked ? '<button class="secondary" id="download-stored">Download stored copy</button>' : ""}</div></footer>${earlierNotebooks()}</main></div>`;
   bind();
   if (scroll) document.querySelector("h1").scrollIntoView({ block: "start" });
 }
@@ -326,6 +387,8 @@ function bind() {
       document
         .querySelectorAll(".choice")
         .forEach((n) => n.classList.remove("correct", "reconsider"));
+      document.querySelector("#practice-guidance").textContent =
+        practiceGuidance(course.lessons[state().lesson].routes[route].practice);
       changed();
     }),
   );
@@ -399,6 +462,13 @@ function bind() {
     ?.addEventListener("click", () =>
       download(session().raw, `foundation-${route}-stored.txt`),
     );
+  document.querySelector("#download-earlier")?.addEventListener("click", () => {
+    const index = Number(document.querySelector("#earlier-record").value);
+    download(
+      session().earlier[index].raw,
+      `foundation-${route}-earlier-${index + 1}.txt`,
+    );
+  });
 }
 
 function save() {

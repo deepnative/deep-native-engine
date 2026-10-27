@@ -56,7 +56,7 @@ Make each step something someone could actually do. “Check carefully” leaves
 
 ### Everyday question — `L5-E-P`
 
-Which change fixes both problems in the first schedule?
+The proposed schedule is sequential: setup 10 minutes with two helpers, swap 45 minutes with seven helpers, then tidy 10 minutes with three helpers. Which change fits E5's one-hour and six-helper limits?
 
 - **A.** Shorten tidy-up to five minutes, leaving seven helpers on the swap.
 - **B.** Make the swap forty minutes with six helpers, leaving setup and tidy-up at ten minutes each.
@@ -140,4 +140,4 @@ Run the card once against an intentionally flawed sample. Record what you change
 
 **Take forward:** choose one step you would like help improving. In [Lesson 6: Give feedback someone can use](06-feedback-and-revision.md), you will ask a focused question, judge the response against the source and record a revision reason.
 
-<!-- Author reference: draft LD-FND-005 0.1; refines FND-005. Original synthetic examples; time/staffing checks establish only the stated constraints, not operational feasibility. -->
+<!-- Author reference: draft LD-FND-005 0.2; refines FND-005. Original synthetic examples; time/staffing checks establish only the stated constraints, not operational feasibility. -->
