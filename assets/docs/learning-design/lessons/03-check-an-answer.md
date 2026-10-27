@@ -119,6 +119,6 @@ Create a small table: **claim / source evidence / status / correction or next ch
 
 Mark each criterion **shown** or **needs another try** and keep the explanation. This is your self-check, not a certificate or an automatic grade.
 
-**Take forward:** your source, request, claim table and corrected draft are one small learning artifact. The [next lesson outcome](../curriculum.md) is deciding which information to use and who may see it before asking another person for feedback.
+**Take forward:** your source, request, claim table and corrected draft are one small learning artifact. In [Lesson 4: Choose what to use and share](04-choose-what-to-share.md), decide which information to use and who may see it before asking another person for feedback.
 
 <!-- Author reference: draft LD-FND-003 0.1; refines FND-003. Original synthetic examples. Question IDs are content IDs, not automated tests. -->

@@ -5,7 +5,7 @@ Scope: [#549](https://github.com/deepnative/deep-native-engine/issues/549), loca
 ## How to read the status
 
 - **Authored:** concrete text/examples now exist in this package. This establishes an inspectable artifact, not an application behavior.
-- **Observed subset:** the narrower #548 local guide journey was actually demonstrated at the baseline revision using invented data; it is not proof of the new three-lesson sequence.
+- **Observed subset:** the narrower #548 local guide journey was actually demonstrated at the baseline revision using invented data; it is not proof of the refined six-lesson sequence.
 - **Existing analogue:** implementation and named test source were inspected, but those tests were not rerun for this document task. The new scenario is not automatically covered.
 - **Proposed:** an expected behavior or test still needs implementation/verification. No scenario below is newly claimed as an automated pass.
 
@@ -24,19 +24,20 @@ The original baseline's manual observation covers the #548 everyday walkthrough.
 | E5 | [L139–141 sample feedback](../../../tests/e2e/sample-feedback.spec.ts). | Source-bound private evidence feedback, one clarification, new private revision and withdrawal. Not a criterion editor, lesson artifact comparison or formal assessment. |
 | E6 | [L71 workflow feedback](../../../tests/e2e/workflow-feedback.spec.ts); [native version/privacy/conflict behavior](../../../tests/integration/workflow-feedback.test.ts); [L151–153 unconfirmed-save recovery](../../../tests/e2e/workflow-feedback-recovery.spec.ts). | Private workflow-feedback notes and recovery. Does not establish identical failure handling for a new learner artifact editor. |
 | E7 | [Local walkthrough](prototype/index.html), [eight local BDD scenarios](prototype/learning.feature), [focused browser checks](prototype/checks.mjs). | Three complete local routes at desktop/mobile widths, correction/hint/transfer, browser save/reload and failure recovery. No server persistence, account identity, actual prior submission or staff review is tested. See the scoped mapping in the prototype README. |
+| E8 | [Lessons 4–6 and final practice](README.md), [13 applied-learning specifications](features/applied-learning.feature). | Authored content and source/answer review only. It does not extend the E7 walkthrough or establish application navigation, saving or observed learning outcomes. |
 
 ## Content creation / refinement scenarios
 
 | Scenario | AC | Artifact / behavior | Current evidence | Planned verification if implemented |
 | --- | --- | --- | --- | --- |
-| CREF-001 | 1, 3 | Curriculum outcome, prerequisite and artifact across routes. | Authored: curriculum and all three lesson openings. | Author walks each route; checks artifact against outcome. |
+| CREF-001 | 1, 3 | Curriculum outcome, prerequisite and artifact across routes. | Authored: curriculum and all six lesson openings. | Author walks each route; checks artifact against outcome. |
 | CREF-002 | 2, 3 | Budget answer-key correction. | Authored: Lesson 3 key distinguishes absent from incompatible facts. | Unit content-key fixture; local editor walkthrough of requested correction. |
 | CREF-003 | 2, 3 | Feedback explains the selected misconception. | Authored: six route repair questions; E1 observed subset. | Unit per-choice explanations; browser wrong-choice → specific explanation → retry. |
 | CREF-004 | 2, 3 | Fresh transfer source and flexible rubric. | Authored: nine fresh cases across three lessons/routes. | Content inspection; browser source remains the transfer source after feedback. |
 | CREF-005 | 3 | Routine local editorial readiness. | Proposed workflow; E3 staff lifecycle is an analogue, not this working state. | Local procedural walkthrough; application role checks only if catalog UI changes. |
 | CREF-006 | 3 | Specific change request and before/after wording. | Proposed workflow; simultaneous staffing wording authored in Lesson 2. | Local revision comparison tied to question/version. |
 | CREF-007 | 3 | Replace uncertain-rights source and continue independent authoring. | Authored source/rights policy in workflows; no actual third-party rights dispute tested. | Procedural example with excluded passage and original replacement. |
-| CREF-008 | 2, 3 | Inspect all teaching stages in all routes. | Authored reading material; interactive preview of these new lessons proposed. | Walkthrough of each new route and wrong/correct/hint/transfer paths. |
+| CREF-008 | 2, 3 | Inspect all teaching stages in all routes. | Authored reading material; E7 demonstrates only the request/check/revision subset. A full six-lesson reader remains proposed. | Walkthrough of each new route and wrong/correct/hint/transfer paths. |
 | CREF-009 | 3, 4 | Preserve lesson/rubric version of prior work. | Existing analogue E3; new lesson adoption integration proposed. | Real PostgreSQL version pinning plus member history browser check. |
 | CREF-010 | 3, 4 | Retirement and retained private history. | Existing analogue E3/E4; replacement recommendation proposed. | Retire item, inspect search and owner history; check applicable deletion path. |
 | CREF-011 | 3 | Conflicting author saves preserve both edits for reconciliation. | Proposed; E6 concerns different private-note objects. | Concurrent native integration writes and browser conflict/recovery. |
@@ -72,17 +73,39 @@ The original baseline's manual observation covers the #548 everyday walkthrough.
 | WORK-FLOW-006 | 4 | Withdrawal stops reviewer exchange, owner retains permitted feedback. | E5 existing sample behavior; new lesson linkage unverified. | Native grant withdrawal checks and browser owner/reviewer comparison. |
 | WORK-FLOW-007 | 4 | Failed revision save preserves prior work and recoverable draft. | Proposed for artifact revisions; E6 unconfirmed-note-save analogue. | Native failed/ambiguous save; browser retain correction/reason without false success. |
 
+## Applied learning: Lessons 4–6 and connected practice
+
+The bounded scope extension is recorded in [the authoring claim](https://github.com/deepnative/deep-native-engine/issues/549#issuecomment-6454119069). All thirteen scenarios in [applied-learning.feature](features/applied-learning.feature) are **authored specifications**, not executed application tests. Their concrete sources, worked responses, hints and rubrics are inspectable in E8. Planned checks below apply only if a later local reader implements the behavior.
+
+| Scenario | AC | Lesson / case and outcome | Author check / planned reader verification |
+| --- | --- | --- | --- |
+| APPLIED-LEARN-001 | 2, 4 | Lesson 4, E4 / L4-E-P: retain useful invented planning facts without the contact sheet. | Key B; counts, duration and unknowns preserved. Later check per-choice feedback against this source. |
+| APPLIED-LEARN-002 | 2, 3 | Lesson 4, W4 / L4-W-P: create a different fictional problem rather than rename a private complaint. | Key C; library, two examples, Monday and new-problem label. Later verify both the example and its stated scope. |
+| APPLIED-LEARN-003 | 2, 4 | Lesson 4, T4 / L4-T-P: describe behavior without a real log or credential. | Key A; required behavior and not-run status preserved. Later verify sample/explanation content. |
+| APPLIED-LEARN-004 | 2, 4 | Lesson 4, L4-E-X: use explicitly permitted facts for the stated public audience. | Ten helpers/Saturday allowed; contacts, address and start time excluded or unknown. Later verify transfer source and rubric. |
+| APPLIED-LEARN-005 | 2, 4 | Lesson 5, E5 / L5-E-P: distinguish total duration and simultaneous staffing. | Key B; original 65 minutes/peak 7, repair 60/peak 6. Later verify both error explanations and the feasibility limit. |
+| APPLIED-LEARN-006 | 2, 4 | Lesson 5, L5-W-X: keep a commitment unverified when its source is unavailable. | Draft attribution is separate from a confirmed source fact. Later verify source recovery and no false/final classification. |
+| APPLIED-LEARN-007 | 2, 4 | Lesson 5, T5 / L5-T-P: recover from a drafting failure. | Key A; retained source, manual/retry option, not run. Later verify explanation without an invented execution result. |
+| APPLIED-LEARN-008 | 2, 4 | Lesson 6, E6 / L6-E-P: write specific source-based feedback. | Key A; six helpers and unknown time, with an explicit observation limit. Later verify feedback/revision pairing. |
+| APPLIED-LEARN-009 | 2, 4 | Lesson 6, W6 / L6-W-P: decline an unsupported deadline suggestion. | Key C; Thursday belongs to the trial, not the survey deadline. Later verify retained-text outcome is accepted. |
+| APPLIED-LEARN-010 | 2, 4 | Lesson 6, T6 / L6-T-P: record a change already made in v2. | Key B; v1 comment remains on v1, without new-review claim. Later verify visible source-version context. |
+| APPLIED-LEARN-011 | 2, 4 | Lesson 6, L6-E-X / W-X / T-X: choose among decline, already addressed and revise. | Each response follows its fresh source/version. Later verify route-specific transfer content and reasons. |
+| APPLIED-LEARN-012 | 1, 2, 4 | CAP-E / W / T: connect source, request, check, scope, workflow and feedback in one record. | Every route permits a contradiction/missing-fact comparison; Everyday has a complete worked record. Later verify sequence and criterion-based reflection, without a mastery score. |
+| APPLIED-LEARN-013 | 2, 4 | Lesson 5, L5-T-X: distinguish expected rejection from interrupted execution. | 3 MB exceeds 2 MB; no response observed, so actual behavior is unconfirmed. Later verify expected/actual labels stay separate. |
+
+The original 32 broad scenarios retain their IDs and scope. These thirteen add teaching-specific cases. The eight PROTO scenarios remain a separate local subset with their earlier focused evidence; this authoring change does not rerun or extend them. The approved application L-series register is unchanged.
+
 ## Acceptance and author check
 
 | Issue acceptance | Concrete artifact / check |
 | --- | --- |
 | AC1: outcomes, sequence and routes | [Curriculum](curriculum.md); openings, carried artifact and next action in each lesson. |
-| AC2: three authored core lessons | Three lesson files: 6 multiple-choice repair questions, 9 classification claims, 9 fresh route cases, worked examples and own-work rubrics. All facts and keys reviewed against their supplied source. |
+| AC2: three authored core lessons, extended by the bounded claim | Original Lessons 1–3 retain their six repair questions, nine classification claims and nine fresh cases. The extension fully authors Lessons 4–6 with nine new practice questions and nine fresh cases, plus the connected final practice. Sources, keys and explanations were checked together. |
 | AC3: creator workflow | [Workflows](workflows.md), CREF-001–011. Routine editorial decisions use delegated judgment. |
-| AC4: learner and feedback behavior | LEARN-FLOW-001–014 and WORK-FLOW-001–007, including denial, stale state and recovery. |
-| AC5: honest evidence mapping | Every one of the 32 design scenarios is mapped above. Existing L-series IDs and test counts are unchanged. No new scenario is reported as executed. |
-| AC6: local inspection and next action | [Reading entry](README.md), linked lessons/features and next local prototype in workflows. Local file/link/ID checks and author review are recorded with the handoff. |
+| AC4: learner and feedback behavior | LEARN-FLOW-001–014 and WORK-FLOW-001–007 retain the broader application requirements. APPLIED-LEARN-001–013 add concrete use/share, workflow recovery, feedback judgment and final-practice cases. |
+| AC5: honest evidence mapping | All 32 original and 13 applied-learning design scenarios are mapped above. E7 retains its separate eight-scenario local evidence. Existing application L-series IDs and test counts are unchanged; authored specifications are not reported as executed tests. |
+| AC6: local inspection and next action | [Reading entry](README.md), six linked lessons, final practice and BDD files. Local file/link/ID checks and author review are recorded with the handoff. |
 
-Author review checks answer correctness, not just presence of sections. Everyday numerical limits and unknowns match their sources; work examples keep task-specific owners/dates; technical examples separate requirements from execution. Fresh cases have different supplied facts. Three lesson drafts are complete; three later lessons remain briefs. No independent learner study or independent review was performed.
+Author review checks answer correctness, not just presence of sections. Everyday numerical limits and unknowns match their sources; work examples keep task-specific owners/dates; technical examples separate requirements from execution. Fresh cases have different supplied facts. All six lesson drafts and the final practice are complete. Review changed the workplace sharing example into a genuinely different fictional problem and added a directly contradicted trial date to the Work final-practice sample so its rubric can be satisfied. The author performed this review; no independent learner study or independent review was performed.
 
-The Lesson 2 → Lesson 3 storyboard is now available as E7. The next bounded content action under #549 is fully authoring Lessons 4–6 from their existing exercise briefs, then reconciling any canonical source adoption with #93/#117. Lead recommendation: Sol / High; author design/self-review High. Later private-data or authority changes require the applicable scope and Astra / High routing. Production work remains parked by the owner's direction.
+The Lesson 2 → Lesson 3 storyboard is available as E7. The next bounded action under #549 is a separate local reader for the six lessons and final practice, preserving E7's interactive behavior and keeping canonical source/shared reader changes coordinated with #93/#117. Lead recommendation: Sol / High; author design/self-review High. Later private-data or authority changes require the applicable scope and Astra / High routing. Production work remains parked by the owner's direction.

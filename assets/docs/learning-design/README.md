@@ -9,10 +9,14 @@ The [local Lesson 2 → 3 walkthrough](prototype/README.md) now lets you try the
 | [1. Choose a task you can check](lessons/01-choose-a-checkable-task.md) | A small task, its source and a check. |
 | [2. Write a useful request](lessons/02-write-a-useful-request.md) | A request with facts, output shape, limits and a check. |
 | [3. Check an answer](lessons/03-check-an-answer.md) | A claim-by-claim review and a corrected answer. |
+| [4. Choose what to use and share](lessons/04-choose-what-to-share.md) | A useful invented sample and a deliberate audience decision. |
+| [5. Build a repeatable workflow](lessons/05-build-a-repeatable-workflow.md) | Input, draft, check, decision and recovery steps. |
+| [6. Give feedback someone can use](lessons/06-feedback-and-revision.md) | A feedback decision, revised or retained text and a source-based reason. |
+| [Put the six lessons together](foundation-practice.md) | One connected learning record using a fresh brief. |
 
 Each lesson offers Everyday, Work and Technical routes. Choose one rather than reading all three. Every route has supplied facts, a worked example, a practice attempt, specific feedback, a fresh case and an own-work self-check. Learners can use the invented samples throughout, without an AI account.
 
-The three drafts form the first half of the [six-lesson map](curriculum.md). Lessons 4–6 currently have outcome/exercise briefs; their full scripts remain to be written. These proposals live separately from the canonical FND files owned by the ongoing #93/#117 work.
+All six lessons in the [curriculum map](curriculum.md) now have full drafts. These proposals live separately from the canonical FND files owned by the ongoing #93/#117 work. The final practice contains a complete Everyday worked record and source-based checks for Work and Technical routes.
 
 ## What the study changes
 
@@ -28,7 +32,8 @@ These are design interpretations of their published approaches, not evidence tha
 - [Content refinement BDD](features/content-refinement.feature): 11 scenarios, including incorrect answer keys, source uncertainty and version changes.
 - [Learner journey BDD](features/learner-journey.feature): 14 scenarios, including hints, save/resume, goal changes and honest progress.
 - [Feedback and revision BDD](features/feedback-revision.feature): 7 scenarios, including exact-version feedback, clarification, revision and recovery.
-- [Evidence and acceptance map](traceability.md): all 32 scenarios, with existing, partial and proposed behavior separated.
+- [Applied learning BDD](features/applied-learning.feature): 13 concrete scenarios for Lessons 4–6 and the connected practice, including unsupported feedback and interrupted execution.
+- [Evidence and acceptance map](traceability.md): the original 32 scenarios plus the new applied-learning map, with authored, existing, partial and proposed behavior separated.
 
 For example:
 
@@ -44,8 +49,8 @@ Scenario: LEARN-FLOW-007 — Distinguish a contradiction from a missing fact
 
 ## Working state
 
-Authored drafts: `LD-FND-001`, `LD-FND-002`, `LD-FND-003`, each revision `0.1`, corresponding to FND-001 through FND-003. These are proposal identifiers, not new published catalog versions. The source baseline is local commit `60c66677d939df8b1d0b59c43a1e8627f45223bc`.
+Authored drafts: `LD-FND-001` through `LD-FND-006`, each revision `0.1`, corresponding to FND-001 through FND-006. These are proposal identifiers, not new published catalog versions. The original source baseline is local commit `60c66677d939df8b1d0b59c43a1e8627f45223bc`; later local commits record the authored refinements and prototype separately.
 
-The existing #548 local guide demonstrates a narrower example/practice/transfer/writing loop. The standalone prototype now demonstrates the request → claim check → revision sequence. This package does not change the application or make these three new lessons available on the hosted site. The 32 broad BDD scenarios remain specifications; the eight PROTO scenarios identify only their tested local subsets. Neither changes the approved application journey register.
+The existing #548 local guide demonstrates a narrower example/practice/transfer/writing loop. The standalone prototype demonstrates the request → claim check → revision sequence. This package does not change the application or make these six refined lessons available on the hosted site. The 32 original and 13 applied-learning BDD scenarios are specifications; the eight PROTO scenarios identify only their tested local subsets. None changes the approved application journey register.
 
-Routine content and wording choices proceed under the owner's instruction. Production publication, release verification campaigns, merges, deployments and hosted setup are parked. The next bounded content task is fully authoring Lessons 4–6 from the [existing briefs](curriculum.md), using the same teaching pattern. Coordinate canonical source and shared reader changes with #93/#117 first; lead recommendation: Sol / High, with author self-review. A separate review is only required if explicitly requested or imposed by the selected implementation scope.
+Routine content and wording choices proceed under the owner's instruction. Production publication, release verification campaigns, merges, deployments and hosted setup are parked. The next bounded task is to make the complete six-lesson content and final practice browsable in the separate local reader, keeping the existing interactive walkthrough intact. Coordinate canonical source and shared application reader changes with #93/#117 first; lead recommendation: Sol / High, with author self-review. A separate review is only required if explicitly requested or imposed by the selected implementation scope.
