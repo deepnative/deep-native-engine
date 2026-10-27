@@ -1252,7 +1252,10 @@ export function app(
       "/workflow-feedback",
     ],
     async (req, res, next) => {
-      const session = await store.session(res.locals.token as string);
+      const session =
+        req.baseUrl === "/account"
+          ? await store.session(res.locals.token as string, "account")
+          : await store.session(res.locals.token as string);
       if (session.kind !== "active") {
         const write =
           req.method === "POST"
@@ -1313,6 +1316,7 @@ export function app(
         return;
       }
       res.locals.learner = session.learner;
+      res.locals.memberDeadline = session.deadline;
       if (req.method === "GET" && cookieOptions(options.origin).secure)
         res.cookie(
           COOKIE,
@@ -3491,16 +3495,39 @@ export function app(
     res.redirect(303, "/editor/library");
   });
   app.get("/account", async (_req, res) => {
+    const memberToken = res.locals.token as string;
+    const memberId = (res.locals.learner as Learner).id;
+    let deadline = res.locals.memberDeadline as number;
+    if (!Number.isFinite(deadline) || performance.now() >= deadline)
+      return res.redirect(303, "/");
     const status = options.memberEmail
-      ? await options.memberEmail.ownedStatus(res.locals.token as string)
+      ? await options.memberEmail.ownedStatus(memberToken)
       : "unavailable";
-    res.send(
-      accountPage(
-        res.locals.learner as Learner,
-        res.locals.csrf as string,
-        status,
-      ),
+    let current: Awaited<ReturnType<Store["session"]>>;
+    try {
+      current = await store.session(memberToken, "account");
+    } catch {
+      return res
+        .status(503)
+        .send(
+          errorPage(
+            "Account unavailable",
+            "Your account could not be checked. Try again later; your saved work is unchanged.",
+          ),
+        );
+    }
+    if (current.kind !== "active" || current.learner.id !== memberId)
+      return res.redirect(303, "/");
+    deadline = Math.min(deadline, current.deadline as number);
+    if (!Number.isFinite(deadline) || performance.now() >= deadline)
+      return res.redirect(303, "/");
+    const html = accountPage(
+      current.learner,
+      res.locals.csrf as string,
+      status,
     );
+    if (performance.now() >= deadline) return res.redirect(303, "/");
+    return res.send(html);
   });
   app.get("/learn", async (_req, res) => {
     const member = res.locals.learner as Learner;

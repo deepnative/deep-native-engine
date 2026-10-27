@@ -80,16 +80,54 @@ it("HOSTED-09 returns the authoritative active principal expiry without changing
         goal: "work",
         active: true,
         expiresAt,
+        remainingMs: "60000",
       },
     ],
   });
-  expect(await store(p.value).session("private-token")).toMatchObject({
+  expect(
+    await store(p.value).session("private-token", "account"),
+  ).toMatchObject({
     kind: "active",
     expiresAt,
   });
   expect(p.query).toHaveBeenCalledOnce();
   expect(p.query.mock.calls[0]![0]).toContain('p.expires_at AS "expiresAt"');
 });
+it.each(["expired", "invalid", "delayed"] as const)(
+  "MON-08 refuses an account session with %s database-observed lifetime",
+  async (condition) => {
+    let clock = 0;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
+    try {
+      const p = pool();
+      p.query.mockImplementation(async () => {
+        if (condition === "delayed") clock = 101;
+        return {
+          rows: [
+            {
+              id: "owned",
+              background: "explorer",
+              goal: "everyday",
+              active: true,
+              expiresAt: new Date(Date.now() + 60000),
+              remainingMs:
+                condition === "expired"
+                  ? "0"
+                  : condition === "invalid"
+                    ? "unavailable"
+                    : "100",
+            },
+          ],
+        };
+      });
+      expect(await store(p.value).session("private-token", "account")).toEqual({
+        kind: "expired",
+      });
+    } finally {
+      now.mockRestore();
+    }
+  },
+);
 it("passes untrusted answers as bound parameters and scopes versioned reads and deletes by learner", async () => {
   const p = pool(),
     db = store(p.value);

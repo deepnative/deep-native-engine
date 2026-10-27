@@ -2870,6 +2870,7 @@ it.each(["linked", "unlinked", "unavailable", "disabled"] as const)(
     db.session.mockResolvedValue({
       kind: "active",
       expiresAt: new Date(Date.now() + 3600000),
+      deadline: performance.now() + 60000,
       learner: {
         ...member,
         background: "professional",
@@ -2952,6 +2953,119 @@ it.each(["new", "expired"] as const)(
     expect(denied.text).not.toContain("America/Toronto");
     expect(denied.text).not.toContain("Verified email linked");
     expect(memberEmail.ownedStatus).not.toHaveBeenCalled();
+  },
+);
+it.each(["expired", "rotated", "replaced", "failed", "expired-reply"] as const)(
+  "MON-08 withholds a captured account when final authority becomes %s during email lookup",
+  async (change) => {
+    const db = storage();
+    const initial = {
+      kind: "active" as const,
+      expiresAt: new Date(Date.now() + 60000),
+      deadline: performance.now() + 60000,
+      learner: { ...member, timezone: "America/Toronto" },
+    };
+    db.session.mockResolvedValue(initial);
+    let entered!: () => void, release!: (status: "unavailable") => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const pending = new Promise<"unavailable">((resolve) => {
+      release = resolve;
+    });
+    const memberEmail = {
+      ownedStatus: vi.fn(async () => {
+        entered();
+        return pending;
+      }),
+      requestAttach: vi.fn(),
+      requestSignIn: vi.fn(),
+      consume: vi.fn(),
+    };
+    const agent = await managedAgent(
+      app(db, { origin, secret: "secret", memberEmail }),
+    );
+    const response = agent
+      .get("/account")
+      .set("Host", host)
+      .then((value) => value);
+    await started;
+    if (change === "failed")
+      db.session.mockRejectedValue(new Error("private authority failure"));
+    else if (change === "replaced")
+      db.session.mockResolvedValue({
+        ...initial,
+        learner: { ...initial.learner, id: "another-member" },
+      });
+    else if (change === "expired-reply")
+      db.session.mockResolvedValue({
+        ...initial,
+        expiresAt: new Date(Date.now() - 1),
+        deadline: performance.now() - 1,
+      });
+    else
+      db.session.mockResolvedValue({
+        kind: change === "expired" ? "expired" : "new",
+      });
+    release("unavailable");
+    const denied = await response;
+    expect(denied.status).toBe(change === "failed" ? 503 : 303);
+    expect(denied.text).not.toContain("America/Toronto");
+    expect(denied.text).not.toContain("Signed in");
+    expect(denied.text).not.toContain("private authority failure");
+  },
+);
+it.each(["lookup", "render"] as const)(
+  "MON-08 withholds a profile crossing its original authority lifetime during %s",
+  async (phase) => {
+    const wall = Date.now();
+    let clock = 0;
+    const monotonic = vi
+      .spyOn(performance, "now")
+      .mockImplementation(() => clock);
+    const time = vi.spyOn(Date, "now").mockReturnValue(wall);
+    try {
+      const db = storage();
+      const original = {
+        kind: "active" as const,
+        expiresAt: new Date(wall + 1000),
+        deadline: 1000,
+        learner: { ...member, timezone: "America/Toronto" },
+      };
+      db.session
+        .mockResolvedValueOnce(original)
+        .mockImplementation(async () => ({
+          ...original,
+          expiresAt: new Date(wall + 60000),
+          deadline: 60000,
+          learner: {
+            ...original.learner,
+            get background() {
+              if (phase === "render") clock = 1001;
+              return member.background;
+            },
+          },
+        }));
+      const memberEmail = {
+        ownedStatus: vi.fn(async () => {
+          if (phase === "lookup") clock = 1001;
+          return "linked" as const;
+        }),
+        requestAttach: vi.fn(),
+        requestSignIn: vi.fn(),
+        consume: vi.fn(),
+      };
+      const agent = await managedAgent(
+        app(db, { origin, secret: "secret", memberEmail }),
+      );
+      const denied = await agent.get("/account").set("Host", host);
+      expect(denied.status).toBe(303);
+      expect(denied.text).not.toContain("America/Toronto");
+      expect(denied.text).not.toContain("Signed in");
+    } finally {
+      monotonic.mockRestore();
+      time.mockRestore();
+    }
   },
 );
 it("onboards only valid profiles and ignores caller-controlled ownership", async () => {

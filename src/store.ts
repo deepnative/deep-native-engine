@@ -63,9 +63,9 @@ export interface Milestone extends MilestoneInput {
 export type Session =
   | { kind: "new" }
   | { kind: "expired" }
-  | { kind: "active"; learner: Learner; expiresAt: Date };
+  | { kind: "active"; learner: Learner; expiresAt: Date; deadline?: number };
 export interface Store {
-  session(token: string): Promise<Session>;
+  session(token: string, scope?: "account"): Promise<Session>;
   create(
     token: string,
     profile: Pick<LearnerProfile, "background" | "goal"> &
@@ -273,25 +273,39 @@ export function store(pool: Pool): Store {
     }
   }
   return {
-    async session(token) {
+    async session(token, scope) {
+      const entered = performance.now();
       const row = (
-        await pool.query<Learner & { active: boolean; expiresAt: Date }>(
+        await pool.query<
+          Learner & { active: boolean; expiresAt: Date; remainingMs: string }
+        >(
           `SELECT l.id,l.background,l.goal,l.background_tags AS "backgroundTags",
                   l.domain_tags AS "domainTags",l.it_roles AS "itRoles",
                   l.experience,l.exploratory,l.time_zone AS timezone,
                   l.weekly_minutes AS "weeklyMinutes",
                   p.expires_at AS "expiresAt",
+                  EXTRACT(EPOCH FROM (p.expires_at-clock_timestamp()))*1000 AS "remainingMs",
                   p.expires_at>CURRENT_TIMESTAMP AND p.revoked_at IS NULL AS active
            FROM principals p JOIN learners l ON l.id=p.id
-           WHERE p.kind='member' AND p.token_hash=$1`,
+           WHERE p.kind='member' AND p.token_hash=$1
+             ${scope === "account" ? "AND EXISTS (SELECT 1 FROM workspaces w WHERE w.owner_principal_id=p.id AND w.deleting_at IS NULL)" : ""}`,
           [hash(token)],
         )
       ).rows[0];
       if (!row) return { kind: "new" };
       if (!row.active) return { kind: "expired" };
+      let deadline: number | undefined;
+      if (scope === "account") {
+        // Subtract time spent awaiting the reply, using the database's remaining
+        // lifetime rather than assuming its wall clock matches this process.
+        deadline = Math.min(entered + 10000, entered + Number(row.remainingMs));
+        if (!Number.isFinite(deadline) || performance.now() >= deadline)
+          return { kind: "expired" };
+      }
       return {
         kind: "active",
         expiresAt: row.expiresAt,
+        ...(deadline === undefined ? {} : { deadline }),
         learner: {
           id: row.id,
           background: row.background,

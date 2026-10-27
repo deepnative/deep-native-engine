@@ -374,3 +374,73 @@ it.each(["expired", "revoked", "deleting"] as const)(
     expect(delivered).toHaveLength(1);
   },
 );
+
+it.each(["rotation", "deletion", "email-unavailable"] as const)(
+  "MON-08 account read rechecks stored authority and fresh own profile after %s during status lookup",
+  async (change) => {
+    const owner = await member();
+    await pool.query(
+      "UPDATE learners SET time_zone='America/Toronto' WHERE id=$1",
+      [owner.id],
+    );
+    let entered!: () => void, release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const guarded = app(members, {
+      origin,
+      secret,
+      memberEmail: {
+        ...access,
+        async ownedStatus(token) {
+          entered();
+          await pending;
+          return change === "email-unavailable"
+            ? "unavailable"
+            : access.ownedStatus(token);
+        },
+      },
+    });
+    const response = request(guarded)
+      .get("/account")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${owner.token}`)
+      .then((value) => value);
+    await Promise.race([
+      started,
+      response.then((value) => {
+        throw new Error(
+          `Account returned ${value.status} before reaching the deferred status boundary`,
+        );
+      }),
+    ]);
+    if (change === "rotation")
+      await pool.query("UPDATE principals SET token_hash=$2 WHERE id=$1", [
+        owner.id,
+        hash(randomBytes(32).toString("hex")),
+      ]);
+    else if (change === "deletion")
+      await pool.query(
+        "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+        [owner.id],
+      );
+    else
+      await pool.query(
+        "UPDATE learners SET time_zone='America/Regina' WHERE id=$1",
+        [owner.id],
+      );
+    release();
+    const result = await response;
+    expect(result.status).toBe(change === "email-unavailable" ? 200 : 303);
+    expect(result.text).not.toContain('value="America/Toronto"');
+    if (change === "email-unavailable") {
+      expect(result.text).toContain('value="America/Regina"');
+      expect(result.text).toContain("Email recovery is unavailable");
+      expect(result.text).toContain("Signed in");
+    } else expect(result.text).not.toContain("Signed in");
+    expect(delivered).toHaveLength(0);
+  },
+);
