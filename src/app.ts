@@ -44,6 +44,7 @@ import { randomUUID } from "node:crypto";
 import { COOKIE, cookieOptions, token, csrf, validCsrf } from "./session.ts";
 import type { MemberEmailAccess } from "./member-email-access.ts";
 import { mountMemberEmailRoutes } from "./member-email-routes.ts";
+import { mountStarterGuidanceRoutes } from "./starter-guidance-routes.ts";
 import {
   disabledSupportRequestStore,
   type SupportRequestStore,
@@ -1339,6 +1340,7 @@ export function app(
       next();
     },
   );
+  mountStarterGuidanceRoutes(app);
   if (options.sampleFeedback && options.reviewTime)
     mountReviewTimeRoutes(
       app,
