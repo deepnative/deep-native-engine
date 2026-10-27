@@ -130,7 +130,7 @@ async function returnByEmail(
   });
 }
 
-test("[L233] MOUT-01/02 a linked member signs out and deliberately returns by email to the same saved work", async ({
+test("[L239] MOUT-01/02 a linked member signs out and deliberately returns by email to the same saved work", async ({
   page,
   browser,
 }) => {
@@ -180,7 +180,7 @@ test("[L233] MOUT-01/02 a linked member signs out and deliberately returns by em
   }
 });
 
-test("[L234] MOUT-03 browser-only, pending and unavailable recovery retain access and explain the next step", async ({
+test("[L240] MOUT-03 browser-only, pending and unavailable recovery retain access and explain the next step", async ({
   page,
 }) => {
   const f = await fixture(page, "normal", false);
@@ -259,7 +259,7 @@ test("[L234] MOUT-03 browser-only, pending and unavailable recovery retain acces
   }
 });
 
-test("[L235] MOUT-06 failed and lost-commit signout shows uncertainty without replay and email return recovers the same work", async ({
+test("[L241] MOUT-06 failed and lost-commit signout shows uncertainty without replay and email return recovers the same work", async ({
   page,
 }) => {
   for (const failure of ["before-commit", "lost-commit"] as const) {
