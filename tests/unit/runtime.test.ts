@@ -456,3 +456,34 @@ it.each(["", ":5432"])(
     }
   },
 );
+
+it("AUDIT-DELETE-01 advances individual recovery independently and reports safe retry state", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    server();
+    const next = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    doubles.recover.mockResolvedValueOnce({
+      examined: 0,
+      completed: 0,
+      failed: 0,
+      nextCursor: null,
+      evidenceDeletions: {
+        examined: 10,
+        completed: 9,
+        failed: 1,
+        nextCursor: next,
+      },
+    });
+    const running = await start(env);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(doubles.recover.mock.calls[1]?.[5]).toBe(next);
+    expect(log).toHaveBeenCalledExactlyOnceWith(
+      "A pending local deletion will be retried.",
+    );
+    await running.close();
+  } finally {
+    log.mockRestore();
+    vi.useRealTimers();
+  }
+});

@@ -48,7 +48,8 @@ async function linked() {
   await members.create(token, { background: "professional", goal: "work" });
   const session = await members.session(token);
   if (session.kind !== "active") throw Error("Synthetic fixture unavailable");
-  await members.save(session.learner.id, {
+  await members.save(token, {
+    revision: 0,
     instruction: "Invented member work",
     verification: "Synthetic source check",
     complete: true,

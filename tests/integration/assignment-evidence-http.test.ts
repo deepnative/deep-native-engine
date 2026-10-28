@@ -67,7 +67,7 @@ it("AHO-01/02 previews one exact owned submitted sequence while a newer private 
   expect(await catalog.submit(editor, draft.id, 1)).toBe(true);
   expect(await catalog.approve(reviewer, draft.id, 1, true)).toBe(true);
   expect(await catalog.publish(editor, draft.id, 1)).toBe(true);
-  expect(await db.chooseAssignment(session.learner.id, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(token, draft.id, 1)).toBe(true);
   const attempts = attemptStore(pool),
     id = await attempts.start(token);
   expect(id).toBeTruthy();

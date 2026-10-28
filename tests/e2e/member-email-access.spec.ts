@@ -25,7 +25,8 @@ test("[L213] email verification restores the exact saved member in another brows
   const session = await members.session(token);
   if (session.kind !== "active")
     throw Error("Synthetic member was not created");
-  await members.save(session.learner.id, {
+  await members.save(token, {
+    revision: 0,
     instruction: "My invented learning plan has three careful steps.",
     verification: "I will compare each invented detail with the source.",
     complete: true,

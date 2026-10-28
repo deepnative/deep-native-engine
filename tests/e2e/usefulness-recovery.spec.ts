@@ -66,9 +66,9 @@ for (const [index, background] of (
     });
     const session = await db.session(token);
     if (session.kind !== "active") throw Error("Missing invented learner");
-    await db.openLesson(session.learner.id, lessonId, 1);
-    await db.advanceLesson(session.learner.id, lessonId, 1, "start");
-    await db.advanceLesson(session.learner.id, lessonId, 1, "complete");
+    await db.openLesson(token, lessonId, 1);
+    await db.advanceLesson(token, lessonId, 1, "start");
+    await db.advanceLesson(token, lessonId, 1, "complete");
     let delayNext = false;
     const outstanding: Promise<unknown>[] = [];
     const backend = usefulnessStore({

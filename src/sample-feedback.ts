@@ -310,7 +310,7 @@ export function sampleFeedbackStore(
           evidence.bytes > 1048576
         )
           return fail("unavailable");
-        const bytes = await tx.bounded(() => objects.get(evidence.key));
+        const bytes = await tx.bounded(() => objects.get(evidence.key, tx));
         if (
           bytes.length !== evidence.bytes ||
           createHash("sha256").update(bytes).digest("hex") !== evidence.digest

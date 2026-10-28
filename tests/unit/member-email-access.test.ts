@@ -69,7 +69,8 @@ it("normalizes one bounded address without retaining its original case", () => {
 it("links by proof of email possession and signs in the same saved member without merging workspaces", async () => {
   const owner = await member();
   const other = await member();
-  await members.save(owner.id, {
+  await members.save(owner.token, {
+    revision: 0,
     instruction: "Invented plan",
     verification: "Check invented result",
     complete: true,
@@ -357,7 +358,8 @@ it("EMAIL-ACCESS-05D returns unavailable after an ownership read failure without
 it("MOUT-01/02 invalidates both copies of the current bearer while preserving same-account recovery and saved work", async () => {
   const owner = await member(),
     other = await member();
-  await members.save(owner.id, {
+  await members.save(owner.token, {
+    revision: 0,
     instruction: "Synthetic saved plan",
     verification: "Synthetic checks",
     complete: true,

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Pool } from "pg";
-import type { ObjectStorage } from "./evidence.ts";
+import type { ObjectStorage, StorageQuery } from "./evidence.ts";
 import { sampleUuid } from "./sample-feedback-values.ts";
 import { assignmentEvidenceName } from "./assignment-evidence-values.ts";
 
@@ -10,10 +10,10 @@ export function assignmentObjectStorage(
   pool: Pool,
   files: ObjectStorage,
 ): ObjectStorage {
-  async function binding(key: string) {
+  async function binding(key: string, query: StorageQuery) {
     if (!sampleUuid(key)) throw Error("Invalid private object key.");
     return (
-      await pool.query<{
+      await query.query<{
         bound: boolean;
         response: string | null;
         sequence: number | null;
@@ -40,14 +40,14 @@ export function assignmentObjectStorage(
   return {
     requiresWriteRecovery: files.requiresWriteRecovery,
     abandon: files.abandon?.bind(files),
-    async put(key, data) {
-      if ((await binding(key))?.bound)
+    async put(key, data, query = pool) {
+      if ((await binding(key, query))?.bound)
         throw Error("Assignment private source is immutable.");
-      await files.put(key, data);
+      await files.put(key, data, query);
     },
-    async get(key) {
-      const row = await binding(key);
-      if (!row?.bound) return files.get(key);
+    async get(key, query = pool) {
+      const row = await binding(key, query);
+      if (!row?.bound) return files.get(key, query);
       if (
         typeof row.response !== "string" ||
         row.sequence === null ||
@@ -64,10 +64,10 @@ export function assignmentObjectStorage(
         throw Error("Assignment private source unavailable.");
       return bytes;
     },
-    async remove(key) {
+    async remove(key, query = pool) {
       // Only the database deletion changes visibility; there is no private file
       // to remove. Missing/damaged origins cannot redirect deletion to a file.
-      if (!(await binding(key))?.bound) await files.remove(key);
+      if (!(await binding(key, query))?.bound) await files.remove(key, query);
     },
   };
 }

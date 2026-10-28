@@ -313,6 +313,7 @@ function currentStarter(
   );
   return row
     ? {
+        revision: row.revision,
         instruction: row.instruction,
         verification: row.verification,
         completed_at: row.completedAt,
@@ -2754,7 +2755,6 @@ export function app(
     res.redirect(303, `/workflow-feedback/${req.params.id}`);
   });
   app.get("/library", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const q = typeof req.query.q === "string" ? req.query.q : "";
     const goal =
       typeof req.query.goal === "string" ? req.query.goal : undefined;
@@ -2768,12 +2768,11 @@ export function app(
       libraryPage(
         await catalog.search({ q, goal, background, domain }),
         { q, goal, background, domain },
-        await store.lessonActivities(member.id),
+        await store.lessonActivities(res.locals.token as string),
       ),
     );
   });
   app.get("/library/:id", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const item = await catalog.published(req.params.id as string);
     if (!item) {
       res
@@ -2804,7 +2803,13 @@ export function app(
       return;
     }
     if (item.kind === "lesson") {
-      if (!(await store.openLesson(member.id, item.id, item.version))) {
+      if (
+        !(await store.openLesson(
+          res.locals.token as string,
+          item.id,
+          item.version,
+        ))
+      ) {
         res
           .status(409)
           .send(
@@ -2818,7 +2823,7 @@ export function app(
     }
     const activity =
       item.kind === "lesson"
-        ? (await store.lessonActivities(member.id)).find(
+        ? (await store.lessonActivities(res.locals.token as string)).find(
             (entry) =>
               entry.contentId === item.id &&
               entry.contentVersion === item.version,
@@ -3321,10 +3326,9 @@ export function app(
         );
       return;
     }
-    const member = res.locals.learner as Learner;
     if (
       !(await store.advanceLesson(
-        member.id,
+        res.locals.token as string,
         req.params.id as string,
         version,
         action,
@@ -3564,7 +3568,7 @@ export function app(
         store.progress(member.id),
         catalog.search({}),
         store.assignmentChoice(member.id),
-        store.lessonActivities(member.id),
+        store.lessonActivities(res.locals.token as string),
         assignmentReadiness.list(res.locals.token as string),
       ]);
     if (readiness === null) {
@@ -3636,7 +3640,7 @@ export function app(
   app.get("/progress", async (_req, res) => {
     const member = res.locals.learner as Learner;
     const [lessons, memberAttempts, reports] = await Promise.all([
-      store.lessonActivities(member.id),
+      store.lessonActivities(res.locals.token as string),
       attempts.list(res.locals.token as string),
       usefulness.list(res.locals.token as string),
     ]);
@@ -3750,7 +3754,7 @@ export function app(
     const version = Number(fields.content_version);
     const [progress, activity] = await Promise.all([
       store.progress(member.id),
-      store.lessonActivities(member.id),
+      store.lessonActivities(res.locals.token as string),
     ]);
     const options = eligibleAssignments(
       await catalog.search({}),
@@ -3761,7 +3765,7 @@ export function app(
     const selected =
       Number.isSafeInteger(version) &&
       options.some((item) => item.id === id && item.version === version)
-        ? await store.chooseAssignment(member.id, id, version)
+        ? await store.chooseAssignment(res.locals.token as string, id, version)
         : false;
     if (selected === null) {
       res
@@ -4343,7 +4347,7 @@ export function app(
       );
   app.get("/milestones", async (_req, res) => {
     const member = res.locals.learner as Learner;
-    const rows = await store.milestones(member.id);
+    const rows = await store.milestones(res.locals.token as string);
     if (rows === null) {
       milestoneDenied(res);
       return;
@@ -4354,7 +4358,7 @@ export function app(
     const member = res.locals.learner as Learner;
     const parsed = parseMilestone(req.body as Fields, member.timezone);
     if (parsed.errors.length) {
-      const rows = await store.milestones(member.id);
+      const rows = await store.milestones(res.locals.token as string);
       if (rows === null) {
         milestoneDenied(res);
         return;
@@ -4372,7 +4376,10 @@ export function app(
         );
       return;
     }
-    const result = await store.createMilestone(member.id, parsed.input);
+    const result = await store.createMilestone(
+      res.locals.token as string,
+      parsed.input,
+    );
     if (result === null) {
       milestoneDenied(res);
       return;
@@ -4411,7 +4418,7 @@ export function app(
     }
     const parsed = parseMilestone(req.body as Fields, member.timezone);
     if (parsed.errors.length) {
-      const rows = await store.milestones(member.id);
+      const rows = await store.milestones(res.locals.token as string);
       if (rows === null) {
         milestoneDenied(res);
         return;
@@ -4431,7 +4438,7 @@ export function app(
       return;
     }
     const result = await store.updateMilestone(
-      member.id,
+      res.locals.token as string,
       id,
       version,
       parsed.input,
@@ -4454,7 +4461,6 @@ export function app(
     res.redirect(303, "/milestones");
   });
   app.post("/milestones/:id/delete", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const fields = req.body as Fields;
     const version = Number(fields.version);
@@ -4465,7 +4471,7 @@ export function app(
       version < 1
     );
     const result = valid
-      ? await store.deleteMilestone(member.id, id, version)
+      ? await store.deleteMilestone(res.locals.token as string, id, version)
       : false;
     if (result === null) {
       milestoneDenied(res);
@@ -4509,8 +4515,7 @@ export function app(
         ),
       );
   app.get("/career", async (_req, res) => {
-    const member = res.locals.learner as Learner;
-    const snapshot = await career.snapshot(member.id);
+    const snapshot = await career.snapshot(res.locals.token as string);
     if (!snapshot) {
       careerDenied(res);
       return;
@@ -4529,28 +4534,27 @@ export function app(
     return true;
   };
   app.post("/career/enable", async (req, res) => {
-    const member = res.locals.learner as Learner;
     if ((req.body as Fields).confirm !== "yes") {
       careerConflict(res);
       return;
     }
-    if (!careerChanged(res, await career.enable(member.id))) return;
+    if (!careerChanged(res, await career.enable(res.locals.token as string)))
+      return;
     res.redirect(303, "/career");
   });
   app.post("/career/disable", async (req, res) => {
-    const member = res.locals.learner as Learner;
     if ((req.body as Fields).confirm !== "yes") {
       careerConflict(res);
       return;
     }
-    if (!careerChanged(res, await career.disable(member.id))) return;
+    if (!careerChanged(res, await career.disable(res.locals.token as string)))
+      return;
     res.redirect(303, "/career");
   });
   app.post("/career/entries", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const parsed = parseCareerEntry(req.body as Fields);
     if (parsed.errors.length) {
-      const snapshot = await career.snapshot(member.id);
+      const snapshot = await career.snapshot(res.locals.token as string);
       if (!snapshot) {
         careerDenied(res);
         return;
@@ -4562,12 +4566,16 @@ export function app(
       );
       return;
     }
-    if (!careerChanged(res, await career.createEntry(member.id, parsed.input)))
+    if (
+      !careerChanged(
+        res,
+        await career.createEntry(res.locals.token as string, parsed.input),
+      )
+    )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/entries/:id/update", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
     if (version === null) {
@@ -4576,7 +4584,7 @@ export function app(
     }
     const parsed = parseCareerEntry(req.body as Fields);
     if (parsed.errors.length) {
-      const snapshot = await career.snapshot(member.id);
+      const snapshot = await career.snapshot(res.locals.token as string);
       if (!snapshot) {
         careerDenied(res);
         return;
@@ -4592,29 +4600,37 @@ export function app(
     if (
       !careerChanged(
         res,
-        await career.updateEntry(member.id, id, version, parsed.input),
+        await career.updateEntry(
+          res.locals.token as string,
+          id,
+          version,
+          parsed.input,
+        ),
       )
     )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/entries/:id/delete", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
     if ((req.body as Fields).confirm !== "yes" || version === null) {
       careerConflict(res);
       return;
     }
-    if (!careerChanged(res, await career.deleteEntry(member.id, id, version)))
+    if (
+      !careerChanged(
+        res,
+        await career.deleteEntry(res.locals.token as string, id, version),
+      )
+    )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/drafts", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const parsed = parseCareerDraft(req.body as Fields);
     if (parsed.errors.length) {
-      const snapshot = await career.snapshot(member.id);
+      const snapshot = await career.snapshot(res.locals.token as string);
       if (!snapshot) {
         careerDenied(res);
         return;
@@ -4626,12 +4642,16 @@ export function app(
       );
       return;
     }
-    if (!careerChanged(res, await career.createDraft(member.id, parsed.input)))
+    if (
+      !careerChanged(
+        res,
+        await career.createDraft(res.locals.token as string, parsed.input),
+      )
+    )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/drafts/:id/update", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
     if (version === null) {
@@ -4640,7 +4660,7 @@ export function app(
     }
     const parsed = parseCareerDraft(req.body as Fields);
     if (parsed.errors.length) {
-      const snapshot = await career.snapshot(member.id);
+      const snapshot = await career.snapshot(res.locals.token as string);
       if (!snapshot) {
         careerDenied(res);
         return;
@@ -4656,45 +4676,62 @@ export function app(
     if (
       !careerChanged(
         res,
-        await career.updateDraft(member.id, id, version, parsed.input),
+        await career.updateDraft(
+          res.locals.token as string,
+          id,
+          version,
+          parsed.input,
+        ),
       )
     )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/drafts/:id/approve", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
     if ((req.body as Fields).confirm !== "yes" || version === null) {
       careerConflict(res);
       return;
     }
-    if (!careerChanged(res, await career.approveDraft(member.id, id, version)))
+    if (
+      !careerChanged(
+        res,
+        await career.approveDraft(res.locals.token as string, id, version),
+      )
+    )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/drafts/:id/revoke", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
     if ((req.body as Fields).confirm !== "yes" || version === null) {
       careerConflict(res);
       return;
     }
-    if (!careerChanged(res, await career.revokeDraft(member.id, id, version)))
+    if (
+      !careerChanged(
+        res,
+        await career.revokeDraft(res.locals.token as string, id, version),
+      )
+    )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/drafts/:id/delete", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
     if ((req.body as Fields).confirm !== "yes" || version === null) {
       careerConflict(res);
       return;
     }
-    if (!careerChanged(res, await career.deleteDraft(member.id, id, version)))
+    if (
+      !careerChanged(
+        res,
+        await career.deleteDraft(res.locals.token as string, id, version),
+      )
+    )
       return;
     res.redirect(303, "/career");
   });
@@ -4707,7 +4744,7 @@ export function app(
           store.progress(member.id),
           catalog.search({}),
           store.assignmentChoice(member.id),
-          store.lessonActivities(member.id),
+          store.lessonActivities(res.locals.token as string),
           assignmentReadiness.list(res.locals.token as string),
         ]);
       if (readiness === null) {
@@ -4738,7 +4775,7 @@ export function app(
         );
       return;
     }
-    if (!(await store.updateProfile(member.id, edit.input))) {
+    if (!(await store.updateProfile(res.locals.token as string, edit.input))) {
       res
         .status(403)
         .send(
@@ -4848,6 +4885,22 @@ export function app(
         );
       return;
     }
+    const revision =
+      typeof form.revision === "string" &&
+      /^(0|[1-9][0-9]*)$/.test(form.revision)
+        ? Number(form.revision)
+        : NaN;
+    if (!Number.isInteger(revision) || revision < 0 || revision >= 2147483647) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Exercise form out of date",
+            "Open the current lesson before saving. This form has no valid saved draft revision.",
+          ),
+        );
+      return;
+    }
     const input = submission(form);
     if (input.errors.length) {
       const html = await store.withExerciseRead(
@@ -4857,7 +4910,7 @@ export function app(
             ? null
             : lesson(
                 member,
-                { ...input, completed_at: null },
+                { ...input, revision, completed_at: null },
                 res.locals.csrf as string,
                 input.errors,
                 rows,
@@ -4878,8 +4931,9 @@ export function app(
       return;
     }
     try {
-      const outcome = await store.save(member.id, {
+      const outcome = await store.save(res.locals.token as string, {
         ...input,
+        revision,
         goal: member.goal,
       });
       if (outcome === "stale-goal" || outcome === "unavailable") {
@@ -4890,6 +4944,30 @@ export function app(
               "Exercise form out of date",
               "Your direction or session changed. Open your learning path and the current lesson before saving.",
             ),
+          );
+        return;
+      }
+      if (outcome === "conflict") {
+        const recovery = await store.withExerciseRead(
+          res.locals.token as string,
+          (rows) =>
+            currentStarter(rows, member.goal)?.withdrawn_at
+              ? null
+              : exerciseWriteRecoveryPage(
+                  input.instruction,
+                  input.verification,
+                  member.goal,
+                  true,
+                ),
+        );
+        res
+          .status(409)
+          .send(
+            recovery ??
+              errorPage(
+                "Exercise unavailable",
+                "Open your current lesson before saving.",
+              ),
           );
         return;
       }

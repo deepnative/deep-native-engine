@@ -7,7 +7,7 @@ import {
 } from "node:crypto";
 import { basename, join, resolve } from "node:path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import type { Pool, PoolClient } from "pg";
+import type { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
 import { objectWriteJournal } from "./object-write-recovery.ts";
 import { hash } from "./store.ts";
 import {
@@ -51,12 +51,19 @@ export interface EvidenceUpload {
   revisesId?: string;
 }
 
+export interface StorageQuery {
+  query<T extends QueryResultRow = QueryResultRow>(
+    sql: string,
+    values?: unknown[],
+  ): Promise<QueryResult<T>>;
+}
+
 export interface ObjectStorage {
   readonly requiresWriteRecovery?: true;
   abandon?(key: string): Promise<void>;
-  put(key: string, data: Buffer): Promise<void>;
-  get(key: string): Promise<Buffer>;
-  remove(key: string): Promise<void>;
+  put(key: string, data: Buffer, query?: StorageQuery): Promise<void>;
+  get(key: string, query?: StorageQuery): Promise<Buffer>;
+  remove(key: string, query?: StorageQuery): Promise<void>;
 }
 
 type Denied = { kind: "denied" };
@@ -498,7 +505,7 @@ export function evidenceStore(
     token: string,
     evidenceId: string,
     action: "evidence_link_issued" | "evidence_bytes_loaded",
-    use: (row: EvidenceMetadata) => T | Promise<T>,
+    use: (row: EvidenceMetadata, client: PoolClient) => T | Promise<T>,
     isCurrent: (result: T) => boolean,
   ): Promise<T | Denied> {
     if (!tokenPattern.test(token) || !uuidPattern.test(evidenceId))
@@ -512,7 +519,7 @@ export function evidenceStore(
         await client.query("ROLLBACK");
         return { kind: "denied" };
       }
-      const result = await use(allowed.row);
+      const result = await use(allowed.row, client);
       if (allowed.staff) {
         const { actorId, assignmentId, exactId } = allowed.staff;
         await client.query(
@@ -690,7 +697,7 @@ export function evidenceStore(
             break;
           let sourceBase64: string | null = null;
           if (row.quarantineState === "clean") {
-            const data = await objects.get(row.storageKey);
+            const data = await objects.get(row.storageKey, client);
             if (
               data.length !== row.byteSize ||
               createHash("sha256").update(data).digest("hex") !== row.sha256
@@ -821,7 +828,7 @@ export function evidenceStore(
           }
           revisionNumber = parent.revision_number + 1;
         }
-        await objects.put(storageKey, input.data);
+        await objects.put(storageKey, input.data, client);
         objectWritten = true;
         await client.query(
           `INSERT INTO evidence_objects(
@@ -853,8 +860,12 @@ export function evidenceStore(
         return { kind: "created", id, state: "pending" };
       } catch (error) {
         if (!commitAttempted) {
-          if (!(await rollback(client))) releaseError = error as Error;
-          if (objectWritten) await objects.remove(storageKey);
+          if (!(await rollback(client))) {
+            client.release(error as Error);
+            released = true;
+          }
+          if (objectWritten)
+            await objects.remove(storageKey, released ? undefined : client);
         } else {
           client.release(error as Error);
           released = true;
@@ -1004,8 +1015,8 @@ export function evidenceStore(
         token,
         evidenceId,
         "evidence_bytes_loaded",
-        async (row) => {
-          const data = await objects.get(row.storage_key);
+        async (row, client) => {
+          const data = await objects.get(row.storage_key, client);
           return {
             kind: "allowed" as const,
             name: row.original_name,
@@ -1051,7 +1062,7 @@ export function evidenceStore(
           await client.query("ROLLBACK");
           throw new Error("Evidence derivative could not be stored.");
         }
-        await objects.put(storageKey, data);
+        await objects.put(storageKey, data, client);
         objectWritten = true;
         await client.query(
           `INSERT INTO evidence_derivatives(
@@ -1073,8 +1084,12 @@ export function evidenceStore(
         return id;
       } catch (error) {
         if (!commitAttempted) {
-          if (!(await rollback(client))) releaseError = error as Error;
-          if (objectWritten) await objects.remove(storageKey);
+          if (!(await rollback(client))) {
+            client.release(error as Error);
+            released = true;
+          }
+          if (objectWritten)
+            await objects.remove(storageKey, released ? undefined : client);
         } else {
           client.release(error as Error);
           released = true;

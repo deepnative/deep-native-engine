@@ -99,6 +99,7 @@ test("[L86] three learner backgrounds withdraw completed starter text privately"
         csrf,
         lesson_id: "clear-instructions",
         lesson_version: "1",
+        revision: "0",
         goal: goal!,
         intent: "complete",
         instruction,

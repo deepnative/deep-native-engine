@@ -453,12 +453,20 @@ function exercisePool(
       };
     if (sql.startsWith("INSERT INTO exercises"))
       return { rows: [], rowCount: options.saveCount ?? 1 };
-    if (sql.startsWith("SELECT withdrawn_at"))
+    if (sql.startsWith("SELECT revision,completed_at"))
       return {
         rows:
-          options.existing === false
-            ? []
-            : [{ withdrawn_at: options.withdrawn ? new Date() : null }],
+          options.existing === true ||
+          options.completed === true ||
+          options.withdrawn
+            ? [
+                {
+                  revision: 1,
+                  completed_at: options.completed === true ? new Date() : null,
+                  withdrawn_at: options.withdrawn ? new Date() : null,
+                },
+              ]
+            : [],
       };
     if (sql.startsWith("SELECT completed_at"))
       return {
@@ -476,7 +484,7 @@ function exercisePool(
                 },
               ],
       };
-    if (sql.startsWith("SELECT lesson_id"))
+    if (sql.startsWith("SELECT revision,lesson_id"))
       return {
         rows: [
           {
@@ -522,7 +530,13 @@ function milestonePool(options: Parameters<typeof exercisePool>[0] = {}) {
     if (sql.startsWith("SELECT id,expires_at") && options.principal !== false)
       return {
         rows: [
-          { id: (args[0] as string[])[0], expires_at: new Date("2035-01-01") },
+          {
+            id:
+              ["member-a", "member-b", "member-1"].find(
+                (id) => hash(id) === (args[0] as string[])[0],
+              ) ?? "owned",
+            expires_at: new Date("2035-01-01"),
+          },
         ],
       };
     return sql.includes("learning_milestones")
@@ -680,9 +694,10 @@ it("rolls back exercise callback/query/commit failures and discards a failed rol
 
 it.each([
   [{}, "saved"],
-  [{ saveCount: 0 }, "unchanged"],
-  [{ saveCount: 0, existing: false }, "unchanged"],
-  [{ saveCount: 0, withdrawn: true }, "withdrawn"],
+  [{ saveCount: 0 }, "conflict"],
+  [{ saveCount: 0, existing: false }, "conflict"],
+  [{ withdrawn: true }, "withdrawn"],
+  [{ completed: true }, "unchanged"],
   [{ principal: false }, "unavailable"],
   [{ workspace: false }, "unavailable"],
   [{ expired: true }, "unavailable"],
@@ -698,11 +713,16 @@ it.each([
       complete: true,
       goal: "everyday" as const,
     };
-    expect(await store(p.value).save("owned", input)).toBe(outcome);
+    expect(
+      await store(p.value).save("owned", {
+        ...input,
+        revision: "completed" in options ? 1 : 0,
+      }),
+    ).toBe(outcome);
     const insert = p.query.mock.calls.find(([sql]) =>
       sql.startsWith("INSERT INTO exercises"),
     );
-    if (outcome !== "unavailable" && outcome !== "stale-goal") {
+    if (outcome === "saved" || outcome === "conflict") {
       expect(insert).toBeDefined();
       expect(insert![0]).not.toContain(input.instruction);
       expect(p.query).toHaveBeenCalledWith(
@@ -740,7 +760,13 @@ function lessonPool(options: Parameters<typeof exercisePool>[0] = {}) {
     if (sql.startsWith("SELECT id,expires_at") && options.principal !== false)
       return {
         rows: [
-          { id: (args[0] as string[])[0], expires_at: new Date("2035-01-01") },
+          {
+            id:
+              ["member-a", "member-b", "member-1"].find(
+                (id) => hash(id) === (args[0] as string[])[0],
+              ) ?? "owned",
+            expires_at: new Date("2035-01-01"),
+          },
         ],
       };
     if (
@@ -823,7 +849,13 @@ function choicePool(options: Parameters<typeof exercisePool>[0] = {}) {
     if (sql.startsWith("SELECT id,expires_at") && options.principal !== false)
       return {
         rows: [
-          { id: (args[0] as string[])[0], expires_at: new Date("2035-01-01") },
+          {
+            id:
+              ["member-a", "member-b", "member-1"].find(
+                (id) => hash(id) === (args[0] as string[])[0],
+              ) ?? "owned",
+            expires_at: new Date("2035-01-01"),
+          },
         ],
       };
     return sql.startsWith("INSERT INTO learner_assignment_choices")
@@ -872,3 +904,34 @@ it.each([false, true])(
     }
   },
 );
+
+it.each([undefined, -1, 0.5, NaN, Infinity, 2147483647])(
+  "AUDIT-DRAFT-02 refuses invalid draft revision %s without querying private state",
+  async (revision) => {
+    const p = exercisePool();
+    expect(
+      await store(p.value).save("owner-token", {
+        instruction: "Invented draft",
+        verification: "Compare samples",
+        complete: false,
+        revision: revision as number,
+      }),
+    ).toBe("conflict");
+    expect(p.connect).not.toHaveBeenCalled();
+  },
+);
+it("AUDIT-DRAFT-01 refuses a stale revision while preserving the current draft", async () => {
+  const p = exercisePool({ existing: true });
+  expect(
+    await store(p.value).save("owner-token", {
+      instruction: "Invented replacement",
+      verification: "Compare samples",
+      complete: false,
+      revision: 0,
+    }),
+  ).toBe("conflict");
+  expect(
+    p.query.mock.calls.some(([sql]) => sql.startsWith("INSERT INTO exercises")),
+  ).toBe(false);
+  expect(p.query).toHaveBeenLastCalledWith("COMMIT");
+});

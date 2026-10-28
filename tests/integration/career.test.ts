@@ -4,7 +4,7 @@ import request from "supertest";
 import { app } from "../../src/app.ts";
 import { careerStore, type CareerStore } from "../../src/career.ts";
 import { COOKIE } from "../../src/session.ts";
-import { migrate, store } from "../../src/store.ts";
+import { migrate, store, hash } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
 import { withLoopback } from "../support/loopback-server.ts";
 
@@ -38,10 +38,10 @@ async function member() {
 }
 async function fixture() {
   const owner = await member();
-  await career.enable(owner.id);
-  await career.createEntry(owner.id, entry);
-  await career.createDraft(owner.id, draft);
-  const snapshot = (await career.snapshot(owner.id))!;
+  await career.enable(owner.token);
+  await career.createEntry(owner.token, entry);
+  await career.createDraft(owner.token, draft);
+  const snapshot = (await career.snapshot(owner.token))!;
   return {
     ...owner,
     entryId: snapshot.entries[0]!.id,
@@ -124,7 +124,7 @@ function mutate(
   target: CareerStore,
   op: Operation,
   owner: Owner,
-  memberId = owner.id,
+  memberId = owner.token,
 ) {
   switch (op) {
     case "enable":
@@ -243,12 +243,12 @@ it.each(operations)(
 );
 it("denies enabling an opted-out deleting member and all operations for inactive or missing owners", async () => {
   const owner = await fixture();
-  await career.disable(owner.id);
+  await career.disable(owner.token);
   await pool.query(
     "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
     [owner.id],
   );
-  expect(await career.enable(owner.id)).toBeNull();
+  expect(await career.enable(owner.token)).toBeNull();
   expect(await retained(owner.id)).toEqual({
     preferences: [],
     entries: [],
@@ -274,9 +274,10 @@ it("denies enabling an opted-out deleting member and all operations for inactive
       );
     if (state === "non-member") {
       invalid.id = randomUUID();
+      invalid.token = randomBytes(32).toString("hex");
       await pool.query(
         "INSERT INTO principals(id,token_hash,kind,expires_at) VALUES($1,$2,'staff',clock_timestamp()+interval '1 day')",
-        [invalid.id, randomBytes(32).toString("hex")],
+        [invalid.id, hash(invalid.token)],
       );
     }
     if (state === "workspace-missing")
@@ -294,7 +295,7 @@ it("denies enabling an opted-out deleting member and all operations for inactive
 it("preserves opt-in, exact-version ownership, approval reset and destructive opt-out behavior", async () => {
   const owner = await fixture();
   const other = await member();
-  await career.enable(other.id);
+  await career.enable(other.token);
   const before = await retained(owner.id);
   for (const op of [
     "updateEntry",
@@ -304,42 +305,42 @@ it("preserves opt-in, exact-version ownership, approval reset and destructive op
     "revokeDraft",
     "deleteDraft",
   ] as const)
-    expect(await mutate(career, op, owner, other.id)).toBe(false);
+    expect(await mutate(career, op, owner, other.token)).toBe(false);
   expect(await retained(owner.id)).toEqual(before);
-  expect(await career.enable(owner.id)).toBe(true);
+  expect(await career.enable(owner.token)).toBe(true);
   expect(
-    await career.updateEntry(owner.id, owner.entryId, 1, {
+    await career.updateEntry(owner.token, owner.entryId, 1, {
       ...entry,
       title: "Changed invented career",
     }),
   ).toBe(true);
-  expect(await career.updateEntry(owner.id, owner.entryId, 1, entry)).toBe(
+  expect(await career.updateEntry(owner.token, owner.entryId, 1, entry)).toBe(
     false,
   );
-  expect(await career.deleteEntry(owner.id, owner.entryId, 1)).toBe(false);
-  expect(await career.deleteEntry(owner.id, owner.entryId, 2)).toBe(true);
-  expect(await career.approveDraft(owner.id, owner.draftId, 1)).toBe(true);
-  expect(await career.approveDraft(owner.id, owner.draftId, 1)).toBe(false);
+  expect(await career.deleteEntry(owner.token, owner.entryId, 1)).toBe(false);
+  expect(await career.deleteEntry(owner.token, owner.entryId, 2)).toBe(true);
+  expect(await career.approveDraft(owner.token, owner.draftId, 1)).toBe(true);
+  expect(await career.approveDraft(owner.token, owner.draftId, 1)).toBe(false);
   expect(
-    await career.updateDraft(owner.id, owner.draftId, 2, {
+    await career.updateDraft(owner.token, owner.draftId, 2, {
       ...draft,
       title: "Revised private draft",
     }),
   ).toBe(true);
-  expect((await career.snapshot(owner.id))?.drafts[0]).toMatchObject({
+  expect((await career.snapshot(owner.token))?.drafts[0]).toMatchObject({
     approved: false,
     version: 3,
   });
-  expect(await career.approveDraft(owner.id, owner.draftId, 3)).toBe(true);
-  expect(await career.revokeDraft(owner.id, owner.draftId, 4)).toBe(true);
-  expect(await career.revokeDraft(owner.id, owner.draftId, 4)).toBe(false);
-  expect(await career.deleteDraft(owner.id, owner.draftId, 5)).toBe(true);
-  await career.createEntry(owner.id, entry);
-  await career.createDraft(owner.id, draft);
-  expect(await career.disable(owner.id)).toBe(true);
-  expect(await career.disable(owner.id)).toBe(false);
-  expect(await career.createEntry(owner.id, entry)).toBe(false);
-  expect(await career.createDraft(owner.id, draft)).toBe(false);
+  expect(await career.approveDraft(owner.token, owner.draftId, 3)).toBe(true);
+  expect(await career.revokeDraft(owner.token, owner.draftId, 4)).toBe(true);
+  expect(await career.revokeDraft(owner.token, owner.draftId, 4)).toBe(false);
+  expect(await career.deleteDraft(owner.token, owner.draftId, 5)).toBe(true);
+  await career.createEntry(owner.token, entry);
+  await career.createDraft(owner.token, draft);
+  expect(await career.disable(owner.token)).toBe(true);
+  expect(await career.disable(owner.token)).toBe(false);
+  expect(await career.createEntry(owner.token, entry)).toBe(false);
+  expect(await career.createDraft(owner.token, draft)).toBe(false);
   expect(await retained(owner.id)).toEqual({
     preferences: [],
     entries: [],
@@ -461,7 +462,7 @@ it.each(["revoked", "deleting"] as const)(
           : "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
         [owner.id],
       );
-      writing = writer.career.approveDraft(owner.id, owner.draftId, 1);
+      writing = writer.career.approveDraft(owner.token, owner.draftId, 1);
       await waitUntil(
         () => blockedBy(pid, writer.pid),
         "Write did not wait for invalidation",
@@ -497,7 +498,7 @@ it.each(["revoked", "deleting"] as const)(
         "SELECT id FROM career_drafts WHERE id=$1 FOR UPDATE",
         [owner.draftId],
       );
-      writing = writer.career.approveDraft(owner.id, owner.draftId, 1);
+      writing = writer.career.approveDraft(owner.token, owner.draftId, 1);
       await waitUntil(
         () => blockedBy(pid, writer.pid),
         "Write did not reach private row after authorization locks",
@@ -519,7 +520,9 @@ it.each(["revoked", "deleting"] as const)(
         approved: true,
         version: 2,
       });
-      expect(await career.revokeDraft(owner.id, owner.draftId, 2)).toBeNull();
+      expect(
+        await career.revokeDraft(owner.token, owner.draftId, 2),
+      ).toBeNull();
     } finally {
       await blocker.query("ROLLBACK");
       await Promise.allSettled([
@@ -535,8 +538,8 @@ it.each(["revoked", "deleting"] as const)(
 it("allows only one concurrent approval for the same draft version", async () => {
   const owner = await fixture();
   const results = await Promise.all([
-    career.approveDraft(owner.id, owner.draftId, 1),
-    career.approveDraft(owner.id, owner.draftId, 1),
+    career.approveDraft(owner.token, owner.draftId, 1),
+    career.approveDraft(owner.token, owner.draftId, 1),
   ]);
   expect(results.sort()).toEqual([false, true]);
   expect((await retained(owner.id)).drafts[0]).toMatchObject({
@@ -601,7 +604,7 @@ it("returns a generic HTTP failure after a real mutation fault and releases auth
     } finally {
       probe.release();
     }
-    expect(await career.approveDraft(owner.id, owner.draftId, 1)).toBe(true);
+    expect(await career.approveDraft(owner.token, owner.draftId, 1)).toBe(true);
   } finally {
     writer.release();
   }
@@ -617,12 +620,12 @@ it("times out a blocked career row without mutation and permits later recovery",
       owner.draftId,
     ]);
     result = career
-      .approveDraft(owner.id, owner.draftId, 1)
+      .approveDraft(owner.token, owner.draftId, 1)
       .catch((error) => error);
     expect(await result).toMatchObject({ code: "55P03" });
     expect(await retained(owner.id)).toEqual(before);
     await blocker.query("COMMIT");
-    expect(await career.approveDraft(owner.id, owner.draftId, 1)).toBe(true);
+    expect(await career.approveDraft(owner.token, owner.draftId, 1)).toBe(true);
   } finally {
     await blocker.query("ROLLBACK");
     if (result) await Promise.allSettled([result]);
@@ -653,7 +656,7 @@ it("reports an uncertain committed career write without replaying it after a los
   } as unknown as import("pg").Pool);
   try {
     await expect(
-      ambiguous.approveDraft(owner.id, owner.draftId, 1),
+      ambiguous.approveDraft(owner.token, owner.draftId, 1),
     ).rejects.toThrow("Synthetic lost commit acknowledgement");
     expect(writes).toBe(1);
     expect(discarded).toBeInstanceOf(Error);
@@ -661,7 +664,9 @@ it("reports an uncertain committed career write without replaying it after a los
       approved: true,
       version: 2,
     });
-    expect(await career.approveDraft(owner.id, owner.draftId, 1)).toBe(false);
+    expect(await career.approveDraft(owner.token, owner.draftId, 1)).toBe(
+      false,
+    );
     expect((await retained(owner.id)).drafts[0]).toMatchObject({
       approved: true,
       version: 2,

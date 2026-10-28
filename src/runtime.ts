@@ -286,25 +286,26 @@ export async function start(env: NodeJS.ProcessEnv) {
       options.origin = new URL("http://127.0.0.1:" + address.port).origin;
     let cursor: string | null = null;
     let objectWriteCursor: string | null = null;
+    let evidenceCursor: string | null = null;
     let activeRecovery: Promise<void> | undefined;
     const recover = () => {
       if (activeRecovery) return;
       activeRecovery = (async () => {
         try {
-          const result = settings.hosted
-            ? await recoverPendingMemberDeletions(
-                pool,
-                objects,
-                cursor,
-                10,
-                objectWriteCursor,
-              )
-            : await recoverPendingMemberDeletions(pool, objects, cursor);
+          const result = await recoverPendingMemberDeletions(
+            pool,
+            objects,
+            cursor,
+            10,
+            objectWriteCursor,
+            evidenceCursor,
+          );
           cursor = result.nextCursor;
           objectWriteCursor = result.objectWrites?.nextCursor ?? null;
+          evidenceCursor = result.evidenceDeletions?.nextCursor ?? null;
           if (result.objectWrites?.failed)
             console.error("Private object cleanup remains unconfirmed.");
-          if (result.failed)
+          if (result.failed || result.evidenceDeletions?.failed)
             console.error("A pending local deletion will be retried.");
         } catch {
           console.error("Pending local deletion recovery is unavailable.");

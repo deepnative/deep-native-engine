@@ -1,4 +1,5 @@
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
+import { starterDraftConflicts } from "../support/starter-draft-conflicts.ts";
 import { createHash, randomBytes } from "node:crypto";
 import { testPool } from "../support/database.ts";
 import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
@@ -961,6 +962,7 @@ test("[L06] independent sessions cannot select another learner to read or overwr
         csrf,
         lesson_id: "clear-instructions",
         lesson_version: "1",
+        revision: "0",
         goal: "work",
         intent: "draft",
         instruction: "Own text",
@@ -998,6 +1000,7 @@ test("[L07] cross-origin and CSRF attacks cannot save or delete progress", async
         csrf: value!,
         lesson_id: "clear-instructions",
         lesson_version: "1",
+        revision: "0",
         goal: "everyday",
         intent: "complete",
         instruction,
@@ -1045,6 +1048,7 @@ test("[L08] repeated or late submissions preserve the completed version", async 
       csrf,
       lesson_id: "clear-instructions",
       lesson_version: "1",
+      revision: "0",
       goal: "everyday",
       intent: "complete",
       instruction,
@@ -1058,6 +1062,7 @@ test("[L08] repeated or late submissions preserve the completed version", async 
       csrf,
       lesson_id: "clear-instructions",
       lesson_version: "1",
+      revision: "0",
       goal: "everyday",
       intent: "draft",
       instruction: "Late draft",
@@ -1069,6 +1074,7 @@ test("[L08] repeated or late submissions preserve the completed version", async 
   ).toEqual([before]);
   await page.reload();
   await expect(page.getByText(instruction, { exact: true })).toBeVisible();
+  await starterDraftConflicts(page, context);
 });
 test("[L09] deleting the preview removes owned records and invalidates the old cookie", async ({
   page,

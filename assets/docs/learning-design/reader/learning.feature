@@ -17,6 +17,26 @@ Feature: Follow the complete authored foundation sequence
     Then it is no longer listed as a mistake to review
     And the skill remains available for voluntary practice
 
+  Scenario: AUDIT-REVIEW-01 — Keep a mistake queued until a checked correction
+    Given a checked incorrect answer is listed in Practice
+    When the learner changes it without checking or checks another wrong answer
+    Then the lesson remains listed through navigation and explicit save and reload
+    And choosing a correct answer without checking does not clear the review need
+    When the learner checks the correct answer
+    Then that lesson is removed from the review queue
+
+  Scenario: AUDIT-REVIEW-02 — Restore review needs from older notebooks
+    Given an older notebook contains a checked incorrect answer without a review flag
+    When it is restored and the answer is edited
+    Then its review need remains until a checked correction
+    And another route has its own separate review queue
+
+  Scenario: AUDIT-REVIEW-03 — Preserve a malformed saved notebook
+    Given a saved notebook has a non-boolean review flag
+    When the reader attempts to restore it
+    Then it explains that the record is unreadable and disables saving over it
+    And the original stored bytes remain available for recovery
+
   Scenario: GUI-03 — Find private drafts without silently saving or mixing routes
     Given a learner has written lesson work in the Work route
     When they open My work and continue writing

@@ -65,7 +65,8 @@ async function anonymousPost(path: string, value: Record<string, string>) {
 
 it("EMAIL-ACCESS-01/02 links only the current verified member and reopens the same saved work", async () => {
   const owner = await member();
-  await members.save(owner.id, {
+  await members.save(owner.token, {
+    revision: 0,
     instruction: "Synthetic plan",
     verification: "Synthetic evidence",
     complete: true,
@@ -209,7 +210,8 @@ it("EMAIL-ACCESS-03 bounds concurrent requests for one address across different 
 
 it("EMAIL-ACCESS-04 preserves duplicate-request links and recovers after expiry or failed delivery", async () => {
   const owner = await member();
-  await members.save(owner.id, {
+  await members.save(owner.token, {
+    revision: 0,
     instruction: "Retain my invented work",
     verification: "Compare the invented source",
     complete: true,

@@ -1735,7 +1735,9 @@ it("serves a member-owned activity view only through the active session", async 
     expect.stringMatching(/^[a-f0-9]{64}$/),
     expect.any(Function),
   );
-  expect(db.lessonActivities).toHaveBeenCalledWith(member.id);
+  expect(db.lessonActivities).toHaveBeenCalledWith(
+    db.session.mock.calls.at(-1)![0],
+  );
   expect(attempts.list).toHaveBeenCalledWith(
     expect.stringMatching(/^[a-f0-9]{64}$/),
   );
@@ -2252,7 +2254,11 @@ it("records only exact synthetic lesson openings and rejects invalid, stale or u
     .get("/library/SYN-105")
     .set("Host", host)
     .expect(200);
-  expect(db.openLesson).toHaveBeenCalledWith(member.id, item.id, 2);
+  expect(db.openLesson).toHaveBeenCalledWith(
+    db.session.mock.calls.at(-1)![0],
+    item.id,
+    2,
+  );
   expect(reader.text).toContain("Opened in reader");
   expect(reader.text).toContain("Start this lesson");
   db.openLesson.mockResolvedValueOnce(false);
@@ -2276,7 +2282,12 @@ it("records only exact synthetic lesson openings and rejects invalid, stale or u
   await post({ content_version: "2", intent: "complete" }).expect(422);
   expect(db.advanceLesson).not.toHaveBeenCalled();
   await post({ content_version: "2", intent: "start" }).expect(303);
-  expect(db.advanceLesson).toHaveBeenCalledWith(member.id, item.id, 2, "start");
+  expect(db.advanceLesson).toHaveBeenCalledWith(
+    db.session.mock.calls.at(-1)![0],
+    item.id,
+    2,
+    "start",
+  );
   await post({
     content_version: "2",
     intent: "complete",
@@ -3271,7 +3282,7 @@ it("lets an active member revise their direction without selecting another owner
     .expect(303)
     .expect("Location", "/learn");
   expect(db.updateProfile).toHaveBeenCalledWith(
-    "owned",
+    db.session.mock.calls.at(-1)![0],
     expect.objectContaining({
       goal: "work",
       domainTags: ["education"],
@@ -3331,6 +3342,7 @@ it("retains invalid answers without claiming they were saved, then saves valid i
       csrf,
       lesson_id: LESSON.id,
       lesson_version: String(LESSON.version),
+      revision: "0",
       goal: "everyday",
       intent: "complete",
       instruction: "short",
@@ -3352,6 +3364,7 @@ it("retains invalid answers without claiming they were saved, then saves valid i
       csrf,
       lesson_id: LESSON.id,
       lesson_version: String(LESSON.version),
+      revision: "0",
       goal: "everyday",
       intent: "draft",
       instruction: "My private draft",
@@ -3359,7 +3372,7 @@ it("retains invalid answers without claiming they were saved, then saves valid i
     })
     .expect(303);
   expect(db.save).toHaveBeenCalledWith(
-    "owned",
+    db.session.mock.calls.at(-1)![0],
     expect.objectContaining({
       instruction: "My private draft",
       complete: false,
@@ -4006,6 +4019,7 @@ it("reports unknown pages and storage failures without leaking secrets or claimi
       csrf,
       lesson_id: LESSON.id,
       lesson_version: String(LESSON.version),
+      revision: "0",
       goal: "everyday",
       intent: "draft",
       instruction: attemptedInstruction,
@@ -4119,6 +4133,7 @@ it("never echoes stale exercise text after withdrawal, including validation and 
         csrf,
         lesson_id: LESSON.id,
         lesson_version: String(LESSON.version),
+        revision: "0",
         goal: "everyday",
         intent: "complete",
         instruction,
@@ -4159,6 +4174,7 @@ it("rejects a form pinned to another starter version before saving or echoing it
         csrf,
         lesson_id: LESSON.id,
         lesson_version: version,
+        revision: "0",
         intent: "draft",
         instruction: staleText,
       })
@@ -4238,7 +4254,11 @@ it("selects only an eligible published assignment for the active member and reje
   await post({}).expect(409);
   db.chooseAssignment.mockResolvedValueOnce(true);
   await post({}).expect(303);
-  expect(db.chooseAssignment).toHaveBeenLastCalledWith(member.id, item.id, 1);
+  expect(db.chooseAssignment).toHaveBeenLastCalledWith(
+    db.session.mock.calls.at(-1)![0],
+    item.id,
+    1,
+  );
   catalog.search.mockResolvedValue([{ ...item, state: "retired" }]);
   await post({}).expect(409);
 });
@@ -4275,7 +4295,7 @@ it("keeps private milestones local, validates edits and refuses stale or foreign
   await post("/milestones", input).expect(409);
   await post("/milestones", input).expect(303);
   expect(db.createMilestone).toHaveBeenLastCalledWith(
-    member.id,
+    db.session.mock.calls.at(-1)![0],
     expect.objectContaining({ reminderTimezone: "America/Toronto" }),
   );
   const saved = {
@@ -4318,7 +4338,7 @@ it("keeps private milestones local, validates edits and refuses stale or foreign
     complete: "yes",
   }).expect(303);
   expect(db.updateMilestone).toHaveBeenLastCalledWith(
-    member.id,
+    db.session.mock.calls.at(-1)![0],
     id,
     1,
     expect.objectContaining({ selfReportedComplete: true }),
@@ -4337,7 +4357,11 @@ it("keeps private milestones local, validates edits and refuses stale or foreign
     version: "2",
     confirm: "yes",
   }).expect(303);
-  expect(db.deleteMilestone).toHaveBeenLastCalledWith(member.id, id, 2);
+  expect(db.deleteMilestone).toHaveBeenLastCalledWith(
+    db.session.mock.calls.at(-1)![0],
+    id,
+    2,
+  );
   await post("/milestones", { ...input, csrf: "invalid" }).expect(403);
 });
 
@@ -5562,6 +5586,7 @@ it("recovers without echoing answers after a transactional stale-goal or unavail
         csrf,
         lesson_id: LESSON.id,
         lesson_version: "1",
+        revision: "0",
         goal: "everyday",
         intent: "draft",
         instruction: "Private attempted text",
@@ -6124,3 +6149,78 @@ it("HOSTED-12 presents accurate hosted persistence while concurrent local render
   expect(localHome.text).toContain("Your work stays on this computer");
   expect(localHome.text).toContain("LOCAL LEARNING PREVIEW");
 });
+
+it.each([undefined, "", "-1", "1.5", "01", "2147483647", ["0", "1"]])(
+  "AUDIT-DRAFT-02 rejects malformed starter revision %j before saving",
+  async (revision) => {
+    const { agent, csrf } = await client();
+    active();
+    await agent
+      .post("/exercise")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf,
+        lesson_id: LESSON.id,
+        lesson_version: String(LESSON.version),
+        goal: "everyday",
+        instruction: "Invented draft",
+        verification: "Compare notes",
+        intent: "draft",
+        revision,
+      })
+      .expect(409);
+    expect(db.save).not.toHaveBeenCalled();
+  },
+);
+it.each(["current", "withdrawn", "unavailable"] as const)(
+  "AUDIT-DRAFT-01 retains conflicting starter text only while private state is %s",
+  async (state) => {
+    const { agent, csrf } = await client();
+    active();
+    db.save.mockResolvedValueOnce("conflict");
+    if (state === "unavailable") db.withExerciseRead = async () => null;
+    if (state === "withdrawn")
+      db.withExerciseRead = async (_token, render) =>
+        render([
+          {
+            lessonId: LESSON.id,
+            version: LESSON.version,
+            instruction: null,
+            verification: null,
+            completedAt: new Date(),
+            withdrawnAt: new Date(),
+            goalAtStart: "everyday",
+            revision: 1,
+          },
+        ]);
+    const attempted = "Invented <script>conflict</script>";
+    const response = await agent
+      .post("/exercise")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf,
+        lesson_id: LESSON.id,
+        lesson_version: String(LESSON.version),
+        goal: "everyday",
+        revision: "0",
+        instruction: attempted,
+        verification: "Compare notes",
+        intent: "draft",
+      })
+      .expect(409);
+    if (state === "current") {
+      expect(response.text).toContain("Draft changed in another tab");
+      expect(response.text).toContain(
+        "Invented &lt;script&gt;conflict&lt;/script&gt;",
+      );
+      expect(response.text).not.toContain('action="/exercise"');
+    } else {
+      expect(response.text).toContain("Exercise unavailable");
+      expect(response.text).not.toContain("Invented");
+    }
+  },
+);

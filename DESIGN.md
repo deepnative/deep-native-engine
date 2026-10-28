@@ -24,7 +24,45 @@ colors:
   repair-line: "#dfbf8c"
   checked-line: "#a5d5bd"
   on-navy-muted: "#dce8f7"
+  selection: "#cdddfc"
+  on-navy-line: "#6b84a5"
 typography:
+  brand:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "18px"
+    fontWeight: 780
+    lineHeight: 1.6
+    letterSpacing: "-0.025em"
+  feedback-title:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "1.4rem"
+    fontWeight: 720
+    lineHeight: 1.25
+  practice-return-title:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "22px"
+    fontWeight: 720
+    lineHeight: 1.25
+  resume-number:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "30px"
+    fontWeight: 650
+    lineHeight: 1.6
+  section-title-mobile:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "1.3rem"
+    fontWeight: 720
+    lineHeight: 1.25
+  lesson-title-mobile:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "19px"
+    fontWeight: 720
+    lineHeight: 1.25
+  resume-title-mobile:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "1.6rem"
+    fontWeight: 720
+    lineHeight: 1.25
   headline:
     fontFamily: "Inter, sans-serif"
     fontSize: "2rem"
@@ -107,11 +145,16 @@ typography:
     fontWeight: 400
     lineHeight: 1.5
 rounded:
+  progress: "3px"
+  code: "4px"
   status: "6px"
+  record-select: "8px"
   step: "9px"
   control: "10px"
+  brand: "11px"
   choice: "12px"
   surface: "14px"
+  resume-visual: "22px"
 spacing:
   "4": "4px"
   "6": "6px"
@@ -268,6 +311,7 @@ The palette uses cool neutrals and a distinct color for each kind of interaction
 - **Reading ink** (`ink`) and **supporting slate** (`muted`): primary content and explanatory labels.
 - **Cool paper** (`paper`), **white surface** (`surface`) and **soft inset** (`surface-subtle`): page, work regions and secondary control backgrounds.
 - **Fine line** (`line`) and **control line** (`line-strong`): dividers and interactive boundaries.
+- **Selection blue** (`selection`): selected text, paired with navy text. **Navy panel line** (`on-navy-line`): the small lesson-number outline inside the resume panel.
 
 **The Semantic Color Rule.** Use blue for action and current position, teal for source context, green for a checked match, and amber for reconsideration. Pair these colors with explanatory text; color alone does not carry the result.
 
@@ -276,6 +320,8 @@ The palette uses cool neutrals and a distinct color for each kind of interaction
 **Display and body family:** Inter, with sans-serif fallback. The variable font is self-hosted at `assets/docs/learning-design/reader/fonts/InterVariable.woff2`, with weights (100–900), normal style, optical sizing and `font-display: swap`. The adjacent `LICENSE.txt` and `provenance.json` retain the SIL Open Font License and pinned upstream provenance. No remote font request is needed. Inline code alone uses a monospace fallback.
 
 Page headings use the `headline` role, resume headings `resume-title`, section headings `section-title`, and authored lesson headings `lesson-title`. They share compact negative tracking and a strong variable weight. Body and lesson-body roles differ in leading, allowing exercise prose more breathing room. Button, navigation, source and status roles retain their own observed sizes instead of imposing a new mathematical scale.
+
+The brand uses `brand`; the feedback workspace uses `feedback-title`; practice-return and empty-state headings share the `practice-return-title` size. The resume panel's lesson numeral uses `resume-number`. The corresponding mobile section, lesson and resume heading roles record their existing breakpoint sizes.
 
 At the mobile breakpoint, page headlines use `headline-mobile`, ordinary section headings reduce to (1.3rem), lesson headings to (19px), and lesson prose to `lesson-body-mobile`. Writing fields remain at `field`. Main lesson paragraphs are limited to (72ch); page descriptions use (65ch). Status and auxiliary labels use smaller type without taking over the content hierarchy.
 
@@ -306,6 +352,8 @@ The reader is flat at rest. Background tones, borders and whitespace establish h
 ## Shapes
 
 Main working and context panels use `surface` rounding; answer choices, details and feedback use `choice`; buttons, textareas and main navigation use `control`; route and stage controls use `step`; status labels use `status`. Borders are fine (1px). Circular stage numerals are sequence markers. Compact inline SVGs use geometric strokes (1.8px) and normally occupy (20px); they accompany meaningful text. The brand’s `dn` text mark is retained.
+
+The smaller `progress`, `code` and `record-select` corners apply to the position bar, inline code and earlier-notebook selector. `brand` and `resume-visual` describe the existing text-mark and lesson-number containers. These roles document the implemented shapes; they do not add new variants.
 
 ## Components
 

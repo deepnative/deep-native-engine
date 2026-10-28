@@ -55,7 +55,8 @@ async function snapshot(id: string) {
 }
 it("denies a retained valid session profile POST after deletion commits without changing private rows", async () => {
   const owner = await member();
-  await db.save(owner.id, {
+  await db.save(owner.token, {
+    revision: 0,
     instruction: "Invented private original practice",
     verification: "Check invented evidence",
     complete: true,
@@ -93,7 +94,8 @@ async function blocked(fragment: string) {
 it("uses session ownership and preserves original-goal history across valid repeated edits", async () => {
   const owner = await member(),
     other = await member();
-  await db.save(owner.id, {
+  await db.save(owner.token, {
+    revision: 0,
     instruction: "Private original",
     verification: "Check invented details",
     complete: true,
@@ -321,7 +323,7 @@ it("cannot report a profile save after its learner row is absent", async () => {
   const owner = await member();
   await pool.query("DELETE FROM learners WHERE id=$1", [owner.id]);
   expect(
-    await db.updateProfile(owner.id, {
+    await db.updateProfile(owner.token, {
       background: "explorer",
       goal: "everyday",
       backgroundTags: [],

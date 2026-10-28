@@ -86,7 +86,7 @@ it("records one private exact-version report per member and supports stale-safe 
     expect(await reports.save(person.token, lessonId, 1, "helpful", 0)).toBe(
       false,
     );
-    await selfAssess(person.id);
+    await selfAssess(person.token);
     expect(await reports.save(person.token, lessonId, 1, "helpful", 0)).toBe(
       true,
     );
@@ -125,11 +125,11 @@ it("denies staff, expired and forged writes; retains historical answers but perm
   const { editor, catalog } = await publishLesson();
   const a = await member("explorer");
   const b = await member("technical");
-  expect(await db.openLesson(a.id, lessonId, 1)).toBe(true);
+  expect(await db.openLesson(a.token, lessonId, 1)).toBe(true);
   expect(await reports.save(a.token, lessonId, 1, "helpful", 0)).toBe(false);
-  await db.advanceLesson(a.id, lessonId, 1, "start");
+  await db.advanceLesson(a.token, lessonId, 1, "start");
   expect(await reports.save(a.token, lessonId, 1, "helpful", 0)).toBe(false);
-  await db.advanceLesson(a.id, lessonId, 1, "complete");
+  await db.advanceLesson(a.token, lessonId, 1, "complete");
   expect(await reports.save(b.token, lessonId, 1, "helpful", 0)).toBe(false);
   expect(await reports.save(editor, lessonId, 1, "helpful", 0)).toBeNull();
   expect(await reports.save(a.token, lessonId, 2, "helpful", 0)).toBe(false);
@@ -157,12 +157,12 @@ it("denies staff, expired and forged writes; retains historical answers but perm
   expect(await reports.list(a.token)).toMatchObject([
     { choice: "helpful", contentVersion: 1 },
   ]);
-  expect(await db.lessonActivities(a.id)).toMatchObject([
+  expect(await db.lessonActivities(a.token)).toMatchObject([
     { contentVersion: 1, reportable: false },
   ]);
   expect(await reports.withdraw(a.token, lessonId, 1, 1)).toBe(true);
   expect(await reports.list(a.token)).toEqual([]);
-  await selfAssess(a.id, 2);
+  await selfAssess(a.token, 2);
   expect(await reports.save(a.token, lessonId, 2, "not_yet", 0)).toBe(true);
   expect(await catalog.retire(editor, lessonId)).toBe(true);
   expect(await reports.save(a.token, lessonId, 2, "helpful", 1)).toBe(false);
@@ -195,7 +195,7 @@ async function retained(id: string) {
 it("denies a valid usefulness creation POST after deletion begins without inserting a report", async () => {
   await publishLesson();
   const owner = await member("professional");
-  await selfAssess(owner.id);
+  await selfAssess(owner.token);
   const before = await retained(owner.id);
   await withLoopback(
     app(db, {
@@ -239,7 +239,7 @@ type Operation = "create" | "correct" | "withdraw";
 async function fixture(op: Operation, restricted = false) {
   await publishLesson(1, restricted);
   const owner = await member("professional");
-  await selfAssess(owner.id);
+  await selfAssess(owner.token);
   if (op !== "create")
     expect(await reports.save(owner.token, lessonId, 1, "helpful", 0)).toBe(
       true,
@@ -690,7 +690,7 @@ it.each(lifetimeCases)(
   async ({ operation, boundary }) => {
     await publishLesson();
     const owner = await member("explorer");
-    await selfAssess(owner.id);
+    await selfAssess(owner.token);
     if (operation !== "save")
       expect(await reports.save(owner.token, lessonId, 1, "helpful", 0)).toBe(
         true,
@@ -812,7 +812,7 @@ it.each(["query", "commit", "rollback"] as const)(
   async (boundary) => {
     await publishLesson();
     const owner = await member("professional");
-    await selfAssess(owner.id);
+    await selfAssess(owner.token);
     let resume!: () => void;
     const stalled = new Promise<void>((resolve) => {
       resume = resolve;

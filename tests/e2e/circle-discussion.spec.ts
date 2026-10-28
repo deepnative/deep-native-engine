@@ -101,7 +101,8 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
       const privateText =
         "Invented private starter text must never appear in a discussion";
       expect(
-        await members.save(a.id, {
+        await members.save(a.token, {
+          revision: 0,
           instruction: privateText,
           verification: "Private invented check",
           complete: false,

@@ -200,13 +200,16 @@ it("requires current member, deliberate opt-in, valid private content and versio
     .type("form")
     .send({ csrf, confirm: "yes" })
     .expect(403);
-  expect(career.createEntry).toHaveBeenCalledWith("member", {
-    kind: "career",
-    title: entry.title,
-    note: entry.note,
-    nextAction: entry.next_action,
-    selfReportedOutcome: entry.self_reported_outcome,
-  });
+  expect(career.createEntry).toHaveBeenCalledWith(
+    vi.mocked(db.session).mock.calls.at(-1)![0],
+    {
+      kind: "career",
+      title: entry.title,
+      note: entry.note,
+      nextAction: entry.next_action,
+      selfReportedOutcome: entry.self_reported_outcome,
+    },
+  );
 });
 
 it("denies career pages and every validation rerender after read authorization is lost", async () => {

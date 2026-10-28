@@ -213,6 +213,134 @@ for (const [route, correct] of [
   );
 }
 
+for (const [route, correct] of [
+  ["Everyday", "B"],
+  ["Work", "A"],
+  ["Technical", "C"],
+]) {
+  await check(
+    `AUDIT-REVIEW-01 ${route} keeps mistakes queued until a checked correction`,
+    async (page) => {
+      await open(page, route);
+      await step(page, "Try it");
+      const wrong = ["A", "B", "C"].filter((choice) => choice !== correct);
+      const review = () =>
+        page.getByRole("button", { name: "Review lesson 1", exact: true });
+      await page
+        .locator(`input[data-question="0"][value="${wrong[0]}"]`)
+        .check();
+      await page
+        .getByRole("button", { name: "Check answer", exact: true })
+        .click();
+      await mainView(page, "Practice");
+      await review().click();
+      await page
+        .locator(`input[data-question="0"][value="${wrong[1]}"]`)
+        .check();
+      await expect(page.locator(".answer-feedback")).toBeHidden();
+      await mainView(page, "Practice");
+      await expect(review()).toBeVisible();
+      await page
+        .getByRole("button", { name: "Save in this browser", exact: true })
+        .click();
+      await page.reload();
+      await mainView(page, "Practice");
+      await expect(review()).toBeVisible();
+      await review().click();
+      await page
+        .getByRole("button", { name: "Check answer", exact: true })
+        .click();
+      await mainView(page, "Practice");
+      await expect(review()).toBeVisible();
+      await review().click();
+      await page
+        .locator(`input[data-question="0"][value="${correct}"]`)
+        .check();
+      await mainView(page, "Practice");
+      await expect(review()).toBeVisible();
+      await review().click();
+      await page
+        .getByRole("button", { name: "Check answer", exact: true })
+        .click();
+      await mainView(page, "Practice");
+      await expect(review()).toHaveCount(0);
+    },
+  );
+}
+
+await check(
+  "AUDIT-REVIEW-02 restores older notebooks and keeps review route-local",
+  async (page) => {
+    await open(page);
+    await step(page, "Try it");
+    await page.locator('input[data-question="0"][value="A"]').check();
+    await page
+      .getByRole("button", { name: "Check answer", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Save in this browser", exact: true })
+      .click();
+    await page.evaluate(() => {
+      const key = Object.keys(localStorage).find((key) =>
+        key.startsWith("dne-course-reader-1:everyday:"),
+      );
+      const notebook = JSON.parse(localStorage.getItem(key));
+      for (const lesson of notebook.state.lessons) delete lesson.reviewNeeded;
+      localStorage.setItem(key, JSON.stringify(notebook));
+    });
+    await page.reload();
+    await mainView(page, "Practice");
+    await page
+      .getByRole("button", { name: "Review lesson 1", exact: true })
+      .click();
+    await page.locator('input[data-question="0"][value="B"]').check();
+    await mainView(page, "Practice");
+    await expect(
+      page.getByRole("button", { name: "Review lesson 1", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Work", exact: true }).click();
+    await mainView(page, "Practice");
+    await expect(
+      page.getByRole("button", { name: "Review lesson 1", exact: true }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Everyday", exact: true }).click();
+    await mainView(page, "Practice");
+    await expect(
+      page.getByRole("button", { name: "Review lesson 1", exact: true }),
+    ).toBeVisible();
+  },
+);
+
+await check(
+  "AUDIT-REVIEW-03 protects notebooks with malformed review state",
+  async (page) => {
+    await open(page);
+    await page
+      .getByRole("button", { name: "Save in this browser", exact: true })
+      .click();
+    const stored = await page.evaluate(() => {
+      const key = Object.keys(localStorage).find((key) =>
+        key.startsWith("dne-course-reader-1:everyday:"),
+      );
+      const notebook = JSON.parse(localStorage.getItem(key));
+      notebook.state.lessons[0].reviewNeeded = "false";
+      const raw = JSON.stringify(notebook);
+      localStorage.setItem(key, raw);
+      return { key, raw };
+    });
+    await page.reload();
+    await expect(page.locator("#save-status")).toContainText(
+      "record is unreadable",
+    );
+    await expect(
+      page.getByRole("button", { name: "Save in this browser", exact: true }),
+    ).toBeDisabled();
+    expect(
+      await page.evaluate((key) => localStorage.getItem(key), stored.key),
+    ).toBe(stored.raw);
+  },
+);
+
 await check(
   "GUI-03 My work retains route drafts through explicit save and reload",
   async (page) => {

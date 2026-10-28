@@ -113,7 +113,7 @@ async function fixture(
   expect(await catalog.submit(editor, draft.id, 1)).toBe(true);
   expect(await catalog.approve(reviewer, draft.id, 1, true)).toBe(true);
   expect(await catalog.publish(editor, draft.id, 1)).toBe(true);
-  expect(await db.chooseAssignment(owner.id, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.token, draft.id, 1)).toBe(true);
   const id = await attempts.start(owner.token);
   if (!id) throw Error("Synthetic attempt was not created");
   expect(await attempts.save(owner.token, id, 1, response)).toBe(true);

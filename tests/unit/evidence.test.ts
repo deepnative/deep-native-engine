@@ -611,6 +611,7 @@ it("writes valid uploads without persisting raw content", async () => {
   expect(objects.put).toHaveBeenCalledWith(
     expect.stringMatching(/^[0-9a-f-]{36}$/),
     base.data,
+    db.client,
   );
   const insert = db.query.mock.calls.find(([statement]) =>
     String(statement).includes("INSERT INTO evidence_objects"),
@@ -1146,14 +1147,19 @@ it("stores derived private objects and cleans them after a failed insert", async
     new Error("derivative insert failed"),
   );
   rollbackFailed.failOn(/^ROLLBACK$/, new Error("rollback failed"));
+  const rollbackObjects = objectStorage();
   await expect(
-    evidenceStore(rollbackFailed.pool, objectStorage(), "secret").addDerivative(
+    evidenceStore(rollbackFailed.pool, rollbackObjects, "secret").addDerivative(
       evidenceId,
       "thumbnail",
       Buffer.from("thumb"),
     ),
   ).rejects.toThrow("derivative insert failed");
   expect(rollbackFailed.client.release).toHaveBeenCalledWith(expect.any(Error));
+  expect(rollbackObjects.remove).toHaveBeenCalledWith(
+    expect.any(String),
+    undefined,
+  );
 });
 
 it("reconciles ambiguous derivative commits without deleting committed bytes", async () => {
@@ -1275,4 +1281,18 @@ it("deletes every owned workspace object once and tolerates an empty cleanup", a
   ).rejects.toThrow("authorization expired");
   expect(untouched.remove).not.toHaveBeenCalled();
   expect(expired.client.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
+});
+
+it("AUDIT-POOL-01 releases a broken upload connection before cleanup can acquire a replacement", async () => {
+  const db = database({ principal_id: evidenceId, workspace_id: evidenceId });
+  db.failOn(/INSERT INTO evidence_objects/, Error("insert failed"));
+  db.failOn(/^ROLLBACK$/, Error("rollback failed"));
+  const objects = objectStorage();
+  objects.remove.mockImplementation(async () => {
+    expect(db.client.release).toHaveBeenCalledWith(expect.any(Error));
+  });
+  await expect(
+    evidenceStore(db.pool, objects, "secret").upload(token, base),
+  ).rejects.toThrow("insert failed");
+  expect(objects.remove).toHaveBeenCalledWith(expect.any(String), undefined);
 });

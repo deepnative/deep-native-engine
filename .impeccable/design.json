@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-28T15:18:27.950218Z",
+  "generatedAt": "2026-10-28T16:15:35.646300Z",
   "title": "Design System: Deep Native local learning reader",
   "extensions": {
     "colorMeta": {
@@ -333,6 +333,36 @@
           "oklch(87% 0.0109 253.95)",
           "oklch(95% 0.0036 253.95)"
         ]
+      },
+      "selection": {
+        "role": "neutral",
+        "displayName": "Selected text blue",
+        "canonical": "#cdddfc",
+        "tonalRamp": [
+          "oklch(15% 0.0115 263.71)",
+          "oklch(27% 0.0230 263.71)",
+          "oklch(39% 0.0346 263.71)",
+          "oklch(51% 0.0461 263.71)",
+          "oklch(63% 0.0461 263.71)",
+          "oklch(75% 0.0369 263.71)",
+          "oklch(87% 0.0207 263.71)",
+          "oklch(95% 0.0069 263.71)"
+        ]
+      },
+      "on-navy-line": {
+        "role": "neutral",
+        "displayName": "Navy panel line",
+        "canonical": "#6b84a5",
+        "tonalRamp": [
+          "oklch(15% 0.0146 255.52)",
+          "oklch(27% 0.0291 255.52)",
+          "oklch(39% 0.0437 255.52)",
+          "oklch(51% 0.0582 255.52)",
+          "oklch(63% 0.0582 255.52)",
+          "oklch(75% 0.0466 255.52)",
+          "oklch(87% 0.0262 255.52)",
+          "oklch(95% 0.0087 255.52)"
+        ]
       }
     },
     "typographyMeta": {
@@ -395,6 +425,34 @@
       "code": {
         "displayName": "Code",
         "purpose": "Inline code only."
+      },
+      "brand": {
+        "displayName": "Brand text",
+        "purpose": "Brand text in the implemented reader."
+      },
+      "feedback-title": {
+        "displayName": "Feedback workspace heading",
+        "purpose": "Feedback workspace heading in the implemented reader."
+      },
+      "practice-return-title": {
+        "displayName": "Practice return and empty-state heading",
+        "purpose": "Practice return and empty-state heading in the implemented reader."
+      },
+      "resume-number": {
+        "displayName": "Current lesson numeral",
+        "purpose": "Current lesson numeral in the implemented reader."
+      },
+      "section-title-mobile": {
+        "displayName": "Mobile section heading",
+        "purpose": "Mobile section heading in the implemented reader."
+      },
+      "lesson-title-mobile": {
+        "displayName": "Mobile lesson heading",
+        "purpose": "Mobile lesson heading in the implemented reader."
+      },
+      "resume-title-mobile": {
+        "displayName": "Mobile resume heading",
+        "purpose": "Mobile resume heading in the implemented reader."
       }
     },
     "shadows": [

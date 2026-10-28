@@ -80,7 +80,8 @@ it("exports a withdrawn completed exercise as a text-free retained completion ma
   const owner = await member();
   const other = await member();
   expect(
-    await db.save(owner.id, {
+    await db.save(owner.token, {
+      revision: 0,
       instruction: "Invented private starter instruction",
       verification: "Invented private starter verification",
       complete: true,
@@ -443,7 +444,8 @@ it("keeps receipt withdrawal and linked job status in one repeatable snapshot", 
 
 it("serializes an export formed first before completed-exercise withdrawal", async () => {
   const owner = await member();
-  await db.save(owner.id, {
+  await db.save(owner.token, {
+    revision: 0,
     instruction: "Invented export-first starter instruction",
     verification: "Invented export-first starter check",
     complete: true,
@@ -497,7 +499,8 @@ it("serializes an export formed first before completed-exercise withdrawal", asy
 
 it("fails closed when an exercise withdrawal commits before an in-flight export locks its row", async () => {
   const owner = await member();
-  await db.save(owner.id, {
+  await db.save(owner.token, {
+    revision: 0,
     instruction: "Invented withdrawal-first starter instruction",
     verification: "Invented withdrawal-first starter check",
     complete: true,
@@ -647,7 +650,8 @@ it.each([
   async (action) => {
     const owner = await member(),
       other = await member();
-    await db.save(owner.id, {
+    await db.save(owner.token, {
+      revision: 0,
       instruction: "Private losing export marker",
       verification: "Original verification",
       complete: false,
@@ -708,7 +712,8 @@ it.each([
 
 it("bounds authorization lock waiting, releases failure state and recovers after rollback", async () => {
   const owner = await member();
-  await db.save(owner.id, {
+  await db.save(owner.token, {
+    revision: 0,
     instruction: "Private timeout recovery marker",
     verification: "Original verification",
     complete: false,
@@ -757,7 +762,8 @@ it("bounds authorization lock waiting, releases failure state and recovers after
 
 it("rolls back authorization locks on a database error without disclosing a partial export", async () => {
   const owner = await member();
-  await db.save(owner.id, {
+  await db.save(owner.token, {
+    revision: 0,
     instruction: "Private database recovery marker",
     verification: "Original verification",
     complete: false,
@@ -838,7 +844,8 @@ it.each(["session revocation", "account deletion"] as const)(
   "commits the authorized export before concurrent %s can complete",
   async (action) => {
     const owner = await member();
-    await db.save(owner.id, {
+    await db.save(owner.token, {
+      revision: 0,
       instruction: "Private synthetic export marker",
       verification: "Original verification",
       complete: false,
@@ -927,7 +934,8 @@ it.each(["session revocation", "account deletion"] as const)(
 
 it("withholds private records if the session expires during export assembly", async () => {
   const owner = await member();
-  await db.save(owner.id, {
+  await db.save(owner.token, {
+    revision: 0,
     instruction: "Private expiry marker",
     verification: "Invented verification",
     complete: false,

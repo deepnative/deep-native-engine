@@ -95,6 +95,7 @@ function emptyState(chosenRoute) {
       selfChecked: false,
       selections: [],
       checked: false,
+      reviewNeeded: false,
       hint: false,
     })),
     final: finalLabels.map(() => ""),
@@ -149,6 +150,7 @@ function validState(value, chosenRoute) {
       text(v.work) &&
       typeof v.selfChecked === "boolean" &&
       typeof v.checked === "boolean" &&
+      (v.reviewNeeded === undefined || typeof v.reviewNeeded === "boolean") &&
       typeof v.hint === "boolean" &&
       Array.isArray(v.selections) &&
       v.selections.length <= questions.length &&
@@ -287,10 +289,11 @@ function updateStatus() {
 function needsReview(index) {
   const lesson = state().lessons[index];
   return (
-    lesson.checked &&
-    course.lessons[index].routes[route].practice.questions.some(
-      (question, n) => lesson.selections[n] !== question.answer,
-    )
+    lesson.reviewNeeded ??
+    (lesson.checked &&
+      course.lessons[index].routes[route].practice.questions.some(
+        (question, n) => lesson.selections[n] !== question.answer,
+      ))
   );
 }
 
@@ -871,6 +874,7 @@ function bind() {
     );
   document.querySelectorAll("[data-question]").forEach((input) =>
     input.addEventListener("change", () => {
+      item().reviewNeeded = needsReview(state().lesson);
       item().selections[Number(input.dataset.question)] = input.value;
       item().checked = false;
       document
@@ -897,6 +901,9 @@ function bind() {
         return;
       }
       item().checked = true;
+      item().reviewNeeded = questions.some(
+        (question, n) => item().selections[n] !== question.answer,
+      );
       changed();
       render(false, ".answer-feedback");
       document

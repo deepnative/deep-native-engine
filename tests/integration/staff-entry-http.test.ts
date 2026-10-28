@@ -59,7 +59,8 @@ async function fixture(grantLifetime = 3600000) {
   await members.create(owner, { background: "professional", goal: "work" });
   const member = await members.session(owner);
   if (member.kind !== "active") throw Error("Missing invented owner");
-  await members.save(member.learner.id, {
+  await members.save(owner, {
+    revision: 0,
     instruction: "An invented team summarizes its sample meeting notes.",
     verification: "Check every action against the original invented notes.",
     complete: true,

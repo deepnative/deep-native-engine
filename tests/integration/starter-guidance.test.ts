@@ -62,7 +62,8 @@ for (const [goal, correct, transfer] of [
     const f = await fixture(goal);
     const instruction = `Private ${goal} instruction ${randomBytes(8).toString("hex")}`;
     const verification = "Compare each claim with the supplied original note.";
-    await members.save(f.owner.id, {
+    await members.save(f.owner.token, {
+      revision: 0,
       instruction,
       verification,
       complete: false,
@@ -112,6 +113,7 @@ for (const [goal, correct, transfer] of [
     const save = await f.post("/exercise", {
       lesson_id: LESSON.id,
       lesson_version: String(LESSON.version),
+      revision: "1",
       goal,
       instruction,
       verification,
@@ -129,7 +131,8 @@ for (const [goal, correct, transfer] of [
 
 it("GUIDE-06 an actual goal change makes the old form stale without moving the saved draft", async () => {
   const f = await fixture();
-  await members.save(f.owner.id, {
+  await members.save(f.owner.token, {
+    revision: 0,
     instruction: "Keep this original everyday draft",
     verification: "Check its original source details",
     complete: false,

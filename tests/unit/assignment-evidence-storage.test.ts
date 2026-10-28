@@ -49,10 +49,10 @@ it.each([undefined, { ...exact(), bound: false }])(
       key = randomUUID(),
       bytes = Buffer.from("ordinary upload");
     await f.storage.put(key, bytes);
-    expect(f.files.put).toHaveBeenCalledWith(key, bytes);
+    expect(f.files.put).toHaveBeenCalledWith(key, bytes, { query: f.query });
     expect(await f.storage.get(key)).toEqual(bytes);
     await f.storage.remove(key);
-    expect(f.files.remove).toHaveBeenCalledWith(key);
+    expect(f.files.remove).toHaveBeenCalledWith(key, { query: f.query });
   },
 );
 it.each([

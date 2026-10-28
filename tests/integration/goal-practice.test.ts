@@ -22,9 +22,9 @@ async function member() {
 }
 it("preserves exact completed practice for both goals after a direction change", async () => {
   const owner = await member();
-  await db.save(owner.id, answer);
+  await db.save(owner.token, { ...answer, revision: 0 });
   const before = await db.progress(owner.id);
-  await db.updateProfile(owner.id, {
+  await db.updateProfile(owner.token, {
     background: "professional",
     goal: "work",
     backgroundTags: [],
@@ -34,7 +34,8 @@ it("preserves exact completed practice for both goals after a direction change",
     exploratory: false,
   });
   expect(
-    await db.save(owner.id, {
+    await db.save(owner.token, {
+      revision: 0,
       ...answer,
       instruction: "Summarize invented meeting notes into clear next steps.",
     }),
@@ -53,13 +54,19 @@ it("preserves exact completed practice for both goals after a direction change",
 it("keeps drafts, exact withdrawals, completion prerequisites and deletion scoped by goal", async () => {
   const owner = await member(),
     other = await member();
-  await db.save(owner.id, answer);
+  await db.save(owner.token, { ...answer, revision: 0 });
   await pool.query("UPDATE learners SET goal='work' WHERE id=$1", [owner.id]);
   expect(
-    await db.save(owner.id, { ...answer, complete: false, goal: "everyday" }),
+    await db.save(owner.token, {
+      revision: 0,
+      ...answer,
+      complete: false,
+      goal: "everyday",
+    }),
   ).toBe("stale-goal");
   expect(
-    await db.save(owner.id, {
+    await db.save(owner.token, {
+      revision: 0,
       ...answer,
       instruction: "Work draft",
       complete: false,
@@ -90,11 +97,13 @@ it("keeps drafts, exact withdrawals, completion prerequisites and deletion scope
   await pool.query("UPDATE learners SET goal='everyday' WHERE id=$1", [
     owner.id,
   ]);
-  expect(await db.save(owner.id, { ...answer, goal: "everyday" })).toBe(
-    "withdrawn",
-  );
+  expect(
+    await db.save(owner.token, { revision: 0, ...answer, goal: "everyday" }),
+  ).toBe("withdrawn");
   await db.remove(owner.id);
-  expect(await db.save(owner.id, answer)).toBe("unavailable");
+  expect(await db.save(owner.token, { ...answer, revision: 0 })).toBe(
+    "unavailable",
+  );
   expect(await db.withExerciseRead(owner.token, (rows) => rows)).toBeNull();
   expect(
     (
@@ -108,18 +117,19 @@ it("keeps drafts, exact withdrawals, completion prerequisites and deletion scope
 it("serializes concurrent first completions into one immutable exact goal slot", async () => {
   const owner = await member();
   const results = await Promise.all([
-    db.save(owner.id, { ...answer, goal: "everyday" }),
-    db.save(owner.id, {
+    db.save(owner.token, { revision: 0, ...answer, goal: "everyday" }),
+    db.save(owner.token, {
+      revision: 0,
       ...answer,
       instruction: "Different invented completion",
       goal: "everyday",
     }),
   ]);
-  expect(results.sort()).toEqual(["saved", "unchanged"]);
+  expect(results.sort()).toEqual(["conflict", "saved"]);
   const rows = await db.withExerciseRead(owner.token, (rows) => rows);
   expect(rows).toHaveLength(1);
   const before = rows![0];
-  await db.save(owner.id, { ...answer, complete: false });
+  await db.save(owner.token, { revision: 0, ...answer, complete: false });
   expect(await db.withExerciseRead(owner.token, (rows) => rows)).toEqual([
     before,
   ]);
@@ -156,6 +166,7 @@ function post(token: string, fields: Record<string, string>, saving = db.save) {
           csrf: csrf(token, secret),
           lesson_id: "clear-instructions",
           lesson_version: "1",
+          revision: "0",
           intent: "complete",
           checked: "yes",
           instruction: answer.instruction,
@@ -168,7 +179,7 @@ function post(token: string, fields: Record<string, string>, saving = db.save) {
 it("shows fresh goal practice, exact read-only history, safe validation and stale-form recovery", async () => {
   const owner = await member(),
     other = await member();
-  await db.save(owner.id, answer);
+  await db.save(owner.token, { ...answer, revision: 0 });
   await pool.query("UPDATE learners SET goal='work' WHERE id=$1", [owner.id]);
   expect((await get(owner.token, "/learn")).text).toContain(
     'value="0" max="1"',
@@ -234,9 +245,13 @@ it("exports same-version goal slots across page boundaries once, redacts withdra
  SELECT $1,$1,'a-synthetic-'||n,1,'Invented sample','Invented check',clock_timestamp(),'everyday' FROM generate_series(1,99) n`,
     [owner.id],
   );
-  await db.save(owner.id, answer);
+  await db.save(owner.token, { ...answer, revision: 0 });
   await pool.query("UPDATE learners SET goal='work' WHERE id=$1", [owner.id]);
-  await db.save(owner.id, { ...answer, instruction: "Work private answer" });
+  await db.save(owner.token, {
+    revision: 0,
+    ...answer,
+    instruction: "Work private answer",
+  });
   const key = Buffer.alloc(32, 7),
     exports = memberExportStore(pool, key);
   const first = await exports.exportOwned(owner.token);
@@ -318,7 +333,7 @@ it("migrates legacy completed, draft, withdrawn, old-version and unattributed ro
       "unattributed",
     ),
   ).toBe("withdrawn");
-  expect(await db.save(owner.id, answer)).toBe("saved");
+  expect(await db.save(owner.token, { ...answer, revision: 0 })).toBe("saved");
   expect(await db.withExerciseRead(owner.token, (rows) => rows.length)).toBe(5);
 });
 
@@ -372,7 +387,7 @@ it("rejects a stale form after waiting behind a committed profile change", async
     await client.query("UPDATE learners SET goal='work' WHERE id=$1", [
       owner.id,
     ]);
-    saving = db.save(owner.id, { ...answer, goal: "everyday" });
+    saving = db.save(owner.token, { revision: 0, ...answer, goal: "everyday" });
     expect(await blocked("SELECT goal FROM learners")).toBe(true);
     await client.query("COMMIT");
     expect(await saving).toBe("stale-goal");
@@ -386,7 +401,8 @@ it("rejects a stale form after waiting behind a committed profile change", async
 it("commits the submitted goal before a waiting profile update without relabeling its record", async () => {
   const owner = await member(),
     pause = pausedStore("INSERT INTO exercises");
-  const saving = pause.controlled.save(owner.id, {
+  const saving = pause.controlled.save(owner.token, {
+    revision: 0,
     ...answer,
     goal: "everyday",
   });
@@ -414,7 +430,7 @@ it.each(["save-first", "withdraw-first"] as const)(
   "keeps exact goal tombstones irreversible with %s ordering",
   async (order) => {
     const owner = await member();
-    await db.save(owner.id, answer);
+    await db.save(owner.token, { ...answer, revision: 0 });
     const pause = pausedStore(
       order === "save-first"
         ? "SELECT goal FROM learners"
@@ -422,7 +438,11 @@ it.each(["save-first", "withdraw-first"] as const)(
     );
     const first =
       order === "save-first"
-        ? pause.controlled.save(owner.id, { ...answer, goal: "everyday" })
+        ? pause.controlled.save(owner.token, {
+            revision: 0,
+            ...answer,
+            goal: "everyday",
+          })
         : pause.controlled.withdrawExercise(
             owner.token,
             "clear-instructions",
@@ -440,11 +460,11 @@ it.each(["save-first", "withdraw-first"] as const)(
               1,
               "everyday",
             )
-          : db.save(owner.id, { ...answer, goal: "everyday" });
+          : db.save(owner.token, { revision: 0, ...answer, goal: "everyday" });
       expect(await blocked("SELECT id FROM workspaces")).toBe(true);
       pause.resume.release();
       expect(await first).toBe(
-        order === "save-first" ? "unchanged" : "withdrawn",
+        order === "save-first" ? "conflict" : "withdrawn",
       );
       expect(await second).toBe("withdrawn");
       expect(await db.progress(owner.id)).toMatchObject({
@@ -476,7 +496,11 @@ it.each(["delete", "revoke", "expire", "deleting"] as const)(
               : "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE id=$1",
         [owner.id],
       );
-      saving = db.save(owner.id, { ...answer, goal: "everyday" });
+      saving = db.save(owner.token, {
+        revision: 0,
+        ...answer,
+        goal: "everyday",
+      });
       expect(
         await blocked(
           action === "deleting"
@@ -507,7 +531,8 @@ import { assignmentReadinessStore } from "../../src/assignment-readiness.ts";
 it("orders readiness behind a paused starter save without a learner/workspace deadlock", async () => {
   const owner = await member(),
     pause = pausedStore("SELECT id FROM workspaces");
-  const saving = pause.controlled.save(owner.id, {
+  const saving = pause.controlled.save(owner.token, {
+    revision: 0,
     ...answer,
     goal: "everyday",
   });
@@ -539,7 +564,7 @@ it("rolls back a save when authorization expires while it waits for the workspac
     await blocker.query("SELECT id FROM workspaces WHERE id=$1 FOR UPDATE", [
       owner.id,
     ]);
-    saving = db.save(owner.id, { ...answer, goal: "everyday" });
+    saving = db.save(owner.token, { revision: 0, ...answer, goal: "everyday" });
     expect(await blocked("SELECT id FROM workspaces")).toBe(true);
     await pool.query(
       "SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM ($1::timestamptz-clock_timestamp())))+0.02)",
@@ -563,7 +588,8 @@ it("rolls back a save when authorization expires while it waits for the workspac
 it("finishes a save before waiting account deletion then removes every goal slot", async () => {
   const owner = await member(),
     pause = pausedStore("INSERT INTO exercises");
-  const saving = pause.controlled.save(owner.id, {
+  const saving = pause.controlled.save(owner.token, {
+    revision: 0,
     ...answer,
     goal: "everyday",
   });

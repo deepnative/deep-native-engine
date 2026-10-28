@@ -84,7 +84,7 @@ async function fixture() {
   expect(await catalog.submit(editor, draft.id, 1)).toBe(true);
   expect(await catalog.approve(reviewer, draft.id, 1, true)).toBe(true);
   expect(await catalog.publish(editor, draft.id, 1)).toBe(true);
-  expect(await db.chooseAssignment(owner.id, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.token, draft.id, 1)).toBe(true);
   const attemptId = await attempts.start(owner.token);
   if (!attemptId) throw Error("Invented attempt missing");
   expect(await attempts.save(owner.token, attemptId, 1, response)).toBe(true);

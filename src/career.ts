@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
+import { hash } from "./store.ts";
 import type { Fields } from "./validation.ts";
 
 export type CareerKind = "career" | "opportunity" | "contract";
@@ -31,46 +32,40 @@ export interface CareerSnapshot {
   drafts: CareerDraft[];
 }
 export interface CareerStore {
-  snapshot(memberId: string): Promise<CareerSnapshot | null>;
-  enable(memberId: string): Promise<boolean | null>;
-  disable(memberId: string): Promise<boolean | null>;
-  createEntry(
-    memberId: string,
-    input: CareerEntryInput,
-  ): Promise<boolean | null>;
+  snapshot(token: string): Promise<CareerSnapshot | null>;
+  enable(token: string): Promise<boolean | null>;
+  disable(token: string): Promise<boolean | null>;
+  createEntry(token: string, input: CareerEntryInput): Promise<boolean | null>;
   updateEntry(
-    memberId: string,
+    token: string,
     id: string,
     version: number,
     input: CareerEntryInput,
   ): Promise<boolean | null>;
   deleteEntry(
-    memberId: string,
+    token: string,
     id: string,
     version: number,
   ): Promise<boolean | null>;
-  createDraft(
-    memberId: string,
-    input: CareerDraftInput,
-  ): Promise<boolean | null>;
+  createDraft(token: string, input: CareerDraftInput): Promise<boolean | null>;
   updateDraft(
-    memberId: string,
+    token: string,
     id: string,
     version: number,
     input: CareerDraftInput,
   ): Promise<boolean | null>;
   approveDraft(
-    memberId: string,
+    token: string,
     id: string,
     version: number,
   ): Promise<boolean | null>;
   revokeDraft(
-    memberId: string,
+    token: string,
     id: string,
     version: number,
   ): Promise<boolean | null>;
   deleteDraft(
-    memberId: string,
+    token: string,
     id: string,
     version: number,
   ): Promise<boolean | null>;
@@ -150,7 +145,7 @@ export function careerStore(pool: Pool): CareerStore {
   // null denies authorization; false preserves an authorized version/no-change conflict.
   const changed = async (
     sql: string,
-    values: unknown[],
+    values: [string, ...unknown[]],
   ): Promise<boolean | null> => {
     const client = await pool.connect();
     let committed = false;
@@ -168,14 +163,15 @@ export function careerStore(pool: Pool): CareerStore {
       await client.query("SET LOCAL lock_timeout='5s'");
       // Keep the deletion/revocation order: principal, workspace, career rows.
       const principal = (
-        await client.query<{ expiresAt: Date }>(
-          `SELECT expires_at AS "expiresAt" FROM principals WHERE id=$1
+        await client.query<{ id: string; expiresAt: Date }>(
+          `SELECT id,expires_at AS "expiresAt" FROM principals WHERE token_hash=$1
          AND kind='member' AND revoked_at IS NULL
          AND expires_at>clock_timestamp() FOR SHARE`,
-          [values[0]],
+          [hash(values[0])],
         )
       ).rows[0];
       if (!principal) return null;
+      values = [principal.id, ...values.slice(1)];
       const workspace = await client.query(
         `SELECT id FROM workspaces WHERE owner_principal_id=$1
          AND deleting_at IS NULL FOR SHARE`,
@@ -204,7 +200,7 @@ export function careerStore(pool: Pool): CareerStore {
     }
   };
   return {
-    async snapshot(memberId) {
+    async snapshot(token) {
       const client = await pool.connect();
       let committed = false;
       let releaseError: Error | undefined;
@@ -213,14 +209,15 @@ export function careerStore(pool: Pool): CareerStore {
         await client.query("SET LOCAL lock_timeout='5s'");
         // Match deletion/export lock order and retain authorization while reading.
         const principal = (
-          await client.query<{ expiresAt: Date }>(
-            `SELECT expires_at AS "expiresAt" FROM principals WHERE id=$1
+          await client.query<{ id: string; expiresAt: Date }>(
+            `SELECT id,expires_at AS "expiresAt" FROM principals WHERE token_hash=$1
            AND kind='member' AND revoked_at IS NULL
            AND expires_at>clock_timestamp() FOR SHARE`,
-            [memberId],
+            [hash(token)],
           )
         ).rows[0];
         if (!principal) return null;
+        const memberId = principal.id;
         const workspace = await client.query(
           `SELECT id FROM workspaces WHERE owner_principal_id=$1
            AND deleting_at IS NULL FOR SHARE`,
@@ -269,18 +266,18 @@ export function careerStore(pool: Pool): CareerStore {
         client.release(releaseError);
       }
     },
-    enable: (memberId) =>
+    enable: (token) =>
       changed(
         `INSERT INTO career_preferences(member_id) SELECT id FROM learners WHERE id=$1 ON CONFLICT(member_id) DO UPDATE SET member_id=EXCLUDED.member_id`,
-        [memberId],
+        [token],
       ),
-    disable: (memberId) =>
-      changed("DELETE FROM career_preferences WHERE member_id=$1", [memberId]),
-    createEntry: (memberId, input) =>
+    disable: (token) =>
+      changed("DELETE FROM career_preferences WHERE member_id=$1", [token]),
+    createEntry: (token, input) =>
       changed(
         `INSERT INTO career_entries(id,member_id,kind,title,note,next_action,self_reported_outcome) SELECT $2,member_id,$3,$4,$5,$6,$7 FROM career_preferences WHERE member_id=$1`,
         [
-          memberId,
+          token,
           randomUUID(),
           input.kind,
           input.title,
@@ -289,11 +286,11 @@ export function careerStore(pool: Pool): CareerStore {
           input.selfReportedOutcome,
         ],
       ),
-    updateEntry: (memberId, id, version, input) =>
+    updateEntry: (token, id, version, input) =>
       changed(
         `UPDATE career_entries SET kind=$4,title=$5,note=$6,next_action=$7,self_reported_outcome=$8,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE member_id=$1 AND id=$2 AND version=$3`,
         [
-          memberId,
+          token,
           id,
           version,
           input.kind,
@@ -303,35 +300,35 @@ export function careerStore(pool: Pool): CareerStore {
           input.selfReportedOutcome,
         ],
       ),
-    deleteEntry: (memberId, id, version) =>
+    deleteEntry: (token, id, version) =>
       changed(
         "DELETE FROM career_entries WHERE member_id=$1 AND id=$2 AND version=$3",
-        [memberId, id, version],
+        [token, id, version],
       ),
-    createDraft: (memberId, input) =>
+    createDraft: (token, input) =>
       changed(
         `INSERT INTO career_drafts(id,member_id,kind,title,body) SELECT $2,member_id,$3,$4,$5 FROM career_preferences WHERE member_id=$1`,
-        [memberId, randomUUID(), input.kind, input.title, input.body],
+        [token, randomUUID(), input.kind, input.title, input.body],
       ),
-    updateDraft: (memberId, id, version, input) =>
+    updateDraft: (token, id, version, input) =>
       changed(
         `UPDATE career_drafts SET kind=$4,title=$5,body=$6,approved=false,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE member_id=$1 AND id=$2 AND version=$3`,
-        [memberId, id, version, input.kind, input.title, input.body],
+        [token, id, version, input.kind, input.title, input.body],
       ),
-    approveDraft: (memberId, id, version) =>
+    approveDraft: (token, id, version) =>
       changed(
         "UPDATE career_drafts SET approved=true,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE member_id=$1 AND id=$2 AND version=$3 AND approved=false",
-        [memberId, id, version],
+        [token, id, version],
       ),
-    revokeDraft: (memberId, id, version) =>
+    revokeDraft: (token, id, version) =>
       changed(
         "UPDATE career_drafts SET approved=false,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE member_id=$1 AND id=$2 AND version=$3 AND approved=true",
-        [memberId, id, version],
+        [token, id, version],
       ),
-    deleteDraft: (memberId, id, version) =>
+    deleteDraft: (token, id, version) =>
       changed(
         "DELETE FROM career_drafts WHERE member_id=$1 AND id=$2 AND version=$3",
-        [memberId, id, version],
+        [token, id, version],
       ),
   };
 }

@@ -50,6 +50,8 @@ Private support intake is off by default. `DNE_PRIVATE_SUPPORT_INTAKE=enabled` a
 
 The [quality gates](assets/docs/context/QUALITY-GATES.md) and [scope and acceptance](assets/docs/INITIAL-LEARNING-SLICE.md) explain what is tested in this preview and what remains for the full MVP.
 
+The [local audit repairs](assets/docs/QA-552-AUDIT-FIXES.md) protect queued writes after sign-out, retain conflicting starter text, resume interrupted file deletion and avoid nested database connections. The local reader keeps mistaken answers in Practice until they are checked again successfully. These changes remain local while production delivery is parked.
+
 Current operators and administrators can open **Learning and participation snapshot** from staff tools for a readable retained-account report: observed activity, self-assessed completion, the bounded return proxy and suppressed/coarse member-reported usefulness. Definitions and deletion limits stay visible, and the existing JSON API remains available. This is a synthetic preview snapshot, not a live business report; see the [metric definitions](assets/docs/CTP-022-LOCAL-METRICS.md).
 
 ## Team setup

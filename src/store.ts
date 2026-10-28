@@ -15,6 +15,7 @@ export interface Learner extends Pick<LearnerProfile, "background" | "goal"> {
 }
 export type ExerciseGoal = LearnerProfile["goal"] | "unattributed";
 export interface Exercise {
+  revision?: number;
   has_completed_version?: boolean;
   instruction: string | null;
   verification: string | null;
@@ -23,6 +24,7 @@ export interface Exercise {
   goal_at_start?: LearnerProfile["goal"] | null;
 }
 export interface ExerciseHistory {
+  revision?: number;
   lessonId: string;
   version: number;
   instruction: string | null;
@@ -34,7 +36,12 @@ export interface ExerciseHistory {
 export type ExerciseWithdrawal =
   "withdrawn" | "already-withdrawn" | "unavailable";
 export type ExerciseSave =
-  "saved" | "unchanged" | "withdrawn" | "stale-goal" | "unavailable";
+  | "saved"
+  | "unchanged"
+  | "withdrawn"
+  | "stale-goal"
+  | "conflict"
+  | "unavailable";
 export interface AssignmentChoice {
   contentId: string;
   contentVersion: number;
@@ -71,7 +78,7 @@ export interface Store {
     profile: Pick<LearnerProfile, "background" | "goal"> &
       Partial<LearnerProfile>,
   ): Promise<void>;
-  updateProfile(id: string, profile: LearnerProfile): Promise<boolean>;
+  updateProfile(token: string, profile: LearnerProfile): Promise<boolean>;
   progress(
     id: string,
     lessonId?: string,
@@ -87,43 +94,48 @@ export interface Store {
     version: number,
     goal?: ExerciseGoal,
   ): Promise<ExerciseWithdrawal>;
-  lessonActivities(id: string): Promise<LessonActivity[]>;
-  openLesson(id: string, contentId: string, version: number): Promise<boolean>;
+  lessonActivities(token: string): Promise<LessonActivity[]>;
+  openLesson(
+    token: string,
+    contentId: string,
+    version: number,
+  ): Promise<boolean>;
   advanceLesson(
-    id: string,
+    token: string,
     contentId: string,
     version: number,
     action: "start" | "complete",
   ): Promise<boolean>;
   assignmentChoice(id: string): Promise<AssignmentChoice | null>;
   chooseAssignment(
-    id: string,
+    token: string,
     contentId: string,
     version: number,
   ): Promise<boolean | null>;
   // null denies access; empty reads and false mutations are authorized results.
-  milestones(id: string): Promise<Milestone[] | null>;
+  milestones(token: string): Promise<Milestone[] | null>;
   createMilestone(
-    id: string,
+    token: string,
     input: MilestoneInput,
   ): Promise<string | false | null>;
   updateMilestone(
-    id: string,
+    token: string,
     milestoneId: string,
     version: number,
     input: MilestoneInput,
   ): Promise<boolean | null>;
   deleteMilestone(
-    id: string,
+    token: string,
     milestoneId: string,
     version: number,
   ): Promise<boolean | null>;
   save(
-    id: string,
+    token: string,
     input: {
       instruction: string;
       verification: string;
       complete: boolean;
+      revision: number;
       goal?: LearnerProfile["goal"];
     },
   ): Promise<ExerciseSave>;
@@ -210,6 +222,8 @@ export async function migrate(pool: Pool) {
       "073-member-email-access.sql",
       "074-assignment-evidence.sql",
       "075-member-contribution-publication.sql",
+      "076-starter-draft-revision.sql",
+      "077-prerequisite-dag-evaluation.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
@@ -221,7 +235,6 @@ export function store(pool: Pool): Store {
     token: string,
     write: boolean,
     use: (client: PoolClient, memberId: string) => Promise<T>,
-    byId = false,
   ): Promise<T | null> {
     if (typeof token !== "string" || !token.trim()) return null;
     const client = await pool.connect();
@@ -231,9 +244,9 @@ export function store(pool: Pool): Store {
       await client.query("SET LOCAL lock_timeout='5s'");
       const principal = (
         await client.query<{ id: string; expires_at: Date }>(
-          `SELECT id,expires_at FROM principals WHERE ${byId ? "id" : "token_hash"}=$1 AND kind='member'
+          `SELECT id,expires_at FROM principals WHERE token_hash=$1 AND kind='member'
          AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE`,
-          [byId ? token : hash(token)],
+          [hash(token)],
         )
       ).rows[0];
       if (!principal) {
@@ -361,39 +374,34 @@ export function store(pool: Pool): Store {
         ],
       );
     },
-    async updateProfile(id, profile) {
+    async updateProfile(token, profile) {
       return (
-        (await exerciseTransaction(
-          id,
-          true,
-          async (client, memberId) => {
-            const result = await client.query(
-              `UPDATE learners SET background=$2,goal=$3,background_tags=$4,
+        (await exerciseTransaction(token, true, async (client, memberId) => {
+          const result = await client.query(
+            `UPDATE learners SET background=$2,goal=$3,background_tags=$4,
           domain_tags=$5,it_roles=$6,experience=$7,exploratory=$8,
           time_zone=$9,weekly_minutes=$10 WHERE id=$1`,
-              [
-                memberId,
-                profile.background,
-                profile.goal,
-                profile.backgroundTags,
-                profile.domainTags,
-                profile.itRoles,
-                profile.experience,
-                profile.exploratory,
-                profile.timezone ?? null,
-                profile.weeklyMinutes ?? null,
-              ],
-            );
-            return result.rowCount === 1;
-          },
-          true,
-        )) === true
+            [
+              memberId,
+              profile.background,
+              profile.goal,
+              profile.backgroundTags,
+              profile.domainTags,
+              profile.itRoles,
+              profile.experience,
+              profile.exploratory,
+              profile.timezone ?? null,
+              profile.weeklyMinutes ?? null,
+            ],
+          );
+          return result.rowCount === 1;
+        })) === true
       );
     },
     async progress(id, lessonId = LESSON.id, version = LESSON.version) {
       return (
         await pool.query<Exercise>(
-          `SELECT instruction,verification,completed_at,goal_at_start,withdrawn_at,
+          `SELECT revision,instruction,verification,completed_at,goal_at_start,withdrawn_at,
            EXISTS(SELECT 1 FROM exercises done WHERE done.learner_id=$1 AND done.workspace_id=$1
              AND done.lesson_id=$2 AND done.lesson_version=$3 AND done.completed_at IS NOT NULL) AS has_completed_version
            FROM exercises WHERE learner_id=$1 AND workspace_id=$1 AND lesson_id=$2 AND lesson_version=$3
@@ -410,7 +418,7 @@ export function store(pool: Pool): Store {
       return exerciseTransaction(token, false, async (client, memberId) => {
         const rows = (
           await client.query<ExerciseHistory>(
-            `SELECT lesson_id AS "lessonId",lesson_version AS version,instruction,verification,
+            `SELECT revision,lesson_id AS "lessonId",lesson_version AS version,instruction,verification,
            completed_at AS "completedAt",withdrawn_at AS "withdrawnAt",goal_at_start AS "goalAtStart"
            FROM exercises WHERE learner_id=$1 AND workspace_id=$1
            ORDER BY lesson_id,lesson_version,goal_slot FOR SHARE`,
@@ -463,9 +471,9 @@ export function store(pool: Pool): Store {
         )) ?? "unavailable"
       );
     },
-    async lessonActivities(id) {
+    async lessonActivities(token) {
       const activities = await exerciseTransaction(
-        id,
+        token,
         false,
         async (client, memberId) =>
           (
@@ -496,19 +504,15 @@ export function store(pool: Pool): Store {
               [memberId],
             )
           ).rows,
-        true,
       );
       if (activities === null) throw new LessonActivityUnavailable();
       return activities;
     },
-    async openLesson(id, contentId, version) {
+    async openLesson(token, contentId, version) {
       return (
-        (await exerciseTransaction(
-          id,
-          true,
-          async (client, memberId) => {
-            const result = await client.query(
-              `INSERT INTO lesson_activity(member_id,content_id,content_version)
+        (await exerciseTransaction(token, true, async (client, memberId) => {
+          const result = await client.query(
+            `INSERT INTO lesson_activity(member_id,content_id,content_version)
          SELECT l.id,cv.id,cv.version FROM learners l
          JOIN content_versions cv ON cv.id=$2 AND cv.version=$3
          WHERE l.id=$1 AND cv.kind='lesson' AND cv.state='published'
@@ -517,22 +521,17 @@ export function store(pool: Pool): Store {
              WHERE newer.id=cv.id AND newer.published_at IS NOT NULL AND newer.version>cv.version)
          ON CONFLICT(member_id,content_id,content_version) DO UPDATE
            SET opened_at=lesson_activity.opened_at`,
-              [memberId, contentId, version],
-            );
-            return result.rowCount === 1;
-          },
-          true,
-        )) ?? false
+            [memberId, contentId, version],
+          );
+          return result.rowCount === 1;
+        })) ?? false
       );
     },
-    async advanceLesson(id, contentId, version, action) {
+    async advanceLesson(token, contentId, version, action) {
       return (
-        (await exerciseTransaction(
-          id,
-          true,
-          async (client, memberId) => {
-            const result = await client.query(
-              `UPDATE lesson_activity a SET
+        (await exerciseTransaction(token, true, async (client, memberId) => {
+          const result = await client.query(
+            `UPDATE lesson_activity a SET
            started_at=CASE WHEN $4='start' THEN COALESCE(a.started_at,CURRENT_TIMESTAMP)
                            ELSE a.started_at END,
            self_assessed_at=CASE WHEN $4='complete' THEN COALESCE(a.self_assessed_at,CURRENT_TIMESTAMP)
@@ -545,12 +544,10 @@ export function store(pool: Pool): Store {
                AND member_content_eligible(a.member_id,cv.id,cv.version)
                AND NOT EXISTS(SELECT 1 FROM content_versions newer
                  WHERE newer.id=cv.id AND newer.published_at IS NOT NULL AND newer.version>cv.version))`,
-              [memberId, contentId, version, action],
-            );
-            return result.rowCount === 1;
-          },
-          true,
-        )) ?? false
+            [memberId, contentId, version, action],
+          );
+          return result.rowCount === 1;
+        })) ?? false
       );
     },
     async assignmentChoice(id) {
@@ -564,13 +561,10 @@ export function store(pool: Pool): Store {
         ).rows[0] ?? null
       );
     },
-    async chooseAssignment(id, contentId, version) {
-      return exerciseTransaction(
-        id,
-        true,
-        async (client, memberId) => {
-          const result = await client.query(
-            `INSERT INTO learner_assignment_choices(member_id,content_id,content_version)
+    async chooseAssignment(token, contentId, version) {
+      return exerciseTransaction(token, true, async (client, memberId) => {
+        const result = await client.query(
+          `INSERT INTO learner_assignment_choices(member_id,content_id,content_version)
              SELECT l.id,cv.id,cv.version FROM learners l
              JOIN content_versions cv ON cv.id=$2 AND cv.version=$3
              WHERE l.id=$1 AND cv.kind='assignment' AND cv.state='published'
@@ -582,16 +576,14 @@ export function store(pool: Pool): Store {
              ON CONFLICT(member_id) DO UPDATE SET
                content_id=EXCLUDED.content_id,content_version=EXCLUDED.content_version,
                chosen_at=CURRENT_TIMESTAMP`,
-            [memberId, contentId, version],
-          );
-          return result.rowCount === 1;
-        },
-        true,
-      );
+          [memberId, contentId, version],
+        );
+        return result.rowCount === 1;
+      });
     },
-    async milestones(id) {
+    async milestones(token) {
       return exerciseTransaction(
-        id,
+        token,
         false,
         async (client, memberId) =>
           (
@@ -607,86 +599,76 @@ export function store(pool: Pool): Store {
               [memberId],
             )
           ).rows,
-        true,
       );
     },
-    async createMilestone(id, input) {
-      return exerciseTransaction(
-        id,
-        true,
-        async (client, memberId) => {
-          const result = await client.query<{ id: string }>(
-            `INSERT INTO learning_milestones(
+    async createMilestone(token, input) {
+      return exerciseTransaction(token, true, async (client, memberId) => {
+        const result = await client.query<{ id: string }>(
+          `INSERT INTO learning_milestones(
            id,member_id,goal_title,milestone_title,evidence_note,next_action,
            reminder_date,reminder_time,reminder_time_zone,self_reported_complete)
          SELECT $2,l.id,$3,$4,$5,$6,$7,$8,$9,$10 FROM learners l WHERE l.id=$1
          RETURNING id`,
-            [
-              memberId,
-              randomUUID(),
-              input.goalTitle,
-              input.milestoneTitle,
-              input.evidenceNote,
-              input.nextAction,
-              input.reminderDate,
-              input.reminderTime,
-              input.reminderTimezone,
-              input.selfReportedComplete,
-            ],
-          );
-          return result.rows[0]?.id ?? false;
-        },
-        true,
-      );
+          [
+            memberId,
+            randomUUID(),
+            input.goalTitle,
+            input.milestoneTitle,
+            input.evidenceNote,
+            input.nextAction,
+            input.reminderDate,
+            input.reminderTime,
+            input.reminderTimezone,
+            input.selfReportedComplete,
+          ],
+        );
+        return result.rows[0]?.id ?? false;
+      });
     },
-    async updateMilestone(id, milestoneId, version, input) {
-      return exerciseTransaction(
-        id,
-        true,
-        async (client, memberId) => {
-          const result = await client.query(
-            `UPDATE learning_milestones SET goal_title=$4,milestone_title=$5,
+    async updateMilestone(token, milestoneId, version, input) {
+      return exerciseTransaction(token, true, async (client, memberId) => {
+        const result = await client.query(
+          `UPDATE learning_milestones SET goal_title=$4,milestone_title=$5,
            evidence_note=$6,next_action=$7,reminder_date=$8,reminder_time=$9,
            reminder_time_zone=$10,self_reported_complete=$11,
            version=version+1,updated_at=CURRENT_TIMESTAMP
          WHERE member_id=$1 AND id=$2 AND version=$3`,
-            [
-              memberId,
-              milestoneId,
-              version,
-              input.goalTitle,
-              input.milestoneTitle,
-              input.evidenceNote,
-              input.nextAction,
-              input.reminderDate,
-              input.reminderTime,
-              input.reminderTimezone,
-              input.selfReportedComplete,
-            ],
-          );
-          return result.rowCount === 1;
-        },
-        true,
-      );
+          [
+            memberId,
+            milestoneId,
+            version,
+            input.goalTitle,
+            input.milestoneTitle,
+            input.evidenceNote,
+            input.nextAction,
+            input.reminderDate,
+            input.reminderTime,
+            input.reminderTimezone,
+            input.selfReportedComplete,
+          ],
+        );
+        return result.rowCount === 1;
+      });
     },
-    async deleteMilestone(id, milestoneId, version) {
-      return exerciseTransaction(
-        id,
-        true,
-        async (client, memberId) => {
-          const result = await client.query(
-            `DELETE FROM learning_milestones WHERE member_id=$1 AND id=$2 AND version=$3`,
-            [memberId, milestoneId, version],
-          );
-          return result.rowCount === 1;
-        },
-        true,
-      );
+    async deleteMilestone(token, milestoneId, version) {
+      return exerciseTransaction(token, true, async (client, memberId) => {
+        const result = await client.query(
+          `DELETE FROM learning_milestones WHERE member_id=$1 AND id=$2 AND version=$3`,
+          [memberId, milestoneId, version],
+        );
+        return result.rowCount === 1;
+      });
     },
-    async save(id, input) {
+    async save(token, input) {
+      if (
+        !Number.isInteger(input.revision) ||
+        input.revision < 0 ||
+        input.revision >= 2147483647
+      )
+        return "conflict";
       return (
         (await exerciseTransaction<ExerciseSave>(
-          id,
+          token,
           true,
           async (client, memberId) => {
             // Principal -> workspace -> learner -> exercise. Profile updates acquire
@@ -700,11 +682,25 @@ export function store(pool: Pool): Store {
             if (!learner) return "unavailable";
             if (input.goal !== undefined && input.goal !== learner.goal)
               return "stale-goal";
+            const existing = (
+              await client.query<{
+                revision: number;
+                completed_at: Date | null;
+                withdrawn_at: Date | null;
+              }>(
+                `SELECT revision,completed_at,withdrawn_at FROM exercises WHERE learner_id=$1 AND workspace_id=$1
+                 AND lesson_id=$2 AND lesson_version=$3 AND goal_slot=$4 FOR UPDATE`,
+                [memberId, LESSON.id, LESSON.version, learner.goal],
+              )
+            ).rows[0];
+            if (existing?.withdrawn_at) return "withdrawn";
+            if (input.revision !== (existing?.revision ?? 0)) return "conflict";
+            if (existing?.completed_at) return "unchanged";
             const result = await client.query(
               `INSERT INTO exercises(learner_id,workspace_id,lesson_id,lesson_version,instruction,verification,completed_at,goal_at_start)
            VALUES($1,$1,$2,$3,$4,$5,CASE WHEN $6 THEN clock_timestamp() ELSE NULL END,$7)
            ON CONFLICT(learner_id,lesson_id,lesson_version,goal_slot) DO UPDATE SET
-             instruction=EXCLUDED.instruction,verification=EXCLUDED.verification,completed_at=EXCLUDED.completed_at
+             instruction=EXCLUDED.instruction,verification=EXCLUDED.verification,completed_at=EXCLUDED.completed_at,revision=exercises.revision+1
            WHERE exercises.completed_at IS NULL AND exercises.withdrawn_at IS NULL RETURNING learner_id`,
               [
                 memberId,
@@ -716,17 +712,8 @@ export function store(pool: Pool): Store {
                 learner.goal,
               ],
             );
-            if (result.rowCount === 1) return "saved";
-            const existing = (
-              await client.query<{ withdrawn_at: Date | null }>(
-                `SELECT withdrawn_at FROM exercises WHERE learner_id=$1 AND workspace_id=$1
-           AND lesson_id=$2 AND lesson_version=$3 AND goal_slot=$4`,
-                [memberId, LESSON.id, LESSON.version, learner.goal],
-              )
-            ).rows[0];
-            return existing?.withdrawn_at ? "withdrawn" : "unchanged";
+            return result.rowCount === 1 ? "saved" : "conflict";
           },
-          true,
         )) ?? "unavailable"
       );
     },
