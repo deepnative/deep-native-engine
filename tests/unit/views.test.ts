@@ -479,7 +479,7 @@ it("shows a private workflow improvement with an exact version and a stale-safe 
   expect(workflow).not.toBeNull();
   const form = proposalListPage([], "csrf", workflow);
   expect(form).toContain('name="workflow_id" value="WF-001"');
-  expect(form).toContain('name="workflow_version" value="1"');
+  expect(form).toContain('name="workflow_version" value="2"');
   expect(form).toContain("no public reuse rights are granted");
   const proposal: OwnerProposal = {
     feedback: null,
@@ -541,7 +541,7 @@ it("labels a capped internal synthetic register without rendering forged markup"
 });
 it("shows private usefulness choices only for self-assessed exact lesson versions", () => {
   const sample = {
-    kind: "sample lesson" as const,
+    kind: "lesson" as const,
     title: "Invented <reading>",
     version: 1,
     state: "Self-reported complete",
@@ -1217,9 +1217,7 @@ it("labels exact private lesson activity without turning a page opening into ach
     "This version is unavailable; your history remains saved",
   );
   expect(history).toContain("Started");
-  expect(libraryPage([], { q: "" })).toContain(
-    "No sample lesson has been opened",
-  );
+  expect(libraryPage([], { q: "" })).toContain("No lesson has been opened");
 });
 it("shows only current assignment choices, escapes titles and gives stale-choice recovery", () => {
   const item = {
@@ -2005,4 +2003,99 @@ it("distinguishes metered local test units and blocks repeat dispatch of termina
   const paused = localAiConsentPage(choices, "csrf", [], "paused");
   expect(paused).not.toContain("Use one local test request</button>");
   expect(paused).not.toContain("Run local test request</button>");
+});
+it("FOUND-04 library history returns to the recorded version even from a cached page", () => {
+  const html = libraryPage([], { q: "" }, [
+    {
+      contentId: "FND-001",
+      contentVersion: 2,
+      title: "Foundation lesson",
+      openedAt: new Date(),
+      startedAt: null,
+      selfAssessedAt: null,
+      available: true,
+    },
+  ]);
+  expect(html).toContain('href="/library/FND-001?version=2"');
+});
+
+it("FOUND-03 distinguishes reviewed foundation text and progress from simulated practice", async () => {
+  const { reviewedFoundation } = await import("../../src/foundation-pack.ts");
+  const { studyReflectionPage } = await import("../../src/views.ts");
+  const item: ContentVersion = {
+    ...(await reviewedFoundation())[0]!,
+    state: "published",
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date(),
+    publishedAt: new Date(),
+  };
+  const opened = {
+    contentId: item.id,
+    contentVersion: 2,
+    openedAt: new Date(),
+    startedAt: null,
+    selfAssessedAt: null,
+    available: true,
+  };
+  const reading = contentPreview(item, false, "csrf", opened);
+  expect(reading).toContain("REVIEWED FOUNDATION");
+  expect(reading).toContain("text below is the primary reading format");
+  expect(reading).not.toContain("Readable sample text");
+  expect(
+    contentPreview(item, false, "csrf", { ...opened, startedAt: new Date() }),
+  ).toContain("I have finished reading this lesson; this is my own report.");
+  expect(
+    contentPreview(item, false, "csrf", {
+      ...opened,
+      startedAt: new Date(),
+      selfAssessedAt: new Date(),
+    }),
+  ).toContain("Report whether this lesson helped");
+  const staff = contentPreview(item, true, "csrf");
+  expect(staff).toContain(
+    "I checked the sources and rights for this ordinary educational lesson.",
+  );
+  expect(staff).toContain("Approve editorial review");
+  expect(staff).toContain("Publish reviewed lesson");
+  expect(staff).not.toContain("Approve synthetic review");
+  const recommendation = dashboard(
+    learner,
+    undefined,
+    "csrf",
+    [],
+    [],
+    null,
+    item,
+  );
+  expect(recommendation).toContain("Optional foundation lesson:");
+  expect(recommendation).toContain("Open current foundation lesson");
+  const reflection = studyReflectionPage(item, "everyday", "csrf");
+  expect(reflection).toContain(
+    "ordinary editorially reviewed foundation lesson",
+  );
+  expect(reflection).toContain("optional reflection is simulated");
+  expect(reflection).toContain("I used only invented or sample information.");
+});
+
+it("ASN103-01 distinguishes ordinary assignment publication from assessment and lesson progress", async () => {
+  const { reviewedAssignments } =
+    await import("../../src/reviewed-assignments.ts");
+  const item: ContentVersion = {
+    ...(await reviewedAssignments())[0]!,
+    state: "published",
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date(),
+    publishedAt: new Date(),
+  };
+  const reading = contentPreview(item, false, "csrf");
+  expect(reading).toContain("REVIEWED ASSIGNMENT");
+  expect(reading).toContain(
+    "Ordinary reviewed assignment with an invented brief",
+  );
+  expect(reading).toContain("Versioned rubric 1");
+  expect(reading).not.toContain("Start this lesson");
+  const staff = contentPreview(item, true, "csrf");
+  expect(staff).toContain("Approve editorial review");
+  expect(staff).toContain("Publish reviewed assignment");
+  expect(staff).toContain("ordinary educational assignment");
 });

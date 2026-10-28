@@ -66,7 +66,7 @@ it("does not export a feedback note withdrawn after the export snapshot forms", 
   expect(session.kind).toBe("active");
   const ownerId = session.kind === "active" ? session.learner.id : "";
   const privateNote = "Invented feedback for withdrawal-first export race";
-  expect(await feedback.save(ownerToken, "WF-001", 1, privateNote, 0)).toBe(
+  expect(await feedback.save(ownerToken, "WF-001", 2, privateNote, 0)).toBe(
     true,
   );
 
@@ -77,7 +77,7 @@ it("does not export a feedback note withdrawn after the export snapshot forms", 
     await controlled.snapshotFormed.wait;
     expect(controlled.state.snapshot).not.toBe("");
     order.push("owner export snapshot formed");
-    expect(await feedback.withdraw(ownerToken, "WF-001", 1, 1)).toBe(true);
+    expect(await feedback.withdraw(ownerToken, "WF-001", 2, 1)).toBe(true);
     order.push("feedback withdrawal committed");
     expect(await feedback.list(ownerToken)).toEqual([]);
     expect(
@@ -110,14 +110,14 @@ it("fails closed on a stale export snapshot when withdrawn feedback is saved aga
   await db.create(ownerToken, { background: "explorer", goal: "everyday" });
   const oldNote = "Invented withdrawn workflow feedback";
   const newNote = "Invented newly saved workflow feedback";
-  expect(await feedback.save(ownerToken, "WF-001", 1, oldNote, 0)).toBe(true);
+  expect(await feedback.save(ownerToken, "WF-001", 2, oldNote, 0)).toBe(true);
   const controlled = pausedAfterOwnerLookup();
   const reading = controlled.exported.exportOwned(ownerToken);
   try {
     await controlled.snapshotFormed.wait;
     expect(controlled.state.snapshot).not.toBe("");
-    expect(await feedback.withdraw(ownerToken, "WF-001", 1, 1)).toBe(true);
-    expect(await feedback.save(ownerToken, "WF-001", 1, newNote, 0)).toBe(true);
+    expect(await feedback.withdraw(ownerToken, "WF-001", 2, 1)).toBe(true);
+    expect(await feedback.save(ownerToken, "WF-001", 2, newNote, 0)).toBe(true);
     expect(await feedback.list(ownerToken)).toMatchObject([
       { note: newNote, revision: 1 },
     ]);
@@ -212,7 +212,7 @@ it("lets an export holding the feedback note finish before withdrawal commits", 
   const ownerToken = token();
   await db.create(ownerToken, { background: "professional", goal: "work" });
   const privateNote = "Invented feedback for export-first race";
-  expect(await feedback.save(ownerToken, "WF-001", 1, privateNote, 0)).toBe(
+  expect(await feedback.save(ownerToken, "WF-001", 2, privateNote, 0)).toBe(
     true,
   );
   const controlled = pausedAfterFeedbackRead();
@@ -223,7 +223,7 @@ it("lets an export holding the feedback note finish before withdrawal commits", 
     const writer = observableWriter();
     let finished = false;
     writing = writer.feedback
-      .withdraw(ownerToken, "WF-001", 1, 1)
+      .withdraw(ownerToken, "WF-001", 2, 1)
       .then((result) => {
         finished = true;
         return result;
@@ -256,7 +256,7 @@ it("does not falsely accept a feedback withdrawal whose session expires while bl
     await feedback.save(
       ownerToken,
       "WF-001",
-      1,
+      2,
       "Invented note preserved on expired withdrawal",
       0,
     ),
@@ -273,7 +273,7 @@ it("does not falsely accept a feedback withdrawal whose session expires while bl
     const writer = observableWriter();
     let finished = false;
     writing = writer.feedback
-      .withdraw(ownerToken, "WF-001", 1, 1)
+      .withdraw(ownerToken, "WF-001", 2, 1)
       .then((result) => {
         finished = true;
         return result;
@@ -301,7 +301,7 @@ it("does not falsely accept a feedback withdrawal whose session expires while bl
     expect(await writing).toBe(false);
     // Pre-start denial is covered separately in workflow-feedback.test.ts;
     // this assertion also confirms the observed wait did not change it.
-    expect(await feedback.withdraw(ownerToken, "WF-001", 1, 1)).toBe(false);
+    expect(await feedback.withdraw(ownerToken, "WF-001", 2, 1)).toBe(false);
     const retained = await pool.query(
       "SELECT note FROM workflow_feedback WHERE member_id=$1",
       [ownerId],
@@ -322,7 +322,7 @@ it("returns no private export after feedback lock timeout and releases owner loc
   expect(session.kind).toBe("active");
   const ownerId = session.kind === "active" ? session.learner.id : "";
   const privateNote = "Invented feedback for lock timeout";
-  expect(await feedback.save(ownerToken, "WF-001", 1, privateNote, 0)).toBe(
+  expect(await feedback.save(ownerToken, "WF-001", 2, privateNote, 0)).toBe(
     true,
   );
   const blocker = await pool.connect();
@@ -345,7 +345,7 @@ it("returns no private export after feedback lock timeout and releases owner loc
   try {
     await blocker.query("BEGIN");
     await blocker.query(
-      "UPDATE workflow_feedback SET note=note WHERE member_id=$1 AND workflow_id='WF-001' AND workflow_version=1",
+      "UPDATE workflow_feedback SET note=note WHERE member_id=$1 AND workflow_id='WF-001' AND workflow_version=2",
       [ownerId],
     );
     reading = memberExportStore(observablePool)
@@ -413,7 +413,7 @@ it.each([
     expect(session.kind).toBe("active");
     const ownerId = session.kind === "active" ? session.learner.id : "";
     const privateNote = "Invented feedback retained after failed withdrawal";
-    expect(await feedback.save(ownerToken, "WF-001", 1, privateNote, 0)).toBe(
+    expect(await feedback.save(ownerToken, "WF-001", 2, privateNote, 0)).toBe(
       true,
     );
 
@@ -451,7 +451,7 @@ it.each([
       await workflowFeedbackStore(faultPool).withdraw(
         ownerToken,
         "WF-001",
-        1,
+        2,
         1,
       ),
     ).toBe(false);
@@ -502,7 +502,7 @@ it.each([
       await probe.query("ROLLBACK");
       probe.release();
     }
-    expect(await feedback.withdraw(ownerToken, "WF-001", 1, 1)).toBe(true);
+    expect(await feedback.withdraw(ownerToken, "WF-001", 2, 1)).toBe(true);
     expect(await feedback.list(ownerToken)).toEqual([]);
   },
   15_000,

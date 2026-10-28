@@ -29,7 +29,7 @@ export async function workflowReviewFixture(pool: Pool) {
     new Date(Date.now() + 3600000),
   );
   const note = "Invented original private concurrency note";
-  if ((await feedback.save(member, "WF-001", 1, note, 0)) !== true)
+  if ((await feedback.save(member, "WF-001", 2, note, 0)) !== true)
     throw Error("Owned exact source required");
   const reviews = workflowReviewStore(
       pool,

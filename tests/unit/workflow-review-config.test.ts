@@ -42,7 +42,7 @@ it.each([true, false])(
       [
         {
           workflowId: "WF-001",
-          workflowVersion: 1,
+          workflowVersion: 2,
           revision: 1,
           note: "Invented own private note",
           createdAt: new Date("2026-10-07T09:00:00Z"),

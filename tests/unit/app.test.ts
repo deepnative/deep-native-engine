@@ -1014,7 +1014,7 @@ it("keeps member proposals private and moderation unable to publish", async () =
     .set("Host", host)
     .expect(200);
   expect(workflowForm.text).toContain(
-    "Private improvement for WF-001 version 1",
+    "Private improvement for WF-001 version 2",
   );
   await memberAgent
     .get("/contribute?workflow=WF-999")
@@ -1613,6 +1613,35 @@ function catalogMock() {
     search: vi.fn<CatalogStore["search"]>().mockResolvedValue([]),
   };
 }
+it("FOUND-01 offers the reviewed foundation import explicitly without publishing it", async () => {
+  const catalog = catalogMock();
+  catalog.staffList.mockResolvedValue([]);
+  const agent = await managedAgent(
+    app(storage(), { origin, secret: "secret", catalog }),
+  );
+  const response = await agent
+    .get("/editor/library")
+    .set("Host", host)
+    .expect(200);
+  expect(response.text).toContain('action="/editor/library/foundation"');
+  expect(response.text).toContain("Import six reviewed foundation drafts");
+  expect(response.text).toContain("Importing does not publish");
+  expect(catalog.publish).not.toHaveBeenCalled();
+});
+it("ASN103-01 offers both reviewed assignment drafts without publishing them", async () => {
+  const catalog = catalogMock();
+  catalog.staffList.mockResolvedValue([]);
+  const agent = await managedAgent(
+    app(storage(), { origin, secret: "secret", catalog }),
+  );
+  const response = await agent
+    .get("/editor/library")
+    .set("Host", host)
+    .expect(200);
+  expect(response.text).toContain('action="/editor/library/assignments"');
+  expect(response.text).toContain("Import two reviewed assignment drafts");
+  expect(catalog.publish).not.toHaveBeenCalled();
+});
 async function client(evidence?: EvidenceStore) {
   const agent = await managedAgent(
     app(db, { origin, secret: "secret", evidence }),
@@ -5798,4 +5827,115 @@ it("HOSTED-12 presents accurate hosted persistence while concurrent local render
   );
   expect(localHome.text).toContain("Your work stays on this computer");
   expect(localHome.text).toContain("LOCAL LEARNING PREVIEW");
+});
+it("FOUND-02 denies invalid imports and provides honest recovery for uncertain outcomes", async () => {
+  const importer = {
+    import:
+      vi.fn<
+        import("../../src/foundation-import.ts").FoundationImportStore["import"]
+      >(),
+  };
+  const agent = await managedAgent(
+    app(storage(), { origin, secret: "secret", foundationImport: importer }),
+  );
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  const post = (confirm: unknown = "yes", token = csrf) =>
+    agent
+      .post("/editor/library/foundation")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ confirm, csrf: token });
+  await post("yes", "invalid").expect(403);
+  await post("no").expect(422);
+  expect(importer.import).not.toHaveBeenCalled();
+  for (const result of ["imported", "existing"] as const) {
+    importer.import.mockResolvedValueOnce(result);
+    await post().expect(303).expect("Location", "/editor/library");
+  }
+  for (const [result, status] of [
+    ["denied", 403],
+    ["conflict", 409],
+    ["unavailable", 503],
+  ] as const) {
+    importer.import.mockResolvedValueOnce(result);
+    const response = await post().expect(status);
+    expect(response.text).toContain("Foundation import unconfirmed");
+    expect(response.text).not.toContain("<form");
+  }
+  importer.import.mockRejectedValueOnce(Error("PRIVATE-DATABASE-DETAIL"));
+  const failure = await post().expect(503);
+  expect(failure.text).not.toContain("PRIVATE-DATABASE-DETAIL");
+  expect(failure.text).toContain("may have completed");
+  const disabled = await managedAgent(
+    app(storage(), { origin, secret: "secret" }),
+  );
+  const disabledHome = await disabled.get("/").set("Host", host).expect(200);
+  const disabledCsrf = disabledHome.text.match(
+    /name="csrf" value="([a-f0-9]+)"/,
+  )![1]!;
+  await disabled
+    .post("/editor/library/foundation")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ confirm: "yes", csrf: disabledCsrf })
+    .expect(503);
+});
+
+it("ASN103-01 denies invalid imports and provides honest recovery for uncertain outcomes", async () => {
+  const importer = {
+    import:
+      vi.fn<
+        import("../../src/foundation-import.ts").FoundationImportStore["import"]
+      >(),
+  };
+  const agent = await managedAgent(
+    app(storage(), { origin, secret: "secret", assignmentImport: importer }),
+  );
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  const post = (confirm: unknown = "yes", token = csrf) =>
+    agent
+      .post("/editor/library/assignments")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ confirm, csrf: token });
+  await post("yes", "invalid").expect(403);
+  await post("no").expect(422);
+  expect(importer.import).not.toHaveBeenCalled();
+  for (const result of ["imported", "existing"] as const) {
+    importer.import.mockResolvedValueOnce(result);
+    await post().expect(303).expect("Location", "/editor/library");
+  }
+  for (const [result, status] of [
+    ["denied", 403],
+    ["conflict", 409],
+    ["unavailable", 503],
+  ] as const) {
+    importer.import.mockResolvedValueOnce(result);
+    const response = await post().expect(status);
+    expect(response.text).toContain("Assignment import unconfirmed");
+    expect(response.text).not.toContain("<form");
+  }
+  importer.import.mockRejectedValueOnce(Error("PRIVATE-DATABASE-DETAIL"));
+  const failure = await post().expect(503);
+  expect(failure.text).not.toContain("PRIVATE-DATABASE-DETAIL");
+  expect(failure.text).toContain("may have completed");
+  const disabled = await managedAgent(
+    app(storage(), { origin, secret: "secret" }),
+  );
+  const disabledHome = await disabled.get("/").set("Host", host).expect(200);
+  const disabledCsrf = disabledHome.text.match(
+    /name="csrf" value="([a-f0-9]+)"/,
+  )![1]!;
+  await disabled
+    .post("/editor/library/assignments")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ confirm: "yes", csrf: disabledCsrf })
+    .expect(503);
 });

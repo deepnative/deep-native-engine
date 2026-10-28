@@ -33,6 +33,8 @@ import { deterministicRegistry } from "./adapters.ts";
 import { localAiConsentStore } from "./local-ai-consent.ts";
 import { localAiControlStore } from "./local-ai-control.ts";
 import { catalogStore, seedDraftPack } from "./catalog.ts";
+import { reviewedAssignmentImportStore } from "./reviewed-assignments.ts";
+import { foundationImportStore } from "./foundation-import.ts";
 import { trackStore } from "./track-readiness.ts";
 import { proposalStore } from "./proposals.ts";
 import { careerStore } from "./career.ts";
@@ -160,6 +162,8 @@ export async function start(env: NodeJS.ProcessEnv) {
       }),
       authorization: authorizationStore(pool),
       catalog: catalogStore(pool),
+      foundationImport: foundationImportStore(pool),
+      assignmentImport: reviewedAssignmentImportStore(pool),
       tracks: trackStore(pool),
       proposals: proposalStore(pool),
       career: careerStore(pool),

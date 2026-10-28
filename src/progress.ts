@@ -3,7 +3,7 @@ import type { AssignmentAttemptListItem } from "./attempts.ts";
 import type { Exercise, ExerciseHistory, LessonActivity } from "./store.ts";
 
 export interface ActivityItem {
-  kind: "starter exercise" | "sample lesson" | "assignment attempt";
+  kind: "starter exercise" | "lesson" | "assignment attempt";
   title: string;
   version: number;
   state: string;
@@ -54,7 +54,7 @@ export function activityItems(
   }
   for (const lesson of lessons) {
     items.push({
-      kind: "sample lesson",
+      kind: "lesson",
       title: lesson.title ?? lesson.contentId,
       version: lesson.contentVersion,
       state: lesson.selfAssessedAt
@@ -63,7 +63,7 @@ export function activityItems(
           ? "Started"
           : "Opened in reader",
       availability: lesson.available
-        ? "Current published sample; no qualified review"
+        ? "Current published version; completion is self-reported"
         : "Historical version unavailable; activity retained",
       href: lesson.available
         ? `/library/${encodeURIComponent(lesson.contentId)}?version=${lesson.contentVersion}`

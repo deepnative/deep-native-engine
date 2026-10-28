@@ -1,5 +1,6 @@
 # Documentation and assets
 
+- [Reviewed workflows](REVIEWED-WORKFLOWS.md): ordinary editorially reviewed manual examples, source and rights facts, exact downloads, maintenance and retained private version history.
 - [Prepared private examples](PRIVATE-PREPARED-SAMPLES.md): fixed invented-source choice, separate acknowledgements, normal browser feedback, original-instruction recovery, provenance and compatible creation rollback.
 - [Private support-minute permissions](PRIVATE-SUPPORT-MINUTE-PERMISSIONS.md): exact member-held request/allocation references, finite administrator browser permission, original-operation recovery and native operator settlement.
 - [Private review-minute permissions](PRIVATE-REVIEW-TIME-PERMISSIONS.md): member allocation and reviewer references, administrator browser grant/history/recovery and exact revocation, with retained accounting and creation rollback.
@@ -13,6 +14,8 @@
 - [Initial learning slice](INITIAL-LEARNING-SLICE.md): acceptance, architecture, privacy and outstanding scope.
 - [CTP-008 private starter plan](CTP-008-PRIVATE-PLAN.md): local goal, experience and weekly-time suggestions, profile revision and remaining live-access gates.
 - [CTP-009 private assignment choice](CTP-009-ASSIGNMENT-CHOICE.md): eligible published samples, exact saved version, conservative prerequisites and honest stale-choice recovery.
+- [Reviewed foundation reader](REVIEWED-FOUNDATION.md): explicit six-lesson version 2 import, separate editorial publication, ordinary learning and private exact-version history.
+- [Reviewed practice assignments](REVIEWED-ASSIGNMENTS.md): deliberate two-draft version 2 import, ordinary publication, exact preparation and private cross-audience assignment work.
 - [CTP-009 synthetic lesson reader](CTP-009-SYNTHETIC-READER.md): accessible sample text and private opened, started and self-assessed activity pinned to an exact published version.
 - [CTP-018 private goals and milestones](CTP-018-PRIVATE-MILESTONES.md): member-owned planning, evidence notes, versioned edits and local-only reminders.
 - [CTP-018 optional career planning](CTP-018-OPTIONAL-CAREER.md): opt-in private records, self-reported outcomes and versioned member approval of unsent drafts.
