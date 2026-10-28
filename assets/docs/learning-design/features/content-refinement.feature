@@ -3,6 +3,15 @@
 Feature: Create and refine content that teaches an observable skill
   Authors improve a local lesson using sources, worked examples and learner actions.
 
+  Scenario: CREF-012 — Make practice choices depend on the source and checking rule
+    Given an authored-item audit finds that the longest choice selects fourteen of fifteen keys
+    When the author revises those items and their explanations
+    Then each alternative attempts the same task with comparable specificity
+    And each wrong choice has a plausible source or checking error and a concrete repair
+    And the source facts, question identity and correct-key identity are preserved
+    And wording-only cue results are recorded alongside semantic author review
+    And neither a lower cue count nor passing interaction checks is called proof of learning
+
   Scenario: CREF-001 — Start with an outcome and a useful artifact
     Given an author is drafting the lesson "Write a useful request"
     When they define what the learner will do

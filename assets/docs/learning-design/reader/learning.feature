@@ -1,6 +1,15 @@
 # Local reader behavior only. No account, publication or application L-series claim.
 Feature: Follow the complete authored foundation sequence
 
+  Scenario: READER-017 — Explain the specific error in each revised practice choice
+    Given the learner opens a refined practice item with its original source visible
+    When they try each of its three choices and check the answer
+    Then the same source-supported key is recognised as correct
+    And each wrong choice receives its corresponding source-based explanation and repair
+    And the selected choice stays visible and can be changed
+    And the fresh case still uses its own unchanged source
+    And the item remains usable at desktop and narrow widths
+
   Scenario: READER-013 — Read feedback with its original source and version
     Given Lesson 6 supplies an invented fresh source, draft versions and practice comment
     When the learner opens its feedback decision workspace in any route

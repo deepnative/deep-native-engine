@@ -45,17 +45,17 @@ Making a smaller sample can help you keep working. Removing a name, however, doe
 
 ### Everyday question — `L4-E-P`
 
-Which input lets you practise the rough plan using Source E4?
+Which next step supports this practice task within E4's stated scope?
 
-- **A.** Copy the whole contact sheet; the phone numbers might help the tool.
-- **B.** Write an invented brief with the six helpers, forty packets, one-hour limit and undecided details.
-- **C.** Remove the helpers' names but retain their phone numbers, then treat the sheet as public.
+- **A.** Use the private sheet with names replaced by initials; keep the phone numbers.
+- **B.** Write an invented brief with the counts, time and unknown details; keep it private.
+- **C.** Publish the real invitation using the counts; leave out contacts and unknown details.
 
-**Hint:** Identify the information the rough plan actually uses.
+**Hint:** Removing a detail and changing the intended use are different decisions.
 
 <details><summary>Check your answer</summary>
 
-**B keeps the planning problem without carrying the private sheet into a new place.** **A** includes information the task does not need and ignores the stated boundary. **C** leaves the contact details present and invents a public-sharing decision. Keep the useful counts, duration and unknowns; leave the contact list behind.
+**B keeps the useful planning facts** in an invented private exercise. **A still carries phone numbers** the rough plan does not need; initials do not remove those details. Leave the contact sheet behind. **C turns practice into a real public release** without establishing that audience or the real arrangements. Keep practising with the invented brief; confirm details and scope before making a real invitation.
 
 </details>
 
@@ -63,31 +63,31 @@ Which input lets you practise the rough plan using Source E4?
 
 You can read the internal note. Which statement follows from Source W4?
 
-- **A.** Reading it gives me permission to upload it anywhere.
-- **B.** Changing the client's name automatically makes the whole complaint reusable.
-- **C.** I can write an original fictional process example for practice; use of the real note elsewhere remains a separate decision.
+- **A.** Rename the client, then practise with the original complaint in an outside tool.
+- **B.** Use a brief complaint excerpt; internal reading access covers the new tool.
+- **C.** Create a fictional library-team note and practise a task/owner/date table from it.
 
-**Hint:** Access to a source and permission for a different use are separate facts.
+**Hint:** Which option creates a new practice problem rather than inferring permission for the real note?
 
 <details><summary>Check your answer</summary>
 
-**C gives you a useful way forward.** **A** expands internal reading access into a permission the case never grants. **B** treats one substitution as proof about the entire document. Use the invented process facts rather than carrying over the real complaint's wording or identifying detail.
+**C preserves the task structure** using a new fictional situation. **A changes a name but reuses the real complaint** in a place the case does not authorise; replace the situation and wording, not just the name. **B treats reading access as permission** for a different tool. A short excerpt still comes from the restricted note. Use original fictional facts while real-note reuse remains undecided.
 
 </details>
 
 ### Technical question — `L4-T-P`
 
-Which sample is appropriate for practising the blank-message test?
+Every proposed sample will say execution is not run. Which input should you use in an outside drafting tool for the blank-message practice?
 
-- **A.** An invented input, the required error behavior and “not run,” with no original log or credential.
-- **B.** The original log with only the customer's name removed; leave the access token for realism.
-- **C.** A screenshot of the log, since an image cannot contain a usable secret.
+- **A.** An invented email and blank message, described from the stated behavior.
+- **B.** The original log after removing token and customer address; no new permission needed.
+- **C.** The customer's original email and blank message; the token is left out.
 
-**Hint:** A change of format does not change what information is present.
+**Hint:** Does the sample need the original log or a real customer's input at all?
 
 <details><summary>Check your answer</summary>
 
-**A retains the behavior you need to test.** **B** still carries the credential. **C** can expose the same visible token and details as the text. Build the smallest invented case that shows the behavior; do not make real access part of this lesson.
+**A creates the required practice case** from the behavior, without the original log or customer data. **B treats redaction as permission** for an outside tool; removing two fields does not change the log's stated restriction. Write a new fictional case instead. **C still uses the customer's address** when an invented email can demonstrate a blank message. Replace that address; removing the token alone does not make the real input necessary.
 
 </details>
 
@@ -95,11 +95,11 @@ Which sample is appropriate for practising the blank-message test?
 
 For your route, write the sample you would use and identify its intended reader. Explain one detail you deliberately leave out.
 
-| Case | Fresh source and agreed scope |
-| --- | --- |
+| Case     | Fresh source and agreed scope                                                                                                                                                                   |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `L4-E-X` | A gardening group has ten helpers and meets on Saturday. The organiser agrees those two facts may appear in a public notice. Helpers' contact details must stay in the private organiser sheet. |
-| `L4-W-X` | A team agrees its public update may say eighteen support requests were resolved. Individual request texts, names and internal links are excluded from that update. |
-| `L4-T-X` | A maintainer asks for a fictional reproduction of an upload problem. The requirement is “PDF up to 2 MB.” Customer logs and credentials must not be included. No test has been run. |
+| `L4-W-X` | A team agrees its public update may say eighteen support requests were resolved. Individual request texts, names and internal links are excluded from that update.                              |
+| `L4-T-X` | A maintainer asks for a fictional reproduction of an upload problem. The requirement is “PDF up to 2 MB.” Customer logs and credentials must not be included. No test has been run.             |
 
 <details><summary>Compare your decision</summary>
 
@@ -129,4 +129,4 @@ Use your Lesson 3 artifact or an invented case above. Write:
 
 **Take forward:** bring the sample and decision to [Lesson 5: Build a repeatable workflow](05-build-a-repeatable-workflow.md). You will decide when a draft is useful, when it needs repair and how to recover from missing information.
 
-<!-- Author reference: draft LD-FND-004 0.2; refines FND-004 without changing its canonical version. All text and case-specific permissions are original fictional teaching material. -->
+<!-- Author reference: draft LD-FND-004 0.3; refines FND-004 without changing its canonical version. All text and case-specific permissions are original fictional teaching material. -->

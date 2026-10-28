@@ -46,43 +46,43 @@ Pick the best starting task for your example. Make your choice before opening th
 
 ### Everyday question — `L1-E-P`
 
-- **A.** Draft a plan for the library booking and confirm the $200 budget.
-- **B.** Draft a schedule within two hours and twelve volunteers; mark venue and budget undecided.
-- **C.** Write a cheerful plan; keep it if the wording sounds confident.
+- **A.** Draft a two-hour plan for twelve volunteers at the library; check minutes and staffing against E1.
+- **B.** Draft a two-hour plan for twelve volunteers; check minutes and staffing, leaving venue and budget open.
+- **C.** Draft a two-hour plan for twelve volunteers; check attendance by adding staff counts across its sequential activities.
 
-**Hint:** Which option gives you a check you can actually perform with Source E1?
+**Hint:** Check both the facts the task assumes and what its proposed check would measure.
 
 <details><summary>Check your answer</summary>
 
-**B is the best starting task.** It uses the supplied limits and names what is missing. **A** assumes a library booking and budget that the source never gives. **C** checks tone, but a confident plan could still require twenty people. The two-hour total and twelve-person limit give you concrete checks.
+**B keeps the task within E1.** It gives you people and minutes to check without settling the unknown arrangements. **A:** The library is not established by E1; remove that assumed venue or label it as a suggestion needing confirmation. **C:** Adding staff counts across sequential slots can count the same person more than once. Compare each slot's demand with twelve, rather than treating the sum as attendance.
 
 </details>
 
 ### Work question — `L1-W-P`
 
-- **A.** Draft an action table, preserve missing owners and dates, and compare every row with the notes.
-- **B.** Give every action a deadline so the table has no blank information.
-- **C.** Announce that Alex will deliver the final results on Friday.
+- **A.** Draft task, owner and date rows; check each against W1 and leave missing fields open.
+- **B.** Draft task, owner and date rows; use Tuesday for every date, then check the owner names.
+- **C.** Draft task, owner and date rows; use Alex for the announcement and check all the dates.
 
-**Hint:** A complete-looking table can contain invented commitments.
+**Hint:** An owner check and a date check can catch different assumptions in the same table.
 
 <details><summary>Check your answer</summary>
 
-**A is best.** It produces something useful without deciding for the team. **B** fills gaps with commitments the team did not make. **C** changes Alex's task and invents Friday. “Not specified” is useful information: it tells the team what to decide next.
+**A preserves W1's separate commitments.** Check each filled cell against the note and retain the gaps. **B transfers the trial date** to other tasks; Tuesday belongs to the process test, not every deadline. **C assigns Alex a task** the note does not give: Alex gathers feedback, while announcement ownership is open. Repair the unsupported cell without deleting the known task.
 
 </details>
 
 ### Technical question — `L1-T-P`
 
-- **A.** Report that the sign-up form is secure because a privacy requirement exists.
-- **B.** List some tests and mark them passed to show the plan is complete.
-- **C.** Draft test cases, link each to a requirement, and leave results “not run.”
+- **A.** Draft a privacy report; use the stated requirement to mark those checks passed.
+- **B.** Draft invalid-input cases; treat account privacy as covered by the same checks.
+- **C.** Draft cases with inputs and expected behavior; check T1 and record not run.
 
-**Hint:** What evidence would be needed to report an observed result?
+**Hint:** Look separately for requirement coverage and evidence of execution.
 
 <details><summary>Check your answer</summary>
 
-**C is best.** You can check a proposed test against the requirements now. **A** confuses intended behavior with observed behavior. **B** records a result without executing a test. Correct either by separating the proposed case from its execution status.
+**C produces candidate cases** you can compare with T1 while keeping execution not run. **A treats a requirement as an execution result**; replace passed with not run until there is actual test evidence. **B assumes invalid-input cases also cover account privacy.** A helpful error could still reveal an existing account, so include a case that checks that separate requirement.
 
 </details>
 
@@ -90,11 +90,11 @@ Pick the best starting task for your example. Make your choice before opening th
 
 Choose the matching route. Write one task and one check before opening the example. There can be more than one useful answer.
 
-| Case | Fresh source | Your task |
-| --- | --- | --- |
-| `L1-E-X` | A book swap has eight helpers and thirty donated books. It is free, on Sunday afternoon. The location is unconfirmed. | Choose a draft you can check without inventing a location. |
-| `L1-W-X` | Jo will collect three comments after a Wednesday pilot. Rene will update the instructions. The continuation decision date is unset. | Choose a useful output and one source-based check. |
-| `L1-T-X` | An upload form should accept PDFs up to 2 MB and explain rejected input. No tests have been run. | Choose a useful testing task that does not claim a result. |
+| Case     | Fresh source                                                                                                                        | Your task                                                  |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `L1-E-X` | A book swap has eight helpers and thirty donated books. It is free, on Sunday afternoon. The location is unconfirmed.               | Choose a draft you can check without inventing a location. |
+| `L1-W-X` | Jo will collect three comments after a Wednesday pilot. Rene will update the instructions. The continuation decision date is unset. | Choose a useful output and one source-based check.         |
+| `L1-T-X` | An upload form should accept PDFs up to 2 MB and explain rejected input. No tests have been run.                                    | Choose a useful testing task that does not claim a result. |
 
 <details><summary>Compare your approach</summary>
 
@@ -122,4 +122,4 @@ Use invented details, or reuse a source above. Keep this private while practisin
 
 **Take forward:** keep these four lines for [Lesson 2: Write a useful request](02-write-a-useful-request.md). You will turn them into instructions someone else can follow.
 
-<!-- Author reference: draft LD-FND-001 0.2; refines FND-001, does not replace its canonical version. Original synthetic examples. Question IDs are content IDs, not automated tests. -->
+<!-- Author reference: draft LD-FND-001 0.3; refines FND-001, does not replace its canonical version. Original synthetic examples. Question IDs are content IDs, not automated tests. -->

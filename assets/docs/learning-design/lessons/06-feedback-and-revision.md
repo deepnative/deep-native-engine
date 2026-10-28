@@ -59,15 +59,15 @@ This avoids making an unnecessary third edit or treating the old response as a r
 
 Draft v1 says “Eight helpers will start at 10 a.m.” Which feedback would best help the writer repair it using E6?
 
-- **A.** “E6 says six helpers and leaves the start time open. Correct the count and mark the time to be confirmed; I have not checked the actual event.”
-- **B.** “Make it more professional; I give it 100% once it sounds confident.”
-- **C.** “Change the time to 9 a.m. because morning events work better.”
+- **A.** E6 gives six helpers and no start time. Use six and mark the time open; I checked the notes, not the event.
+- **B.** E6 gives six helpers and no start time. Use six and keep 10 a.m. as the confirmed start; I checked the count.
+- **C.** E6 gives six helpers and no start time. Mark both the helper count and time unknown until the organiser replies.
 
-**Hint:** Look for an observed issue, source evidence and a concrete next action.
+**Hint:** Check whether the advice preserves what is known as well as correcting what is unsupported.
 
 <details><summary>Check your answer</summary>
 
-**A is useful and bounded.** **B** substitutes tone and a score for evidence. **C** replaces one unsupported time with another. You can suggest a possible time as a separate planning idea, but you cannot label it an agreed fact from E6.
+**A repairs both claims using E6** and states the limit of its check. **B fixes the count but keeps an unsupported start time**; replace confirmed 10 a.m. with a time to be confirmed. **C discards the known count** while waiting for a missing time. Keep six helpers, and ask only about the detail the source leaves open.
 
 </details>
 
@@ -75,15 +75,15 @@ Draft v1 says “Eight helpers will start at 10 a.m.” Which feedback would bes
 
 How should you handle the suggestion to give Mina a Thursday deadline?
 
-- **A.** Accept it because feedback is always more authoritative than your own check.
-- **B.** Delete Mina's task entirely because its deadline is uncertain.
-- **C.** Keep the known task and unspecified deadline, explain the source distinction and ask whether a deadline source exists.
+- **A.** Use Thursday as Mina's deadline; explain that the source links it to the survey trial.
+- **B.** Leave the deadline open and remove Mina's owner entry until the team confirms a date.
+- **C.** Retain Mina's task and unspecified deadline; ask which source gives her a Thursday deadline.
 
-**Hint:** You can disagree with a change while still using the useful information.
+**Hint:** A missing deadline does not erase a known task or transfer another event's date.
 
 <details><summary>Check your answer</summary>
 
-**C preserves the source and makes the next question clear.** **A** turns advice into a commitment without evidence. **B** throws away the stated task because one field is missing. A good decision can be “keep this wording, with a reason.”
+**C retains the known task** and asks a question that could resolve the missing deadline. **A borrows the trial date** for Mina's separate commitment; the source does not make that connection. Keep her deadline unspecified. **B removes a known owner** because a date is missing. Restore Mina's task and leave only the unsupported deadline open.
 
 </details>
 
@@ -91,15 +91,15 @@ How should you handle the suggestion to give Mina a Thursday deadline?
 
 Draft v1 says “Blank-message test: passed. Maximum message length: 500.” Draft v2 says “Blank-message test: not run. Maximum message length: unspecified.” Feedback on v1 requests those corrections. What should your revision record say?
 
-- **A.** “The reviewer has approved v2,” because the requested changes are now present.
-- **B.** “Already addressed in v2,” with the matching changes; retain the feedback's v1 scope.
-- **C.** Rewrite v1 to look like v2, so there is no incorrect old answer.
+- **A.** Keep v1 and its comment; record v2 as reviewed because both requested fixes are present.
+- **B.** Keep v1 and its comment; record the two fixes in v2 as already addressed, with no new review.
+- **C.** Keep the comment on v1; overwrite v1 with the corrected text so the record shows no open issues.
 
-**Hint:** A comment's source version and the current version are separate facts.
+**Hint:** Separate the version that received feedback from the version that contains the correction.
 
 <details><summary>Check your answer</summary>
 
-**B keeps the history truthful.** **A** invents a new review or approval. **C** removes the evidence of what was revised. Keep the earlier version identifiable and point to the newer correction; retention or deletion of real work follows the actual product's rules.
+**B records the two changes** while keeping the feedback attached to v1. **A invents a new review** from the presence of the corrections; record already addressed, not reviewed or approved. **C overwrites the evidence** of the original draft. Keep v1 identifiable and point to v2 for the changed status and limit. A real work record still follows its applicable retention and deletion rules.
 
 </details>
 
@@ -107,11 +107,11 @@ Draft v1 says “Blank-message test: passed. Maximum message length: 500.” Dra
 
 Choose whether to **revise**, **ask/decline with a reason**, or **record already addressed**. Write the feedback response and name the source/version it concerns.
 
-| Case | Fresh source, draft and feedback |
-| --- | --- |
+| Case     | Fresh source, draft and feedback                                                                                                                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `L6-E-X` | A reading group has nine people and forty-five minutes on Wednesday. The room is undecided. Draft v1 says nine people and an undecided room. Feedback says “make it twelve people in Room 4 so it sounds complete.” |
-| `L6-W-X` | Noor is the assigned agenda owner; Lee invites participants. Draft v1 assigned the agenda to Lee. Draft v2 correctly assigns it to Noor. A comment on v1 says “fix the agenda owner.” |
-| `L6-T-X` | A file form should accept PDFs up to 2 MB. No test has run. Draft v1 says “3 MB PDF rejection test: passed.” Feedback says “separate the expected rejection from the actual execution status.” |
+| `L6-W-X` | Noor is the assigned agenda owner; Lee invites participants. Draft v1 assigned the agenda to Lee. Draft v2 correctly assigns it to Noor. A comment on v1 says “fix the agenda owner.”                               |
+| `L6-T-X` | A file form should accept PDFs up to 2 MB. No test has run. Draft v1 says “3 MB PDF rejection test: passed.” Feedback says “separate the expected rejection from the actual execution status.”                      |
 
 <details><summary>Compare your response</summary>
 
@@ -145,4 +145,4 @@ Keep your practice record for yourself unless you deliberately choose an audienc
 
 **Take forward:** [complete the foundation practice](../foundation-practice.md) with one connected artifact. Keep what you can explain, mark what remains uncertain, and repeat the process with a fresh source.
 
-<!-- Author reference: draft LD-FND-006 0.2; refines FND-006. Original synthetic sources, comments and revisions; no real review, message or assessment is claimed. -->
+<!-- Author reference: draft LD-FND-006 0.3; refines FND-006. Original synthetic sources, comments and revisions; no real review, message or assessment is claimed. -->

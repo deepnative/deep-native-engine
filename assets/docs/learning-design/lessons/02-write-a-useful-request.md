@@ -45,15 +45,15 @@ Choose the missing instruction that would most improve each request. Work only o
 
 The request says: “Suggest a two-hour plan for twelve volunteers on Saturday. Use activity and duration columns.” What should you add?
 
-- **A.** Use the library as the venue because it sounds suitable.
-- **B.** Make the plan enthusiastic and do not mention uncertainty.
-- **C.** Keep venue, budget and start time unconfirmed; add simultaneous volunteer counts so I can check the limits.
+- **A.** Add total volunteer-hours; leave venue, budget and start time open.
+- **B.** Add volunteers needed at the same time; use 9 a.m. as the start, with venue and budget open.
+- **C.** Add volunteers needed at the same time; leave venue, budget and start time open.
 
-**Hint:** Improve what you can inspect, and protect the missing facts.
+**Hint:** Which added field reveals an overstaffed slot, and which time is actually supplied?
 
 <details><summary>Check your answer</summary>
 
-**C adds the useful missing constraints.** **A** converts a possible venue into a fact. **B** could hide a gap behind tone. Enthusiasm can be a preference, but it cannot replace a check of people, time and unknown details.
+**C exposes the peak staffing demand** while preserving E2's unknowns. **A total of volunteer-hours can hide** a slot needing too many people: thirteen people for one hour uses only thirteen volunteer-hours, but exceeds the twelve available. Ask for people needed in each slot. **B supplies a start time that E2 does not give.** Keep that time open while retaining the useful staffing column.
 
 </details>
 
@@ -61,15 +61,15 @@ The request says: “Suggest a two-hour plan for twelve volunteers on Saturday. 
 
 The request says: “Turn Source W2 into task, owner and date columns.” What should you add?
 
-- **A.** Give each task next Tuesday as its date.
-- **B.** Use “not specified” when a task's owner or date is missing, and compare each row with the notes.
-- **C.** Fill missing owners from whichever person's name appears closest.
+- **A.** Give every task next Tuesday as its date, then compare the owner names with W2.
+- **B.** Keep missing owners and dates not specified; compare each populated cell with W2.
+- **C.** Keep missing dates not specified; assign the announcement to Alex, who gathers feedback.
 
-**Hint:** Which dates and owners does the note actually attach to each task?
+**Hint:** Trace each date and owner to the particular task it belongs to.
 
 <details><summary>Check your answer</summary>
 
-**B preserves the source.** **A** reuses the process test date for unrelated deadlines. **C** treats word proximity as authority to assign work. If your draft has either error, replace that owner or date with “not specified” and record an open question.
+**B makes the source check explicit** and preserves missing information. **A transfers the process test date** to unrelated deadlines; checking owner names does not repair those dates. Keep each missing deadline not specified. **C preserves dates but invents an announcement owner.** Alex's feedback task does not assign the announcement; leave that owner open and keep the known feedback task.
 
 </details>
 
@@ -77,15 +77,15 @@ The request says: “Turn Source W2 into task, owner and date columns.” What s
 
 The request says: “Create sign-up tests with input and expected behavior.” What should you add?
 
-- **A.** Link each case to the supplied requirement and mark execution “not run.”
-- **B.** Add “passed” for cases whose expected behavior is easy to describe.
-- **C.** Predict that the form passes because it has email and password fields.
+- **A.** Add a source requirement and not-run status to each case; keep missing input limits open.
+- **B.** Add a source requirement and not-run status; use an eight-character minimum for passwords.
+- **C.** Add a source requirement to each case; mark privacy passed when the expected message is generic.
 
-**Hint:** A clear expectation is useful before execution, but is still an expectation.
+**Hint:** A familiar input rule and a well-written expectation still need their own evidence.
 
 <details><summary>Check your answer</summary>
 
-**A makes coverage and evidence inspectable.** **B** invents test outcomes. **C** infers correct behavior from field names. Keep the expected result, then use a separate status to say what has actually been observed.
+**A keeps requirements and execution separate** without adding an input rule. **B adds a password minimum** that T2 does not supply. Leave that limit unspecified and identify the requirement needed before testing it. **C turns expected wording into a passing result.** A generic message is an expectation to check, not evidence that the form displayed it without revealing an account. Keep execution not run.
 
 </details>
 
@@ -93,10 +93,10 @@ The request says: “Create sign-up tests with input and expected behavior.” W
 
 Write a two-to-four-sentence request using one of these sources. Include all four ingredients; no exact wording is required.
 
-| Case | Fresh source |
-| --- | --- |
-| `L2-E-X` | A seed-swap table has six helpers and forty seed packets. It opens on Sunday for one hour. The location and start time are undecided. |
-| `L2-W-X` | Mina drafts a survey. Arun checks the wording. A trial is planned for Thursday. No survey deadline, review deadline or launch date is agreed. |
+| Case     | Fresh source                                                                                                                                            |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `L2-E-X` | A seed-swap table has six helpers and forty seed packets. It opens on Sunday for one hour. The location and start time are undecided.                   |
+| `L2-W-X` | Mina drafts a survey. Arun checks the wording. A trial is planned for Thursday. No survey deadline, review deadline or launch date is agreed.           |
 | `L2-T-X` | A contact form requires an email and message. A blank message must show an explanation. No maximum message length is specified. No tests have been run. |
 
 <details><summary>Compare with a worked request</summary>
@@ -115,15 +115,15 @@ Take your Lesson 1 task. Write the request, then annotate it with **context / ta
 
 **Self-check rubric:**
 
-| Criterion | What you should be able to point to | If it is missing |
-| --- | --- | --- |
-| Faithful context | Each included number, name or commitment appears in your source. | Remove or clearly label the extra detail as a suggestion. |
-| Useful task | One draft output is named. | Replace “help me” with the draft you want. |
-| Inspectable shape and limits | A reader can tell how to organise it and what not to guess. | Add columns, a short outline or explicit unknowns. |
-| Meaningful check | You name what you will compare with which source. | Replace “check quality” with a specific check. |
+| Criterion                    | What you should be able to point to                              | If it is missing                                          |
+| ---------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------- |
+| Faithful context             | Each included number, name or commitment appears in your source. | Remove or clearly label the extra detail as a suggestion. |
+| Useful task                  | One draft output is named.                                       | Replace “help me” with the draft you want.                |
+| Inspectable shape and limits | A reader can tell how to organise it and what not to guess.      | Add columns, a short outline or explicit unknowns.        |
+| Meaningful check             | You name what you will compare with which source.                | Replace “check quality” with a specific check.            |
 
 Keep the source beside the request. Save the version you want to work from; checking every box does not certify the answer an AI might produce.
 
 **Take forward:** [Lesson 3: Check an answer](03-check-an-answer.md) gives you a flawed answer to inspect, so you can practise even without calling an AI tool.
 
-<!-- Author reference: draft LD-FND-002 0.2; refines FND-002. Original synthetic examples. Question IDs are content IDs, not automated tests. -->
+<!-- Author reference: draft LD-FND-002 0.3; refines FND-002. Original synthetic examples. Question IDs are content IDs, not automated tests. -->

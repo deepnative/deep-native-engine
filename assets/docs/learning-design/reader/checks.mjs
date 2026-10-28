@@ -1352,6 +1352,172 @@ await check(
   },
 );
 
+// Source-derived expectations for the revised alternatives. These are not
+// imported from course.mjs, and do not grade learners' free writing.
+const refinedPractice = {
+  Everyday: {
+    1: [
+      ["at the library", "The library is not established"],
+      ["leaving venue and budget open", "B keeps the task within E1"],
+      ["adding staff counts", "Adding staff counts across sequential slots"],
+    ],
+    2: [
+      ["total volunteer-hours", "A total of volunteer-hours can hide"],
+      ["use 9 a.m.", "B supplies a start time that E2 does not give"],
+      ["at the same time", "C exposes the peak staffing demand"],
+    ],
+    4: [
+      ["names replaced by initials", "A still carries phone numbers"],
+      ["invented brief", "B keeps the useful planning facts"],
+      [
+        "Publish the real invitation",
+        "C turns practice into a real public release",
+      ],
+    ],
+    5: [
+      [
+        "swap 45 min / 7",
+        "A totals sixty minutes but still needs seven helpers",
+      ],
+      ["swap 40 min / 6", "B passes both stated checks"],
+      [
+        "swap 45 min / 6",
+        "C fits the helper limit but still totals sixty-five minutes",
+      ],
+    ],
+    6: [
+      ["I checked the notes, not the event", "A repairs both claims using E6"],
+      [
+        "confirmed start",
+        "B fixes the count but keeps an unsupported start time",
+      ],
+      ["both the helper count and time unknown", "C discards the known count"],
+    ],
+  },
+  Work: {
+    1: [
+      ["leave missing fields open", "A preserves W1's separate commitments"],
+      ["Tuesday for every date", "B transfers the trial date"],
+      ["Alex for the announcement", "C assigns Alex a task"],
+    ],
+    2: [
+      ["every task next Tuesday", "A transfers the process test date"],
+      ["each populated cell", "B makes the source check explicit"],
+      [
+        "announcement to Alex",
+        "C preserves dates but invents an announcement owner",
+      ],
+    ],
+    4: [
+      ["original complaint", "A changes a name but reuses the real complaint"],
+      ["reading access covers", "B treats reading access as permission"],
+      ["fictional library-team note", "C preserves the task structure"],
+    ],
+    5: [
+      ["Thursday for any date", "A checks owners but invents deadlines"],
+      ["Mina for the trial", "B checks dates but invents the trial owner"],
+      ["unsupported cells not specified", "C checks both kinds of commitment"],
+    ],
+    6: [
+      ["Thursday as Mina's deadline", "A borrows the trial date"],
+      ["remove Mina's owner entry", "B removes a known owner"],
+      ["which source gives her", "C retains the known task"],
+    ],
+  },
+  Technical: {
+    1: [
+      [
+        "mark those checks passed",
+        "A treats a requirement as an execution result",
+      ],
+      [
+        "account privacy as covered",
+        "B assumes invalid-input cases also cover account privacy",
+      ],
+      ["record not run", "C produces candidate cases"],
+    ],
+    2: [
+      [
+        "missing input limits open",
+        "A keeps requirements and execution separate",
+      ],
+      ["eight-character minimum", "B adds a password minimum"],
+      ["privacy passed", "C turns expected wording into a passing result"],
+    ],
+    4: [
+      [
+        "invented email and blank message",
+        "A creates the required practice case",
+      ],
+      ["no new permission needed", "B treats redaction as permission"],
+      ["customer's original email", "C still uses the customer's address"],
+    ],
+    5: [
+      ["finish the missing cases manually", "A keeps the retained source"],
+      ["expected results passed", "B confuses an expectation with execution"],
+      ["Retry from memory", "C abandons the available source"],
+    ],
+    6: [
+      ["record v2 as reviewed", "A invents a new review"],
+      ["already addressed, with no new review", "B records the two changes"],
+      ["overwrite v1", "C overwrites the evidence"],
+    ],
+  },
+};
+for (const width of [1360, 390]) {
+  for (const [routeName, lessons] of Object.entries(refinedPractice)) {
+    for (const [number, choices] of Object.entries(lessons)) {
+      await check(
+        `READER-017 ${routeName} lesson ${number} practice diagnoses all choices at ${width}px`,
+        async (page) => {
+          await start(page, routeName);
+          const index = Number(number) - 1;
+          await page.locator(`[data-lesson="${index}"]`).click();
+          await expect(page.locator("#source-text")).toContainText(
+            expected[routeName].sources[index],
+          );
+          await step(page, "Try it");
+          for (const [choiceIndex, [label, feedback]] of choices.entries()) {
+            const key = "ABC"[choiceIndex];
+            const field = page.locator("fieldset");
+            await expect(
+              field.locator("label.choice").nth(choiceIndex),
+            ).toContainText(label);
+            await field.locator(`input[value="${key}"]`).check();
+            await page
+              .getByRole("button", { name: "Check answer", exact: true })
+              .click();
+            await expect(field.locator(`input[value="${key}"]`)).toBeChecked();
+            await expect(field.locator(".answer-feedback")).toContainText(
+              `You chose ${key}.`,
+            );
+            await expect(field.locator(".answer-feedback")).toContainText(
+              feedback,
+            );
+            await expect(
+              field.locator(".answer-feedback.positive"),
+            ).toHaveCount(key === expected[routeName].keys[index][0] ? 1 : 0);
+          }
+          expect(
+            await page.evaluate(
+              () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+          ).toBe(true);
+          if (routeName === "Everyday" && Number(number) === 2)
+            await page.locator(".lesson-body").screenshot({
+              path: path.join(output, `refined-request-${width}.png`),
+            });
+          await step(page, "Fresh case");
+          await expect(page.locator("#source-text")).toContainText(
+            expected[routeName].fresh[index],
+          );
+        },
+        { width, height: 950 },
+      );
+    }
+  }
+}
+
 await browser.close();
 await writeFile(
   path.join(output, "results.json"),

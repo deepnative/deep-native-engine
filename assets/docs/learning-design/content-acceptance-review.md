@@ -2,7 +2,9 @@
 
 Author review for [#549](https://github.com/deepnative/deep-native-engine/issues/549), 27 October 2026. Reviewed content: `11d6a7f6dbe2adb2e4bf70769a05cc2529505584`, content hash `a63aa78cb2a451f4bbaba9b38d1e31efe61741d4aff8469402ea8d9760975178`. Codex performed this audit as the author. No independent learner study or new application test run is claimed.
 
-**The six-lesson package is inspectable and its supplied answers are factually consistent, but its multiple-choice practice needs refinement before content acceptance.** A rule that simply chooses the longest option selects the correct key in **14 of 15 items**. The next work is to improve the choices and explanations, using the existing reader. More controls or production setup would not address this finding.
+**Historical baseline finding:** the six-lesson package was inspectable and its supplied answers were factually consistent, but the unique-longest-option rule selected 14 of 15 multiple-choice keys. The audit below records that reviewed revision.
+
+**Resolution, 27 October:** the [practice refinement](practice-refinement.md) rewrites those fifteen items and their hints/explanations, records all thirty misconception/repair rationales, preserves the keys and earlier notebooks, and passes 72 local reader checks. Unique-longest matches are now 3/15; tie-aware results and limits are in that report. The earlier AC2 finding is resolved within author content review. Its final section contains the current next action; the proposed rewrite below remains historical evidence.
 
 ## Findings
 
@@ -30,7 +32,7 @@ Repair the alternatives as competing attempts at the same task. Each wrong choic
 
 At the reviewed revision, `authoring/README.md` says the reader does not provide a structured feedback decision, while Lesson 6 already does. `prototype/README.md` asks for the Everyday rehearsal that has already been recorded. That can send the next content pass back into delivered work. This audit updates their next-action sections, the reader entry and the package index to point here. Their historical evidence and local-storage limits remain intact.
 
-## AC1–6 disposition
+## AC1–6 disposition at the audited revision
 
 | Issue criterion                                                                           | Direct current evidence                                                                                                                                                                    | Disposition and limit                                                                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -74,7 +76,7 @@ The three study links were rechecked for the claims used in the package: Khan Ac
 
 Evidence directory: `/Users/tomwu/Documents/Codex/2026-10-27/dne-content-workflows-bdd/content-audit/`. `item-cue-audit.json` records every item/key/length and the analysis boundary; `audit_items.py` reproduces it. Static/reference checks and the final committed-file manifest are recorded separately. No application files, lesson text, runtime or tests change in this audit.
 
-## Next bounded refinement
+## Refinement proposed by this audit
 
 Under #549, revise the **15 multiple-choice practice items in Lessons 1, 2, 4, 5 and 6**, with their hints/explanations, so choices are competing attempts with specific mistakes. Keep source facts, outcomes, question IDs, correct-key identity, fresh cases and learner notebooks intact. Do not rewrite Lesson 3's classification keys or introduce automatic grading of free writing. Regenerate the reader's content version and verify earlier notebook recovery; record the exact before/after teaching changes. Existing content and tools suffice. Coordinate later canonical/shared-reader adoption with #93/#117; preserve #103/#114 work. Lead Sol/High; author semantic review High, separate Astra review only if requested or actually required.
 
@@ -104,4 +106,4 @@ Scenario: Refine practice without rewriting earlier work
   And current practice uses the revised choices and their matching explanations
 ```
 
-These are proposed acceptance examples, not extra executed scenarios or additions to the 77-ID register. Review every option for meaning; compare the wording-only cue result before and after; run the full focused reader checks and inspect a substantive attempt. Keep #549 open until the choice-design finding is resolved. Production and the full thread goal remain separate from this local content checkpoint.
+These are proposed acceptance examples, not extra executed scenarios or additions to the 77-ID register. Review every option for meaning; compare the wording-only cue result before and after; run the full focused reader checks and inspect a substantive attempt. The audit left #549 open for this finding; the linked refinement now records its resolution. Production and the full thread goal remain separate from this local content checkpoint.

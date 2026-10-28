@@ -6,13 +6,13 @@
 
 A repeatable workflow explains more than how to get a draft. It explains how a person knows whether that draft is useful and what happens next.
 
-| Step | Question it answers |
-| --- | --- |
-| **Input** | What source am I using, what may be missing, and is it suitable for this purpose? |
-| **Draft** | What small output will I create? |
-| **Check** | What observable comparison could catch an error? |
-| **Decision** | Will I keep, revise or set aside the draft, and for which use? |
-| **Recovery** | What will I do if the source is missing, the draft is wrong or the tool fails? |
+| Step         | Question it answers                                                               |
+| ------------ | --------------------------------------------------------------------------------- |
+| **Input**    | What source am I using, what may be missing, and is it suitable for this purpose? |
+| **Draft**    | What small output will I create?                                                  |
+| **Check**    | What observable comparison could catch an error?                                  |
+| **Decision** | Will I keep, revise or set aside the draft, and for which use?                    |
+| **Recovery** | What will I do if the source is missing, the draft is wrong or the tool fails?    |
 
 Make each step something someone could actually do. “Check carefully” leaves the important work unexplained. “Add the durations and compare the total with sixty minutes” tells you how to check.
 
@@ -23,10 +23,10 @@ Make each step something someone could actually do. “Check carefully” leaves
 **Draft to inspect:**
 
 | Sequential activity | Minutes | Helpers needed at that time |
-| --- | --- | --- |
-| Set up | 10 | 2 |
-| Swap | 45 | 7 |
-| Tidy | 10 | 3 |
+| ------------------- | ------- | --------------------------- |
+| Set up              | 10      | 2                           |
+| Swap                | 45      | 7                           |
+| Tidy                | 10      | 3                           |
 
 **Worked check:** 10 + 45 + 10 = 65 minutes, which exceeds sixty. The swap also needs seven helpers when only six are available. Adding 2 + 7 + 3 is not the staffing check: the activities happen one after another, so people can take different roles in successive slots.
 
@@ -58,15 +58,15 @@ Make each step something someone could actually do. “Check carefully” leaves
 
 The proposed schedule is sequential: setup 10 minutes with two helpers, swap 45 minutes with seven helpers, then tidy 10 minutes with three helpers. Which change fits E5's one-hour and six-helper limits?
 
-- **A.** Shorten tidy-up to five minutes, leaving seven helpers on the swap.
-- **B.** Make the swap forty minutes with six helpers, leaving setup and tidy-up at ten minutes each.
-- **C.** Change the source to say seven helpers are available because the draft needs them.
+- **A.** Set up 10 min / 2 helpers; swap 45 min / 7; tidy 5 min / 3.
+- **B.** Set up 10 min / 2 helpers; swap 40 min / 6; tidy 10 min / 3.
+- **C.** Set up 10 min / 2 helpers; swap 45 min / 6; tidy 10 min / 3.
 
-**Hint:** There are two checks: total time and the demand in each time slot.
+**Hint:** Add each schedule's three durations, then inspect its busiest staffing slot.
 
 <details><summary>Check your answer</summary>
 
-**B passes both checks:** 10 + 40 + 10 = 60, and no slot needs more than six helpers. **A** fixes the duration but leaves the staffing conflict. **C** changes a source fact to suit the output. Keep the constraint and revise the proposal instead.
+**B passes both stated checks:** 10 + 40 + 10 = 60, and the peak demand is six. **A totals sixty minutes but still needs seven helpers** during the swap; reduce that slot's staffing demand. **C fits the helper limit but still totals sixty-five minutes**; shorten the schedule by five minutes. Passing either check alone is insufficient, and passing both does not establish practical feasibility.
 
 </details>
 
@@ -74,15 +74,15 @@ The proposed schedule is sequential: setup 10 minutes with two helpers, swap 45 
 
 Which checking rule produces a faithful action table from W5?
 
-- **A.** Use Thursday for every task, so every row has a date.
-- **B.** Assign unowned tasks to the person named closest to them.
-- **C.** Trace each owner and date to its own source statement; keep absent commitments “not specified.”
+- **A.** Check each owner against W5; use Thursday for any date left blank.
+- **B.** Check each date against W5; use Mina for the trial's missing owner.
+- **C.** Check each owner and date against W5; leave unsupported cells not specified.
 
-**Hint:** A filled cell can look useful while containing a decision nobody made.
+**Hint:** A rule can check one kind of cell correctly while inventing the other kind.
 
 <details><summary>Check your answer</summary>
 
-**C catches the invented deadlines and trial owner.** **A** turns a trial date into unrelated deadlines. **B** turns text position into task assignment. Keep the known commitments and list only the unresolved cells as questions.
+**C checks both kinds of commitment** against their own source statements. **A checks owners but invents deadlines** from the Thursday trial date; keep those task deadlines not specified. **B checks dates but invents the trial owner.** Mina's survey task does not assign the trial to her. Leave only the missing cell open and retain the known task and date.
 
 </details>
 
@@ -90,15 +90,15 @@ Which checking rule produces a faithful action table from W5?
 
 Your drafting tool stops before returning a complete test plan. What can you do next with T5?
 
-- **A.** Keep the source, write or retry the missing case, and leave execution “not run.”
-- **B.** Mark the plan passed so the interrupted attempt does not block progress.
-- **C.** Invent a maximum length and continue as though it were a requirement.
+- **A.** Retain T5, finish the missing cases manually or retry, and keep execution not run.
+- **B.** Keep the incomplete cases, then mark the ones with stated expected results passed.
+- **C.** Retry from memory and use the tool's usual message-length limit to fill the gap.
 
-**Hint:** Failure to produce a draft does not change the source or create execution evidence.
+**Hint:** Recover the missing draft without changing the source or the execution evidence.
 
 <details><summary>Check your answer</summary>
 
-**A preserves useful work and gives you a recovery step.** **B** turns a drafting failure into an invented test result. **C** adds a requirement you cannot trace. Retry or draft manually within the same facts; leave the unknown length visible.
+**A keeps the retained source** and provides a way to complete the draft. **B confuses an expectation with execution**; the written cases still have not been run. Keep their expected results, with execution not run. **C abandons the available source** and fills its unknown length from a convention. Retry from T5 or write the missing case manually, leaving maximum length unspecified.
 
 </details>
 
@@ -106,11 +106,11 @@ Your drafting tool stops before returning a complete test plan. What can you do 
 
 Write the check, decision and recovery for one route. Keep the original source separate from the proposed repair.
 
-| Case | Fresh source and problem |
-| --- | --- |
-| `L5-E-X` | Four helpers have thirty minutes. Sequential draft slots require 10 minutes/two helpers, 15 minutes/five helpers, and 5 minutes/one helper. |
+| Case     | Fresh source and problem                                                                                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `L5-E-X` | Four helpers have thirty minutes. Sequential draft slots require 10 minutes/two helpers, 15 minutes/five helpers, and 5 minutes/one helper.                                          |
 | `L5-W-X` | A draft assigns an announcement to Jo on Friday. The original notes cannot be opened, and you have no retained trusted copy. You need to decide whether this commitment is verified. |
-| `L5-T-X` | A file form should accept PDFs up to 2 MB. A 3 MB PDF rejection case is proposed, but test execution stops before any response is observed. |
+| `L5-T-X` | A file form should accept PDFs up to 2 MB. A 3 MB PDF rejection case is proposed, but test execution stops before any response is observed.                                          |
 
 <details><summary>Compare your workflow</summary>
 
@@ -140,4 +140,4 @@ Run the card once against an intentionally flawed sample. Record what you change
 
 **Take forward:** choose one step you would like help improving. In [Lesson 6: Give feedback someone can use](06-feedback-and-revision.md), you will ask a focused question, judge the response against the source and record a revision reason.
 
-<!-- Author reference: draft LD-FND-005 0.2; refines FND-005. Original synthetic examples; time/staffing checks establish only the stated constraints, not operational feasibility. -->
+<!-- Author reference: draft LD-FND-005 0.3; refines FND-005. Original synthetic examples; time/staffing checks establish only the stated constraints, not operational feasibility. -->
