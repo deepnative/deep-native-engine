@@ -327,6 +327,62 @@ article {
 .reference {
   min-width: 0;
 }
+.feedback-workflow {
+  margin: 28px 0;
+  padding: 24px;
+  border: 1px solid #c7d4bf;
+  border-radius: 14px;
+  background: #f4f6ec;
+}
+.feedback-workflow h2 {
+  font-size: 28px;
+}
+.feedback-context,
+.feedback-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.feedback-workflow pre,
+.decision-record pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  padding: 15px;
+  border-radius: 8px;
+  background: #fffefb;
+}
+.feedback-workflow select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #bac8b2;
+  border-radius: 8px;
+  font: inherit;
+  color: inherit;
+  background: #fffefb;
+}
+.feedback-workflow h3,
+.feedback-workflow h4 {
+  margin-top: 22px;
+}
+.decision-record {
+  margin-top: 20px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.feedback-retained {
+  margin-top: 16px;
+}
+@media (max-width: 700px) {
+  .feedback-workflow {
+    padding: 16px;
+  }
+  .feedback-context,
+  .feedback-comparison {
+    grid-template-columns: 1fr;
+  }
+}
 .source-card {
   padding: 24px 22px 20px;
   border: 1px solid #d3ded0;

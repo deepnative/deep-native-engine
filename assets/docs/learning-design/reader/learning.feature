@@ -1,6 +1,40 @@
 # Local reader behavior only. No account, publication or application L-series claim.
 Feature: Follow the complete authored foundation sequence
 
+  Scenario: READER-013 — Read feedback with its original source and version
+    Given Lesson 6 supplies an invented fresh source, draft versions and practice comment
+    When the learner opens its feedback decision workspace in any route
+    Then the exact source and original comment version are visible beside the current draft
+    And an older comment is not presented as a review of a newer draft
+    And the feedback is labelled supplied practice rather than a real person's response
+
+  Scenario: READER-014 — Retain a reasoned feedback decision without rewriting history
+    Given the learner can inspect the source and current artifact
+    When they choose revise, decline with evidence or already addressed
+    Then a choice and written reason are required to add the decision
+    And the learner can compare their reason with supplied source-based guidance
+    And revising requires different nonempty text and appends a new artifact version
+    And declining or already addressed retains the current text and version
+    And already addressed requires a newer artifact than the comment's version
+    And all original versions, the comment, reason and optional clarification remain identifiable
+    And adding a decision does not claim persistence, a sent question or independent assessment
+
+  Scenario: READER-015 — Save and recover the feedback record with the notebook
+    Given the learner has a recorded decision or an unfinished response
+    When they explicitly save and reload or download the notebook
+    Then its versions, decisions, writing and clarification are retained
+    But a failed save leaves the response recoverable without claiming persistence
+    And an invalid decision history is protected from overwrite
+    And earlier content notebooks remain separate and unchanged
+
+  Scenario: READER-016 — Keep feedback writing literal and separate by route
+    Given the learner has self-checked Lesson 6 work
+    When they edit a feedback response or add a decision
+    Then the earlier lesson self-check is cleared
+    And HTML-looking text is rendered and downloaded literally
+    And switching routes preserves distinct response drafts and decision records
+    And browsing the workspace alone does not warn about unsaved writing
+
   Scenario: READER-001 — Follow six lessons and a final practice in one route
     Given the learner chooses Everyday, Work or Technical
     When they follow the course path on a desktop or narrow screen

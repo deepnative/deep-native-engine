@@ -1,4 +1,12 @@
 import { course } from "./course.mjs";
+import {
+  newFeedbackState,
+  validFeedbackState,
+  renderFeedback,
+  feedbackHistory,
+  addFeedbackDecision,
+  exportFeedback,
+} from "./feedback.mjs";
 
 const routes = { everyday: "Everyday", work: "Work", technical: "Technical" };
 const stages = ["See an example", "Try it", "Fresh case", "Your work"];
@@ -25,7 +33,7 @@ const sessions = new Map();
 let route = new URLSearchParams(location.hash.slice(1)).get("route");
 if (!Object.keys(routes).includes(route)) route = "everyday";
 
-function emptyState() {
+function emptyState(chosenRoute) {
   return {
     lesson: 0,
     step: 0,
@@ -39,6 +47,7 @@ function emptyState() {
     })),
     final: finalLabels.map(() => ""),
     finalChecked: false,
+    feedback: newFeedbackState(chosenRoute),
   };
 }
 
@@ -60,7 +69,9 @@ function validState(value, chosenRoute) {
     !Array.isArray(value.final) ||
     value.final.length !== 6 ||
     !value.final.every(text) ||
-    typeof value.finalChecked !== "boolean"
+    typeof value.finalChecked !== "boolean" ||
+    (value.feedback !== undefined &&
+      !validFeedbackState(value.feedback, chosenRoute))
   )
     return false;
   return value.lessons.every((v, i) => {
@@ -91,13 +102,14 @@ function writingSnapshot(value) {
     })),
     final: value.final,
     finalChecked: value.finalChecked,
+    feedback: value.feedback,
   });
 }
 
 function getSession(chosenRoute) {
   if (sessions.has(chosenRoute)) return sessions.get(chosenRoute);
   const session = {
-    state: emptyState(),
+    state: emptyState(chosenRoute),
     dirty: false,
     blocked: false,
     raw: null,
@@ -135,6 +147,7 @@ function getSession(chosenRoute) {
         if (!validState(stored.state, chosenRoute))
           throw new Error("unreadable");
         session.state = stored.state;
+        session.state.feedback ??= newFeedbackState(chosenRoute);
         session.earlier = session.earlier.filter(
           (entry) => entry.key !== loadedKey,
         );
@@ -190,11 +203,13 @@ function outline() {
         i < 6 ? state().lessons[i].selfChecked : state().finalChecked;
       const caption = checked
         ? "Self-checked"
-        : written
-          ? "Notes written"
-          : i === 6
-            ? "One connected record"
-            : "Example · practice · apply";
+        : i === 5 && state().feedback.records.length
+          ? "Decision recorded"
+          : written
+            ? "Notes written"
+            : i === 6
+              ? "One connected record"
+              : "Example · practice · apply";
       return `<button class="lesson-link ${current ? "current" : ""}" data-lesson="${i}" aria-label="${i < 6 ? `Lesson ${i + 1}: ` : ""}${escape(title)}" ${current ? 'aria-current="step"' : ""}><span class="lesson-number">${i < 6 ? String(i + 1).padStart(2, "0") : "↗"}</span><span><strong>${escape(title)}</strong><small>${caption}</small></span></button>`;
     })
     .join("");
@@ -249,8 +264,9 @@ function earlierNotebooks() {
 function earlierNotes() {
   const notes = state()
     .lessons.map((l, n) => {
-      if (!l.work.trim() && !l.transfer.trim()) return "";
-      return `<section><h3>${n + 1}. ${escape(course.lessons[n].title)}</h3>${l.transfer.trim() ? `<p class="eyebrow">Fresh-case attempt</p><pre>${escape(l.transfer)}</pre>` : ""}${l.work.trim() ? `<p class="eyebrow">Your work</p><pre>${escape(l.work)}</pre>` : ""}</section>`;
+      const decisions = n === 5 ? feedbackHistory(state().feedback) : "";
+      if (!l.work.trim() && !l.transfer.trim() && !decisions) return "";
+      return `<section><h3>${n + 1}. ${escape(course.lessons[n].title)}</h3>${l.transfer.trim() ? `<p class="eyebrow">Fresh-case attempt</p><pre>${escape(l.transfer)}</pre>` : ""}${l.work.trim() ? `<p class="eyebrow">Your work</p><pre>${escape(l.work)}</pre>` : ""}${decisions}</section>`;
     })
     .join("");
   return `<details class="notebook" id="notebook"><summary>Your earlier notes</summary>${notes || "<p>Your notes will appear here as you write. You can revisit any lesson.</p>"}</details>`;
@@ -268,7 +284,7 @@ function lessonContent() {
   if (state().step === 0) body = data.example;
   if (state().step === 1) body = practice(data.practice);
   if (state().step === 2)
-    body = `${data.transfer}${textarea("Your fresh-case attempt", current.transfer, "transfer")}${data.comparison}<p class="quiet">Compare the reasoning, not the exact wording. The example is supplied teaching material.</p>`;
+    body = `${data.transfer}${state().lesson === 5 ? renderFeedback(route, state().feedback, session().feedbackNotice) : ""}${textarea("Your fresh-case attempt", current.transfer, "transfer")}${data.comparison}<p class="quiet">Compare the reasoning, not the exact wording. The example is supplied teaching material.</p>`;
   if (state().step === 3)
     body = `${data.own}${textarea("Your lesson work", current.work, "work")}${selfCheck(current.selfChecked, Boolean(current.work.trim()))}`;
   const next =
@@ -337,6 +353,40 @@ function navigate(lesson, step = 0) {
 }
 
 function bind() {
+  document
+    .querySelector("#feedback-choice")
+    ?.addEventListener("change", (event) => {
+      state().feedback.draft.decision = event.target.value;
+      state().lessons[5].selfChecked = false;
+      session().feedbackNotice =
+        "This response is still a draft. Add a reason before recording it.";
+      changed();
+      render();
+    });
+  document.querySelectorAll("[data-feedback-field]").forEach((input) =>
+    input.addEventListener("input", () => {
+      state().feedback.draft[input.dataset.feedbackField] = input.value;
+      state().lessons[5].selfChecked = false;
+      const comparison = document.querySelector("#feedback-proposed");
+      if (comparison) comparison.textContent = state().feedback.draft.text;
+      changed();
+    }),
+  );
+  document
+    .querySelector("#feedback-form")
+    ?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const error = addFeedbackDecision(route, state().feedback);
+      if (error) {
+        document.querySelector("#feedback-notice").textContent = error;
+        return;
+      }
+      state().lessons[5].selfChecked = false;
+      session().feedbackNotice =
+        "Decision added to this notebook. Save in this browser to retain it after reload. No question was sent.";
+      changed();
+      render();
+    });
   document.querySelectorAll("[data-route]").forEach((button) =>
     button.addEventListener("click", () => {
       route = button.dataset.route;
@@ -517,6 +567,7 @@ function exportText() {
       ),
     );
   });
+  lines.push(exportFeedback(route, state().feedback));
   lines.push("\nFinal practice", `Source: ${course.capstone[route].source}`);
   finalLabels.forEach((label, i) =>
     lines.push(`${label}: ${state().final[i]}`),

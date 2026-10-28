@@ -669,11 +669,10 @@ if (!process.argv.includes("--baseline")) {
               .fill(
                 `${name} fresh attempt for lesson ${lesson + 1}: keep the source facts and explain the check.`,
               );
-            await page.locator(".lesson-body details summary").click();
-            await expect(page.locator(".lesson-body details")).toHaveAttribute(
-              "open",
-              "",
-            );
+            await page.locator(".lesson-body > details > summary").click();
+            await expect(
+              page.locator(".lesson-body > details"),
+            ).toHaveAttribute("open", "");
             await step(page, "Your work");
             await page
               .getByLabel("Your lesson work", { exact: true })
@@ -937,6 +936,421 @@ if (!process.argv.includes("--baseline")) {
     );
   }
 }
+
+async function openFeedback(page, name = "Everyday") {
+  await start(page, name);
+  await page.locator('[data-lesson="5"]').click();
+  await step(page, "Fresh case");
+}
+
+const feedbackExamples = {
+  Everyday: {
+    source: "nine people and forty-five minutes on Wednesday",
+    comment: "make it twelve people in Room 4",
+    decision: "decline",
+    current: "Nine people will meet; the room is undecided.",
+    reason:
+      "The source gives nine people and no chosen room. A complete-looking sentence cannot establish twelve people or Room 4.",
+    question: "Which updated source establishes twelve people or Room 4?",
+    version: 1,
+  },
+  Work: {
+    source: "Noor is the assigned agenda owner; Lee invites participants",
+    comment: "fix the agenda owner",
+    decision: "addressed",
+    current: "Noor is the agenda owner; Lee invites participants.",
+    reason:
+      "V2 already assigns the agenda to Noor. The comment remains on v1 and is not a new review of v2.",
+    question: "",
+    version: 2,
+  },
+  Technical: {
+    source: "PDFs up to 2 MB. No test has run",
+    comment: "separate the expected rejection from the actual execution status",
+    decision: "revise",
+    current:
+      "Expected result: reject a 3 MB PDF under the 2 MB rule. Execution: not run.",
+    reason:
+      "The requirement supports expected rejection. No execution supports a passing result.",
+    question: "",
+    version: 2,
+  },
+};
+
+for (const width of [1360, 390]) {
+  for (const [name, example] of Object.entries(feedbackExamples)) {
+    await check(
+      `READER-013/014/015 feedback ${name} decision journey at ${width}px`,
+      async (page) => {
+        await openFeedback(page, name);
+        await expect(
+          page.getByRole("heading", {
+            name: "Decide what to do with the feedback",
+            exact: true,
+          }),
+        ).toBeVisible({ timeout: 3000 });
+        await expect(page.locator("#feedback-source")).toContainText(
+          example.source,
+        );
+        await expect(page.locator("#feedback-comment")).toContainText(
+          example.comment,
+        );
+        await expect(page.locator("#feedback-comment")).toContainText(
+          "Comment on v1",
+        );
+        await expect(page.locator("#feedback-comment")).toContainText(
+          "Supplied practice feedback",
+        );
+        await page
+          .getByLabel("My decision", { exact: true })
+          .selectOption(example.decision);
+        if (example.decision === "revise")
+          await page
+            .getByLabel("Revised text", { exact: true })
+            .fill(example.current);
+        await page
+          .getByLabel("My reason", { exact: true })
+          .fill(example.reason);
+        if (example.question)
+          await page
+            .getByLabel("Clarification to keep (optional)", { exact: true })
+            .fill(example.question);
+        await page
+          .getByRole("button", {
+            name: "Add decision to my notebook",
+            exact: true,
+          })
+          .click();
+        await expect(page.locator("#feedback-current")).toContainText(
+          `Current draft · v${example.version}`,
+        );
+        await expect(page.locator("#feedback-current")).toContainText(
+          example.current,
+        );
+        await expect(page.locator("#feedback-decisions")).toContainText(
+          example.reason,
+        );
+        await expect(page.locator("#feedback-versions")).toContainText("v1");
+        if (name === "Technical")
+          await expect(page.locator("#feedback-versions")).toContainText(
+            "3 MB PDF rejection test: passed.",
+          );
+        await expect(page.locator("#feedback-notice")).toContainText(
+          "Save in this browser",
+        );
+        await expect(page.locator("#save-status")).toContainText(
+          "Unsaved changes",
+        );
+        await page.locator("#save").click();
+        await page.reload();
+        await expect(page.locator("#feedback-decisions")).toContainText(
+          example.reason,
+        );
+        await expect(page.locator("#feedback-current")).toContainText(
+          example.current,
+        );
+        await expect(page.locator("#save-status")).toContainText("Restored");
+        const exported = await downloadText(page, page.locator("#download"));
+        for (const text of [
+          example.reason,
+          example.current,
+          example.question,
+          "Comment on v1",
+          "No question was sent",
+        ])
+          expect(exported).toContain(text);
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        await page.locator("#feedback-workflow").screenshot({
+          path: path.join(
+            output,
+            `feedback-${name.toLowerCase()}-${width}.png`,
+          ),
+        });
+      },
+      { width, height: 950 },
+    );
+  }
+}
+
+async function keepFeedback(page) {
+  await page
+    .getByRole("button", { name: "Add decision to my notebook", exact: true })
+    .click();
+}
+
+await check(
+  "READER-014 feedback decisions require a valid action and preserve version history",
+  async (page) => {
+    await openFeedback(page, "Technical");
+    await keepFeedback(page);
+    await expect(page.locator("#feedback-notice")).toContainText(
+      "Choose what to do",
+    );
+    await page
+      .getByLabel("My decision", { exact: true })
+      .selectOption("addressed");
+    await keepFeedback(page);
+    await expect(page.locator("#feedback-notice")).toContainText(
+      "Give a reason",
+    );
+    await page
+      .getByLabel("My reason", { exact: true })
+      .fill("No newer draft exists yet.");
+    await keepFeedback(page);
+    await expect(page.locator("#feedback-notice")).toContainText(
+      "no newer draft",
+    );
+    await page
+      .getByLabel("My decision", { exact: true })
+      .selectOption("revise");
+    await keepFeedback(page);
+    await expect(page.locator("#feedback-notice")).toContainText(
+      "different, nonempty",
+    );
+    await page.getByLabel("Revised text", { exact: true }).fill(" ");
+    await keepFeedback(page);
+    await expect(page.locator("#feedback-notice")).toContainText(
+      "different, nonempty",
+    );
+    await expect(page.locator("#feedback-decisions")).toContainText(
+      "No decision recorded",
+    );
+    await page
+      .getByLabel("Revised text", { exact: true })
+      .fill(feedbackExamples.Technical.current);
+    await page
+      .getByLabel("My reason", { exact: true })
+      .fill(feedbackExamples.Technical.reason);
+    await keepFeedback(page);
+    await page
+      .getByLabel("My decision", { exact: true })
+      .selectOption("addressed");
+    await page
+      .getByLabel("My reason", { exact: true })
+      .fill("The correction is now in v2; the comment still refers to v1.");
+    await keepFeedback(page);
+    await expect(page.locator("#feedback-current")).toContainText(
+      "Current draft · v2",
+    );
+    await expect(
+      page.locator("#feedback-decisions .decision-record"),
+    ).toHaveCount(2);
+    await expect(page.locator("#feedback-versions")).not.toContainText(
+      "Draft v3",
+    );
+    await expect(page.locator("#feedback-comment")).toContainText(
+      "Comment on v1",
+    );
+    await keepFeedback(page);
+    await expect(
+      page.locator("#feedback-decisions .decision-record"),
+    ).toHaveCount(2);
+    await page.locator("#save").click();
+    await page.reload();
+    await expect(
+      page.locator("#feedback-decisions .decision-record"),
+    ).toHaveCount(2);
+  },
+);
+
+await check(
+  "READER-015 feedback save failure retains the earlier save and new response",
+  async (page) => {
+    await openFeedback(page);
+    await page.locator("#save").click();
+    const baseline = await page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.startsWith("dne-course-reader-1:everyday:"),
+      );
+      return { key, raw: localStorage.getItem(key) };
+    });
+    await page
+      .getByLabel("My decision", { exact: true })
+      .selectOption("decline");
+    await page
+      .getByLabel("My reason", { exact: true })
+      .fill(feedbackExamples.Everyday.reason);
+    await page
+      .getByLabel("Clarification to keep (optional)", { exact: true })
+      .fill(feedbackExamples.Everyday.question);
+    await keepFeedback(page);
+    await page.evaluate(() => {
+      window.feedbackSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (k, v) {
+        if (k.startsWith("dne-course-reader-1:"))
+          throw new Error("fixture storage failure");
+        return window.feedbackSetItem.call(this, k, v);
+      };
+    });
+    await page.locator("#save").click();
+    await expect(page.locator("#save-status")).toContainText("Saving failed");
+    await expect(page.locator("#feedback-decisions")).toContainText(
+      feedbackExamples.Everyday.reason,
+    );
+    expect(
+      await page.evaluate((key) => localStorage.getItem(key), baseline.key),
+    ).toBe(baseline.raw);
+    const exported = await downloadText(page, page.locator("#download"));
+    expect(exported).toContain(feedbackExamples.Everyday.reason);
+    expect(exported).toContain(feedbackExamples.Everyday.question);
+    await page.evaluate(() => {
+      Storage.prototype.setItem = window.feedbackSetItem;
+    });
+    await page.locator("#save").click();
+    await page.reload();
+    await expect(page.locator("#feedback-decisions")).toContainText(
+      feedbackExamples.Everyday.reason,
+    );
+  },
+);
+
+for (const corruption of [
+  "wrong comment version",
+  "rewritten retained artifact",
+  "another route",
+]) {
+  await check(
+    `READER-015 feedback ${corruption} record is protected`,
+    async (page) => {
+      await openFeedback(page, "Work");
+      await page
+        .getByLabel("My decision", { exact: true })
+        .selectOption("addressed");
+      await page
+        .getByLabel("My reason", { exact: true })
+        .fill(feedbackExamples.Work.reason);
+      await keepFeedback(page);
+      await page.locator("#save").click();
+      const saved = await page.evaluate((kind) => {
+        const key = Object.keys(localStorage).find((k) =>
+          k.startsWith("dne-course-reader-1:work:"),
+        );
+        const value = JSON.parse(localStorage.getItem(key));
+        if (kind === "wrong comment version")
+          value.state.feedback.records[0].commentVersion = 2;
+        if (kind === "rewritten retained artifact")
+          value.state.feedback.records[0].text =
+            "A changed draft pretending to be retained.";
+        if (kind === "another route") value.state.feedback.caseId = "L6-E-X";
+        const raw = JSON.stringify(value);
+        localStorage.setItem(key, raw);
+        return { key, raw };
+      }, corruption);
+      await page.reload();
+      await expect(page.locator("#save-status")).toContainText(
+        "record is unreadable",
+      );
+      await expect(page.locator("#save")).toBeDisabled();
+      expect(await downloadText(page, page.locator("#download-stored"))).toBe(
+        saved.raw,
+      );
+      expect(
+        await page.evaluate((key) => localStorage.getItem(key), saved.key),
+      ).toBe(saved.raw);
+    },
+  );
+}
+
+await check(
+  "READER-015/016 feedback unfinished drafts survive save and remain separate by route",
+  async (page) => {
+    await openFeedback(page);
+    const dialogs = [];
+    page.on("dialog", (dialog) => dialogs.push(dialog.type()));
+    await page.goto("about:blank");
+    expect(dialogs).toEqual([]);
+    await openFeedback(page);
+    await page
+      .getByLabel("My decision", { exact: true })
+      .selectOption("decline");
+    await page
+      .getByLabel("My reason", { exact: true })
+      .fill("Everyday unfinished source check.");
+    await page
+      .getByLabel("Clarification to keep (optional)", { exact: true })
+      .fill("An unsent Everyday question.");
+    await page.locator("#save").click();
+    await page.reload();
+    await expect(page.getByLabel("My reason", { exact: true })).toHaveValue(
+      "Everyday unfinished source check.",
+    );
+    await expect(page.locator("#feedback-decisions")).toContainText(
+      "No decision recorded",
+    );
+    await page.getByRole("button", { name: "Work", exact: true }).click();
+    await page.locator('[data-lesson="5"]').click();
+    await step(page, "Fresh case");
+    await expect(page.getByLabel("My reason", { exact: true })).toHaveValue("");
+    await page
+      .getByLabel("My reason", { exact: true })
+      .fill("Separate unsaved Work response.");
+    await page.getByRole("button", { name: "Everyday", exact: true }).click();
+    await expect(page.getByLabel("My reason", { exact: true })).toHaveValue(
+      "Everyday unfinished source check.",
+    );
+    const exported = await downloadText(page, page.locator("#download"));
+    expect(exported).toContain("Unfinished response (not a recorded decision)");
+    expect(exported).not.toContain("Separate unsaved Work response.");
+    await page.goto("about:blank");
+    expect(dialogs).toEqual(["beforeunload"]);
+  },
+);
+
+await check(
+  "READER-016 feedback edits clear the lesson self-check and preserve literal proposals",
+  async (page) => {
+    await openFeedback(page);
+    await step(page, "Your work");
+    await page
+      .getByLabel("Your lesson work", { exact: true })
+      .fill("Previously self-checked lesson work.");
+    await page
+      .getByLabel("I compared this work with the criteria above", {
+        exact: true,
+      })
+      .check();
+    await step(page, "Fresh case");
+    const literal =
+      '<img src=x onerror="window.feedbackInjected=true"> a proposed alternative';
+    await page
+      .getByLabel("My decision", { exact: true })
+      .selectOption("revise");
+    await page.getByLabel("Revised text", { exact: true }).fill(literal);
+    await expect(page.locator("#feedback-proposed")).toHaveText(literal);
+    await page
+      .getByLabel("My decision", { exact: true })
+      .selectOption("decline");
+    await page
+      .getByLabel("My reason", { exact: true })
+      .fill("Keep the original source facts. " + literal);
+    await keepFeedback(page);
+    await expect(page.locator("#feedback-current")).toContainText(
+      feedbackExamples.Everyday.current,
+    );
+    await expect(page.locator("#feedback-decisions")).toContainText(
+      "Unapplied proposal retained",
+    );
+    expect(await page.locator("#feedback-workflow img").count()).toBe(0);
+    await step(page, "Your work");
+    await expect(
+      page.getByLabel("I compared this work with the criteria above", {
+        exact: true,
+      }),
+    ).not.toBeChecked();
+    await page.locator("#save").click();
+    await page.reload();
+    expect(await page.evaluate(() => Boolean(window.feedbackInjected))).toBe(
+      false,
+    );
+    expect(await downloadText(page, page.locator("#download"))).toContain(
+      literal,
+    );
+  },
+);
 
 await browser.close();
 await writeFile(
