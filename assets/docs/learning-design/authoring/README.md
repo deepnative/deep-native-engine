@@ -27,7 +27,7 @@ The budget revision explains why no amount or replacement room can be inferred. 
 
 ## BDD and focused verification
 
-[AUTHOR-001–008](authoring.feature) are eight additional browser-local scenarios. They preserve all 65 earlier design/local IDs, giving 73 in this package. They do not alter the application's approved journey register or promote broader CREF requirements to application passes.
+[AUTHOR-001–008](authoring.feature) added eight browser-local scenarios at the workshop checkpoint, preserving the 65 earlier design/local IDs for 73 at that time. The later reader feedback scenarios bring the current package to 77. They do not alter the application's approved journey register or promote broader CREF requirements to application passes.
 
 | Scenario   | Executable behavior in [checks.mjs](checks.mjs)                                                                                                                                      | Broader connection and limit                                                            |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
@@ -70,4 +70,4 @@ A detected newer local record must be compared and deliberately adopted as the b
 
 ## Next bounded action
 
-Under #549, make Lesson 6's learner feedback decision interactive: revise the text, decline an unsupported suggestion with source evidence, or mark an older-version comment already addressed. Preserve the original artifact/comment and show the resulting version and reason. WORK-FLOW-003–005 already specify this behavior; the current reader teaches it but does not provide that structured decision workflow. Use supplied invented feedback and local records, without a reviewer service or production integration. Lead Sol/High; author design/self-review High. Coordinate any later canonical/shared-reader adoption with #93/#117 and preserve their active claims. Production remains parked.
+Lesson 6's [feedback decision workspace](../reader/feedback-workflow.md) is now implemented locally and has actual saved/exported records. Follow the [current content review](../content-acceptance-review.md) for the next bounded action under #549: refine the full reader's 15 multiple-choice items and explanations to remove the recurring wording shortcut. This workshop retains its original practice fixtures and saved revisions. Lead Sol/High; author design/self-review High. Coordinate any later canonical/shared-reader adoption with #93/#117 and preserve their active claims. Production remains parked.

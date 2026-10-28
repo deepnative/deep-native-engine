@@ -28,15 +28,15 @@ The check runner uses Chromium at 1280 × 900 and 390 × 844. It does not use th
 
 All eight [local scenarios](learning.feature) have explicit browser checks in [checks.mjs](checks.mjs). PROTO-001/002/003 run once per route at both widths (six cases); PROTO-004–007 each run once (four cases); PROTO-008 covers request, correction and reason edits separately (three cases): thirteen total. These demonstrate local portions of the broader [learning specifications](../traceability.md), not member persistence or staff feedback authority.
 
-| Local IDs | Broader design connection | Executable outcome |
-| --- | --- | --- |
+| Local IDs     | Broader design connection                                 | Executable outcome                                                                           |
+| ------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | PROTO-001–003 | LEARN-FLOW-003/004/005/006/007/008/010/013; WORK-FLOW-004 | Fresh source, request, correction feedback, before/after/reason, explicit local save/reload. |
-| PROTO-004 | LEARN-FLOW-011, limited to route draft separation | Switching examples retains each in-page draft; no account goal/version mutation is tested. |
-| PROTO-005 | LEARN-FLOW-009; WORK-FLOW-007, browser-only subset | Failed storage leaves editable text and a verified downloadable copy. |
-| PROTO-006 | LEARN-FLOW-010, browser-only subset | Malformed saved state is reported and not overwritten on load. |
-| PROTO-007 | LEARN-FLOW-008/013 | Worked-example origin and self-check are explicit; no automatic proficiency claim. |
-| PROTO-008 | LEARN-FLOW-008; WORK-FLOW-004 | Revisions clear prior self-check marks. |
+| PROTO-004     | LEARN-FLOW-011, limited to route draft separation         | Switching examples retains each in-page draft; no account goal/version mutation is tested.   |
+| PROTO-005     | LEARN-FLOW-009; WORK-FLOW-007, browser-only subset        | Failed storage leaves editable text and a verified downloadable copy.                        |
+| PROTO-006     | LEARN-FLOW-010, browser-only subset                       | Malformed saved state is reported and not overwritten on load.                               |
+| PROTO-007     | LEARN-FLOW-008/013                                        | Worked-example origin and self-check are explicit; no automatic proficiency claim.           |
+| PROTO-008     | LEARN-FLOW-008; WORK-FLOW-004                             | Revisions clear prior self-check marks.                                                      |
 
 Before implementation, the actual page returned a directory listing rather than the expected lesson heading; the browser check failed. The first complete version passed ten cases. Author inspection then varied the claim order to avoid answer-position learning. A new revision check exposed stale self-check marks after editing: it failed with a checked box where an unchecked box was expected, then passed after the fix. Exact commands, immutable first-run reports and source hashes are recorded in the local issue evidence directory, not rewritten as an uninterrupted pass.
 
-The actual learner-account reader, private submission and reviewer exchange remain outside this prototype. The #117 worker retains the shared reader/source scope. Production work remains parked. All six lessons and final practice are now available in the [complete local reader](../reader/README.md); this walkthrough and its storage remain unchanged. Next under #549: complete an Everyday walkthrough with substantive answers and refine the teaching from the resulting artifacts; lead Sol/High, author self-review High. Reconcile with #93/#117 before changing canonical sources or the shared application reader.
+The actual learner-account reader, private submission and reviewer exchange remain outside this prototype. The #117 worker retains the shared reader/source scope. Production work remains parked. All six lessons and final practice are now available in the [complete local reader](../reader/README.md); this walkthrough and its storage remain unchanged. The Everyday, Work and Technical rehearsals are now recorded. Follow the [current content review](../content-acceptance-review.md) for the next bounded action: refine the full reader's 15 multiple-choice items and their explanations to address its wording shortcut. Lead Sol/High; author self-review High. Reconcile with #93/#117 before changing canonical sources or the shared application reader.
