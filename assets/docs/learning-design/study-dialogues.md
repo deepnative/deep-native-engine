@@ -43,4 +43,6 @@ The subsequent [contribution practice](contribution-practice.md) is now authored
 
 The [realistic Work brief](realistic-work-practice.md) is now authored and rehearsed locally: changed notes, capacity tradeoff, usable update and retained revision.
 
-Next bounded content action under [#34](https://github.com/deepnative/deep-native-engine/issues/34): a realistic Technical debugging brief with observed behavior, a competing requirement and a useful investigation/test plan. It extends the owner’s realism priority to a second audience. Reuse the local reader and BDD; preserve canonical/shared-reader claims and the existing notebooks. Lead Sol/High; author design/self-review High. Production remains parked.
+The [realistic Technical investigation](realistic-technical-practice.md) is now authored and rehearsed locally: conflicting requirements, bounded observations, a useful reproduction/test plan and a retained revision after a later update.
+
+Next bounded content action under [#34](https://github.com/deepnative/deep-native-engine/issues/34): a realistic Everyday planning case using changed attendance, conflicting arrangements and a useful message/checklist. It extends the owner’s realism priority to the remaining audience. Reuse the local reader and BDD; preserve canonical/shared-reader claims and existing notebooks. Lead Sol/High; author design/self-review High. Check live claims before starting. Production remains parked.

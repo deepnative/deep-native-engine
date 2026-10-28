@@ -271,9 +271,13 @@ if (!process.argv.includes("--baseline")) {
           .getByRole("button", { name: "Put it all together", exact: true })
           .click();
         const draft =
-          "My CAP-T plan: trace PNG expectations to the 3 MB rule and leave execution not run.";
+          "My CAP-T2 investigation: separate supplied observations from new boundary checks and their not-run status.";
         await page.getByLabel("1. Task and check", { exact: true }).fill(draft);
-        const worked = page.locator(".lesson-body details");
+        const worked = page.locator(".lesson-body > details").filter({
+          has: page.getByText("Compare with a worked record", {
+            exact: true,
+          }),
+        });
         await worked.locator("summary").click();
         for (const title of [
           "1. Task and check.",
@@ -286,30 +290,32 @@ if (!process.argv.includes("--baseline")) {
           await expect(worked.getByText(title, { exact: true })).toBeVisible();
         }
         for (const row of [
-          "1 MB PNG Accept PNG up to 3 MB Not run None",
-          "PNG at the stated 3 MB limit Accept Inclusive 3 MB limit Not run None",
-          "4 MB PNG Reject 3 MB size limit Not run None",
-          "1 MB JPEG Unspecified Other formats unspecified Not run None",
+          "Valid PNG, 2,999,999 bytes Accept R1 Not run None",
+          "Valid PNG, 3,000,000 bytes Accept R1 inclusive limit Not run None",
+          "Valid PNG, 3,000,001 bytes Reject R1 Not run None",
+          "Valid JPEG, 1,000,000 bytes Unspecified R1 has no JPEG decision Not run None",
         ]) {
           await expect(
             worked.getByRole("row", { name: row, exact: true }),
           ).toBeVisible();
         }
         await expect(worked).toContainText(
-          "Do not replace the unknown JPEG rule with either accept or reject",
+          "do not replace the unknown JPEG rule with either accept or reject",
         );
         await expect(worked).toContainText(
-          "If a later test starts but stops before a response",
+          "Inspect the available request/storage outcome for T03",
         );
         await expect(worked).toContainText("interrupted/unconfirmed");
         await expect(worked).toContainText(
-          "Keep that attempt separate from CAP-T's original no-tests-run brief",
+          "Keep T01–T03 as observations of web2.4-r7/api2.4-a5",
         );
         await expect(worked).toContainText(
-          "This is self-written practice feedback",
+          "This is supplied practice feedback",
         );
         await expect(worked).not.toContainText("UPLOAD-1");
-        await expect(worked).not.toContainText("2 MB");
+        await expect(worked).toContainText(
+          "R0 does not define release 2.4 expectations",
+        );
         await expect(
           page.getByLabel("1. Task and check", { exact: true }),
         ).toHaveValue(draft);
@@ -2006,6 +2012,94 @@ for (const width of [1360, 390]) {
       await page
         .locator(".lesson-body")
         .screenshot({ path: path.join(output, `realistic-work-${width}.png`) });
+    },
+    { width, height: 950 },
+  );
+}
+
+for (const width of [1360, 390]) {
+  await check(
+    `READER-024 realistic Technical investigation keeps observations and revision at ${width}px`,
+    async (page) => {
+      await start(page, "Technical");
+      await page
+        .getByRole("button", { name: "Put it all together", exact: true })
+        .click();
+      await expect(
+        page.getByRole("heading", {
+          name: "The upload bug: what do we actually know?",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(page.locator(".lesson-body")).toContainText(
+        "T03 · interrupted attempt",
+      );
+      const first =
+        "Initial finding: R1 accepts valid PNG through 3,000,000 bytes. T01 blocks the 2,500,000-byte PNG in web2.4-r7 before a request. T02's success limits the failure claim. T03 is unconfirmed. A stale client rule is a hypothesis; reproduce with the same fixture and inspect a matched service run.";
+      for (let i = 0; i < 6; i++)
+        await page
+          .locator(`#writing-final${i}`)
+          .fill(
+            `Investigation decision ${i + 1}: keep source version and expected/actual separate.`,
+          );
+      await page.locator("#writing-final2").fill(first);
+      await page.locator("#self-check").check();
+      await page
+        .getByText("After your first investigation: open the next update", {
+          exact: true,
+        })
+        .click();
+      await expect(page.locator(".lesson-body")).toContainText(
+        "R2 · requirement for the next candidate",
+      );
+      await expect(page.locator("#writing-final2")).toHaveValue(first);
+      await expect(page.locator("#self-check")).toBeChecked();
+      const revision =
+        "Revision after R2/D1: add JPEG below/at/above 3,000,000-byte checks for the next candidate. Keep T01–T03 on their original builds. The client change is only a proposed patch; record new build IDs and fresh browser/service results before calling it fixed. Do not rewrite the interrupted attempt as a rejection.";
+      await page.locator("#writing-final5").fill(revision);
+      await expect(page.locator("#self-check")).not.toBeChecked();
+      await page
+        .getByText("Compare with a worked record", { exact: true })
+        .click();
+      const worked = page.locator(".lesson-body > details").filter({
+        has: page.getByText("Compare with a worked record", { exact: true }),
+      });
+      for (const text of [
+        "2,999,999",
+        "3,000,000",
+        "3,000,001",
+        "hypothesis",
+        "Unconfirmed",
+        "proposed patch",
+      ])
+        await expect(worked).toContainText(text);
+      await expect(page.locator("#writing-final2")).toHaveValue(first);
+      await expect(page.locator("#writing-final5")).toHaveValue(revision);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      await page.locator("#self-check").check();
+      await page.locator("#save").click();
+      const exported = await downloadText(page, page.locator("#download"));
+      for (const text of [
+        first,
+        revision,
+        "R0 · superseded rule",
+        "R1 · current requirement",
+        "T03 · interrupted attempt",
+        "R2 · requirement for the next candidate",
+        "D1 · proposed patch",
+      ])
+        expect(exported).toContain(text);
+      await page.reload();
+      await expect(page.locator("#writing-final2")).toHaveValue(first);
+      await expect(page.locator("#writing-final5")).toHaveValue(revision);
+      await expect(page.locator("#self-check")).toBeChecked();
+      await page.locator(".lesson-body").screenshot({
+        path: path.join(output, `realistic-technical-${width}.png`),
+      });
     },
     { width, height: 950 },
   );

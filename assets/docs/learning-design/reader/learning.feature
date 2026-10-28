@@ -1,6 +1,15 @@
 # Local reader behavior only. No account, publication or application L-series claim.
 Feature: Follow the complete authored foundation sequence
 
+  Scenario: READER-024 — Rehearse a realistic technical investigation and later revision
+    Given the learner opens Technical final practice at desktop or narrow width
+    When they retain an initial investigation and reveal the later requirement and patch note
+    Then the initial writing stays intact
+    When they revise the plan and reason
+    Then the earlier self-check clears and the supplied comparison does not replace their words
+    And save, download and reload retain both versions and the full evidence packet
+    And expanded content fits the page with wide tables scrolling within their container
+
   Scenario: READER-023 — Rehearse a changing project brief with retained writing
     Given the learner opens the realistic Work final practice at desktop or narrow width
     When they write a first plan and reveal the later source update
