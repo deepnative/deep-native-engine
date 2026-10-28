@@ -245,9 +245,9 @@ function renderOutline() {
   if (node) node.innerHTML = outline();
 }
 
-function textarea(label, value, kind, index = "") {
+function textarea(label, value, kind, index = "", guidance = "") {
   const id = `writing-${kind}${index}`;
-  return `<label class="writing-label" for="${id}">${escape(label)}</label><textarea id="${id}" data-writing="${kind}" data-index="${index}" maxlength="30000" rows="6" placeholder="Use the invented source. Write what you can explain.">${escape(value)}</textarea>`;
+  return `<label class="writing-label" for="${id}">${escape(label)}</label>${guidance ? `<div class="writing-guidance" id="${id}-guide">${guidance}</div>` : ""}<textarea id="${id}" ${guidance ? `aria-describedby="${id}-guide"` : ""} data-writing="${kind}" data-index="${index}" maxlength="30000" rows="6" placeholder="Use the invented source. Write what you can explain.">${escape(value)}</textarea>`;
 }
 
 function selfCheck(checked, enabled, isFinal = false) {
@@ -346,8 +346,15 @@ function finalContent() {
     `<div class="final-panel" data-final-panel="${index}" ${state().finalStep === index ? "" : "hidden"}>${body}</div>`;
   const draft = (id, label) =>
     `<details id="${id}"><summary>${label}</summary><pre>${escape(state().final[2] || "Your first draft will appear here after you write it in step 2.")}</pre></details>`;
+  const teachingSample = `<div class="teaching-sample"><p class="eyebrow">Deliberately flawed teaching sample</p><p>${escape(data.sample)}</p><small>This was supplied for practice; it was not generated from your request.</small></div>`;
   const field = (n) =>
-    textarea(`${n + 1}. ${finalLabels[n]}`, state().final[n], "final", n);
+    textarea(
+      `${n + 1}. ${finalLabels[n]}`,
+      state().final[n],
+      "final",
+      n,
+      flow.fieldGuides[n] + (n === 2 ? teachingSample : ""),
+    );
   const panels = [
     panel(
       0,
@@ -355,7 +362,7 @@ function finalContent() {
     ),
     panel(
       1,
-      `<h2>Make a useful first draft.</h2><p>Write your plan from the brief. Keep the first version so you can explain what changes later.</p><details><summary>What to include in your first pass</summary>${flow.task}</details>${field(0)}${field(1)}<div class="teaching-sample"><p class="eyebrow">Deliberately flawed teaching sample</p><p>${escape(data.sample)}</p><small>This was supplied for practice; it was not generated from your request.</small></div>${[2, 3, 4].map(field).join("")}`,
+      `<h2>Make a useful first draft.</h2><p id="final-output"><strong>Your output:</strong> ${escape(data.output)}</p><p>Keep this first version so you can explain what changes later.</p>${[0, 1, 2, 3, 4].map(field).join("")}`,
     ),
     panel(
       2,

@@ -98,6 +98,28 @@ def parts(text):
     return sections[0], dict(zip(sections[1::2], sections[2::2]))
 
 
+def field_guides(task, update):
+    markers = list(re.finditer(r"(?:In|Use|and) \*\*([1-5])\*\*", task))
+    assert [m[1] for m in markers] == list("12345"), "Keep first-pass instructions numbered 1 through 5."
+    guides = [
+        task[m.end():markers[i + 1].start() if i < 4 else len(task)].lstrip(" ,").strip()
+        for i, m in enumerate(markers)
+    ]
+    final = list(re.finditer(r"In \*\*6\*\*,\s*", update))
+    assert len(final) == 1, "Keep one numbered revision instruction in the update."
+    guides.append(update[final[0].end():].strip())
+    result = []
+    for guide in guides:
+        assert guide, "Each writing field needs its authored instruction."
+        if guide.startswith("for "):
+            guide = "Use this field " + guide
+        guide = guide[0].upper() + guide[1:]
+        if not guide.endswith("."):
+            guide += "."
+        result.append(markdown(guide))
+    return result
+
+
 def practice_flow(intro, sections):
     title, introduction = intro.strip().split("\n", 1)
     first_pass = sections["Your first pass"]
@@ -112,6 +134,7 @@ def practice_flow(intro, sections):
         "task": markdown(first_pass[:update.start()]),
         "updateTitle": update[1],
         "update": markdown(update[2]),
+        "fieldGuides": field_guides(first_pass[:update.start()], update[2]),
     }
 
 

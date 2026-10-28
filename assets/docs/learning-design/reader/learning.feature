@@ -1,6 +1,16 @@
 # Local reader behavior only. No account, publication or application L-series claim.
 Feature: Follow the complete authored foundation sequence
 
+  Scenario: READER-029 — See the existing task requirements beside each writing field
+    Given a realistic Everyday, Work or Technical brief at desktop or narrow width
+    When the learner visits the first-draft and revision steps
+    Then the expected output and all six authored field instructions are visible beside their writing
+    And the output length, shape, source checks, unknowns and revision requirements are retained
+    And no example answer replaces their text or marks learning complete
+    And reading the guidance preserves existing writing and the learner's self-check
+    And explicit save, reload and download retain both drafts, the selected step and full source packet
+    And the first writing field is visible without a long source panel and there is no horizontal overflow
+
   Scenario: READER-026 — Follow four practice stages while retaining the learner's work
     Given an Everyday, Work or Technical final practice at desktop or narrow width
     When the learner freely visits the brief, first draft, update and revision stages

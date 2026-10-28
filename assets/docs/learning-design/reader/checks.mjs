@@ -2478,6 +2478,136 @@ await check(
   },
 );
 
+const fieldGuideCases = {
+  Everyday: {
+    output: "A useful reminder, capacity checklist and retained reply update.",
+    instructions: [
+      "name the useful output and its check",
+      "write a request for an AI assistant or colleague",
+      "100–160 word reminder for confirmed guests",
+      "choose which details belong in the reminder versus the internal checklist",
+      "describe how to check changed notes and recover missing information",
+      "Distinguish confirmed guests, a reserved pending place and the remaining waitlist",
+    ],
+    checks: [
+      "Check people and books separately",
+      "Label that as an upper bound",
+    ],
+    revision:
+      "The snapshot does not tell you whether the pending person eventually accepts",
+  },
+  Work: {
+    output:
+      "A short pilot update, action list, capacity check and retained revision.",
+    instructions: [
+      "state the useful output and a check",
+      "write a request you could give an AI assistant or a colleague",
+      "100–160 word team update",
+      "identify its reader",
+      "describe how you will check the next update",
+      "write a revised team update and explain the changes from your first draft",
+    ],
+    checks: [
+      "short task/owner/timing list",
+      "current facts, recommendations and open questions",
+    ],
+    revision: "Do not claim the pilot has happened",
+  },
+  Technical: {
+    output: "A reproducible investigation, test plan and retained revision.",
+    instructions: [
+      "name the useful handoff and the check it must support",
+      "requirements, observations and hypotheses separate",
+      "100–180 word investigation summary",
+      "for the intended reader",
+      "for the workflow that keeps new runs traceable",
+      "Identify what R2 changes, what D1 does not prove",
+    ],
+    checks: [
+      "concise reproduction steps and a small test plan",
+      "below/at/above boundary cases",
+    ],
+    revision: "Keep T01–T03 attached to their original builds",
+  },
+};
+for (const width of [1360, 390]) {
+  for (const [name, content] of Object.entries(fieldGuideCases)) {
+    await check(
+      `READER-029 ${name} field guidance stays beside retained writing at ${width}px`,
+      async (page) => {
+        await start(page, name);
+        await page.locator('[data-lesson="6"]').click();
+        await finalStep(page, 1);
+        await expect(page.locator("#writing-final0-guide")).toBeVisible();
+        await expect(page.locator("#final-output")).toHaveText(
+          `Your output: ${content.output}`,
+        );
+        const firstField = await page.locator("#writing-final0").boundingBox();
+        expect(firstField.y).toBeLessThan(950);
+        const writing = [];
+        for (let i = 0; i < 6; i++) {
+          await finalStep(page, i < 5 ? 1 : 3);
+          const guide = page.locator(`#writing-final${i}-guide`);
+          await expect(guide).toBeVisible();
+          expect((await guide.innerText()).toLowerCase()).toContain(
+            content.instructions[i].toLowerCase(),
+          );
+          expect(
+            await guide.evaluate((node) => node.nextElementSibling.id),
+          ).toBe(`writing-final${i}`);
+          await expect(page.locator(`#writing-final${i}`)).toHaveValue("");
+          writing.push(
+            `${name} retained field ${i + 1}: my source-based decision and reason.`,
+          );
+          await fillFinal(page, i, writing[i]);
+        }
+        await expect(page.locator("#writing-final5-guide")).toContainText(
+          content.revision,
+        );
+        await page.locator("#self-check").check();
+        await finalStep(page, 1);
+        for (const text of content.checks)
+          await expect(page.locator("#writing-final2-guide")).toContainText(
+            text,
+          );
+        await expect(page.locator("#self-check")).toBeChecked();
+        for (let i = 0; i < 6; i++)
+          await expect(page.locator(`#writing-final${i}`)).toHaveValue(
+            writing[i],
+          );
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        await page.locator("#writing-final2-guide").screenshot({
+          path: path.join(
+            output,
+            `field-guidance-${name.toLowerCase()}-${width}.png`,
+          ),
+        });
+        await finalStep(page, 3);
+        await page.locator("#save").click();
+        const exported = await downloadText(page, page.locator("#download"));
+        for (const value of writing) expect(exported).toContain(value);
+        expect(exported).toContain(content.instructions[2]);
+        expect(exported).toContain(content.revision);
+        await page.reload();
+        await expect(page.locator("#writing-final5-guide")).toBeVisible();
+        await expect(page.locator("#self-check")).toBeChecked();
+        for (let i = 0; i < 6; i++)
+          await expect(page.locator(`#writing-final${i}`)).toHaveValue(
+            writing[i],
+          );
+        await expect(page.locator("#course-path")).not.toContainText(
+          /mastered|completed/i,
+        );
+      },
+      { width, height: 950 },
+    );
+  }
+}
+
 await browser.close();
 await writeFile(
   path.join(output, "results.json"),

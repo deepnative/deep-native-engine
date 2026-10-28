@@ -944,3 +944,19 @@ textarea::placeholder {
     grid-row: auto;
   }
 }
+
+.writing-guidance {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 8px 0 12px;
+}
+.writing-guidance p {
+  margin: 0 0 10px;
+}
+.writing-guidance > p:last-child {
+  margin-bottom: 0;
+}
+.writing-guidance .teaching-sample {
+  margin: 18px 0 0;
+}
