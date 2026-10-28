@@ -252,7 +252,7 @@ test("[L43] professional and IT sessions keep versioned activity private through
     ).toContainText("unavailable");
     await otherPage.reload();
     await expect(
-      otherPage.getByText("No sample lesson has been opened"),
+      otherPage.getByText("No lesson has been opened for this account yet."),
     ).toBeVisible();
   } finally {
     await other.close();
