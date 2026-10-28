@@ -1,0 +1,104 @@
+# Whole learning workflow audit
+
+The three realistic final exercises are authored and runnable locally. One required learner outcome is still incomplete: when a final-practice criterion needs work, the learner is not directed to the lesson that helps repair it. Add that route back to practice before adding another case or interface feature.
+
+Audit started 27 October and completed 28 October 2026, America/Toronto. Reviewed local revision: `6d49d9fed4e7120a68e8ea72a9358cb85a71d051`, tree `ea364bc184ba5a3b53facc16196882d02b9479a9`. Scope: [#34](https://github.com/deepnative/deep-native-engine/issues/34), the owner's content/workflow study and realism priority. Production remains parked. This is an author audit, not independent learner research.
+
+## Finding: a weak final criterion has no corresponding practice action
+
+**P2 — APPLIED-LEARN-012 is partial.** Its last clause requires unfinished criteria to point back to a lesson. The realistic Everyday, Work and Technical criteria show evidence to look for, followed by a general self-check. None names or links the corresponding lesson. The course navigation remains available, but the learner must work out which lesson addresses the problem.
+
+For example, a learner who cannot distinguish confirmed guests from a reserved place sees “Correct headcount” and its expected evidence. The page does not direct them to practise checking claims against their source. Someone whose technical plan calls an interrupted attempt a failure similarly gets no specific route to the workflow/recovery lesson.
+
+Source locations:
+
+- [Original acceptance](features/applied-learning.feature), APPLIED-LEARN-012.
+- [Everyday criteria](realistic-everyday-practice.md#criteria-for-your-record), [Work criteria](realistic-work-practice.md#criteria-for-your-record), [Technical criteria](realistic-technical-practice.md#criteria-for-your-record).
+- [Generator](reader/build.py): each realistic case replaces the earlier final criteria with its own section.
+- [Reader](reader/reader.mjs): `finalContent()` displays those criteria and a self-check; `selfCheck()` records the learner's judgment.
+
+Reproduction at the reviewed revision: open each route → final practice → **Revise and check** → inspect the criteria. Three fresh isolated browser contexts reproduced the missing lesson references and actions. The probe captured each table and the following guidance; it made no saves and did not touch the existing browser notebook. This is a missing recovery instruction, not evidence that a particular learner failed.
+
+The earlier [foundation practice](foundation-practice.md#decide-what-you-can-show) at least says to revisit the corresponding lesson. The realistic replacements omit that instruction. The desired refinement should make the connection explicit, with a useful retry action and a way back to the retained final draft. Free writing should continue to use the learner's judgment; this finding does not call for automatic semantic grading.
+
+## What works, and what the evidence means
+
+| Workflow               | Current local outcome                                                                                                                                 | Evidence and limit                                                                                                                                                                                                |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create and refine      | Two editorial cases: correct a key or improve staffing instructions, preview, compare and retain revisions with reasons.                              | AUTHOR-001–008; 12 recorded browser cases and two substantive author exports. A local workshop does not adopt or retire a catalog lesson.                                                                         |
+| Learn and apply        | Six lessons in three routes, worked examples, practice with explanations/hints, distinct fresh cases and retained own-work notes.                     | READER-001–012/017/018; recorded full-sequence and per-choice checks, plus three author rehearsals. Tests exercise the interface; several use placeholder prose and do not establish learning.                    |
+| Use realistic evidence | Book-swap arrangements and capacity; a changing pilot with limited time; an upload investigation with different requirements and recorded attempts.   | REAL-EVERY/WORK/TECH-001–005 and READER-023–029; substantive author first/revised records and save/export/reload evidence. Original invented cases, not observed real events or independent transfer performance. |
+| Respond to feedback    | Inspect supplied comment/source versions; revise, decline with a reason, or record an already-made change; preserve history and unsent clarification. | READER-013–016, `feedback.mjs` and existing author records. A nonempty reason is structurally required; its correctness is not automatically judged. No live reviewer exchange occurs.                            |
+| Prepare a contribution | Keep first/revised proposals, reason, rights note and an optional audience plan; cancel the plan without discarding writing.                          | CONTRIB-001–004, READER-019–022 and author rehearsal. This is private preparation; no submission, editorial acceptance or sharing grant is created.                                                               |
+| Return to a weak skill | A learner can manually revisit any lesson. Criteria do not identify the relevant lesson or next practice action.                                      | **Partial:** APPLIED-LEARN-012; reproduced in all three final routes during this audit.                                                                                                                           |
+
+## Complete scenario disposition
+
+All **114 unique IDs** are retained: **69 content/broader workflow specifications** and **45 scoped local interaction IDs**. These are different evidence scopes, not 114 passing application journeys. No denominator or scenario was removed or added by this audit.
+
+“Local” below means the stated subset exists in this browser experiment. “Authored” means the source, guidance or procedure is inspectable. Account, catalog and reviewer behaviours stay outside this package's evidence even where an older application analogue exists.
+
+| Original scenario(s) | Disposition at this revision                                                                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| CREF-001             | Authored outcomes, artifacts and equivalent Everyday/Work/Technical goals in the curriculum and six lessons.                                                                                                       |
+| CREF-002             | Correct source key authored; AUTHOR-001/002 locally demonstrates repair of a deliberately faulty workshop key and related fresh-case key.                                                                          |
+| CREF-003             | Source-specific misconception/repair explanations authored and displayed; READER-017 checks every choice in the fifteen revised items.                                                                             |
+| CREF-004             | Eighteen fresh cases across the six lessons/routes; constructed responses and comparison criteria. Mostly near transfer; not a measured generalisation result.                                                     |
+| CREF-005             | Routine local author readiness demonstrated by AUTHOR-002–004; no extra owner wording approval. Catalog adoption is separate.                                                                                      |
+| CREF-006             | AUTHOR-003 retains old/new wording and a revision reason for the staffing critique.                                                                                                                                |
+| CREF-007             | Authored rights/replacement procedure; an actual third-party rights dispute is not exercised.                                                                                                                      |
+| CREF-008             | All eighteen lesson/route views available in E9; the source-parity check and route/stage browser assertions support local inspection.                                                                              |
+| CREF-009             | Local notebooks keep their source version and earlier bytes; submitted lesson/rubric adoption remains outside this reader.                                                                                         |
+| CREF-010             | Retirement/replacement is an application analogue/proposal; this package has no catalog retirement journey.                                                                                                        |
+| CREF-011             | AUTHOR-007 compares two local tabs and preserves both revisions after explicit reconciliation; not atomic multi-user persistence.                                                                                  |
+| CREF-012             | Fifteen revised items, preserved keys and thirty mistake/repair rationales; author semantic review plus READER-017. Surface-cue improvement is not learning-effectiveness proof.                                   |
+| LEARN-FLOW-001–003   | Local route choice, visible next lesson, earlier notes and worked-example-first stages; no admission prerequisite. Account-based recommendation remains separate.                                                  |
+| LEARN-FLOW-004–007   | Local wrong-choice explanation/retry, hint, distinct fresh source and supported/contradicted/not-given classification. Source facts and repair reasoning are authored; no model evaluates arbitrary fresh writing. |
+| LEARN-FLOW-008       | Lesson 2 has evidence criteria and an “If it is missing” repair column. Free writing is retained without a length-based mastery grade. No independent evidence shows learners apply the rubric successfully.       |
+| LEARN-FLOW-009–010   | Local explicit save, failed-write recovery, download and saved-position resume. “Same saved account” and cross-session native persistence are not supplied by browser storage.                                     |
+| LEARN-FLOW-011–012   | Route-separated local drafts and content-version-separated notebooks exist. Native stale-goal/form submission and new catalog-key checks remain application integration requirements.                              |
+| LEARN-FLOW-013       | Self-check labels remain distinct from proficiency or formal assessment. Opening content does not complete learning.                                                                                               |
+| LEARN-FLOW-014       | No member identities in this reader; cross-member access denial is not evidenced by its separate route notebooks.                                                                                                  |
+| WORK-FLOW-001        | Supplied feedback pins sample versions, but no member request/grant is sent on a saved submission.                                                                                                                 |
+| WORK-FLOW-002        | Concrete source/version guidance and supplied-practice origin are visible. No real reviewer response is claimed.                                                                                                   |
+| WORK-FLOW-003–005    | Local decline/clarification, revised versions/reasons and already-addressed decisions demonstrated; the clarification stays unsent.                                                                                |
+| WORK-FLOW-006        | Actual reviewer-access withdrawal is outside this package. Cancelling a contribution audience plan is not withdrawal of a real grant.                                                                              |
+| WORK-FLOW-007        | Browser-save failure retains the prior record and recoverable new response; native ambiguous transactions remain separate.                                                                                         |
+
+| Added scenario group  | Disposition at this revision                                                                                                                                                                                                                                         |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| APPLIED-LEARN-001–010 | Authored sources and explanations cover permitted sharing, invented replacements, capacity checks, missing evidence, tool failure and feedback judgment. Reader checks exercise the choices and displayed content; authored own-work semantics remain self-reviewed. |
+| APPLIED-LEARN-011     | Three supplied feedback outcomes are interactive through READER-013–016, with versions and reasons retained.                                                                                                                                                         |
+| APPLIED-LEARN-012     | Connected six-field records and comparisons exist; **unfinished criteria → matching lesson remains missing**, as reproduced above.                                                                                                                                   |
+| APPLIED-LEARN-013     | Expected rejection and interrupted/unconfirmed execution remain distinct in the Technical fresh case and worked explanation; no actual software test runs in the lesson.                                                                                             |
+| DIALOGUE-001–003      | Three supplied hint/repair/reason conversations plus missing-evidence and unsupported-request examples. These are authored exchanges, not responses to the learner's text.                                                                                           |
+| DIALOGUE-004          | READER-018 preserves the learner's attempt/revision/reason when opening comparisons and saving/exporting/reloading.                                                                                                                                                  |
+| CONTRIB-001–004       | Authored proposal/refinement/sharing distinctions plus the local worksheet behaviours mapped above. Real publication, permissions and reviewer exchange remain separate.                                                                                             |
+| REAL-EVERY-001–005    | Current booking, separate attendance states, upper-bound capacity, later reply update and retained first/revised work; READER-025/026/029 cover interaction.                                                                                                         |
+| REAL-WORK-001–005     | Dated replacement notes, capacity/readiness arithmetic, recommendation versus decision, later update and retained work; READER-023/026/029 cover interaction.                                                                                                        |
+| REAL-TECH-001–005     | Applicable requirements, bounded observations, proposed tests, later requirements/patch and retained investigation; READER-024/026/029 cover interaction.                                                                                                            |
+| PROTO-001–008         | All eight local request/check/repair/save/recovery scenarios have recorded assertions in 13 passing prototype cases.                                                                                                                                                 |
+| AUTHOR-001–008        | All eight local source/preview/refinement/history/recovery scenarios have recorded assertions in 12 passing workshop cases.                                                                                                                                          |
+| READER-001–029        | All twenty-nine local scenario IDs appear in 113 recorded passing reader cases. The uncovered broader APPLIED-LEARN-012 clause is not asserted by that suite.                                                                                                        |
+
+## Evidence audit
+
+The 14 file hashes and nine report hashes in the latest checkpoint manifest match. `build.py --check` confirms twelve authored sources, eighteen lesson/route views and three final views. The prototype and workshop runtime, fixtures, feature files and check runners were also compared with their recorded verification hashes; their later README edits are not treated as runtime changes.
+
+The recorded reports contain **113 reader**, **13 prototype** and **12 workshop** passing cases, each with zero failures/retries. This audit inspected the reports and relevant executable assertions rather than rerunning those entire suites. The three new isolated browser probes reproduce the missing remediation mapping; they do not repair it or turn it into a passing acceptance result. Existing failure records remain untouched.
+
+The substantive [Everyday](everyday-author-rehearsal.md), [Work](work-author-rehearsal.md) and [Technical](technical-author-rehearsal.md) rehearsals and later realistic-case records are author work with known sources and keys. No independent learner comprehension, completion-time, retention, satisfaction or unaided-transfer result exists. That is an evidence limitation, not proof that the content is ineffective and not a reason to manufacture more interface work.
+
+Evidence directory: `/Users/tomwu/Documents/Codex/2026-10-27/dne-content-workflows-bdd/package-audit/`. It contains the exact scenario inventory, checkpoint/report comparisons, three-route reproduction, criteria captures, document checks and the audit commit manifest. Application source, source packets, runtime, tests, stored notebooks and approved L-series register are unchanged. No full application gate, push, CI, merge, deployment or hosted acceptance is claimed.
+
+## Next bounded action
+
+Under [#34](https://github.com/deepnative/deep-native-engine/issues/34), complete the existing **APPLIED-LEARN-012** recovery clause for all three realistic final cases:
+
+1. For each criterion, give a concrete repair/check prompt and name the relevant lesson. Keep alternatives acceptable and source-specific facts intact.
+2. Let the learner revisit that lesson's useful practice and return to the final record with their first draft, revision, source route and self-check state preserved. Navigation must not imply learning or save work automatically; editing must still invalidate the affected check.
+3. Use the reproduced missing behaviour as the baseline; test the round trip, explicit save/reload, failure recovery and previous-notebook preservation at desktop/narrow widths. Reuse existing behaviour and scenario IDs where they already cover an invariant.
+
+Definition of done for that local slice: the learner can identify a weak part, take the corresponding practice action and return to revise the same record; authored facts and earlier writing remain intact; exact checks and an actual local rehearsal are recorded. No provider, account integration, new case bank, score or production change is needed. This proposal does not itself implement the missing outcome.
+
+The live #93/#117 canonical/shared-reader claims remain with @netcsc, In review for PR #550; preserve their scope and processes. Recheck ownership before the next claim. Lead recommendation from #34: **GPT-6 Sol / High**, author content/evidence review High; separate Astra High review only if requested or actually required. After this bounded repair, use an unfamiliar person's attempt to decide further content changes instead of inferring them from more passing interface checks.

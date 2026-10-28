@@ -38,6 +38,8 @@ These are design interpretations of their published approaches, not evidence tha
 
 ## Inspect the behavior
 
+The [whole learning workflow audit](package-audit.md) accounts for all 114 local/design BDD IDs. It identifies one concrete gap: final-practice criteria need a corresponding lesson and repair action so learners can return to improve the same draft. Existing browser checks and author rehearsals do not establish independent learning outcomes.
+
 - [Content and learner workflows](workflows.md): author → check → preview → refine; learner → attempt → correction → application; feedback → revision.
 - [Content refinement BDD](features/content-refinement.feature): 12 scenarios, including incorrect keys, plausible alternatives, source uncertainty and version changes.
 - [Learner journey BDD](features/learner-journey.feature): 14 scenarios, including hints, save/resume, goal changes and honest progress.
@@ -79,4 +81,4 @@ The [guided final-practice checkpoint](reader/guided-final-practice.md) now pres
 
 The [field-guidance refinement](reader/guided-final-practice.md#field-guidance-refinement) now places all eighteen existing numbered instructions beside the corresponding final-practice fields and shows the case’s expected output. READER-029 adds six route/width checks; the full reader suite passes 113 cases with the same sources and preserved notebooks.
 
-Next bounded action under [#34](https://github.com/deepnative/deep-native-engine/issues/34): audit the complete local learn → apply → feedback → contribution journey against its original BDD requirements and current authored content. Several local refinements now exist; reconcile the package as a whole and identify a concrete missing learner outcome before adding another slice. Reuse the completed rehearsals and executable evidence, preserve #93/#117 canonical/shared-reader claims, and recheck live ownership. Lead Sol/High; author content/evidence review High. Production remains parked.
+Next bounded action under [#34](https://github.com/deepnative/deep-native-engine/issues/34): complete APPLIED-LEARN-012’s return-to-practice behaviour. For each realistic final criterion, give a concrete repair prompt and a corresponding lesson action, then preserve the learner’s draft through the practice-and-return journey. The [whole-package audit](package-audit.md) reproduces the missing mapping in all three routes and separates local evidence from broader application requirements. Preserve #93/#117’s canonical/shared-reader claims and recheck ownership. Lead Sol/High; author content/evidence review High. Production remains parked.
