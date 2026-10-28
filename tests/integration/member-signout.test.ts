@@ -1,22 +1,15 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { randomBytes } from "node:crypto";
-import { Pool } from "pg";
+import type { Pool } from "pg";
 import request from "supertest";
 import { app } from "../../src/app.ts";
 import { memberEmailAccess } from "../../src/member-email-access.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
 import { hash, migrate, store } from "../../src/store.ts";
 import { withLoopback } from "../support/loopback-server.ts";
+import { testPool } from "../support/database.ts";
 
-const root = new URL(
-  process.env.DNE_DATABASE_URL ??
-    "postgresql://dne:local-preview-only@127.0.0.1:54329/dne_dev",
-);
-const name = `dne_test_${randomBytes(16).toString("hex")}`;
-const admin = new Pool({ connectionString: root.toString() });
-const scoped = new URL(root);
-scoped.pathname = `/${name}`;
-const pool = new Pool({ connectionString: scoped.toString() });
+const pool = testPool();
 const members = store(pool);
 const origin = "http://127.0.0.1:3000",
   secret = "synthetic-signout-integration";
@@ -27,19 +20,12 @@ const sender = {
   },
 };
 const access = memberEmailAccess(pool, sender, origin);
-beforeAll(async () => {
-  await admin.query(`CREATE DATABASE "${name}"`);
-  await migrate(pool);
-});
+beforeAll(() => migrate(pool));
 beforeEach(async () => {
   await pool.query("TRUNCATE principals CASCADE");
   messages.length = 0;
 });
-afterAll(async () => {
-  await pool.end();
-  await admin.query(`DROP DATABASE "${name}"`);
-  await admin.end();
-});
+afterAll(() => pool.end());
 function code() {
   return new URL(messages.at(-1)!).searchParams.get("code")!;
 }
