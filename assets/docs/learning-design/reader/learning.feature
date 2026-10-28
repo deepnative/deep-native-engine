@@ -1,6 +1,51 @@
 # Local reader behavior only. No account, publication or application L-series claim.
 Feature: Follow the complete authored foundation sequence
 
+  Scenario: GUI-01 — Resume a named learning path from the learner's actual position
+    Given a learner has opened a lesson stage in an example route
+    When they open Learn and choose Continue learning
+    Then all six lessons have named destinations
+    And the same route, lesson, stage and writing return unchanged
+    And navigating the path does not award learning or mastery
+
+  Scenario: GUI-02 — Practise a checked mistake and remove it after correction
+    Given a learner has checked an incorrect response in any example route
+    When they open Practice
+    Then the affected lesson is offered for review
+    And reopening it retains the learner's choice and source-based explanation
+    When they correct and check that response
+    Then it is no longer listed as a mistake to review
+    And the skill remains available for voluntary practice
+
+  Scenario: GUI-03 — Find private drafts without silently saving or mixing routes
+    Given a learner has written lesson work in the Work route
+    When they open My work and continue writing
+    Then the original draft returns unchanged without an automatic save
+    And an explicit save, reload and download retain the draft
+    And the Everyday route does not show the Work draft
+    Given a learner is writing a later final-draft field in a reduced mobile viewport
+    Then Save notebook remains reachable without overlapping the focused writing
+    And typing alone leaves stored writing unchanged and shows Unsaved changes
+    When they explicitly choose Save notebook and reload
+    Then their latest writing and current draft step return with browser-only save status
+
+  Scenario: GUI-04 — Keep keyboard position through routine lesson actions
+    Given keyboard focus is on the next-stage action
+    When the learner opens the practice stage
+    Then focus identifies the newly opened exercise
+    Given keyboard focus is on a feedback decision
+    When the learner confirms a choice
+    Then focus remains on the replacement decision control
+
+  Scenario: GUI-05 — Navigate named course destinations on a narrow screen
+    Given the reader is displayed at a 390-pixel viewport
+    When the learner moves between Learn, Practice, My work and the final case
+    Then course destinations remain visibly named
+    And the views and writing fields fit without horizontal page overflow
+    When the learner checks the source and returns to the exercise
+    Then focus follows the chosen source and returns to the current exercise
+    And lesson and final writing remain unchanged without an automatic save
+
   Scenario: READER-029 — See the existing task requirements beside each writing field
     Given a realistic Everyday, Work or Technical brief at desktop or narrow width
     When the learner visits the first-draft and revision steps

@@ -163,8 +163,31 @@ async function start(page, name = "Everyday") {
   const response = await page.goto(url);
   expect(response.status()).toBe(200);
   await page.getByRole("button", { name, exact: true }).click();
+  await enterCurrentLesson(page);
+}
+async function enterCurrentLesson(page) {
+  // New empty notebooks open the named learning path; saved sessions still
+  // restore their lesson directly. This is navigation setup, not an assertion.
+  if (
+    await page
+      .getByRole("heading", { name: "Your learning path", exact: true })
+      .isVisible()
+  )
+    await page
+      .getByRole("button", { name: "Continue learning", exact: true })
+      .click();
+}
+async function openCourse(page) {
+  const menu = page.locator("#course-menu");
+  if ((await menu.count()) && (await menu.getAttribute("open")) === null)
+    await menu.getByText("Course contents", { exact: true }).click();
+}
+async function selectLesson(page, index) {
+  await openCourse(page);
+  await page.locator(`[data-lesson="${index}"]`).click();
 }
 async function step(page, name) {
+  await enterCurrentLesson(page);
   await page
     .getByRole("navigation", { name: "Lesson stages" })
     .getByRole("button", { name, exact: false })
@@ -199,9 +222,7 @@ if (!process.argv.includes("--baseline")) {
       `READER-003 Work final worked record at ${width}px`,
       async (page) => {
         await start(page, "Work");
-        await page
-          .getByRole("button", { name: "Put it all together", exact: true })
-          .click();
+        await selectLesson(page, 6);
         const draft =
           "My task: make a CAP-W action table; check each owner and date against the brief.";
         await fillFinal(page, 0, draft);
@@ -280,9 +301,7 @@ if (!process.argv.includes("--baseline")) {
       `READER-003 Technical final worked record at ${width}px`,
       async (page) => {
         await start(page, "Technical");
-        await page
-          .getByRole("button", { name: "Put it all together", exact: true })
-          .click();
+        await selectLesson(page, 6);
         const draft =
           "My CAP-T2 investigation: separate supplied observations from new boundary checks and their not-run status.";
         await fillFinal(page, 0, draft);
@@ -384,7 +403,7 @@ if (!process.argv.includes("--baseline")) {
         await step(page, "Your work");
         await page.getByLabel("Your lesson work", { exact: true }).fill(source);
         for (let i = 1; i < 6; i++) {
-          await page.locator(`[data-lesson="${i}"]`).click();
+          await selectLesson(page, i);
           await step(page, "Your work");
           await expect(page.locator("#source-text")).toHaveText(source);
           await expect(page.locator(".source-card")).toContainText(
@@ -416,14 +435,12 @@ if (!process.argv.includes("--baseline")) {
         }
         await step(page, "Fresh case");
         await expect(page.locator("#source-text")).toContainText("nine people");
-        await page
-          .getByRole("button", { name: "Put it all together", exact: true })
-          .click();
+        await selectLesson(page, 6);
         await expect(page.locator("#source-text")).toContainText(
           "eighteen confirmed guests and two helpers",
         );
         await page.getByRole("button", { name: "Work", exact: true }).click();
-        await page.locator('[data-lesson="1"]').click();
+        await selectLesson(page, 1);
         await step(page, "Your work");
         await expect(page.locator("#source-text")).not.toContainText("BOOK-1");
         await expect(page.locator(".source-card")).toContainText(
@@ -437,12 +454,12 @@ if (!process.argv.includes("--baseline")) {
     "READER-011 rehearsal questions include the compared drafts",
     async (page) => {
       await start(page);
-      await page.locator('[data-lesson="4"]').click();
+      await selectLesson(page, 4);
       await step(page, "Try it");
       await expect(page.locator("fieldset legend")).toContainText(
         "45 minutes with seven helpers",
       );
-      await page.locator('[data-lesson="5"]').click();
+      await selectLesson(page, 5);
       await step(page, "Try it");
       await expect(page.locator("fieldset legend")).toContainText(
         "Eight helpers will start at 10 a.m.",
@@ -450,7 +467,7 @@ if (!process.argv.includes("--baseline")) {
       await page
         .getByRole("button", { name: "Technical", exact: true })
         .click();
-      await page.locator('[data-lesson="5"]').click();
+      await selectLesson(page, 5);
       await step(page, "Try it");
       await expect(page.locator("fieldset legend")).toContainText(
         "Maximum message length: 500",
@@ -579,12 +596,7 @@ if (!process.argv.includes("--baseline")) {
         dialogs++;
       });
       await start(page);
-      await page
-        .getByRole("button", {
-          name: "Lesson 2: Write a useful request",
-          exact: true,
-        })
-        .click();
+      await selectLesson(page, 1);
       await page.reload();
       expect(
         dialogs,
@@ -606,7 +618,7 @@ if (!process.argv.includes("--baseline")) {
       async (page) => {
         await start(page, name);
         for (let lesson = 0; lesson < 6; lesson++) {
-          await page.locator(`[data-lesson="${lesson}"]`).click();
+          await selectLesson(page, lesson);
           await step(page, "Fresh case");
           await expect(page.locator("#source-text")).toContainText(
             data.fresh[lesson],
@@ -787,6 +799,7 @@ if (!process.argv.includes("--baseline")) {
     "READER-004 route drafts, explicit save/resume and unchanged prototype storage",
     async (page) => {
       await page.goto(`${url}#route=constructor`);
+      await enterCurrentLesson(page);
       await expect(
         page.getByRole("heading", { name: titles[0], exact: true }),
       ).toBeVisible({ timeout: 1500 });
@@ -917,9 +930,7 @@ if (!process.argv.includes("--baseline")) {
       async (page) => {
         await start(page);
         if (field === "final") {
-          await page
-            .getByRole("button", { name: "Put it all together", exact: true })
-            .click();
+          await selectLesson(page, 6);
           for (let i = 0; i < 6; i++)
             await fillFinal(page, i, `Original criterion ${i + 1}`);
         } else {
@@ -965,7 +976,7 @@ if (!process.argv.includes("--baseline")) {
 
 async function openFeedback(page, name = "Everyday") {
   await start(page, name);
-  await page.locator('[data-lesson="5"]').click();
+  await selectLesson(page, 5);
   await step(page, "Fresh case");
 }
 
@@ -1308,7 +1319,7 @@ await check(
       "No decision recorded",
     );
     await page.getByRole("button", { name: "Work", exact: true }).click();
-    await page.locator('[data-lesson="5"]').click();
+    await selectLesson(page, 5);
     await step(page, "Fresh case");
     await expect(page.getByLabel("My reason", { exact: true })).toHaveValue("");
     await page
@@ -1498,7 +1509,7 @@ for (const width of [1360, 390]) {
         async (page) => {
           await start(page, routeName);
           const index = Number(number) - 1;
-          await page.locator(`[data-lesson="${index}"]`).click();
+          await selectLesson(page, index);
           await expect(page.locator("#source-text")).toContainText(
             expected[routeName].sources[index],
           );
@@ -1579,7 +1590,7 @@ for (const width of [1360, 390]) {
       `READER-018 ${name} supplied follow-up and retained revision at ${width}px`,
       async (page) => {
         await start(page, name);
-        await page.locator('[data-lesson="1"]').click();
+        await selectLesson(page, 1);
         await step(page, "Fresh case");
         const writing = page.getByLabel("Your fresh-case attempt", {
           exact: true,
@@ -1673,7 +1684,7 @@ const contributionDraft = {
 };
 async function openContribution(page, name = "Everyday") {
   await start(page, name);
-  await page.locator('[data-lesson="6"]').click();
+  await selectLesson(page, 6);
   await finalStep(page, 3);
   const opener = page.getByText("Shape a contribution (optional)", {
     exact: true,
@@ -1923,7 +1934,7 @@ await check(
       .fill("Everyday private proposal.");
     await page.locator("#save").click();
     await page.getByRole("button", { name: "Work", exact: true }).click();
-    await page.locator('[data-lesson="6"]').click();
+    await selectLesson(page, 6);
     await finalStep(page, 3);
     await page
       .getByText("Shape a contribution (optional)", { exact: true })
@@ -1956,9 +1967,7 @@ for (const width of [1360, 390]) {
     `READER-023 realistic Work brief preserves first plan and later revision at ${width}px`,
     async (page) => {
       await start(page, "Work");
-      await page
-        .getByRole("button", { name: "Put it all together", exact: true })
-        .click();
+      await selectLesson(page, 6);
       await expect(
         page.getByRole("heading", {
           name: "The handover pilot: plans changed",
@@ -2032,9 +2041,7 @@ for (const width of [1360, 390]) {
     `READER-024 realistic Technical investigation keeps observations and revision at ${width}px`,
     async (page) => {
       await start(page, "Technical");
-      await page
-        .getByRole("button", { name: "Put it all together", exact: true })
-        .click();
+      await selectLesson(page, 6);
       await expect(
         page.getByRole("heading", {
           name: "The upload bug: what do we actually know?",
@@ -2115,9 +2122,7 @@ for (const width of [1360, 390]) {
     `READER-025 realistic Everyday plan keeps attendance states and revision at ${width}px`,
     async (page) => {
       await start(page, "Everyday");
-      await page
-        .getByRole("button", { name: "Put it all together", exact: true })
-        .click();
+      await selectLesson(page, 6);
       await expect(
         page.getByRole("heading", {
           name: "The book swap: who is actually coming?",
@@ -2218,9 +2223,7 @@ for (const width of [1360, 390]) {
       `READER-026 ${name} guided final practice retains drafts and position at ${width}px`,
       async (page) => {
         await start(page, name);
-        await page
-          .getByRole("button", { name: "Put it all together", exact: true })
-          .click();
+        await selectLesson(page, 6);
         const nav = page.getByRole("navigation", {
           name: "Final practice steps",
           exact: true,
@@ -2343,7 +2346,7 @@ await check(
   "READER-027 older compatible final notebook gains a default step only in memory",
   async (page) => {
     await start(page);
-    await page.locator('[data-lesson="6"]').click();
+    await selectLesson(page, 6);
     for (let i = 0; i < 6; i++)
       await fillFinal(page, i, `Preserved prior field ${i + 1}.`);
     await page.locator("#self-check").check();
@@ -2390,7 +2393,7 @@ for (const invalid of [4, "1"]) {
     `READER-027 unreadable final stage ${JSON.stringify(invalid)} protects the original record`,
     async (page) => {
       await start(page);
-      await page.locator('[data-lesson="6"]').click();
+      await selectLesson(page, 6);
       await fillFinal(page, 2, "Retain this exact old writing.");
       await page.locator("#save").click();
       const previous = await page.evaluate((invalid) => {
@@ -2421,7 +2424,7 @@ await check(
   "READER-028 failed staged save keeps all current writing downloadable",
   async (page) => {
     await start(page);
-    await page.locator('[data-lesson="6"]').click();
+    await selectLesson(page, 6);
     await fillFinal(page, 2, "Original first draft for the new case.");
     await page.locator("#save").click();
     const previous = await page.evaluate(() => {
@@ -2451,11 +2454,11 @@ await check(
   "READER-028 stages and unsaved writing remain separate between routes",
   async (page) => {
     await start(page);
-    await page.locator('[data-lesson="6"]').click();
+    await selectLesson(page, 6);
     await fillFinal(page, 2, "Everyday first draft.");
     await page.locator("#save").click();
     await page.getByRole("button", { name: "Work", exact: true }).click();
-    await page.locator('[data-lesson="6"]').click();
+    await selectLesson(page, 6);
     await finalStep(page, 3);
     await expect(page.locator("#writing-final2")).toHaveValue("");
     await fillFinal(page, 5, "Work unsaved revision.");
@@ -2536,7 +2539,7 @@ for (const width of [1360, 390]) {
       `READER-029 ${name} field guidance stays beside retained writing at ${width}px`,
       async (page) => {
         await start(page, name);
-        await page.locator('[data-lesson="6"]').click();
+        await selectLesson(page, 6);
         await finalStep(page, 1);
         await expect(page.locator("#writing-final0-guide")).toBeVisible();
         await expect(page.locator("#final-output")).toHaveText(
@@ -2637,7 +2640,7 @@ const reviewTargets = {
 };
 async function reviewFinal(page, name = "Everyday") {
   await start(page, name);
-  await page.locator('[data-lesson="6"]').click();
+  await selectLesson(page, 6);
   for (let i = 0; i < 6; i++)
     await fillFinal(
       page,
@@ -2866,7 +2869,7 @@ await check(
     await openReview(page, "Correct headcount", 3);
     await page.locator("#save").click();
     await page.getByRole("button", { name: "Work", exact: true }).click();
-    await page.locator('[data-lesson="6"]').click();
+    await selectLesson(page, 6);
     for (let i = 0; i < 6; i++)
       await fillFinal(page, i, `Work separate field ${i + 1}.`);
     await finalStep(page, 3);

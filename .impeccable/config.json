@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "files": [
+          "assets/docs/learning-design/reader/style.css"
+        ],
+        "createdAt": "2026-10-28T15:18:48.378Z",
+        "reason": "Agent design decision: DESIGN.md records self-hosted Inter for the local reader; its surface brief selects Operate with Read and one clean sans family. Retain the documented typography rather than redesign it for a saturation warning."
+      }
+    ]
+  }
+}

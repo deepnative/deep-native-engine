@@ -2,6 +2,8 @@
 
 A local content and workflow draft for [#549](https://github.com/deepnative/deep-native-engine/issues/549), prepared 27 October 2026. **Start with the [complete local reader](reader/README.md), or read a lesson below.** It connects all six authored lessons and final practice with route-specific examples, feedback and a browser-local notebook.
 
+The October 28 GUI now provides **Learn / Practice / My work**: a named path, focused lesson stages, review of actual mistakes, retained writing and an explicit save control reachable during long drafts. It adapts the requested Duolingo, Quantic and Khan Academy learning patterns to this authored content. The [reader handoff](reader/README.md#bdd-and-evidence) records the design review, browser checks and two earlier unexplained startup stalls. The next local action is to investigate that loading evidence under #34 (Sol/High; separate review Astra/High). Production remains parked.
+
 Lesson 2 now includes [three follow-up conversations](study-dialogues.md): use a hint, repair a specific misconception and explain the change while keeping your own writing.
 
 The [local Lesson 2 → 3 walkthrough](prototype/README.md) now lets you try the sequence: write a request, classify a supplied answer, revise it and explain the change. Its saves are explicitly browser-local. The prototype includes eight additional scoped BDD scenarios and focused executable browser checks; it does not add application journey coverage.
