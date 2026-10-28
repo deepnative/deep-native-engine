@@ -11,13 +11,14 @@ import {
 import { escape, hidden, page } from "./views.ts";
 
 const warning = `<p class="eyebrow">INVENTED LOCAL CIRCLE · UNREVIEWED</p><p>Share invented examples only. No private exercise or evidence is copied here. This sandbox has no staffed moderation, response-time promise, qualified review, AI provider or payment service.</p>`;
+const rules = `<details><summary>Rules, privacy and review limits</summary><p>Use invented information only. Keep personal, client, private assignment and evidence text out of shared contributions. Keep discussion respectful and relevant; report the exact shared item for privacy, conduct or off-topic concerns. A current moderator needs a finite grant for this exact circle to hide or restore a contribution.</p><p>Leaving or withdrawing sharing removes your text from peer views; a later choice does not republish old contributions. Withdrawing a contribution removes its body. Content-free decision records remain part of your private retained history until account deletion. Downloading a notice saves a copy on your device that account deletion cannot remove.</p><p>No appeal request or appeal-review service is available in this preview. A decision notice or download is not an appeal, a promise of response, a qualified judgment or proof that a human reviewed the contribution.</p></details>`;
 const base = (circle: string) =>
   `/circles/${encodeURIComponent(circle)}/discussion`;
 function shell(circle: string, title: string, body: string) {
   const url = base(circle);
   return page(
     title,
-    `<nav class="breadcrumb circle-discussion-nav"><a href="/circles">Local circles</a> · <a href="${url}">Questions</a> · <a href="${url}/owned">Your contributions</a> · <a href="${url}/reports">Your sample reports</a> · <a href="${url}/reconcile">Check an original form key</a> · <a href="${url}/choice">Sharing choice</a></nav><section class="reading">${warning}<h1>${escape(title)}</h1>${body}</section>`,
+    `<nav class="breadcrumb circle-discussion-nav"><a href="/circles">Local circles</a> · <a href="${url}">Questions</a> · <a href="${url}/owned">Your contributions</a> · <a href="${url}/reports">Your sample reports</a> · <a href="${url}/reconcile">Check an original form key</a> · <a href="${url}/choice">Sharing choice</a></nav><section class="reading">${warning}<h1>${escape(title)}</h1>${rules}${body}</section>`,
   );
 }
 function confirmation(text: string) {
@@ -39,7 +40,7 @@ function composer(circle: string, csrf: string, root?: string) {
 }
 function item(circle: string, csrf: string, row: CircleItem, owned: boolean) {
   const url = base(circle);
-  return `<li><article><h2>${escape(row.pseudonym)}</h2><p class="small">${escape(row.createdAt)} · ${escape(row.state)} · revision ${row.revision}</p>${row.body === null ? "<p>Text withdrawn.</p>" : `<pre class="content-text">${escape(row.body)}</pre>`}${owned ? (row.state === "withdrawn" ? "" : `<form method="post" action="${url}/posts/${encodeURIComponent(row.id)}/withdraw">${hidden(csrf)}${confirmation("Withdraw this contribution's text; a content-free marker remains until account deletion.")}<button type="submit">Withdraw contribution</button></form>`) : `<p><a href="${url}/threads/${encodeURIComponent(row.rootId ?? row.id)}">Open question and replies</a></p><form method="post" action="${url}/posts/${encodeURIComponent(row.id)}/reports">${hidden(csrf)}${originalKey(circle, "report")}<label for="report-${escape(row.id)}">Report this exact invented contribution</label><select id="report-${escape(row.id)}" name="category">${REPORT_CATEGORIES.map((category) => `<option value="${category}">${escape(category.replace("_", " "))}</option>`).join("")}</select><button type="submit">Save private sample report</button></form>`}</article></li>`;
+  return `<li><article><h2>${escape(row.pseudonym)}</h2><p class="small">${escape(row.createdAt)} · ${escape(row.state)} · revision ${row.revision}</p>${row.body === null ? "<p>Text withdrawn.</p>" : `<pre class="content-text">${escape(row.body)}</pre>`}${owned ? `<p><a href="${url}/posts/${encodeURIComponent(row.id)}/moderation-notice">Inspect this contribution's moderation notice</a></p>` : ""}${owned ? (row.state === "withdrawn" ? "" : `<form method="post" action="${url}/posts/${encodeURIComponent(row.id)}/withdraw">${hidden(csrf)}${confirmation("Withdraw this contribution's text; a content-free marker remains until account deletion.")}<button type="submit">Withdraw contribution</button></form>`) : `<p><a href="${url}/threads/${encodeURIComponent(row.rootId ?? row.id)}">Open question and replies</a></p><form method="post" action="${url}/posts/${encodeURIComponent(row.id)}/reports">${hidden(csrf)}${originalKey(circle, "report")}<label for="report-${escape(row.id)}">Report this exact invented contribution</label><select id="report-${escape(row.id)}" name="category">${REPORT_CATEGORIES.map((category) => `<option value="${category}">${escape(category.replace("_", " "))}</option>`).join("")}</select><button type="submit">Save private sample report</button></form>`}</article></li>`;
 }
 function listing(
   circle: string,
@@ -317,6 +318,62 @@ export function registerCircleDiscussion(
         );
     }),
   );
+  for (const download of [false, true])
+    app.get(
+      `/circles/:id/discussion/posts/:postId/moderation-notice${download ? "/download" : ""}`,
+      route(async (req, res, circle, token) => {
+        res.set({
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        });
+        if (Object.keys(req.query).length !== 0) {
+          rejectFields(res, circle);
+          return;
+        }
+        const value = result(
+          res,
+          circle,
+          await store.moderationNotice(
+            token,
+            circle,
+            req.params.postId as string,
+          ),
+        );
+        if (!value) return;
+        // Select public fields explicitly, never serializing future internal fields.
+        const notice = {
+          noticeVersion: 1,
+          circleId: value.circleId,
+          postId: value.postId,
+          postState: value.postState,
+          postRevision: value.postRevision,
+          decision: value.decision
+            ? {
+                action: value.decision.action,
+                reason: value.decision.reason,
+                oldRevision: value.decision.oldRevision,
+                newRevision: value.decision.newRevision,
+                occurredAt: value.decision.occurredAt,
+              }
+            : null,
+        };
+        if (download) {
+          res
+            .attachment("circle-moderation-notice.json")
+            .type("application/json")
+            .send(JSON.stringify(notice));
+          return;
+        }
+        const decision = notice.decision;
+        res.send(
+          shell(
+            circle,
+            "Your private moderation decision notice",
+            `<p>Circle ${escape(notice.circleId)} · your contribution ${escape(notice.postId)}</p><p role="status">Current retained state: ${escape(notice.postState)} · revision ${notice.postRevision}.</p>${decision ? `<dl><dt>Latest recorded decision</dt><dd>${escape(decision.action)}</dd><dt>Decision reason</dt><dd>${escape(decision.reason.replace("_", " "))}</dd><dt>Decision revision</dt><dd>${decision.oldRevision} → ${decision.newRevision}</dd><dt>Decision time</dt><dd>${escape(decision.occurredAt)}</dd></dl><p>This is the latest recorded decision, not the whole decision history. The current retained state above may reflect a later withdrawal. Inspecting it does not restore or share text.</p>` : "<p>No moderation decision is recorded for this contribution.</p>"}<p><a href="${base(circle)}/posts/${encodeURIComponent(notice.postId)}/moderation-notice/download">Download this latest-decision snapshot</a></p><p>This bounded content-free snapshot contains only the fields shown here. It is separate from your general activity export and contains no contribution body, reporter or staff identity.</p><p><a href="${base(circle)}/owned">Return to your retained contributions</a></p>`,
+          ),
+        );
+      }),
+    );
   app.get(
     "/circles/:id/discussion/threads/:postId",
     route(async (req, res, circle, token, csrf) => {

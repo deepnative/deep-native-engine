@@ -53,7 +53,27 @@ interface ReadCase {
   value: unknown;
   heading: string;
 }
+const notice = {
+  noticeVersion: 1,
+  circleId: "everyday-ai",
+  postId: id,
+  postState: "hidden",
+  postRevision: 2,
+  decision: {
+    action: "hidden",
+    reason: "privacy",
+    oldRevision: 1,
+    newRevision: 2,
+    occurredAt: "2026-10-28T00:00:00Z",
+  },
+};
 const reads: ReadCase[] = [
+  {
+    path: root + "/posts/" + id + "/moderation-notice",
+    operation: "moderationNotice",
+    value: notice,
+    heading: "Your private moderation decision notice",
+  },
   {
     path: root + "/choice",
     operation: "choice",
@@ -576,5 +596,115 @@ it("keeps withdrawal uncertainty generic when there is no original submission ke
     expect(response.text).toContain("Circle result unconfirmed");
     expect(response.text).not.toContain("Invented private withdrawal fault");
     expect(response.text).not.toContain("Check the original form key</a>");
+  });
+});
+
+it.each([false, true])(
+  "MODN-01 renders latest or no-decision notice (empty=%s) without exposing contribution or staff details",
+  async (empty) => {
+    const f = fixture();
+    f.mocks.moderationNotice.mockResolvedValue({
+      kind: "ready",
+      value: { ...notice, decision: empty ? null : notice.decision },
+    });
+    await withLoopback(f.application, async (server) => {
+      const response = await request(server)
+        .get(root + "/posts/" + id + "/moderation-notice")
+        .expect(200);
+      expect(response.headers["cache-control"]).toBe("no-store");
+      expect(response.text).toContain(
+        empty ? "No moderation decision is recorded" : "Decision time",
+      );
+      expect(response.text).toContain(
+        "No appeal request or appeal-review service is available",
+      );
+      expect(response.text).toContain("until account deletion");
+      expect(response.text).toContain("Return to your retained contributions");
+    });
+  },
+);
+it("MODN-04 explicitly whitelists content-free JSON fields and safe download headers", async () => {
+  const f = fixture();
+  f.mocks.moderationNotice.mockResolvedValue({
+    kind: "ready",
+    value: {
+      ...notice,
+      body: "Private invented body",
+      staffId: "private-staff",
+      decision: {
+        ...notice.decision,
+        actorId: "private-actor",
+        fingerprint: "private-fingerprint",
+      },
+    },
+  });
+  await withLoopback(f.application, async (server) => {
+    const response = await request(server)
+      .get(root + "/posts/" + id + "/moderation-notice/download")
+      .expect(200);
+    expect(response.body).toEqual(notice);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers["content-disposition"]).toBe(
+      'attachment; filename="circle-moderation-notice.json"',
+    );
+    expect(response.headers["content-type"]).toContain("application/json");
+    expect(response.text).not.toContain("private-");
+  });
+});
+it.each(["denied", "invalid", "conflict", "throw"])(
+  "MODN-02/04 emits no download attachment or success on %s",
+  async (kind) => {
+    const f = fixture();
+    if (kind === "throw")
+      f.mocks.moderationNotice.mockRejectedValue(
+        Error("Private invented database diagnostic"),
+      );
+    else f.mocks.moderationNotice.mockResolvedValue({ kind });
+    await withLoopback(f.application, async (server) => {
+      const response = await request(server)
+        .get(root + "/posts/" + id + "/moderation-notice/download")
+        .expect(
+          kind === "throw"
+            ? 503
+            : kind === "denied"
+              ? 403
+              : kind === "invalid"
+                ? 422
+                : 409,
+        );
+      expect(response.headers["content-disposition"]).toBeUndefined();
+      expect(response.headers["cache-control"]).toBe("no-store");
+      expect(response.text).not.toContain(
+        "Private invented database diagnostic",
+      );
+      expect(response.text).not.toContain("Decision time");
+    });
+  },
+);
+it.each(["?member_id=other", "?cursor=x&cursor=y"])(
+  "MODN-02 rejects download query %s without a store read",
+  async (query) => {
+    const f = fixture();
+    await withLoopback(f.application, async (server) => {
+      const response = await request(server)
+        .get(root + "/posts/" + id + "/moderation-notice/download" + query)
+        .expect(422);
+      expect(response.headers["content-disposition"]).toBeUndefined();
+      expect(f.mocks.moderationNotice).not.toHaveBeenCalled();
+    });
+  },
+);
+it("MODN-01 excludes decision fields from a no-decision download", async () => {
+  const f = fixture();
+  f.mocks.moderationNotice.mockResolvedValue({
+    kind: "ready",
+    value: { ...notice, decision: null },
+  });
+  await withLoopback(f.application, async (server) => {
+    const response = await request(server)
+      .get(root + "/posts/" + id + "/moderation-notice/download")
+      .expect(200);
+    expect(response.body.decision).toBeNull();
   });
 });

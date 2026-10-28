@@ -6,6 +6,7 @@ import {
   disabledCircleDiscussionStore,
   CIRCLE_DISCUSSION_POLICY,
   type CircleDiscussionStore,
+  type CircleModerationNotice,
 } from "../../src/circle-discussion.ts";
 const token = "a".repeat(64),
   actor = "00000000-0000-4000-8000-000000000001",
@@ -19,6 +20,7 @@ afterEach(() => {
 });
 function operations(db: CircleDiscussionStore, t = token, c = circle) {
   return {
+    moderationNotice: () => db.moderationNotice(t, c, id),
     choice: () => db.choice(t, c),
     choose: () => db.choose(t, c, id, "1", CIRCLE_DISCUSSION_POLICY, true),
     list: () => db.list(t, c),
@@ -63,6 +65,11 @@ interface PriorChoice {
   revoked_at: Date | null;
 }
 interface MemberFixture {
+  noticePost: {
+    state: "visible" | "hidden" | "withdrawn";
+    revision: number;
+  } | null;
+  noticeDecision: CircleModerationNotice["decision"];
   priorReport: {
     id: string;
     circle_id: string;
@@ -97,6 +104,8 @@ interface MemberFixture {
 }
 function fixture(overrides: Partial<MemberFixture> = {}) {
   const state: MemberFixture = {
+    noticePost: { state: "hidden", revision: 2 },
+    noticeDecision: null,
     priorReport: null,
     duplicateReport: null,
     bodyRows: true,
@@ -130,6 +139,10 @@ function fixture(overrides: Partial<MemberFixture> = {}) {
       sql.includes("pg_advisory_xact_lock(")
     )
       return { rows: [] };
+    if (sql.startsWith("SELECT state,revision FROM preview_circle_posts"))
+      return { rows: state.noticePost ? [state.noticePost] : [] };
+    if (sql.startsWith("SELECT action,reason,old_revision"))
+      return { rows: state.noticeDecision ? [state.noticeDecision] : [] };
     if (sql.startsWith("WITH instant"))
       return { rows: state.current ? [state.current] : [] };
     if (sql.startsWith("SELECT id FROM principals WHERE token_hash="))
@@ -313,6 +326,7 @@ it("pauses group operations without treating pause as permission to access any r
   expect(f.connect).not.toHaveBeenCalled();
   for (const name of [
     "owned",
+    "moderationNotice",
     "reports",
     "reportReceipt",
     "reconcile",
@@ -1343,4 +1357,110 @@ it("rejects a group continuation when sharing changes between observation and cu
       }),
     ),
   ).toEqual({ kind: "invalid" });
+});
+
+it("MODN-02 refuses an invalid notice target before connection acquisition", async () => {
+  const f = fixture();
+  expect(await f.db.moderationNotice(token, circle, "bad")).toEqual({
+    kind: "invalid",
+  });
+  expect(f.connect).not.toHaveBeenCalled();
+});
+it.each(["identity", "principal", "workspace"] as const)(
+  "MODN-02 denies the notice when current %s authority is absent",
+  async (gate) => {
+    const f = fixture({ [gate]: false });
+    expect(await f.db.moderationNotice(token, circle, id)).toEqual({
+      kind: "denied",
+    });
+    expect(f.commands).not.toContain("COMMIT");
+  },
+);
+it("MODN-02 denies an unavailable own post before selecting any decision", async () => {
+  const f = fixture({ noticePost: null });
+  expect(await f.db.moderationNotice(token, circle, id)).toEqual({
+    kind: "denied",
+  });
+  expect(f.commands.some((sql) => sql.startsWith("SELECT action,reason"))).toBe(
+    false,
+  );
+});
+it.each([
+  null,
+  {
+    action: "hidden",
+    reason: "privacy",
+    oldRevision: 1,
+    newRevision: 2,
+    occurredAt: "2026-10-28T00:00:00Z",
+  },
+] as const)(
+  "MODN-01/03 returns an honest bounded owner notice independently of sharing (%j)",
+  async (decision) => {
+    const f = fixture({
+      joined: false,
+      chosen: false,
+      noticePost: { state: "withdrawn", revision: 3 },
+      noticeDecision: decision,
+    });
+    const paused = circleDiscussionStore(f.pool, secret, false);
+    expect(await paused.moderationNotice(token, circle, id)).toEqual({
+      kind: "ready",
+      value: {
+        noticeVersion: 1,
+        circleId: circle,
+        postId: id,
+        postState: "withdrawn",
+        postRevision: 3,
+        decision,
+      },
+    });
+    expect(
+      f.commands.some((sql) => sql.includes("FROM preview_circle_memberships")),
+    ).toBe(false);
+    expect(f.commands.some((sql) => /^(INSERT|UPDATE|DELETE)/.test(sql))).toBe(
+      false,
+    );
+  },
+);
+it("MODN-02 withholds a notice when owner lifetime fails the final DB-clock check", async () => {
+  const f = fixture({
+    current: { n: 0, grant_active: true, remaining_ms: "0" },
+  });
+  expect(await f.db.moderationNotice(token, circle, id)).toEqual({
+    kind: "denied",
+  });
+  expect(f.commands).not.toContain("COMMIT");
+});
+it.each(["post", "decision", "commit"])(
+  "MODN-04 does not acknowledge a notice after %s database uncertainty",
+  async (stage) => {
+    const f = fixture();
+    const original = f.query.getMockImplementation()!;
+    f.query.mockImplementation(async (sql: string, values: unknown[] = []) => {
+      if (
+        (stage === "post" && sql.startsWith("SELECT state,revision")) ||
+        (stage === "decision" && sql.startsWith("SELECT action,reason")) ||
+        (stage === "commit" && sql === "COMMIT")
+      )
+        throw Error("Invented private DB diagnostic");
+      return original(sql, values);
+    });
+    await expect(f.db.moderationNotice(token, circle, id)).rejects.toThrow(
+      stage === "commit"
+        ? "Circle outcome unconfirmed"
+        : "Circle operation unavailable",
+    );
+    expect(f.release).toHaveBeenCalledOnce();
+    expect(f.commands).toContain("ROLLBACK");
+  },
+);
+it("MODN-04 withholds a notice when connection release cannot be confirmed", async () => {
+  const f = fixture();
+  f.release.mockImplementation(() => {
+    throw Error("Invented release diagnostic");
+  });
+  await expect(f.db.moderationNotice(token, circle, id)).rejects.toThrow(
+    "Circle outcome unconfirmed",
+  );
 });

@@ -51,7 +51,26 @@ export interface CircleReconciliation {
   status: string | null;
   revision: number | null;
 }
+export interface CircleModerationNotice {
+  noticeVersion: 1;
+  circleId: string;
+  postId: string;
+  postState: CircleItem["state"];
+  postRevision: number;
+  decision: {
+    action: "hidden" | "restored";
+    reason: "privacy" | "conduct" | "off_topic" | "test_correction";
+    oldRevision: number;
+    newRevision: number;
+    occurredAt: string;
+  } | null;
+}
 export interface CircleDiscussionStore {
+  moderationNotice(
+    token: string,
+    circle: string,
+    postId: string,
+  ): Promise<CircleResult<CircleModerationNotice>>;
   reconcile(
     token: string,
     circle: string,
@@ -182,6 +201,7 @@ interface Context {
 
 export function disabledCircleDiscussionStore(): CircleDiscussionStore {
   return {
+    moderationNotice: async () => denied,
     reconcile: async () => denied,
     reports: async () => denied,
     reportReceipt: async () => denied,
@@ -922,6 +942,46 @@ export function circleDiscussionStore(
     });
   }
   return {
+    async moderationNotice(token, circle, postId) {
+      if (!input(token, circle)) return denied;
+      if (!uuid.test(postId)) return invalid;
+      // Owner history is independent of current sharing, membership and write
+      // availability. Lock current identity/workspace before its own post, just
+      // like existing private history; account erasure cannot race this read.
+      return transaction(circle, false, async (client, finish) => {
+        const context = await authorize(client, token, circle, [], false, true);
+        if (!context) return denied;
+        finish(context);
+        const post = (
+          await client.query<{
+            state: CircleItem["state"];
+            revision: number;
+          }>(
+            "SELECT state,revision FROM preview_circle_posts WHERE id=$1 AND circle_id=$2 AND member_id=$3 FOR SHARE",
+            [postId, circle, context.actor],
+          )
+        ).rows[0];
+        if (!post) return denied;
+        // Select only the bounded member-visible fields. No body, reporter,
+        // staff identity or internal replay material enters this projection.
+        const decision = (
+          await client.query<NonNullable<CircleModerationNotice["decision"]>>(
+            `SELECT action,reason,old_revision AS "oldRevision",new_revision AS "newRevision",occurred_at::text AS "occurredAt"
+             FROM preview_circle_moderation_audit WHERE post_id=$1 AND circle_id=$2 AND member_id=$3
+             ORDER BY new_revision DESC LIMIT 1`,
+            [postId, circle, context.actor],
+          )
+        ).rows[0];
+        return ready({
+          noticeVersion: 1,
+          circleId: circle,
+          postId,
+          postState: post.state,
+          postRevision: post.revision,
+          decision: decision ?? null,
+        });
+      });
+    },
     async reconcile(token, circle, kind, key) {
       if (!input(token, circle)) return denied;
       if (
