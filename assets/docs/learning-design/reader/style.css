@@ -891,3 +891,41 @@ textarea::placeholder {
     min-height: 155px;
   }
 }
+
+.contribution-workspace {
+  margin: 28px 0;
+}
+.contribution-workspace > details {
+  background: #f1f5eb;
+}
+.contribution-workspace h2 {
+  margin-top: 24px;
+}
+.contribution-workspace .source-card {
+  margin: 24px 0;
+}
+.contribution-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+.contribution-fields > div:first-child {
+  grid-column: 1 / -1;
+}
+.contribution-workspace select {
+  width: 100%;
+  padding: 12px;
+  font: inherit;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: white;
+}
+.contribution-workspace .self-check {
+  margin-top: 24px;
+}
+@media (max-width: 700px) {
+  .contribution-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

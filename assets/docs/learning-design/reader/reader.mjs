@@ -8,6 +8,14 @@ import {
   exportFeedback,
 } from "./feedback.mjs";
 
+import {
+  newContribution,
+  validContribution,
+  renderContribution,
+  bindContribution,
+  exportContribution,
+} from "./contribution.mjs";
+
 const routes = { everyday: "Everyday", work: "Work", technical: "Technical" };
 const stages = ["See an example", "Try it", "Fresh case", "Your work"];
 const finalLabels = [
@@ -48,6 +56,7 @@ function emptyState(chosenRoute) {
     final: finalLabels.map(() => ""),
     finalChecked: false,
     feedback: newFeedbackState(chosenRoute),
+    contribution: newContribution(),
   };
 }
 
@@ -70,6 +79,8 @@ function validState(value, chosenRoute) {
     value.final.length !== 6 ||
     !value.final.every(text) ||
     typeof value.finalChecked !== "boolean" ||
+    (value.contribution !== undefined &&
+      !validContribution(value.contribution)) ||
     (value.feedback !== undefined &&
       !validFeedbackState(value.feedback, chosenRoute))
   )
@@ -103,6 +114,7 @@ function writingSnapshot(value) {
     final: value.final,
     finalChecked: value.finalChecked,
     feedback: value.feedback,
+    contribution: value.contribution,
   });
 }
 
@@ -148,6 +160,7 @@ function getSession(chosenRoute) {
           throw new Error("unreadable");
         session.state = stored.state;
         session.state.feedback ??= newFeedbackState(chosenRoute);
+        session.state.contribution ??= newContribution();
         session.earlier = session.earlier.filter(
           (entry) => entry.key !== loadedKey,
         );
@@ -324,7 +337,7 @@ function finalContent() {
       state().finalChecked,
       state().final.every((v) => v.trim()),
       true,
-    )}</section><div class="next-row"><button class="secondary" id="back">Back to lesson 6</button><button class="primary" id="download-final">Download my learning record</button></div>`,
+    )}</section>${renderContribution(state().contribution)}<div class="next-row"><button class="secondary" id="back">Back to lesson 6</button><button class="primary" id="download-final">Download my learning record</button></div>`,
   };
 }
 
@@ -353,6 +366,7 @@ function navigate(lesson, step = 0) {
 }
 
 function bind() {
+  if (state().lesson === 6) bindContribution(state().contribution, changed);
   document
     .querySelector("#feedback-choice")
     ?.addEventListener("change", (event) => {
@@ -575,6 +589,7 @@ function exportText() {
   lines.push(
     `Final record self-checked by learner: ${state().finalChecked ? "yes" : "no"}`,
   );
+  lines.push(exportContribution(state().contribution, plain));
   return lines.join("\n\n");
 }
 

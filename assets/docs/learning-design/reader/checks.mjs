@@ -1631,6 +1631,301 @@ for (const width of [1360, 390]) {
   }
 }
 
+const contributionFields = {
+  problem: "Problem and source version",
+  first: "First proposal",
+  revision: "Revised proposal (optional)",
+  reason: "Reason and evidence",
+  rights: "Sources and rights note",
+  attribution: "Intended attribution (optional)",
+};
+const contributionDraft = {
+  problem:
+    "WF-LAB-01 v1 borrows Friday for two task deadlines that the source leaves open.",
+  first:
+    "Keep each date with its own task. Put not specified in missing date cells.",
+  revision:
+    "Keep sourced dates and proposed dates in separate columns. Label suggestions; do not turn them into commitments.",
+  reason:
+    "Friday belongs to the trial. Suggestions can be useful when their origin is visible. Checked against the invented brief, not a real team.",
+  rights:
+    "Original invented learning example based on WF-LAB-01 v1. No member or client text; no external reuse permission inferred.",
+};
+async function openContribution(page, name = "Everyday") {
+  await start(page, name);
+  await page.locator('[data-lesson="6"]').click();
+  const opener = page.getByText("Shape a contribution (optional)", {
+    exact: true,
+  });
+  await expect(opener).toHaveCount(1);
+  await opener.click();
+}
+async function fillContribution(page) {
+  for (const [key, value] of Object.entries(contributionDraft))
+    await page.getByLabel(contributionFields[key], { exact: true }).fill(value);
+}
+for (const width of [1360, 390]) {
+  for (const name of ["Everyday", "Work", "Technical"]) {
+    await check(
+      `READER-019 ${name} contribution draft and worked revision at ${width}px`,
+      async (page) => {
+        await openContribution(page, name);
+        await expect(page.locator("#contribution-source")).toContainText(
+          "WF-LAB-01 · version 1",
+        );
+        await expect(page.locator("#contribution-source")).toContainText(
+          "Nora drafts invitations",
+        );
+        await expect(
+          page.getByLabel("Intended audience", { exact: true }),
+        ).toHaveValue("private");
+        await fillContribution(page);
+        await page
+          .getByText("Compare a complete proposal and its revision", {
+            exact: true,
+          })
+          .click();
+        await expect(page.locator("#contribution-teaching")).toContainText(
+          "Borrowing Friday",
+        );
+        await expect(page.locator("#contribution-teaching")).toContainText(
+          "Proposed date",
+        );
+        await expect(page.locator("#contribution-teaching")).toContainText(
+          "Withdraw sharing",
+        );
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        if (name === "Work")
+          await page
+            .locator("#contribution-teaching .table-wrap")
+            .filter({ hasText: "Proposed date" })
+            .screenshot({
+              path: path.join(output, `contribution-table-${width}.png`),
+            });
+
+        await expect(
+          page.getByLabel("First proposal", { exact: true }),
+        ).toHaveValue(contributionDraft.first);
+        await page
+          .getByLabel(
+            "I checked this proposal against its source and sharing boundaries",
+            { exact: true },
+          )
+          .check();
+        await page.locator("#save").click();
+        const exported = await downloadText(page, page.locator("#download"));
+        for (const value of Object.values(contributionDraft))
+          expect(exported).toContain(value);
+        expect(exported).toContain("WF-LAB-01 · version 1");
+        expect(exported).toContain("Not submitted or shared");
+        await page.reload();
+        await page
+          .getByText("Shape a contribution (optional)", { exact: true })
+          .click();
+        for (const [key, value] of Object.entries(contributionDraft))
+          await expect(
+            page.getByLabel(contributionFields[key], { exact: true }),
+          ).toHaveValue(value);
+        await expect(page.locator("#contribution-check")).toBeChecked();
+        await expect(page.locator("#contribution-status")).toContainText(
+          "Not submitted or shared",
+        );
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        await page.locator("#contribution-workspace").screenshot({
+          path: path.join(
+            output,
+            `contribution-${expected[name].route}-${width}.png`,
+          ),
+        });
+      },
+      { width, height: 950 },
+    );
+  }
+  await check(
+    `READER-020 contribution edits and cancelled sharing intent at ${width}px`,
+    async (page) => {
+      await openContribution(page);
+      for (let i = 0; i < 6; i++)
+        await page
+          .locator(`#writing-final${i}`)
+          .fill(`Retained final decision ${i + 1}.`);
+      await page.locator("#self-check").check();
+      await fillContribution(page);
+      await page.locator("#contribution-check").check();
+      await page
+        .getByLabel("Revised proposal (optional)", { exact: true })
+        .fill("Changed proposal with a proposed-date column.");
+      await expect(page.locator("#contribution-check")).not.toBeChecked();
+      await expect(page.locator("#self-check")).toBeChecked();
+      await page.locator("#contribution-check").check();
+      await page
+        .getByLabel("Intended audience", { exact: true })
+        .selectOption("members-later");
+      await expect(page.locator("#contribution-check")).not.toBeChecked();
+      await expect(page.locator("#contribution-check")).toBeDisabled();
+      await page
+        .getByLabel("Intended attribution (optional)", { exact: true })
+        .fill("Invented workshop learner");
+      await page.locator("#contribution-check").check();
+      await page
+        .getByLabel("Intended attribution (optional)", { exact: true })
+        .fill("Invented contributor");
+      await expect(page.locator("#contribution-check")).not.toBeChecked();
+      await page.locator("#contribution-check").check();
+      await page
+        .getByRole("button", { name: "Cancel this sharing plan", exact: true })
+        .click();
+      await expect(
+        page.getByLabel("Intended audience", { exact: true }),
+      ).toHaveValue("private");
+      await expect(
+        page.getByLabel("Intended attribution (optional)", { exact: true }),
+      ).toHaveValue("");
+      await expect(
+        page.getByLabel("First proposal", { exact: true }),
+      ).toHaveValue(contributionDraft.first);
+      await expect(
+        page.getByLabel("Revised proposal (optional)", { exact: true }),
+      ).toHaveValue("Changed proposal with a proposed-date column.");
+      await expect(page.locator("#self-check")).toBeChecked();
+      await expect(page.locator("#contribution-check")).not.toBeChecked();
+      await page.locator("#save").click();
+      await page.reload();
+      await page
+        .getByText("Shape a contribution (optional)", { exact: true })
+        .click();
+      await expect(
+        page.getByLabel("Intended audience", { exact: true }),
+      ).toHaveValue("private");
+      await expect(page.locator("#self-check")).toBeChecked();
+    },
+    { width, height: 950 },
+  );
+}
+await check(
+  "READER-021 failed save keeps literal contribution writing downloadable",
+  async (page) => {
+    await page.addInitScript(() => {
+      Storage.prototype.setItem = () => {
+        throw new DOMException("Test quota failure", "QuotaExceededError");
+      };
+    });
+    await openContribution(page);
+    const literal =
+      '<img src=x onerror="window.contributionInjected=true"> retain my draft';
+    await page.getByLabel("First proposal", { exact: true }).fill(literal);
+    await page
+      .getByLabel("Intended audience", { exact: true })
+      .selectOption("members-later");
+    await page.locator("#save").click();
+    await expect(page.locator("#save-status")).toContainText("Saving failed");
+    await expect(
+      page.getByLabel("First proposal", { exact: true }),
+    ).toHaveValue(literal);
+    const text = await downloadText(page, page.locator("#download"));
+    expect(text).toContain(literal);
+    expect(text).toContain("Member-only sharing considered for later");
+    expect(text).toContain("Not submitted or shared");
+    expect(text).toContain("Nora drafts invitations");
+    expect(await page.locator("#contribution-workspace img").count()).toBe(0);
+    expect(
+      await page.evaluate(() => Boolean(window.contributionInjected)),
+    ).toBe(false);
+  },
+);
+for (const kind of ["missing optional worksheet", "unreadable worksheet"]) {
+  await check(
+    `READER-022 ${kind} preserves the stored learning record`,
+    async (page) => {
+      await openContribution(page);
+      await page
+        .locator("#writing-final0")
+        .fill("Keep this saved task and check.");
+      await fillContribution(page);
+      await page.locator("#save").click();
+      const saved = await page.evaluate((kind) => {
+        const key = Object.keys(localStorage).find((k) =>
+          k.startsWith("dne-course-reader-1:everyday:"),
+        );
+        const value = JSON.parse(localStorage.getItem(key));
+        if (kind === "missing optional worksheet")
+          delete value.state.contribution;
+        else value.state.contribution.audience = "published-to-everyone";
+        const raw = JSON.stringify(value);
+        localStorage.setItem(key, raw);
+        return { key, raw };
+      }, kind);
+      await page.reload();
+      if (kind === "missing optional worksheet") {
+        await expect(page.locator("#writing-final0")).toHaveValue(
+          "Keep this saved task and check.",
+        );
+        await page
+          .getByText("Shape a contribution (optional)", { exact: true })
+          .click();
+        await expect(
+          page.getByLabel("First proposal", { exact: true }),
+        ).toHaveValue("");
+        await expect(page.locator("#save")).toBeEnabled();
+      } else {
+        await expect(page.locator("#save-status")).toContainText(
+          "record is unreadable",
+        );
+        await expect(page.locator("#save")).toBeDisabled();
+        expect(await downloadText(page, page.locator("#download-stored"))).toBe(
+          saved.raw,
+        );
+        expect(
+          await page.evaluate((key) => localStorage.getItem(key), saved.key),
+        ).toBe(saved.raw);
+      }
+    },
+  );
+}
+await check(
+  "READER-022 contribution drafts remain separate by route and warn on unsaved departure",
+  async (page) => {
+    await openContribution(page);
+    await page
+      .getByLabel("First proposal", { exact: true })
+      .fill("Everyday private proposal.");
+    await page.locator("#save").click();
+    await page.getByRole("button", { name: "Work", exact: true }).click();
+    await page.locator('[data-lesson="6"]').click();
+    await page
+      .getByText("Shape a contribution (optional)", { exact: true })
+      .click();
+    await expect(
+      page.getByLabel("First proposal", { exact: true }),
+    ).toHaveValue("");
+    await page
+      .getByLabel("First proposal", { exact: true })
+      .fill("Work unsaved contribution.");
+    await page.getByRole("button", { name: "Everyday", exact: true }).click();
+    await page
+      .getByText("Shape a contribution (optional)", { exact: true })
+      .click();
+    await expect(
+      page.getByLabel("First proposal", { exact: true }),
+    ).toHaveValue("Everyday private proposal.");
+    expect(await downloadText(page, page.locator("#download"))).not.toContain(
+      "Work unsaved contribution.",
+    );
+    const dialogs = [];
+    page.on("dialog", (d) => dialogs.push(d.type()));
+    await page.goto("about:blank");
+    expect(dialogs).toEqual(["beforeunload"]);
+  },
+);
+
 await browser.close();
 await writeFile(
   path.join(output, "results.json"),

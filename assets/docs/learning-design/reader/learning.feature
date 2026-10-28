@@ -1,6 +1,34 @@
 # Local reader behavior only. No account, publication or application L-series claim.
 Feature: Follow the complete authored foundation sequence
 
+  Scenario: READER-019 — Draft a contribution beside its worked source and revision
+    Given the learner opens the optional contribution practice after the final record
+    When they write a problem, first proposal, revision, reason and rights note
+    Then the source and supplied comparison remain visible without replacing their words
+    And explicit save, download and reload retain the draft for that route at both widths
+    And the draft has no submitted, accepted or shared status
+
+  Scenario: READER-020 — Revise or cancel a sharing plan without erasing learning
+    Given the final record and optional proposal have separate learner self-checks
+    When proposal text, attribution or intended audience changes
+    Then only the proposal self-check is cleared
+    When the learner cancels the member-sharing plan
+    Then the attribution is cleared and the intended audience becomes private
+    And the first and revised proposal and final record stay intact
+
+  Scenario: READER-021 — Keep an unfinished contribution after a failed save
+    Given the browser cannot save an unfinished contribution
+    When the learner saves and then downloads the notebook
+    Then the page reports failure and retains editable literal writing
+    And the download contains the draft, source and unsubmitted audience plan
+
+  Scenario: READER-022 — Preserve separate routes and protected notebook versions
+    Given saved learning may lack the optional worksheet or contain an unreadable one
+    When the learner opens the reader
+    Then compatible learning gains an empty optional worksheet without losing prior writing
+    And an unreadable stored copy is protected and separately downloadable
+    And switching routes keeps contribution drafts separate
+
   Scenario: READER-018 — Rehearse a supplied follow-up without losing the learner's words
     Given the learner opens Lesson 2's fresh case in any route
     When they write an attempt and reveal its supplied follow-up conversation
