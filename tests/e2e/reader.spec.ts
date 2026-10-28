@@ -142,7 +142,7 @@ test("[L43] professional and IT sessions keep versioned activity private through
     const csrf = await page.locator('input[name="csrf"]').first().inputValue();
     await otherPage.goto("/library");
     await expect(
-      otherPage.getByText("No sample lesson has been opened"),
+      otherPage.getByText("No lesson has been opened for this account yet."),
     ).toBeVisible();
     const otherWrite = await otherPage.request.post(`/library/${id}/progress`, {
       headers: { Origin: origin },

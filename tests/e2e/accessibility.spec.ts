@@ -100,7 +100,10 @@ test("[L53] three learner paths retain visible keyboard focus, actionable errors
       }),
     ).toBeVisible();
     await expect(
-      page.getByText("No workflow runs here", { exact: false }),
+      page.getByText(
+        "These ordinary educational workflows do not run here or connect to an AI provider or client system.",
+        { exact: false },
+      ),
     ).toBeVisible();
     await page
       .getByRole("link", { name: "Return to learning", exact: true })
