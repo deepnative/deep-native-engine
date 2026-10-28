@@ -181,6 +181,9 @@ test("[L231] FOUND-03/04 all three backgrounds read six lessons and retain priva
       await member
         .getByRole("button", { name: "Mark self-assessed complete" })
         .click();
+      await expect(member.getByRole("status")).toContainText(
+        "Self-assessed complete · version 2",
+      );
       await member.reload();
       await expect(member.getByRole("status")).toContainText(
         "Self-assessed complete · version 2",
