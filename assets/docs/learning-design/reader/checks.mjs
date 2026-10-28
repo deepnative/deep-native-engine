@@ -100,7 +100,7 @@ const expected = {
       "Four helpers",
       "nine people",
     ],
-    final: "five helpers for ninety minutes",
+    final: "eighteen confirmed guests and two helpers",
   },
   Work: {
     route: "work",
@@ -410,7 +410,7 @@ if (!process.argv.includes("--baseline")) {
           .getByRole("button", { name: "Put it all together", exact: true })
           .click();
         await expect(page.locator("#source-text")).toContainText(
-          "five helpers for ninety minutes",
+          "eighteen confirmed guests and two helpers",
         );
         await page.getByRole("button", { name: "Work", exact: true }).click();
         await page.locator('[data-lesson="1"]').click();
@@ -2099,6 +2099,96 @@ for (const width of [1360, 390]) {
       await expect(page.locator("#self-check")).toBeChecked();
       await page.locator(".lesson-body").screenshot({
         path: path.join(output, `realistic-technical-${width}.png`),
+      });
+    },
+    { width, height: 950 },
+  );
+}
+
+for (const width of [1360, 390]) {
+  await check(
+    `READER-025 realistic Everyday plan keeps attendance states and revision at ${width}px`,
+    async (page) => {
+      await start(page, "Everyday");
+      await page
+        .getByRole("button", { name: "Put it all together", exact: true })
+        .click();
+      await expect(
+        page.getByRole("heading", {
+          name: "The book swap: who is actually coming?",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(page.locator(".lesson-body")).toContainText(
+        "S1 · current venue confirmation",
+      );
+      const first =
+        "First reminder: Saturday 7 November, Cedar Room, 1:30–3 p.m.; up to three books per confirmed guest. Eighteen guests plus two helpers use all twenty places. Four people are waiting, not confirmed. Maximum incoming books are 54, not a promised total. Display two per guest first and hold any third books in the box.";
+      for (let i = 0; i < 6; i++)
+        await page
+          .locator(`#writing-final${i}`)
+          .fill(
+            `Everyday decision ${i + 1}: keep source and open questions visible.`,
+          );
+      await page.locator("#writing-final2").fill(first);
+      await page.locator("#self-check").check();
+      await page
+        .getByText("After your first plan: open the reply update", {
+          exact: true,
+        })
+        .click();
+      await expect(page.locator(".lesson-body")).toContainText(
+        "U1 · Friday reply snapshot",
+      );
+      await expect(page.locator("#writing-final2")).toHaveValue(first);
+      await expect(page.locator("#self-check")).toBeChecked();
+      const revision =
+        "Revised plan: two cancellations and one accepted replacement leave seventeen confirmed guests, plus two helpers. One invitation is pending until 6 p.m.; keep that one place reserved and the other two people on the waitlist. Nineteen are confirmed in the room; twenty if the pending person accepts. Plan for at most 54 books, but neither attendance nor actual books is guaranteed. Check replies before offering the reserved place again.";
+      await page.locator("#writing-final5").fill(revision);
+      await expect(page.locator("#self-check")).not.toBeChecked();
+      await page
+        .getByText("Compare with a worked record", { exact: true })
+        .click();
+      const worked = page.locator(".lesson-body > details").filter({
+        has: page.getByText("Compare with a worked record", { exact: true }),
+      });
+      for (const text of [
+        "18 + 2 = 20",
+        "18 × 3 = 54",
+        "17 + 2 = 19",
+        "one reserved place",
+        "36 books",
+        "18 books",
+        "not a promise",
+      ])
+        await expect(worked).toContainText(text);
+      await expect(worked).toContainText("1 p.m. is setup access");
+      await expect(worked).toContainText("This is supplied practice feedback");
+      await expect(page.locator("#writing-final2")).toHaveValue(first);
+      await expect(page.locator("#writing-final5")).toHaveValue(revision);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      await page.locator("#self-check").check();
+      await page.locator("#save").click();
+      const exported = await downloadText(page, page.locator("#download"));
+      for (const text of [
+        first,
+        revision,
+        "S0 · old invitation",
+        "S1 · current venue confirmation",
+        "S2 · attendance and materials",
+        "U1 · Friday reply snapshot",
+      ])
+        expect(exported).toContain(text);
+      await page.reload();
+      await expect(page.locator("#writing-final2")).toHaveValue(first);
+      await expect(page.locator("#writing-final5")).toHaveValue(revision);
+      await expect(page.locator("#self-check")).toBeChecked();
+      await page.locator(".lesson-body").screenshot({
+        path: path.join(output, `realistic-everyday-${width}.png`),
       });
     },
     { width, height: 950 },

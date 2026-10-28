@@ -1,6 +1,15 @@
 # Local reader behavior only. No account, publication or application L-series claim.
 Feature: Follow the complete authored foundation sequence
 
+  Scenario: READER-025 — Keep an Everyday plan accurate through changed replies
+    Given the learner opens the book-swap case at desktop or narrow width
+    When they retain a first reminder and open the later reply snapshot
+    Then their words and existing self-check stay intact
+    When they retain a revised reminder and reason
+    Then the old self-check clears and comparison does not replace either draft
+    And save, download and reload retain both versions and the full source packet
+    And expanded content fits the page with wide tables contained
+
   Scenario: READER-024 — Rehearse a realistic technical investigation and later revision
     Given the learner opens Technical final practice at desktop or narrow width
     When they retain an initial investigation and reveal the later requirement and patch note

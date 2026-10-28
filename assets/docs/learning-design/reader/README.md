@@ -16,6 +16,8 @@ The Work final practice now uses [CAP-W2: a changing handover pilot](../realisti
 
 The Technical final practice uses [CAP-T2: an upload-bug investigation](../realistic-technical-practice.md). Reconcile obsolete/current requirements, a vague report, a specific UI failure, a successful control and an interrupted attempt. Produce an investigation and boundary test plan, then revise after a new JPEG requirement and an unverified patch proposal. Supplied observations, hypotheses and planned runs stay distinct. Downloads retain the full packet; the earlier simpler Technical source remains in `foundation-practice.md`.
 
+The Everyday final practice uses [CAP-E2: the book swap](../realistic-everyday-practice.md). Correct an old invitation, count guests/helpers/waitlist separately and choose a feasible table/holding-box plan. A later reply snapshot changes confirmed and reserved places. Learners can retain correct reminder wording while revising the checklist and reason. The complete packet is downloadable; earlier Everyday source/notebooks stay separate.
+
 ## Run locally
 
 Use the already running dedicated content-preview server when available; its address is recorded in the #549 handoff. It serves only `assets/docs/learning-design` and has no database, provider or member account. From the repository root, if no suitable preview is running:
@@ -32,7 +34,7 @@ Open `http://127.0.0.1:<printed-port>/reader/`. Keep that process running; do no
 
 ## Refine and verify
 
-Ten authored Markdown files and `feedback-cases.json` are the sources. `build.py` extracts route-specific content, verifies the structured feedback sources/comments against Lesson 6 and generates `course.mjs`, including all eleven source hashes. It uses Python's standard library and supports the Markdown forms in these drafts; it is not a general renderer for external or member content. The new content hash preserves previous notebooks separately rather than silently copying their writing or self-checks.
+Eleven authored Markdown files and `feedback-cases.json` are the sources. `build.py` extracts route-specific content, verifies the structured feedback sources/comments against Lesson 6 and generates `course.mjs`, including all twelve source hashes. It uses Python's standard library and supports the Markdown forms in these drafts; it is not a general renderer for external or member content. The new content hash preserves previous notebooks separately rather than silently copying their writing or self-checks.
 
 ```sh
 python3 assets/docs/learning-design/reader/build.py
@@ -44,7 +46,7 @@ Use the repository's installed Node 24+ and Playwright. The browser runner uses 
 
 ## BDD and evidence
 
-Twenty-four [local scenarios](learning.feature) map to [executable checks](checks.mjs):
+Twenty-five [local scenarios](learning.feature) map to [executable checks](checks.mjs):
 
 | IDs                             | Observable check                                                                                                                                                                                                 | Broader design connection                                                                                          |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -69,6 +71,7 @@ Twenty-four [local scenarios](learning.feature) map to [executable checks](check
 | READER-022                      | Three cases: optional-field compatibility, unreadable-record protection, route isolation and an unsaved-departure warning.                                                                                       | Browser storage only; no native ownership or transaction claim.                                                    |
 | READER-023                      | Two widths: reconcile source/update material, retain first and revised plans, clear self-check on edit, save/export/reload the complete source packet and check expanded-view overflow.                          | REAL-WORK-001–005; supplied notes and author review, no independent learning score.                                |
 | READER-024                      | Two widths: keep a first investigation through the R2/D1 update, retain a revision/reason, invalidate an edited self-check and save/export/reload both versions with the source packet.                          | REAL-TECH-001–005; source/meaning review remains separate from browser proof.                                      |
+| READER-025                      | Two widths: retain the first reminder through a reply update, compare headcount/book capacity, clear an edited self-check and save/export/reload both plans and the complete packet.                             | REAL-EVERY-001–005; author meaning/arithmetic review is separate from local interaction evidence.                  |
 
 The prior seventeen-case checkpoint covered the complete reader, fresh-source switch, leave warning and unsupported-route repair. The [substantive Everyday rehearsal](../everyday-author-rehearsal.md) added three scenario IDs and expanded the runner to twenty-five cases. Five initial repair checks failed against the baseline before implementation. The first full twenty-five-case run passed; self-review then reproduced two legacy-version failures when an answer option had been retired, while the versioned-history case already passed. The recovery fix preserves the old answer as historical bytes without validating it against the new key. Exact final results and source parity are recorded in the #549 handoff. These are local behavior checks plus author review, not an independent learner study.
 
@@ -88,4 +91,6 @@ The realistic Work checkpoint preserves all 90 case names and adds two READER-02
 
 The realistic Technical checkpoint preserves all 92 case names and adds two READER-024 cases: **94 passed, zero failures, zero retries**. Two missing-case expectations failed before authoring at `3405dbd0a5540e9e0700dde1a56f981d776f3903`. Existing Technical comparison assertions now use R1’s exact boundary rows, supplied observations and T03’s unconfirmed outcome while retaining six-field preservation, recovery, self-check and layout checks. The first full run passed; a formatter check required locator-chain line wrapping, and the exact final runner also passed all 94. Actual rehearsal retained the first investigation, revised plan/reason, complete packet and earlier notebook bytes. See [the evidence map](../traceability.md#realistic-technical-practice).
 
-Next bounded content action under [#34](https://github.com/deepnative/deep-native-engine/issues/34): a realistic Everyday planning case using changed attendance, conflicting arrangements and a useful message/checklist. It extends the owner’s realism priority to the remaining audience. Reuse the local reader and BDD; preserve canonical/shared-reader claims and existing notebooks. Lead Sol/High; author design/self-review High. Check live claims before starting. Production remains parked.
+The realistic Everyday checkpoint preserves all 94 case names and adds two READER-025 cases: **96 passed, zero failures, zero retries**. Two missing-case expectations failed at `0e4ea00a4e0a2b0cb4bff72212e3f4fa473d5b90` before authoring. Two existing Everyday final-source expectations now identify CAP-E2; all earlier behavior assertions remain. The actual rehearsal retained a 113-word reminder, used a two-books-first alternative and revised only the affected checklist/recipient information after U1. First/revised plans, reasons and full packet survived save/export/reload; earlier notebook bytes match. See [the evidence map](../traceability.md#realistic-everyday-practice).
+
+Next bounded workflow action under [#34](https://github.com/deepnative/deep-native-engine/issues/34): guide final practice through sources → first draft → new information → revision. The phone rehearsal shows that the current long source panel precedes the writing task. Reuse the three authored cases, versioned notebooks and BDD; retain free navigation and existing writing. Preserve #93/#117 canonical/shared-reader claims and check live ownership before starting. Lead Sol/High; author design/self-review High. Production remains parked.
