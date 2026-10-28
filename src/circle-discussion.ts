@@ -65,6 +65,15 @@ export interface CircleModerationNotice {
     occurredAt: string;
   } | null;
 }
+export interface CircleReportNotice {
+  reportNoticeVersion: 1;
+  circleId: string;
+  reportId: string;
+  category: ReportCategory;
+  reportedAt: string;
+  targetStatus: OwnedCircleReport["status"];
+  decision: CircleModerationNotice["decision"];
+}
 export const CIRCLE_APPEAL_REASONS = [
   "recheck_rule",
   "missing_context",
@@ -99,6 +108,11 @@ export interface CircleAppealPage {
   items: CircleAppeal[];
 }
 export interface CircleDiscussionStore {
+  reportModerationNotice(
+    token: string,
+    circle: string,
+    reportId: string,
+  ): Promise<CircleResult<CircleReportNotice>>;
   appeals(
     token: string,
     circle: string,
@@ -284,6 +298,7 @@ interface Context {
 
 export function disabledCircleDiscussionStore(): CircleDiscussionStore {
   return {
+    reportModerationNotice: async () => denied,
     appeals: async () => denied,
     appealHistory: async () => denied,
     appealReceipt: async () => denied,
@@ -910,11 +925,49 @@ export function circleDiscussionStore(
     circle: string,
     receiptId?: string,
     cursor?: string,
+    withNotice = false,
   ): Promise<
-    CircleResult<{ items: OwnedCircleReport[]; nextCursor: string | null }>
+    CircleResult<{
+      items: (OwnedCircleReport & { notice?: CircleReportNotice })[];
+      nextCursor: string | null;
+    }>
   > {
     if (!input(token, circle)) return denied;
     if (receiptId !== undefined && !uuid.test(receiptId)) return invalid;
+    const project = (
+      report: Pick<OwnedCircleReport, "id" | "category" | "createdAt">,
+      status: OwnedCircleReport["status"],
+      decision: CircleModerationNotice["decision"] = null,
+    ) => {
+      const receipt = {
+        id: report.id,
+        category: report.category,
+        createdAt: report.createdAt,
+        status,
+      };
+      return withNotice
+        ? {
+            ...receipt,
+            notice: {
+              reportNoticeVersion: 1 as const,
+              circleId: circle,
+              reportId: report.id,
+              category: report.category,
+              reportedAt: report.createdAt,
+              targetStatus: status,
+              decision: decision
+                ? {
+                    action: decision.action,
+                    reason: decision.reason,
+                    oldRevision: decision.oldRevision,
+                    newRevision: decision.newRevision,
+                    occurredAt: decision.occurredAt,
+                  }
+                : null,
+            },
+          }
+        : receipt;
+    };
     return transaction(circle, false, async (client, finish) => {
       const observed = await observe(client, token, circle, true);
       if (!observed) return denied;
@@ -952,12 +1005,9 @@ export function circleDiscussionStore(
       finish(context);
       if (!writes)
         return ready({
-          items: reports.slice(0, 20).map((report) => ({
-            id: report.id,
-            category: report.category,
-            createdAt: report.createdAt,
-            status: "unavailable" as const,
-          })),
+          items: reports
+            .slice(0, 20)
+            .map((report) => project(report, "unavailable")),
           nextCursor:
             reports.length > 20
               ? encode(context, circle, "owned-reports", reports[19]!.id)
@@ -997,7 +1047,8 @@ export function circleDiscussionStore(
         circle,
         reports.map((r) => r.target_id),
       );
-      const items = reports.slice(0, 20).map((report) => {
+      const items: (OwnedCircleReport & { notice?: CircleReportNotice })[] = [];
+      for (const report of reports.slice(0, 20)) {
         const target = current.find((m) => m.id === report.target_id);
         const root = target?.root_id
           ? current.find((m) => m.id === target.root_id && !m.root_id)
@@ -1011,17 +1062,36 @@ export function circleDiscussionStore(
             (root &&
               root.state === "visible" &&
               eligible(sourceContext, root)));
-        return {
-          id: report.id,
-          category: report.category,
-          createdAt: report.createdAt,
-          status: available
-            ? target.state === "hidden"
-              ? ("hidden" as const)
-              : ("reported" as const)
-            : ("unavailable" as const),
-        };
-      });
+        // The receipt is the reporter's record, but the decision belongs to the
+        // source owner. Read it only under the current eligible source/root locks;
+        // never retain a cross-owner snapshot or disclose a pre-report decision.
+        const decision =
+          withNotice && available
+            ? ((
+                await client.query<
+                  NonNullable<CircleModerationNotice["decision"]>
+                >(
+                  `SELECT action,reason,old_revision AS "oldRevision",new_revision AS "newRevision",occurred_at::text AS "occurredAt"
+                   FROM preview_circle_moderation_audit
+                   WHERE circle_id=$1 AND post_id=$2 AND member_id=$3 AND workspace_id=$3
+                     AND occurred_at>=$4::timestamptz
+                   ORDER BY new_revision DESC LIMIT 1`,
+                  [circle, target.id, target.member_id, report.createdAt],
+                )
+              ).rows[0] ?? null)
+            : null;
+        items.push(
+          project(
+            report,
+            available
+              ? target.state === "hidden"
+                ? ("hidden" as const)
+                : ("reported" as const)
+              : ("unavailable" as const),
+            decision,
+          ),
+        );
+      }
       return ready({
         items,
         nextCursor:
@@ -1170,6 +1240,18 @@ export function circleDiscussionStore(
     return newRevision;
   }
   return {
+    async reportModerationNotice(token, circle, reportId) {
+      const result = await readReports(
+        token,
+        circle,
+        reportId,
+        undefined,
+        true,
+      );
+      if (result.kind !== "ready") return result;
+      const notice = result.value.items[0]?.notice;
+      return notice ? ready(notice) : denied;
+    },
     async appeals(token, circle, postId) {
       if (!input(token, circle)) return denied;
       if (!uuid.test(postId)) return invalid;
