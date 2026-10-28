@@ -3,6 +3,8 @@ import type { Express, Request, Response } from "express";
 import {
   CIRCLE_DISCUSSION_POLICY,
   REPORT_CATEGORIES,
+  CIRCLE_APPEAL_REASONS,
+  type CircleAppeal,
   type CircleDiscussionStore,
   type CircleItem,
   type CirclePage,
@@ -11,7 +13,7 @@ import {
 import { escape, hidden, page } from "./views.ts";
 
 const warning = `<p class="eyebrow">INVENTED LOCAL CIRCLE · UNREVIEWED</p><p>Share invented examples only. No private exercise or evidence is copied here. This sandbox has no staffed moderation, response-time promise, qualified review, AI provider or payment service.</p>`;
-const rules = `<details><summary>Rules, privacy and review limits</summary><p>Use invented information only. Keep personal, client, private assignment and evidence text out of shared contributions. Keep discussion respectful and relevant; report the exact shared item for privacy, conduct or off-topic concerns. A current moderator needs a finite grant for this exact circle to hide or restore a contribution.</p><p>Leaving or withdrawing sharing removes your text from peer views; a later choice does not republish old contributions. Withdrawing a contribution removes its body. Content-free decision records remain part of your private retained history until account deletion. Downloading a notice saves a copy on your device that account deletion cannot remove.</p><p>No appeal request or appeal-review service is available in this preview. A decision notice or download is not an appeal, a promise of response, a qualified judgment or proof that a human reviewed the contribution.</p></details>`;
+const rules = `<details><summary>Rules, privacy and review limits</summary><p>Use invented information only. Keep personal, client, private assignment and evidence text out of shared contributions. Keep discussion respectful and relevant; report the exact shared item for privacy, conduct or off-topic concerns. A current moderator needs a finite grant for this exact circle to hide or restore a contribution.</p><p>Leaving or withdrawing sharing removes your text from peer views; a later choice does not republish old contributions. Withdrawing a contribution removes its body. Content-free decision records remain part of your private retained history until account deletion. Downloading a notice saves a copy on your device that account deletion cannot remove.</p><p>You may request reconsideration of the latest hidden decision while your contribution and its question remain deliberately shared in this circle. A structured request is not a promise of response, independent review or qualified judgment. You may withdraw a pending request. Leaving, withdrawing sharing or withdrawing text removes staff availability; your content-free appeal history remains private until account deletion. A notice download alone is not an appeal or proof of human review.</p></details>`;
 const base = (circle: string) =>
   `/circles/${encodeURIComponent(circle)}/discussion`;
 function shell(circle: string, title: string, body: string) {
@@ -26,11 +28,17 @@ function confirmation(text: string) {
 }
 function originalKey(
   circle: string,
-  kind: "post" | "report" | "choice" | "moderation",
+  kind:
+    | "post"
+    | "report"
+    | "choice"
+    | "moderation"
+    | "appeal"
+    | "appeal-resolution",
 ) {
   const key = randomUUID();
   const url =
-    kind === "moderation"
+    kind === "moderation" || kind === "appeal-resolution"
       ? `/moderate/circles/${encodeURIComponent(circle)}/reconcile`
       : `${base(circle)}/reconcile`;
   return `<input type="hidden" name="idempotencyKey" value="${key}"><details><summary>Submission recovery</summary><p>Keep <a href="${escape(`${url}?kind=${kind}&key=${key}`)}">this original-key recovery link</a> if the result is unconfirmed. It checks only your retained receipt and does not submit anything.</p></details>`;
@@ -60,6 +68,34 @@ function fields(req: Request, allowed: string[]) {
     Object.keys(body).every((key) => ["csrf", ...allowed].includes(key)) &&
     Object.values(body).every((value) => typeof value === "string")
   );
+}
+function appealCard(circle: string, csrf: string, appeal: CircleAppeal) {
+  const url = `${base(circle)}/appeals/${encodeURIComponent(appeal.id)}`;
+  return `<article><h2>Request for decision revision ${appeal.decisionRevision}</h2><p>Original hidden decision: ${escape(appeal.decisionReason.replaceAll("_", " "))} · ${escape(appeal.decisionAt)}.</p><details><summary>Private request references</summary><p>Request ${escape(appeal.id)} · contribution ${escape(appeal.postId)}.</p></details><p>Requested ${escape(appeal.requestedAt)} · ${escape(appeal.requestReason.replaceAll("_", " "))}</p><p role="status">Recorded request: ${escape(appeal.state)}. Current retained contribution: ${escape(appeal.postState)} · revision ${appeal.postRevision}.</p>${appeal.state === "pending" ? `<p>Current review availability: ${escape(appeal.availability.replaceAll("_", " "))}. ${appeal.availability === "superseded" ? "A later decision or state supersedes this request; no staff resolution is implied and no older state can be restored through it." : appeal.availability === "unavailable" ? "Current sharing, source or membership is unavailable. Staff cannot newly inspect or resolve this request; this private record does not reshare text." : appeal.availability === "write_paused" ? "New requests and resolutions are paused. Your retained record and withdrawal remain available." : "This retained request promises no response or independent review."}</p><form method="post" action="${url}/withdraw">${hidden(csrf)}${confirmation("Withdraw this pending reconsideration request; its content-free record remains private until account deletion.")}<button type="submit">Withdraw reconsideration request</button></form>` : appeal.resolution ? `<p>Recorded result: ${escape(appeal.resolution.reason.replaceAll("_", " "))} · resulting contribution revision ${appeal.resolution.postRevision} · ${escape(appeal.resolution.occurredAt)}. Reconsideration may be by the original moderator; it is not independent or qualified review.</p>` : `<p>Request withdrawn at ${escape(appeal.closedAt!)}. No staff resolution is implied.</p>`}<p><a href="${url}">Inspect this private request</a></p></article>`;
+}
+function appealJson(appeal: CircleAppeal) {
+  // Deliberate transport whitelist, even if a future store returns more fields.
+  return {
+    id: appeal.id,
+    postId: appeal.postId,
+    decisionRevision: appeal.decisionRevision,
+    decisionReason: appeal.decisionReason,
+    decisionAt: appeal.decisionAt,
+    requestReason: appeal.requestReason,
+    requestedAt: appeal.requestedAt,
+    state: appeal.state,
+    closedAt: appeal.closedAt,
+    postState: appeal.postState,
+    postRevision: appeal.postRevision,
+    availability: appeal.availability,
+    resolution: appeal.resolution
+      ? {
+          reason: appeal.resolution.reason,
+          postRevision: appeal.resolution.postRevision,
+          occurredAt: appeal.resolution.occurredAt,
+        }
+      : null,
+  };
 }
 function result<T>(
   res: Response,
@@ -115,9 +151,13 @@ export function registerCircleDiscussion(
                 ? "report"
                 : path === "/moderate/circles/:id/posts/:postId"
                   ? "moderation"
-                  : null;
+                  : path === "/circles/:id/discussion/posts/:postId/appeals"
+                    ? "appeal"
+                    : path === "/moderate/circles/:id/appeals/:appealId/resolve"
+                      ? "appeal-resolution"
+                      : null;
         const receiptUrl =
-          kind === "moderation"
+          kind === "moderation" || kind === "appeal-resolution"
             ? `/moderate/circles/${encodeURIComponent(circle)}/reconcile`
             : `${base(circle)}/reconcile`;
         const recovery =
@@ -128,7 +168,11 @@ export function registerCircleDiscussion(
             key,
           )
             ? `<p><a href="${escape(`${receiptUrl}?kind=${kind}&key=${encodeURIComponent(key)}`)}">Check the original form key</a></p>`
-            : "";
+            : path === "/circles/:id/discussion/appeals/:appealId/withdraw" &&
+                typeof req.params.appealId === "string" &&
+                /^[a-f0-9-]{36}$/i.test(req.params.appealId)
+              ? `<p><a href="${base(circle)}/appeals/${encodeURIComponent(req.params.appealId)}">Inspect the current private request before another withdrawal</a></p>`
+              : "";
         res
           .status(503)
           .send(
@@ -149,7 +193,7 @@ export function registerCircleDiscussion(
     const url = moderator
       ? `/moderate/circles/${encodeURIComponent(circle)}/reconcile`
       : `${base(circle)}/reconcile`;
-    return `<form method="get" action="${url}">${moderator ? '<input type="hidden" name="kind" value="moderation">' : '<label for="receipt-kind">Original submission type</label><select id="receipt-kind" name="kind"><option value="post">Contribution</option><option value="report">Sample report</option><option value="choice">Sharing choice</option></select>'}<label for="receipt-key">Original form key</label><input id="receipt-key" name="key" maxlength="36" required><button type="submit">Check original form key</button></form>`;
+    return `<form method="get" action="${url}">${moderator ? '<label for="receipt-kind">Original action type</label><select id="receipt-kind" name="kind"><option value="moderation">Moderation</option><option value="appeal-resolution">Reconsideration result</option></select>' : '<label for="receipt-kind">Original submission type</label><select id="receipt-kind" name="kind"><option value="post">Contribution</option><option value="report">Sample report</option><option value="choice">Sharing choice</option><option value="appeal">Reconsideration request</option></select>'}<label for="receipt-key">Original form key</label><input id="receipt-key" name="key" maxlength="36" required><button type="submit">Check original form key</button></form>`;
   }
   for (const moderator of [false, true])
     app.get(
@@ -184,8 +228,10 @@ export function registerCircleDiscussion(
             typeof req.query.kind !== "string" ||
             typeof req.query.key !== "string" ||
             (moderator
-              ? req.query.kind !== "moderation"
-              : !["post", "report", "choice"].includes(req.query.kind))
+              ? !["moderation", "appeal-resolution"].includes(req.query.kind)
+              : !["post", "report", "choice", "appeal"].includes(
+                  req.query.kind,
+                ))
           ) {
             rejectFields(res, circle);
             return;
@@ -369,11 +415,218 @@ export function registerCircleDiscussion(
           shell(
             circle,
             "Your private moderation decision notice",
-            `<p>Circle ${escape(notice.circleId)} · your contribution ${escape(notice.postId)}</p><p role="status">Current retained state: ${escape(notice.postState)} · revision ${notice.postRevision}.</p>${decision ? `<dl><dt>Latest recorded decision</dt><dd>${escape(decision.action)}</dd><dt>Decision reason</dt><dd>${escape(decision.reason.replace("_", " "))}</dd><dt>Decision revision</dt><dd>${decision.oldRevision} → ${decision.newRevision}</dd><dt>Decision time</dt><dd>${escape(decision.occurredAt)}</dd></dl><p>This is the latest recorded decision, not the whole decision history. The current retained state above may reflect a later withdrawal. Inspecting it does not restore or share text.</p>` : "<p>No moderation decision is recorded for this contribution.</p>"}<p><a href="${base(circle)}/posts/${encodeURIComponent(notice.postId)}/moderation-notice/download">Download this latest-decision snapshot</a></p><p>This bounded content-free snapshot contains only the fields shown here. It is separate from your general activity export and contains no contribution body, reporter or staff identity.</p><p><a href="${base(circle)}/owned">Return to your retained contributions</a></p>`,
+            `<p>Circle ${escape(notice.circleId)} · your contribution ${escape(notice.postId)}</p><p role="status">Current retained state: ${escape(notice.postState)} · revision ${notice.postRevision}.</p>${decision ? `<dl><dt>Latest recorded decision</dt><dd>${escape(decision.action)}</dd><dt>Decision reason</dt><dd>${escape(decision.reason.replace("_", " "))}</dd><dt>Decision revision</dt><dd>${decision.oldRevision} → ${decision.newRevision}</dd><dt>Decision time</dt><dd>${escape(decision.occurredAt)}</dd></dl><p>This is the latest recorded decision, not the whole decision history. The current retained state above may reflect a later withdrawal. Inspecting it does not restore or share text.</p>` : "<p>No moderation decision is recorded for this contribution.</p>"}<p><a href="${base(circle)}/posts/${encodeURIComponent(notice.postId)}/moderation-notice/download">Download this latest-decision snapshot</a></p><p>This bounded content-free snapshot contains only the fields shown here. It is separate from your general activity export and contains no contribution body, reporter or staff identity.</p><p><a href="${base(circle)}/posts/${encodeURIComponent(notice.postId)}/appeals">Request or inspect reconsideration of this decision</a></p><p><a href="${base(circle)}/owned">Return to your retained contributions</a></p>`,
           ),
         );
       }),
     );
+  app.get(
+    "/circles/:id/discussion/posts/:postId/appeals",
+    route(async (req, res, circle, token, csrf) => {
+      if (Object.keys(req.query).length) {
+        rejectFields(res, circle);
+        return;
+      }
+      const value = result(
+        res,
+        circle,
+        await store.appeals(token, circle, req.params.postId as string),
+      );
+      if (!value) return;
+      const url = `${base(circle)}/posts/${encodeURIComponent(value.postId)}/appeals`;
+      res.send(
+        shell(
+          circle,
+          "Request reconsideration of this decision",
+          `<p>Current retained contribution: ${escape(value.postState)} · revision ${value.postRevision}. Latest recorded decision revision: ${value.decisionRevision ?? "none"}.</p><p>Choose a structured reason only. This does not copy your contribution, private learning work or evidence. One request is retained per exact hidden decision, with at most 200 requests in this circle until account deletion. Reconsideration may be by the original moderator and promises no response or independent review.</p>${value.canRequest ? `<form method="post" action="${url}">${hidden(csrf)}${originalKey(circle, "appeal")}<input type="hidden" name="decisionRevision" value="${value.decisionRevision}"><label for="appeal-reason">Reason for reconsideration</label><select id="appeal-reason" name="reason">${CIRCLE_APPEAL_REASONS.map((r) => `<option value="${r}">${escape(r.replaceAll("_", " "))}</option>`).join("")}</select>${confirmation("Request reconsideration of this exact hidden decision; retain only this structured reason and decision reference.")}<button type="submit">Request reconsideration</button></form>` : "<p>No new request is available for this state. New requests require the latest still-hidden decision, current deliberate sharing and an available question. An existing request, retained limit or write pause also prevents a new request. Your history below remains available.</p>"}${value.items.map((a) => appealCard(circle, csrf, a)).join("")}<p><a href="${base(circle)}/appeals/download">Download all your retained appeals in this circle</a></p><p><a href="${base(circle)}/posts/${encodeURIComponent(value.postId)}/moderation-notice">Inspect the latest decision notice</a></p>`,
+        ),
+      );
+    }),
+  );
+  app.post(
+    "/circles/:id/discussion/posts/:postId/appeals",
+    route(async (req, res, circle, token) => {
+      if (
+        Object.keys(req.query).length ||
+        !fields(req, [
+          "idempotencyKey",
+          "decisionRevision",
+          "reason",
+          "confirm",
+        ]) ||
+        typeof req.body.decisionRevision !== "string" ||
+        !/^[1-9][0-9]{0,9}$/.test(req.body.decisionRevision)
+      ) {
+        rejectFields(res, circle);
+        return;
+      }
+      const value = result(
+        res,
+        circle,
+        await store.requestAppeal(
+          token,
+          circle,
+          req.params.postId as string,
+          req.body.idempotencyKey,
+          Number(req.body.decisionRevision),
+          req.body.reason,
+          req.body.confirm === "yes",
+        ),
+      );
+      if (value)
+        res.redirect(
+          303,
+          `${base(circle)}/appeals/${encodeURIComponent(value.id)}`,
+        );
+    }),
+  );
+  app.get(
+    "/circles/:id/discussion/appeals/download",
+    route(async (req, res, circle, token) => {
+      if (Object.keys(req.query).length) {
+        rejectFields(res, circle);
+        return;
+      }
+      const value = result(
+        res,
+        circle,
+        await store.appealHistory(token, circle),
+      );
+      if (!value) return;
+      res
+        .set("Cache-Control", "no-store")
+        .set("X-Content-Type-Options", "nosniff")
+        .attachment("circle-moderation-appeals.json")
+        .type("application/json")
+        .send(
+          JSON.stringify({
+            appealsVersion: 1,
+            circleId: value.circleId,
+            items: value.items.map(appealJson),
+          }),
+        );
+    }),
+  );
+  app.get(
+    "/circles/:id/discussion/appeals/:appealId",
+    route(async (req, res, circle, token, csrf) => {
+      if (Object.keys(req.query).length) {
+        rejectFields(res, circle);
+        return;
+      }
+      const value = result(
+        res,
+        circle,
+        await store.appealReceipt(token, circle, req.params.appealId as string),
+      );
+      if (!value) return;
+      res.send(
+        shell(
+          circle,
+          "Your private reconsideration request",
+          `${appealCard(circle, csrf, value)}<p><a href="${base(circle)}/posts/${encodeURIComponent(value.postId)}/appeals">Inspect this contribution's reconsideration history</a></p><p><a href="${base(circle)}/appeals/download">Download all your retained appeals in this circle</a></p><p>This complete bounded content-free download is separate from your general activity export. It contains no contribution body, reporter or staff identity, internal form key or private learning work. Account deletion erases server records; it cannot remove a copy saved on your device.</p>`,
+        ),
+      );
+    }),
+  );
+  app.post(
+    "/circles/:id/discussion/appeals/:appealId/withdraw",
+    route(async (req, res, circle, token) => {
+      if (Object.keys(req.query).length || !fields(req, ["confirm"])) {
+        rejectFields(res, circle);
+        return;
+      }
+      const value = result(
+        res,
+        circle,
+        await store.withdrawAppeal(
+          token,
+          circle,
+          req.params.appealId as string,
+          req.body.confirm === "yes",
+        ),
+      );
+      if (value)
+        res.redirect(
+          303,
+          `${base(circle)}/appeals/${encodeURIComponent(value.id)}`,
+        );
+    }),
+  );
+  app.get(
+    "/moderate/circles/:id/appeals",
+    route(async (req, res, circle, token, csrf) => {
+      if (!cursor(req)) {
+        rejectFields(res, circle);
+        return;
+      }
+      const value = result(
+        res,
+        circle,
+        await store.appealQueue(
+          token,
+          circle,
+          req.query.cursor as string | undefined,
+        ),
+      );
+      if (!value) return;
+      const url = `/moderate/circles/${encodeURIComponent(circle)}`;
+      const rows = value.items
+        .map(
+          ({ appeal, target }) =>
+            `<li><article><h2>Reconsideration of hidden decision revision ${appeal.decisionRevision}</h2><p>${escape(appeal.decisionReason.replaceAll("_", " "))} · ${escape(appeal.decisionAt)}. Request: ${escape(appeal.requestReason.replaceAll("_", " "))} · ${escape(appeal.requestedAt)}.</p><p>${escape(target.pseudonym)} · ${escape(target.state)} · revision ${target.revision}</p><pre class="content-text">${escape(target.body!)}</pre>${appeal.availability === "available" ? `<form method="post" action="${url}/appeals/${encodeURIComponent(appeal.id)}/resolve">${hidden(csrf)}${originalKey(circle, "appeal-resolution")}<input type="hidden" name="expectedRevision" value="${appeal.decisionRevision}"><label for="resolution-${escape(appeal.id)}">Recorded reconsideration result</label><select id="resolution-${escape(appeal.id)}" name="outcome"><option value="uphold">Uphold: the recorded rule applies</option><option value="restore">Correct: restore this invented contribution</option></select>${confirmation("Record this exact reconsideration result; this is not independent or qualified review.")}<button type="submit">Record reconsideration result</button></form>` : "<p>This earlier request is no longer actionable. A later state supersedes it; no staff resolution has been recorded by this page.</p>"}</article></li>`,
+        )
+        .join("");
+      res.send(
+        page(
+          "Scoped reconsideration requests",
+          `<section class="reading">${warning}<h1>Scoped reconsideration requests</h1><p>Your current finite grant applies only to this circle and existing test purpose. Only currently shared eligible source is shown. The original moderator may reconsider a decision; this is not independent review, staffed coverage or a response promise.</p><p><a href="${url}/reports">Inspect current reports</a> · <a href="${url}/reconcile">Check an original action key</a></p>${rows ? `<ul>${rows}</ul>` : "<p>No currently available reconsideration requests on this page.</p>"}${value.nextCursor ? `<p><a href="${url}/appeals?cursor=${encodeURIComponent(value.nextCursor)}">Next page</a></p>` : ""}</section>`,
+        ),
+      );
+    }),
+  );
+  app.post(
+    "/moderate/circles/:id/appeals/:appealId/resolve",
+    route(async (req, res, circle, token) => {
+      if (
+        Object.keys(req.query).length ||
+        !fields(req, [
+          "idempotencyKey",
+          "expectedRevision",
+          "outcome",
+          "confirm",
+        ]) ||
+        req.body.confirm !== "yes" ||
+        typeof req.body.expectedRevision !== "string" ||
+        !/^[1-9][0-9]{0,9}$/.test(req.body.expectedRevision)
+      ) {
+        rejectFields(res, circle);
+        return;
+      }
+      const value = result(
+        res,
+        circle,
+        await store.resolveAppeal(
+          token,
+          circle,
+          req.params.appealId as string,
+          req.body.idempotencyKey,
+          req.body.outcome,
+          Number(req.body.expectedRevision),
+          req.body.outcome === "uphold"
+            ? "rule_applies"
+            : req.body.outcome === "restore"
+              ? "decision_corrected"
+              : "",
+        ),
+      );
+      if (value)
+        res.redirect(
+          303,
+          `/moderate/circles/${encodeURIComponent(circle)}/appeals`,
+        );
+    }),
+  );
   app.get(
     "/circles/:id/discussion/threads/:postId",
     route(async (req, res, circle, token, csrf) => {
@@ -503,7 +756,7 @@ export function registerCircleDiscussion(
       res.send(
         page(
           "Synthetic circle report worklist",
-          `<section class="reading">${warning}<h1>Synthetic circle report worklist</h1><p><a href="${url}/reconcile">Check an original action key</a></p><p>Your current grant applies only to this exact circle and test purpose. Reporter identity is not displayed. Actions do not establish staffed moderation, appeal coverage or qualified approval.</p>${rows ? `<ul>${rows}</ul>` : "<p>No reports available on this page.</p>"}${value.nextCursor ? `<p><a href="${url}/reports?cursor=${encodeURIComponent(value.nextCursor)}">Next page</a></p>` : ""}</section>`,
+          `<section class="reading">${warning}<h1>Synthetic circle report worklist</h1><p><a href="${url}/reconcile">Check an original action key</a> · <a href="${url}/appeals">Inspect reconsideration requests</a></p><p>Your current grant applies only to this exact circle and test purpose. Reporter identity is not displayed. Actions do not establish staffed moderation, appeal coverage or qualified approval.</p>${rows ? `<ul>${rows}</ul>` : "<p>No reports available on this page.</p>"}${value.nextCursor ? `<p><a href="${url}/reports?cursor=${encodeURIComponent(value.nextCursor)}">Next page</a></p>` : ""}</section>`,
         ),
       );
     }),

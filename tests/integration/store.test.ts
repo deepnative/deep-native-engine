@@ -2575,7 +2575,7 @@ it("backfills and safely reruns authorization migration over populated learning 
     );
     const draftRevision = await readFile(
       new URL(
-        "../../migrations/076-starter-draft-revision.sql",
+        "../../migrations/078-starter-draft-revision.sql",
         import.meta.url,
       ),
       "utf8",

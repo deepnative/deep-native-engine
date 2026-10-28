@@ -65,7 +65,90 @@ export interface CircleModerationNotice {
     occurredAt: string;
   } | null;
 }
+export const CIRCLE_APPEAL_REASONS = [
+  "recheck_rule",
+  "missing_context",
+  "other",
+] as const;
+export interface CircleAppeal {
+  id: string;
+  postId: string;
+  decisionRevision: number;
+  decisionReason: string;
+  decisionAt: string;
+  requestReason: string;
+  requestedAt: string;
+  state: "pending" | "withdrawn" | "upheld" | "restored";
+  closedAt: string | null;
+  postState: CircleItem["state"];
+  postRevision: number;
+  availability:
+    "available" | "closed" | "superseded" | "unavailable" | "write_paused";
+  resolution: {
+    reason: string;
+    postRevision: number;
+    occurredAt: string;
+  } | null;
+}
+export interface CircleAppealPage {
+  postId: string;
+  postState: CircleItem["state"];
+  postRevision: number;
+  decisionRevision: number | null;
+  canRequest: boolean;
+  items: CircleAppeal[];
+}
 export interface CircleDiscussionStore {
+  appeals(
+    token: string,
+    circle: string,
+    postId: string,
+  ): Promise<CircleResult<CircleAppealPage>>;
+  appealHistory(
+    token: string,
+    circle: string,
+  ): Promise<
+    CircleResult<{ appealsVersion: 1; circleId: string; items: CircleAppeal[] }>
+  >;
+  appealReceipt(
+    token: string,
+    circle: string,
+    id: string,
+  ): Promise<CircleResult<CircleAppeal>>;
+  requestAppeal(
+    token: string,
+    circle: string,
+    postId: string,
+    key: string,
+    decisionRevision: number,
+    reason: string,
+    confirmed: boolean,
+  ): Promise<CircleResult<{ id: string }>>;
+  withdrawAppeal(
+    token: string,
+    circle: string,
+    id: string,
+    confirmed: boolean,
+  ): Promise<CircleResult<{ id: string }>>;
+  appealQueue(
+    token: string,
+    circle: string,
+    cursor?: string,
+  ): Promise<
+    CircleResult<{
+      items: { appeal: CircleAppeal; target: CircleItem }[];
+      nextCursor: string | null;
+    }>
+  >;
+  resolveAppeal(
+    token: string,
+    circle: string,
+    id: string,
+    key: string,
+    outcome: string,
+    revision: number,
+    reason: string,
+  ): Promise<CircleResult<{ id: string; revision: number }>>;
   moderationNotice(
     token: string,
     circle: string,
@@ -201,6 +284,13 @@ interface Context {
 
 export function disabledCircleDiscussionStore(): CircleDiscussionStore {
   return {
+    appeals: async () => denied,
+    appealHistory: async () => denied,
+    appealReceipt: async () => denied,
+    requestAppeal: async () => denied,
+    withdrawAppeal: async () => denied,
+    appealQueue: async () => denied,
+    resolveAppeal: async () => denied,
     moderationNotice: async () => denied,
     reconcile: async () => denied,
     reports: async () => denied,
@@ -375,8 +465,8 @@ export function circleDiscussionStore(
       ...new Set([identity.id, ...metadata.map((item) => item.member_id)]),
     ].sort();
     const principals = await client.query<{ id: string }>(
-      "SELECT id FROM principals WHERE id=ANY($1::uuid[]) AND kind='member' AND revoked_at IS NULL AND expires_at>clock_timestamp() ORDER BY id FOR SHARE",
-      [ids],
+      "SELECT id FROM principals WHERE id=ANY($1::uuid[]) AND (id<>$2::uuid OR token_hash=$3) AND kind='member' AND revoked_at IS NULL AND expires_at>clock_timestamp() ORDER BY id FOR SHARE",
+      [ids, identity.id, hash(token)],
     );
     if (!principals.rows.some((p) => p.id === identity.id)) return null;
     const currentIds = principals.rows.map((p) => p.id);
@@ -941,7 +1031,503 @@ export function circleDiscussionStore(
       });
     });
   }
+  type AppealRow = Omit<CircleAppeal, "availability" | "resolution"> & {
+    sharedEligible: boolean;
+    resolutionReason: string | null;
+    resolvedRevision: number | null;
+  };
+  // This flag only describes form availability. Every mutation obtains fresh
+  // ordered authority/source locks; it never trusts a prior page's flag.
+  const sharedAppealSource = `EXISTS(SELECT 1 FROM preview_circle_choices c
+    JOIN preview_circle_memberships m ON m.member_id=c.member_id AND m.circle_id=c.circle_id AND m.generation=c.generation
+    WHERE c.id=p.choice_id AND c.member_id=p.member_id AND c.circle_id=p.circle_id
+      AND c.policy_version='circle-discussion-test-v1' AND c.revoked_at IS NULL AND m.left_at IS NULL)
+    AND (p.root_id IS NULL OR EXISTS(SELECT 1 FROM preview_circle_posts r
+      JOIN principals rp ON rp.id=r.member_id AND rp.kind='member' AND rp.revoked_at IS NULL AND rp.expires_at>clock_timestamp()
+      JOIN workspaces rw ON rw.owner_principal_id=r.member_id AND rw.deleting_at IS NULL
+      JOIN preview_circle_choices rc ON rc.id=r.choice_id AND rc.member_id=r.member_id AND rc.circle_id=r.circle_id
+      JOIN preview_circle_memberships rm ON rm.member_id=r.member_id AND rm.circle_id=r.circle_id AND rm.generation=rc.generation
+      WHERE r.id=p.root_id AND r.circle_id=p.circle_id AND r.root_id IS NULL AND r.state='visible'
+        AND rc.policy_version='circle-discussion-test-v1' AND rc.revoked_at IS NULL AND rm.left_at IS NULL))`;
+  const appealColumns = `a.id,a.post_id AS "postId",a.decision_revision AS "decisionRevision",
+    d.reason AS "decisionReason",d.occurred_at::text AS "decisionAt",
+    a.request_reason AS "requestReason",a.requested_at::text AS "requestedAt",a.state,a.closed_at::text AS "closedAt",
+    a.resolution_reason AS "resolutionReason",a.resolved_revision AS "resolvedRevision",
+    p.state AS "postState",p.revision AS "postRevision",(${sharedAppealSource}) AS "sharedEligible"`;
+  const appealTables = `preview_circle_appeals a JOIN preview_circle_posts p ON p.id=a.post_id
+    JOIN preview_circle_moderation_audit d ON d.post_id=a.post_id AND d.new_revision=a.decision_revision`;
+  function appealProjection(row: AppealRow): CircleAppeal {
+    return {
+      id: row.id,
+      postId: row.postId,
+      decisionRevision: row.decisionRevision,
+      decisionReason: row.decisionReason,
+      decisionAt: row.decisionAt,
+      requestReason: row.requestReason,
+      requestedAt: row.requestedAt,
+      state: row.state,
+      closedAt: row.closedAt,
+      postState: row.postState,
+      postRevision: row.postRevision,
+      availability:
+        row.state !== "pending"
+          ? "closed"
+          : row.postState === "withdrawn" || !row.sharedEligible
+            ? "unavailable"
+            : row.postState !== "hidden" ||
+                row.postRevision !== row.decisionRevision
+              ? "superseded"
+              : !writes
+                ? "write_paused"
+                : "available",
+      resolution:
+        row.state === "upheld" || row.state === "restored"
+          ? {
+              reason: row.resolutionReason!,
+              postRevision: row.resolvedRevision!,
+              occurredAt: row.closedAt!,
+            }
+          : null,
+    };
+  }
+  async function ownerAppealSources(
+    client: PoolClient,
+    token: string,
+    circle: string,
+    finish: (context: Context) => void,
+    postId?: string,
+  ) {
+    const context = await authorize(client, token, circle, [], false, true);
+    if (!context) return null;
+    finish(context);
+    // Source before request locks, matching resolution/withdrawal. Private
+    // history never needs another member's lifetime or current sharing grant.
+    const posts = (
+      await client.query<{
+        id: string;
+        state: CircleItem["state"];
+        revision: number;
+        sharedEligible: boolean;
+      }>(
+        `SELECT p.id,p.state,p.revision,(${sharedAppealSource}) AS "sharedEligible"
+       FROM preview_circle_posts p WHERE p.member_id=$1 AND p.circle_id=$2 AND ($3::uuid IS NULL OR p.id=$3)
+       ORDER BY p.id FOR SHARE OF p`,
+        [context.actor, circle, postId ?? null],
+      )
+    ).rows;
+    return { context, posts };
+  }
+  async function ownedAppealRows(
+    client: PoolClient,
+    actor: string,
+    circle: string,
+    postId?: string,
+    id?: string,
+  ) {
+    const rows = (
+      await client.query<AppealRow>(
+        `SELECT ${appealColumns} FROM ${appealTables} WHERE a.member_id=$1 AND a.circle_id=$2
+       AND ($3::uuid IS NULL OR a.post_id=$3) AND ($4::uuid IS NULL OR a.id=$4) ORDER BY a.id LIMIT 201 FOR SHARE OF a`,
+        [actor, circle, postId ?? null, id ?? null],
+      )
+    ).rows;
+    if (rows.length > 200) throw Error("Circle appeal history unavailable");
+    return rows.map(appealProjection);
+  }
+  async function writeModeration(
+    client: PoolClient,
+    context: Context,
+    circle: string,
+    id: string,
+    owner: string,
+    key: string,
+    action: "hide" | "restore",
+    revision: number,
+    reason: string,
+    digest: string,
+  ) {
+    const newRevision = revision + 1;
+    await client.query(
+      "UPDATE preview_circle_posts SET state=$2,revision=revision+1,changed_at=clock_timestamp() WHERE id=$1",
+      [id, action === "hide" ? "hidden" : "visible"],
+    );
+    await client.query(
+      "INSERT INTO preview_circle_moderation_audit(actor_id,actor_role,member_id,workspace_id,circle_id,post_id,action,reason,old_revision,new_revision,idempotency_key,fingerprint) VALUES($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+      [
+        context.actor,
+        context.moderator!.role,
+        owner,
+        circle,
+        id,
+        action === "hide" ? "hidden" : "restored",
+        reason,
+        revision,
+        newRevision,
+        key,
+        digest,
+      ],
+    );
+    return newRevision;
+  }
   return {
+    async appeals(token, circle, postId) {
+      if (!input(token, circle)) return denied;
+      if (!uuid.test(postId)) return invalid;
+      // Serialize with circle mutations to return a complete bounded snapshot.
+      // Taking the advisory lock does not enable writes during a write pause.
+      return transaction(circle, true, async (client, finish) => {
+        const source = await ownerAppealSources(
+          client,
+          token,
+          circle,
+          finish,
+          postId,
+        );
+        const post = source?.posts[0];
+        if (!source || !post) return denied;
+        const decision = (
+          await client.query<{ new_revision: number; action: string }>(
+            "SELECT new_revision,action FROM preview_circle_moderation_audit WHERE post_id=$1 AND circle_id=$2 AND member_id=$3 ORDER BY new_revision DESC LIMIT 1",
+            [postId, circle, source.context.actor],
+          )
+        ).rows[0];
+        const items = await ownedAppealRows(
+          client,
+          source.context.actor,
+          circle,
+          postId,
+        );
+        const count = (
+          await client.query<{ n: number }>(
+            "SELECT count(*)::int n FROM preview_circle_appeals WHERE member_id=$1 AND circle_id=$2",
+            [source.context.actor, circle],
+          )
+        ).rows[0]!.n;
+        return ready({
+          postId,
+          postState: post.state,
+          postRevision: post.revision,
+          decisionRevision: decision?.new_revision ?? null,
+          canRequest:
+            writes &&
+            post.sharedEligible &&
+            post.state === "hidden" &&
+            decision?.action === "hidden" &&
+            decision.new_revision === post.revision &&
+            count < 200 &&
+            !items.some((a) => a.decisionRevision === decision.new_revision),
+          items,
+        });
+      });
+    },
+    async appealHistory(token, circle) {
+      if (!input(token, circle)) return denied;
+      return transaction(circle, true, async (client, finish) => {
+        const source = await ownerAppealSources(client, token, circle, finish);
+        if (!source) return denied;
+        return ready({
+          appealsVersion: 1 as const,
+          circleId: circle,
+          items: await ownedAppealRows(client, source.context.actor, circle),
+        });
+      });
+    },
+    async appealReceipt(token, circle, id) {
+      if (!input(token, circle)) return denied;
+      if (!uuid.test(id)) return invalid;
+      return transaction(circle, true, async (client, finish) => {
+        const source = await ownerAppealSources(client, token, circle, finish);
+        if (!source) return denied;
+        const row = (
+          await ownedAppealRows(
+            client,
+            source.context.actor,
+            circle,
+            undefined,
+            id,
+          )
+        )[0];
+        return row ? ready(row) : denied;
+      });
+    },
+    async requestAppeal(
+      token,
+      circle,
+      postId,
+      key,
+      decisionRevision,
+      reason,
+      confirmed,
+    ) {
+      if (!input(token, circle) || !writes) return denied;
+      if (
+        !uuid.test(postId) ||
+        !uuid.test(key) ||
+        !Number.isSafeInteger(decisionRevision) ||
+        decisionRevision < 2 ||
+        !CIRCLE_APPEAL_REASONS.includes(
+          reason as (typeof CIRCLE_APPEAL_REASONS)[number],
+        ) ||
+        !confirmed
+      )
+        return invalid;
+      return transaction(circle, true, async (client, finish) => {
+        const metadata = await target(client, circle, postId);
+        const context = await authorize(client, token, circle, metadata, true);
+        if (
+          !context ||
+          metadata.find((m) => m.id === postId)?.member_id !== context.actor
+        )
+          return denied;
+        finish(context);
+        await lockReadTargets(client, context, circle, metadata);
+        const item = await moderatorItem(
+          client,
+          context,
+          circle,
+          postId,
+          metadata,
+        );
+        if (!item) return denied;
+        const digest = fingerprint({
+          circle,
+          postId,
+          decisionRevision,
+          reason,
+        });
+        const prior = (
+          await client.query<{ id: string; fingerprint: string }>(
+            "SELECT id,fingerprint FROM preview_circle_appeals WHERE member_id=$1 AND idempotency_key=$2 FOR SHARE",
+            [context.actor, key],
+          )
+        ).rows[0];
+        if (prior)
+          return prior.fingerprint === digest
+            ? ready({ id: prior.id })
+            : conflict;
+        const duplicate = (
+          await client.query<{ id: string; fingerprint: string }>(
+            "SELECT id,fingerprint FROM preview_circle_appeals WHERE post_id=$1 AND decision_revision=$2 FOR SHARE",
+            [postId, decisionRevision],
+          )
+        ).rows[0];
+        if (duplicate)
+          return duplicate.fingerprint === digest
+            ? ready({ id: duplicate.id })
+            : conflict;
+        if (item.state !== "hidden" || item.revision !== decisionRevision)
+          return conflict;
+        const decision = (
+          await client.query<{ action: string }>(
+            "SELECT action FROM preview_circle_moderation_audit WHERE post_id=$1 AND new_revision=$2 AND member_id=$3 AND circle_id=$4",
+            [postId, decisionRevision, context.actor, circle],
+          )
+        ).rows[0];
+        if (decision?.action !== "hidden") return conflict;
+        const count = (
+          await client.query<{ n: number }>(
+            "SELECT count(*)::int n FROM preview_circle_appeals WHERE member_id=$1 AND circle_id=$2",
+            [context.actor, circle],
+          )
+        ).rows[0]!.n;
+        if (count >= 200) return { kind: "limit" } as const;
+        const id = randomUUID();
+        await client.query(
+          "INSERT INTO preview_circle_appeals(id,member_id,workspace_id,circle_id,post_id,decision_revision,request_reason,idempotency_key,fingerprint) VALUES($1,$2,$2,$3,$4,$5,$6,$7,$8)",
+          [
+            id,
+            context.actor,
+            circle,
+            postId,
+            decisionRevision,
+            reason,
+            key,
+            digest,
+          ],
+        );
+        return ready({ id });
+      });
+    },
+    async withdrawAppeal(token, circle, id, confirmed) {
+      if (!input(token, circle)) return denied;
+      if (!uuid.test(id) || !confirmed) return invalid;
+      return transaction(circle, true, async (client, finish) => {
+        const source = await ownerAppealSources(client, token, circle, finish);
+        if (!source) return denied;
+        const row = (
+          await client.query<{ state: string }>(
+            "SELECT state FROM preview_circle_appeals WHERE id=$1 AND circle_id=$2 AND member_id=$3 FOR UPDATE",
+            [id, circle, source.context.actor],
+          )
+        ).rows[0];
+        if (!row) return denied;
+        if (row.state === "withdrawn") return ready({ id });
+        if (row.state !== "pending") return conflict;
+        await client.query(
+          "UPDATE preview_circle_appeals SET state='withdrawn',closed_at=clock_timestamp() WHERE id=$1",
+          [id],
+        );
+        return ready({ id });
+      });
+    },
+    async appealQueue(token, circle, cursor) {
+      if (!input(token, circle) || !writes) return denied;
+      return transaction(circle, false, async (client, finish) => {
+        const observed = await moderatorObservation(client, token, circle);
+        if (!observed) return denied;
+        const after = decode(observed, circle, "appeals", cursor);
+        if (after === false) return invalid;
+        const rows = (
+          await client.query<{ id: string; post_id: string }>(
+            "SELECT id,post_id FROM preview_circle_appeals WHERE circle_id=$1 AND state='pending' AND ($2::uuid IS NULL OR id>$2) ORDER BY id LIMIT 21",
+            [circle, after],
+          )
+        ).rows;
+        const metadata = await targetMetadata(
+          client,
+          circle,
+          rows.map((r) => r.post_id),
+        );
+        const context = await moderatorContext(client, token, circle, metadata);
+        if (!context) return denied;
+        finish(context);
+        if (decode(context, circle, "appeals", cursor) === false)
+          return invalid;
+        await lockReadTargets(client, context, circle, metadata);
+        const items: { appeal: CircleAppeal; target: CircleItem }[] = [];
+        for (const row of rows.slice(0, 20)) {
+          const targetItem = await moderatorItem(
+            client,
+            context,
+            circle,
+            row.post_id,
+            metadata,
+          );
+          if (!targetItem) continue;
+          const appeal = (
+            await client.query<AppealRow>(
+              `SELECT ${appealColumns} FROM ${appealTables} WHERE a.id=$1 AND a.circle_id=$2 AND a.state='pending' FOR SHARE OF a`,
+              [row.id, circle],
+            )
+          ).rows[0];
+          if (appeal)
+            items.push({
+              appeal: appealProjection(appeal),
+              target: targetItem,
+            });
+        }
+        return ready({
+          items,
+          nextCursor:
+            rows.length > 20
+              ? encode(context, circle, "appeals", rows[19]!.id)
+              : null,
+        });
+      });
+    },
+    async resolveAppeal(token, circle, id, key, outcome, revision, reason) {
+      if (!input(token, circle) || !writes) return denied;
+      if (
+        !uuid.test(id) ||
+        !uuid.test(key) ||
+        !Number.isSafeInteger(revision) ||
+        revision < 2 ||
+        !(
+          (outcome === "uphold" && reason === "rule_applies") ||
+          (outcome === "restore" && reason === "decision_corrected")
+        )
+      )
+        return invalid;
+      return transaction(circle, true, async (client, finish) => {
+        const observed = (
+          await client.query<{ post_id: string }>(
+            "SELECT post_id FROM preview_circle_appeals WHERE id=$1 AND circle_id=$2",
+            [id, circle],
+          )
+        ).rows[0];
+        if (!observed) return denied;
+        const metadata = await target(client, circle, observed.post_id);
+        const context = await moderatorContext(client, token, circle, metadata);
+        if (!context) return denied;
+        finish(context);
+        const item = await moderatorItem(
+          client,
+          context,
+          circle,
+          observed.post_id,
+          metadata,
+          true,
+        );
+        if (!item) return denied;
+        const digest = fingerprint({ circle, id, outcome, revision, reason });
+        const prior = (
+          await client.query<{
+            id: string;
+            resolution_fingerprint: string;
+            resolved_revision: number;
+          }>(
+            "SELECT id,resolution_fingerprint,resolved_revision FROM preview_circle_appeals WHERE resolver_id=$1 AND resolution_key=$2 FOR SHARE",
+            [context.actor, key],
+          )
+        ).rows[0];
+        if (prior)
+          return prior.id === id && prior.resolution_fingerprint === digest
+            ? ready({ id, revision: prior.resolved_revision })
+            : conflict;
+        const appeal = (
+          await client.query<{ state: string; decision_revision: number }>(
+            "SELECT state,decision_revision FROM preview_circle_appeals WHERE id=$1 AND circle_id=$2 FOR UPDATE",
+            [id, circle],
+          )
+        ).rows[0];
+        if (!appeal) return denied;
+        if (
+          appeal.state !== "pending" ||
+          appeal.decision_revision !== revision ||
+          item.revision !== revision ||
+          item.state !== "hidden"
+        )
+          return conflict;
+        let resolved = revision;
+        if (outcome === "restore") {
+          if (
+            (
+              await client.query(
+                "SELECT 1 FROM preview_circle_moderation_audit WHERE actor_id=$1 AND idempotency_key=$2",
+                [context.actor, key],
+              )
+            ).rowCount
+          )
+            return conflict;
+          resolved = await writeModeration(
+            client,
+            context,
+            circle,
+            observed.post_id,
+            metadata.find((m) => m.id === observed.post_id)!.member_id,
+            key,
+            "restore",
+            revision,
+            "test_correction",
+            digest,
+          );
+        }
+        await client.query(
+          "UPDATE preview_circle_appeals SET state=$2,closed_at=clock_timestamp(),resolver_id=$3,resolver_role=$4,resolution_key=$5,resolution_fingerprint=$6,resolution_reason=$7,resolved_revision=$8 WHERE id=$1",
+          [
+            id,
+            outcome === "restore" ? "restored" : "upheld",
+            context.actor,
+            context.moderator!.role,
+            key,
+            digest,
+            reason,
+            resolved,
+          ],
+        );
+        return ready({ id, revision: resolved });
+      });
+    },
     async moderationNotice(token, circle, postId) {
       if (!input(token, circle)) return denied;
       if (!uuid.test(postId)) return invalid;
@@ -986,14 +1572,21 @@ export function circleDiscussionStore(
       if (!input(token, circle)) return denied;
       if (
         !uuid.test(key) ||
-        !["choice", "post", "report", "moderation"].includes(kind)
+        ![
+          "choice",
+          "post",
+          "report",
+          "moderation",
+          "appeal",
+          "appeal-resolution",
+        ].includes(kind)
       )
         return invalid;
       return transaction(circle, false, async (client, finish) => {
         // These receipts convey retained ownership, not visibility/publication
         // permission. No source body, root ID, reporter or target identity is read.
         const context =
-          kind === "moderation"
+          kind === "moderation" || kind === "appeal-resolution"
             ? await moderatorContext(client, token, circle, [])
             : await authorize(client, token, circle, [], false, true);
         if (!context) return denied;
@@ -1005,7 +1598,11 @@ export function circleDiscussionStore(
               ? "SELECT id,state status,revision FROM preview_circle_posts WHERE member_id=$1 AND circle_id=$2 AND idempotency_key=$3 FOR SHARE"
               : kind === "report"
                 ? "SELECT id,'retained' AS status,NULL::integer revision FROM preview_circle_reports WHERE member_id=$1 AND circle_id=$2 AND idempotency_key=$3 FOR SHARE"
-                : "SELECT NULL::uuid id,action AS status,new_revision AS revision FROM preview_circle_moderation_audit WHERE actor_id=$1 AND circle_id=$2 AND idempotency_key=$3 FOR SHARE";
+                : kind === "appeal"
+                  ? "SELECT id,state AS status,decision_revision AS revision FROM preview_circle_appeals WHERE member_id=$1 AND circle_id=$2 AND idempotency_key=$3 FOR SHARE"
+                  : kind === "appeal-resolution"
+                    ? "SELECT id,state AS status,resolved_revision AS revision FROM preview_circle_appeals WHERE resolver_id=$1 AND circle_id=$2 AND resolution_key=$3 FOR SHARE"
+                    : "SELECT NULL::uuid id,action AS status,new_revision AS revision FROM preview_circle_moderation_audit WHERE actor_id=$1 AND circle_id=$2 AND idempotency_key=$3 FOR SHARE";
         const row = (
           await client.query<{
             id: string | null;
@@ -1236,27 +1833,17 @@ export function circleDiscussionStore(
           item.state !== (action === "hide" ? "visible" : "hidden")
         )
           return conflict;
-        const owner = metadata.find((m) => m.id === id)!.member_id,
-          newRevision = revision + 1;
-        await client.query(
-          "UPDATE preview_circle_posts SET state=$2,revision=revision+1,changed_at=clock_timestamp() WHERE id=$1",
-          [id, action === "hide" ? "hidden" : "visible"],
-        );
-        await client.query(
-          "INSERT INTO preview_circle_moderation_audit(actor_id,actor_role,member_id,workspace_id,circle_id,post_id,action,reason,old_revision,new_revision,idempotency_key,fingerprint) VALUES($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
-          [
-            context.actor,
-            context.moderator!.role,
-            owner,
-            circle,
-            id,
-            action === "hide" ? "hidden" : "restored",
-            reason,
-            revision,
-            newRevision,
-            key,
-            digest,
-          ],
+        const newRevision = await writeModeration(
+          client,
+          context,
+          circle,
+          id,
+          metadata.find((m) => m.id === id)!.member_id,
+          key,
+          action as "hide" | "restore",
+          revision,
+          reason,
+          digest,
         );
         return ready({ id, revision: newRevision });
       });
