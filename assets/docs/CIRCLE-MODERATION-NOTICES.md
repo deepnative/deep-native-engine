@@ -2,7 +2,7 @@
 
 In a deliberately enabled invented local circle, open **Your contributions**, then **Inspect this contribution's moderation notice**. The page shows your contribution's current retained state and revision, and the latest recorded hide or restore decision's reason, revisions and time. A contribution without a decision says so. **Download this latest-decision snapshot** saves the same bounded information as JSON.
 
-This is a private snapshot of one contribution's latest decision, not a complete decision history, an appeal or a promise of human review. The preview has no appeal request or appeal-review service, staffed moderation, response-time promise or qualified judgment. The wider ordinary moderation and appeal outcome remains open in [#196](https://github.com/deepnative/deep-native-engine/issues/196).
+This is a private snapshot of one contribution's latest decision, not a complete decision history, an appeal or a promise of human review. To make an actual structured request for an eligible hidden decision, follow **Request or inspect reconsideration of this decision**; see the [reconsideration guide](CIRCLE-MODERATION-APPEALS.md). A downloaded notice alone creates no request. The preview has no staffed moderation, response-time promise, independent appeal-review service or qualified judgment. The wider ordinary moderation and appeal outcome remains open in [#196](https://github.com/deepnative/deep-native-engine/issues/196).
 
 ## Privacy and retention
 

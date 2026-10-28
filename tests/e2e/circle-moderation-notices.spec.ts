@@ -196,7 +196,7 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
         .click();
       await expect(
         page.getByText(
-          "No appeal request or appeal-review service is available",
+          "A structured request is not a promise of response, independent review or qualified judgment.",
           { exact: false },
         ),
       ).toBeVisible();

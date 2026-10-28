@@ -616,7 +616,7 @@ it.each([false, true])(
         empty ? "No moderation decision is recorded" : "Decision time",
       );
       expect(response.text).toContain(
-        "No appeal request or appeal-review service is available",
+        "A structured request is not a promise of response, independent review or qualified judgment.",
       );
       expect(response.text).toContain("until account deletion");
       expect(response.text).toContain("Return to your retained contributions");

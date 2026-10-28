@@ -208,6 +208,7 @@ export async function migrate(pool: Pool) {
       "071-private-support-grant-revocations.sql",
       "072-private-object-write-intents.sql",
       "073-member-email-access.sql",
+      "076-circle-moderation-appeals.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
