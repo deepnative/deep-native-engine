@@ -114,7 +114,6 @@ export async function reviewedContentFixture(browser: Browser, info: TestInfo) {
 
       await actor.getByLabel("Your starting point").selectOption(background);
       await actor.getByLabel("What would you like to do?").selectOption(goal);
-      await actor.getByLabel("I'll use invented or sample information").check();
       await actor
         .getByRole("button", { name: "Start my learning path" })
         .click();
