@@ -944,7 +944,7 @@ it("WFPREVIEW-01/02/03 rehearses an exact private workflow-note review request, 
     const read = await moderator.open(`/moderate/workflow-reviews/${grantId}`);
     expect(read.status).toBe(200);
     expect(read.text).toContain(note);
-    expect(read.text).toContain("WF-001 · version 1 · revision 1");
+    expect(read.text).toContain("WF-001 · version 2 · revision 1");
     // A learner cannot use the moderator reader.
     expect(
       (await member.open(`/moderate/workflow-reviews/${grantId}`)).status,
