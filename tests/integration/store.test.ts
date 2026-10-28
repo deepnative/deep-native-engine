@@ -1858,23 +1858,23 @@ it("binds a private workflow improvement to its current version and redacts it o
   expect(
     await proposals.createDraft(owner.token, sample, true, {
       id: "WF-001",
-      version: 2,
+      version: 1,
     }),
   ).toBeNull();
   const id = await proposals.createDraft(owner.token, sample, true, {
     id: "WF-001",
-    version: 1,
+    version: 2,
   });
   expect(id).toEqual(expect.any(String));
   expect(await proposals.preview(other.token, id!)).toBeNull();
   expect(await proposals.preview(owner.token, id!)).toMatchObject({
     workflowId: "WF-001",
-    workflowVersion: 1,
+    workflowVersion: 2,
     state: "draft",
   });
   const changedRegistry = proposalStore(
     pool,
-    async () => ({ version: 2 }) as never,
+    async () => ({ version: 3 }) as never,
   );
   expect(await changedRegistry.submit(owner.token, id!, true, 1)).toBe(
     "denied",
@@ -1898,13 +1898,13 @@ it("binds a private workflow improvement to its current version and redacts it o
       .rows[0],
   ).toEqual(beforeReplay);
   expect(await proposals.moderationQueue(moderatorToken)).toMatchObject([
-    { id, workflowId: "WF-001", workflowVersion: 1, state: "submitted" },
+    { id, workflowId: "WF-001", workflowVersion: 2, state: "submitted" },
   ]);
   const before = await memberExportStore(pool).exportOwned(owner.token);
   expect(before).toMatchObject({
     kind: "ready",
     payload: {
-      records: { proposals: [{ workflowId: "WF-001", workflowVersion: 1 }] },
+      records: { proposals: [{ workflowId: "WF-001", workflowVersion: 2 }] },
     },
   });
   expect(await proposals.withdraw(owner.token, id!)).toBe(true);

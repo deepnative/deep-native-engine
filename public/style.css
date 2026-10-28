@@ -918,3 +918,8 @@ footer span {
 .reviewer-worklist {
   overflow-wrap: anywhere;
 }
+
+/* Reviewed source URLs and hashes must not expand the narrow reader viewport. */
+.reading dd {
+  overflow-wrap: anywhere;
+}

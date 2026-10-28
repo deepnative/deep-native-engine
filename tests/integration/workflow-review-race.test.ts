@@ -36,13 +36,13 @@ async function change(f: Fixture, kind: Change) {
     return f.feedback.save(
       f.member,
       "WF-001",
-      1,
+      2,
       "Invented corrected private note",
       1,
     );
   if (kind === "source withdrawal/recreation") {
-    expect(await f.feedback.withdraw(f.member, "WF-001", 1, 1)).toBe(true);
-    return f.feedback.save(f.member, "WF-001", 1, f.note, 0);
+    expect(await f.feedback.withdraw(f.member, "WF-001", 2, 1)).toBe(true);
+    return f.feedback.save(f.member, "WF-001", 2, f.note, 0);
   }
   if (kind === "moderator revocation")
     return pool.query(
@@ -138,7 +138,7 @@ it.each(changes)(
           f.memberId,
         ]);
         await holder.query(
-          "INSERT INTO workflow_feedback(member_id,workflow_id,workflow_version,note,revision) VALUES($1,'WF-001',1,$2,1)",
+          "INSERT INTO workflow_feedback(member_id,workflow_id,workflow_version,note,revision) VALUES($1,'WF-001',2,$2,1)",
           [f.memberId, f.note],
         );
       } else if (kind === "moderator revocation")

@@ -24,7 +24,7 @@ it("WFREV-07 owned bounded history spans pages without duplicates and preserves 
     await feedback.save(
       member,
       "WF-001",
-      1,
+      2,
       "Invented private history source",
       0,
     ),
@@ -93,7 +93,7 @@ it("WFREV-07 owned bounded history spans pages without duplicates and preserves 
   expect(own.receipt.state).toBe("withdrawn");
   expect(
     (await feedback.list(member))?.find(
-      (r) => r.workflowId === "WF-001" && r.workflowVersion === 1,
+      (r) => r.workflowId === "WF-001" && r.workflowVersion === 2,
     )?.note,
   ).toBe("Invented private history source");
 });
@@ -101,7 +101,7 @@ it("WFREV-04 exact receipt cannot treat identical-text recreation as the origina
   const member = fresh();
   await db.create(member, { background: "explorer", goal: "everyday" });
   const note = "Invented identical source through receipt reload";
-  expect(await feedback.save(member, "WF-001", 1, note, 0)).toBe(true);
+  expect(await feedback.save(member, "WF-001", 2, note, 0)).toBe(true);
   const preview = await reviews.preview(member, "WF-001");
   if (preview.kind !== "ready") throw Error("Source preview required");
   const original = {
@@ -111,8 +111,8 @@ it("WFREV-04 exact receipt cannot treat identical-text recreation as the origina
   };
   const intent = await reviews.request(member, original);
   if (intent.kind !== "applied") throw Error("Original permission required");
-  expect(await feedback.withdraw(member, "WF-001", 1, 1)).toBe(true);
-  expect(await feedback.save(member, "WF-001", 1, note, 0)).toBe(true);
+  expect(await feedback.withdraw(member, "WF-001", 2, 1)).toBe(true);
+  expect(await feedback.save(member, "WF-001", 2, note, 0)).toBe(true);
   const receipt = await reviews.receipt(member, intent.receipt.requestId);
   expect(receipt.kind).toBe("ready");
   if (receipt.kind !== "ready")
@@ -128,7 +128,7 @@ it("WFREV-04 exact receipt cannot treat identical-text recreation as the origina
   ).toEqual({ kind: "denied" });
   expect(
     (await feedback.list(member))?.find(
-      (r) => r.workflowId === "WF-001" && r.workflowVersion === 1,
+      (r) => r.workflowId === "WF-001" && r.workflowVersion === 2,
     )?.note,
   ).toBe(note);
 });

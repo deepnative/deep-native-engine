@@ -48,7 +48,7 @@ it("withholds retained private feedback over HTTP when workspace deletion is pen
     await feedback.save(
       owner.token,
       "WF-001",
-      1,
+      2,
       "Invented retained private note",
       0,
     ),
@@ -93,7 +93,7 @@ it("keeps versioned feedback private across three learner backgrounds and handle
       await feedback.save(
         person.token,
         "WF-001",
-        1,
+        2,
         "  Invented workflow detail  ",
         0,
       ),
@@ -101,7 +101,7 @@ it("keeps versioned feedback private across three learner backgrounds and handle
     expect(await feedback.list(person.token)).toMatchObject([
       {
         workflowId: "WF-001",
-        workflowVersion: 1,
+        workflowVersion: 2,
         note: "Invented workflow detail",
         revision: 1,
       },
@@ -110,17 +110,17 @@ it("keeps versioned feedback private across three learner backgrounds and handle
   const owner = people[0]!;
   const other = people[1]!;
   const concurrent = await Promise.all([
-    feedback.save(owner.token, "WF-001", 1, "First correction", 1),
-    feedback.save(owner.token, "WF-001", 1, "Second correction", 1),
+    feedback.save(owner.token, "WF-001", 2, "First correction", 1),
+    feedback.save(owner.token, "WF-001", 2, "Second correction", 1),
   ]);
   expect(concurrent.sort()).toEqual([false, true]);
   expect(await feedback.list(owner.token)).toMatchObject([{ revision: 2 }]);
   expect(await feedback.list(other.token)).toMatchObject([
     { note: "Invented workflow detail", revision: 1 },
   ]);
-  expect(await feedback.withdraw(other.token, "WF-001", 1, 2)).toBe(false);
-  expect(await feedback.withdraw(owner.token, "WF-001", 1, 1)).toBe(false);
-  expect(await feedback.withdraw(owner.token, "WF-001", 1, 2)).toBe(true);
+  expect(await feedback.withdraw(other.token, "WF-001", 2, 2)).toBe(false);
+  expect(await feedback.withdraw(owner.token, "WF-001", 2, 1)).toBe(false);
+  expect(await feedback.withdraw(owner.token, "WF-001", 2, 2)).toBe(true);
   expect(await feedback.list(owner.token)).toEqual([]);
   expect(await feedback.list(other.token)).toHaveLength(1);
 });
@@ -137,12 +137,12 @@ it("rejects unknown versions and staff, revocation and expiry while retaining on
   expect(await feedback.save(owner.token, "WF-999", 1, "Invented", 0)).toBe(
     false,
   );
-  expect(await feedback.save(owner.token, "WF-001", 2, "Invented", 0)).toBe(
+  expect(await feedback.save(owner.token, "WF-001", 1, "Invented", 0)).toBe(
     false,
   );
-  expect(await feedback.save(staff, "WF-001", 1, "Invented", 0)).toBe(false);
+  expect(await feedback.save(staff, "WF-001", 2, "Invented", 0)).toBe(false);
   expect(await feedback.list(staff)).toBeNull();
-  expect(await feedback.save(owner.token, "WF-001", 1, "Invented", 0)).toBe(
+  expect(await feedback.save(owner.token, "WF-001", 2, "Invented", 0)).toBe(
     true,
   );
   const own = await memberExportStore(pool).exportOwned(owner.token);
@@ -152,7 +152,7 @@ it("rejects unknown versions and staff, revocation and expiry while retaining on
       version: "local-member-records-v27",
       records: {
         workflowFeedback: [
-          { workflowId: "WF-001", workflowVersion: 1, note: "Invented" },
+          { workflowId: "WF-001", workflowVersion: 2, note: "Invented" },
         ],
       },
     },
@@ -167,7 +167,7 @@ it("rejects unknown versions and staff, revocation and expiry while retaining on
     [owner.id],
   );
   expect(await feedback.list(owner.token)).toBeNull();
-  expect(await feedback.withdraw(owner.token, "WF-001", 1, 1)).toBe(false);
+  expect(await feedback.withdraw(owner.token, "WF-001", 2, 1)).toBe(false);
   await pool.query("UPDATE principals SET revoked_at=NULL WHERE id=$1", [
     owner.id,
   ]);
@@ -176,7 +176,7 @@ it("rejects unknown versions and staff, revocation and expiry while retaining on
     [owner.id],
   );
   expect(await feedback.list(owner.token)).toBeNull();
-  expect(await feedback.save(owner.token, "WF-001", 1, "Changed", 1)).toBe(
+  expect(await feedback.save(owner.token, "WF-001", 2, "Changed", 1)).toBe(
     false,
   );
   await pool.query("DELETE FROM learners WHERE id=$1", [owner.id]);
@@ -193,26 +193,26 @@ it("shows retained historical versions without silently copying a note to the cu
   const owner = await member("explorer");
   await pool.query(
     `INSERT INTO workflow_feedback(member_id,workflow_id,workflow_version,note)
-     VALUES($1,'WF-002',2,'Invented historical version note')`,
+     VALUES($1,'WF-002',1,'Invented historical version note')`,
     [owner.id],
   );
   expect(await feedback.list(owner.token)).toMatchObject([
     {
       workflowId: "WF-002",
-      workflowVersion: 2,
+      workflowVersion: 1,
       note: "Invented historical version note",
     },
   ]);
-  expect(await feedback.save(owner.token, "WF-002", 2, "Changed", 1)).toBe(
+  expect(await feedback.save(owner.token, "WF-002", 1, "Changed", 1)).toBe(
     false,
   );
-  expect(await feedback.save(owner.token, "WF-002", 1, "Current note", 0)).toBe(
+  expect(await feedback.save(owner.token, "WF-002", 2, "Current note", 0)).toBe(
     true,
   );
   expect(await feedback.list(owner.token)).toHaveLength(2);
-  expect(await feedback.withdraw(owner.token, "WF-002", 2, 1)).toBe(true);
+  expect(await feedback.withdraw(owner.token, "WF-002", 1, 1)).toBe(true);
   expect(await feedback.list(owner.token)).toMatchObject([
-    { workflowVersion: 1, note: "Current note" },
+    { workflowVersion: 2, note: "Current note" },
   ]);
 });
 
@@ -241,7 +241,7 @@ it.each([
         await feedback.save(
           owner.token,
           "WF-001",
-          1,
+          2,
           "Original invented note",
           0,
         ),
@@ -274,14 +274,14 @@ it.each([
           : boundary === "workspace"
             ? "SELECT id FROM workspaces WHERE owner_principal_id=$1 FOR UPDATE"
             : boundary === "unique-key"
-              ? "INSERT INTO workflow_feedback(member_id,workflow_id,workflow_version,note) VALUES($1,'WF-001',1,'Uncommitted invented note')"
+              ? "INSERT INTO workflow_feedback(member_id,workflow_id,workflow_version,note) VALUES($1,'WF-001',2,'Uncommitted invented note')"
               : "SELECT member_id FROM workflow_feedback WHERE member_id=$1 FOR UPDATE",
         [owner.id],
       );
       writing = controlled.save(
         owner.token,
         "WF-001",
-        1,
+        2,
         "Late invented note",
         revision,
       );
@@ -342,7 +342,7 @@ it.each([0, 1])(
           await feedback.save(
             owner.token,
             "WF-001",
-            1,
+            2,
             "Original invented note",
             0,
           ),
@@ -373,7 +373,7 @@ it.each([0, 1])(
         writing = controlled.save(
           owner.token,
           "WF-001",
-          1,
+          2,
           "Denied invented note",
           revision,
         );
@@ -414,7 +414,7 @@ it.each([0, 1])(
 it("retains feedback on save transport failures and releases authorization locks", async () => {
   const owner = await member("technical");
   expect(
-    await feedback.save(owner.token, "WF-001", 1, "Original invented note", 0),
+    await feedback.save(owner.token, "WF-001", 2, "Original invented note", 0),
   ).toBe(true);
   const client = await pool.connect();
   const controlled = workflowFeedbackStore({
@@ -435,7 +435,7 @@ it("retains feedback on save transport failures and releases authorization locks
       await controlled.save(
         owner.token,
         "WF-001",
-        1,
+        2,
         "Failed invented note",
         1,
       ),
@@ -475,8 +475,8 @@ it("allows only one initial save and cannot correct another member's feedback", 
   expect(
     (
       await Promise.all([
-        feedback.save(owner.token, "WF-001", 1, "Invented first", 0),
-        feedback.save(owner.token, "WF-001", 1, "Invented second", 0),
+        feedback.save(owner.token, "WF-001", 2, "Invented first", 0),
+        feedback.save(owner.token, "WF-001", 2, "Invented second", 0),
       ])
     ).sort(),
   ).toEqual([false, true]);
@@ -487,7 +487,7 @@ it("allows only one initial save and cannot correct another member's feedback", 
     await feedback.save(
       other.token,
       "WF-001",
-      1,
+      2,
       "Invented cross-member correction",
       1,
     ),
@@ -510,7 +510,7 @@ it.each([
         await feedback.save(
           owner.token,
           "WF-001",
-          1,
+          2,
           "Original invented note",
           0,
         ),
@@ -536,7 +536,7 @@ it.each([
       const result = await controlled.save(
         owner.token,
         "WF-001",
-        1,
+        2,
         "Committed invented note",
         revision,
       );
@@ -560,7 +560,7 @@ it.each([
         await feedback.save(
           owner.token,
           "WF-001",
-          1,
+          2,
           "Invented recovery attempt",
           revision,
         ),
@@ -587,6 +587,69 @@ function feedbackPage(value: string, backend = feedback, id = "WF-001") {
         .set("Cookie", `dne_preview=${value}`),
   );
 }
+
+it("WFR114-03 keeps a version 1 note private and withdrawable beside a separate version 2 note", async () => {
+  const owner = await member("explorer");
+  const other = await member("professional");
+  // This row represents a note saved before the reviewed workflow release.
+  await pool.query(
+    "INSERT INTO workflow_feedback(member_id,workflow_id,workflow_version,note,revision) VALUES($1,'WF-001',1,$2,3)",
+    [owner.id, "Invented retained version one note"],
+  );
+  expect(
+    await feedback.save(owner.token, "WF-001", 1, "Stale edit attempt", 3),
+  ).toBe(false);
+  const oldPage = await feedbackPage(owner.token);
+  expect(oldPage.text).toContain("Historical version notes");
+  expect(oldPage.text).toContain("Invented retained version one note");
+  expect(oldPage.text).toContain('name="workflow_version" value="2"');
+  expect(oldPage.text).toContain('name="revision" value="0"');
+  expect(
+    await feedback.save(
+      owner.token,
+      "WF-001",
+      2,
+      "Invented version two note",
+      0,
+    ),
+  ).toBe(true);
+  expect(await feedback.list(owner.token)).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        workflowVersion: 1,
+        revision: 3,
+        note: "Invented retained version one note",
+      }),
+      expect.objectContaining({
+        workflowVersion: 2,
+        revision: 1,
+        note: "Invented version two note",
+      }),
+    ]),
+  );
+  expect(await feedback.list(other.token)).toEqual([]);
+  expect((await feedbackPage(other.token)).text).not.toContain(
+    "Invented retained",
+  );
+  expect(await feedback.withdraw(other.token, "WF-001", 1, 3)).toBe(false);
+  const exported = await memberExportStore(pool).exportOwned(owner.token);
+  expect(exported).toMatchObject({
+    kind: "ready",
+    payload: {
+      records: {
+        workflowFeedback: expect.arrayContaining([
+          expect.objectContaining({ workflowVersion: 1, revision: 3 }),
+          expect.objectContaining({ workflowVersion: 2, revision: 1 }),
+        ]),
+      },
+    },
+  });
+  expect(await feedback.withdraw(owner.token, "WF-001", 1, 2)).toBe(false);
+  expect(await feedback.withdraw(owner.token, "WF-001", 1, 3)).toBe(true);
+  expect(await feedback.list(owner.token)).toMatchObject([
+    { workflowVersion: 2, revision: 1, note: "Invented version two note" },
+  ]);
+});
 
 it("distinguishes valid empty and historical pages from content-free denial for every workflow ID", async () => {
   const owner = await member("professional");
@@ -646,7 +709,7 @@ it.each(["principal", "workspace", "query"] as const)(
       await feedback.save(
         owner.token,
         "WF-001",
-        1,
+        2,
         "Invented expiring private note",
         0,
       ),
@@ -726,7 +789,7 @@ it.each(["revoked", "deleting"] as const)(
       await feedback.save(
         owner.token,
         "WF-001",
-        1,
+        2,
         "Invented retained private note",
         0,
       ),
@@ -779,7 +842,7 @@ it.each(["revoked", "deleting"] as const)(
       await feedback.save(
         owner.token,
         "WF-001",
-        1,
+        2,
         "Invented valid private note",
         0,
       ),
@@ -850,7 +913,7 @@ it("does not render a private or empty success after read failure and releases a
     await feedback.save(
       owner.token,
       "WF-001",
-      1,
+      2,
       "Invented failed read note",
       0,
     ),

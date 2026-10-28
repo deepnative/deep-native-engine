@@ -27,7 +27,7 @@ it.each(["technical", "professional", "explorer"] as const)(
     });
     const note =
       "Invented original feedback: make the example easier to follow.";
-    expect(await feedback.save(token, "WF-001", 1, note, 0)).toBe(true);
+    expect(await feedback.save(token, "WF-001", 2, note, 0)).toBe(true);
     const options = {
       origin: "http://localhost",
       secret: "synthetic-workflow-review-test-secret",

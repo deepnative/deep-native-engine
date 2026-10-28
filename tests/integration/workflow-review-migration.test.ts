@@ -27,7 +27,7 @@ it("WFREV-08 populated migration063 upgrades without rewriting notes or inventin
     await workflowFeedbackStore(shared).save(
       unrelatedToken,
       "WF-001",
-      1,
+      2,
       "Invented unrelated public note",
       0,
     ),
@@ -62,13 +62,13 @@ it("WFREV-08 populated migration063 upgrades without rewriting notes or inventin
     await db.create(member, { background: "technical", goal: "work" });
     await db.create(other, { background: "explorer", goal: "everyday" });
     expect(
-      await feedback.save(member, "WF-001", 1, "Invented populated note", 0),
+      await feedback.save(member, "WF-001", 2, "Invented populated note", 0),
     ).toBe(true);
     expect(
       await feedback.save(
         member,
         "WF-001",
-        1,
+        2,
         "Invented populated correction",
         1,
       ),
@@ -77,7 +77,7 @@ it("WFREV-08 populated migration063 upgrades without rewriting notes or inventin
       await feedback.save(
         other,
         "WF-001",
-        1,
+        2,
         "Invented other populated note",
         0,
       ),

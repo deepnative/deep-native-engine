@@ -1,6 +1,6 @@
 # Local audit repairs — #552
 
-The owner requested all six Ponytail audit findings be repaired on 28 October 2026. The working scope is local code, tests and evidence; production, publication and live-provider work remain parked. The audited application baseline was `9373a23`; the existing local reader GUI was preserved in checkpoint `41e9c03` before repairs. This document does not establish delivery on main or hosted availability.
+The owner requested all six Ponytail audit findings be repaired on 28 October 2026. The initial scope was local code, tests and evidence. The owner subsequently directed push/PR/merge on 28 October 2026; repository delivery now proceeds through a fresh gate on the integrated revision, PR CI and resulting-main CI. Production deployment and live-provider work remain parked. The audited application baseline was `9373a23`; the existing local reader GUI was preserved in checkpoint `41e9c03` before repairs. This document does not establish delivery on main or hosted availability.
 
 ## Behavior and evidence map
 
