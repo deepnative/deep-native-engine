@@ -189,7 +189,11 @@ if (!process.argv.includes("--baseline")) {
         const draft =
           "My task: make a CAP-W action table; check each owner and date against the brief.";
         await page.getByLabel("1. Task and check", { exact: true }).fill(draft);
-        const worked = page.locator(".lesson-body details");
+        const worked = page.locator(".lesson-body > details").filter({
+          has: page.getByText("Compare with a worked record", {
+            exact: true,
+          }),
+        });
         await worked.locator("summary").click();
         for (const title of [
           "1. Task and check.",
@@ -203,24 +207,24 @@ if (!process.argv.includes("--baseline")) {
         }
         await expect(
           worked.getByRole("row", {
-            name: "Write one page of instructions Noor Not specified",
+            name: "Retain one-page instruction draft Noor Received; not trial-tested",
             exact: true,
           }),
         ).toBeVisible();
         await expect(
           worked.getByRole("row", {
-            name: "Gather four comments Lee Not specified",
+            name: "Consolidate four written comments Lee Friday noon",
             exact: true,
           }),
         ).toBeVisible();
         await expect(
           worked.getByRole("row", {
-            name: "Try the check-in process Not specified Wednesday",
+            name: "Facilitate six-case remote pilot, 11:00–11:30 Mira Thursday",
             exact: true,
           }),
         ).toBeVisible();
         const trialDay = worked.getByRole("cell", {
-          name: "Wednesday",
+          name: "Thursday",
           exact: true,
         });
         expect(
@@ -234,7 +238,7 @@ if (!process.argv.includes("--baseline")) {
           "The ordinary date word should remain on one line inside its cell",
         ).toBe(1);
         await expect(worked).toContainText(
-          "Who owns the continuation decision, and when will it be made?",
+          "Monday, with the meeting time still to be confirmed",
         );
         await expect(worked).toContainText(
           "Recover the source before confirming the draft",
@@ -1925,6 +1929,87 @@ await check(
     expect(dialogs).toEqual(["beforeunload"]);
   },
 );
+
+for (const width of [1360, 390]) {
+  await check(
+    `READER-023 realistic Work brief preserves first plan and later revision at ${width}px`,
+    async (page) => {
+      await start(page, "Work");
+      await page
+        .getByRole("button", { name: "Put it all together", exact: true })
+        .click();
+      await expect(
+        page.getByRole("heading", {
+          name: "The handover pilot: plans changed",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(page.locator(".lesson-body")).toContainText(
+        "S3 · Wednesday 09:00",
+      );
+      const first =
+        "First update: Thursday remote pilot, three participants. Six cases are ready; twelve sequential cases would need 46 minutes. Propose six in 28 minutes, leaving two minutes. Scope and facilitator still need a decision.";
+      for (let i = 0; i < 6; i++)
+        await page
+          .locator(`#writing-final${i}`)
+          .fill(
+            `Decision ${i + 1}: retain the dated notes and explain the draft.`,
+          );
+      await page.locator("#writing-final2").fill(first);
+      await page.locator("#self-check").check();
+      await page
+        .getByText("After your first draft: open Wednesday's update", {
+          exact: true,
+        })
+        .click();
+      await expect(page.locator(".lesson-body")).toContainText(
+        "U1 · Wednesday 15:10",
+      );
+      await expect(page.locator("#writing-final2")).toHaveValue(first);
+      await expect(page.locator("#self-check")).toBeChecked();
+      const revised =
+        "Revision after U1: six ready cases are now approved, Mira facilitates Thursday 11:00–11:30 remotely, and Lee gathers four comments by Friday noon. Monday's continuation decision has no time yet. Reason: replace my proposed scope and open ownership with U1's explicit decision; no claim the pilot has succeeded.";
+      await page.locator("#writing-final5").fill(revised);
+      await expect(page.locator("#self-check")).not.toBeChecked();
+      await page
+        .getByText("Compare with a worked record", { exact: true })
+        .click();
+      const worked = page.locator(".lesson-body > details").filter({
+        has: page.getByText("Compare with a worked record", { exact: true }),
+      });
+      await expect(worked).toContainText("5 + (12 × 3) + 5 = 46 minutes");
+      await expect(worked).toContainText("5 + (6 × 3) + 5 = 28 minutes");
+      await expect(worked).toContainText("Five cases would take 25 minutes");
+      await expect(page.locator("#writing-final2")).toHaveValue(first);
+      await expect(page.locator("#writing-final5")).toHaveValue(revised);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      await page.locator("#self-check").check();
+      await page.locator("#save").click();
+      const exported = await downloadText(page, page.locator("#download"));
+      for (const text of [
+        first,
+        revised,
+        "S1 · Monday 09:00",
+        "S3 · Wednesday 09:00",
+        "U1 · Wednesday 15:10",
+        "six ready cases",
+      ])
+        expect(exported).toContain(text);
+      await page.reload();
+      await expect(page.locator("#writing-final2")).toHaveValue(first);
+      await expect(page.locator("#writing-final5")).toHaveValue(revised);
+      await expect(page.locator("#self-check")).toBeChecked();
+      await page
+        .locator(".lesson-body")
+        .screenshot({ path: path.join(output, `realistic-work-${width}.png`) });
+    },
+    { width, height: 950 },
+  );
+}
 
 await browser.close();
 await writeFile(

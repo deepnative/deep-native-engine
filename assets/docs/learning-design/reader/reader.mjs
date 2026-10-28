@@ -583,6 +583,10 @@ function exportText() {
   });
   lines.push(exportFeedback(route, state().feedback));
   lines.push("\nFinal practice", `Source: ${course.capstone[route].source}`);
+  if (course.capstone[route].sourcePacket)
+    lines.push(
+      `Complete source packet: ${plain(course.capstone[route].sourcePacket)}`,
+    );
   finalLabels.forEach((label, i) =>
     lines.push(`${label}: ${state().final[i]}`),
   );

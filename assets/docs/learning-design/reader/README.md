@@ -12,6 +12,8 @@ Lesson 6's **Fresh case** now includes a [feedback decision workspace](feedback-
 
 **Put it all together** also offers [Shape a contribution](../contribution-practice.md). Read the fictional workflow, keep a first proposal, compare supplied editorial feedback, and record a revision with its reason. Intended attribution/audience is only a future plan; cancelling it retains the private draft. The optional proposal self-check is separate from the six-step record. No contribution is required to finish that record.
 
+The Work final practice now uses [CAP-W2: a changing handover pilot](../realistic-work-practice.md). Write a short team update from three dated notes, calculate whether the workload fits, propose a feasible option, then open a later decision and keep your revision/reason separately. A five-case and a six-case proposal can both be defensible; the rubric checks evidence, tradeoffs and arithmetic. The complete packet is included in notebook downloads. The earlier simpler Work case remains in `foundation-practice.md`; earlier notebook bytes stay separate.
+
 ## Run locally
 
 Use the already running dedicated content-preview server when available; its address is recorded in the #549 handoff. It serves only `assets/docs/learning-design` and has no database, provider or member account. From the repository root, if no suitable preview is running:
@@ -28,7 +30,7 @@ Open `http://127.0.0.1:<printed-port>/reader/`. Keep that process running; do no
 
 ## Refine and verify
 
-Eight authored Markdown files and `feedback-cases.json` are the sources. `build.py` extracts route-specific content, verifies the structured feedback sources/comments against Lesson 6 and generates `course.mjs`, including all nine source hashes. It uses Python's standard library and supports the Markdown forms in these drafts; it is not a general renderer for external or member content. The new content hash preserves previous notebooks separately rather than silently copying their writing or self-checks.
+Nine authored Markdown files and `feedback-cases.json` are the sources. `build.py` extracts route-specific content, verifies the structured feedback sources/comments against Lesson 6 and generates `course.mjs`, including all ten source hashes. It uses Python's standard library and supports the Markdown forms in these drafts; it is not a general renderer for external or member content. The new content hash preserves previous notebooks separately rather than silently copying their writing or self-checks.
 
 ```sh
 python3 assets/docs/learning-design/reader/build.py
@@ -40,7 +42,7 @@ Use the repository's installed Node 24+ and Playwright. The browser runner uses 
 
 ## BDD and evidence
 
-Twenty-two [local scenarios](learning.feature) map to [executable checks](checks.mjs):
+Twenty-three [local scenarios](learning.feature) map to [executable checks](checks.mjs):
 
 | IDs                             | Observable check                                                                                                                                                                                                 | Broader design connection                                                                                          |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -63,6 +65,7 @@ Twenty-two [local scenarios](learning.feature) map to [executable checks](checks
 | READER-020                      | Two width cases: edits clear proposal checks, audience plans need attribution for self-check, cancellation retains text, and the six-step check stays separate.                                                  | CONTRIB-002/003; a plan grants no real display permission.                                                         |
 | READER-021                      | Failed save preserves editable literal text and a downloadable source-bearing proposal.                                                                                                                          | Local recovery portion of CONTRIB-004.                                                                             |
 | READER-022                      | Three cases: optional-field compatibility, unreadable-record protection, route isolation and an unsaved-departure warning.                                                                                       | Browser storage only; no native ownership or transaction claim.                                                    |
+| READER-023                      | Two widths: reconcile source/update material, retain first and revised plans, clear self-check on edit, save/export/reload the complete source packet and check expanded-view overflow.                          | REAL-WORK-001–005; supplied notes and author review, no independent learning score.                                |
 
 The prior seventeen-case checkpoint covered the complete reader, fresh-source switch, leave warning and unsupported-route repair. The [substantive Everyday rehearsal](../everyday-author-rehearsal.md) added three scenario IDs and expanded the runner to twenty-five cases. Five initial repair checks failed against the baseline before implementation. The first full twenty-five-case run passed; self-review then reproduced two legacy-version failures when an answer option had been retired, while the versioned-history case already passed. The recovery fix preserves the old answer as historical bytes without validating it against the new key. Exact final results and source parity are recorded in the #549 handoff. These are local behavior checks plus author review, not an independent learner study.
 
@@ -78,4 +81,6 @@ The [study-dialogue checkpoint](../study-dialogues.md) adds READER-018 and six c
 
 The contribution checkpoint adds READER-019–022 and twelve cases: **90 passed, zero failures, zero retries**. Its six missing-workspace checks failed at baseline `e5d8861400dcd8b9b0399fab35d0de4bc42bd78d`. The first full run passed; author review then paired the proposal fields and moved the table-overflow assertion to the expanded worked example. The final full run also passed all 90. Actual Work rehearsal saved, downloaded and restored an initial proposal, revision and reason; cancelling its audience plan preserved those words, and the earlier notebook stayed byte-identical. See the [contribution evidence map](../traceability.md#contribution-practice) for scope and artifacts.
 
-Next bounded content action: a more realistic project-brief exercise under [#34](https://github.com/deepnative/deep-native-engine/issues/34), following the owner’s selected priority. Use original invented meeting notes, a changed requirement, uncertain dates and a flawed draft; have the learner produce a usable update/action plan, justify corrections and respond to a later change. Specify behavior in BDD before authoring. Keep the work in this local content package and preserve the active canonical/shared-reader claims. Lead Sol/High; author design/self-review High. Production remains parked.
+The realistic Work checkpoint preserves all 90 case names and adds two READER-023 cases: **92 passed, zero failures, zero retries**. Two missing-case expectations failed before authoring at `965f18dacf10e80d0d514118a7ac7eb7005df487`. Existing Work final-record assertions now use the revised case’s task/owner/date facts and specifically target the worked-record disclosure; their preservation, recovery and layout checks remain. A formatter check required only locator-chain line wrapping; the exact final runner also passed all 92 cases. Actual rehearsal saved a five-case proposal, then a revision to U1’s selected six cases, with both versions and the full packet retained. See [the evidence map](../traceability.md#realistic-work-practice).
+
+Next bounded content action under [#34](https://github.com/deepnative/deep-native-engine/issues/34): a realistic Technical debugging brief with observed behavior, a competing requirement and a useful investigation/test plan. It extends the owner’s realism priority to a second audience. Reuse the local reader and BDD; preserve canonical/shared-reader claims and the existing notebooks. Lead Sol/High; author design/self-review High. Production remains parked.

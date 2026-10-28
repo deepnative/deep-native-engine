@@ -1,6 +1,15 @@
 # Local reader behavior only. No account, publication or application L-series claim.
 Feature: Follow the complete authored foundation sequence
 
+  Scenario: READER-023 — Rehearse a changing project brief with retained writing
+    Given the learner opens the realistic Work final practice at desktop or narrow width
+    When they write a first plan and reveal the later source update
+    Then their initial writing is retained
+    When they write a revision and reason and compare the worked record
+    Then a previous self-check is cleared by the edit
+    And save, download and reload retain both versions and the source packet
+    And the expanded source and comparison fit the page with tables scrolling inside it
+
   Scenario: READER-019 — Draft a contribution beside its worked source and revision
     Given the learner opens the optional contribution practice after the final record
     When they write a problem, first proposal, revision, reason and rights note
