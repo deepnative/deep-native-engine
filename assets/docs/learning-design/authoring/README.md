@@ -70,4 +70,4 @@ A detected newer local record must be compared and deliberately adopted as the b
 
 ## Next bounded action
 
-Lesson 6's feedback workspace and the full reader's [fifteen-item practice refinement](../practice-refinement.md) are complete locally. This workshop keeps its original fixtures and saved revisions. Next content action: the [three follow-up dialogues under #34](../practice-refinement.md#content-acceptance-and-next-action), reusing delivered practice behavior. Lead Sol/High; author design/self-review High. Preserve #93/#117/#103/#114 claims and coordinate later adoption. Production remains parked.
+Lesson 6's feedback workspace and the full reader's [fifteen-item practice refinement](../practice-refinement.md) are complete locally. This workshop keeps its original fixtures and saved revisions. The [three follow-up dialogues](../study-dialogues.md) are now complete locally. Next content action: the [workflow-improvement contribution under #115](../study-dialogues.md#scope-and-next-action), reusing delivered private proposals. Lead Astra/High; author design/self-review High. Coordinate canonical/publication changes with #97/#114. Production remains parked.

@@ -2,6 +2,8 @@
 
 A local content and workflow draft for [#549](https://github.com/deepnative/deep-native-engine/issues/549), prepared 27 October 2026. **Start with the [complete local reader](reader/README.md), or read a lesson below.** It connects all six authored lessons and final practice with route-specific examples, feedback and a browser-local notebook.
 
+Lesson 2 now includes [three follow-up conversations](study-dialogues.md): use a hint, repair a specific misconception and explain the change while keeping your own writing.
+
 The [local Lesson 2 → 3 walkthrough](prototype/README.md) now lets you try the sequence: write a request, classify a supplied answer, revise it and explain the change. Its saves are explicitly browser-local. The prototype includes eight additional scoped BDD scenarios and focused executable browser checks; it does not add application journey coverage.
 
 For content creation, open the [authoring workshop](authoring/README.md): correct an answer key or refine a staffing request, try the learner preview, compare the wording and retain a separate local revision with its reason. Both editorial journeys have been rehearsed through save, reload and export.
@@ -38,7 +40,8 @@ These are design interpretations of their published approaches, not evidence tha
 - [Feedback and revision BDD](features/feedback-revision.feature): 7 scenarios, including exact-version feedback, clarification, revision and recovery.
 - [Applied learning BDD](features/applied-learning.feature): 13 concrete scenarios for Lessons 4–6 and the connected practice, including unsupported feedback and interrupted execution.
 - [Authoring workshop BDD](authoring/authoring.feature): eight scoped scenarios for correction, preview, revision history and recovery, backed by 12 focused browser checks.
-- [Practice refinement](practice-refinement.md): fifteen revised questions, thirty misconception/repair rationales, before/after diagnostics and 72 passing reader checks.
+- [Practice refinement](practice-refinement.md): fifteen revised questions, thirty misconception/repair rationales and before/after diagnostics.
+- [Study dialogues](study-dialogues.md): three source-grounded follow-ups, four workflow specifications and six added browser cases; the reader now passes 78 checks.
 - [Evidence and acceptance map](traceability.md): the original 32 scenarios plus the new applied-learning map, with authored, existing, partial and proposed behavior separated.
 
 For example:
@@ -55,12 +58,12 @@ Scenario: LEARN-FLOW-007 — Distinguish a contradiction from a missing fact
 
 ## Working state
 
-Authored drafts: `LD-FND-001` through `LD-FND-006`, corresponding to FND-001 through FND-006. The [practice refinement](practice-refinement.md) brings Lessons 1, 2, 4, 5 and 6 to revision `0.3`; Lesson 3 remains `0.1`. These are proposal identifiers, not published catalog versions. The original source baseline is local commit `60c66677d939df8b1d0b59c43a1e8627f45223bc`; later local commits record the authored refinements and prototypes separately.
+Authored drafts: `LD-FND-001` through `LD-FND-006`, corresponding to FND-001 through FND-006. The [practice refinement](practice-refinement.md) brings Lessons 1, 4, 5 and 6 to revision `0.3`; the [follow-up dialogues](study-dialogues.md) bring Lesson 2 to `0.4`. Lesson 3 remains `0.1`. These are proposal identifiers, not published catalog versions. The original source baseline is local commit `60c66677d939df8b1d0b59c43a1e8627f45223bc`; later local commits record the authored refinements and prototypes separately.
 
-The existing #548 guide and standalone request/check prototype demonstrate narrower loops. The six-lesson reader makes the complete authored sequence locally usable. This package does not change the hosted application. The 32 original and 13 applied-learning BDD scenarios retain their broader scope; CREF-012 adds the option-design review; eight PROTO, seventeen READER and eight AUTHOR scenarios identify separately scoped local behavior. The package has 79 unique IDs. None changes the approved application journey register.
+The existing #548 guide and standalone request/check prototype demonstrate narrower loops. The six-lesson reader makes the complete authored sequence locally usable. This package does not change the hosted application. The 32 original and 13 applied-learning BDD scenarios retain their broader scope; CREF-012 adds the option-design review; four DIALOGUE, eight PROTO, eighteen READER and eight AUTHOR scenarios identify separately scoped local behavior. The package has 84 unique IDs. None changes the approved application journey register.
 
 Routine content and wording choices proceed under the owner's instruction. Production work is parked. Everyday, [Work](work-author-rehearsal.md) and [Technical](technical-author-rehearsal.md) rehearsals contain connected artifacts and separate final records. The authoring workshop demonstrates critique → correction → preview → comparison → saved revision. Lesson 6 supports revise, decline and already-addressed decisions with saved/exported records.
 
-The [practice refinement](practice-refinement.md) resolves the [earlier review's](content-acceptance-review.md) recurring longest-answer cue: unique-longest matches fell from 14/15 to 3/15, with ties reported separately. All 24 keys are preserved; each of the fifteen revised items has specific mistake-and-repair feedback. The full reader suite passes 72 checks, and actual old-notebook downloads remain unchanged. These are author and local-behavior results, not proof of learning effectiveness.
+The [practice refinement](practice-refinement.md) resolves the [earlier review's](content-acceptance-review.md) recurring longest-answer cue: unique-longest matches fell from 14/15 to 3/15, with ties reported separately. All 24 keys are preserved; each of the fifteen revised items has specific mistake-and-repair feedback. The full reader suite now passes 78 checks, including the follow-up dialogues, and actual old-notebook downloads remain unchanged. These are author and local-behavior results, not proof of learning effectiveness.
 
-Next bounded content action: the [three source-grounded follow-up dialogues under #34](practice-refinement.md#content-acceptance-and-next-action), reusing existing practice behavior. Lead Sol/High; author design/self-review High. Coordinate canonical source or shared application reader adoption with #93/#117.
+Next bounded content action: the [workflow-improvement contribution under #115](study-dialogues.md#scope-and-next-action). Reuse existing private proposals and keep the local content step separate from canonical adoption. Lead Astra/High; author design/self-review High. Production remains parked.

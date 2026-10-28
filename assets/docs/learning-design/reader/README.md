@@ -6,6 +6,8 @@ Choose a route, then follow **example → try → fresh case → your work**. Pr
 
 Opening a page is not completion. The path distinguishes written notes and a deliberate learner self-check. Editing fresh writing, lesson work or the final record clears the applicable previous self-check. Free writing has authored criteria and comparisons, not an automatic grade. Comparisons are supplied examples rather than responses generated from the learner's text.
 
+Lesson 2's **Fresh case** adds [three supplied follow-up conversations](../study-dialogues.md). Keep an initial request, try the hint, then retain a repair and a reason in the existing writing field. Separate disclosures show the worked repair and how to handle missing evidence or unsupported requests. Opening them never replaces the writing.
+
 Lesson 6's **Fresh case** now includes a [feedback decision workspace](feedback-workflow.md). Learners can revise, decline with a reason or record an already-addressed change while preserving draft/comment versions. Decisions and unfinished responses use the same explicit notebook save and export. A clarification stays in the notebook; it is not sent to a reviewer.
 
 ## Run locally
@@ -36,7 +38,7 @@ Use the repository's installed Node 24+ and Playwright. The browser runner uses 
 
 ## BDD and evidence
 
-Seventeen [local scenarios](learning.feature) map to [executable checks](checks.mjs):
+Eighteen [local scenarios](learning.feature) map to [executable checks](checks.mjs):
 
 | IDs                             | Observable check                                                                                                                                                                                                 | Broader design connection                                                                                          |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -55,6 +57,8 @@ Seventeen [local scenarios](learning.feature) map to [executable checks](checks.
 | READER-015/016                  | Save/reload/export, failed storage write, inconsistent-history protection, unfinished response, route isolation, self-check invalidation and literal writing.                                                    | Local WORK-FLOW-007 and LEARN-FLOW-009/010/013; no member or native transaction claim.                             |
 | READER-017                      | Fifteen revised practice items at both widths: all choices, source-based explanations, correct/incorrect state and unchanged fresh source; thirty cases.                                                         | CREF-012 and local CREF-003; content meaning is reviewed separately.                                               |
 
+| READER-018 | Three route-specific dialogues at both widths: hint/repair/limits, supplied-example label, unchanged writing, explicit save/export/reload and no horizontal overflow; six cases. | DIALOGUE-001–004; meaning reviewed separately, no automatic grade or live AI. |
+
 The prior seventeen-case checkpoint covered the complete reader, fresh-source switch, leave warning and unsupported-route repair. The [substantive Everyday rehearsal](../everyday-author-rehearsal.md) added three scenario IDs and expanded the runner to twenty-five cases. Five initial repair checks failed against the baseline before implementation. The first full twenty-five-case run passed; self-review then reproduced two legacy-version failures when an answer option had been retired, while the versioned-history case already passed. The recovery fix preserves the old answer as historical bytes without validating it against the new key. Exact final results and source parity are recorded in the #549 handoff. These are local behavior checks plus author review, not an independent learner study.
 
 The [Work author rehearsal](../work-author-rehearsal.md) completed a second substantive artifact and replaced its short final advice with a full six-part comparison. Two missing-record checks failed before authoring. Visual review also reproduced a narrow-table word-breaking problem before repair; that checkpoint passed 27 cases.
@@ -65,4 +69,6 @@ The [feedback workflow checkpoint](feedback-workflow.md) adds four scenario IDs 
 
 The [practice refinement](../practice-refinement.md) resolves the earlier review's recurring longest-answer cue through fifteen revised items and specific explanations. The full suite now passes 72 checks, including all 42 earlier cases and 30 READER-017 cases. The actual author rehearsal saved/reloaded/exported a substantive request and preserved earlier notebook bytes. See its item review, tie-aware cue comparison and evidence limits.
 
-Next bounded content action: the [three follow-up dialogues under #34](../practice-refinement.md#content-acceptance-and-next-action). Reuse the existing practice flow; preserve #93/#117 canonical-source and shared-reader claims. Lead Sol/High, author design/self-review High. Production remains parked.
+The [study-dialogue checkpoint](../study-dialogues.md) adds READER-018 and six cases, bringing the full suite to **78 passing checks**. Six missing-content failures preceded authoring. Every earlier case remains; the Lesson 2 comparison selector now explicitly identifies the original worked-request disclosure. The actual Work rehearsal preserves its request, repair and reason through save/export/reload and preserves the earlier notebook byte-for-byte.
+
+Next bounded content action: the [workflow-improvement contribution under #115](../study-dialogues.md#scope-and-next-action), reusing delivered private proposals. Lead Astra/High; author design/self-review High. Coordinate any canonical/publication changes with #97/#114. Production remains parked.

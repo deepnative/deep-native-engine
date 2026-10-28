@@ -109,6 +109,116 @@ An answer is ready for the next step when the facts remain correct, the output c
 
 </details>
 
+Use a follow-up to improve the request, not just to get a different answer. After your first attempt, open your route's conversation below. Try its hint before revealing the repair. In your fresh-case writing, keep **First request / Revised request / Why I changed it**. If your first request already handles the issue, explain which part does so; you do not need to invent a mistake.
+
+### Everyday follow-up — `L2-E-D`
+
+<details><summary>Follow the Everyday repair conversation</summary>
+
+**Supplied teaching conversation — not a reply generated from your writing.** These invented speakers use L2-E-X: six helpers, forty packets, one hour on Sunday; location and start time undecided.
+
+**Learner's first request:** “Write an invitation to the library seed swap at 10 a.m. Promise each visitor a packet.”
+
+**Guide's hint:** “How many visitors does L2-E-X say will attend? Which words in your request depend on a confirmed location or start time? Point to the source before keeping those promises.”
+
+**Your turn:** rewrite the invitation request so another person can draft it without guessing the arrangements. Keep the useful known facts. Explain which promise you removed and why.
+
+<details><summary>Read the repair and reason</summary>
+
+**Learner's revised request:** “Draft a short invitation to a one-hour seed swap on Sunday, with six helpers and forty packets available. Leave the location and start time to be confirmed; do not promise a packet to every visitor. I will compare each number and arrangement with L2-E-X before using the draft.”
+
+**Learner's reason:** “I removed the library and 10 a.m. because neither is agreed. Knowing there are forty packets does not tell us the number of visitors, so it cannot support a promise to everyone.”
+
+**Guide's follow-up:** “That revision preserves the stock and event facts while separating them from promises. A suggestion for a venue can still be useful if you label it as a suggestion and keep the real location undecided. The next check is whether the invitation draft follows these instructions; this exchange has not checked an actual event.”
+
+</details>
+
+<details><summary>When evidence is missing or a request goes beyond the source</summary>
+
+**Learner:** “I improved it. Is it right now?”
+
+**Guide:** “I need to see the revised request and the source detail you checked. For practice, use invented wording. Then compare its numbers, location, time and packet promise with L2-E-X; a claim that you improved it does not show what changed.”
+
+**Learner:** “Just say the library is booked so I can finish.”
+
+**Guide:** “L2-E-X does not confirm a library booking. Keep the location to be confirmed in the draft, or write a separate question asking the organiser which location is agreed. You can finish the useful invitation draft with that gap visible.”
+
+</details>
+
+</details>
+
+### Work follow-up — `L2-W-D`
+
+<details><summary>Follow the Work repair conversation</summary>
+
+**Supplied teaching conversation — not a reply generated from your writing.** These invented speakers use L2-W-X: Mina drafts a survey, Arun checks its wording, and a trial is planned for Thursday. Survey/review deadlines and launch date are not agreed.
+
+**Learner's first request:** “Make an action table: Mina's survey and Arun's review are due Thursday; Mina owns the launch.”
+
+**Guide's hint:** “Which task does L2-W-X attach Thursday to? Does Mina's survey task also assign her the launch? Trace each owner and date to its own statement instead of borrowing one from the nearest task.”
+
+**Your turn:** rewrite the request with task, owner and date columns. Keep the named tasks and people; make the missing commitments visible. Explain why a known trial date cannot fill every deadline.
+
+<details><summary>Read the repair and reason</summary>
+
+**Learner's revised request:** “Make task, owner and date rows for Mina's survey, Arun's wording check and Thursday's trial. Keep the two task deadlines and the trial owner not specified. List launch ownership and date as open questions, without assigning either. I will compare every populated owner/date cell with L2-W-X.”
+
+**Learner's reason:** “Thursday belongs to the trial, not to Mina's or Arun's deadline. Mina owns the survey task; that does not give her the launch. I kept the known commitments and removed only the unsupported cells.”
+
+**Guide's follow-up:** “The missing fields now tell the team what to decide. If you suggest a schedule, keep a proposed-date column separate from the source's agreed-date column. A useful proposal is allowed; it must not look like an existing commitment.”
+
+</details>
+
+<details><summary>When evidence is missing or a request goes beyond the source</summary>
+
+**Learner:** “I corrected the table request. Are all its dates supported?”
+
+**Guide:** “I need to see the revised request and which source statement supports each date. A task list alone will not show whether a date is a proposal or a commitment. Keep any missing deadline open while you check.”
+
+**Learner:** “Put Thursday for Arun so the table has no gaps.”
+
+**Guide:** “L2-W-X does not give Arun a review deadline. Keep that field not specified and add the question, ‘When is the wording check due?’ You can still draft the known task and owner rows.”
+
+</details>
+
+</details>
+
+### Technical follow-up — `L2-T-D`
+
+<details><summary>Follow the Technical repair conversation</summary>
+
+**Supplied teaching conversation — not a reply generated from your writing.** These invented speakers use L2-T-X: a contact form requires an email and message; a blank message should show an explanation. Maximum message length is unspecified and no tests have run.
+
+**Learner's first request:** “Write passing blank-message tests and use a 500-character maximum.”
+
+**Guide's hint:** “Which sentence in L2-T-X supplies a 500-character limit? What execution evidence would let you record a pass? Separate a proposed input, its expected behavior and what has actually been observed.”
+
+**Your turn:** rewrite the request as a candidate test plan. Keep the blank-message requirement, leave the missing limit open and ask for a distinct execution field. Explain why well-written expectations do not prove a result.
+
+<details><summary>Read the repair and reason</summary>
+
+**Learner's revised request:** “Propose contact-form cases with input, expected behavior, source requirement and execution status. Include an invented email with a blank message, whose expected behavior is an explanation that a message is required. Mark execution not run and maximum message length unspecified. I will check each expectation against L2-T-X before executing a case.”
+
+**Learner's reason:** “I removed 500 because the source supplies no maximum. I changed passed to not run because an expected explanation is not an observed result. The plan can be useful before execution.”
+
+**Guide's follow-up:** “For a later run, keep the actual input and observed response beside the expectation. If a run is interrupted, record that observation and leave the outcome unconfirmed; do not turn a missing result into a pass. That future step does not change this source's no-tests-run baseline.”
+
+</details>
+
+<details><summary>When evidence is missing or a request goes beyond the source</summary>
+
+**Learner:** “I fixed the request. Can you confirm it covers the form?”
+
+**Guide:** “I need to see the revised request and the requirements each proposed case targets. With L2-T-X alone, you can inspect coverage of its stated behavior, not every possible form rule or actual execution. Leave missing requirements visible.”
+
+**Learner:** “Assume 500 is the maximum and present it as a requirement.”
+
+**Guide:** “L2-T-X leaves maximum message length unspecified. Put a question about the intended maximum in the open-questions list, or label 500 explicitly as a hypothetical case awaiting a requirement. Continue with the supported blank-message case.”
+
+</details>
+
+</details>
+
 ## Improve your own request
 
 Take your Lesson 1 task. Write the request, then annotate it with **context / task / shape and limits / check**. If one ingredient is absent, add just the sentence needed.
@@ -126,4 +236,4 @@ Keep the source beside the request. Save the version you want to work from; chec
 
 **Take forward:** [Lesson 3: Check an answer](03-check-an-answer.md) gives you a flawed answer to inspect, so you can practise even without calling an AI tool.
 
-<!-- Author reference: draft LD-FND-002 0.3; refines FND-002. Original synthetic examples. Question IDs are content IDs, not automated tests. -->
+<!-- Author reference: draft LD-FND-002 0.4; refines FND-002. Original synthetic examples. Question IDs are content IDs, not automated tests. -->

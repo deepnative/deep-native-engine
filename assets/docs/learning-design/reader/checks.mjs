@@ -669,10 +669,16 @@ if (!process.argv.includes("--baseline")) {
               .fill(
                 `${name} fresh attempt for lesson ${lesson + 1}: keep the source facts and explain the check.`,
               );
-            await page.locator(".lesson-body > details > summary").click();
-            await expect(
-              page.locator(".lesson-body > details"),
-            ).toHaveAttribute("open", "");
+            const workedComparison =
+              lesson === 1
+                ? page.locator(".lesson-body > details").filter({
+                    has: page.getByText("Compare with a worked request", {
+                      exact: true,
+                    }),
+                  })
+                : page.locator(".lesson-body > details");
+            await workedComparison.locator(":scope > summary").click();
+            await expect(workedComparison).toHaveAttribute("open", "");
             await step(page, "Your work");
             await page
               .getByLabel("Your lesson work", { exact: true })
@@ -1515,6 +1521,113 @@ for (const width of [1360, 390]) {
         { width, height: 950 },
       );
     }
+  }
+}
+
+const dialogueCases = {
+  Everyday: {
+    hint: "How many visitors does L2-E-X say will attend?",
+    repair: "forty packets does not tell us the number of visitors",
+    unsupported: "L2-E-X does not confirm a library booking",
+    draft:
+      "Attempt: Invite everyone to the library at ten and promise each visitor a packet.",
+    revised:
+      "Repair: Draft a one-hour Sunday seed-swap invitation with six helpers and forty packets; keep location and start time open and promise no packet per visitor.\nReason: L2-E-X gives packet stock, not attendance or a booking.",
+  },
+  Work: {
+    hint: "Which task does L2-W-X attach Thursday to?",
+    repair: "Thursday belongs to the trial",
+    unsupported: "L2-W-X does not give Arun a review deadline",
+    draft:
+      "Attempt: Make Mina's survey and Arun's review due Thursday; Mina owns the launch.",
+    revised:
+      "Repair: List Mina's survey and Arun's wording check with dates not specified; Thursday's trial has no named owner. Keep launch date open.\nReason: The note assigns Thursday to the trial, not to either task deadline.",
+  },
+  Technical: {
+    hint: "Which sentence in L2-T-X supplies a 500-character limit?",
+    repair: "an expected explanation is not an observed result",
+    unsupported: "L2-T-X leaves maximum message length unspecified",
+    draft:
+      "Attempt: Write passing blank-message tests and use a 500-character maximum.",
+    revised:
+      "Repair: Propose cases with input, expected behavior, source requirement and execution not run. Include a blank message and leave maximum length unspecified.\nReason: L2-T-X supplies a requirement but no execution result or maximum length.",
+  },
+};
+for (const width of [1360, 390]) {
+  for (const [name, sample] of Object.entries(dialogueCases)) {
+    await check(
+      `READER-018 ${name} supplied follow-up and retained revision at ${width}px`,
+      async (page) => {
+        await start(page, name);
+        await page.locator('[data-lesson="1"]').click();
+        await step(page, "Fresh case");
+        const writing = page.getByLabel("Your fresh-case attempt", {
+          exact: true,
+        });
+        await writing.fill(sample.draft);
+        const dialogue = page.locator(".lesson-body > details").filter({
+          has: page.getByText(`Follow the ${name} repair conversation`, {
+            exact: true,
+          }),
+        });
+        await expect(dialogue).toHaveCount(1);
+        await dialogue.locator(":scope > summary").click();
+        await expect(dialogue).toContainText("Supplied teaching conversation");
+        await expect(dialogue).toContainText(
+          "not a reply generated from your writing",
+        );
+        await expect(dialogue).toContainText(sample.hint);
+        await expect(writing).toHaveValue(sample.draft);
+        const repaired = dialogue.locator("details").filter({
+          has: page.getByText("Read the repair and reason", { exact: true }),
+        });
+        await repaired.locator("summary").click();
+        await expect(repaired).toContainText(sample.repair);
+        const limits = dialogue.locator("details").filter({
+          has: page.getByText(
+            "When evidence is missing or a request goes beyond the source",
+            { exact: true },
+          ),
+        });
+        await limits.locator("summary").click();
+        await expect(limits).toContainText("I need to see the revised request");
+        await expect(limits).toContainText(sample.unsupported);
+        await expect(writing).toHaveValue(sample.draft);
+        const record = `${sample.draft}\n${sample.revised}`;
+        await writing.fill(record);
+        await page
+          .getByRole("button", { name: "Save in this browser", exact: true })
+          .click();
+        const exported = await downloadText(page, page.locator("#download"));
+        expect(exported).toContain(record);
+        expect(exported).toContain(
+          "Local practice writing; no automatic grade or independent review.",
+        );
+        await page.reload();
+        await expect(writing).toHaveValue(record);
+        await expect(page.locator("#source-text")).toContainText(
+          expected[name].fresh[1],
+        );
+        await page
+          .getByText(`Follow the ${name} repair conversation`, { exact: true })
+          .click();
+        await page
+          .getByText("Read the repair and reason", { exact: true })
+          .click();
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        await dialogue.screenshot({
+          path: path.join(
+            output,
+            `dialogue-${expected[name].route}-${width}.png`,
+          ),
+        });
+      },
+      { width, height: 950 },
+    );
   }
 }
 

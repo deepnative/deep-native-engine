@@ -1,6 +1,15 @@
 # Local reader behavior only. No account, publication or application L-series claim.
 Feature: Follow the complete authored foundation sequence
 
+  Scenario: READER-018 — Rehearse a supplied follow-up without losing the learner's words
+    Given the learner opens Lesson 2's fresh case in any route
+    When they write an attempt and reveal its supplied follow-up conversation
+    Then they can inspect a specific hint, repair and reason beside the same source
+    And missing-evidence and unsupported-request examples remain truthful
+    And opening an example neither changes their writing nor marks it assessed
+    When they keep an attempt, repair and reason and explicitly save
+    Then reload and download preserve that writing at desktop and narrow widths
+
   Scenario: READER-017 — Explain the specific error in each revised practice choice
     Given the learner opens a refined practice item with its original source visible
     When they try each of its three choices and check the answer
