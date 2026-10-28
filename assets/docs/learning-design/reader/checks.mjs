@@ -2608,6 +2608,311 @@ for (const width of [1360, 390]) {
   }
 }
 
+// Targets derive from the authored criterion and the lesson's stated outcome.
+const reviewTargets = {
+  Everyday: [
+    ["Usable reminder", 2, "room"],
+    ["Correct headcount", 3, "reserved"],
+    ["Feasible book plan", 5, "upper bound"],
+    ["Useful revision", 6, "unchanged"],
+    ["Next action", 5, "reply"],
+    ["Deliberate audience", 4, "internal"],
+  ],
+  Work: [
+    ["Current facts and changed requirements", 3, "S2"],
+    ["A usable output", 2, "owner"],
+    ["Sound feasibility reasoning", 5, "minutes"],
+    ["Useful judgment", 1, "recommendation"],
+    ["A retained revision", 6, "U1"],
+    ["Honest limits", 3, "unknown"],
+  ],
+  Technical: [
+    ["Applicable requirement", 3, "R1"],
+    ["Reproducible finding", 2, "fixture"],
+    ["Bounded conclusion", 3, "T03"],
+    ["Useful next action", 5, "browser"],
+    ["Retained revision", 6, "R2"],
+    ["Honest execution record", 5, "not run"],
+  ],
+};
+async function reviewFinal(page, name = "Everyday") {
+  await start(page, name);
+  await page.locator('[data-lesson="6"]').click();
+  for (let i = 0; i < 6; i++)
+    await fillFinal(
+      page,
+      i,
+      `${name} retained field ${i + 1}: my source-based decision and reason.`,
+    );
+  await finalStep(page, 3);
+  await page.locator("#self-check").check();
+}
+async function openReview(page, criterion, lesson) {
+  const row = page.getByRole("region", { name: criterion, exact: true });
+  await row.locator("summary").click();
+  await row
+    .getByRole("button", {
+      name: `Practise lesson ${lesson}: ${titles[lesson - 1]}`,
+      exact: true,
+    })
+    .click();
+}
+for (const width of [1360, 390]) {
+  for (const [name, targets] of Object.entries(reviewTargets)) {
+    await check(
+      `READER-030 ${name} each criterion leads to practice and retained writing at ${width}px`,
+      async (page) => {
+        await reviewFinal(page, name);
+        const before = await downloadText(page, page.locator("#download"));
+        await expect(
+          page.getByRole("heading", {
+            name: "Review your record",
+            exact: true,
+          }),
+        ).toBeVisible({ timeout: 3000 });
+        for (const [index, [criterion, lesson, phrase]] of targets.entries()) {
+          const row = page.getByRole("region", {
+            name: criterion,
+            exact: true,
+          });
+          await expect(row).toContainText(phrase);
+          await openReview(page, criterion, lesson);
+          await expect(
+            page.getByRole("heading", {
+              name: titles[lesson - 1],
+              exact: true,
+            }),
+          ).toBeVisible();
+          await expect(
+            page.getByRole("region", { name: "Try it", exact: true }),
+          ).toBeVisible();
+          await expect(page.locator("#source-text")).toContainText(
+            expected[name].sources[lesson - 1],
+          );
+          await expect(page.locator("#practice-return")).toContainText(
+            criterion,
+          );
+          await expect(page.locator("#practice-return")).toContainText(phrase);
+          if (index === 0) {
+            await page.locator("#practice-return").screenshot({
+              path: path.join(
+                output,
+                `review-${name.toLowerCase()}-${width}-practice.png`,
+              ),
+            });
+          }
+          await page
+            .getByRole("button", {
+              name: "Return to my final record",
+              exact: true,
+            })
+            .click();
+          await expect(row).toBeFocused();
+          for (let i = 0; i < 6; i++)
+            await expect(page.locator(`#writing-final${i}`)).toHaveValue(
+              `${name} retained field ${i + 1}: my source-based decision and reason.`,
+            );
+          await expect(page.locator("#self-check")).toBeChecked();
+          await expect(page.locator("#practice-return")).toHaveCount(0);
+        }
+        expect(await downloadText(page, page.locator("#download"))).toBe(
+          before,
+        );
+        // Exercise an actual mistake/correction, not only a navigation round trip.
+        const [criterion, lesson] = targets[0];
+        await openReview(page, criterion, lesson);
+        const answers = expected[name].keys[lesson - 1];
+        for (const [index, answer] of answers.entries()) {
+          const wrong =
+            answer.length === 1
+              ? answer === "A"
+                ? "B"
+                : "A"
+              : answer === "Supported"
+                ? "Contradicted"
+                : "Supported";
+          await page
+            .locator("fieldset")
+            .nth(index)
+            .locator(`input[value="${wrong}"]`)
+            .check();
+        }
+        await page.getByRole("button", { name: /^Check answers?$/ }).click();
+        await expect(page.locator(".answer-feedback").first()).toContainText(
+          "Try another choice",
+        );
+        for (const [index, answer] of answers.entries())
+          await page
+            .locator("fieldset")
+            .nth(index)
+            .locator(`input[value="${answer}"]`)
+            .check();
+        await page.getByRole("button", { name: /^Check answers?$/ }).click();
+        await expect(page.locator(".answer-feedback.positive")).toHaveCount(
+          answers.length,
+        );
+        await page
+          .getByRole("button", {
+            name: "Return to my final record",
+            exact: true,
+          })
+          .click();
+        for (let i = 0; i < 6; i++)
+          await expect(page.locator(`#writing-final${i}`)).toHaveValue(
+            `${name} retained field ${i + 1}: my source-based decision and reason.`,
+          );
+        await expect(page.locator("#self-check")).toBeChecked();
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        await page.locator("#final-review").screenshot({
+          path: path.join(
+            output,
+            `review-${name.toLowerCase()}-${width}-criteria.png`,
+          ),
+        });
+        await fillFinal(
+          page,
+          5,
+          `${name} revised after revisiting a weak criterion.`,
+        );
+        await expect(page.locator("#self-check")).not.toBeChecked();
+        await page.locator("#save").click();
+        await page.reload();
+        await expect(page.locator("#writing-final5")).toHaveValue(
+          `${name} revised after revisiting a weak criterion.`,
+        );
+        await expect(page.locator("#self-check")).not.toBeChecked();
+      },
+      { width, height: 950 },
+    );
+  }
+}
+await check(
+  "READER-031 old compatible records stay unchanged until explicit save",
+  async (page) => {
+    await reviewFinal(page);
+    await page.locator("#save").click();
+    const old = await page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.startsWith("dne-course-reader-1:everyday:"),
+      );
+      const value = JSON.parse(localStorage.getItem(key));
+      delete value.state.reviewCriterion;
+      const raw = JSON.stringify(value);
+      localStorage.setItem(key, raw);
+      return { key, raw };
+    });
+    await page.reload();
+    await expect(page.locator("#writing-final5")).toHaveValue(
+      "Everyday retained field 6: my source-based decision and reason.",
+    );
+    await expect(page.locator("#self-check")).toBeChecked();
+    await openReview(page, "Correct headcount", 3);
+    expect(
+      await page.evaluate((key) => localStorage.getItem(key), old.key),
+    ).toBe(old.raw);
+    await page.locator("#save").click();
+    await page.reload();
+    await expect(page.locator("#practice-return")).toContainText(
+      "Correct headcount",
+    );
+    await expect(
+      page.getByRole("region", { name: "Try it", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Return to my final record", exact: true })
+      .click();
+    await expect(page.locator("#writing-final5")).toHaveValue(
+      "Everyday retained field 6: my source-based decision and reason.",
+    );
+    await expect(page.locator("#self-check")).toBeChecked();
+  },
+);
+for (const invalid of [-1, 6, "1"]) {
+  await check(
+    `READER-031 invalid review context ${JSON.stringify(invalid)} protects the stored original`,
+    async (page) => {
+      await reviewFinal(page);
+      await page.locator("#save").click();
+      const raw = await page.evaluate((value) => {
+        const key = Object.keys(localStorage).find((k) =>
+          k.startsWith("dne-course-reader-1:everyday:"),
+        );
+        const saved = JSON.parse(localStorage.getItem(key));
+        saved.state.reviewCriterion = value;
+        const raw = JSON.stringify(saved);
+        localStorage.setItem(key, raw);
+        return { key, raw };
+      }, invalid);
+      await page.reload();
+      await expect(page.locator("#save")).toBeDisabled();
+      await expect(page.locator("#save-status")).toContainText("unreadable");
+      expect(await downloadText(page, page.locator("#download-stored"))).toBe(
+        raw.raw,
+      );
+      expect(
+        await page.evaluate((key) => localStorage.getItem(key), raw.key),
+      ).toBe(raw.raw);
+    },
+  );
+}
+await check(
+  "READER-031 saved return contexts stay separate by route and preserve failed-save writing",
+  async (page) => {
+    await reviewFinal(page);
+    await openReview(page, "Correct headcount", 3);
+    await page.locator("#save").click();
+    await page.getByRole("button", { name: "Work", exact: true }).click();
+    await page.locator('[data-lesson="6"]').click();
+    for (let i = 0; i < 6; i++)
+      await fillFinal(page, i, `Work separate field ${i + 1}.`);
+    await finalStep(page, 3);
+    await openReview(page, "Sound feasibility reasoning", 5);
+    await page.locator("#save").click();
+    await page.reload();
+    await expect(page.locator("#practice-return")).toContainText(
+      "Sound feasibility reasoning",
+    );
+    await page.getByRole("button", { name: "Everyday", exact: true }).click();
+    await expect(page.locator("#practice-return")).toContainText(
+      "Correct headcount",
+    );
+    await page
+      .getByRole("button", { name: "Return to my final record", exact: true })
+      .click();
+    await fillFinal(page, 5, "Everyday new revision kept after failed save.");
+    await openReview(page, "Correct headcount", 3);
+    const before = await page.evaluate(() =>
+      Object.fromEntries(Object.entries(localStorage)),
+    );
+    await page.evaluate(() => {
+      Storage.prototype.setItem = () => {
+        throw new Error("Test rejected save");
+      };
+    });
+    await page.locator("#save").click();
+    await expect(page.locator("#save-status")).toContainText("Saving failed");
+    const exported = await downloadText(page, page.locator("#download"));
+    expect(exported).toContain("Everyday new revision kept after failed save.");
+    expect(exported).toContain("S1 · current venue confirmation");
+    expect(
+      await page.evaluate(() =>
+        Object.fromEntries(Object.entries(localStorage)),
+      ),
+    ).toEqual(before);
+    await page
+      .getByRole("button", { name: "Return to my final record", exact: true })
+      .click();
+    await expect(page.locator("#writing-final5")).toHaveValue(
+      "Everyday new revision kept after failed save.",
+    );
+    await expect(page.locator("#self-check")).not.toBeChecked();
+  },
+);
+
 await browser.close();
 await writeFile(
   path.join(output, "results.json"),

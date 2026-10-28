@@ -960,3 +960,42 @@ textarea::placeholder {
 .writing-guidance .teaching-sample {
   margin: 18px 0 0;
 }
+
+.review-criteria {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.review-criterion {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fffefb;
+  scroll-margin: 24px;
+}
+.review-criterion h3 {
+  margin-top: 0;
+}
+.review-criterion details {
+  margin-bottom: 0;
+}
+.review-criterion button {
+  white-space: normal;
+  width: 100%;
+}
+.practice-return {
+  padding: 22px;
+  margin-bottom: 22px;
+  border: 1px solid #c7d4bf;
+  border-radius: 12px;
+  background: #f4f6ec;
+}
+.practice-return h2 {
+  font-size: 26px;
+}
+@media (max-width: 750px) {
+  .review-criteria {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

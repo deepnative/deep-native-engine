@@ -80,4 +80,6 @@ The [guided final-practice checkpoint](../reader/guided-final-practice.md) now p
 
 The [field-guidance refinement](../reader/guided-final-practice.md#field-guidance-refinement) now places all eighteen existing numbered instructions beside the corresponding final-practice fields and shows the case’s expected output. READER-029 adds six route/width checks; the full reader suite passes 113 cases with the same sources and preserved notebooks.
 
-Next bounded action under [#34](https://github.com/deepnative/deep-native-engine/issues/34): audit the complete local learn → apply → feedback → contribution journey against its original BDD requirements and current authored content. Several local refinements now exist; reconcile the package as a whole and identify a concrete missing learner outcome before adding another slice. Reuse the completed rehearsals and executable evidence, preserve #93/#117 canonical/shared-reader claims, and recheck live ownership. Lead Sol/High; author content/evidence review High. Production remains parked.
+The [criterion-specific practice and return](../reader/practice-return.md) completes the local audit finding: eighteen repair prompts, matching lesson practice, preserved drafts and a saved return context. READER-030/031 bring the reader to **124 passing cases** and the package to **116 IDs**, preserving prior scopes.
+
+For the current bounded content action and model recommendation, use the [package handoff](../README.md). Production remains parked.

@@ -94,6 +94,8 @@ Feature: Use a checked draft responsibly and improve a repeatable workflow
     And it states the input and audience scope, workflow and recovery step
     And it includes practice feedback, its source version and a reasoned revision decision
     And unfinished criteria point back to a lesson rather than producing a mastery certificate
+    And realistic final cases offer a specific repair prompt and relevant practice
+    And returning from that practice retains the first draft and revision for another attempt
 
   Scenario: APPLIED-LEARN-013 — Record interrupted execution separately from expected behavior
     Given L5-T-X requires PDFs no larger than two megabytes

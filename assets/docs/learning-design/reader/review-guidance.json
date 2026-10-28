@@ -1,0 +1,98 @@
+{
+  "everyday": [
+    {
+      "criterion": "Usable reminder",
+      "lesson": 2,
+      "prompt": "Check the room and guest arrival time against S1, then the book limit and cancellation contact against S2. Rewrite any sentence that still carries the old invitation’s arrangements."
+    },
+    {
+      "criterion": "Correct headcount",
+      "lesson": 3,
+      "prompt": "List confirmed guests, helpers, the reserved place and people still waiting separately. Trace each count to S2 or U1 before adding the people who can be in the room."
+    },
+    {
+      "criterion": "Feasible book plan",
+      "lesson": 5,
+      "prompt": "Calculate the upper bound for incoming books, table space and box space separately. Show where any overflow goes; do not turn the maximum into a promised quantity."
+    },
+    {
+      "criterion": "Useful revision",
+      "lesson": 6,
+      "prompt": "Compare your first and revised plans. Name what U1 changed and what stayed unchanged; explain why keeping correct reminder wording can be a valid revision decision."
+    },
+    {
+      "criterion": "Next action",
+      "lesson": 5,
+      "prompt": "Write the next reply-list check, who makes it and when. Explain what must be confirmed before the reserved place is offered to someone else."
+    },
+    {
+      "criterion": "Deliberate audience",
+      "lesson": 4,
+      "prompt": "Separate guest-facing arrangements from internal reply tracking. Keep the attendance decisions useful without putting individual reply details in the reminder."
+    }
+  ],
+  "work": [
+    {
+      "criterion": "Current facts and changed requirements",
+      "lesson": 3,
+      "prompt": "Trace the slot, location and attendance to S2, readiness to S3, and unchanged commitments to S1. Correct only the facts that later notes actually replace."
+    },
+    {
+      "criterion": "A usable output",
+      "lesson": 2,
+      "prompt": "Make the current slot, scope, owner and next decision easy to find. Replace a long retelling with a short update and a task/owner/timing list; keep missing dates explicit."
+    },
+    {
+      "criterion": "Sound feasibility reasoning",
+      "lesson": 5,
+      "prompt": "Show opening minutes plus sequential case minutes plus debrief minutes. Check both the available slot and ready cards before recommending a scope; label the timing as an estimate."
+    },
+    {
+      "criterion": "Useful judgment",
+      "lesson": 1,
+      "prompt": "State the small outcome your recommendation would achieve and how you would check it. Keep a feasible recommendation distinct from an agreed decision; explain its tradeoff."
+    },
+    {
+      "criterion": "A retained revision",
+      "lesson": 6,
+      "prompt": "Keep your first update beside the revision. Point to each change supported by U1, explain the reason, and preserve commitments that U1 did not replace."
+    },
+    {
+      "criterion": "Honest limits",
+      "lesson": 3,
+      "prompt": "Mark the still-unknown meeting time and unobserved pilot results separately from known plans. Ask for the missing source before describing success or a new commitment."
+    }
+  ],
+  "technical": [
+    {
+      "criterion": "Applicable requirement",
+      "lesson": 3,
+      "prompt": "Match each expectation to its candidate: R1 replaces R0 for the supplied runs; R2 adds JPEG for the next candidate. Do not apply a later rule retroactively."
+    },
+    {
+      "criterion": "Reproducible finding",
+      "lesson": 2,
+      "prompt": "Give the next person the exact fixture type/bytes, build, steps, expected result and recorded actual result. Keep unsupported details from the vague support message as questions."
+    },
+    {
+      "criterion": "Bounded conclusion",
+      "lesson": 3,
+      "prompt": "Use T01 for the observed UI mismatch, T02 for the successful control and T03 for an unconfirmed attempt. Keep the possible cause separate from a demonstrated finding."
+    },
+    {
+      "criterion": "Useful next action",
+      "lesson": 5,
+      "prompt": "Choose a matched browser/service check that can test the suspected limit. Include below, at and above the boundary and a recovery step if the response is interrupted."
+    },
+    {
+      "criterion": "Retained revision",
+      "lesson": 6,
+      "prompt": "Keep the initial investigation and original run IDs. Explain how R2 and D1 change the next plan while preserving what the earlier observations actually showed."
+    },
+    {
+      "criterion": "Honest execution record",
+      "lesson": 5,
+      "prompt": "Label new checks not run. For an interrupted attempt, keep the expected result separate from the unknown actual outcome, and check request/storage state before deciding how to retry."
+    }
+  ]
+}

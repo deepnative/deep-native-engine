@@ -246,3 +246,23 @@ Feature: Follow the complete authored foundation sequence
     When they explicitly save current-version writing and reload
     Then the current notebook is restored and the earlier bytes remain unchanged
     And a failed save leaves current writing editable and the earlier copy intact
+
+  Scenario: READER-030 — Revisit a weak criterion and return to the same final record
+    Given an Everyday, Work or Technical final record at desktop or narrow width
+    When the learner reviews any of its six criteria
+    Then its original evidence and a specific repair prompt are available
+    And its practice action opens the relevant lesson in the same example route
+    When the learner practises and returns to the final record
+    Then the first draft, revision and self-check remain unchanged by navigation
+    And the selected criterion is available again beside the retained writing
+    And editing the final record still clears its self-check
+    And neither the practice action nor the return claims a saved or assessed result
+
+  Scenario: READER-031 — Retain a practice-return context without losing saved work
+    Given an explicit browser save made with or without a practice-return context
+    When the learner reloads or switches example routes
+    Then each route keeps its own writing and valid return context
+    And older compatible records gain an empty context only in memory
+    But an unreadable context protects the original stored copy from overwrite
+    And a rejected save leaves current writing and the source packet downloadable
+    And a return action does not save automatically or alter earlier-version records

@@ -62,6 +62,7 @@ function emptyState(chosenRoute) {
     final: finalLabels.map(() => ""),
     finalChecked: false,
     finalStep: 0,
+    reviewCriterion: null,
     feedback: newFeedbackState(chosenRoute),
     contribution: newContribution(),
   };
@@ -86,6 +87,12 @@ function validState(value, chosenRoute) {
     value.final.length !== 6 ||
     !value.final.every(text) ||
     typeof value.finalChecked !== "boolean" ||
+    (value.reviewCriterion !== undefined &&
+      value.reviewCriterion !== null &&
+      (!Number.isInteger(value.reviewCriterion) ||
+        value.reviewCriterion < 0 ||
+        value.reviewCriterion >=
+          course.reviewGuidance.routes[chosenRoute].rows.length)) ||
     (value.finalStep !== undefined &&
       (!Number.isInteger(value.finalStep) ||
         value.finalStep < 0 ||
@@ -171,6 +178,7 @@ function getSession(chosenRoute) {
           throw new Error("unreadable");
         session.state = stored.state;
         session.state.finalStep ??= 0;
+        session.state.reviewCriterion ??= null;
         session.state.feedback ??= newFeedbackState(chosenRoute);
         session.state.contribution ??= newContribution();
         session.earlier = session.earlier.filter(
@@ -297,6 +305,17 @@ function earlierNotes() {
   return `<details class="notebook" id="notebook"><summary>Your earlier notes</summary>${notes || "<p>Your notes will appear here as you write. You can revisit any lesson.</p>"}</details>`;
 }
 
+function finalReview() {
+  const guidance = course.reviewGuidance.routes[route];
+  return `<section id="final-review" aria-labelledby="final-review-heading"><h2 id="final-review-heading">Review your record</h2><p>Point to the evidence in your own work. If one part needs another try, open its help and practise the related skill. Your final draft stays here.</p><div class="review-criteria">${guidance.rows.map((row, index) => `<section class="review-criterion" id="review-criterion-${index}" aria-label="${escape(row.criterion)}" tabindex="-1"><h3>${escape(row.criterion)}</h3><p>${escape(row.evidence)}</p><details><summary>Help me improve this part</summary><p>${escape(row.prompt)}</p><button class="secondary" data-review-criterion="${index}">Practise lesson ${row.lesson}: ${escape(course.lessons[row.lesson - 1].title)}</button></details></section>`).join("")}</div>${guidance.afterword}</section>`;
+}
+
+function practiceReturn() {
+  if (state().reviewCriterion === null) return "";
+  const row = course.reviewGuidance.routes[route].rows[state().reviewCriterion];
+  return `<aside id="practice-return" class="practice-return" aria-label="Return to final practice"><p class="eyebrow">A skill to revisit</p><h2>${escape(row.criterion)}</h2><p>${escape(row.prompt)}</p><p>Your first draft and revision remain in your final record. Practise here, then return when you are ready to improve your own work.</p><button class="secondary" id="return-final">Return to my final record</button></aside>`;
+}
+
 function lessonContent() {
   const lesson = course.lessons[state().lesson];
   const data = lesson.routes[route];
@@ -335,7 +354,7 @@ function lessonContent() {
           : "Your source",
     title: lesson.title,
     intro: lesson.intro,
-    body: `<nav class="stages" aria-label="Lesson stages">${stages.map((label, i) => `<button data-step="${i}" ${i === state().step ? 'aria-current="step"' : ""}><span>${i + 1}</span>${label}</button>`).join("")}</nav><section class="lesson-body" aria-label="${stages[state().step]}">${body}</section><div class="next-row"><button class="secondary" id="back" ${state().lesson === 0 && state().step === 0 ? "disabled" : ""}>Back</button><button class="primary" id="next">${next} <span aria-hidden="true">→</span></button></div>`,
+    body: `${practiceReturn()}<nav class="stages" aria-label="Lesson stages">${stages.map((label, i) => `<button data-step="${i}" ${i === state().step ? 'aria-current="step"' : ""}><span>${i + 1}</span>${label}</button>`).join("")}</nav><section class="lesson-body" aria-label="${stages[state().step]}">${body}</section><div class="next-row"><button class="secondary" id="back" ${state().lesson === 0 && state().step === 0 ? "disabled" : ""}>Back</button><button class="primary" id="next">${next} <span aria-hidden="true">→</span></button></div>`,
   };
 }
 
@@ -370,7 +389,7 @@ function finalContent() {
     ),
     panel(
       3,
-      `<h2>Explain what changed and why.</h2><p>Keep your first draft. Write the revision here, including what stays the same and any questions you still need to resolve.</p>${draft("retained-draft-revision", "Refer to your first draft")}${field(5)}<details id="final-comparison"><summary>Compare with a worked record</summary>${data.comparison}</details>${data.criteria}${selfCheck(
+      `<h2>Explain what changed and why.</h2><p>Keep your first draft. Write the revision here, including what stays the same and any questions you still need to resolve.</p>${draft("retained-draft-revision", "Refer to your first draft")}${field(5)}<details id="final-comparison"><summary>Compare with a worked record</summary>${data.comparison}</details>${finalReview()}${selfCheck(
         state().finalChecked,
         state().final.every((v) => v.trim()),
         true,
@@ -403,6 +422,7 @@ function render(scroll = false) {
 }
 
 function navigate(lesson, step = 0) {
+  if (lesson === 6) state().reviewCriterion = null;
   state().lesson = lesson;
   state().step = step;
   changed();
@@ -416,6 +436,21 @@ function navigateFinal(step) {
 }
 
 function bind() {
+  document.querySelectorAll("[data-review-criterion]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.dataset.reviewCriterion);
+      state().reviewCriterion = index;
+      navigate(course.reviewGuidance.routes[route].rows[index].lesson - 1, 1);
+    });
+  });
+  document.querySelector("#return-final")?.addEventListener("click", () => {
+    const index = state().reviewCriterion;
+    state().finalStep = 3;
+    navigate(6);
+    const criterion = document.querySelector(`#review-criterion-${index}`);
+    criterion?.focus();
+    criterion?.scrollIntoView({ block: "center" });
+  });
   if (state().lesson === 6) bindContribution(state().contribution, changed);
   document
     .querySelector("#feedback-choice")
@@ -643,6 +678,10 @@ function exportText() {
     );
   });
   lines.push(exportFeedback(route, state().feedback));
+  if (state().reviewCriterion !== null)
+    lines.push(
+      `Revisiting for final practice: ${course.reviewGuidance.routes[route].rows[state().reviewCriterion].criterion}. The first draft and revision remain below.`,
+    );
   lines.push(
     "\nFinal practice",
     `Final practice step: ${finalStages[state().finalStep]}`,

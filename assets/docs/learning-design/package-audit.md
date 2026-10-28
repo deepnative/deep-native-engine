@@ -1,12 +1,12 @@
 # Whole learning workflow audit
 
-The three realistic final exercises are authored and runnable locally. One required learner outcome is still incomplete: when a final-practice criterion needs work, the learner is not directed to the lesson that helps repair it. Add that route back to practice before adding another case or interface feature.
+The three realistic final exercises are authored and runnable locally. This audit found a missing route from a weak criterion back to useful practice. **Resolved locally on 28 October:** the [practice-and-return checkpoint](reader/practice-return.md) adds eighteen repair actions and preserves the learner’s draft. The original findings and 114-ID disposition below describe the reviewed revision; the later checkpoint preserves them and adds two scoped interaction IDs.
 
 Audit started 27 October and completed 28 October 2026, America/Toronto. Reviewed local revision: `6d49d9fed4e7120a68e8ea72a9358cb85a71d051`, tree `ea364bc184ba5a3b53facc16196882d02b9479a9`. Scope: [#34](https://github.com/deepnative/deep-native-engine/issues/34), the owner's content/workflow study and realism priority. Production remains parked. This is an author audit, not independent learner research.
 
 ## Finding: a weak final criterion has no corresponding practice action
 
-**P2 — APPLIED-LEARN-012 is partial.** Its last clause requires unfinished criteria to point back to a lesson. The realistic Everyday, Work and Technical criteria show evidence to look for, followed by a general self-check. None names or links the corresponding lesson. The course navigation remains available, but the learner must work out which lesson addresses the problem.
+**Historical P2 at the reviewed revision — APPLIED-LEARN-012 was partial.** Its last clause requires unfinished criteria to point back to a lesson. The realistic Everyday, Work and Technical criteria show evidence to look for, followed by a general self-check. None names or links the corresponding lesson. The course navigation remains available, but the learner must work out which lesson addresses the problem.
 
 For example, a learner who cannot distinguish confirmed guests from a reserved place sees “Correct headcount” and its expected evidence. The page does not direct them to practise checking claims against their source. Someone whose technical plan calls an interrupted attempt a failure similarly gets no specific route to the workflow/recovery lesson.
 
@@ -91,7 +91,7 @@ The substantive [Everyday](everyday-author-rehearsal.md), [Work](work-author-reh
 
 Evidence directory: `/Users/tomwu/Documents/Codex/2026-10-27/dne-content-workflows-bdd/package-audit/`. It contains the exact scenario inventory, checkpoint/report comparisons, three-route reproduction, criteria captures, document checks and the audit commit manifest. Application source, source packets, runtime, tests, stored notebooks and approved L-series register are unchanged. No full application gate, push, CI, merge, deployment or hosted acceptance is claimed.
 
-## Next bounded action
+## Bounded repair proposed by this audit
 
 Under [#34](https://github.com/deepnative/deep-native-engine/issues/34), complete the existing **APPLIED-LEARN-012** recovery clause for all three realistic final cases:
 
@@ -102,3 +102,5 @@ Under [#34](https://github.com/deepnative/deep-native-engine/issues/34), complet
 Definition of done for that local slice: the learner can identify a weak part, take the corresponding practice action and return to revise the same record; authored facts and earlier writing remain intact; exact checks and an actual local rehearsal are recorded. No provider, account integration, new case bank, score or production change is needed. This proposal does not itself implement the missing outcome.
 
 The live #93/#117 canonical/shared-reader claims remain with @netcsc, In review for PR #550; preserve their scope and processes. Recheck ownership before the next claim. Lead recommendation from #34: **GPT-6 Sol / High**, author content/evidence review High; separate Astra High review only if requested or actually required. After this bounded repair, use an unfamiliar person's attempt to decide further content changes instead of inferring them from more passing interface checks.
+
+The proposed repair above is now implemented locally; see [practice-and-return evidence and the next content action](reader/practice-return.md#next-content-action). The independent learner-effectiveness limitation remains.
