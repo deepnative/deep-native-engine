@@ -170,6 +170,22 @@ async function step(page, name) {
     .getByRole("button", { name, exact: false })
     .click();
 }
+const finalStages = [
+  "Read the brief",
+  "Write a first draft",
+  "Read the update",
+  "Revise and check",
+];
+async function finalStep(page, index) {
+  await page
+    .getByRole("navigation", { name: "Final practice steps", exact: true })
+    .getByRole("button", { name: finalStages[index], exact: true })
+    .click();
+}
+async function fillFinal(page, index, value) {
+  await finalStep(page, index < 5 ? 1 : 3);
+  await page.locator(`#writing-final${index}`).fill(value);
+}
 async function downloadText(page, button) {
   const pending = page.waitForEvent("download");
   await button.click();
@@ -188,12 +204,9 @@ if (!process.argv.includes("--baseline")) {
           .click();
         const draft =
           "My task: make a CAP-W action table; check each owner and date against the brief.";
-        await page.getByLabel("1. Task and check", { exact: true }).fill(draft);
-        const worked = page.locator(".lesson-body > details").filter({
-          has: page.getByText("Compare with a worked record", {
-            exact: true,
-          }),
-        });
+        await fillFinal(page, 0, draft);
+        await finalStep(page, 3);
+        const worked = page.locator("#final-comparison");
         await worked.locator("summary").click();
         for (const title of [
           "1. Task and check.",
@@ -272,12 +285,9 @@ if (!process.argv.includes("--baseline")) {
           .click();
         const draft =
           "My CAP-T2 investigation: separate supplied observations from new boundary checks and their not-run status.";
-        await page.getByLabel("1. Task and check", { exact: true }).fill(draft);
-        const worked = page.locator(".lesson-body > details").filter({
-          has: page.getByText("Compare with a worked record", {
-            exact: true,
-          }),
-        });
+        await fillFinal(page, 0, draft);
+        await finalStep(page, 3);
+        const worked = page.locator("#final-comparison");
         await worked.locator("summary").click();
         for (const title of [
           "1. Task and check.",
@@ -725,11 +735,11 @@ if (!process.argv.includes("--baseline")) {
             `${name} artifact 6`,
           );
           for (let i = 0; i < 6; i++)
-            await page
-              .locator(`[data-writing="final"][data-index="${i}"]`)
-              .fill(
-                `${name} final step ${i + 1}: compare this decision with the supplied final source.`,
-              );
+            await fillFinal(
+              page,
+              i,
+              `${name} final step ${i + 1}: compare this decision with the supplied final source.`,
+            );
           await page
             .getByLabel("I compared this work with the criteria above", {
               exact: true,
@@ -911,9 +921,7 @@ if (!process.argv.includes("--baseline")) {
             .getByRole("button", { name: "Put it all together", exact: true })
             .click();
           for (let i = 0; i < 6; i++)
-            await page
-              .locator(`[data-writing="final"][data-index="${i}"]`)
-              .fill(`Original criterion ${i + 1}`);
+            await fillFinal(page, i, `Original criterion ${i + 1}`);
         } else {
           await step(page, "Your work");
           await page
@@ -928,9 +936,11 @@ if (!process.argv.includes("--baseline")) {
         const literal =
           '<img src=x onerror="window.readerInjected=true"> revised practice';
         if (field === "transfer") await step(page, "Fresh case");
+        if (field === "final") await finalStep(page, 1);
         const input = page.locator(`[data-writing="${field}"]`).first();
         await input.fill(literal);
         if (field === "transfer") await step(page, "Your work");
+        if (field === "final") await finalStep(page, 3);
         await expect(
           page.getByLabel("I compared this work with the criteria above", {
             exact: true,
@@ -1664,6 +1674,7 @@ const contributionDraft = {
 async function openContribution(page, name = "Everyday") {
   await start(page, name);
   await page.locator('[data-lesson="6"]').click();
+  await finalStep(page, 3);
   const opener = page.getByText("Shape a contribution (optional)", {
     exact: true,
   });
@@ -1764,10 +1775,11 @@ for (const width of [1360, 390]) {
     async (page) => {
       await openContribution(page);
       for (let i = 0; i < 6; i++)
-        await page
-          .locator(`#writing-final${i}`)
-          .fill(`Retained final decision ${i + 1}.`);
+        await fillFinal(page, i, `Retained final decision ${i + 1}.`);
       await page.locator("#self-check").check();
+      await page
+        .getByText("Shape a contribution (optional)", { exact: true })
+        .click();
       await fillContribution(page);
       await page.locator("#contribution-check").check();
       await page
@@ -1856,9 +1868,11 @@ for (const kind of ["missing optional worksheet", "unreadable worksheet"]) {
     `READER-022 ${kind} preserves the stored learning record`,
     async (page) => {
       await openContribution(page);
+      await fillFinal(page, 0, "Keep this saved task and check.");
+      await finalStep(page, 3);
       await page
-        .locator("#writing-final0")
-        .fill("Keep this saved task and check.");
+        .getByText("Shape a contribution (optional)", { exact: true })
+        .click();
       await fillContribution(page);
       await page.locator("#save").click();
       const saved = await page.evaluate((kind) => {
@@ -1910,6 +1924,7 @@ await check(
     await page.locator("#save").click();
     await page.getByRole("button", { name: "Work", exact: true }).click();
     await page.locator('[data-lesson="6"]').click();
+    await finalStep(page, 3);
     await page
       .getByText("Shape a contribution (optional)", { exact: true })
       .click();
@@ -1956,18 +1971,15 @@ for (const width of [1360, 390]) {
       const first =
         "First update: Thursday remote pilot, three participants. Six cases are ready; twelve sequential cases would need 46 minutes. Propose six in 28 minutes, leaving two minutes. Scope and facilitator still need a decision.";
       for (let i = 0; i < 6; i++)
-        await page
-          .locator(`#writing-final${i}`)
-          .fill(
-            `Decision ${i + 1}: retain the dated notes and explain the draft.`,
-          );
-      await page.locator("#writing-final2").fill(first);
+        await fillFinal(
+          page,
+          i,
+          `Decision ${i + 1}: retain the dated notes and explain the draft.`,
+        );
+      await fillFinal(page, 2, first);
+      await finalStep(page, 3);
       await page.locator("#self-check").check();
-      await page
-        .getByText("After your first draft: open Wednesday's update", {
-          exact: true,
-        })
-        .click();
+      await finalStep(page, 2);
       await expect(page.locator(".lesson-body")).toContainText(
         "U1 · Wednesday 15:10",
       );
@@ -1975,14 +1987,12 @@ for (const width of [1360, 390]) {
       await expect(page.locator("#self-check")).toBeChecked();
       const revised =
         "Revision after U1: six ready cases are now approved, Mira facilitates Thursday 11:00–11:30 remotely, and Lee gathers four comments by Friday noon. Monday's continuation decision has no time yet. Reason: replace my proposed scope and open ownership with U1's explicit decision; no claim the pilot has succeeded.";
-      await page.locator("#writing-final5").fill(revised);
+      await fillFinal(page, 5, revised);
       await expect(page.locator("#self-check")).not.toBeChecked();
       await page
         .getByText("Compare with a worked record", { exact: true })
         .click();
-      const worked = page.locator(".lesson-body > details").filter({
-        has: page.getByText("Compare with a worked record", { exact: true }),
-      });
+      const worked = page.locator("#final-comparison");
       await expect(worked).toContainText("5 + (12 × 3) + 5 = 46 minutes");
       await expect(worked).toContainText("5 + (6 × 3) + 5 = 28 minutes");
       await expect(worked).toContainText("Five cases would take 25 minutes");
@@ -2037,18 +2047,15 @@ for (const width of [1360, 390]) {
       const first =
         "Initial finding: R1 accepts valid PNG through 3,000,000 bytes. T01 blocks the 2,500,000-byte PNG in web2.4-r7 before a request. T02's success limits the failure claim. T03 is unconfirmed. A stale client rule is a hypothesis; reproduce with the same fixture and inspect a matched service run.";
       for (let i = 0; i < 6; i++)
-        await page
-          .locator(`#writing-final${i}`)
-          .fill(
-            `Investigation decision ${i + 1}: keep source version and expected/actual separate.`,
-          );
-      await page.locator("#writing-final2").fill(first);
+        await fillFinal(
+          page,
+          i,
+          `Investigation decision ${i + 1}: keep source version and expected/actual separate.`,
+        );
+      await fillFinal(page, 2, first);
+      await finalStep(page, 3);
       await page.locator("#self-check").check();
-      await page
-        .getByText("After your first investigation: open the next update", {
-          exact: true,
-        })
-        .click();
+      await finalStep(page, 2);
       await expect(page.locator(".lesson-body")).toContainText(
         "R2 · requirement for the next candidate",
       );
@@ -2056,14 +2063,12 @@ for (const width of [1360, 390]) {
       await expect(page.locator("#self-check")).toBeChecked();
       const revision =
         "Revision after R2/D1: add JPEG below/at/above 3,000,000-byte checks for the next candidate. Keep T01–T03 on their original builds. The client change is only a proposed patch; record new build IDs and fresh browser/service results before calling it fixed. Do not rewrite the interrupted attempt as a rejection.";
-      await page.locator("#writing-final5").fill(revision);
+      await fillFinal(page, 5, revision);
       await expect(page.locator("#self-check")).not.toBeChecked();
       await page
         .getByText("Compare with a worked record", { exact: true })
         .click();
-      const worked = page.locator(".lesson-body > details").filter({
-        has: page.getByText("Compare with a worked record", { exact: true }),
-      });
+      const worked = page.locator("#final-comparison");
       for (const text of [
         "2,999,999",
         "3,000,000",
@@ -2125,18 +2130,15 @@ for (const width of [1360, 390]) {
       const first =
         "First reminder: Saturday 7 November, Cedar Room, 1:30–3 p.m.; up to three books per confirmed guest. Eighteen guests plus two helpers use all twenty places. Four people are waiting, not confirmed. Maximum incoming books are 54, not a promised total. Display two per guest first and hold any third books in the box.";
       for (let i = 0; i < 6; i++)
-        await page
-          .locator(`#writing-final${i}`)
-          .fill(
-            `Everyday decision ${i + 1}: keep source and open questions visible.`,
-          );
-      await page.locator("#writing-final2").fill(first);
+        await fillFinal(
+          page,
+          i,
+          `Everyday decision ${i + 1}: keep source and open questions visible.`,
+        );
+      await fillFinal(page, 2, first);
+      await finalStep(page, 3);
       await page.locator("#self-check").check();
-      await page
-        .getByText("After your first plan: open the reply update", {
-          exact: true,
-        })
-        .click();
+      await finalStep(page, 2);
       await expect(page.locator(".lesson-body")).toContainText(
         "U1 · Friday reply snapshot",
       );
@@ -2144,14 +2146,12 @@ for (const width of [1360, 390]) {
       await expect(page.locator("#self-check")).toBeChecked();
       const revision =
         "Revised plan: two cancellations and one accepted replacement leave seventeen confirmed guests, plus two helpers. One invitation is pending until 6 p.m.; keep that one place reserved and the other two people on the waitlist. Nineteen are confirmed in the room; twenty if the pending person accepts. Plan for at most 54 books, but neither attendance nor actual books is guaranteed. Check replies before offering the reserved place again.";
-      await page.locator("#writing-final5").fill(revision);
+      await fillFinal(page, 5, revision);
       await expect(page.locator("#self-check")).not.toBeChecked();
       await page
         .getByText("Compare with a worked record", { exact: true })
         .click();
-      const worked = page.locator(".lesson-body > details").filter({
-        has: page.getByText("Compare with a worked record", { exact: true }),
-      });
+      const worked = page.locator("#final-comparison");
       for (const text of [
         "18 + 2 = 20",
         "18 × 3 = 54",
@@ -2194,6 +2194,289 @@ for (const width of [1360, 390]) {
     { width, height: 950 },
   );
 }
+
+const guidedCases = {
+  Everyday: {
+    title: "The book swap: who is actually coming?",
+    source: "S1 · current venue confirmation",
+    update: "U1 · Friday reply snapshot",
+  },
+  Work: {
+    title: "The handover pilot: plans changed",
+    source: "S3 · Wednesday 09:00",
+    update: "U1 · Wednesday 15:10",
+  },
+  Technical: {
+    title: "The upload bug: what do we actually know?",
+    source: "R1 · current requirement",
+    update: "R2 · requirement for the next candidate",
+  },
+};
+for (const width of [1360, 390]) {
+  for (const [name, content] of Object.entries(guidedCases)) {
+    await check(
+      `READER-026 ${name} guided final practice retains drafts and position at ${width}px`,
+      async (page) => {
+        await start(page, name);
+        await page
+          .getByRole("button", { name: "Put it all together", exact: true })
+          .click();
+        const nav = page.getByRole("navigation", {
+          name: "Final practice steps",
+          exact: true,
+        });
+        await expect(nav).toBeVisible();
+        await expect(nav.getByRole("button")).toHaveCount(4);
+        await expect(
+          nav.getByRole("button", { name: "Read the brief", exact: true }),
+        ).toHaveAttribute("aria-current", "step");
+        await expect(
+          page.getByRole("heading", { name: content.title, exact: true }),
+        ).toBeVisible();
+        await expect(page.locator('[data-final-panel="0"]')).toContainText(
+          content.source,
+        );
+        await expect(page.locator('[data-final-panel="2"]')).not.toBeVisible();
+        await page.locator("#next").click();
+        await expect(
+          nav.getByRole("button", { name: "Write a first draft", exact: true }),
+        ).toHaveAttribute("aria-current", "step");
+        await page.locator("#back").click();
+        await expect(
+          nav.getByRole("button", { name: "Read the brief", exact: true }),
+        ).toHaveAttribute("aria-current", "step");
+        await finalStep(page, 3);
+        await expect(page.locator("#self-check")).toBeDisabled();
+        await expect(page.locator("#self-check")).not.toBeChecked();
+        await finalStep(page, 1);
+        await expect(
+          page.locator("#final-source-reminder"),
+        ).not.toHaveAttribute("open", "");
+        const task = page.getByLabel("1. Task and check", { exact: true });
+        await expect(task).toBeVisible();
+        const box = await task.boundingBox();
+        expect(box.y).toBeLessThan(950);
+        if (width === 390) {
+          const reference = await page
+            .locator(".final-workspace .reference")
+            .boundingBox();
+          expect(reference.y).toBeGreaterThan(box.y);
+        }
+        await page.screenshot({
+          path: path.join(
+            output,
+            `guided-${name.toLowerCase()}-${width}-draft.png`,
+          ),
+        });
+        const first = `${name} first draft: <img src=x onerror="window.guidedInjected=true"> retain the source and explain my choice.`;
+        for (let i = 0; i < 5; i++)
+          await fillFinal(
+            page,
+            i,
+            i === 2 ? first : `${name} first-pass decision ${i + 1}.`,
+          );
+        await finalStep(page, 2);
+        await expect(page.locator('[data-final-panel="2"]')).toContainText(
+          content.update,
+        );
+        await expect(page.locator("#retained-draft-update")).toContainText(
+          first,
+        );
+        await page
+          .getByText("Your retained first draft", { exact: true })
+          .click();
+        await expect(page.locator("#retained-draft-update pre")).toHaveText(
+          first,
+        );
+        await finalStep(page, 3);
+        const revision = `${name} revision: keep the original, explain the new evidence and my reason.`;
+        await fillFinal(page, 5, revision);
+        await page
+          .getByText("Compare with a worked record", { exact: true })
+          .click();
+        await expect(page.locator("#writing-final2")).toHaveValue(first);
+        await expect(page.locator("#writing-final5")).toHaveValue(revision);
+        await page.locator("#self-check").check();
+        await finalStep(page, 0);
+        await finalStep(page, 2);
+        await expect(page.locator("#self-check")).toBeChecked();
+        expect(await page.evaluate(() => Boolean(window.guidedInjected))).toBe(
+          false,
+        );
+        await page.locator("#save").click();
+        const exported = await downloadText(page, page.locator("#download"));
+        for (const text of [
+          first,
+          revision,
+          content.source,
+          content.update,
+          "Final practice step: Read the update",
+        ])
+          expect(exported).toContain(text);
+        await page.reload();
+        await expect(
+          nav.getByRole("button", { name: "Read the update", exact: true }),
+        ).toHaveAttribute("aria-current", "step");
+        await expect(page.locator("#writing-final2")).toHaveValue(first);
+        await expect(page.locator("#writing-final5")).toHaveValue(revision);
+        await expect(page.locator("#self-check")).toBeChecked();
+        await fillFinal(page, 0, `${name} changed task and check.`);
+        await finalStep(page, 3);
+        await expect(page.locator("#self-check")).not.toBeChecked();
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        expect(await page.locator("[data-final-panel]:visible").count()).toBe(
+          1,
+        );
+        expect(await page.locator("#course-path").innerText()).not.toMatch(
+          /completed|mastery|learned/i,
+        );
+      },
+      { width, height: 950 },
+    );
+  }
+}
+await check(
+  "READER-027 older compatible final notebook gains a default step only in memory",
+  async (page) => {
+    await start(page);
+    await page.locator('[data-lesson="6"]').click();
+    for (let i = 0; i < 6; i++)
+      await fillFinal(page, i, `Preserved prior field ${i + 1}.`);
+    await page.locator("#self-check").check();
+    await page.locator("#save").click();
+    const previous = await page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.startsWith("dne-course-reader-1:everyday:"),
+      );
+      const value = JSON.parse(localStorage.getItem(key));
+      delete value.state.finalStep;
+      const raw = JSON.stringify(value);
+      localStorage.setItem(key, raw);
+      return { key, raw };
+    });
+    await page.reload();
+    await expect(
+      page
+        .getByRole("navigation", { name: "Final practice steps" })
+        .getByRole("button", { name: "Read the brief", exact: true }),
+    ).toHaveAttribute("aria-current", "step");
+    for (let i = 0; i < 6; i++)
+      await expect(page.locator(`#writing-final${i}`)).toHaveValue(
+        `Preserved prior field ${i + 1}.`,
+      );
+    await expect(page.locator("#self-check")).toBeChecked();
+    expect(
+      await page.evaluate((k) => localStorage.getItem(k), previous.key),
+    ).toBe(previous.raw);
+    await finalStep(page, 2);
+    expect(
+      await page.evaluate((k) => localStorage.getItem(k), previous.key),
+    ).toBe(previous.raw);
+    await page.locator("#save").click();
+    expect(
+      await page.evaluate(
+        (k) => JSON.parse(localStorage.getItem(k)).state.finalStep,
+        previous.key,
+      ),
+    ).toBe(2);
+  },
+);
+for (const invalid of [4, "1"]) {
+  await check(
+    `READER-027 unreadable final stage ${JSON.stringify(invalid)} protects the original record`,
+    async (page) => {
+      await start(page);
+      await page.locator('[data-lesson="6"]').click();
+      await fillFinal(page, 2, "Retain this exact old writing.");
+      await page.locator("#save").click();
+      const previous = await page.evaluate((invalid) => {
+        const key = Object.keys(localStorage).find((k) =>
+          k.startsWith("dne-course-reader-1:everyday:"),
+        );
+        const value = JSON.parse(localStorage.getItem(key));
+        value.state.finalStep = invalid;
+        const raw = JSON.stringify(value);
+        localStorage.setItem(key, raw);
+        return { key, raw };
+      }, invalid);
+      await page.reload();
+      await expect(page.locator("#save")).toBeDisabled();
+      await expect(page.locator("#save-status")).toContainText(
+        "record is unreadable",
+      );
+      expect(await downloadText(page, page.locator("#download-stored"))).toBe(
+        previous.raw,
+      );
+      expect(
+        await page.evaluate((k) => localStorage.getItem(k), previous.key),
+      ).toBe(previous.raw);
+    },
+  );
+}
+await check(
+  "READER-028 failed staged save keeps all current writing downloadable",
+  async (page) => {
+    await start(page);
+    await page.locator('[data-lesson="6"]').click();
+    await fillFinal(page, 2, "Original first draft for the new case.");
+    await page.locator("#save").click();
+    const previous = await page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.startsWith("dne-course-reader-1:everyday:"),
+      );
+      return { key, raw: localStorage.getItem(key) };
+    });
+    await fillFinal(page, 5, "Retained revision and reason after the update.");
+    await page.evaluate(() => {
+      Storage.prototype.setItem = () => {
+        throw new Error("Test save unavailable");
+      };
+    });
+    await page.locator("#save").click();
+    await expect(page.locator("#save-status")).toContainText("Saving failed");
+    await fillFinal(page, 2, "Still editable after failed saving.");
+    const text = await downloadText(page, page.locator("#download"));
+    expect(text).toContain("Still editable after failed saving.");
+    expect(text).toContain("Retained revision and reason after the update.");
+    expect(
+      await page.evaluate((k) => localStorage.getItem(k), previous.key),
+    ).toBe(previous.raw);
+  },
+);
+await check(
+  "READER-028 stages and unsaved writing remain separate between routes",
+  async (page) => {
+    await start(page);
+    await page.locator('[data-lesson="6"]').click();
+    await fillFinal(page, 2, "Everyday first draft.");
+    await page.locator("#save").click();
+    await page.getByRole("button", { name: "Work", exact: true }).click();
+    await page.locator('[data-lesson="6"]').click();
+    await finalStep(page, 3);
+    await expect(page.locator("#writing-final2")).toHaveValue("");
+    await fillFinal(page, 5, "Work unsaved revision.");
+    await page.getByRole("button", { name: "Everyday", exact: true }).click();
+    await expect(
+      page
+        .getByRole("navigation", { name: "Final practice steps" })
+        .getByRole("button", { name: "Write a first draft", exact: true }),
+    ).toHaveAttribute("aria-current", "step");
+    await expect(page.locator("#writing-final2")).toHaveValue(
+      "Everyday first draft.",
+    );
+    expect(await downloadText(page, page.locator("#download"))).not.toContain(
+      "Work unsaved revision.",
+    );
+    const dialogs = [];
+    page.on("dialog", (d) => dialogs.push(d.type()));
+    await page.goto("about:blank");
+    expect(dialogs).toEqual(["beforeunload"]);
+  },
+);
 
 await browser.close();
 await writeFile(

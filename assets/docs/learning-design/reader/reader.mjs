@@ -18,6 +18,12 @@ import {
 
 const routes = { everyday: "Everyday", work: "Work", technical: "Technical" };
 const stages = ["See an example", "Try it", "Fresh case", "Your work"];
+const finalStages = [
+  "Read the brief",
+  "Write a first draft",
+  "Read the update",
+  "Revise and check",
+];
 const finalLabels = [
   "Task and check",
   "Your request",
@@ -55,6 +61,7 @@ function emptyState(chosenRoute) {
     })),
     final: finalLabels.map(() => ""),
     finalChecked: false,
+    finalStep: 0,
     feedback: newFeedbackState(chosenRoute),
     contribution: newContribution(),
   };
@@ -79,6 +86,10 @@ function validState(value, chosenRoute) {
     value.final.length !== 6 ||
     !value.final.every(text) ||
     typeof value.finalChecked !== "boolean" ||
+    (value.finalStep !== undefined &&
+      (!Number.isInteger(value.finalStep) ||
+        value.finalStep < 0 ||
+        value.finalStep > 3)) ||
     (value.contribution !== undefined &&
       !validContribution(value.contribution)) ||
     (value.feedback !== undefined &&
@@ -159,6 +170,7 @@ function getSession(chosenRoute) {
         if (!validState(stored.state, chosenRoute))
           throw new Error("unreadable");
         session.state = stored.state;
+        session.state.finalStep ??= 0;
         session.state.feedback ??= newFeedbackState(chosenRoute);
         session.state.contribution ??= newContribution();
         session.earlier = session.earlier.filter(
@@ -329,15 +341,40 @@ function lessonContent() {
 
 function finalContent() {
   const data = course.capstone[route];
+  const flow = data.practiceFlow;
+  const panel = (index, body) =>
+    `<div class="final-panel" data-final-panel="${index}" ${state().finalStep === index ? "" : "hidden"}>${body}</div>`;
+  const draft = (id, label) =>
+    `<details id="${id}"><summary>${label}</summary><pre>${escape(state().final[2] || "Your first draft will appear here after you write it in step 2.")}</pre></details>`;
+  const field = (n) =>
+    textarea(`${n + 1}. ${finalLabels[n]}`, state().final[n], "final", n);
+  const panels = [
+    panel(
+      0,
+      `<h2>${escape(flow.title)}</h2>${flow.introduction}${flow.sources}`,
+    ),
+    panel(
+      1,
+      `<h2>Make a useful first draft.</h2><p>Write your plan from the brief. Keep the first version so you can explain what changes later.</p><details><summary>What to include in your first pass</summary>${flow.task}</details>${field(0)}${field(1)}<div class="teaching-sample"><p class="eyebrow">Deliberately flawed teaching sample</p><p>${escape(data.sample)}</p><small>This was supplied for practice; it was not generated from your request.</small></div>${[2, 3, 4].map(field).join("")}`,
+    ),
+    panel(
+      2,
+      `<h2>${escape(flow.updateTitle)}</h2>${flow.update}${draft("retained-draft-update", "Your retained first draft")}`,
+    ),
+    panel(
+      3,
+      `<h2>Explain what changed and why.</h2><p>Keep your first draft. Write the revision here, including what stays the same and any questions you still need to resolve.</p>${draft("retained-draft-revision", "Refer to your first draft")}${field(5)}<details id="final-comparison"><summary>Compare with a worked record</summary>${data.comparison}</details>${data.criteria}${selfCheck(
+        state().finalChecked,
+        state().final.every((v) => v.trim()),
+        true,
+      )}${renderContribution(state().contribution)}`,
+    ),
+  ];
   return {
     source: data.source,
     title: "Put it all together",
-    intro: `<p>Make one useful piece of work you can explain from source to revision. Keep your earlier notes nearby and try this fresh brief.</p>`,
-    body: `<section class="lesson-body"><h2>One source. Six useful decisions.</h2>${data.instructions}<div class="teaching-sample"><p class="eyebrow">Deliberately flawed teaching sample</p><p>${escape(data.sample)}</p><small>This was supplied for practice; it was not generated from your request.</small></div>${finalLabels.map((label, n) => textarea(`${n + 1}. ${label}`, state().final[n], "final", n)).join("")}<details><summary>Compare with a worked record</summary>${data.comparison}</details>${data.criteria}${selfCheck(
-      state().finalChecked,
-      state().final.every((v) => v.trim()),
-      true,
-    )}</section>${renderContribution(state().contribution)}<div class="next-row"><button class="secondary" id="back">Back to lesson 6</button><button class="primary" id="download-final">Download my learning record</button></div>`,
+    intro: `<p>Make one useful piece of work you can explain from source to revision. Move between the steps whenever you need.</p>`,
+    body: `<nav class="stages" aria-label="Final practice steps">${finalStages.map((label, i) => `<button data-final-step="${i}" aria-label="${label}" ${i === state().finalStep ? 'aria-current="step"' : ""}><span aria-hidden="true">${i + 1}</span>${label}</button>`).join("")}</nav><section class="lesson-body">${panels.join("")}</section><div class="next-row"><button class="secondary" id="back">${state().finalStep === 0 ? "Back to lesson 6" : "Back"}</button>${state().finalStep < 3 ? `<button class="primary" id="next">${finalStages[state().finalStep + 1]} <span aria-hidden="true">→</span></button>` : '<button class="primary" id="download-final">Download my learning record</button>'}</div>`,
   };
 }
 
@@ -353,7 +390,7 @@ function render(scroll = false) {
     )
     .join(
       "",
-    )}</div><div class="workspace"><article>${content.body}</article><aside class="reference"><div class="source-card"><p class="eyebrow">${content.sourceLabel ?? "Your source"} · ${routes[route]}</p><h2>Keep the facts close.</h2><p id="source-text">${escape(content.source)}</p><p class="source-note">${content.sourceNote ?? "Compare each claim with these notes. Keep unknown details open."}</p></div>${earlierNotes()}<a class="extra-link" href="../prototype/" target="_blank" rel="noopener">Open the request/check walkthrough <span aria-hidden="true">↗</span></a></aside></div><footer class="save-bar"><div><strong>Your practice notebook</strong><p id="save-status" role="status">${escape(session().message)}</p><small>Saved only in this browser, at this address. Use invented information.</small></div><div class="save-actions"><button class="secondary" id="download">Download my work</button><button class="primary" id="save" ${session().blocked ? "disabled" : ""}>Save in this browser</button>${session().blocked ? '<button class="secondary" id="download-stored">Download stored copy</button>' : ""}</div></footer>${earlierNotebooks()}</main></div>`;
+    )}</div><div class="workspace ${current.lesson === 6 ? "final-workspace" : ""}"><article>${content.body}</article><aside class="reference">${current.lesson === 6 ? '<details id="final-source-reminder" class="source-card"><summary>Source reminder</summary>' : '<div class="source-card">'}<p class="eyebrow">${content.sourceLabel ?? "Your source"} · ${routes[route]}</p><h2>Keep the facts close.</h2><p id="source-text">${escape(content.source)}</p><p class="source-note">${content.sourceNote ?? "Compare each claim with these notes. Keep unknown details open."}</p>${current.lesson === 6 ? "</details>" : "</div>"}${earlierNotes()}<a class="extra-link" href="../prototype/" target="_blank" rel="noopener">Open the request/check walkthrough <span aria-hidden="true">↗</span></a></aside></div><footer class="save-bar"><div><strong>Your practice notebook</strong><p id="save-status" role="status">${escape(session().message)}</p><small>Saved only in this browser, at this address. Use invented information.</small></div><div class="save-actions"><button class="secondary" id="download">Download my work</button><button class="primary" id="save" ${session().blocked ? "disabled" : ""}>Save in this browser</button>${session().blocked ? '<button class="secondary" id="download-stored">Download stored copy</button>' : ""}</div></footer>${earlierNotebooks()}</main></div>`;
   bind();
   if (scroll) document.querySelector("h1").scrollIntoView({ block: "start" });
 }
@@ -361,6 +398,12 @@ function render(scroll = false) {
 function navigate(lesson, step = 0) {
   state().lesson = lesson;
   state().step = step;
+  changed();
+  render(true);
+}
+
+function navigateFinal(step) {
+  state().finalStep = step;
   changed();
   render(true);
 }
@@ -426,17 +469,28 @@ function bind() {
       ),
     );
   document
+    .querySelectorAll("[data-final-step]")
+    .forEach((button) =>
+      button.addEventListener("click", () =>
+        navigateFinal(Number(button.dataset.finalStep)),
+      ),
+    );
+  document
     .querySelector("#next")
     ?.addEventListener("click", () =>
-      state().step < 3
-        ? navigate(state().lesson, state().step + 1)
-        : navigate(state().lesson + 1),
+      state().lesson === 6
+        ? navigateFinal(state().finalStep + 1)
+        : state().step < 3
+          ? navigate(state().lesson, state().step + 1)
+          : navigate(state().lesson + 1),
     );
   document
     .querySelector("#back")
     ?.addEventListener("click", () =>
       state().lesson === 6
-        ? navigate(5, 3)
+        ? state().finalStep > 0
+          ? navigateFinal(state().finalStep - 1)
+          : navigate(5, 3)
         : state().step > 0
           ? navigate(state().lesson, state().step - 1)
           : navigate(state().lesson - 1, 3),
@@ -582,7 +636,11 @@ function exportText() {
     );
   });
   lines.push(exportFeedback(route, state().feedback));
-  lines.push("\nFinal practice", `Source: ${course.capstone[route].source}`);
+  lines.push(
+    "\nFinal practice",
+    `Final practice step: ${finalStages[state().finalStep]}`,
+    `Source: ${course.capstone[route].source}`,
+  );
   if (course.capstone[route].sourcePacket)
     lines.push(
       `Complete source packet: ${plain(course.capstone[route].sourcePacket)}`,

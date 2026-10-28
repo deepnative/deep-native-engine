@@ -1,6 +1,29 @@
 # Local reader behavior only. No account, publication or application L-series claim.
 Feature: Follow the complete authored foundation sequence
 
+  Scenario: READER-026 — Follow four practice stages while retaining the learner's work
+    Given an Everyday, Work or Technical final practice at desktop or narrow width
+    When the learner freely visits the brief, first draft, update and revision stages
+    Then the relevant content is visible and the compact source reminder does not displace writing
+    And earlier words remain literal and unchanged through navigation and comparison
+    And navigation does not mark learning complete or clear the self-check
+    But editing first or revised work clears its self-check
+    And explicit save, reload and export preserve all writing and the selected stage
+
+  Scenario: READER-027 — Load compatible records and protect malformed stage values
+    Given an earlier compatible notebook with no final-stage field
+    When the learner opens it
+    Then the first stage is selected in memory and stored writing/checks stay unchanged until explicit save
+    But a non-integer or out-of-range stage protects the unreadable original from overwrite
+    And the original remains downloadable
+
+  Scenario: READER-028 — Recover staged work across save failure and route changes
+    Given drafts in separate example routes
+    When saving fails or the learner switches routes
+    Then all current writing remains editable and downloadable
+    And each route retains its own stage and writing
+    And leaving with unsaved writing still warns
+
   Scenario: READER-025 — Keep an Everyday plan accurate through changed replies
     Given the learner opens the book-swap case at desktop or narrow width
     When they retain a first reminder and open the later reply snapshot

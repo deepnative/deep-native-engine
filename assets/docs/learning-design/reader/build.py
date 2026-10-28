@@ -98,6 +98,23 @@ def parts(text):
     return sections[0], dict(zip(sections[1::2], sections[2::2]))
 
 
+def practice_flow(intro, sections):
+    title, introduction = intro.strip().split("\n", 1)
+    first_pass = sections["Your first pass"]
+    updates = list(re.finditer(r"<details><summary>(.*?)</summary>\s*(.*?)\s*</details>", first_pass, re.S))
+    assert len(updates) == 1, "Each final practice needs exactly one later update."
+    update = updates[0]
+    assert not first_pass[update.end():].strip(), "Keep all later-update instructions inside its disclosure."
+    return {
+        "title": title.removeprefix("# "),
+        "introduction": markdown(introduction),
+        "sources": markdown(sections["Source packet"]),
+        "task": markdown(first_pass[:update.start()]),
+        "updateTitle": update[1],
+        "update": markdown(update[2]),
+    }
+
+
 def select_route(text, title, letter):
     selected = []
     keep = True
@@ -186,6 +203,7 @@ course["contribution"] = {"intro": markdown(contribution_intro.split("\n", 1)[1]
 
 work_intro, work_sections = parts((BASE / "realistic-work-practice.md").read_text())
 course["capstone"]["work"] = {
+    "practiceFlow": practice_flow(work_intro, work_sections),
     "source": work_sections["Brief summary"].strip(),
     "output": "A short pilot update, action list, capacity check and retained revision.",
     "instructions": markdown(work_intro + "\n\n" + work_sections["Source packet"] + "\n\n" + work_sections["Your first pass"]),
@@ -197,6 +215,7 @@ course["capstone"]["work"] = {
 
 tech_intro, tech_sections = parts((BASE / "realistic-technical-practice.md").read_text())
 course["capstone"]["technical"] = {
+    "practiceFlow": practice_flow(tech_intro, tech_sections),
     "source": tech_sections["Brief summary"].strip(),
     "output": "A reproducible investigation, test plan and retained revision.",
     "instructions": markdown(tech_intro + "\n\n" + tech_sections["Source packet"] + "\n\n" + tech_sections["Your first pass"]),
@@ -208,6 +227,7 @@ course["capstone"]["technical"] = {
 
 everyday_intro, everyday_sections = parts((BASE / "realistic-everyday-practice.md").read_text())
 course["capstone"]["everyday"] = {
+    "practiceFlow": practice_flow(everyday_intro, everyday_sections),
     "source": everyday_sections["Brief summary"].strip(),
     "output": "A useful reminder, capacity checklist and retained reply update.",
     "instructions": markdown(everyday_intro + "\n\n" + everyday_sections["Source packet"] + "\n\n" + everyday_sections["Your first pass"]),
