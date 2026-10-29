@@ -2,19 +2,33 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import request from "supertest";
 import { start } from "../../src/runtime.ts";
-import { store } from "../../src/store.ts";
+import { migrate, store } from "../../src/store.ts";
 import { authorizationStore } from "../../src/authorization.ts";
 import { COOKIE } from "../../src/session.ts";
 import { testPool } from "../support/database.ts";
 const pool = testPool();
 const members = store(pool);
 const authority = authorizationStore(pool);
-let running: Awaited<ReturnType<typeof start>>, storage: string;
+let running: Awaited<ReturnType<typeof start>> | undefined, storage: string;
+function currentRuntime() {
+  if (!running) throw new Error("The test runtime is not started.");
+  return running;
+}
+async function closeRuntime() {
+  const current = running;
+  running = undefined;
+  await current?.close();
+}
 beforeAll(async () => {
   storage = await mkdtemp(join(tmpdir(), "dne-unit-issuance-http-"));
+  await migrate(pool);
+});
+beforeEach(async () => {
+  // The prior runtime, including its recovery query, closes before this reset.
+  await pool.query("TRUNCATE principals,cohorts CASCADE");
   running = await start({
     DNE_DATABASE_URL: process.env.DNE_TEST_DATABASE_URL,
     DNE_APP_MODE: "test",
@@ -24,18 +38,15 @@ beforeAll(async () => {
     DNE_PRIVATE_STORAGE_ROOT: storage,
   });
 });
-beforeEach(async () => {
-  await pool.query("TRUNCATE principals,cohorts CASCADE");
-});
+afterEach(closeRuntime);
 afterAll(async () => {
-  await running?.close();
   await pool.end();
   if (storage) await rm(storage, { recursive: true, force: true });
 });
 const own = (path: string, token: string) =>
-  request(running.server)
+  request(currentRuntime().server)
     .get(path)
-    .set("Host", new URL(running.origin).host)
+    .set("Host", new URL(currentRuntime().origin).host)
     .set("Cookie", `${COOKIE}=${token}`);
 it("TESTISSUE-01 existing baseline: a fresh member can inspect zero local units without a grant", async () => {
   const token = randomBytes(32).toString("hex");
@@ -84,19 +95,19 @@ const field = (html: string, name: string) => {
     .replaceAll("&amp;", "&");
 };
 const getWith = (path: string, cookie: string) =>
-  request(running.server)
+  request(currentRuntime().server)
     .get(path)
-    .set("Host", new URL(running.origin).host)
+    .set("Host", new URL(currentRuntime().origin).host)
     .set("Cookie", cookie);
 const postWith = (
   path: string,
   cookie: string,
   fields: Record<string, string>,
 ) =>
-  request(running.server)
+  request(currentRuntime().server)
     .post(path)
-    .set("Host", new URL(running.origin).host)
-    .set("Origin", running.origin)
+    .set("Host", new URL(currentRuntime().origin).host)
+    .set("Origin", currentRuntime().origin)
     .set("Cookie", cookie)
     .type("form")
     .send(fields);
@@ -178,7 +189,7 @@ it("TESTISSUE-01/02/05 the normal member and selected administrator deliberately
     consumed: 0,
   });
   // Pause creation on the same populated schema; existing owner actions remain.
-  await running.close();
+  await closeRuntime();
   running = await start({
     DNE_DATABASE_URL: process.env.DNE_TEST_DATABASE_URL,
     DNE_APP_MODE: "test",
@@ -250,7 +261,7 @@ it("TESTISSUE-01/02/05 the normal member and selected administrator deliberately
       )
     ).rows,
   ).toEqual([{ quantity: 3 }]);
-  await running.close();
+  await closeRuntime();
   running = await start({
     DNE_DATABASE_URL: process.env.DNE_TEST_DATABASE_URL,
     DNE_APP_MODE: "test",
@@ -282,18 +293,18 @@ it("TESTISSUE-03 unsafe, unconfirmed and arbitrary-scope HTTP instructions canno
     csrf: "invalid",
     administratorId: selected,
   }).expect(403);
-  await request(running.server)
+  await request(currentRuntime().server)
     .post("/member/test-unit-request/check")
-    .set("Host", new URL(running.origin).host)
+    .set("Host", new URL(currentRuntime().origin).host)
     .set("Origin", "https://invented.invalid")
     .set("Cookie", cookie)
     .type("form")
     .send({ csrf, administratorId: selected })
     .expect(403);
-  await request(running.server)
+  await request(currentRuntime().server)
     .post("/member/test-unit-request/check")
     .set("Host", "invented.invalid")
-    .set("Origin", running.origin)
+    .set("Origin", currentRuntime().origin)
     .set("Cookie", cookie)
     .type("form")
     .send({ csrf, administratorId: selected })
