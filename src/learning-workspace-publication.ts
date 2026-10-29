@@ -15,9 +15,7 @@ import {
 type Failure = { kind: "denied" | "conflict" | "unavailable" };
 export interface LearningWorkspacePublicationStore {
   import(token: string): Promise<{ kind: "imported" | "existing" } | Failure>;
-  preview(
-    token: string,
-  ): Promise<
+  preview(token: string): Promise<
     | {
         kind: "ready";
         pack: LearningWorkspacePack;
