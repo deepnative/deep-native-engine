@@ -647,10 +647,18 @@ it("TESTISSUE-07 append-only owned fixture export discloses no administrator ide
     "assignmentEvidenceOrigins",
     "assignmentCopyReceipts",
     "proposalPublications",
+    "learningNotebooks",
+    "learningWriting",
+    "learningFeedbackDecisions",
+    "learningFeedbackWriting",
   ]);
   expect(result.payload.records.assignmentEvidenceOrigins).toEqual([]);
   expect(result.payload.records.assignmentCopyReceipts).toEqual([]);
   expect(result.payload.records.proposalPublications).toEqual([]);
+  expect(result.payload.records.learningNotebooks).toEqual([]);
+  expect(result.payload.records.learningWriting).toEqual([]);
+  expect(result.payload.records.learningFeedbackDecisions).toEqual([]);
+  expect(result.payload.records.learningFeedbackWriting).toEqual([]);
   expect(JSON.stringify(result.payload)).not.toContain(f.administratorId);
   expect(JSON.stringify(result.payload)).not.toContain(f.issueKey);
   expect(JSON.stringify(result.payload)).not.toContain(f.requestKey);
