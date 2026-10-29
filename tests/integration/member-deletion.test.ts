@@ -126,7 +126,8 @@ async function seedOwned(
     requestFingerprint({ marker }),
   );
   track("adapter_jobs", "member_id", id);
-  await db.save(id, {
+  await db.save(owner.token, {
+    revision: 0,
     instruction: `${marker} instruction`,
     verification: `${marker} check`,
     complete: true,

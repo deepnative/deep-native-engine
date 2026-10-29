@@ -6,8 +6,8 @@ import { COOKIE } from "../../src/session.ts";
 import { testPool } from "../support/database.ts";
 const pool = testPool(),
   support = supportRequestStore(pool),
-  auth = authorizationStore(pool),
-  origin = "http://127.0.0.1:4317";
+  auth = authorizationStore(pool);
+const origin = (page: Page) => new URL(page.url()).origin;
 const audiences = [
   ["explorer", "everyday"],
   ["professional", "work"],
@@ -23,10 +23,9 @@ async function onboard(
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(
-    page.getByRole("link", { name: "Private sample support", exact: true }),
+    page.getByRole("link", { name: "Private support", exact: true }),
   ).toBeVisible();
   const cookie = (await page.context().cookies()).find(
     (item) => item.name === COOKIE,
@@ -39,7 +38,7 @@ async function session(page: Page, token: string) {
     {
       name: COOKIE,
       value: token,
-      url: origin,
+      url: origin(page),
       httpOnly: true,
       sameSite: "Strict",
     },
@@ -65,7 +64,7 @@ async function intake(page: Page, suffix: string) {
     .click();
   await expect(
     page.getByRole("heading", {
-      name: "Private sample support receipt",
+      name: "Private support receipt",
       exact: true,
     }),
   ).toBeVisible();
@@ -99,7 +98,7 @@ async function operators() {
 async function post(page: Page, path: string, form: Record<string, string>) {
   return page.request.post(path, {
     form,
-    headers: { Origin: origin },
+    headers: { Origin: origin(page) },
     maxRedirects: 0,
   });
 }
@@ -130,10 +129,10 @@ async function sendMessage(page: Page, kind: "note" | "reply", body: string) {
   return { ...savedFields, body };
 }
 async function resolve(page: Page) {
-  const form = formFor(page, "Resolve request locally"),
+  const form = formFor(page, "Resolve request"),
     savedFields = await fields(form);
   await form.getByRole("checkbox").check();
-  await form.getByRole("button", { name: "Resolve request locally" }).click();
+  await form.getByRole("button", { name: "Resolve request" }).click();
   await expect(page.getByRole("status")).toContainText(
     "This request cannot be reopened",
   );
@@ -155,7 +154,7 @@ test("[L106] all three audiences validate private sample intake, retain exact re
     await test.step(background, async () => {
       await onboard(page, background, goal);
       await page
-        .getByRole("link", { name: "Private sample support", exact: true })
+        .getByRole("link", { name: "Private support", exact: true })
         .click();
       await expect(
         page.getByRole("heading", {
@@ -164,10 +163,10 @@ test("[L106] all three audiences validate private sample intake, retain exact re
         }),
       ).toBeVisible();
       await page
-        .getByRole("link", { name: "New private sample request", exact: true })
+        .getByRole("link", { name: "New private request", exact: true })
         .click();
       await expect(
-        page.getByText("Local sample support · coverage unverified", {
+        page.getByText("Private support · no guaranteed response time", {
           exact: false,
         }),
       ).toBeVisible();
@@ -288,7 +287,7 @@ test("[L107] all three audiences receive only deliberate replies while exact-gra
         `Invented member-visible ${background} reply`,
       );
       await expect(
-        page.getByText("Synthetic operator", { exact: false }),
+        page.getByText("Support operator", { exact: false }),
       ).toBeVisible();
       expect(await page.content()).not.toContain(`INTERNAL_${background}_ONLY`);
       expect(await page.content()).not.toContain(grant);
@@ -300,18 +299,16 @@ test("[L107] all three audiences receive only deliberate replies while exact-gra
       ).toBe(403);
       await session(page, staff.operator);
       await page.goto(`/operator/support/${item.id}?grant=${grant}`);
-      const form = formFor(page, "Acknowledge request locally");
+      const form = formFor(page, "Acknowledge request");
       await form.getByRole("checkbox").check();
-      await form
-        .getByRole("button", { name: "Acknowledge request locally" })
-        .click();
+      await form.getByRole("button", { name: "Acknowledge request" }).click();
       await expect(
-        page.getByText("Acknowledged locally", { exact: false }),
+        page.locator("dd").filter({ hasText: /^Acknowledged \d{4}-/ }),
       ).toBeVisible();
       await session(page, owner);
       await page.goto(`/support/${item.id}`);
       await expect(
-        page.getByText("Acknowledged locally", { exact: false }),
+        page.locator("dd").filter({ hasText: /^Acknowledged \d{4}-/ }),
       ).toBeVisible();
       await expect(
         page.getByText("Open; no resolution recorded", { exact: true }),
@@ -329,9 +326,7 @@ test("[L108] all three audiences see independent resolution while terminal repla
         grant = await staff.grant(item.id);
       await session(page, staff.operator);
       await page.goto(`/operator/support/${item.id}?grant=${grant}`);
-      const staleAck = await fields(
-        formFor(page, "Acknowledge request locally"),
-      );
+      const staleAck = await fields(formFor(page, "Acknowledge request"));
       const reply = await sendMessage(
         page,
         "reply",
@@ -367,26 +362,26 @@ test("[L108] all three audiences see independent resolution while terminal repla
         page.getByText("No separate acknowledgement recorded", { exact: true }),
       ).toBeVisible();
       await expect(
-        page.getByText("Resolved locally", { exact: false }),
+        page.locator("dd").filter({ hasText: /^Resolved \d{4}-/ }),
       ).toBeVisible();
       const second = await intake(page, `${background} acknowledged`),
         secondGrant = await staff.grant(second.id);
       await session(page, staff.operator);
       await page.goto(`/operator/support/${second.id}?grant=${secondGrant}`);
-      const ack = formFor(page, "Acknowledge request locally");
+      const ack = formFor(page, "Acknowledge request");
       await ack.getByRole("checkbox").check();
       await ack.getByRole("button").click();
       await expect(
-        page.getByText("Acknowledged locally", { exact: false }),
+        page.locator("dd").filter({ hasText: /^Acknowledged \d{4}-/ }),
       ).toBeVisible();
       await resolve(page);
       await session(page, owner);
       await page.goto(`/support/${second.id}`);
       await expect(
-        page.getByText("Acknowledged locally", { exact: false }),
+        page.locator("dd").filter({ hasText: /^Acknowledged \d{4}-/ }),
       ).toBeVisible();
       await expect(
-        page.getByText("Resolved locally", { exact: false }),
+        page.locator("dd").filter({ hasText: /^Resolved \d{4}-/ }),
       ).toBeVisible();
       expect((await support.revoke(staff.admin, grant)).kind).toBe("revoked");
       await session(page, staff.operator);
@@ -458,7 +453,7 @@ test("[L109] all three audiences privately withdraw open or resolved requests an
         expect.objectContaining({
           requestId: item.id,
           body: reply.body,
-          attribution: "Synthetic operator",
+          attribution: "Support operator",
         }),
       ]);
       expect(JSON.stringify(before)).not.toContain(

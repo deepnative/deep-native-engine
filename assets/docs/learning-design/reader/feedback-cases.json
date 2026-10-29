@@ -1,0 +1,31 @@
+{
+  "everyday": {
+    "id": "L6-E-X",
+    "source": "A reading group has nine people and forty-five minutes on Wednesday. The room is undecided.",
+    "versions": [
+      { "id": 1, "text": "Nine people will meet; the room is undecided." }
+    ],
+    "commentVersion": 1,
+    "comment": "make it twelve people in Room 4 so it sounds complete.",
+    "guidance": "The source gives nine people and no room. Keep those facts and ask for an updated source if you need clarification. Complete-looking wording does not establish new facts."
+  },
+  "work": {
+    "id": "L6-W-X",
+    "source": "Noor is the assigned agenda owner; Lee invites participants.",
+    "versions": [
+      { "id": 1, "text": "Lee is the agenda owner; Lee invites participants." },
+      { "id": 2, "text": "Noor is the agenda owner; Lee invites participants." }
+    ],
+    "commentVersion": 1,
+    "comment": "fix the agenda owner.",
+    "guidance": "V2 already assigns the agenda to Noor, matching the source. The comment still concerns v1. Recording already addressed does not claim that v2 received a new review."
+  },
+  "technical": {
+    "id": "L6-T-X",
+    "source": "A file form should accept PDFs up to 2 MB. No test has run.",
+    "versions": [{ "id": 1, "text": "3 MB PDF rejection test: passed." }],
+    "commentVersion": 1,
+    "comment": "separate the expected rejection from the actual execution status.",
+    "guidance": "The 2 MB requirement supports expected rejection of a 3 MB PDF. It does not establish a passing execution result: no test has run. Keep expected behavior and actual execution separate."
+  }
+}

@@ -28,6 +28,51 @@ const metrics = () =>
     ]),
   );
 const coverage = () => ({ total: metrics(), "/repo/src/app.ts": metrics() });
+it("accepts fully measured data modules without functions, retaining all coverage guards", () => {
+  const report = coverage();
+  const data = metrics();
+  data.functions = data.branches = { total: 0, covered: 0, skipped: 0 };
+  report["/repo/src/data.ts"] = data;
+  for (const metric of ["statements", "lines"])
+    report.total[metric] = { total: 200, covered: 200, skipped: 0 };
+  const files = ["src/app.ts", "src/data.ts"];
+  expect(assertCoverage(report, files, "/repo")).toEqual(report.total);
+  for (const metric of ["statements", "lines"]) {
+    const broken = copy(report);
+    broken["/repo/src/data.ts"][metric] = { total: 0, covered: 0, skipped: 0 };
+    expect(() => assertCoverage(broken, files, "/repo")).toThrow(
+      "Empty coverage denominator",
+    );
+  }
+  const empty = copy(report);
+  empty.total.functions = empty["/repo/src/app.ts"].functions = {
+    total: 0,
+    covered: 0,
+    skipped: 0,
+  };
+  expect(() => assertCoverage(empty, files, "/repo")).toThrow(
+    "Empty coverage denominator",
+  );
+  for (const functions of [
+    undefined,
+    { total: 0, covered: 1, skipped: 0 },
+    { total: 0, covered: 0, skipped: 1 },
+  ]) {
+    const broken = copy(report);
+    broken["/repo/src/data.ts"].functions = functions;
+    expect(() => assertCoverage(broken, files, "/repo")).toThrow(
+      "Malformed coverage counts",
+    );
+  }
+  const low = copy(report);
+  low["/repo/src/app.ts"].functions.covered = 98;
+  expect(() => assertCoverage(low, files, "/repo")).toThrow("below 99%");
+  const mismatch = copy(report);
+  mismatch.total.functions.total = 101;
+  expect(() => assertCoverage(mismatch, files, "/repo")).toThrow(
+    "Global coverage differs",
+  );
+});
 const register = {
   version: "v1",
   fullMvpVersion: "full-v1",

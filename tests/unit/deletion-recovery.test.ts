@@ -6,7 +6,11 @@ import { recoverPendingMemberDeletions } from "../../src/deletion-recovery.ts";
 const first = "11111111-1111-4111-8111-111111111111";
 const second = "22222222-2222-4222-8222-222222222222";
 
+const empty = { examined: 0, completed: 0, failed: 0, nextCursor: null };
+
 interface Options {
+  evidenceIds?: string[];
+  absentEvidence?: string;
   absentPrincipal?: string;
   absentWorkspace?: string;
   failObject?: string;
@@ -39,9 +43,14 @@ function database(ids: string[], options: Options = {}) {
       return { rows: id === options.absentPrincipal ? [] : [{ id }] };
     if (sql.startsWith("SELECT id FROM workspaces"))
       return { rows: id === options.absentWorkspace ? [] : [{ id }] };
+    if (sql.startsWith("SELECT id FROM evidence_objects"))
+      return { rows: id === options.absentEvidence ? [] : [{ id }] };
     if (sql.startsWith("SELECT storage_key FROM evidence_objects"))
       return { rows: [{ storage_key: id }] };
-    if (sql.startsWith("DELETE FROM principals"))
+    if (
+      sql.startsWith("DELETE FROM principals") ||
+      sql.startsWith("DELETE FROM evidence_objects")
+    )
       return { rowCount: id === options.failDelete ? 0 : 1, rows: [] };
     throw new Error("Unexpected recovery query");
   });
@@ -57,7 +66,19 @@ function database(ids: string[], options: Options = {}) {
           .map((id) => ({ id })),
       };
     }
-    if (sql.startsWith("SELECT id FROM principals"))
+    if (sql.startsWith("SELECT e.id,e.owner_principal_id")) {
+      const [cursor, limit] = values as [string | null, number];
+      return {
+        rows: (options.evidenceIds ?? [])
+          .filter((id) => cursor === null || id > cursor)
+          .slice(0, limit)
+          .map((id) => ({ id, member_id: id })),
+      };
+    }
+    if (
+      sql.startsWith("SELECT id FROM principals") ||
+      sql.startsWith("SELECT id FROM evidence_objects")
+    )
       return {
         rows: options.committedDespiteError ? [] : [{ id: values?.[0] }],
       };
@@ -102,6 +123,7 @@ it("HOSTED-06 gives durable object cleanup its own bounded cursor without changi
     completed: 0,
     failed: 0,
     nextCursor: null,
+    evidenceDeletions: empty,
     objectWrites: { examined: 0, completed: 0, failed: 0, nextCursor: null },
   });
   expect(db.query).toHaveBeenCalledWith(
@@ -122,8 +144,12 @@ it("selects only bounded marked candidates and removes bytes before principal ro
     completed: 1,
     failed: 0,
     nextCursor: first,
+    evidenceDeletions: empty,
   });
-  expect(db.remove).toHaveBeenCalledWith(first);
+  expect(db.remove).toHaveBeenCalledWith(
+    first,
+    expect.objectContaining({ query: db.clientQuery }),
+  );
   expect(
     db.clientQuery.mock.calls.findIndex(([sql]) => sql === "BEGIN"),
   ).toBeLessThan(
@@ -153,8 +179,12 @@ it("selects only bounded marked candidates and removes bytes before principal ro
     completed: 1,
     failed: 0,
     nextCursor: null,
+    evidenceDeletions: empty,
   });
-  expect(db.remove).toHaveBeenCalledWith(second);
+  expect(db.remove).toHaveBeenCalledWith(
+    second,
+    expect.objectContaining({ query: db.clientQuery }),
+  );
 });
 
 it("leaves an empty page and rejects an unbounded batch", async () => {
@@ -164,6 +194,7 @@ it("leaves an empty page and rejects an unbounded batch", async () => {
     completed: 0,
     failed: 0,
     nextCursor: null,
+    evidenceDeletions: empty,
   });
   for (const size of [0, 101, 1.5])
     await expect(
@@ -200,9 +231,13 @@ it("keeps a broken request recoverable while later marked members advance", asyn
     completed: 1,
     failed: 1,
     nextCursor: second,
+    evidenceDeletions: empty,
   });
   expect(db.clientQuery.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
-  expect(db.remove).toHaveBeenCalledWith(second);
+  expect(db.remove).toHaveBeenCalledWith(
+    second,
+    expect.objectContaining({ query: db.clientQuery }),
+  );
 });
 
 it("retains a marked request when its final database deletion fails", async () => {
@@ -210,7 +245,10 @@ it("retains a marked request when its final database deletion fails", async () =
   expect(
     (await recoverPendingMemberDeletions(db.pool, db.objects)).failed,
   ).toBe(1);
-  expect(db.remove).toHaveBeenCalledWith(first);
+  expect(db.remove).toHaveBeenCalledWith(
+    first,
+    expect.objectContaining({ query: db.clientQuery }),
+  );
   expect(db.clientQuery.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
 });
 
@@ -253,9 +291,95 @@ it("isolates connect failures but surfaces a failed candidate scan", async () =>
     completed: 0,
     failed: 2,
     nextCursor: second,
+    evidenceDeletions: empty,
   });
   const selection = database([first], { failCandidates: true });
   await expect(
     recoverPendingMemberDeletions(selection.pool, selection.objects),
   ).rejects.toThrow("candidate query unavailable");
+});
+
+it("AUDIT-DELETE-01 keeps individual deletion paging independent of member and object-write recovery", async () => {
+  const db = database([], { evidenceIds: [first, second], failObject: first });
+  const failed = await recoverPendingMemberDeletions(
+    db.pool,
+    db.objects,
+    second,
+    1,
+    null,
+  );
+  expect(failed.evidenceDeletions).toEqual({
+    examined: 1,
+    completed: 0,
+    failed: 1,
+    nextCursor: first,
+  });
+  const next = await recoverPendingMemberDeletions(
+    db.pool,
+    db.objects,
+    null,
+    1,
+    null,
+    first,
+  );
+  expect(next.evidenceDeletions).toEqual({
+    examined: 1,
+    completed: 1,
+    failed: 0,
+    nextCursor: second,
+  });
+  expect(db.clientQuery).toHaveBeenCalledWith(
+    "DELETE FROM evidence_objects WHERE id=$1 AND quarantine_state='deleting'",
+    [second],
+  );
+  expect(
+    db.clientQuery.mock.calls.some(([sql]) =>
+      sql.startsWith("DELETE FROM principals"),
+    ),
+  ).toBe(false);
+});
+it.each([
+  { absentPrincipal: first },
+  { absentWorkspace: first },
+  { absentEvidence: first },
+])(
+  "AUDIT-DELETE-01 skips an unavailable individual deletion fence %j",
+  async (options) => {
+    const db = database([], { evidenceIds: [first], ...options });
+    expect(
+      (await recoverPendingMemberDeletions(db.pool, db.objects))
+        .evidenceDeletions,
+    ).toEqual({ examined: 1, completed: 0, failed: 0, nextCursor: null });
+    expect(db.remove).not.toHaveBeenCalled();
+  },
+);
+it.each([
+  { failDelete: first },
+  { failConnect: true },
+  { failBegin: true, failRollback: true },
+  { failCommit: true },
+])(
+  "AUDIT-DELETE-01 retains individual deletion after database failure %j",
+  async (options) => {
+    const db = database([], { evidenceIds: [first], ...options });
+    expect(
+      (await recoverPendingMemberDeletions(db.pool, db.objects))
+        .evidenceDeletions.failed,
+    ).toBe(1);
+  },
+);
+it("AUDIT-DELETE-01 reconciles an acknowledged-lost individual deletion against its own metadata", async () => {
+  const db = database([], {
+    evidenceIds: [first],
+    failCommit: true,
+    committedDespiteError: true,
+  });
+  expect(
+    (await recoverPendingMemberDeletions(db.pool, db.objects)).evidenceDeletions
+      .completed,
+  ).toBe(1);
+  expect(db.query).toHaveBeenCalledWith(
+    "SELECT id FROM evidence_objects WHERE id=$1",
+    [first],
+  );
 });

@@ -50,7 +50,7 @@ export interface SupportMemberReply {
   id: string;
   body: string;
   createdAt: Date;
-  attribution: "Synthetic operator";
+  attribution: "Support operator";
 }
 export interface SupportMemberDetail extends SupportRequestSummary {
   supportTime?: SupportTimeReceipt;
@@ -1016,7 +1016,7 @@ export function supportRequestStore(
     // Parent locks make immutable children stable; members query replies only.
     const rows = (
       await ctx.client.query<SupportOperatorMessage & { cursorAt: string }>(
-        `SELECT id,body,created_at AS "createdAt",kind,'Synthetic operator'::text AS attribution,${at("created_at")}
+        `SELECT id,body,created_at AS "createdAt",kind,'Support operator'::text AS attribution,${at("created_at")}
        FROM (SELECT id,body,created_at,'reply'::text AS kind FROM support_request_replies WHERE request_id=$1
        ${staff ? "UNION ALL SELECT id,body,created_at,'internal-note'::text AS kind FROM support_request_notes WHERE request_id=$1" : ""}) messages
        WHERE ($2::timestamptz IS NULL OR (created_at,id,kind)<($2::timestamptz,$3::uuid,$4::text))

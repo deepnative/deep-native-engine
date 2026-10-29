@@ -53,7 +53,8 @@ export function assertCoverage(report, sourceFiles, root) {
         "Malformed coverage counts",
       );
       requireGate(
-        data.total > 0 || (name !== "total" && metric === "branches"),
+        data.total > 0 ||
+          (name !== "total" && ["branches", "functions"].includes(metric)),
         "Empty coverage denominator",
       );
       requireGate(

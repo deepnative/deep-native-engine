@@ -41,7 +41,6 @@ async function onboard(
   await page.goto(origin);
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(origin + "/learn");
   const token = (await page.context().cookies()).find(
@@ -178,15 +177,19 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
         .click();
       const queue = `${origin}/moderate/circles/${circle}/reports`;
       await moderator.goto(queue);
-      await moderator
+      const contribution = moderator.getByRole("article").filter({
+        has: moderator.getByText(body, { exact: true }),
+      });
+      await expect(contribution).toHaveCount(1);
+      await contribution
         .getByLabel("Synthetic decision reason")
         .selectOption("privacy");
-      await moderator
+      await contribution
         .getByRole("button", { name: "Hide invented contribution" })
         .click();
       await expect(moderator).toHaveURL(queue);
       await expect(
-        moderator.getByRole("button", {
+        contribution.getByRole("button", {
           name: "Restore invented contribution",
         }),
       ).toBeVisible();
@@ -258,10 +261,11 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
       expect(denied.status()).toBe(403);
       expect(denied.headers()["content-disposition"]).toBeUndefined();
       await moderator.goto(queue);
-      await moderator
+      await expect(contribution).toHaveCount(1);
+      await contribution
         .getByLabel("Synthetic decision reason")
         .selectOption("test_correction");
-      await moderator
+      await contribution
         .getByRole("button", { name: "Restore invented contribution" })
         .click();
       await peer.reload();

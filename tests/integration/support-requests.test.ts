@@ -215,7 +215,7 @@ it("requires exact grants and keeps internal notes separate from explicit member
       acknowledgedAt: null,
       replies: {
         items: [
-          { body: "Visible invented reply", attribution: "Synthetic operator" },
+          { body: "Visible invented reply", attribution: "Support operator" },
         ],
       },
     },
@@ -690,7 +690,7 @@ it("guards immutable request/grant/message/audit history while permitting privac
     kind: "ready",
     value: {
       replies: {
-        items: [{ body: "Invented reply", attribution: "Synthetic operator" }],
+        items: [{ body: "Invented reply", attribution: "Support operator" }],
       },
     },
   });

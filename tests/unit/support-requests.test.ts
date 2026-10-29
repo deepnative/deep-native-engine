@@ -149,7 +149,7 @@ function fixture(
             body: input.body,
             createdAt: date,
             kind: "reply",
-            attribution: "Synthetic operator",
+            attribution: "Support operator",
             cursorAt: candidate.cursorAt,
           },
         ],
@@ -661,7 +661,7 @@ it("paginates every projection at twenty without exposing internal-note metadata
     body: `Invented ${i}`,
     createdAt: date,
     kind: "reply",
-    attribution: "Synthetic operator",
+    attribution: "Support operator",
     cursorAt: candidate.cursorAt,
   }));
   const histories = messages.map((message) => ({

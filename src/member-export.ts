@@ -1,6 +1,10 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { hash } from "./store.ts";
+import {
+  ASSIGNMENT_ORIGIN_JOIN,
+  ASSIGNMENT_ORIGIN_SQL,
+} from "./assignment-evidence-values.ts";
 
 export const MAX_MEMBER_EXPORT_RECORDS = 100;
 export const MAX_MEMBER_EXPORT_BYTES = 256 * 1024;
@@ -181,7 +185,7 @@ const sections = {
   ),
   supportReplies: section(
     `e.id,e.request_id AS "requestId",e.body,e.created_at AS "createdAt",
-    'Synthetic operator' AS attribution`,
+    'Support operator' AS attribution`,
     `support_request_replies e JOIN support_requests r ON r.id=e.request_id
     WHERE r.member_id=$1 AND r.withdrawn_at IS NULL AND r.id=ANY($4::uuid[])`,
     "e.request_id,e.id",
@@ -190,7 +194,7 @@ const sections = {
   supportTimeAllocations: section(
     `a.id,a.request_id AS "requestId",a.policy,a.ceiling,a.state,
     a.created_at AS "createdAt",a.begun_at AS "begunAt",a.settled_at AS "settledAt",
-    CASE WHEN a.begun_by IS NULL THEN NULL ELSE 'Synthetic operator' END AS attribution,
+    CASE WHEN a.begun_by IS NULL THEN NULL ELSE 'Support operator' END AS attribution,
     (SELECT count(*)::integer FROM support_time_units u JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id WHERE u.allocation_id=a.id AND r.state='reserved') AS held,
     (SELECT count(*)::integer FROM support_time_units u JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id WHERE u.allocation_id=a.id AND r.state='consumed') AS consumed,
     (SELECT count(*)::integer FROM support_time_units u JOIN synthetic_entitlement_reservations r ON r.id=u.reservation_id WHERE u.allocation_id=a.id AND r.state='released') AS released`,
@@ -203,7 +207,7 @@ const sections = {
     e.support_start AS "supportStart",e.support_end AS "supportEnd",
     e.preparation_start AS "preparationStart",e.preparation_end AS "preparationEnd",
     e.support_minutes AS "supportMinutes",e.preparation_minutes AS "preparationMinutes",
-    e.created_at AS "createdAt",'Synthetic operator' AS attribution`,
+    e.created_at AS "createdAt",'Support operator' AS attribution`,
     "support_time_entries e JOIN support_time_allocations a ON a.id=e.allocation_id WHERE a.member_id=$1",
     "e.allocation_id",
   ),
@@ -410,6 +414,31 @@ const sections = {
     "r.id",
     true,
   ),
+  assignmentEvidenceOrigins: section(
+    `e.id AS "evidenceId",${ASSIGNMENT_ORIGIN_SQL}`,
+    `evidence_objects e ${ASSIGNMENT_ORIGIN_JOIN}
+     WHERE e.owner_principal_id=$1 AND e.quarantine_state<>'deleting'
+      AND ao.evidence_id IS NOT NULL AND e.id=ANY($4::uuid[])`,
+    "e.id",
+  ),
+  assignmentCopyReceipts: section(
+    `r.id AS "receiptId",r.created_at AS "createdAt",
+     CASE WHEN e.quarantine_state='deleting' THEN NULL ELSE r.evidence_id END AS "evidenceId",
+     CASE WHEN r.evidence_id IS NULL OR e.quarantine_state='deleting' THEN 'removed'
+       WHEN NOT e.private_review_allowed THEN 'withdrawn' ELSE 'available' END AS state`,
+    `assignment_evidence_operations r LEFT JOIN evidence_objects e ON e.id=r.evidence_id
+     ${ASSIGNMENT_ORIGIN_JOIN} WHERE r.member_id=$1
+     AND (r.evidence_id IS NULL OR (r.evidence_id=ANY($4::uuid[]) AND ao.evidence_id IS NOT NULL))`,
+    "r.id",
+  ),
+  // v27 appends owned publication decisions and explicit display permission.
+  proposalPublications: section(
+    `id,proposal_id AS "proposalId",revision,state,accepted_at AS "acceptedAt",
+    attribution,audience,permission_version AS "permissionVersion",published_at AS "publishedAt",withdrawn_at AS "withdrawnAt"`,
+    "proposal_publications WHERE member_id=$1",
+    "id",
+    true,
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -423,7 +452,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v26";
+  version: "local-member-records-v27";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -557,7 +586,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v26",
+          version: "local-member-records-v27",
           profile: owner.rows[0],
           records,
           testUnitHistory: {
@@ -660,16 +689,25 @@ export function memberExportStore(
           }
           if (
             name === "providedEvidenceOrigins" ||
-            name === "preparedCopyReceipts"
+            name === "preparedCopyReceipts" ||
+            name === "assignmentEvidenceOrigins" ||
+            name === "assignmentCopyReceipts"
           ) {
             // A continuation can start here. Source first, then receipt/metadata,
             // matching withdrawal and ON DELETE SET NULL; never lock children first.
             const sourceTable =
               name === "providedEvidenceOrigins"
                 ? "provided_evidence_origins"
-                : "provided_evidence_operations";
+                : name === "preparedCopyReceipts"
+                  ? "provided_evidence_operations"
+                  : name === "assignmentEvidenceOrigins"
+                    ? "assignment_evidence_origins"
+                    : "assignment_evidence_operations";
             const rowKey =
-              name === "providedEvidenceOrigins" ? "r.evidence_id" : "r.id";
+              name === "providedEvidenceOrigins" ||
+              name === "assignmentEvidenceOrigins"
+                ? "r.evidence_id"
+                : "r.id";
             const parents = await client.query<{ id: string }>(
               `SELECT e.id FROM evidence_objects e WHERE e.owner_principal_id=$1 AND e.id IN(
                 SELECT r.evidence_id FROM ${sourceTable} r WHERE r.member_id=$1

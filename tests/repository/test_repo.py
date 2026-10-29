@@ -454,6 +454,51 @@ class RepositoryFixture(unittest.TestCase):
                     gate.validate_scope(self.root, gate.repository_files(self.root))
                 path.unlink()
 
+    def test_local_learning_accepts_only_the_reviewed_assets(self):
+        gate.validate_scope(self.root, gate.repository_files(self.root))
+        for name in ("assets/docs/learning-design/reader/extra.mjs",
+                     "assets/docs/learning-design/authoring/extra.html",
+                     ".impeccable/injected.js"):
+            with self.subTest(name=name):
+                path = self.root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("unreviewed local executable")
+                with self.assertRaisesRegex(gate.GateError, "Outside verified"):
+                    gate.validate_scope(self.root, gate.repository_files(self.root))
+                path.unlink()
+
+    def test_local_learning_requires_complete_first_attempt_results(self):
+        passing = {"retries": 0, "results": [{"name": "retains writing", "status": "passed"}]}
+        self.assertEqual(gate.local_learning_results(passing, 1), 1)
+        with self.assertRaises(gate.GateError):
+            gate.local_learning_results(passing, 2)
+        for report in ({}, {**passing, "retries": 1}, {**passing, "results": []},
+                       {**passing, "results": passing["results"] * 2},
+                       {**passing, "results": [{"name": "retains writing", "status": "failed"}]},
+                       {**passing, "results": [{"name": "retains writing", "status": "skipped"}]}):
+            with self.subTest(report=report), self.assertRaises(gate.GateError):
+                gate.local_learning_results(report, 1)
+
+    def test_local_learning_stops_its_server_when_a_browser_check_fails(self):
+        servers = []
+        make_server = gate.ThreadingHTTPServer
+
+        def server(*args, **kwargs):
+            instance = make_server(*args, **kwargs)
+            servers.append(instance)
+            return instance
+
+        def run(command, **_kwargs):
+            if command[1] != "--check" and any(str(part).endswith("/checks.mjs") for part in command):
+                raise subprocess.CalledProcessError(1, command)
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch.object(gate, "ThreadingHTTPServer", side_effect=server), patch.object(
+                gate.subprocess, "run", side_effect=run), self.assertRaises(subprocess.CalledProcessError):
+            gate.verify_local_learning(self.root)
+        self.assertEqual(len(servers), 1)
+        self.assertEqual(servers[0].socket.fileno(), -1)
+
     def test_infra_accepts_only_the_reviewed_terraform_files(self):
         gate.validate_scope(self.root, gate.repository_files(self.root))
         for name in ("infra/extra.tf", "infra/deploy.sh", "infra/modules/app/main.tf", "infra/terraform.tfvars"):
@@ -767,6 +812,7 @@ class RepositoryFixture(unittest.TestCase):
                 with redirect_stdout(stdout), redirect_stderr(stderr), patch.object(
                         gate.unittest.defaultTestLoader, "discover", return_value=suite), patch.object(
                         gate, "verify_application", return_value={"unitCoverage": {}, "journeys": {}}), patch.object(
+                        gate, "verify_local_learning", return_value={"cases": {"reader-checks": 1}}), patch.object(
                         gate, "scan_artifacts", return_value={"status": "passed"}):
                     self.assertEqual(gate.verify(self.root), expected_status)
                 report = (self.root / "artifacts/repository-verification.json").read_text()

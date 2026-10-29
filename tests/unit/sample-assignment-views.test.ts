@@ -79,7 +79,8 @@ it("REVADM-01 offers exact references without directories or authority overrides
     "credential",
   ])
     expect(html).not.toContain(`name="${name}"`);
-  expect(html).toContain("does not list members, reviewers or private samples");
+  expect(html).toContain("No member content or reviewer directory is shown");
+  expect(html).toContain('href="/operator/sample-assignments/pending"');
   expect(formAt(html, `${base}/history`)).toContain('method="get"');
   const recover = formAt(html, `${base}/recover`);
   expect(recover).toContain('method="post"');

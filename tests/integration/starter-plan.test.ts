@@ -44,7 +44,8 @@ it("advances only the owner's saved exercise and keeps an earlier goal historica
   expect((await plan(owner.token)).text).toContain(
     "Next session: try the sample exercise",
   );
-  await db.save(owner.id, {
+  await db.save(owner.token, {
+    revision: 0,
     instruction: "Plan a small event with invented volunteer details.",
     verification: "Check timing and roles against the invented details.",
     complete: true,
@@ -63,7 +64,7 @@ it("advances only the owner's saved exercise and keeps an earlier goal historica
   expect(withdrawn).toContain("withdrawn");
   expect(withdrawn).not.toContain("review your saved starter exercise");
   expect(withdrawn).not.toContain("try the sample exercise");
-  await db.updateProfile(owner.id, {
+  await db.updateProfile(owner.token, {
     background: "explorer",
     goal: "work",
     backgroundTags: [],

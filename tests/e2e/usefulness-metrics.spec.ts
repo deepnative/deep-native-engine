@@ -73,7 +73,6 @@ test("[L70] operator sees only a suppressed local usefulness snapshot after a me
     await page.goto("/");
     await page.getByLabel("Your starting point").selectOption("professional");
     await page.getByLabel("What would you like to do?").selectOption("work");
-    await page.getByLabel("I'll use invented or sample information").check();
     await page.getByRole("button", { name: "Start my learning path" }).click();
     const memberToken = (await page.context().cookies(origin)).find(
       (cookie) => cookie.name === "dne_preview",

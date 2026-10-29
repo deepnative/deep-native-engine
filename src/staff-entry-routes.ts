@@ -80,7 +80,11 @@ function links(role: StaffRole, tools: StaffTools) {
         "Your granted support test effort",
       ],
       [tools.experts, "/operator/experts", "Synthetic expert registry"],
-      [tools.metrics, "/operator/metrics", "Coarse local metrics"],
+      [
+        tools.metrics,
+        "/operator/metrics/report",
+        "Learning and participation snapshot",
+      ],
       [
         tools.ledger,
         "/operator/ledger-reconciliation",
@@ -150,6 +154,11 @@ function links(role: StaffRole, tools: StaffTools) {
         tools.supportTimeGrants === true,
         "/operator/support-time-grants",
         "Private support-minute permissions",
+      ],
+      [
+        tools.sampleAssignments,
+        "/operator/sample-assignments/pending",
+        "Pending feedback requests",
       ],
       [
         tools.sampleAssignments,

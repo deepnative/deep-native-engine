@@ -17,7 +17,6 @@ for (const [index, [background, goal, workflow]] of [
     await page.goto("/");
     await page.getByLabel("Your starting point").selectOption(background!);
     await page.getByLabel("What would you like to do?").selectOption(goal!);
-    await page.getByLabel("I'll use invented or sample information").check();
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await expect(page).toHaveURL(/\/learn$/);
     await page.goto(`/workflows/${workflow}?version=2`);
@@ -121,7 +120,6 @@ for (const [index, [background, goal, workflow]] of [
       await other
         .getByLabel("What would you like to do?")
         .selectOption("everyday");
-      await other.getByLabel("I'll use invented or sample information").check();
       await other
         .getByRole("button", { name: "Start my learning path" })
         .click();

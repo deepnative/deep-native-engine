@@ -13,6 +13,9 @@ import sys
 import tomllib
 import unittest
 import zipfile
+import threading
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from html.parser import HTMLParser
 from xml.etree import ElementTree
@@ -41,6 +44,24 @@ SETUP_FILES = {
 PRODUCT_SITE_FILES = {
     ".github/workflows/product-pages.yml", "site/index.html", "site/styles.css", "site/favicon.svg",
 }
+LEARNING_ROOT = Path("assets/docs/learning-design")
+LEARNING_FILES = {str(LEARNING_ROOT / name) for name in (
+    "authoring/authoring.feature", "authoring/cases.mjs", "authoring/checks.mjs",
+    "authoring/index.html", "authoring/style.css", "authoring/workshop.mjs",
+    "features/applied-learning.feature", "features/content-refinement.feature",
+    "features/contribution-practice.feature", "features/feedback-revision.feature",
+    "features/learner-journey.feature", "features/realistic-everyday-practice.feature",
+    "features/realistic-technical-practice.feature", "features/realistic-work-practice.feature",
+    "features/study-dialogues.feature", "prototype/checks.mjs", "prototype/content.mjs",
+    "prototype/index.html", "prototype/learning.feature", "prototype/storyboard.mjs",
+    "prototype/style.css", "reader/build.py", "reader/checks.mjs", "reader/contribution.mjs",
+    "reader/course.mjs", "reader/feedback-cases.json", "reader/feedback.mjs",
+    "reader/fonts/InterVariable.woff2", "reader/fonts/LICENSE.txt", "reader/fonts/provenance.json",
+    "reader/gui-checks.mjs", "reader/index.html", "reader/learning.feature",
+    "reader/reader.mjs", "reader/review-guidance.json", "reader/style.css",
+)}
+DESIGN_FILES = {"DESIGN.md", "PRODUCT.md", ".impeccable/.gitignore", ".impeccable/config.json",
+                ".impeccable/design.json", ".impeccable/surfaces/assets-docs-learning-design-reader.md"}
 
 APP_FILES = {
     ".env.example", ".nvmrc", "compose.yaml", "eslint.config.mjs", "package.json", "package-lock.json",
@@ -127,6 +148,7 @@ def validate_scope(root, files):
         p = Path(name)
         allowed = (
             name in SETUP_FILES or name in APP_FILES or name in PRODUCT_SITE_FILES or name in INFRA_FILES
+            or name in LEARNING_FILES or name in DESIGN_FILES
             or (p.is_relative_to(Path("src")) and p.suffix == ".ts")
             or (p.is_relative_to(Path("public")) and p.suffix == ".css")
             or (p.parent == Path("migrations") and p.suffix == ".sql")
@@ -646,6 +668,59 @@ def verify_application(root):
     return report
 
 
+def local_learning_results(report, expected):
+    results = report.get("results")
+    require(expected > 0 and report.get("retries") == 0 and isinstance(results, list) and len(results) == expected,
+            "Missing local learning evidence or retries enabled")
+    names = [case.get("name") for case in results]
+    require(all(isinstance(name, str) and name for name in names) and len(set(names)) == len(names)
+            and all(case.get("status") == "passed" for case in results),
+            "Local learning checks failed, duplicated or incomplete")
+    return len(results)
+
+
+def verify_local_learning(root):
+    def run(*command):
+        subprocess.run(command, cwd=root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    run(sys.executable, str(LEARNING_ROOT / "reader/build.py"), "--check")
+    for name in sorted(LEARNING_FILES):
+        if name.endswith(".mjs"):
+            run("node", "--check", name)
+        elif name.endswith(".json"):
+            json.loads((root / name).read_text())
+    provenance = json.loads((root / LEARNING_ROOT / "reader/fonts/provenance.json").read_text())
+    for asset in provenance["files"]:
+        data = (root / LEARNING_ROOT / "reader/fonts" / asset["file"]).read_bytes()
+        require(hashlib.sha256(data).hexdigest() == asset["sha256"] and len(data) == asset["bytes"],
+                "Local reader font provenance mismatch")
+
+    class QuietHandler(SimpleHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=str(root / LEARNING_ROOT)))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    counts = {}
+    try:
+        for folder, script, expected in (("prototype", "checks.mjs", 13), ("authoring", "checks.mjs", 12),
+                                         ("reader", "checks.mjs", 124), ("reader", "gui-checks.mjs", 16)):
+            name = folder + "-" + Path(script).stem
+            output = root / "artifacts/local-learning" / name
+            output.mkdir(parents=True, exist_ok=True)
+            report = output / "results.json"
+            report.unlink(missing_ok=True)
+            run("node", str(LEARNING_ROOT / folder / script),
+                f"http://127.0.0.1:{server.server_port}/{folder}/", str(output))
+            counts[name] = local_learning_results(json.loads(report.read_text()), expected)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+    return {"scope": "local-content-prototypes", "cases": counts, "applicationCoverageClaim": False}
+
+
 def verify(root):
     report = {"scope": "repository-and-initial-learning-v36", "application_status": "not-verified",
               "application_unit_coverage": None, "application_e2e_journey_coverage": None,
@@ -671,6 +746,8 @@ def verify(root):
                 "Repository tests failed, were skipped, or had expected failures")
         stage = "application verification"
         app = verify_application(root)
+        stage = "local learning verification"
+        report["local_learning"] = verify_local_learning(root)
         stage = "artifact scan"
         report["artifact_scan"] = scan_artifacts(root)
         report.update(application_status="verified-local-slice", application_unit_coverage=app["unitCoverage"],

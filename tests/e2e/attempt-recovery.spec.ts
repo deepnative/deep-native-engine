@@ -66,9 +66,7 @@ for (const [index, background] of (
     });
     const session = await db.session(credential);
     if (session.kind !== "active") throw Error("Missing invented learner");
-    expect(await db.chooseAssignment(session.learner.id, contentId, 1)).toBe(
-      true,
-    );
+    expect(await db.chooseAssignment(credential, contentId, 1)).toBe(true);
     let commitsToDelay = 0;
     const outstanding: Promise<unknown>[] = [];
     const backend = attemptStore({

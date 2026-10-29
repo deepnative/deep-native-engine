@@ -85,7 +85,8 @@ it.each([
     const privateInstruction =
       "Invented private assignment: alpha project details";
     expect(
-      await members.save(a.id, {
+      await members.save(a.token, {
+        revision: 0,
         instruction: privateInstruction,
         verification: "Private invented check",
         complete: false,

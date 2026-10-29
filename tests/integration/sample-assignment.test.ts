@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import { migrate } from "../../src/store.ts";
+import request from "supertest";
+import { app } from "../../src/app.ts";
 import { sampleAssignmentStore } from "../../src/sample-assignment.ts";
 import type {
   SampleAssignmentInput,
@@ -634,4 +636,283 @@ it("REVADM-08 historical expiry, source deletion and local disablement preserve 
     audits: 0,
     receipts: 0,
   });
+});
+
+it("INTAKE-01 exposes pending exact feedback references to the current administrator without source content", async () => {
+  const f = await sampleAssignmentFixture(pool, root);
+  const before = await counts();
+  const application = app(f.members, {
+    origin: "http://127.0.0.1:3000",
+    secret: "invented-intake-secret",
+    mode: "test",
+    sampleAssignments: f.assignments,
+    sampleAssignmentAdministration: true,
+    localStaffEntry: true,
+  });
+  const response = await request(application)
+    .get("/operator/sample-assignments/pending")
+    .set("Host", "127.0.0.1:3000")
+    .set("Cookie", `dne_staff=${f.administratorToken}`);
+  expect(response.status).toBe(200);
+  expect(response.text).toContain("Pending feedback requests");
+  expect(response.text).toContain(f.input.evidenceId);
+  expect(response.text).toContain("Source version 1");
+  for (const privateValue of [
+    f.ownerId,
+    f.ownerToken,
+    f.administratorToken,
+    "Invented private sample",
+    "Invented source for exact private feedback.",
+  ])
+    expect(response.text).not.toContain(privateValue);
+  expect(await counts()).toEqual(before);
+});
+
+it("INTAKE-02/03 selecting a request grants nothing; active and scheduled exact pairs keep it out of intake", async () => {
+  const f = await sampleAssignmentFixture(pool, root);
+  const before = await counts();
+  expect(
+    await f.assignments.selectPending(f.administratorToken, source(f.input)),
+  ).toMatchObject({ kind: "ready", source: source(f.input) });
+  expect(await counts()).toEqual(before);
+  const first = written(
+    await f.assignments.assign(f.administratorToken, f.input),
+  );
+  expect(await f.assignments.pending(f.administratorToken)).toMatchObject({
+    kind: "ready",
+    items: [],
+    next: null,
+  });
+  const scheduled = written(
+    await f.assignments.assign(f.administratorToken, {
+      ...f.input,
+      operationId: randomUUID(),
+      startsAt: new Date(Date.now() + 600000).toISOString(),
+    }),
+  );
+  await f.assignments.revoke(
+    f.administratorToken,
+    source(f.input),
+    first.exactGrantId,
+  );
+  expect(await f.assignments.pending(f.administratorToken)).toMatchObject({
+    kind: "ready",
+    items: [],
+  });
+  expect(
+    await f.assignments.selectPending(f.administratorToken, source(f.input)),
+  ).toMatchObject({ kind: "denied" });
+  await f.assignments.revoke(
+    f.administratorToken,
+    source(f.input),
+    scheduled.exactGrantId,
+  );
+  expect(await f.assignments.pending(f.administratorToken)).toMatchObject({
+    kind: "ready",
+    items: [source(f.input)],
+  });
+  await pool.query("UPDATE evidence_review_submissions SET status='reviewed'");
+  expect(await f.assignments.pending(f.administratorToken)).toMatchObject({
+    kind: "ready",
+    items: [],
+  });
+});
+it.each(["expired", "revoked", "reviewer-expired", "nonoverlap"])(
+  "INTAKE-03 a %s reviewer pair cannot hide a genuinely unassigned request",
+  async (change) => {
+    const f = await sampleAssignmentFixture(pool, root);
+    written(await f.assignments.assign(f.administratorToken, f.input));
+    if (change === "expired")
+      await pool.query(
+        "UPDATE reviewer_evidence_grants SET expires_at=clock_timestamp()-interval '1 millisecond',starts_at=clock_timestamp()-interval '1 hour'",
+      );
+    if (change === "revoked")
+      await pool.query(
+        "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+        [f.reviewerId],
+      );
+    if (change === "reviewer-expired")
+      await pool.query(
+        "UPDATE principals SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+        [f.reviewerId],
+      );
+    if (change === "nonoverlap")
+      await pool.query(
+        "UPDATE reviewer_evidence_grants SET starts_at=clock_timestamp()+interval '2 hours',expires_at=clock_timestamp()+interval '3 hours'",
+      );
+    expect(await f.assignments.pending(f.administratorToken)).toMatchObject({
+      kind: "ready",
+      items: [source(f.input)],
+    });
+  },
+);
+it.each(["member", "reviewer", "expired", "revoked", "rotated"])(
+  "INTAKE-04 denies %s administrator authority without metadata",
+  async (change) => {
+    const f = await sampleAssignmentFixture(pool, root);
+    let token = f.administratorToken;
+    if (change === "member") token = f.ownerToken;
+    if (change === "reviewer") token = f.reviewerToken;
+    if (change === "expired")
+      await pool.query(
+        "UPDATE principals SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+        [f.administratorId],
+      );
+    if (change === "revoked")
+      await pool.query(
+        "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+        [f.administratorId],
+      );
+    if (change === "rotated")
+      await pool.query("UPDATE principals SET token_hash=$1 WHERE id=$2", [
+        "b".repeat(64),
+        f.administratorId,
+      ]);
+    for (const value of [
+      await f.assignments.pending(token),
+      await f.assignments.selectPending(token, source(f.input)),
+    ]) {
+      expect(value.kind).toBe("denied");
+      expect(JSON.stringify(value)).not.toContain(f.input.evidenceId);
+    }
+  },
+);
+it.each([
+  "withdrawn",
+  "quarantined",
+  "deleting",
+  "deleted",
+  "expired-owner",
+  "revoked-owner",
+  "stale-version",
+])(
+  "INTAKE-04 rechecks %s sources when an inbox reference is selected",
+  async (change) => {
+    const f = await sampleAssignmentFixture(pool, root);
+    expect((await f.assignments.pending(f.administratorToken)).kind).toBe(
+      "ready",
+    );
+    if (change === "withdrawn")
+      await pool.query(
+        "UPDATE evidence_objects SET private_review_allowed=false,private_review_revoked_at=clock_timestamp()",
+      );
+    if (change === "quarantined")
+      await pool.query(
+        "UPDATE evidence_objects SET quarantine_state='pending'",
+      );
+    if (change === "deleting")
+      await pool.query(
+        "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
+        [f.ownerId],
+      );
+    if (change === "deleted") await pool.query("DELETE FROM evidence_objects");
+    if (change === "expired-owner")
+      await pool.query(
+        "UPDATE principals SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+        [f.ownerId],
+      );
+    if (change === "revoked-owner")
+      await pool.query(
+        "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+        [f.ownerId],
+      );
+    const value = source(f.input);
+    if (change === "stale-version") value.sourceRevision = 2;
+    expect(
+      (await f.assignments.selectPending(f.administratorToken, value)).kind,
+    ).toBe("denied");
+    if (change !== "stale-version")
+      expect(await f.assignments.pending(f.administratorToken)).toMatchObject({
+        kind: "ready",
+        items: [],
+      });
+  },
+);
+it.each(["withdrawal", "deletion", "administrator-revocation"])(
+  "INTAKE-04 excludes %s committed while intake waits on actual PostgreSQL locks",
+  async (change) => {
+    const f = await sampleAssignmentFixture(pool, root);
+    const blocker = await pool.connect();
+    let pending: ReturnType<typeof f.assignments.pending> | undefined;
+    try {
+      await blocker.query("BEGIN");
+      const pid = (await blocker.query("SELECT pg_backend_pid() AS pid"))
+        .rows[0].pid;
+      if (change === "administrator-revocation")
+        await blocker.query(
+          "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
+          [f.administratorId],
+        );
+      else if (change === "withdrawal")
+        await blocker.query(
+          "UPDATE evidence_objects SET private_review_allowed=false,private_review_revoked_at=clock_timestamp() WHERE id=$1",
+          [f.input.evidenceId],
+        );
+      else
+        await blocker.query("DELETE FROM evidence_objects WHERE id=$1", [
+          f.input.evidenceId,
+        ]);
+      pending = f.assignments.pending(f.administratorToken);
+      await waitForSampleAssignmentBlock(pool, pid);
+      await blocker.query("COMMIT");
+      const result = await pending;
+      expect(result).toMatchObject(
+        change === "administrator-revocation"
+          ? { kind: "denied" }
+          : { kind: "ready", items: [], next: null },
+      );
+      expect(JSON.stringify(result)).not.toContain(f.input.evidenceId);
+    } finally {
+      await blocker.query("ROLLBACK");
+      blocker.release();
+      await pending;
+    }
+  },
+);
+it("INTAKE-05 traverses more than twenty tied-time requests once and rejects another administrator's cursor", async () => {
+  const f = await sampleAssignmentFixture(pool, root);
+  const expected = [f.input.evidenceId];
+  for (let i = 0; i < 22; i++) {
+    const uploaded = await f.evidence.upload(f.ownerToken, {
+      name: `Invented intake ${i}`,
+      mediaType: "text/plain",
+      data: Buffer.from(`Invented private intake ${i}`),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    });
+    if (uploaded.kind !== "created") throw Error("Expected invented source");
+    await f.evidence.transitionQuarantine(uploaded.id, "clean");
+    expect(await f.evidence.submitForReview(f.ownerToken, uploaded.id)).toBe(
+      true,
+    );
+    expected.push(uploaded.id);
+  }
+  await pool.query(
+    "UPDATE evidence_review_submissions SET created_at='2026-10-27T09:00:00.123456Z'",
+  );
+  const first = await f.assignments.pending(f.administratorToken);
+  if (first.kind !== "ready" || !first.next)
+    throw Error("Expected bounded continuation");
+  expect(first.items).toHaveLength(20);
+  for (const item of first.items)
+    expect(Object.keys(item).sort()).toEqual([
+      "evidenceId",
+      "sourceRevision",
+      "submittedAt",
+    ]);
+  const other = sampleAssignmentToken();
+  await f.auth.provisionStaff(other, "platform_admin", f.end);
+  expect((await f.assignments.pending(other, first.next)).kind).toBe("invalid");
+  expect(
+    (await f.assignments.pending(f.administratorToken, first.next + "x")).kind,
+  ).toBe("invalid");
+  const second = await f.assignments.pending(f.administratorToken, first.next);
+  if (second.kind !== "ready") throw Error("Expected next page");
+  expect(second.next).toBeNull();
+  expect([...first.items, ...second.items].map((x) => x.evidenceId)).toEqual(
+    expected.sort(),
+  );
 });

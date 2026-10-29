@@ -180,7 +180,7 @@ function snapshotFixture(
         rows:
           options.principal === false
             ? []
-            : [{ expiresAt: new Date(2000000000000) }],
+            : [{ id: "member", expiresAt: new Date(2000000000000) }],
       };
     if (sql.includes("FROM workspaces"))
       return { rows: options.workspace === false ? [] : [{ id: "workspace" }] };
@@ -273,7 +273,7 @@ function mutationFixture(
         rows:
           options.principal === false
             ? []
-            : [{ expiresAt: new Date(2000000000000) }],
+            : [{ id: "member", expiresAt: new Date(2000000000000) }],
       };
     if (sql.includes("FROM workspaces"))
       return { rows: options.workspace === false ? [] : [{ id: "workspace" }] };

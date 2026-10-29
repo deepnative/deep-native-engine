@@ -1,0 +1,4 @@
+BEGIN;
+ALTER TABLE exercises ADD COLUMN IF NOT EXISTS revision integer NOT NULL DEFAULT 1 CHECK(revision>0);
+INSERT INTO schema_migrations(version) VALUES(78) ON CONFLICT DO NOTHING;
+COMMIT;

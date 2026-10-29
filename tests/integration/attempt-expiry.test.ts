@@ -70,7 +70,7 @@ async function fixture(operation: Operation) {
   expect(await catalog.submit(editor, draft.id, 1)).toBe(true);
   expect(await catalog.approve(reviewer, draft.id, 1, true)).toBe(true);
   expect(await catalog.publish(editor, draft.id, 1)).toBe(true);
-  expect(await db.chooseAssignment(owner, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(token, draft.id, 1)).toBe(true);
   let id = "";
   if (operation !== "start-new") {
     id = (await attempts.start(token))!;

@@ -433,7 +433,8 @@ it("CIRADM-07 deleting a creator preserves grants to others but never preserves 
   });
   const member = await members.session(memberToken);
   if (member.kind !== "active") throw Error("Invented member missing");
-  await members.save(member.learner.id, {
+  await members.save(memberToken, {
+    revision: 0,
     instruction: "Invented private work",
     verification: "Compare the invented source",
     complete: true,

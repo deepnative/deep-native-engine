@@ -180,6 +180,101 @@ function fixture(
   };
 }
 afterEach(() => vi.restoreAllMocks());
+function inboxFixture(
+  count = 1,
+  mutation?: (rows: Record<string, unknown>[]) => Record<string, unknown>[],
+  boundary = "requests",
+) {
+  const rows = Array.from({ length: count }, (_, i) => ({
+    requestId: id(10 + i),
+    memberId: owner,
+    workspaceId: owner,
+    receivedAt: past,
+    acknowledgedAt: null,
+    resolvedAt: null,
+    withdrawnAt: null,
+    cursorAt: "2026-01-01T00:00:00.000001Z",
+    subject: "NEVER-PROJECT-SUBJECT",
+    body: "NEVER-PROJECT-BODY",
+  }));
+  const f = fixture({
+    override(sql) {
+      if (sql.includes("FROM support_requests r JOIN workspaces")) return rows;
+      if (sql.includes("FROM workspaces WHERE id=ANY")) {
+        const workspaces = count
+          ? [{ id: owner, memberId: owner, deletingAt: null }]
+          : [];
+        return boundary === "workspaces" && mutation
+          ? mutation(workspaces)
+          : workspaces;
+      }
+      if (sql.includes("FROM support_requests WHERE id=ANY"))
+        return mutation && boundary === "requests" ? mutation(rows) : rows;
+      return undefined;
+    },
+  });
+  return f;
+}
+it("SI-01 admin inbox projects only receipt lifecycle, bounds 21 discovered rows to 20, and scopes signed navigation to this administrator surface", async () => {
+  const f = inboxFixture(21);
+  const value = ready(await f.store.inbox(token));
+  expect(value.items).toHaveLength(20);
+  expect(value.items[0]).toEqual({
+    requestId: id(10),
+    receivedAt: past,
+    acknowledgedAt: null,
+    resolvedAt: null,
+    withdrawnAt: null,
+  });
+  expect(JSON.stringify(value)).not.toContain("NEVER-PROJECT");
+  expect(value.nextCursor).toBeTruthy();
+  expect((await f.store.inbox(token, value.nextCursor!)).kind).toBe("ready");
+  expect(
+    (await f.store.history(token, requestId, value.nextCursor!)).kind,
+  ).toBe("denied");
+  expect((await f.store.inbox(token, "forged")).kind).toBe("denied");
+  expect(ready(await inboxFixture(0).store.inbox(token))).toEqual({
+    items: [],
+    nextCursor: null,
+  });
+  expect(ready(await inboxFixture().store.inbox(token)).nextCursor).toBeNull();
+  expect(
+    f.query.mock.calls.some(([sql]) => /^(INSERT|UPDATE|DELETE)/.test(sql)),
+  ).toBe(false);
+});
+it("SI-03 inbox refuses changed owner, workspace or request fences instead of exposing stale metadata", async () => {
+  const expired = inboxFixture();
+  expired.state.people.find((p) => p.id === owner)!.active = false;
+  expect(await expired.store.inbox(token)).toEqual({ kind: "denied" });
+  for (const [boundary, mutation] of [
+    ["workspaces", () => []],
+    [
+      "workspaces",
+      (rows: Record<string, unknown>[]) =>
+        rows.map((r) => ({ ...r, memberId: operator })),
+    ],
+    [
+      "workspaces",
+      (rows: Record<string, unknown>[]) =>
+        rows.map((r) => ({ ...r, deletingAt: past })),
+    ],
+    ["requests", () => []],
+    [
+      "requests",
+      (rows: Record<string, unknown>[]) =>
+        rows.map((r) => ({ ...r, memberId: operator })),
+    ],
+    [
+      "requests",
+      (rows: Record<string, unknown>[]) =>
+        rows.map((r) => ({ ...r, workspaceId: operator })),
+    ],
+  ] as const) {
+    expect(
+      await inboxFixture(1, mutation, boundary).store.inbox(token),
+    ).toEqual({ kind: "denied" });
+  }
+});
 it("SUPADM-07-RECOVERY an unexpected transaction-boundary exception remains sanitized and is never retried", async () => {
   const transaction = vi
     .spyOn(lifetime, "sampleFeedbackTransaction")

@@ -28,7 +28,6 @@ test("[L102] three audiences keep exact private starter practice when changing g
     await page.goto("/");
     await page.getByLabel("Your starting point").selectOption(background);
     await page.getByLabel("What would you like to do?").selectOption(a);
-    await page.getByLabel("I'll use invented or sample information").check();
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await page.goto("/lesson");
     const first = `Invented ${background} first goal plan with source checks.`;

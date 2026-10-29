@@ -141,11 +141,9 @@ describe("local-only configuration", () => {
 });
 describe("learner inputs", () => {
   it.each(["explorer", "professional", "technical"])(
-    "accepts %s without identity, job or payment fields",
+    "MON-01 accepts %s without invented-data, identity, job or payment fields",
     (background) =>
-      expect(
-        profile({ background, goal: "everyday", synthetic: "yes" }),
-      ).toEqual({
+      expect(profile({ background, goal: "everyday" })).toEqual({
         background,
         goal: "everyday",
         backgroundTags: [],
@@ -163,7 +161,7 @@ describe("learner inputs", () => {
     { background: "owner", goal: "work", synthetic: "yes" },
     { background: "explorer", goal: [] },
     { background: "explorer", goal: "admin", synthetic: "yes" },
-    { background: "explorer", goal: "work", synthetic: "no" },
+    { background: "explorer", goal: { value: "work" } },
     { background: "__proto__", goal: "work", synthetic: "yes" },
   ])("rejects invalid profile %j", (body) => expect(profile(body)).toBeNull());
   it("accepts overlapping interests and an exploratory path without a work identity", () => {
@@ -328,7 +326,7 @@ describe("learner inputs", () => {
       },
     ]);
   });
-  it("keeps onboarding acknowledgement explicit while retaining safe attempted choices", () => {
+  it("MON-01 retains invalid profile choices and accepts correction without a global sample pledge", () => {
     const body = {
       background: "explorer",
       goal: "everyday",
@@ -336,43 +334,32 @@ describe("learner inputs", () => {
       timezone: "Mars/Olympus",
       weekly_minutes: "30",
     };
-    const omitted = profileStart(body);
-    expect(omitted.input).toBeNull();
-    expect(omitted.syntheticAcknowledged).toBe(false);
-    expect(omitted.errors.map((error) => error.field)).toEqual([
-      "timezone",
-      "synthetic",
-    ]);
-    expect(omitted.attempted).toMatchObject({
+    const invalid = profileStart(body);
+    expect(invalid.input).toBeNull();
+    expect(invalid.errors.map((error) => error.field)).toEqual(["timezone"]);
+    expect(invalid.attempted).toMatchObject({
       background: "explorer",
       goal: "everyday",
       domainTags: ["education"],
       timezone: "Mars/Olympus",
       weeklyMinutes: "30",
     });
-    const duplicate = profileStart({
-      ...body,
-      timezone: "UTC",
-      synthetic: ["yes", "yes"],
-    });
-    expect(duplicate.input).toBeNull();
-    expect(duplicate.syntheticAcknowledged).toBe(false);
-    expect(duplicate.errors.map((error) => error.field)).toEqual(["synthetic"]);
-    const accepted = profileStart({
-      ...body,
-      timezone: "UTC",
-      synthetic: "yes",
-    });
-    expect(accepted.errors).toEqual([]);
-    expect(accepted.syntheticAcknowledged).toBe(true);
-    expect(accepted.input).toMatchObject({
+    const corrected = profileStart({ ...body, timezone: "UTC" });
+    expect(corrected.errors).toEqual([]);
+    expect(corrected.input).toMatchObject({
       background: "explorer",
       goal: "everyday",
       domainTags: ["education"],
       timezone: "UTC",
       weeklyMinutes: 30,
     });
+    // Older browser forms may still send this obsolete field; it grants nothing.
+    expect(
+      profileStart({ ...body, timezone: "UTC", synthetic: ["yes", "yes"] })
+        .input,
+    ).toEqual(corrected.input);
   });
+
   it("allows an unfinished draft but validates every completed answer", () => {
     expect(submission({ intent: "draft" })).toMatchObject({
       instruction: "",

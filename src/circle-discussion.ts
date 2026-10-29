@@ -480,8 +480,8 @@ export function circleDiscussionStore(
       ...new Set([identity.id, ...metadata.map((item) => item.member_id)]),
     ].sort();
     const principals = await client.query<{ id: string }>(
-      "SELECT id FROM principals WHERE id=ANY($1::uuid[]) AND kind='member' AND revoked_at IS NULL AND expires_at>clock_timestamp() ORDER BY id FOR SHARE",
-      [ids],
+      "SELECT id FROM principals WHERE id=ANY($1::uuid[]) AND (id<>$2::uuid OR token_hash=$3) AND kind='member' AND revoked_at IS NULL AND expires_at>clock_timestamp() ORDER BY id FOR SHARE",
+      [ids, identity.id, hash(token)],
     );
     if (!principals.rows.some((p) => p.id === identity.id)) return null;
     const currentIds = principals.rows.map((p) => p.id);

@@ -95,7 +95,6 @@ async function onboard(
       .getByRole("group", { name: "Domains of interest (optional)" })
       .getByLabel("Education")
       .check();
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }

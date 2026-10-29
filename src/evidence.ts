@@ -7,7 +7,7 @@ import {
 } from "node:crypto";
 import { basename, join, resolve } from "node:path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import type { Pool, PoolClient } from "pg";
+import type { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
 import { objectWriteJournal } from "./object-write-recovery.ts";
 import { hash } from "./store.ts";
 import {
@@ -15,6 +15,12 @@ import {
   PROVIDED_ORIGIN_JOIN,
   type ProvidedSampleOrigin,
 } from "./prepared-sample-values.ts";
+
+import {
+  ASSIGNMENT_ORIGIN_SQL,
+  ASSIGNMENT_ORIGIN_JOIN,
+  type AssignmentEvidenceOrigin,
+} from "./assignment-evidence-values.ts";
 
 export const MAX_EVIDENCE_BYTES = 1024 * 1024;
 export const MAX_EXPORT_ITEMS = 20;
@@ -45,12 +51,19 @@ export interface EvidenceUpload {
   revisesId?: string;
 }
 
+export interface StorageQuery {
+  query<T extends QueryResultRow = QueryResultRow>(
+    sql: string,
+    values?: unknown[],
+  ): Promise<QueryResult<T>>;
+}
+
 export interface ObjectStorage {
   readonly requiresWriteRecovery?: true;
   abandon?(key: string): Promise<void>;
-  put(key: string, data: Buffer): Promise<void>;
-  get(key: string): Promise<Buffer>;
-  remove(key: string): Promise<void>;
+  put(key: string, data: Buffer, query?: StorageQuery): Promise<void>;
+  get(key: string, query?: StorageQuery): Promise<Buffer>;
+  remove(key: string, query?: StorageQuery): Promise<void>;
 }
 
 type Denied = { kind: "denied" };
@@ -62,10 +75,12 @@ type EvidenceMetadata = {
   media_type: EvidenceType;
   storage_key: string;
   origin?: ProvidedSampleOrigin;
+  assignmentOrigin?: AssignmentEvidenceOrigin;
 };
 
 export interface OwnedEvidence {
   origin?: ProvidedSampleOrigin;
+  assignmentOrigin?: AssignmentEvidenceOrigin;
   id: string;
   name: string;
   mediaType: EvidenceType;
@@ -81,6 +96,7 @@ export interface OwnedEvidence {
 }
 export interface ExportedEvidence {
   origin?: ProvidedSampleOrigin;
+  assignmentOrigin?: AssignmentEvidenceOrigin;
   id: string;
   name: string;
   mediaType: EvidenceType;
@@ -146,6 +162,7 @@ export interface EvidenceStore {
         mediaType: EvidenceType;
         data: Buffer;
         origin?: ProvidedSampleOrigin;
+        assignmentOrigin?: AssignmentEvidenceOrigin;
       }
   >;
   addDerivative(
@@ -398,8 +415,8 @@ export function evidenceStore(
         }
       >(
         `SELECT e.id,e.workspace_id,e.original_name,e.media_type,e.storage_key,
-              e.owner_principal_id,e.private_review_allowed,e.learning_circle_id,${PROVIDED_ORIGIN_SQL}
-       FROM evidence_objects e ${PROVIDED_ORIGIN_JOIN} WHERE e.id=$1 AND e.workspace_id=$2
+              e.owner_principal_id,e.private_review_allowed,e.learning_circle_id,${PROVIDED_ORIGIN_SQL},${ASSIGNMENT_ORIGIN_SQL}
+       FROM evidence_objects e ${PROVIDED_ORIGIN_JOIN} ${ASSIGNMENT_ORIGIN_JOIN} WHERE e.id=$1 AND e.workspace_id=$2
          AND e.quarantine_state='clean' FOR SHARE OF e`,
         [evidenceId, workspace.id],
       )
@@ -488,7 +505,7 @@ export function evidenceStore(
     token: string,
     evidenceId: string,
     action: "evidence_link_issued" | "evidence_bytes_loaded",
-    use: (row: EvidenceMetadata) => T | Promise<T>,
+    use: (row: EvidenceMetadata, client: PoolClient) => T | Promise<T>,
     isCurrent: (result: T) => boolean,
   ): Promise<T | Denied> {
     if (!tokenPattern.test(token) || !uuidPattern.test(evidenceId))
@@ -502,7 +519,7 @@ export function evidenceStore(
         await client.query("ROLLBACK");
         return { kind: "denied" };
       }
-      const result = await use(allowed.row);
+      const result = await use(allowed.row, client);
       if (allowed.staff) {
         const { actorId, assignmentId, exactId } = allowed.staff;
         await client.query(
@@ -560,11 +577,11 @@ export function evidenceStore(
                     WHEN parent.quarantine_state='deleting' THEN 'deleting'
                     ELSE 'current' END AS "revisionParentStatus",
                   e.revision_number AS "revisionNumber",
-                  ${PROVIDED_ORIGIN_SQL},
+                  ${PROVIDED_ORIGIN_SQL},${ASSIGNMENT_ORIGIN_SQL},
                   EXISTS(SELECT 1 FROM evidence_objects child
                     WHERE child.revision_parent_id=e.id) AS "hasRevision"
            FROM evidence_objects e
-           ${PROVIDED_ORIGIN_JOIN}
+           ${PROVIDED_ORIGIN_JOIN} ${ASSIGNMENT_ORIGIN_JOIN}
            JOIN principals p ON p.id=e.owner_principal_id
            LEFT JOIN evidence_objects parent ON parent.id=e.revision_parent_id
            LEFT JOIN evidence_review_submissions s ON s.evidence_id=e.id
@@ -573,9 +590,10 @@ export function evidenceStore(
            ORDER BY e.created_at DESC,e.id`,
           [hash(token)],
         )
-      ).rows.map(({ origin, ...row }) => ({
+      ).rows.map(({ origin, assignmentOrigin, ...row }) => ({
         ...row,
         ...(origin ? { origin } : {}),
+        ...(assignmentOrigin ? { assignmentOrigin } : {}),
       }));
     },
     async exportOwned(token, continuation) {
@@ -627,6 +645,7 @@ export function evidenceStore(
           sha256: string;
           storageKey: string;
           origin?: ProvidedSampleOrigin;
+          assignmentOrigin?: AssignmentEvidenceOrigin;
         }>(
           `SELECT e.id,e.original_name AS name,e.media_type AS "mediaType",
                   e.quarantine_state AS "quarantineState",
@@ -640,9 +659,9 @@ export function evidenceStore(
                     WHEN parent.quarantine_state='deleting' THEN 'deleting'
                     ELSE 'current' END AS "revisionParentStatus",
                   e.revision_number AS "revisionNumber",e.byte_size AS "byteSize",
-                  e.sha256,e.storage_key AS "storageKey",${PROVIDED_ORIGIN_SQL}
+                  e.sha256,e.storage_key AS "storageKey",${PROVIDED_ORIGIN_SQL},${ASSIGNMENT_ORIGIN_SQL}
            FROM evidence_objects e
-           ${PROVIDED_ORIGIN_JOIN}
+           ${PROVIDED_ORIGIN_JOIN} ${ASSIGNMENT_ORIGIN_JOIN}
            LEFT JOIN evidence_objects parent ON parent.id=e.revision_parent_id
            WHERE e.owner_principal_id=$1 AND e.workspace_id=$2
              AND ($3::timestamptz IS NULL OR (e.created_at,e.id)>($3::timestamptz,$4::uuid))
@@ -678,7 +697,7 @@ export function evidenceStore(
             break;
           let sourceBase64: string | null = null;
           if (row.quarantineState === "clean") {
-            const data = await objects.get(row.storageKey);
+            const data = await objects.get(row.storageKey, client);
             if (
               data.length !== row.byteSize ||
               createHash("sha256").update(data).digest("hex") !== row.sha256
@@ -703,6 +722,9 @@ export function evidenceStore(
             revisionNumber: row.revisionNumber,
             sourceBase64,
             ...(row.origin ? { origin: row.origin } : {}),
+            ...(row.assignmentOrigin
+              ? { assignmentOrigin: row.assignmentOrigin }
+              : {}),
           });
         }
         // BEGIN freezes CURRENT_TIMESTAMP; source reads can outlive the session.
@@ -790,7 +812,7 @@ export function evidenceStore(
               `SELECT e.revision_number FROM evidence_objects e
                JOIN evidence_review_submissions s ON s.evidence_id=e.id
                WHERE e.id=$1 AND e.owner_principal_id=$2
-                 AND e.workspace_id=$3 AND e.quarantine_state='clean'
+                 AND e.workspace_id=$3 AND e.quarantine_state='clean' AND NOT e.assignment_bound
                  AND e.private_review_allowed
                  AND s.status IN ('queued','reviewed')
                  AND e.revision_number<20
@@ -806,7 +828,7 @@ export function evidenceStore(
           }
           revisionNumber = parent.revision_number + 1;
         }
-        await objects.put(storageKey, input.data);
+        await objects.put(storageKey, input.data, client);
         objectWritten = true;
         await client.query(
           `INSERT INTO evidence_objects(
@@ -838,8 +860,12 @@ export function evidenceStore(
         return { kind: "created", id, state: "pending" };
       } catch (error) {
         if (!commitAttempted) {
-          if (!(await rollback(client))) releaseError = error as Error;
-          if (objectWritten) await objects.remove(storageKey);
+          if (!(await rollback(client))) {
+            client.release(error as Error);
+            released = true;
+          }
+          if (objectWritten)
+            await objects.remove(storageKey, released ? undefined : client);
         } else {
           client.release(error as Error);
           released = true;
@@ -989,14 +1015,17 @@ export function evidenceStore(
         token,
         evidenceId,
         "evidence_bytes_loaded",
-        async (row) => {
-          const data = await objects.get(row.storage_key);
+        async (row, client) => {
+          const data = await objects.get(row.storage_key, client);
           return {
             kind: "allowed" as const,
             name: row.original_name,
             mediaType: row.media_type,
             data,
             ...(row.origin ? { origin: row.origin } : {}),
+            ...(row.assignmentOrigin
+              ? { assignmentOrigin: row.assignmentOrigin }
+              : {}),
           };
         },
         () => validCapability(evidenceId, capability, clock()),
@@ -1025,7 +1054,7 @@ export function evidenceStore(
         const source = (
           await client.query<{ id: string }>(
             `SELECT id FROM evidence_objects
-             WHERE id=$1 AND quarantine_state='clean' FOR UPDATE`,
+             WHERE id=$1 AND quarantine_state='clean' AND NOT assignment_bound FOR UPDATE`,
             [evidenceId],
           )
         ).rows[0];
@@ -1033,7 +1062,7 @@ export function evidenceStore(
           await client.query("ROLLBACK");
           throw new Error("Evidence derivative could not be stored.");
         }
-        await objects.put(storageKey, data);
+        await objects.put(storageKey, data, client);
         objectWritten = true;
         await client.query(
           `INSERT INTO evidence_derivatives(
@@ -1055,8 +1084,12 @@ export function evidenceStore(
         return id;
       } catch (error) {
         if (!commitAttempted) {
-          if (!(await rollback(client))) releaseError = error as Error;
-          if (objectWritten) await objects.remove(storageKey);
+          if (!(await rollback(client))) {
+            client.release(error as Error);
+            released = true;
+          }
+          if (objectWritten)
+            await objects.remove(storageKey, released ? undefined : client);
         } else {
           client.release(error as Error);
           released = true;

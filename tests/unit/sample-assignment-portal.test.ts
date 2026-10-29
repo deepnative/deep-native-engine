@@ -14,6 +14,8 @@ it.each(STAFF_ROLES)(
   "REVADM-01/06 exposes only the current %s assignment navigation without reading private samples",
   async (role) => {
     const sampleAssignments = {
+      pending: vi.fn(),
+      selectPending: vi.fn(),
       open: vi.fn(),
       selfReference: vi.fn(),
       check: vi.fn(),
@@ -46,6 +48,9 @@ it.each(STAFF_ROLES)(
     expect(visible.text.includes('href="/operator/sample-assignments"')).toBe(
       role === "platform_admin",
     );
+    expect(
+      visible.text.includes('href="/operator/sample-assignments/pending"'),
+    ).toBe(role === "platform_admin");
     expect(
       visible.text.includes('href="/review/sample-assignment-reference"'),
     ).toBe(role === "reviewer");

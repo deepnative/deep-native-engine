@@ -48,7 +48,6 @@ test("[F-BUILD-10-C] pending save and uncertain storage result recover without d
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await page.getByLabel("What would you like to do?").selectOption("everyday");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const choices = page.getByRole("region", {
     name: "Choose a practice assignment",

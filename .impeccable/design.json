@@ -1,0 +1,618 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-28T16:15:35.646300Z",
+  "title": "Design System: Deep Native local learning reader",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Reading ink",
+        "canonical": "#172c46",
+        "tonalRamp": [
+          "oklch(15% 0.0138 254.62)",
+          "oklch(27% 0.0275 254.62)",
+          "oklch(39% 0.0413 254.62)",
+          "oklch(51% 0.0551 254.62)",
+          "oklch(63% 0.0551 254.62)",
+          "oklch(75% 0.0441 254.62)",
+          "oklch(87% 0.0248 254.62)",
+          "oklch(95% 0.0083 254.62)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Supporting slate",
+        "canonical": "#51647c",
+        "tonalRamp": [
+          "oklch(15% 0.0112 254.48)",
+          "oklch(27% 0.0225 254.48)",
+          "oklch(39% 0.0337 254.48)",
+          "oklch(51% 0.0450 254.48)",
+          "oklch(63% 0.0450 254.48)",
+          "oklch(75% 0.0360 254.48)",
+          "oklch(87% 0.0202 254.48)",
+          "oklch(95% 0.0067 254.48)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Cool paper",
+        "canonical": "#f5f7fb",
+        "tonalRamp": [
+          "oklch(15% 0.0014 264.53)",
+          "oklch(27% 0.0029 264.53)",
+          "oklch(39% 0.0043 264.53)",
+          "oklch(51% 0.0057 264.53)",
+          "oklch(63% 0.0057 264.53)",
+          "oklch(75% 0.0046 264.53)",
+          "oklch(87% 0.0026 264.53)",
+          "oklch(95% 0.0009 264.53)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "White surface",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(27% 0.0000 89.88)",
+          "oklch(39% 0.0000 89.88)",
+          "oklch(51% 0.0000 89.88)",
+          "oklch(63% 0.0000 89.88)",
+          "oklch(75% 0.0000 89.88)",
+          "oklch(87% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ]
+      },
+      "surface-subtle": {
+        "role": "neutral",
+        "displayName": "Soft inset",
+        "canonical": "#edf2f8",
+        "tonalRamp": [
+          "oklch(15% 0.0024 252.81)",
+          "oklch(27% 0.0048 252.81)",
+          "oklch(39% 0.0073 252.81)",
+          "oklch(51% 0.0097 252.81)",
+          "oklch(63% 0.0097 252.81)",
+          "oklch(75% 0.0077 252.81)",
+          "oklch(87% 0.0044 252.81)",
+          "oklch(95% 0.0015 252.81)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Fine line",
+        "canonical": "#d9e2ee",
+        "tonalRamp": [
+          "oklch(15% 0.0048 255.54)",
+          "oklch(27% 0.0095 255.54)",
+          "oklch(39% 0.0143 255.54)",
+          "oklch(51% 0.0190 255.54)",
+          "oklch(63% 0.0190 255.54)",
+          "oklch(75% 0.0152 255.54)",
+          "oklch(87% 0.0086 255.54)",
+          "oklch(95% 0.0029 255.54)"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Control line",
+        "canonical": "#afbed1",
+        "tonalRamp": [
+          "oklch(15% 0.0079 254.35)",
+          "oklch(27% 0.0158 254.35)",
+          "oklch(39% 0.0237 254.35)",
+          "oklch(51% 0.0317 254.35)",
+          "oklch(63% 0.0317 254.35)",
+          "oklch(75% 0.0253 254.35)",
+          "oklch(87% 0.0142 254.35)",
+          "oklch(95% 0.0047 254.35)"
+        ]
+      },
+      "blue": {
+        "role": "primary",
+        "displayName": "Action blue",
+        "canonical": "#2459d6",
+        "tonalRamp": [
+          "oklch(15% 0.0400 263.49)",
+          "oklch(27% 0.0800 263.49)",
+          "oklch(39% 0.1200 263.49)",
+          "oklch(51% 0.1600 263.49)",
+          "oklch(63% 0.1600 263.49)",
+          "oklch(75% 0.1280 263.49)",
+          "oklch(87% 0.0720 263.49)",
+          "oklch(95% 0.0240 263.49)"
+        ]
+      },
+      "blue-hover": {
+        "role": "primary",
+        "displayName": "Action blue hover",
+        "canonical": "#1845b0",
+        "tonalRamp": [
+          "oklch(15% 0.0400 263.45)",
+          "oklch(27% 0.0800 263.45)",
+          "oklch(39% 0.1200 263.45)",
+          "oklch(51% 0.1600 263.45)",
+          "oklch(63% 0.1600 263.45)",
+          "oklch(75% 0.1280 263.45)",
+          "oklch(87% 0.0720 263.45)",
+          "oklch(95% 0.0240 263.45)"
+        ]
+      },
+      "blue-soft": {
+        "role": "primary",
+        "displayName": "Action blue tint",
+        "canonical": "#eaf0ff",
+        "tonalRamp": [
+          "oklch(15% 0.0053 268.43)",
+          "oklch(27% 0.0106 268.43)",
+          "oklch(39% 0.0159 268.43)",
+          "oklch(51% 0.0212 268.43)",
+          "oklch(63% 0.0212 268.43)",
+          "oklch(75% 0.0169 268.43)",
+          "oklch(87% 0.0095 268.43)",
+          "oklch(95% 0.0032 268.43)"
+        ]
+      },
+      "navy": {
+        "role": "primary",
+        "displayName": "Anchor navy",
+        "canonical": "#17365f",
+        "tonalRamp": [
+          "oklch(15% 0.0204 256.34)",
+          "oklch(27% 0.0407 256.34)",
+          "oklch(39% 0.0611 256.34)",
+          "oklch(51% 0.0815 256.34)",
+          "oklch(63% 0.0815 256.34)",
+          "oklch(75% 0.0652 256.34)",
+          "oklch(87% 0.0367 256.34)",
+          "oklch(95% 0.0122 256.34)"
+        ]
+      },
+      "green": {
+        "role": "tertiary",
+        "displayName": "Checked green",
+        "canonical": "#18715c",
+        "tonalRamp": [
+          "oklch(15% 0.0218 172.62)",
+          "oklch(27% 0.0437 172.62)",
+          "oklch(39% 0.0655 172.62)",
+          "oklch(51% 0.0873 172.62)",
+          "oklch(63% 0.0873 172.62)",
+          "oklch(75% 0.0699 172.62)",
+          "oklch(87% 0.0393 172.62)",
+          "oklch(95% 0.0131 172.62)"
+        ]
+      },
+      "green-soft": {
+        "role": "tertiary",
+        "displayName": "Checked green tint",
+        "canonical": "#e9f5ef",
+        "tonalRamp": [
+          "oklch(15% 0.0037 164.73)",
+          "oklch(27% 0.0075 164.73)",
+          "oklch(39% 0.0112 164.73)",
+          "oklch(51% 0.0149 164.73)",
+          "oklch(63% 0.0149 164.73)",
+          "oklch(75% 0.0120 164.73)",
+          "oklch(87% 0.0067 164.73)",
+          "oklch(95% 0.0022 164.73)"
+        ]
+      },
+      "teal": {
+        "role": "secondary",
+        "displayName": "Source teal",
+        "canonical": "#146576",
+        "tonalRamp": [
+          "oklch(15% 0.0193 215.92)",
+          "oklch(27% 0.0386 215.92)",
+          "oklch(39% 0.0578 215.92)",
+          "oklch(51% 0.0771 215.92)",
+          "oklch(63% 0.0771 215.92)",
+          "oklch(75% 0.0617 215.92)",
+          "oklch(87% 0.0347 215.92)",
+          "oklch(95% 0.0116 215.92)"
+        ]
+      },
+      "teal-soft": {
+        "role": "secondary",
+        "displayName": "Source teal tint",
+        "canonical": "#eaf5f7",
+        "tonalRamp": [
+          "oklch(15% 0.0030 209.80)",
+          "oklch(27% 0.0060 209.80)",
+          "oklch(39% 0.0090 209.80)",
+          "oklch(51% 0.0120 209.80)",
+          "oklch(63% 0.0120 209.80)",
+          "oklch(75% 0.0096 209.80)",
+          "oklch(87% 0.0054 209.80)",
+          "oklch(95% 0.0018 209.80)"
+        ]
+      },
+      "amber": {
+        "role": "tertiary",
+        "displayName": "Repair amber",
+        "canonical": "#875619",
+        "tonalRamp": [
+          "oklch(15% 0.0245 67.04)",
+          "oklch(27% 0.0489 67.04)",
+          "oklch(39% 0.0734 67.04)",
+          "oklch(51% 0.0978 67.04)",
+          "oklch(63% 0.0978 67.04)",
+          "oklch(75% 0.0783 67.04)",
+          "oklch(87% 0.0440 67.04)",
+          "oklch(95% 0.0147 67.04)"
+        ]
+      },
+      "amber-soft": {
+        "role": "tertiary",
+        "displayName": "Repair amber tint",
+        "canonical": "#fff4e3",
+        "tonalRamp": [
+          "oklch(15% 0.0063 78.92)",
+          "oklch(27% 0.0127 78.92)",
+          "oklch(39% 0.0190 78.92)",
+          "oklch(51% 0.0253 78.92)",
+          "oklch(63% 0.0253 78.92)",
+          "oklch(75% 0.0203 78.92)",
+          "oklch(87% 0.0114 78.92)",
+          "oklch(95% 0.0038 78.92)"
+        ]
+      },
+      "focus": {
+        "role": "primary",
+        "displayName": "Focus blue",
+        "canonical": "#174dbb",
+        "tonalRamp": [
+          "oklch(15% 0.0400 262.27)",
+          "oklch(27% 0.0800 262.27)",
+          "oklch(39% 0.1200 262.27)",
+          "oklch(51% 0.1600 262.27)",
+          "oklch(63% 0.1600 262.27)",
+          "oklch(75% 0.1280 262.27)",
+          "oklch(87% 0.0720 262.27)",
+          "oklch(95% 0.0240 262.27)"
+        ]
+      },
+      "source-line": {
+        "role": "secondary",
+        "displayName": "Source border",
+        "canonical": "#bddce2",
+        "tonalRamp": [
+          "oklch(15% 0.0085 210.64)",
+          "oklch(27% 0.0169 210.64)",
+          "oklch(39% 0.0254 210.64)",
+          "oklch(51% 0.0338 210.64)",
+          "oklch(63% 0.0338 210.64)",
+          "oklch(75% 0.0271 210.64)",
+          "oklch(87% 0.0152 210.64)",
+          "oklch(95% 0.0051 210.64)"
+        ]
+      },
+      "repair-line": {
+        "role": "tertiary",
+        "displayName": "Repair border",
+        "canonical": "#dfbf8c",
+        "tonalRamp": [
+          "oklch(15% 0.0190 79.00)",
+          "oklch(27% 0.0380 79.00)",
+          "oklch(39% 0.0570 79.00)",
+          "oklch(51% 0.0761 79.00)",
+          "oklch(63% 0.0761 79.00)",
+          "oklch(75% 0.0608 79.00)",
+          "oklch(87% 0.0342 79.00)",
+          "oklch(95% 0.0114 79.00)"
+        ]
+      },
+      "checked-line": {
+        "role": "tertiary",
+        "displayName": "Checked border",
+        "canonical": "#a5d5bd",
+        "tonalRamp": [
+          "oklch(15% 0.0151 163.07)",
+          "oklch(27% 0.0302 163.07)",
+          "oklch(39% 0.0452 163.07)",
+          "oklch(51% 0.0603 163.07)",
+          "oklch(63% 0.0603 163.07)",
+          "oklch(75% 0.0483 163.07)",
+          "oklch(87% 0.0271 163.07)",
+          "oklch(95% 0.0090 163.07)"
+        ]
+      },
+      "on-navy-muted": {
+        "role": "primary",
+        "displayName": "Secondary text on navy",
+        "canonical": "#dce8f7",
+        "tonalRamp": [
+          "oklch(15% 0.0060 253.95)",
+          "oklch(27% 0.0121 253.95)",
+          "oklch(39% 0.0181 253.95)",
+          "oklch(51% 0.0241 253.95)",
+          "oklch(63% 0.0241 253.95)",
+          "oklch(75% 0.0193 253.95)",
+          "oklch(87% 0.0109 253.95)",
+          "oklch(95% 0.0036 253.95)"
+        ]
+      },
+      "selection": {
+        "role": "neutral",
+        "displayName": "Selected text blue",
+        "canonical": "#cdddfc",
+        "tonalRamp": [
+          "oklch(15% 0.0115 263.71)",
+          "oklch(27% 0.0230 263.71)",
+          "oklch(39% 0.0346 263.71)",
+          "oklch(51% 0.0461 263.71)",
+          "oklch(63% 0.0461 263.71)",
+          "oklch(75% 0.0369 263.71)",
+          "oklch(87% 0.0207 263.71)",
+          "oklch(95% 0.0069 263.71)"
+        ]
+      },
+      "on-navy-line": {
+        "role": "neutral",
+        "displayName": "Navy panel line",
+        "canonical": "#6b84a5",
+        "tonalRamp": [
+          "oklch(15% 0.0146 255.52)",
+          "oklch(27% 0.0291 255.52)",
+          "oklch(39% 0.0437 255.52)",
+          "oklch(51% 0.0582 255.52)",
+          "oklch(63% 0.0582 255.52)",
+          "oklch(75% 0.0466 255.52)",
+          "oklch(87% 0.0262 255.52)",
+          "oklch(95% 0.0087 255.52)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page titles."
+      },
+      "headline-mobile": {
+        "displayName": "Headline Mobile",
+        "purpose": "Page titles at maximum width 720px."
+      },
+      "resume-title": {
+        "displayName": "Resume Title",
+        "purpose": "Current lesson or applied-case entry panel."
+      },
+      "section-title": {
+        "displayName": "Section Title",
+        "purpose": "Overview section headings."
+      },
+      "lesson-title": {
+        "displayName": "Lesson Title",
+        "purpose": "Authored lesson section headings."
+      },
+      "subtitle": {
+        "displayName": "Subtitle",
+        "purpose": "Lower-level headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default interface and prose."
+      },
+      "lesson-body": {
+        "displayName": "Lesson Body",
+        "purpose": "Longer exercise prose."
+      },
+      "lesson-body-mobile": {
+        "displayName": "Lesson Body Mobile",
+        "purpose": "Lesson prose at maximum width 720px; writing fields remain 16px."
+      },
+      "button-label": {
+        "displayName": "Button Label",
+        "purpose": "Primary and secondary action labels."
+      },
+      "nav-label": {
+        "displayName": "Nav Label",
+        "purpose": "Desktop main-navigation labels."
+      },
+      "field": {
+        "displayName": "Field",
+        "purpose": "Writing fields at every breakpoint."
+      },
+      "source-body": {
+        "displayName": "Source Body",
+        "purpose": "Source context and notes."
+      },
+      "status-label": {
+        "displayName": "Status Label",
+        "purpose": "Passive notebook save status."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Inline code only."
+      },
+      "brand": {
+        "displayName": "Brand text",
+        "purpose": "Brand text in the implemented reader."
+      },
+      "feedback-title": {
+        "displayName": "Feedback workspace heading",
+        "purpose": "Feedback workspace heading in the implemented reader."
+      },
+      "practice-return-title": {
+        "displayName": "Practice return and empty-state heading",
+        "purpose": "Practice return and empty-state heading in the implemented reader."
+      },
+      "resume-number": {
+        "displayName": "Current lesson numeral",
+        "purpose": "Current lesson numeral in the implemented reader."
+      },
+      "section-title-mobile": {
+        "displayName": "Mobile section heading",
+        "purpose": "Mobile section heading in the implemented reader."
+      },
+      "lesson-title-mobile": {
+        "displayName": "Mobile lesson heading",
+        "purpose": "Mobile lesson heading in the implemented reader."
+      },
+      "resume-title-mobile": {
+        "displayName": "Mobile resume heading",
+        "purpose": "Mobile resume heading in the implemented reader."
+      }
+    },
+    "shadows": [
+      {
+        "name": "current-stage-underline",
+        "value": "inset 0 -2px var(--blue, #2459d6)",
+        "purpose": "Current lesson-stage state; not surface elevation."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-transition",
+        "value": "0.16s ease",
+        "purpose": "Background/border changes for choices and route options, plus background and press transform for primary/secondary actions; disabled under prefers-reduced-motion."
+      },
+      {
+        "name": "button-press",
+        "value": "translateY(1px)",
+        "purpose": "Primary and secondary active state; disabled under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-desktop-max",
+        "value": "1180px"
+      },
+      {
+        "name": "single-workspace-max",
+        "value": "1000px"
+      },
+      {
+        "name": "mobile-max",
+        "value": "720px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Implemented action style; visual specimen only.",
+      "html": "<button class=\"ds-button-primary\">Continue learning <svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></button>",
+      "css": ".ds-button-primary{display:inline-flex;align-items:center;justify-content:center;gap:9px;border-radius:10px;min-height:46px;padding:11px 18px;border:1px solid transparent;font-family:Inter,sans-serif;font-size:14px;font-weight:680;line-height:1.5;background:var(--blue, #2459d6);color:var(--surface, #ffffff);cursor:pointer;transition:background-color .16s,transform .16s;}.ds-button-primary:hover{background:var(--blue-hover, #1845b0);}.ds-button-primary:focus-visible{outline:3px solid var(--focus, #174dbb);outline-offset:4px;}.ds-button-primary:active{transform:translateY(1px);}.ds-button-primary:disabled{opacity:.5;cursor:default;}@media(prefers-reduced-motion:reduce){.ds-button-primary{transition:none;}.ds-button-primary:active{transform:none;}}"
+    },
+    {
+      "name": "Secondary action",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Implemented action style; visual specimen only.",
+      "html": "<button class=\"ds-button-secondary\">Download my work <svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></button>",
+      "css": ".ds-button-secondary{display:inline-flex;align-items:center;justify-content:center;gap:9px;border-radius:10px;min-height:46px;padding:11px 18px;border:1px solid var(--line-strong, #afbed1);font-family:Inter,sans-serif;font-size:14px;font-weight:680;line-height:1.5;background:var(--surface, #ffffff);color:var(--blue, #2459d6);cursor:pointer;transition:background-color .16s,transform .16s;}.ds-button-secondary:hover{background:var(--blue-soft, #eaf0ff);border-color:var(--blue, #2459d6);}.ds-button-secondary:focus-visible{outline:3px solid var(--focus, #174dbb);outline-offset:4px;}.ds-button-secondary:active{transform:translateY(1px);}.ds-button-secondary:disabled{opacity:.5;cursor:default;}@media(prefers-reduced-motion:reduce){.ds-button-secondary{transition:none;}.ds-button-secondary:active{transform:none;}}"
+    },
+    {
+      "name": "Writing field",
+      "kind": "input",
+      "refersTo": "writing-field",
+      "description": "Visible label and resizable private-practice writing field.",
+      "html": "<label class=\"ds-writing-label\" for=\"ds-work\">Your lesson work</label><textarea class=\"ds-writing-field\" id=\"ds-work\" rows=\"6\" placeholder=\"Use the invented source. Write what you can explain.\"></textarea>",
+      "css": ".ds-writing-label{display:block;font-family:Inter,sans-serif;font-size:16px;font-weight:680;color:var(--ink, #172c46);margin:0 0 10px;}.ds-writing-field{display:block;width:100%;resize:vertical;min-height:150px;border:1px solid var(--line-strong, #afbed1);border-radius:10px;padding:16px;background:var(--surface, #ffffff);color:var(--ink, #172c46);font-family:Inter,sans-serif;font-size:16px;line-height:1.7;caret-color:var(--blue, #2459d6);}.ds-writing-field::placeholder{color:var(--muted, #51647c);opacity:1;}.ds-writing-field:focus-visible{outline:3px solid var(--focus, #174dbb);outline-offset:4px;}"
+    },
+    {
+      "name": "Named navigation",
+      "kind": "nav",
+      "refersTo": "main-navigation",
+      "description": "Current-page treatment from the reader rail.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Reader navigation\"><button aria-current=\"page\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4 4.5h6a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H4z\"/><path d=\"M20 4.5h-4a3 3 0 0 0-3 3v13a3 3 0 0 1 3-3h4z\"/></svg>Learn</button><button>Practice</button><button>My work</button></nav>",
+      "css": ".ds-nav{display:grid;gap:6px;}.ds-nav button{display:flex;align-items:center;gap:12px;min-height:48px;padding:12px 14px;color:var(--muted, #51647c);background:transparent;border:0;border-radius:10px;text-align:left;font-family:Inter,sans-serif;font-weight:650;font-size:15px;line-height:1.6;cursor:pointer;}.ds-nav button:hover{background:var(--surface-subtle, #edf2f8);color:var(--ink, #172c46);}.ds-nav button[aria-current=\"page\"]{background:var(--blue-soft, #eaf0ff);color:var(--blue, #2459d6);}.ds-nav button:focus-visible{outline:3px solid var(--focus, #174dbb);outline-offset:4px;}"
+    },
+    {
+      "name": "Example route",
+      "kind": "chip",
+      "refersTo": "route-option",
+      "description": "An example-context selector with an explicit selected state.",
+      "html": "<div class=\"ds-routes\" role=\"group\" aria-label=\"Choose your example route\"><span>Your examples</span><button aria-pressed=\"true\">Everyday</button><button aria-pressed=\"false\">Work</button><button aria-pressed=\"false\">Technical</button></div>",
+      "css": ".ds-routes{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-family:Inter,sans-serif;}.ds-routes>span{color:var(--muted, #51647c);font-size:13px;margin-right:10px;}.ds-routes button{min-height:44px;border:1px solid var(--line, #d9e2ee);color:var(--muted, #51647c);border-radius:9px;padding:8px 16px;background:var(--surface, #ffffff);font-family:Inter,sans-serif;font-size:13px;font-weight:650;line-height:1.6;cursor:pointer;transition:background-color .16s,border-color .16s;}.ds-routes button:hover{border-color:var(--blue, #2459d6);color:var(--blue, #2459d6);}.ds-routes button[aria-pressed=\"true\"]{background:var(--blue-soft, #eaf0ff);color:var(--blue, #2459d6);border-color:var(--blue, #2459d6);}.ds-routes button:focus-visible{outline:3px solid var(--focus, #174dbb);outline-offset:4px;}@media(prefers-reduced-motion:reduce){.ds-routes button{transition:none;}}"
+    },
+    {
+      "name": "Notebook status",
+      "kind": "chip",
+      "refersTo": "notebook-status",
+      "description": "Passive status paired with the storage location, not an autosave indicator.",
+      "html": "<div class=\"ds-notebook-status\"><span>Unsaved changes</span><small>Only in this browser</small></div>",
+      "css": ".ds-notebook-status{display:flex;flex-direction:column;align-items:flex-start;gap:2px;font-family:Inter,sans-serif;}.ds-notebook-status>span{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:550;line-height:1.6;padding:5px 10px;border-radius:6px;background:var(--surface-subtle, #edf2f8);color:var(--muted, #51647c);}.ds-notebook-status small{font-size:12px;line-height:1.6;color:var(--muted, #51647c);}"
+    },
+    {
+      "name": "Source context",
+      "kind": "card",
+      "refersTo": "source-card",
+      "description": "A source and a reminder to keep unknown details open.",
+      "html": "<aside class=\"ds-source\"><p class=\"ds-source-label\">Your source · Everyday</p><p>Twelve volunteers are available for two hours on Saturday. The venue and budget are undecided.</p><p class=\"ds-source-note\">Compare each claim with these notes. Keep unknown details open.</p></aside>",
+      "css": ".ds-source{padding:20px;border:1px solid #bddce2;border-radius:var(--radius,14px);background:var(--teal-soft, #eaf5f7);color:var(--ink, #172c46);font-family:Inter,sans-serif;}.ds-source p{font-size:14px;line-height:1.7;margin:0 0 18px;}.ds-source .ds-source-label{color:var(--teal, #146576);font-size:13px;font-weight:700;margin:0 0 14px;}.ds-source .ds-source-note{padding-top:14px;margin:14px 0 0;border-top:1px solid #bddce2;color:var(--teal, #146576);font-size:13px;}"
+    },
+    {
+      "name": "Checked feedback",
+      "kind": "custom",
+      "refersTo": "answer-feedback",
+      "description": "Checked response states retain words explaining the result.",
+      "html": "<div class=\"ds-feedback\"><strong>Try another choice after comparing with the source.</strong><p>You chose B.</p></div><div class=\"ds-feedback ds-feedback-positive\"><strong>This response matches the source.</strong><p>You chose A.</p></div>",
+      "css": ".ds-feedback{background:var(--amber-soft, #fff4e3);color:var(--ink, #172c46);border:1px solid #dfbf8c;border-radius:12px;padding:20px;margin-top:20px;font-family:Inter,sans-serif;font-size:15px;line-height:1.7;}.ds-feedback>strong{font-weight:680;color:var(--amber, #875619);}.ds-feedback-positive{border-color:#a5d5bd;background:var(--green-soft, #e9f5ef);}.ds-feedback-positive>strong{color:var(--green, #18715c);}.ds-feedback p{margin:12px 0 0;}"
+    },
+    {
+      "name": "Answer choice",
+      "kind": "input",
+      "refersTo": "answer-choice",
+      "description": "Native radio choices: selection is blue before evaluation.",
+      "html": "<fieldset class=\"ds-choice-group\"><legend>Choose a useful task.</legend><label class=\"ds-choice\"><input type=\"radio\" name=\"ds-choice\" checked><span>Draft an activity plan using the available volunteers and time.</span></label><label class=\"ds-choice\"><input type=\"radio\" name=\"ds-choice\"><span>Assume the venue and budget are already agreed.</span></label></fieldset>",
+      "css": ".ds-choice-group{margin:0;padding:0;border:0;min-width:0;font-family:Inter,sans-serif;color:var(--ink, #172c46);}.ds-choice-group legend{font-size:18px;line-height:1.5;font-weight:650;margin-bottom:18px;}.ds-choice{display:flex;align-items:flex-start;gap:12px;padding:16px 18px;margin:10px 0;border:1px solid var(--line-strong, #afbed1);border-radius:12px;background:var(--surface, #ffffff);cursor:pointer;transition:background-color .16s,border-color .16s;}.ds-choice:hover,.ds-choice:has(input:checked){background:var(--blue-soft, #eaf0ff);border-color:var(--blue, #2459d6);}.ds-choice input{width:18px;height:18px;flex-shrink:0;margin:4px 0 0;accent-color:var(--blue, #2459d6);}.ds-choice input:focus-visible{outline:3px solid var(--focus, #174dbb);outline-offset:4px;}.ds-choice span{font-size:15px;line-height:1.6;}.ds-choice.ds-choice-correct{background:var(--green-soft, #e9f5ef);border-color:var(--green, #18715c);}.ds-choice.ds-choice-reconsider{background:var(--amber-soft, #fff4e3);border-color:var(--amber, #875619);}@media(prefers-reduced-motion:reduce){.ds-choice{transition:none;}}"
+    },
+    {
+      "name": "Lesson stages",
+      "kind": "nav",
+      "refersTo": "lesson-stage",
+      "description": "Four current-position controls; these are not completion scores.",
+      "html": "<nav class=\"ds-stages\" aria-label=\"Lesson stages\"><button aria-current=\"step\"><span>1</span>See an example</button><button><span>2</span>Try it</button><button><span>3</span>Fresh case</button><button><span>4</span>Your work</button></nav>",
+      "css": ".ds-stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;}.ds-stages button{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:7px;min-height:66px;border:0;border-radius:9px;padding:10px 5px;background:var(--surface-subtle, #edf2f8);font-family:Inter,sans-serif;font-size:12px;line-height:1.4;color:var(--muted, #51647c);cursor:pointer;}.ds-stages button:hover{background:var(--blue-soft, #eaf0ff);color:var(--blue, #2459d6);}.ds-stages button[aria-current=\"step\"]{color:var(--blue, #2459d6);background:var(--blue-soft, #eaf0ff);box-shadow:inset 0 -2px var(--blue, #2459d6);font-weight:700;}.ds-stages span{width:21px;height:21px;border-radius:50%;display:grid;place-items:center;font-size:12px;border:1px solid var(--line-strong, #afbed1);}.ds-stages button[aria-current=\"step\"] span{color:var(--surface, #ffffff);background:var(--blue, #2459d6);border-color:var(--blue, #2459d6);}.ds-stages button:focus-visible{outline:3px solid var(--focus, #174dbb);outline-offset:4px;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Working Notebook",
+    "overview": "The Working Notebook is calm, explicit and practical. Cool paper surrounds white working surfaces; deep navy gives the current lesson a clear entry point. Blue connects actions and current position, while source context and checked responses have their own restrained colors. The reader uses familiar controls, named navigation and compact stroke icons so its authored examples and the learner’s writing carry the experience.\n\nThis is a code-derived record of assets/docs/learning-design/reader, captured on 28 October 2026. It covers this local reader only. It does not establish a visual migration of the hosted application or a production release. PRODUCT.md records product constraints; .impeccable/surfaces/assets-docs-learning-design-reader.md owns the surface direction. The tokens below describe the implemented CSS, with literal reused values extracted where no CSS custom property exists.",
+    "keyCharacteristics": [
+      "A single self-hosted sans family with a compact, deliberate hierarchy.",
+      "Flat surfaces distinguished by tone, fine borders and open spacing.",
+      "Named learning, practice and private-work destinations with visible current state.",
+      "Explicit saving and evidence-based status labels beside the work they describe."
+    ],
+    "rules": [
+      {
+        "name": "Semantic Color",
+        "body": "Use blue for action and current position, teal for source context, green for a checked match, and amber for reconsideration. Pair these colors with explanatory text; color alone does not carry the result.",
+        "section": "colors"
+      },
+      {
+        "name": "Readable Work",
+        "body": "Keep writing fields at the implemented body size on small screens, preserve visible field labels, and keep paragraphs narrow enough to scan alongside their source.",
+        "section": "typography"
+      },
+      {
+        "name": "Flat Surface",
+        "body": "Use tonal fills and fine borders to separate regions. The active stage’s inset underline is a state indicator, not elevation.",
+        "section": "elevation"
+      },
+      {
+        "name": "Explicit Notebook",
+        "body": "Keep the save action and browser-only storage explanation together. A navigation change or typed draft must not be styled as proof of a successful save.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do keep source context visually distinct and reachable from the exercise.",
+      "Do preserve named controls, visible keyboard focus, and text descriptions of current state.",
+      "Do keep the primary lesson save action reachable while the learner writes.",
+      "Do describe progress using checked practices, written lessons, recorded self-checks, and the current step.",
+      "Do retain separate route drafts and the distinction between a first draft and its revision."
+    ],
+    "donts": [
+      "Don’t style self-checks or activity counts as mastery, grades, credentials, or independent review.",
+      "Don’t imply automatic saving, account synchronization, public sharing, or a contacted reviewer.",
+      "Don’t promote these local reader tokens into a claim that the hosted application has been restyled."
+    ]
+  }
+}
