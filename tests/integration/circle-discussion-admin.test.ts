@@ -22,6 +22,7 @@ async function command(root: string, args: string[], enabled = "enabled") {
         DNE_APP_MODE: "test",
         DNE_PRIVATE_STORAGE_ROOT: root,
         DNE_CIRCLE_DISCUSSION: enabled,
+        NODE_COMPILE_CACHE: join(root, "node-compile-cache"),
       },
       stdio: ["ignore", "pipe", "pipe"],
     },

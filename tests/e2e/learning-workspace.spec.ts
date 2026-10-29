@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { catalogStore } from "../../src/catalog.ts";
 import { learningWorkspacePublicationStore } from "../../src/learning-workspace-publication.ts";
+import { PROGRAM_PATH } from "../../src/program-values.ts";
 import { reviewedContentFixture as fixture } from "../support/reviewed-content-browser.ts";
 
 // The fixture's invented staff credentials must not appear in a browser trace.
@@ -58,6 +60,19 @@ async function saveAccountNotebook(page: Page) {
   await expect(page.locator("#save-status")).toContainText(
     "Saved to your private account notebook.",
   );
+}
+
+async function downloadEnrollment(page: Page) {
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page
+      .getByRole("link", { name: "Download private enrollment JSON" })
+      .click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("program-enrollment.json");
+  const path = await download.path();
+  if (!path) throw Error("Owned enrollment download missing");
+  return JSON.parse(await readFile(path, "utf8"));
 }
 
 async function openLesson(page: Page, number: number, step: number) {
@@ -210,12 +225,21 @@ for (const [background, goal, route, sourceFact, freshFact, correction] of [
 ] as const) {
   const scenario =
     route === "Everyday" ? "L258" : route === "Work" ? "L259" : "L260";
-  test(`[${scenario}] LWORK-01/02/03/08 ${route} member reads, checks, revises and privately resumes the account notebook`, async ({
+  test(`[${scenario}] LWORK-01/02/03/08/INTEGRATION-01 ${route} member moves between courses and private account notebook`, async ({
     browser,
   }, info) => {
     const f = await fixture(browser, info);
     try {
+      await f.publishFixture();
       await publishForMemberJourney(f);
+      const admin = await f.staff("platform_admin");
+      await admin.page.goto(f.origin + "/operator/programs");
+      await admin.page
+        .getByLabel("Open this exact local inventory only.")
+        .check();
+      await admin.page
+        .getByRole("button", { name: "Open local term", exact: true })
+        .click();
       const member = await f.member(background, goal);
       await expect(
         member.getByRole("heading", { name: "Your learning path" }),
@@ -233,6 +257,46 @@ for (const [background, goal, route, sourceFact, freshFact, correction] of [
       await expect(
         member.getByRole("link", { name: "Learning records" }),
       ).toHaveAttribute("href", "/learn/records");
+      await member.getByRole("link", { name: "My courses" }).click();
+      await expect(
+        member.getByText("No local enrollment is recorded for this account."),
+      ).toBeVisible();
+      await member
+        .getByRole("link", { name: "Explore local foundation program" })
+        .click();
+      await expect(member).toHaveURL(f.origin + PROGRAM_PATH);
+      await member
+        .getByLabel(/Choose this exact local program and term/)
+        .check();
+      await member
+        .getByRole("button", { name: "Choose local program", exact: true })
+        .click();
+      await member
+        .getByLabel(/Enroll this current account in the local simulation/)
+        .check();
+      await member
+        .getByRole("button", { name: "Confirm local enrollment", exact: true })
+        .click();
+      await expect(
+        member.getByRole("heading", { name: "My courses", exact: true }),
+      ).toBeVisible();
+      await expect(
+        member.getByText("No self-assessed activity recorded", {
+          exact: false,
+        }),
+      ).toHaveCount(6);
+      const initialEnrollment = await downloadEnrollment(member);
+      expect(initialEnrollment.enrollment.manifest.lessons).toHaveLength(6);
+      for (const [
+        index,
+        lesson,
+      ] of initialEnrollment.enrollment.manifest.lessons.entries())
+        expect(lesson).toMatchObject({ id: `FND-00${index + 1}`, version: 2 });
+      expect(initialEnrollment.enrollment.activity).toEqual([]);
+      await member.getByRole("link", { name: "Continue learning" }).click();
+      await expect(
+        member.getByRole("heading", { name: "Your learning path" }),
+      ).toBeVisible();
       await member.locator('[data-view="practice"]').first().click();
       await expect(
         member.getByRole("heading", { name: "Make it stick" }),
@@ -305,6 +369,41 @@ for (const [background, goal, route, sourceFact, freshFact, correction] of [
       );
       await saveAccountNotebook(member);
       await member.reload();
+      await expect(member.locator("#feedback-decisions")).toContainText(
+        "Decision 1",
+      );
+      await member.getByRole("link", { name: "My courses" }).click();
+      await expect(
+        member.getByText("No self-assessed activity recorded", {
+          exact: false,
+        }),
+      ).toHaveCount(6);
+      expect(await downloadEnrollment(member)).toEqual(initialEnrollment);
+      const firstFoundation = member.locator(
+        'a[href="/library/FND-001?version=2"]',
+      );
+      await expect(firstFoundation).toBeVisible();
+      await firstFoundation.click();
+      await member.getByRole("button", { name: "Start this lesson" }).click();
+      await member
+        .getByLabel(
+          "I have finished reading this lesson; this is my own report.",
+        )
+        .check();
+      await member
+        .getByRole("button", { name: "Mark self-assessed complete" })
+        .click();
+      await member.goto(f.origin + "/my-courses");
+      await expect(
+        member.getByText("No self-assessed activity recorded", {
+          exact: false,
+        }),
+      ).toHaveCount(5);
+      const finalEnrollment = await downloadEnrollment(member);
+      expect(finalEnrollment.enrollment.activity).toEqual([
+        { id: "FND-001", version: 2, started: true, selfAssessed: true },
+      ]);
+      await member.getByRole("link", { name: "Continue learning" }).click();
       await expect(member.locator("#feedback-decisions")).toContainText(
         "Decision 1",
       );

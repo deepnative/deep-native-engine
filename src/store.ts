@@ -225,6 +225,7 @@ export async function migrate(pool: Pool) {
       "076-circle-moderation-appeals.sql",
       "077-prerequisite-dag-evaluation.sql",
       "078-starter-draft-revision.sql",
+      "079-local-program-enrollment.sql",
       "080-learning-workspace.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),

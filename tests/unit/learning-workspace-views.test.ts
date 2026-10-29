@@ -17,6 +17,7 @@ it("LWORK-01/07 gives the account reader its private context and preserves earli
       "/account",
       "/learn/notebooks",
       "/learn/records",
+      "/my-courses",
       "/support",
       "/member/export",
     ])

@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import type { Pool } from "pg";
+import { Pool } from "pg";
 import { beforeAll, beforeEach, afterAll, expect, it, vi } from "vitest";
 import { testPool } from "../support/database.ts";
 import { migrate, store } from "../../src/store.ts";
@@ -17,6 +17,7 @@ import { evidenceStore } from "../../src/evidence.ts";
 import { memberExportStore } from "../../src/member-export.ts";
 import { sampleFeedbackStore } from "../../src/sample-feedback.ts";
 import { SAMPLE_FEEDBACK_PURPOSE } from "../../src/sample-feedback-values.ts";
+import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
 
 const pool = testPool(),
   db = store(pool),
@@ -33,6 +34,15 @@ const files = {
 };
 const objects = assignmentObjectStorage(pool, files),
   evidence = evidenceStore(pool, objects, "invented-test-secret");
+let observerDatabase:
+  | {
+      name: string;
+      marker: string;
+      oid: string | null;
+      marked: boolean;
+      foreign: Pool | null;
+    }
+  | undefined;
 beforeAll(async () => {
   await migrate(pool);
   await pool.query(
@@ -41,12 +51,51 @@ beforeAll(async () => {
       "utf8",
     ),
   );
+  const url = new URL(process.env.DNE_TEST_DATABASE_URL!);
+  if (!/^\/dne_test_[a-f0-9]{32}$/.test(url.pathname))
+    throw Error("Generated control database required");
+  const name = `dne_test_${randomBytes(16).toString("hex")}`;
+  const marker = `CIBUDGET-OBS01-${randomUUID()}`;
+  observerDatabase = { name, marker, oid: null, marked: false, foreign: null };
+  const existing = await pool.query<{ n: number }>(
+    "SELECT count(*)::integer n FROM pg_database WHERE datname=$1",
+    [name],
+  );
+  if (existing.rows[0]!.n !== 0)
+    throw Error("Observer database already exists; setup refused");
+  await pool.query(`CREATE DATABASE "${name}"`);
+  observerDatabase.oid = (
+    await pool.query<{ oid: string }>(
+      "SELECT oid::text oid FROM pg_database WHERE datname=$1",
+      [name],
+    )
+  ).rows[0]!.oid;
+  await pool.query(`COMMENT ON DATABASE "${name}" IS '${marker}'`);
+  observerDatabase.marked = true;
+  url.pathname = `/${name}`;
+  observerDatabase.foreign = new Pool({ connectionString: url.toString() });
+  await migrate(observerDatabase.foreign);
 }, 30000);
 beforeEach(async () => {
   await pool.query("TRUNCATE principals,cohorts CASCADE");
   vi.clearAllMocks();
 });
-afterAll(() => pool.end());
+afterAll(async () => {
+  try {
+    if (observerDatabase) {
+      await observerDatabase.foreign?.end();
+      if (!observerDatabase.marked || !observerDatabase.oid)
+        throw Error("Observer ownership unavailable; database preserved");
+      await dropOwnedObserverDatabase(
+        observerDatabase.name,
+        observerDatabase.oid,
+        observerDatabase.marker,
+      );
+    }
+  } finally {
+    await pool.end();
+  }
+});
 async function member() {
   const token = randomBytes(32).toString("hex");
   await db.create(token, { background: "explorer", goal: "everyday" });
@@ -142,6 +191,66 @@ async function blocked(pid: number) {
   }
   throw Error("Expected actual database lock wait");
 }
+async function observesAttemptRemovalWait() {
+  return (
+    await pool.query<{ waiting: boolean }>(
+      "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND cardinality(pg_blocking_pids(pid))>0 AND query LIKE 'DELETE FROM assignment_attempts%') waiting",
+    )
+  ).rows[0]!.waiting;
+}
+async function dropOwnedObserverDatabase(
+  name: string,
+  oid: string,
+  marker: string,
+) {
+  const current = (
+    await pool.query<{ oid: string; marker: string }>(
+      "SELECT oid::text oid,shobj_description(oid,'pg_database') marker FROM pg_database WHERE datname=$1",
+      [name],
+    )
+  ).rows[0];
+  if (!current || current.oid !== oid || current.marker !== marker)
+    throw Error("Owned observer database changed; cleanup refused");
+  await dropAttendanceBrowserDatabase(pool, name);
+}
+it("CIBUDGET-OBS01 ignores an actual attempt-delete wait in another generated database", async () => {
+  const foreign = observerDatabase?.foreign;
+  if (!foreign) throw Error("Observer fixture unavailable");
+  const holder = await foreign.connect();
+  const waiter = await foreign.connect();
+  let deleting: Promise<unknown> | undefined;
+  try {
+    await holder.query("BEGIN");
+    await holder.query(
+      "LOCK TABLE assignment_attempts IN ACCESS EXCLUSIVE MODE",
+    );
+    const heldPid = (await holder.query("SELECT pg_backend_pid() pid")).rows[0]
+      .pid;
+    const waitingPid = (await waiter.query("SELECT pg_backend_pid() pid"))
+      .rows[0].pid;
+    deleting = waiter.query("DELETE FROM assignment_attempts WHERE false");
+    void deleting.catch(() => {});
+    const deadline = performance.now() + 3000;
+    let reached = false;
+    while (performance.now() < deadline) {
+      reached = (
+        await pool.query<{ blocked: boolean }>(
+          "SELECT $1::integer=ANY(pg_blocking_pids($2::integer)) blocked",
+          [heldPid, waitingPid],
+        )
+      ).rows[0]!.blocked;
+      if (reached) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(reached).toBe(true);
+    expect(await observesAttemptRemovalWait()).toBe(false);
+  } finally {
+    await holder.query("ROLLBACK");
+    if (deleting) await deleting;
+    holder.release();
+    waiter.release();
+  }
+});
 
 it("AHO-01/02 preserves exact old bytes and pinned rubric while a newer draft exists, without implicitly granting review", async () => {
   const f = await fixture();
@@ -492,11 +601,7 @@ it("AHO-06 export holds the copied source until bytes are observed, then source 
     const deadline = performance.now() + 3000;
     let waiting = false;
     while (performance.now() < deadline) {
-      waiting = (
-        await pool.query(
-          "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE cardinality(pg_blocking_pids(pid))>0 AND query LIKE 'DELETE FROM assignment_attempts%') waiting",
-        )
-      ).rows[0].waiting;
+      waiting = await observesAttemptRemovalWait();
       if (waiting) break;
       await new Promise((r) => setTimeout(r, 5));
     }

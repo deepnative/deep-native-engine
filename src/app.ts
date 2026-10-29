@@ -185,6 +185,9 @@ import {
 import type { WorkflowReviewStore } from "./workflow-review.ts";
 import { mountWorkflowReviewRoutes } from "./workflow-review-routes.ts";
 import { registerCircleDiscussion } from "./circle-discussion-routes.ts";
+import { disabledProgramStore, type ProgramStore } from "./program-values.ts";
+import { mountProgramRoutes } from "./program-routes.ts";
+import { programResumeTarget } from "./program-selection.ts";
 import {
   disabledCircleDiscussionStore,
   type CircleDiscussionStore,
@@ -353,6 +356,7 @@ export function app(
     catalog?: CatalogStore;
     learningWorkspace?: LearningWorkspaceStore;
     learningWorkspacePublication?: LearningWorkspacePublicationStore;
+    programs?: ProgramStore;
     foundationImport?: FoundationImportStore;
     assignmentImport?: FoundationImportStore;
     tracks?: TrackStore;
@@ -667,7 +671,22 @@ export function app(
     next();
   });
   app.get("/readiness", (_req, res) => res.send(readinessPage(mode, adapters)));
-  mountMemberEmailRoutes(app, store, options.memberEmail, options.origin);
+  const resumeProgram = (raw: string | undefined) =>
+    programResumeTarget(raw, options.secret);
+  mountMemberEmailRoutes(
+    app,
+    store,
+    options.memberEmail,
+    options.origin,
+    resumeProgram,
+  );
+  mountProgramRoutes(
+    app,
+    store,
+    options.programs ?? disabledProgramStore(),
+    options.origin,
+    options.secret,
+  );
   app.get("/readiness/offers", (_req, res) => res.send(offerHypothesesPage()));
   app.get("/readiness/tracks", async (_req, res) =>
     res.send(trackReadinessPage(await tracks.snapshot())),
@@ -1230,7 +1249,7 @@ export function app(
           res.locals.token as string,
           cookieOptions(options.origin, session.expiresAt),
         );
-      res.redirect(303, "/learn");
+      res.redirect(303, resumeProgram(req.headers.cookie) ?? "/learn");
       return;
     }
     const fresh =
@@ -1263,7 +1282,7 @@ export function app(
       return;
     }
     await store.create(res.locals.token as string, start.input);
-    res.redirect(303, "/learn");
+    res.redirect(303, resumeProgram(req.headers.cookie) ?? "/learn");
   });
   app.use(
     [

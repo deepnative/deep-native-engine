@@ -40,6 +40,7 @@ import { localAiControlStore } from "./local-ai-control.ts";
 import { catalogStore, seedDraftPack } from "./catalog.ts";
 import { reviewedAssignmentImportStore } from "./reviewed-assignments.ts";
 import { foundationImportStore } from "./foundation-import.ts";
+import { programEnrollmentStore } from "./program-enrollments.ts";
 import { trackStore } from "./track-readiness.ts";
 import { publicationStore } from "./proposal-publication.ts";
 import { proposalStore } from "./proposals.ts";
@@ -179,6 +180,7 @@ export async function start(env: NodeJS.ProcessEnv) {
         resolveLearningWorkspaceBundle,
       ),
       learningWorkspacePublication: learningWorkspacePublicationStore(pool),
+      programs: programEnrollmentStore(pool, settings.mode),
       foundationImport: foundationImportStore(pool),
       assignmentImport: reviewedAssignmentImportStore(pool),
       tracks: trackStore(pool),

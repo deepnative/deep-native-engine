@@ -20,6 +20,7 @@ export function mountMemberEmailRoutes(
   store: Store,
   access: MemberEmailAccess | undefined,
   origin: string,
+  continuation?: (rawCookie: string | undefined) => string | null,
 ) {
   app.post("/account/sign-out", async (req, res) => {
     if (
@@ -222,7 +223,7 @@ export function mountMemberEmailRoutes(
         );
     if (result.kind === "signed_in") {
       res.cookie(COOKIE, result.token!, cookieOptions(origin));
-      return res.redirect(303, "/learn");
+      return res.redirect(303, continuation?.(req.headers.cookie) ?? "/learn");
     }
     return res.send(
       page(

@@ -15,7 +15,7 @@
     "lint": "eslint src tests scripts/*.mjs *.ts public/*.js assets/docs/learning-design/reader/{reader,feedback,contribution,browser-notebook,local-entry}.mjs",
     "format:check": "prettier --check 'src/**/*.ts' 'tests/**/*.{ts,mjs,json}' 'scripts/*.mjs' '*.{ts,mjs}' 'public/*.{css,js}' 'assets/docs/learning-design/reader/{reader,feedback,contribution,browser-notebook,local-entry}.mjs' 'assets/docs/learning-design/reader/style.css' 'package.json' 'tsconfig*.json'",
     "test:unit": "vitest run --coverage",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration": "node scripts/integration-runner.mjs",
     "test:e2e": "playwright test",
     "test:e2e:cross-browser": "playwright test --config playwright.cross-browser.config.ts",
     "test:e2e:provisional": "playwright test --config playwright.provisional.config.ts",
