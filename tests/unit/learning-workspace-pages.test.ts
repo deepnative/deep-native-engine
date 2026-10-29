@@ -1,6 +1,8 @@
 import express from "express";
 import request from "supertest";
-import { beforeEach, expect, it, vi } from "vitest";
+import { type Server } from "node:http";
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 import { mountLearningWorkspacePages } from "../../src/learning-workspace-pages.ts";
 import {
   learningWorkspacePack,
@@ -24,6 +26,13 @@ app.use((req, res, next) => {
 });
 mountLearningWorkspacePages(app, store, publication);
 app.get("/learn", (_req, res) => res.send("Earlier lessons and assignments"));
+let server: Server;
+beforeAll(async () => {
+  server = await listenLoopback(app);
+});
+afterAll(async () => {
+  await closeLoopback(server);
+});
 beforeEach(() => {
   vi.mocked(store.source)
     .mockReset()
@@ -39,7 +48,9 @@ it("LWORK-01 opens the published workspace for each goal with the original beare
     ["work", "work"],
     ["build", "technical"],
   ]) {
-    const response = await request(app).get("/learn").set("x-test-goal", goal!);
+    const response = await request(server)
+      .get("/learn")
+      .set("x-test-goal", goal!);
     expect(response.status).toBe(200);
     expect(response.text).toContain(`data-workspace-route="${route}"`);
     expect(response.text).toContain('href="/learn/notebooks"');
@@ -55,23 +66,23 @@ it("LWORK-01 opens the published workspace for each goal with the original beare
 });
 
 it("LWORK-07 keeps earlier lessons reachable explicitly and before publication or after retirement", async () => {
-  const redirect = await request(app).get("/learn/records");
+  const redirect = await request(server).get("/learn/records");
   expect(redirect.status).toBe(303);
   expect(redirect.headers.location).toBe("/learn?view=records");
-  expect((await request(app).get(redirect.headers.location!)).text).toBe(
+  expect((await request(server).get(redirect.headers.location!)).text).toBe(
     "Earlier lessons and assignments",
   );
   expect(store.source).not.toHaveBeenCalled();
   vi.mocked(store.source).mockResolvedValue({ kind: "source-unavailable" });
-  expect((await request(app).get("/learn")).text).toBe(
+  expect((await request(server).get("/learn")).text).toBe(
     "Earlier lessons and assignments",
   );
 });
 
 it("LWORK-05/06 reauthorizes reloads and keeps failure recovery free of private errors", async () => {
-  const first = await request(app).get("/learn");
+  const first = await request(server).get("/learn");
   vi.mocked(store.source).mockResolvedValue({ kind: "denied" });
-  const denied = await request(app)
+  const denied = await request(server)
     .get("/learn")
     .set("if-none-match", first.headers.etag!);
   expect(denied.status).toBe(303);
@@ -84,7 +95,7 @@ it("LWORK-05/06 reauthorizes reloads and keeps failure recovery free of private 
     "not-found",
   ] as const) {
     vi.mocked(store.source).mockResolvedValue({ kind });
-    const response = await request(app).get("/learn");
+    const response = await request(server).get("/learn");
     expect(response.status).toBe(503);
     expect(response.text).toContain('href="/learn/notebooks"');
     expect(response.text).not.toContain("data-workspace-module-base");
@@ -92,13 +103,15 @@ it("LWORK-05/06 reauthorizes reloads and keeps failure recovery free of private 
   vi.mocked(store.source).mockRejectedValue(
     new Error("private database detail"),
   );
-  expect((await request(app).get("/learn")).text).not.toContain(
+  expect((await request(server).get("/learn")).text).not.toContain(
     "private database detail",
   );
 });
 
 it("LWORK-05 offers explicit draft import and complete source inspection without automatic publication", async () => {
-  const response = await request(app).get("/editor/library/learning-workspace");
+  const response = await request(server).get(
+    "/editor/library/learning-workspace",
+  );
   expect(response.status).toBe(200);
   expect(response.text).toContain(
     'action="/editor/library/learning-workspace/import"',
@@ -120,7 +133,7 @@ it("LWORK-05 offers explicit draft import and complete source inspection without
       pack,
       state,
     } as never);
-    const existing = await request(app).get(
+    const existing = await request(server).get(
       "/editor/library/learning-workspace",
     );
     expect(existing.text).toContain('href="/editor/library/LRN-001/1"');
@@ -135,7 +148,7 @@ it("LWORK-05 denies unauthorized bundle inspection and explains mismatched/unava
     ["unavailable", 503],
   ] as const) {
     vi.mocked(publication.preview).mockResolvedValue({ kind });
-    const response = await request(app).get(
+    const response = await request(server).get(
       "/editor/library/learning-workspace",
     );
     expect(response.status).toBe(status);
@@ -144,7 +157,9 @@ it("LWORK-05 denies unauthorized bundle inspection and explains mismatched/unava
   vi.mocked(publication.preview).mockRejectedValue(
     new Error("private bundle detail"),
   );
-  const response = await request(app).get("/editor/library/learning-workspace");
+  const response = await request(server).get(
+    "/editor/library/learning-workspace",
+  );
   expect(response.status).toBe(503);
   expect(response.text).not.toContain("private bundle detail");
 });

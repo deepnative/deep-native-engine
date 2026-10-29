@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
 import express from "express";
 import request from "supertest";
-import { beforeEach, expect, it, vi } from "vitest";
+import { type Server } from "node:http";
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 import { csrf } from "../../src/session.ts";
 import {
   mountLearningWorkspaceAssets,
@@ -36,6 +38,13 @@ app.use((_req, res, next) => {
   next();
 });
 mountLearningWorkspaceAssets(app, store, publication, { origin, secret });
+let server: Server;
+beforeAll(async () => {
+  server = await listenLoopback(app);
+});
+afterAll(async () => {
+  await closeLoopback(server);
+});
 beforeEach(() => {
   vi.mocked(readFile).mockClear().mockImplementation(original.readFile);
   vi.mocked(store.source).mockReset().mockResolvedValue({ kind: "denied" });
@@ -49,7 +58,7 @@ beforeEach(() => {
 
 it("serves the full exact course only from a freshly authorized source, never a public file fallback", async () => {
   vi.mocked(store.source).mockResolvedValue({ kind: "ok", value: pack });
-  const first = await request(app).get(`${base}/course.mjs`);
+  const first = await request(server).get(`${base}/course.mjs`);
   expect(first.status).toBe(200);
   expect(first.text).toBe(pack.module);
   expect(first.headers["cache-control"]).toBe("no-store");
@@ -65,7 +74,7 @@ it("serves the full exact course only from a freshly authorized source, never a 
   vi.mocked(store.source).mockResolvedValue({ kind: "source-unavailable" });
   expect(
     (
-      await request(app)
+      await request(server)
         .get(`${base}/course.mjs`)
         .set("if-none-match", first.headers.etag!)
     ).status,
@@ -78,7 +87,7 @@ it("serves the full exact course only from a freshly authorized source, never a 
     "checks.mjs",
     "index.html",
   ]) {
-    expect((await request(app).get(`${base}/${filename}`)).status).toBe(404);
+    expect((await request(server).get(`${base}/${filename}`)).status).toBe(404);
   }
   expect(readFile).not.toHaveBeenCalled();
 });
@@ -91,7 +100,7 @@ it("provides only the five allowlisted generic rendering assets at the exact ver
     "browser-notebook.mjs",
     "style.css",
   ]) {
-    const result = await request(app).get(`${base}/${filename}`);
+    const result = await request(server).get(`${base}/${filename}`);
     expect(result.status).toBe(200);
     expect(result.headers["content-type"]).toContain(
       filename.endsWith(".css") ? "text/css" : "javascript",
@@ -107,7 +116,7 @@ it("provides only the five allowlisted generic rendering assets at the exact ver
     );
   }
   expect(store.source).not.toHaveBeenCalled();
-  const font = await request(app).get(`${base}/fonts/InterVariable.woff2`);
+  const font = await request(server).get(`${base}/fonts/InterVariable.woff2`);
   expect(font.status).toBe(200);
   expect(font.headers["content-type"]).toBe("font/woff2");
   expect(font.body).toEqual(
@@ -119,31 +128,34 @@ it("provides only the five allowlisted generic rendering assets at the exact ver
     ),
   );
   expect(
-    (await request(app).get(base.replace("LRN-001", "LRN-999") + "/reader.mjs"))
-      .status,
+    (
+      await request(server).get(
+        base.replace("LRN-001", "LRN-999") + "/reader.mjs",
+      )
+    ).status,
   ).toBe(404);
 });
 
 it("fails closed for denied, missing or malformed sources and unavailable assets", async () => {
-  expect((await request(app).get(`${base}/course.mjs`)).status).toBe(403);
+  expect((await request(server).get(`${base}/course.mjs`)).status).toBe(403);
   vi.mocked(store.source).mockResolvedValue({
     kind: "ok",
     value: { ...pack, module: undefined },
   } as never);
-  expect((await request(app).get(`${base}/course.mjs`)).status).toBe(503);
+  expect((await request(server).get(`${base}/course.mjs`)).status).toBe(503);
   vi.mocked(store.source).mockResolvedValue({ kind: "ok", value: {} } as never);
-  expect((await request(app).get(`${base}/course.mjs`)).status).toBe(503);
+  expect((await request(server).get(`${base}/course.mjs`)).status).toBe(503);
   vi.mocked(store.source).mockRejectedValue(
     new Error("private filesystem detail"),
   );
-  expect((await request(app).get(`${base}/course.mjs`)).body).toEqual({
+  expect((await request(server).get(`${base}/course.mjs`)).body).toEqual({
     kind: "unavailable",
   });
   vi.mocked(readFile).mockRejectedValue(new Error("private path"));
   expect(
-    (await request(app).get(`${base}/fonts/InterVariable.woff2`)).status,
+    (await request(server).get(`${base}/fonts/InterVariable.woff2`)).status,
   ).toBe(503);
-  expect((await request(app).get(`${base}/reader.mjs`)).body).toEqual({
+  expect((await request(server).get(`${base}/reader.mjs`)).body).toEqual({
     kind: "unavailable",
   });
 });
@@ -154,7 +166,7 @@ it("lets current staff inspect the complete bundle without granting learner publ
     pack,
     state: "draft",
   });
-  const first = await request(app).get(`${teaching}/bundle`);
+  const first = await request(server).get(`${teaching}/bundle`);
   expect(first.status).toBe(200);
   expect(first.body.course).toEqual(pack.course);
   expect(first.body.publication).toEqual(pack.publication);
@@ -165,13 +177,13 @@ it("lets current staff inspect the complete bundle without granting learner publ
   vi.mocked(publication.preview).mockResolvedValue({ kind: "denied" });
   expect(
     (
-      await request(app)
+      await request(server)
         .get(`${teaching}/bundle`)
         .set("if-none-match", first.headers.etag!)
     ).status,
   ).toBe(403);
   vi.mocked(publication.preview).mockRejectedValue(new Error("private detail"));
-  expect((await request(app).get(`${teaching}/bundle`)).body).toEqual({
+  expect((await request(server).get(`${teaching}/bundle`)).body).toEqual({
     kind: "unavailable",
   });
 });
@@ -179,12 +191,12 @@ it("lets current staff inspect the complete bundle without granting learner publ
 it("requires explicit same-origin CSRF-protected import and preserves editorial lifecycle results", async () => {
   const form = { csrf: csrf(bearer, secret) };
   expect(
-    (await request(app).post(`${teaching}/import`).type("form").send(form))
+    (await request(server).post(`${teaching}/import`).type("form").send(form))
       .status,
   ).toBe(403);
   expect(
     (
-      await request(app)
+      await request(server)
         .post(`${teaching}/import`)
         .set("origin", origin)
         .type("form")
@@ -193,7 +205,7 @@ it("requires explicit same-origin CSRF-protected import and preserves editorial 
   ).toBe(403);
   expect(
     (
-      await request(app)
+      await request(server)
         .post(`${teaching}/import`)
         .set("origin", origin)
         .type("form")
@@ -209,7 +221,7 @@ it("requires explicit same-origin CSRF-protected import and preserves editorial 
     ["unavailable", 503],
   ] as const) {
     vi.mocked(publication.import).mockResolvedValue({ kind });
-    const response = await request(app)
+    const response = await request(server)
       .post(`${teaching}/import`)
       .set("origin", origin)
       .type("form")
@@ -223,7 +235,7 @@ it("requires explicit same-origin CSRF-protected import and preserves editorial 
   );
   expect(
     (
-      await request(app)
+      await request(server)
         .post(`${teaching}/import`)
         .set("origin", origin)
         .type("form")
@@ -235,7 +247,7 @@ it("requires explicit same-origin CSRF-protected import and preserves editorial 
 it("returns an explicit HTML draft import to the ordinary editorial version", async () => {
   for (const kind of ["imported", "existing"] as const) {
     vi.mocked(publication.import).mockResolvedValue({ kind });
-    const response = await request(app)
+    const response = await request(server)
       .post(`${teaching}/import`)
       .set("origin", origin)
       .set("accept", "text/html")
@@ -248,7 +260,7 @@ it("returns an explicit HTML draft import to the ordinary editorial version", as
 
 it("gives failed HTML imports a read-only inspection path before an explicit retry", async () => {
   const post = (form = { csrf: csrf(bearer, secret) }) =>
-    request(app)
+    request(server)
       .post(`${teaching}/import`)
       .set("origin", origin)
       .set("accept", "text/html")

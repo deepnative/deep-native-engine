@@ -1,6 +1,8 @@
 import express from "express";
 import request from "supertest";
-import { beforeEach, expect, it, vi } from "vitest";
+import { type Server } from "node:http";
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 import { csrf } from "../../src/session.ts";
 import { mountLearningWorkspaceRoutes } from "../../src/learning-workspace-routes.ts";
 import type { LearningWorkspaceStore } from "../../src/learning-workspace-store.ts";
@@ -29,6 +31,13 @@ app.use((_req, res, next) => {
   next();
 });
 mountLearningWorkspaceRoutes(app, store, { origin, secret });
+let server: Server;
+beforeAll(async () => {
+  server = await listenLoopback(app);
+});
+afterAll(async () => {
+  await closeLoopback(server);
+});
 const path = "/api/learning-workspace";
 const identity = {
   contentId: LEARNING_WORKSPACE_CONTENT.id,
@@ -48,7 +57,7 @@ beforeEach(() => {
 
 it("opens only the requested registered variant without implicitly creating work", async () => {
   vi.mocked(store.find).mockResolvedValue({ kind: "not-found" });
-  const response = await request(app).get(`${path}/current?variant=work`);
+  const response = await request(server).get(`${path}/current?variant=work`);
   expect(response.status).toBe(200);
   expect(response.body).toEqual({ kind: "empty" });
   expect(response.headers["cache-control"]).toBe("no-store");
@@ -60,7 +69,7 @@ it("opens only the requested registered variant without implicitly creating work
     "variant=work&variant=everyday",
     "variant=work&owner=other",
   ])
-    expect((await request(app).get(`${path}/current?${query}`)).status).toBe(
+    expect((await request(server).get(`${path}/current?${query}`)).status).toBe(
       400,
     );
 });
@@ -79,7 +88,7 @@ it("preserves original bearer and operation identity across each explicit write"
   vi.mocked(store.remove).mockResolvedValue({ ...saved, kind: "replayed" });
   const create = { ...identity, operationId: operation.operationId };
   expect(
-    (await request(app).post(`${path}/notebooks`).set(headers).send(create))
+    (await request(server).post(`${path}/notebooks`).set(headers).send(create))
       .body.kind,
   ).toBe("saved");
   expect(store.create).toHaveBeenCalledWith(bearer, create);
@@ -90,7 +99,7 @@ it("preserves original bearer and operation identity across each explicit write"
   };
   expect(
     (
-      await request(app)
+      await request(server)
         .put(`${path}/notebooks/own/draft`)
         .set(headers)
         .send(draft)
@@ -103,7 +112,7 @@ it("preserves original bearer and operation identity across each explicit write"
   };
   expect(
     (
-      await request(app)
+      await request(server)
         .post(`${path}/notebooks/own/feedback-decisions`)
         .set(headers)
         .send(append)
@@ -112,7 +121,7 @@ it("preserves original bearer and operation identity across each explicit write"
   expect(store.append).toHaveBeenCalledWith(bearer, "own", append);
   expect(
     (
-      await request(app)
+      await request(server)
         .delete(`${path}/notebooks/own`)
         .set(headers)
         .send(operation)
@@ -129,7 +138,7 @@ it("rejects cross-origin, missing CSRF, wrong media and unexpected write fields 
   ])
     expect(
       (
-        await request(app)
+        await request(server)
           .post(`${path}/notebooks`)
           .set({ ...headers, ...override })
           .send({})
@@ -137,7 +146,7 @@ it("rejects cross-origin, missing CSRF, wrong media and unexpected write fields 
     ).toBe(403);
   expect(
     (
-      await request(app)
+      await request(server)
         .post(`${path}/notebooks`)
         .set(headers)
         .type("form")
@@ -147,7 +156,7 @@ it("rejects cross-origin, missing CSRF, wrong media and unexpected write fields 
   for (const route of ["/notebooks", "/notebooks/own/feedback-decisions"])
     expect(
       (
-        await request(app)
+        await request(server)
           .post(path + route)
           .set(headers)
           .send({})
@@ -155,7 +164,7 @@ it("rejects cross-origin, missing CSRF, wrong media and unexpected write fields 
     ).toBe(400);
   expect(
     (
-      await request(app)
+      await request(server)
         .put(`${path}/notebooks/own/draft`)
         .set(headers)
         .send({
@@ -167,8 +176,12 @@ it("rejects cross-origin, missing CSRF, wrong media and unexpected write fields 
     ).status,
   ).toBe(400);
   expect(
-    (await request(app).delete(`${path}/notebooks/own`).set(headers).send({}))
-      .status,
+    (
+      await request(server)
+        .delete(`${path}/notebooks/own`)
+        .set(headers)
+        .send({})
+    ).status,
   ).toBe(400);
   for (const method of [store.create, store.save, store.append, store.remove])
     expect(method).not.toHaveBeenCalled();
@@ -177,8 +190,8 @@ it("rejects cross-origin, missing CSRF, wrong media and unexpected write fields 
 it("returns owner reads, paged history and receipt inspection without conditional-cache shortcuts", async () => {
   const read = { kind: "ok" as const, value: { exact: "own\u0000draft" } };
   vi.mocked(store.read).mockResolvedValue(read as never);
-  const first = await request(app).get(`${path}/notebooks/own`);
-  const cached = await request(app)
+  const first = await request(server).get(`${path}/notebooks/own`);
+  const cached = await request(server)
     .get(`${path}/notebooks/own`)
     .set("if-none-match", first.headers.etag!);
   expect(cached.status).toBe(200);
@@ -188,23 +201,23 @@ it("returns owner reads, paged history and receipt inspection without conditiona
     kind: "ok",
     value: { items: [], nextCursor: null },
   });
-  expect((await request(app).get(`${path}/notebooks?after=known`)).status).toBe(
-    200,
-  );
+  expect(
+    (await request(server).get(`${path}/notebooks?after=known`)).status,
+  ).toBe(200);
   expect(store.list).toHaveBeenLastCalledWith(bearer, "known");
-  await request(app).get(`${path}/notebooks`);
+  await request(server).get(`${path}/notebooks`);
   expect(store.list).toHaveBeenLastCalledWith(bearer, undefined);
   for (const query of ["after=a&after=b", "owner=other"])
-    expect((await request(app).get(`${path}/notebooks?${query}`)).status).toBe(
-      400,
-    );
+    expect(
+      (await request(server).get(`${path}/notebooks?${query}`)).status,
+    ).toBe(400);
   vi.mocked(store.history).mockResolvedValue({
     kind: "ok",
     value: { items: [], nextSequence: null },
   });
-  await request(app).get(`${path}/notebooks/own/history?after=20`);
+  await request(server).get(`${path}/notebooks/own/history?after=20`);
   expect(store.history).toHaveBeenLastCalledWith(bearer, "own", 20);
-  await request(app).get(`${path}/notebooks/own/history`);
+  await request(server).get(`${path}/notebooks/own/history`);
   expect(store.history).toHaveBeenLastCalledWith(bearer, "own", undefined);
   for (const query of [
     "after=-1",
@@ -215,11 +228,12 @@ it("returns owner reads, paged history and receipt inspection without conditiona
     "owner=other",
   ])
     expect(
-      (await request(app).get(`${path}/notebooks/own/history?${query}`)).status,
+      (await request(server).get(`${path}/notebooks/own/history?${query}`))
+        .status,
     ).toBe(400);
   vi.mocked(store.operation).mockResolvedValue({ kind: "not-found" });
   expect(
-    (await request(app).get(`${path}/operations/${operation.operationId}`))
+    (await request(server).get(`${path}/operations/${operation.operationId}`))
       .status,
   ).toBe(404);
   expect(store.operation).toHaveBeenCalledWith(bearer, operation.operationId);
@@ -235,7 +249,9 @@ it("preserves store failure distinctions and hides unexpected exceptions", async
     "source-unavailable": 409,
   })) {
     vi.mocked(store.find).mockResolvedValue({ kind } as never);
-    const response = await request(app).get(`${path}/current?variant=everyday`);
+    const response = await request(server).get(
+      `${path}/current?variant=everyday`,
+    );
     expect(response.status).toBe(code);
     expect(response.body).toEqual({ kind });
   }
@@ -244,7 +260,7 @@ it("preserves store failure distinctions and hides unexpected exceptions", async
     "private detail",
   ]) {
     vi.mocked(store.read).mockRejectedValueOnce(error);
-    const response = await request(app).get(`${path}/notebooks/own`);
+    const response = await request(server).get(`${path}/notebooks/own`);
     expect(response.status).toBe(503);
     expect(response.body).toEqual({ kind: "unavailable" });
   }
@@ -259,7 +275,7 @@ it("accepts the largest fixed writing payload and rejects oversized/malformed/en
     basedOnDecisionSequence: 0,
   });
   expect(Buffer.byteLength(body)).toBeGreaterThan(4_800_000);
-  const full = await request(app)
+  const full = await request(server)
     .put(`${path}/notebooks/own/draft`)
     .set(headers)
     .type("json")
@@ -270,13 +286,13 @@ it("accepts the largest fixed writing payload and rejects oversized/malformed/en
     "own",
     expect.objectContaining({ state: fields }),
   );
-  const large = await request(app)
+  const large = await request(server)
     .put(`${path}/notebooks/own/draft`)
     .set(headers)
     .type("json")
     .send(JSON.stringify({ text: "x".repeat(8 * 1024 * 1024) }));
   expect(large.status).toBe(413);
-  const malformed = await request(app)
+  const malformed = await request(server)
     .post(`${path}/notebooks`)
     .set(headers)
     .type("json")
@@ -285,7 +301,7 @@ it("accepts the largest fixed writing payload and rejects oversized/malformed/en
   expect(malformed.body).toEqual({ kind: "invalid" });
   expect(
     (
-      await request(app)
+      await request(server)
         .post(`${path}/notebooks`)
         .set(headers)
         .set("Content-Encoding", "gzip")
@@ -295,7 +311,7 @@ it("accepts the largest fixed writing payload and rejects oversized/malformed/en
   ).toBe(415);
   expect(
     (
-      await request(app)
+      await request(server)
         .post(`${path}/notebooks`)
         .set(headers)
         .set("Content-Type", "application/json; charset=iso-8859-1")
