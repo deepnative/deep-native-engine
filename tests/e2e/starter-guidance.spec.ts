@@ -214,6 +214,9 @@ for (const journey of journeys)
       await page
         .getByRole("button", { name: "Complete exercise", exact: true })
         .click();
+      await expect(
+        page.getByText("Exercise completed", { exact: true }),
+      ).toBeVisible();
       await page.reload();
       await expect(
         page.getByText("Exercise completed", { exact: true }),

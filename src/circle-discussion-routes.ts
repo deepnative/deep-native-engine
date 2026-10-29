@@ -842,9 +842,66 @@ export function registerCircleDiscussion(
           shell(
             circle,
             "Your private sample report receipt",
-            `<p>Receipt ${escape(value.id)} · ${escape(value.category)} · ${escape(value.createdAt)}</p><p role="status">${value.status === "unavailable" ? "Target unavailable" : value.status === "hidden" ? "Sample target hidden" : "Sample report retained"}. This content-free record does not promise staffed moderation, a response or formal review.</p><p><a href="${base(circle)}/reports">Your private sample reports</a></p>`,
+            `<p>Receipt ${escape(value.id)} · ${escape(value.category)} · ${escape(value.createdAt)}</p><p role="status">${value.status === "unavailable" ? "Target unavailable" : value.status === "hidden" ? "Sample target hidden" : "Sample report retained"}. This content-free record does not promise staffed moderation, a response or formal review.</p><p><a href="${base(circle)}/reports/${encodeURIComponent(value.id)}/moderation-notice">Inspect the latest decision available for this report</a></p><p><a href="${base(circle)}/reports">Your private sample reports</a></p>`,
           ),
         );
     }),
   );
+  for (const download of [false, true])
+    app.get(
+      `/circles/:id/discussion/reports/:reportId/moderation-notice${download ? "/download" : ""}`,
+      route(async (req, res, circle, token) => {
+        res.set({
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        });
+        if (Object.keys(req.query).length) {
+          rejectFields(res, circle);
+          return;
+        }
+        const value = result(
+          res,
+          circle,
+          await store.reportModerationNotice(
+            token,
+            circle,
+            req.params.reportId as string,
+          ),
+        );
+        if (!value) return;
+        const notice = {
+          reportNoticeVersion: 1,
+          circleId: value.circleId,
+          reportId: value.reportId,
+          category: value.category,
+          reportedAt: value.reportedAt,
+          targetStatus: value.targetStatus,
+          decision: value.decision
+            ? {
+                action: value.decision.action,
+                reason: value.decision.reason,
+                oldRevision: value.decision.oldRevision,
+                newRevision: value.decision.newRevision,
+                occurredAt: value.decision.occurredAt,
+              }
+            : null,
+        };
+        if (download) {
+          res
+            .attachment("circle-report-decision-notice.json")
+            .type("application/json")
+            .send(JSON.stringify(notice));
+          return;
+        }
+        const decision = notice.decision;
+        const url = `${base(circle)}/reports/${encodeURIComponent(notice.reportId)}`;
+        res.send(
+          shell(
+            circle,
+            "Your private report decision notice",
+            `<p>Report category: ${escape(notice.category.replace("_", " "))} · reported at ${escape(notice.reportedAt)}.</p><details><summary>Your private report reference</summary><p>${escape(notice.reportId)}</p></details><p role="status">Current target availability: ${notice.targetStatus === "unavailable" ? "Target unavailable" : notice.targetStatus === "hidden" ? "Hidden" : "Visible"}.</p>${decision ? `<dl><dt>Latest recorded decision since this report</dt><dd>${escape(decision.action)}</dd><dt>Decision reason</dt><dd>${escape(decision.reason.replace("_", " "))}</dd><dt>Decision revision</dt><dd>${decision.oldRevision} → ${decision.newRevision}</dd><dt>Decision time</dt><dd>${escape(decision.occurredAt)}</dd></dl>` : "<p>No later recorded decision is currently available for this report.</p>"}<p>This is the latest available target decision, not a resolution of your individual report or its whole history. It does not show that your report caused the action or promise a response, independent review or qualified judgment. The contribution owner has a separate reconsideration path.</p><p>Decision details are available only while you and the source authors currently share eligible discussion in this circle. Leaving, withdrawing sharing or text, an unavailable question, account erasure or a discussion pause removes these details. Your own content-free report receipt remains private until account deletion. No source text, target reference or member/staff identity is copied into this notice.</p><p><a href="${url}/moderation-notice/download">Download this report decision snapshot</a></p><p>This bounded snapshot is separate from your general activity export. A download saves a device copy that server account deletion cannot remove.</p><p><a href="${url}">Return to your report receipt</a></p>`,
+          ),
+        );
+      }),
+    );
 }
