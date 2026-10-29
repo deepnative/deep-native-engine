@@ -54,7 +54,7 @@ export function myCoursesPage(
               const activity = receipt.activity.find(
                 (a) => a.id === lesson.id && a.version === lesson.version,
               );
-              return `<li><strong>${escape(lesson.id)} version ${lesson.version}</strong><p>${escape(lesson.outcome)}</p><p>${activity?.started ? "Started" : "Not started"} · ${activity?.selfAssessed ? "Self-assessed activity recorded" : "No self-assessed activity recorded"}. This is not mastery or assessed credit.</p>${current && !["course_unavailable"].includes(current.availability) ? `<p><a href="/library/${encodeURIComponent(lesson.id)}">Open current matching lesson</a></p>` : "<p>Current lesson source is unavailable. Earlier activity is retained without retargeting it.</p>"}</li>`;
+              return `<li><strong>${escape(lesson.id)} version ${lesson.version}</strong><p>${escape(lesson.outcome)}</p><p>${activity?.started ? "Started" : "Not started"} · ${activity?.selfAssessed ? "Self-assessed activity recorded" : "No self-assessed activity recorded"}. This is not mastery or assessed credit.</p>${current && !["course_unavailable"].includes(current.availability) ? `<p><a href="/library/${encodeURIComponent(lesson.id)}?version=${lesson.version}">Open current matching lesson</a></p>` : "<p>Current lesson source is unavailable. Earlier activity is retained without retargeting it.</p>"}</li>`;
             })
             .join(
               "",

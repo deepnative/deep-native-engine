@@ -203,6 +203,37 @@ it("PROGRAM-02/03/05/ENR-02/05 admits once only after explicit confirmation and 
       )
     ).rows[0].n,
   ).toBe(1);
+  // ENR-PIN01: a saved enrolled link must not open a later publication.
+  const savedCoursePage = await get("/my-courses", memberToken);
+  const savedLessonLink = savedCoursePage.text.match(
+    /href="([^"]*\/library\/FND-001[^"]*)"/,
+  )?.[1];
+  if (!savedLessonLink) throw Error("Enrolled lesson link missing");
+  expect((await get(savedLessonLink, memberToken)).status).toBe(200);
+  const acceptedBeforePublication = await programs.mine(memberToken);
+  const sourceEditor = randomBytes(32).toString("hex");
+  const sourceReviewer = randomBytes(32).toString("hex");
+  const authority = authorizationStore(pool);
+  const sourceExpiry = new Date(Date.now() + 3600000);
+  await authority.provisionStaff(sourceEditor, "editor", sourceExpiry);
+  await authority.provisionStaff(sourceReviewer, "reviewer", sourceExpiry);
+  const newerLesson = { ...(await reviewedFoundation())[0]!, version: 3 };
+  expect(await catalog.createDraft(sourceEditor, newerLesson)).toBe(true);
+  expect(await catalog.submit(sourceEditor, newerLesson.id, 3)).toBe(true);
+  expect(await catalog.approve(sourceReviewer, newerLesson.id, 3, true)).toBe(
+    true,
+  );
+  expect(await catalog.publish(sourceEditor, newerLesson.id, 3)).toBe(true);
+  const savedLinkResult = await get(savedLessonLink, memberToken);
+  expect(savedLinkResult.status).toBe(409);
+  expect(savedLinkResult.text).toContain("Content version unavailable");
+  expect(await programs.mine(memberToken)).toEqual(acceptedBeforePublication);
+  expect(
+    (await members.lessonActivities(memberToken)).some(
+      (activity) =>
+        activity.contentId === newerLesson.id && activity.contentVersion === 3,
+    ),
+  ).toBe(false);
   expect(
     (
       await post("/operator/programs/close", admin, {

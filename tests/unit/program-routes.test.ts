@@ -318,6 +318,10 @@ it("PROGRAM-03/05 allows only current own receipt/key inspection and explicitly 
     const dashboard = await request(server).get("/my-courses").expect(200);
     expect(dashboard.text).toContain("Self-assessed activity recorded");
     expect(dashboard.text).toContain("Open current matching lesson");
+    for (const lesson of f.receipt.manifest.lessons)
+      expect(dashboard.text).toContain(
+        `href="/library/${encodeURIComponent(lesson.id)}?version=${lesson.version}"`,
+      );
     await request(server).get("/my-courses/bad-id").expect(404);
     await request(server)
       .get("/my-courses/13a81b72-3651-4426-888b-c7c45a41d919/download")

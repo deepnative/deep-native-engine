@@ -8,6 +8,7 @@ import {
 import { readFile } from "node:fs/promises";
 import { programEnrollmentFixture } from "../support/program-enrollment-recovery-server.ts";
 import { COOKIE } from "../../src/session.ts";
+import { reviewedFoundation } from "../../src/foundation-pack.ts";
 import { PROGRAM_PATH } from "../../src/program-values.ts";
 
 // Finite staff entry and one-use email capabilities never enter saved traces.
@@ -61,7 +62,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
       return context.newPage();
     }
     try {
-      await f.publish();
+      const editorial = await f.publish();
       const admin = await f.staff("platform_admin");
       const operator = await otherPage();
       await operator.goto(f.origin + "/staff/sign-in");
@@ -103,6 +104,17 @@ for (const [index, [background, goal]] of audiences.entries()) {
       await expect(
         page.getByText("No self-assessed activity recorded", { exact: false }),
       ).toHaveCount(6);
+      const matchingLessons = page.getByRole("link", {
+        name: "Open current matching lesson",
+        exact: true,
+      });
+      const foundation = await reviewedFoundation();
+      await expect(matchingLessons).toHaveCount(foundation.length);
+      for (const [position, lesson] of foundation.entries())
+        await expect(matchingLessons.nth(position)).toHaveAttribute(
+          "href",
+          `/library/${encodeURIComponent(lesson.id)}?version=${lesson.version}`,
+        );
       await expect(
         page.getByText("Local enrollment simulation", { exact: true }),
       ).toBeVisible();
@@ -278,6 +290,49 @@ for (const [index, [background, goal]] of audiences.entries()) {
       await expect(
         returning.getByText(/Current enrollment availability: closed/),
       ).toBeVisible();
+      // ENR-PIN01: follow the saved enrolled link after ordinary supersession.
+      const savedLessonLink = await returning
+        .getByRole("link", {
+          name: "Open current matching lesson",
+          exact: true,
+        })
+        .first()
+        .getAttribute("href");
+      if (!savedLessonLink) throw Error("Enrolled lesson link missing");
+      const receiptBeforePublication = await f.programs.mine(recoveredToken);
+      const newerLesson = { ...foundation[0]!, version: 3 };
+      expect(
+        await f.catalog.createDraft(editorial.editor.token, newerLesson),
+      ).toBe(true);
+      expect(
+        await f.catalog.submit(editorial.editor.token, newerLesson.id, 3),
+      ).toBe(true);
+      expect(
+        await f.catalog.approve(
+          editorial.reviewer.token,
+          newerLesson.id,
+          3,
+          true,
+        ),
+      ).toBe(true);
+      expect(
+        await f.catalog.publish(editorial.editor.token, newerLesson.id, 3),
+      ).toBe(true);
+      const staleLesson = await returning.goto(f.origin + savedLessonLink);
+      expect(staleLesson?.status()).toBe(409);
+      await expect(
+        returning.getByRole("heading", { name: "Content version unavailable" }),
+      ).toBeVisible();
+      expect(await f.programs.mine(recoveredToken)).toEqual(
+        receiptBeforePublication,
+      );
+      expect(
+        (await f.members.lessonActivities(recoveredToken)).some(
+          (activity) =>
+            activity.contentId === newerLesson.id &&
+            activity.contentVersion === 3,
+        ),
+      ).toBe(false);
       await returning.goto(f.origin + "/learn");
       await returning.getByLabel("Delete my local preview").check();
       await returning
