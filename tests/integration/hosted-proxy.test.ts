@@ -1,4 +1,4 @@
-import { request as httpRequest } from "node:http";
+import { request as httpRequest, type IncomingHttpHeaders } from "node:http";
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, writeFileSync, rmSync, chmodSync } from "node:fs";
@@ -18,6 +18,138 @@ const docker = (...args: string[]) =>
     timeout: 120_000,
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
+const evidenceLimit = 1024 * 1024;
+const upstreamRequests = () =>
+  docker("exec", name, "cat", "/tmp/owned-upstream.log")
+    .split("\n")
+    .filter(Boolean).length;
+
+it("BCAP-01 refuses evidence above the existing 1 MiB limit before forwarding upstream", async () => {
+  const upstreamCount = () =>
+    docker("exec", name, "cat", "/tmp/owned-upstream.log")
+      .split("\n")
+      .filter((line) => line === "POST /api/evidence").length;
+  const before = upstreamCount();
+  const response = await proxyRequest(address + "/api/evidence", {
+    method: "POST",
+    headers: { Host: canonical, Origin: `https://${canonical}` },
+    body: "a".repeat(1024 * 1024 + 1),
+  });
+  expect([response.status, upstreamCount() - before]).toEqual([413, 0]);
+});
+
+it.each(
+  [canonical, legacy].flatMap((host) =>
+    ["/api/evidence", "/API/EVIDENCE/", "/api/%65vidence"].flatMap((path) =>
+      ["length", "chunked"].map((transfer) => ({ host, path, transfer })),
+    ),
+  ),
+)(
+  "BCAP-02 bounds $transfer evidence at $host$path without reaching upstream",
+  async ({ host, path, transfer }) => {
+    const before = upstreamRequests();
+    const privateBytes = "invented-private-body-" + "a".repeat(evidenceLimit);
+    const response = await proxyRequest(
+      address + path + "?private=do-not-reflect",
+      {
+        method: "POST",
+        headers: {
+          Host: host,
+          Origin: `https://${host}`,
+          Cookie: "dne_session=invented-private-cookie",
+          ...(transfer === "chunked"
+            ? { "Transfer-Encoding": "chunked" }
+            : { "Content-Length": String(Buffer.byteLength(privateBytes)) }),
+        },
+        body: privateBytes,
+      },
+    );
+    expect(response.status).toBe(413);
+    expect(upstreamRequests()).toBe(before);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers["strict-transport-security"]).toBe(
+      "max-age=31536000",
+    );
+    expect(response.headers["content-type"]).toContain("application/json");
+    expect(await response.text()).toBe(
+      '{"error":"evidence_too_large","maxBytes":1048576,"action":"Choose a file of 1 MiB or less."}\n',
+    );
+  },
+);
+
+it.each([canonical, legacy])(
+  "BCAP-01/04 accepts the exact existing limit then recovers after refusal at %s",
+  async (host) => {
+    for (const bytes of [evidenceLimit, evidenceLimit + 1, 12]) {
+      const before = upstreamRequests();
+      const response = await proxyRequest(address + "/api/evidence", {
+        method: "POST",
+        headers: {
+          Host: host,
+          Origin: `https://${host}`,
+          Cookie: "dne_session=invented-preserved-session",
+          "Content-Length": String(bytes),
+          "X-Forwarded-Host": "attacker.example",
+          "X-Forwarded-Proto": "http",
+        },
+        body: "a".repeat(bytes),
+      });
+      expect([response.status, upstreamRequests() - before]).toEqual(
+        bytes > evidenceLimit ? [413, 0] : [200, 1],
+      );
+      if (bytes <= evidenceLimit)
+        expect(await response.text()).toBe(
+          `${canonical}|https://${canonical}|dne_session=invented-preserved-session||`,
+        );
+    }
+  },
+);
+
+it.each([
+  "/api/evidence/item/review",
+  "/api//evidence",
+  "/api/evidence/export",
+])("BCAP-02 covers the evidence mount at %s", async (path) => {
+  const before = upstreamRequests();
+  const response = await proxyRequest(address + path, {
+    method: "POST",
+    headers: { Host: canonical, Origin: `https://${canonical}` },
+    body: "a".repeat(evidenceLimit + 1),
+  });
+  expect([response.status, upstreamRequests() - before]).toEqual([413, 0]);
+});
+
+it("BCAP-02 preserves the existing larger body allowance on unrelated paths", async () => {
+  const before = upstreamRequests();
+  const response = await proxyRequest(address + "/contribute", {
+    method: "POST",
+    headers: { Host: canonical, Origin: `https://${canonical}` },
+    body: "a".repeat(evidenceLimit + 1),
+  });
+  expect([response.status, upstreamRequests() - before]).toEqual([200, 1]);
+});
+
+it.each([
+  { Host: canonical, Origin: "https://attacker.example" },
+  { Host: legacy, Origin: `https://${canonical}` },
+  { Host: canonical, Origin: "" },
+])(
+  "BCAP-03 retains Host/Origin denial before evidence forwarding with %j",
+  async (headers) => {
+    const before = upstreamRequests();
+    const response = await proxyRequest(address + "/api/evidence", {
+      method: "POST",
+      headers: {
+        ...headers,
+        "X-Forwarded-Host": canonical,
+        "X-Forwarded-Proto": "https",
+      },
+      body: "small-invented-body",
+    });
+    expect([response.status, upstreamRequests() - before]).toEqual([403, 0]);
+  },
+);
 function workers() {
   const rows = docker(
     "exec",
@@ -62,37 +194,42 @@ async function proxyRequest(
     body?: string;
   } = {},
 ) {
-  return new Promise<{ status: number; text: () => Promise<string> }>(
-    (resolve, reject) => {
-      // Each probe is an independent real HTTP request, not a pooled socket
-      // that nginx may close while an old worker drains during reload.
-      const request = httpRequest(
-        url,
-        { ...options, agent: false },
-        (response) => {
-          const chunks: Buffer[] = [];
-          response.on("data", (chunk: Buffer) => chunks.push(chunk));
-          response.on("end", () =>
-            resolve({
-              status: response.statusCode!,
-              text: async () => Buffer.concat(chunks).toString("utf8"),
-            }),
-          );
-          response.on("error", reject);
-        },
-      );
-      request.on("error", reject);
-      request.setTimeout(5_000, () =>
-        request.destroy(Error("Owned proxy request timed out.")),
-      );
-      request.end(options.body);
-    },
-  );
+  return new Promise<{
+    status: number;
+    headers: IncomingHttpHeaders;
+    text: () => Promise<string>;
+  }>((resolve, reject) => {
+    // Each probe is an independent real HTTP request, not a pooled socket
+    // that nginx may close while an old worker drains during reload.
+    const request = httpRequest(
+      url,
+      { ...options, agent: false },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () =>
+          resolve({
+            status: response.statusCode!,
+            headers: response.headers,
+            text: async () => Buffer.concat(chunks).toString("utf8"),
+          }),
+        );
+        response.on("error", reject);
+      },
+    );
+    request.on("error", reject);
+    request.setTimeout(5_000, () =>
+      request.destroy(Error("Owned proxy request timed out.")),
+    );
+    request.end(options.body);
+  });
 }
 beforeAll(async () => {
   writeFileSync(
     join(directory, "upstream.conf"),
-    'server { listen 3000; access_log off; error_log /dev/null; location / { default_type text/plain; return 200 "$http_host|$http_origin|$http_cookie|$http_x_forwarded_host|$http_x_forwarded_proto"; } }',
+    // The observer must accept more than the application evidence limit so its
+    // own nginx default cannot masquerade as a refusal by the public proxy.
+    'log_format upstream_observation "$request_method $uri"; server { listen 3000; client_max_body_size 16m; access_log /tmp/owned-upstream.log upstream_observation; error_log /dev/null; location / { default_type text/plain; return 200 "$http_host|$http_origin|$http_cookie|$http_x_forwarded_host|$http_x_forwarded_proto"; } }',
   );
   chmodSync(join(directory, "upstream.conf"), 0o644);
   docker("build", "--tag", name, "infra/proxy");

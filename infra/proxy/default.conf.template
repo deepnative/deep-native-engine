@@ -26,6 +26,28 @@ server {
   if ($dne_owned_pair = 0) { return 403; }
   if ($dne_missing_write_origin = 1) { return 403; }
   add_header Strict-Transport-Security "max-age=31536000" always;
+  # Match the application's case-insensitive evidence mount, including nested
+  # routes and a trailing slash. Refuse oversized bytes before an upstream call.
+  location ~* ^/api/evidence(?:/|$) {
+    client_max_body_size 1m;
+    proxy_request_buffering on;
+    error_page 413 = @evidence_too_large;
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host ${PUBLIC_HOST};
+    proxy_set_header Origin $dne_origin;
+    proxy_set_header Forwarded "";
+    proxy_set_header X-Forwarded-Host "";
+    proxy_set_header X-Forwarded-Proto "";
+    proxy_redirect off;
+  }
+  location @evidence_too_large {
+    default_type application/json;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    return 413 '{"error":"evidence_too_large","maxBytes":1048576,"action":"Choose a file of 1 MiB or less."}\n';
+  }
   location / {
     proxy_pass http://127.0.0.1:3000;
     proxy_http_version 1.1;
