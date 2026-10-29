@@ -228,9 +228,18 @@ try {
   const files = [
     ...source("src"),
     ...source("public").filter((file) => file.endsWith(".js")),
+    ...source("assets/docs/learning-design/reader").filter(
+      (file) =>
+        file.endsWith(".mjs") &&
+        !["course.mjs", "checks.mjs", "gui-checks.mjs"].includes(
+          file.split("/").at(-1),
+        ),
+    ),
   ];
   requireGate(
-    files.every((f) => f.endsWith(".ts") || f.endsWith(".js")),
+    files.every(
+      (f) => f.endsWith(".ts") || f.endsWith(".js") || f.endsWith(".mjs"),
+    ),
     "Unmeasured application source",
   );
   report.unitCoverage = assertCoverage(

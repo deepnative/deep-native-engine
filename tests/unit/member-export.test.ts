@@ -103,7 +103,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v27",
+      version: "local-member-records-v28",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -226,8 +226,8 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    // Original indices0..45 remain; owned publication index46 is valid.
-    [2, 47, ...valid.slice(2)],
+    // Original indices0..46 remain; learning sections47..50 are valid.
+    [2, 51, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -281,7 +281,7 @@ it.each([
     expect(result).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v27",
+        version: "local-member-records-v28",
         records: { [name]: [{ record: "Invented owned metadata" }] },
       },
     });
@@ -518,7 +518,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v27",
+        version: "local-member-records-v28",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -726,7 +726,7 @@ it("appends owned review accounting at indices 33-35 without moving existing sec
     expect(value).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v27",
+        version: "local-member-records-v28",
         records: { [name]: [{ id: "owned-accounting" }] },
       },
     });
@@ -759,7 +759,7 @@ it("appends safe source-deleted assignment receipts at index36 without moving an
   expect(value).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v27",
+      version: "local-member-records-v28",
       records: { sampleAssignmentOperations: [record] },
     },
   });
@@ -888,7 +888,7 @@ it("CONPUB-04 appends owner-only publication permissions at cursor index46 with 
   expect(result).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v27",
+      version: "local-member-records-v28",
       records: {
         proposalPublications: [{ state: "withdrawn", attribution: null }],
       },
@@ -901,4 +901,126 @@ it("CONPUB-04 appends owner-only publication permissions at cursor index46 with 
   expect(query).toContain("member_id=$1");
   expect(query).toContain("FOR SHARE");
   expect(query).not.toMatch(/accepted_by|accepted_role|operation_id/);
+});
+
+it.each([
+  [47, "learningNotebooks", "FROM learning_workspace_notebooks"],
+  [48, "learningWriting", "FROM learning_workspace_fields"],
+  [49, "learningFeedbackDecisions", "FROM learning_workspace_decisions"],
+  [50, "learningFeedbackWriting", "FROM learning_workspace_decision_fields"],
+] as const)(
+  "LWORK-03/06 appends section %s without moving an existing cursor and decodes exact writing",
+  async (index, name, table) => {
+    const text = "private NUL\u0000 and lone\ud800";
+    const isWriting =
+      name === "learningWriting" || name === "learningFeedbackWriting";
+    const f = fakePool({ id: "member-1" }, (sql) =>
+      sql.includes("FOR SHARE OF n")
+        ? [{ id: "own" }]
+        : sql.includes('AS "_key"') && sql.includes(table)
+          ? [
+              {
+                _key: ["b"],
+                notebookId: "own",
+                ...(isWriting
+                  ? {
+                      field: "lesson.0.work",
+                      _encodedWriting: JSON.stringify(text),
+                    }
+                  : { revision: 2 }),
+              },
+            ]
+          : [],
+    );
+    const result = await memberExportStore(f.pool, secret).exportOwned(
+      "owner",
+      signed([2, index, ["a"], 2, Date.now() + 60000]),
+    );
+    expect(result.kind).toBe("ready");
+    if (result.kind !== "ready") throw Error("Owner export expected");
+    expect(result.payload.records[name]).toEqual([
+      {
+        notebookId: "own",
+        ...(isWriting ? { field: "lesson.0.work", text } : { revision: 2 }),
+      },
+    ]);
+    expect(Object.keys(result.payload.records).slice(0, 47).at(-1)).toBe(
+      "proposalPublications",
+    );
+    expect(Object.keys(result.payload.records).slice(47)).toEqual([
+      "learningNotebooks",
+      "learningWriting",
+      "learningFeedbackDecisions",
+      "learningFeedbackWriting",
+    ]);
+    const sql = f.statements.find(
+      (q) => q.includes('AS "_key"') && q.includes(table),
+    )!;
+    expect(sql).toContain("member_id=$1");
+    if (name !== "learningNotebooks") {
+      expect(sql).toContain("n.deleted_at IS NULL");
+      expect(sql).toContain("n.id=ANY($4::uuid[])");
+      const locked = f.statements.findIndex(
+        (q) => q.includes("FOR SHARE OF n") && q.includes(table),
+      );
+      const read = f.statements.indexOf(sql);
+      expect(locked).toBeGreaterThan(-1);
+      expect(read).toBeGreaterThan(locked);
+    }
+    expect(sql).not.toMatch(/request_digest|operation_id/);
+    expect(JSON.stringify(result)).not.toContain("_encodedWriting");
+  },
+);
+
+it("LWORK-03 measures decoded export bytes and never skips corrupted private writing", async () => {
+  const text = "\u0000".repeat(30000);
+  const f = fakePool({ id: "member-1" }, (sql) =>
+    sql.includes('AS "_key"') && sql.includes("FROM learning_workspace_fields")
+      ? [0, 1].map((id) => ({
+          _key: [String(id)],
+          notebookId: "own",
+          field: String(id),
+          _encodedWriting: JSON.stringify(text),
+        }))
+      : [],
+  );
+  const exporter = memberExportStore(f.pool, secret);
+  const first = await exporter.exportOwned("owner");
+  expect(first.kind).toBe("ready");
+  if (first.kind !== "ready") throw Error("Owner export expected");
+  expect(first.payload.page.complete).toBe(false);
+  expect(first.payload.records.learningWriting).toEqual([
+    { notebookId: "own", field: "0", text },
+  ]);
+  expect(Buffer.byteLength(JSON.stringify(first.payload))).toBeLessThanOrEqual(
+    MAX_MEMBER_EXPORT_BYTES,
+  );
+  const next = await exporter.exportOwned(
+    "owner",
+    first.payload.page.nextCursor!,
+  );
+  expect(next).toMatchObject({
+    kind: "ready",
+    payload: {
+      records: { learningWriting: [{ notebookId: "own", field: "1", text }] },
+      page: { complete: true },
+    },
+  });
+  for (const encoded of [
+    '"broken',
+    JSON.stringify({ not: "text" }),
+    '"\\u0061"',
+  ]) {
+    const corrupt = fakePool({ id: "member-1" }, (sql) =>
+      sql.includes('AS "_key"') &&
+      sql.includes("FROM learning_workspace_fields")
+        ? [{ _encodedWriting: encoded }]
+        : [],
+    );
+    expect(await memberExportStore(corrupt.pool).exportOwned("owner")).toEqual({
+      kind: "unavailable",
+    });
+    expect(corrupt.statements).toContain("ROLLBACK");
+    expect(corrupt.statements).not.toContain("COMMIT");
+  }
 });

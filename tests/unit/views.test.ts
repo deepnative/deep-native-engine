@@ -49,6 +49,7 @@ import type { ExpertRecord } from "../../src/track-readiness.ts";
 import type { OwnerProposal } from "../../src/proposals.ts";
 import { workflowBundle } from "../../src/workflow-registry.ts";
 import { profileEdit } from "../../src/validation.ts";
+import { learningWorkspacePack } from "../../src/learning-workspace-pack.ts";
 const learner = {
   id: "a",
   background: "explorer" as const,
@@ -1844,7 +1845,7 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v27" as const,
+    version: "local-member-records-v28" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2151,4 +2152,31 @@ it("ASN103-01 distinguishes ordinary assignment publication from assessment and 
   expect(staff).toContain("Approve editorial review");
   expect(staff).toContain("Publish reviewed assignment");
   expect(staff).toContain("ordinary educational assignment");
+});
+
+it("LWORK-05 describes the versioned catalog entry as an overview and directs complete staff review", async () => {
+  const pack = await learningWorkspacePack();
+  const item: ContentVersion = {
+    ...pack.publication,
+    state: "published",
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date("2026-10-29T12:00:00Z"),
+    publishedAt: new Date("2026-10-29T12:00:00Z"),
+  };
+  const memberReading = contentPreview(item, false, "csrf");
+  expect(memberReading).toContain("catalog text is an overview");
+  expect(memberReading).toContain(
+    'href="/learn">Open the learning workspace</a>',
+  );
+  expect(memberReading).not.toContain(
+    "text below is the primary reading format",
+  );
+  const staffReading = contentPreview(item, true, "csrf");
+  expect(staffReading).toContain(
+    'href="/editor/library/learning-workspace/bundle"',
+  );
+  expect(staffReading).toContain(
+    "Review the full instruction before an editorial decision.",
+  );
+  expect(staffReading).toContain('action="/editor/library/LRN-001/1/publish"');
 });

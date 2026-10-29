@@ -251,6 +251,30 @@ it("starts after migration and closes both listener and pool", async () => {
   expect(s.close).toHaveBeenCalledOnce();
   expect(doubles.end).toHaveBeenCalledOnce();
 });
+
+it("LWORK-01/05 supplies the member workspace and editorial publication stores to the app", async () => {
+  server();
+  const running = await start(env);
+  try {
+    const options = doubles.app.mock.calls[0]![1];
+    expect(options.learningWorkspace).toEqual(
+      expect.objectContaining({
+        source: expect.any(Function),
+        create: expect.any(Function),
+        save: expect.any(Function),
+        history: expect.any(Function),
+      }),
+    );
+    expect(options.learningWorkspacePublication).toEqual(
+      expect.objectContaining({
+        preview: expect.any(Function),
+        import: expect.any(Function),
+      }),
+    );
+  } finally {
+    await running.close();
+  }
+});
 it("closes the pool when migration or bind fails", async () => {
   doubles.migrate.mockRejectedValueOnce(new Error("migration failed"));
   await expect(start(env)).rejects.toThrow("migration failed");

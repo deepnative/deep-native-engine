@@ -1,3 +1,6 @@
+import { learningWorkspaceStore } from "./learning-workspace-store.ts";
+import { learningWorkspacePublicationStore } from "./learning-workspace-publication.ts";
+import { resolveLearningWorkspaceBundle } from "./learning-workspace-pack.ts";
 import { workflowReviewStaffStore } from "./workflow-review-staff.ts";
 import { staffEntryStore } from "./staff-entry.ts";
 import { supportAssignmentStore } from "./support-assignment.ts";
@@ -171,6 +174,11 @@ export async function start(env: NodeJS.ProcessEnv) {
       }),
       authorization: authorizationStore(pool),
       catalog: catalogStore(pool),
+      learningWorkspace: learningWorkspaceStore(
+        pool,
+        resolveLearningWorkspaceBundle,
+      ),
+      learningWorkspacePublication: learningWorkspacePublicationStore(pool),
       foundationImport: foundationImportStore(pool),
       assignmentImport: reviewedAssignmentImportStore(pool),
       tracks: trackStore(pool),

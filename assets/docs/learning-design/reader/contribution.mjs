@@ -28,7 +28,7 @@ export function contributionReady(value) {
     ["problem", "first", "reason", "rights"].every((key) =>
       value[key].trim(),
     ) &&
-    (value.audience === "private" || value.attribution.trim())
+    (value.audience === "private" || Boolean(value.attribution.trim()))
   );
 }
 export function validContribution(value) {
@@ -44,7 +44,7 @@ export function validContribution(value) {
     (!value.checked || contributionReady(value)),
   );
 }
-export function renderContribution(value) {
+export function renderContribution(value, account = false) {
   return `<section class="contribution-workspace" id="contribution-workspace"><details id="contribution-panel"><summary>Shape a contribution (optional)</summary>
     <h2>Help someone use your improvement.</h2>${course.contribution.intro}
     <div class="source-card" id="contribution-source">${course.contribution.source}</div>
@@ -56,10 +56,10 @@ export function renderContribution(value) {
     <button class="secondary" id="contribution-cancel" type="button"${value.audience === "private" && !value.attribution ? " disabled" : ""}>Cancel this sharing plan</button>
     <label class="self-check"><input id="contribution-check" type="checkbox"${value.checked ? " checked" : ""}${contributionReady(value) ? "" : " disabled"}>I checked this proposal against its source and sharing boundaries</label>
     <p class="quiet">Complete the problem, first proposal, reason and rights note to record your self-check. For a future member audience, also choose intended attribution. Unfinished drafts can still be saved.</p>
-    <p id="contribution-status" role="status">Not submitted or shared. Use Save in this browser or Download my work to retain this private practice.</p>
+    <p id="contribution-status" role="status">Not submitted or shared. Use ${account ? "Save my work" : "Save in this browser"} or Download my work to retain this private practice.</p>
   </details></section>`;
 }
-export function bindContribution(value, changed) {
+export function bindContribution(value, changed, document) {
   const refresh = () => {
     const checked = document.querySelector("#contribution-check");
     checked.checked = value.checked;

@@ -517,7 +517,7 @@ test("[L81] three learning backgrounds withdraw an exact private note with keybo
         }[];
       };
     };
-    expect(exported.version).toBe("local-member-records-v27");
+    expect(exported.version).toBe("local-member-records-v28");
     expect(exported.records.privatePractice).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

@@ -10,8 +10,18 @@ export default defineConfig({
     fileParallelism: false,
     coverage: {
       provider: "v8",
-      include: ["src/**/*.ts", "public/**/*.js"],
-      exclude: [],
+      include: [
+        "src/**/*.ts",
+        "public/**/*.js",
+        "assets/docs/learning-design/reader/*.mjs",
+      ],
+      // The course is generated data; the other two files are browser tests.
+      // Every reader controller, adapter and entry point remains measured.
+      exclude: [
+        "assets/docs/learning-design/reader/course.mjs",
+        "assets/docs/learning-design/reader/checks.mjs",
+        "assets/docs/learning-design/reader/gui-checks.mjs",
+      ],
       reporter: ["text", "json", "json-summary"],
       reportsDirectory: "artifacts/coverage",
       thresholds: {
