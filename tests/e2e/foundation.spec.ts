@@ -295,7 +295,7 @@ test("[L232] FOUND-01/02/04 cached history refuses replacement, retirement prese
     )!.value;
     const session = await store(f.pool).session(token);
     if (session.kind !== "active") throw Error("Member unavailable");
-    const history = await store(f.pool).lessonActivities(session.learner.id);
+    const history = await store(f.pool).lessonActivities(token);
     expect(history).toHaveLength(2);
     expect(history.every((x) => !x.available)).toBe(true);
     expect(

@@ -96,7 +96,7 @@ it("discloses only a coarse latest-answer band for a large retained cohort and s
     ]!;
     const person = await respondent(background);
     people.push(person);
-    await selfAssess(person.id, 1);
+    await selfAssess(person.token, 1);
     expect(
       await reports.save(
         person.token,
@@ -153,7 +153,7 @@ it("discloses only a coarse latest-answer band for a large retained cohort and s
     "coarse-band",
   );
   await publish(2, editor.token, reviewer.token);
-  await selfAssess(first.id, 2);
+  await selfAssess(first.token, 2);
   expect(await reports.save(first.token, lessonId, 2, "not_yet", 0)).toBe(true);
   // Equal timestamps cannot double-count a member or make the older version win.
   await pool.query(

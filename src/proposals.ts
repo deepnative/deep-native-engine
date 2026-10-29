@@ -26,6 +26,7 @@ export type ProposalState =
   | "rejected"
   | "withdrawn";
 export interface Proposal {
+  origin?: "sample" | "member";
   id: string;
   title: string | null;
   body: string | null;
@@ -120,7 +121,7 @@ export function disabledProposalStore(): ProposalStore {
 }
 const columns = `mp.id,mp.title,mp.body,mp.sources,mp.state,mp.revision,
  mp.workflow_id AS "workflowId",mp.workflow_version AS "workflowVersion",
- mp.created_at AS "createdAt",mp.submitted_at AS "submittedAt"`;
+ mp.created_at AS "createdAt",mp.submitted_at AS "submittedAt",mp.origin`;
 const ownerColumns = `${columns},mp.change_feedback AS "feedbackText",
  mp.change_feedback_revision AS "feedbackRevision",mp.changes_requested_at AS "feedbackRequestedAt",
  mp.rights_attested_revision AS "rightsAttestedRevision",mp.rights_attested_at AS "rightsAttestedAt"`;
@@ -133,6 +134,7 @@ interface OwnerRow extends Proposal {
 }
 function projection(row: Proposal): Proposal {
   return {
+    ...(row.origin === "member" ? { origin: "member" as const } : {}),
     id: row.id,
     title: row.title,
     body: row.body,
@@ -160,6 +162,7 @@ interface ModerationProposal extends Proposal {
 export function proposalStore(
   pool: Pool,
   resolveWorkflow = workflowBundle,
+  options: { ordinaryEnabled: boolean } = { ordinaryEnabled: false },
 ): ProposalStore {
   // Continuation is intentionally local to this store instance. Restarting it
   // invalidates old links; the first page always remains available.
@@ -447,7 +450,11 @@ export function proposalStore(
 
   return {
     async createDraft(token, value, sampleConfirmed, workflow) {
-      if (!sampleConfirmed || !validProposal(value)) return null;
+      if (
+        (!sampleConfirmed && !options.ordinaryEnabled) ||
+        !validProposal(value)
+      )
+        return null;
       if (
         workflow &&
         (!Number.isSafeInteger(workflow.version) || workflow.version < 1)
@@ -465,8 +472,8 @@ export function proposalStore(
           }
           const result = await client.query<{ id: string }>(
             `INSERT INTO member_proposals(id,member_id,title,body,sources,
-             workflow_id,workflow_version,sample_attested_at)
-           SELECT $2,l.id,$3,$4,$5,$6,$7,clock_timestamp() FROM learners l WHERE l.id=$1
+             workflow_id,workflow_version,sample_attested_at,origin)
+           SELECT $2,l.id,$3,$4,$5,$6,$7,CASE WHEN $8 THEN clock_timestamp() ELSE NULL END,CASE WHEN $8 THEN 'sample' ELSE 'member' END FROM learners l WHERE l.id=$1
            RETURNING id`,
             [
               principal.id,
@@ -476,6 +483,7 @@ export function proposalStore(
               value.sources,
               workflow?.id ?? null,
               workflow?.version ?? null,
+              sampleConfirmed,
             ],
           );
           return result.rows[0]?.id ?? null;

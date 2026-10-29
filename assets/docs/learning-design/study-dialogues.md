@@ -1,0 +1,54 @@
+# Improve a request through a follow-up
+
+Local authored teaching material under [#34](https://github.com/deepnative/deep-native-engine/issues/34), 27 October 2026. Lesson 2 now has three supplied conversations that show **attempt → source-specific hint → repair → reason**. They use the existing fresh sources and writing/notebook controls. No live assistant or automatic writing assessment is added.
+
+**Try it:** open the [local reader](http://localhost:56274/reader/), choose Work → Lesson 2 → Fresh case. Write a first request, open **Follow the Work repair conversation**, try its hint, then reveal the repair. Keep your first request, revision and reason in the writing field. Explicitly save or download your work. [Reader instructions](reader/README.md) describe restart and browser-local storage.
+
+## What each conversation teaches
+
+| Conversation               | Misconception and useful hint                                                                                                                             | Repair and source limit                                                                                                                                                                              |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Everyday, L2-E-D / L2-E-X  | Forty packets is treated as enough for every visitor, and a venue/time is invented. Ask how many visitors the source actually names.                      | Keep six helpers, forty packets and one hour on Sunday; leave location/start time open and remove the guarantee. Suggestions can be labelled, but a library booking cannot be asserted.              |
+| Work, L2-W-D / L2-W-X      | Thursday's trial date becomes everyone’s deadline and Mina's survey task becomes launch ownership. Trace each date and owner to its own source statement. | Keep Mina's survey, Arun's wording check and Thursday's trial. Preserve missing deadlines/ownership and distinguish proposed dates from agreed ones.                                                 |
+| Technical, L2-T-D / L2-T-X | A 500-character maximum is invented and planned tests are called passing. Ask for the requirement and execution evidence.                                 | Keep email/message and blank-message expectations; leave the maximum unspecified and execution not run. A future observation or interrupted run must not rewrite the supplied no-tests-run baseline. |
+
+Each conversation also contains an unseen-revision example: the guide asks for the actual request and relevant source rather than endorsing missing work. A separate unsupported-request example preserves a useful next action: draft the known parts or ask a specific question. These are original invented teaching exchanges.
+
+The initial instruction allows a learner whose first request already handles the issue to explain why. They need not manufacture a mistake. The comparison is about reasoning, not matching the sample's words. Opening any dialogue leaves the learner's writing intact.
+
+## BDD and evidence
+
+| Scenario                                             | Evidence                                                                                                                                                                                       | Boundary                                                                     |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [DIALOGUE-001](features/study-dialogues.feature)     | Three source/meaning reviews above; READER-018 displays each distinct hint, repair and reason.                                                                                                 | Author review establishes the sample's reasoning, not learner comprehension. |
+| DIALOGUE-002                                         | Each route asks for unseen revised wording/source evidence before judging it; browser checks inspect the corresponding text.                                                                   | Supplied conversation only; no dynamic assessment of arbitrary writing.      |
+| DIALOGUE-003                                         | Each route identifies an unsupported venue, deadline or input limit and offers useful supported work or clarification.                                                                         | No external verification, provider request or human response is claimed.     |
+| DIALOGUE-004 / [READER-018](reader/learning.feature) | Six desktop/narrow cases preserve writing through disclosures, explicit save, export and reload. Existing READER-012 recovery cases remain; actual Work notebook downloads match before/after. | Browser-local records; no member account or actual reviewer exchange.        |
+
+Before content editing, all six new cases failed on the missing conversation disclosure at baseline `022c7deb7c714536301d46cfb28d985d888494ff`. The first test wording used “Follow a Everyday…”; that article was corrected to “Follow the Everyday…” before authoring. No such conversation existed under either wording. The retained red run is an absence-of-content result, not a syntax or fixture failure.
+
+After authoring, the full focused reader run passed **78 cases, zero failures, zero retries** at 1360 × 950 and 390 × 950. Self-review moved the overflow check after opening the dialogue and repair so it inspects the expanded content; the final full run also passed all 78. All 72 earlier case names remain. The existing whole-course comparison selector was narrowed for Lesson 2 to distinguish the original worked request from the additional dialogue; its assertion remains. Four DIALOGUE scenarios and READER-018 bring the package from 79 to **84 unique IDs**. The approved application journey denominator is unchanged.
+
+The actual Work author rehearsal kept an initial request with unsupported Thursday deadlines and launch ownership, used the hint, and wrote a different supported request with a source-based reason. Revealing the comparisons did not replace it. Save/export/reload retained the exact words. The earlier Work notebook stayed byte-identical across the new save (SHA-256 `766a3e58478ffe9cf378a6fda2b8b986cbaa80e69e6ac9bad90848442cb4e7ba`). Desktop and narrow dialogue views were inspected. This was an author rehearsal, not an independent learner study.
+
+Only Lesson 2's generated comparison fields change, plus its source digest and the overall content hash. Existing comparisons remain intact as prefixes. All 24 keys, source facts, fresh cases, other lesson material, final records and feedback cases are exactly preserved. Lesson 2 is draft `0.4`; new content hash: `09b137043e26445d4a2668b3ecbdd6c3ddbd157f6331b586f358bb6a49bf04cf`. Earlier notebooks remain separate rather than being silently migrated.
+
+Evidence directory: `/Users/tomwu/Documents/Codex/2026-10-27/dne-content-workflows-bdd/study-dialogues/`. It contains the initial red run, `full-first/results.json`, `full-final/results.json`, generated-content comparison, actual exports, `manual-observations.json`, screenshots, static verification and a commit manifest. Reproduce the focused run with the reader's documented command and `--case READER-018`; omit that flag for all 78 cases.
+
+## Scope and next action
+
+Inspection of `src/practice-sessions.ts` confirmed that the application already has goal-specific prompts, exact-source comparison pairs, saved conversations and reload. This content exercise reuses the local reader's existing writing/disclosure/notebook behavior and does not rebuild that backend. No reader runtime, provider, application test, canonical FND file, hosted configuration or account state changes. The broad #34 provider, budget and human-service criteria remain open. Production stays parked.
+
+The subsequent [contribution practice](contribution-practice.md) is now authored and rehearsed locally under #115; see its [evidence map](traceability.md#contribution-practice). It reuses the existing reader notebook while leaving application proposal storage and permissions unchanged.
+
+The [realistic Work brief](realistic-work-practice.md) is now authored and rehearsed locally: changed notes, capacity tradeoff, usable update and retained revision.
+
+The [realistic Technical investigation](realistic-technical-practice.md) is now authored and rehearsed locally: conflicting requirements, bounded observations, a useful reproduction/test plan and a retained revision after a later update.
+
+The [realistic Everyday planning case](realistic-everyday-practice.md) is now authored and rehearsed locally: changed arrangements, attendance states, capacity choices, a useful reminder and a retained checklist revision.
+
+The [guided final-practice checkpoint](reader/guided-final-practice.md) now presents all three cases as brief → first draft → update → revision, preserving existing writing and explicit saves. READER-026–028 added eleven browser cases; that checkpoint passed 107 cases.
+
+The [field-guidance refinement](reader/guided-final-practice.md#field-guidance-refinement) now places all eighteen existing numbered instructions beside the corresponding final-practice fields and shows the case’s expected output. READER-029 adds six route/width checks; the full reader suite passes 113 cases with the same sources and preserved notebooks.
+
+Next bounded action under [#34](https://github.com/deepnative/deep-native-engine/issues/34): audit the complete local learn → apply → feedback → contribution journey against its original BDD requirements and current authored content. Several local refinements now exist; reconcile the package as a whole and identify a concrete missing learner outcome before adding another slice. Reuse the completed rehearsals and executable evidence, preserve #93/#117 canonical/shared-reader claims, and recheck live ownership. Lead Sol/High; author content/evidence review High. Production remains parked.

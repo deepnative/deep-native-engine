@@ -8,12 +8,71 @@ function form(action: string, csrf: string, button: string) {
   return `<form method="post" action="${action}"><input type="hidden" name="csrf" value="${csrf}"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" required><button type="submit">${button}</button></form>`;
 }
 
+function linkedPage() {
+  return page(
+    "Email already linked",
+    '<section class="error-page"><h1>Email already linked</h1><p>An email is already linked to this learning record. No new verification message is needed.</p><p>To return to this same saved work in another browser or on another device, open the email sign-in page there and enter your linked address.</p><p><a href="/email/sign-in">Email sign-in</a></p><p><a href="/learn">Return to learning</a></p></section>',
+  );
+}
+
 export function mountMemberEmailRoutes(
   app: Express,
   store: Store,
   access: MemberEmailAccess | undefined,
   origin: string,
 ) {
+  app.post("/account/sign-out", async (req, res) => {
+    if (
+      Object.keys(req.body ?? {}).some((key) => key !== "csrf") ||
+      Object.keys(req.query).length
+    )
+      return res
+        .status(400)
+        .send(
+          page(
+            "Sign-out unavailable",
+            '<section class="error-page"><h1>Sign-out unavailable</h1><p>Open My account and use its sign-out form.</p></section>',
+          ),
+        );
+    if (!access)
+      return res
+        .status(503)
+        .send(
+          page(
+            "Email recovery unavailable",
+            '<section class="error-page"><h1>Email recovery unavailable</h1><p>Keep this browser’s access. Email recovery cannot be checked right now.</p><p><a href="/account">My account</a></p></section>',
+          ),
+        );
+    let result: Awaited<ReturnType<MemberEmailAccess["signOut"]>>;
+    try {
+      result = await access.signOut(res.locals.token as string);
+    } catch {
+      return res
+        .status(503)
+        .send(
+          page(
+            "Sign-out could not be confirmed",
+            '<section class="error-page"><h1>Sign-out could not be confirmed</h1><p>The result is uncertain. Do not resend this form. Open My account to check access, or deliberately request an email sign-in link to return to your saved work.</p><p><a href="/account">Check My account</a> · <a href="/email/sign-in">Email sign-in</a></p></section>',
+          ),
+        );
+    }
+    if (result !== "signed_out")
+      return res
+        .status(409)
+        .send(
+          page(
+            "Sign-out unavailable",
+            `<section class="error-page"><h1>Sign-out unavailable</h1><p>${result === "recovery_required" ? "Link and verify an email before signing out. Your current access is unchanged." : "Current account access could not be verified. Open My account to check access, or use email sign-in."}</p><p><a href="/account">My account</a> · <a href="/email/attach">Link an email</a> · <a href="/email/sign-in">Email sign-in</a></p></section>`,
+          ),
+        );
+    res.clearCookie(COOKIE, cookieOptions(origin));
+    return res.send(
+      page(
+        "Signed out",
+        '<section class="error-page"><h1>Signed out</h1><p>Your saved work is still in your account. This access token, including any copied browser cookies, no longer opens it. No email was sent.</p><p><a href="/email/sign-in">Sign back in by email</a></p></section>',
+      ),
+    );
+  });
   let pendingRequests = 0;
   function dispatch(request: () => Promise<unknown>) {
     // Acknowledgement must not wait for an account lookup or mail delivery:
@@ -64,7 +123,10 @@ export function mountMemberEmailRoutes(
   app.get("/email/attach", async (_req, res) => {
     const session = await store.session(res.locals.token as string);
     if (session.kind !== "active") return res.redirect(303, "/email/sign-in");
-    if (!access)
+    const status = access
+      ? await access.ownedStatus(res.locals.token as string)
+      : "unavailable";
+    if (status === "unavailable")
       return res
         .status(503)
         .send(
@@ -73,6 +135,7 @@ export function mountMemberEmailRoutes(
             '<section class="error-page"><h1>Email unavailable</h1><p>Try again later. Your saved work is unchanged.</p></section>',
           ),
         );
+    if (status === "linked") return res.send(linkedPage());
     return res.send(
       page(
         "Keep access to your learning",
@@ -91,7 +154,10 @@ export function mountMemberEmailRoutes(
             '<section class="error-page"><h1>Session expired</h1><p>Reopen your learning path before linking an email.</p></section>',
           ),
         );
-    if (!access)
+    const status = access
+      ? await access.ownedStatus(res.locals.token as string)
+      : "unavailable";
+    if (status === "unavailable")
       return res
         .status(503)
         .send(
@@ -100,9 +166,10 @@ export function mountMemberEmailRoutes(
             '<section class="error-page"><h1>Email unavailable</h1><p>Try again later. Your saved work is unchanged.</p></section>',
           ),
         );
+    if (status === "linked") return res.send(linkedPage());
     const memberToken = res.locals.token as string;
     const address = String(req.body.email ?? "");
-    dispatch(() => access.requestAttach(memberToken, address));
+    dispatch(() => access!.requestAttach(memberToken, address));
     return res.send(
       page(
         "Check your email",

@@ -57,7 +57,6 @@ for (const [index, [background, goal]] of audiences.entries())
       await page.goto("/");
       await page.getByLabel("Your starting point").selectOption(background);
       await page.getByLabel("What would you like to do?").selectOption(goal);
-      await page.getByLabel("I'll use invented or sample information").check();
       await page
         .getByRole("button", { name: "Start my learning path" })
         .click();
@@ -179,9 +178,7 @@ for (const [index, [background, goal]] of audiences.entries())
         .getByLabel("Internal note (up to 2,000 characters)")
         .fill("Invented staff-only note");
       await page
-        .getByLabel(
-          "Save this invented information as an internal staff-only note.",
-        )
+        .getByLabel("Save this information as an internal staff-only note.")
         .check();
       await page
         .getByRole("button", { name: "Save internal note", exact: true })

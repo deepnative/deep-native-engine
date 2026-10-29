@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import type { ObjectStorage } from "./evidence.ts";
+import type { ObjectStorage, StorageQuery } from "./evidence.ts";
 import { preparedSample } from "./prepared-sample-values.ts";
 import { sampleUuid } from "./sample-feedback-values.ts";
 
@@ -10,10 +10,10 @@ export function preparedObjectStorage(
   pool: Pool,
   files: ObjectStorage,
 ): ObjectStorage {
-  async function binding(key: string) {
+  async function binding(key: string, query: StorageQuery) {
     if (!sampleUuid(key)) throw Error("Invalid private object key.");
     return (
-      await pool.query<{
+      await query.query<{
         templateId: string;
         templateVersion: number;
         templateDigest: string;
@@ -35,14 +35,14 @@ export function preparedObjectStorage(
   return {
     requiresWriteRecovery: files.requiresWriteRecovery,
     abandon: files.abandon?.bind(files),
-    async put(key, data) {
-      if (await binding(key))
+    async put(key, data, query = pool) {
+      if (await binding(key, query))
         throw Error("Provided private source is immutable.");
-      await files.put(key, data);
+      await files.put(key, data, query);
     },
-    async get(key) {
-      const row = await binding(key);
-      if (!row) return files.get(key);
+    async get(key, query = pool) {
+      const row = await binding(key, query);
+      if (!row) return files.get(key, query);
       const sample = preparedSample(
         row.templateId,
         row.templateVersion,
@@ -58,10 +58,10 @@ export function preparedObjectStorage(
         throw Error("Provided private source unavailable.");
       return Buffer.from(sample.text);
     },
-    async remove(key) {
+    async remove(key, query = pool) {
       // Source removal controls access through its retained database binding.
       // No private byte write/orphan exists for these immutable fixed examples.
-      if (!(await binding(key))) await files.remove(key);
+      if (!(await binding(key, query))) await files.remove(key, query);
     },
   };
 }

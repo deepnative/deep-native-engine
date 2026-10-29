@@ -31,6 +31,13 @@ function fixture(active = true, enabled = true) {
     lessonActivities: vi.fn(async () => []),
   } as unknown as Store;
   const email = {
+    signOut: vi.fn(
+      async () =>
+        "signed_out" as "signed_out" | "recovery_required" | "unavailable",
+    ),
+    ownedStatus: vi.fn(
+      async () => "unlinked" as "linked" | "unlinked" | "unavailable",
+    ),
     requestAttach: vi.fn(async () => "sent" as const),
     requestSignIn: vi.fn(async () => undefined),
     consume: vi.fn(async () => ({ kind: "attached" as const })),
@@ -107,7 +114,7 @@ it("shows configured email sign-in and links it from the welcome page", async ()
   expect(landing.status).toBe(200);
   expect(landing.text).toContain('action="/email/sign-in"');
   const welcome = await get(application, "/");
-  expect(welcome.text).toContain("Return to saved learning by email");
+  expect(welcome.text).toContain('href="/email/sign-in">Sign in</a>');
 });
 
 it("offers active members an email link from their learning path", async () => {
@@ -388,4 +395,132 @@ it("EMAIL-HTTP-01 keeps a competing listener out of the exact email error reques
         foreign.close((error) => (error ? reject(error) : resolve())),
       );
   }
+});
+
+it("EMAIL-ACCESS-05A/05B shows only the current owner's linked state and refuses stale attachment dispatch", async () => {
+  const { application, email } = fixture();
+  email.ownedStatus.mockResolvedValue("linked");
+  const linked = await get(application, "/email/attach");
+  const stale = await post(application, "/email/attach", {
+    email: "foreign@example.com",
+  });
+  expect(linked.status).toBe(200);
+  expect(stale.status).toBe(200);
+  expect(stale.text).toBe(linked.text);
+  expect(linked.text).toContain("Email already linked");
+  expect(linked.text).toContain("another browser");
+  expect(linked.text).toContain('href="/email/sign-in"');
+  expect(linked.text).not.toContain('action="/email/attach"');
+  expect(linked.text).not.toContain("foreign@example.com");
+  expect(email.ownedStatus.mock.calls).toEqual([[credential], [credential]]);
+  expect(email.requestAttach).not.toHaveBeenCalled();
+});
+
+it("EMAIL-ACCESS-05D withholds attachment state and dispatch when current ownership cannot be verified", async () => {
+  const { application, email } = fixture();
+  email.ownedStatus.mockResolvedValue("unavailable");
+  const getResult = await get(application, "/email/attach");
+  const postResult = await post(application, "/email/attach", {
+    email: "private@example.com",
+  });
+  for (const response of [getResult, postResult]) {
+    expect(response.status).toBe(503);
+    expect(response.text).not.toContain("Email already linked");
+    expect(response.text).not.toContain('action="/email/attach"');
+    expect(response.text).not.toContain("private@example.com");
+  }
+  expect(email.requestAttach).not.toHaveBeenCalled();
+});
+
+it("MOUT-01 signs out a linked member only after confirmed invalidation and clears only its cookie", async () => {
+  const { application, email } = fixture();
+  Object.assign(email, { signOut: vi.fn(async () => "signed_out") });
+  const response = await post(application, "/account/sign-out", {});
+  expect(response.status).toBe(200);
+  expect(response.text).toContain("Signed out");
+  expect(response.headers["set-cookie"]).toEqual([
+    expect.stringContaining("dne_preview=;"),
+  ]);
+  expect(email.requestSignIn).not.toHaveBeenCalled();
+});
+
+it.each(["recovery_required", "unavailable"] as const)(
+  "MOUT-03/04 retains the member cookie when sign-out is %s",
+  async (result) => {
+    const { application, email } = fixture();
+    email.signOut.mockResolvedValue(result);
+    const response = await post(application, "/account/sign-out", {});
+    expect(response.status).toBe(409);
+    expect(response.headers["set-cookie"]).toBeUndefined();
+    expect(response.text).toContain(
+      result === "recovery_required"
+        ? "Link and verify"
+        : "could not be verified",
+    );
+    expect(email.signOut).toHaveBeenCalledExactlyOnceWith(credential);
+  },
+);
+it("MOUT-03 retains access when email recovery is not configured", async () => {
+  const { application, email } = fixture(true, false);
+  const response = await post(application, "/account/sign-out", {});
+  expect(response.status).toBe(503);
+  expect(response.headers["set-cookie"]).toBeUndefined();
+  expect(email.signOut).not.toHaveBeenCalled();
+});
+it("MOUT-04 rejects identifiers and forged origin/CSRF before mutation", async () => {
+  const { application, email } = fixture();
+  for (const body of [{ memberId: "other" }, { csrf: ["unexpected"] }]) {
+    const response = await post(
+      application,
+      "/account/sign-out",
+      body as unknown as Record<string, string>,
+      false,
+    );
+    expect([400, 403]).toContain(response.status);
+  }
+  expect(
+    (await post(application, "/account/sign-out?memberId=other", {})).status,
+  ).toBe(400);
+  expect(
+    (await post(application, "/account/sign-out", { memberId: "other" }))
+      .status,
+  ).toBe(400);
+  expect((await post(application, "/account/sign-out", {}, false)).status).toBe(
+    403,
+  );
+  const forged = await (
+    await http(application)
+  )
+    .post("/account/sign-out")
+    .set("Host", "127.0.0.1:3000")
+    .set("Origin", "https://forged.example")
+    .set("Cookie", `${COOKIE}=${credential}`)
+    .type("form")
+    .send({ csrf: csrf(credential, secret) });
+  expect(forged.status).toBe(403);
+  expect(email.signOut).not.toHaveBeenCalled();
+});
+it("MOUT-06 makes no signed-out claim or automatic replay when storage outcome is uncertain", async () => {
+  const { application, email } = fixture();
+  email.signOut.mockRejectedValue(Error("private storage failure"));
+  const response = await post(application, "/account/sign-out", {});
+  expect(response.status).toBe(503);
+  expect(response.text).toContain("Sign-out could not be confirmed");
+  expect(response.text).not.toContain("private storage failure");
+  expect(response.headers["set-cookie"]).toBeUndefined();
+  expect(email.signOut).toHaveBeenCalledOnce();
+});
+
+it("MOUT-01 accepts an explicit empty-body POST with the authenticated CSRF header", async () => {
+  const { application, email } = fixture();
+  const response = await (
+    await http(application)
+  )
+    .post("/account/sign-out")
+    .set("Host", "127.0.0.1:3000")
+    .set("Origin", origin)
+    .set("Cookie", `${COOKIE}=${credential}`)
+    .set("x-csrf-token", csrf(credential, secret));
+  expect(response.status).toBe(200);
+  expect(email.signOut).toHaveBeenCalledExactlyOnceWith(credential);
 });

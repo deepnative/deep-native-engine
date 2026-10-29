@@ -117,6 +117,7 @@ it("rejects forged or stale workflow references at creation", async () => {
 function ownerFixture(
   options: {
     principal?: boolean;
+    ordinaryEnabled?: boolean;
     workspace?: boolean;
     row?:
       | (Proposal & {
@@ -183,10 +184,13 @@ function ownerFixture(
     return { rows: [], rowCount: 1 };
   });
   const connect = vi.fn(async () => ({ query, release }));
-  const store = proposalStore({ connect } as unknown as Pool, async () =>
-    options.workflow === null
-      ? null
-      : ({ version: options.workflow ?? 1 } as never),
+  const store = proposalStore(
+    { connect } as unknown as Pool,
+    async () =>
+      options.workflow === null
+        ? null
+        : ({ version: options.workflow ?? 1 } as never),
+    { ordinaryEnabled: options.ordinaryEnabled ?? false },
   );
   return { store, query, release, connect };
 }
@@ -795,4 +799,31 @@ it("never returns owner feedback or extra database columns through a moderation 
   }).store.moderationPage("staff");
   expect(page?.items).toEqual([{ ...draft, state: "submitted" }]);
   expect(JSON.stringify(page)).not.toContain("Private text");
+});
+
+it("CONPUB-01 ordinary intake is explicit and retains member origin through owner projection", async () => {
+  const ordinary = ownerFixture({
+    ordinaryEnabled: true,
+    row: { ...draft, origin: "member" },
+  });
+  expect(await ordinary.store.createDraft("member", value, false)).toBe(
+    draft.id,
+  );
+  expect(await ordinary.store.owned("member")).toEqual([
+    { ...draft, origin: "member" },
+  ]);
+  expect(await ordinary.store.preview("member", draft.id)).toMatchObject({
+    origin: "member",
+    state: "draft",
+    rightsAttestedRevision: null,
+  });
+  const paused = ownerFixture({
+    ordinaryEnabled: false,
+    row: { ...draft, origin: "member" },
+  });
+  expect(await paused.store.createDraft("member", value, false)).toBeNull();
+  expect(await paused.store.preview("member", draft.id)).toMatchObject({
+    origin: "member",
+  });
+  expect(await paused.store.createDraft("member", value, true)).toBe(draft.id);
 });

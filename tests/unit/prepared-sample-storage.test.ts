@@ -54,10 +54,10 @@ it("PREPARED-07 leaves ordinary file operations and absent erased bindings with 
     key = randomUUID(),
     bytes = Buffer.from("new member upload");
   await f.storage.put(key, bytes);
-  expect(f.files.put).toHaveBeenCalledWith(key, bytes);
+  expect(f.files.put).toHaveBeenCalledWith(key, bytes, { query: f.query });
   expect((await f.storage.get(key)).toString()).toBe("ordinary file");
   await f.storage.remove(key);
-  expect(f.files.remove).toHaveBeenCalledWith(key);
+  expect(f.files.remove).toHaveBeenCalledWith(key, { query: f.query });
 });
 it("HOSTED-06 preserves the private provider's durable-write recovery requirement through prepared-source wrapping", async () => {
   const f = fixture();

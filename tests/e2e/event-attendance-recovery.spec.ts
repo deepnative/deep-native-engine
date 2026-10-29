@@ -77,7 +77,6 @@ test("[L198] ATTEND-06/08 member deliberately inspects and repeats original perm
     await page.goto(origin);
     await page.getByLabel("Your starting point").selectOption("professional");
     await page.getByLabel("What would you like to do?").selectOption("work");
-    await page.getByLabel("I'll use invented or sample information").check();
     await page
       .getByRole("button", { name: "Start my learning path", exact: true })
       .click();

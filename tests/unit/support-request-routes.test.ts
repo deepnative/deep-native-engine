@@ -67,7 +67,7 @@ const actions = [
   ["notes", "note"],
   ["resolve", "resolve"],
 ] as const;
-function fixture() {
+function fixture(privateIntake = false) {
   const store = {
     ...disabledSupportRequestStore(),
     create: vi
@@ -119,7 +119,7 @@ function fixture() {
     res.locals.csrf = "csrf";
     next();
   });
-  mountSupportRequestRoutes(app, store);
+  mountSupportRequestRoutes(app, store, privateIntake);
   const get = (path: string) =>
     withLoopback(app, (server) => request(server).get(path));
   const post = (path: string, body?: Record<string, unknown>) =>
@@ -129,6 +129,47 @@ function fixture() {
     });
   return { store, get, post };
 }
+it("SI-01 private intake accepts deliberate consent, preserves validation and recovery, and never offers test-minute purchase as a condition", async () => {
+  const f = fixture(true);
+  const form = await f.get("/support/new");
+  expect(form.text).toContain('name="confirm"');
+  expect(form.text).not.toContain('name="synthetic"');
+  const body = {
+    csrf: intake.csrf,
+    idempotencyKey: intake.idempotencyKey,
+    subject: intake.subject,
+    body: intake.body,
+    confirm: "yes",
+  };
+  expect((await f.post("/support", body)).status).toBe(303);
+  expect(f.store.create).toHaveBeenCalledWith(token, {
+    idempotencyKey: key,
+    subject: intake.subject,
+    body: intake.body,
+  });
+  f.store.create.mockClear();
+  for (const bad of [
+    { ...body, confirm: "no" },
+    { ...body, synthetic: "yes" },
+    { ...body, body: " " },
+  ]) {
+    const result = await f.post("/support", bad);
+    expect(result.status).toBe(422);
+    expect(result.text).toContain('name="confirm"');
+    expect(result.text).not.toContain('name="synthetic"');
+    expect(result.text).not.toContain("nonblank sample request");
+  }
+  expect(f.store.create).not.toHaveBeenCalled();
+  f.store.create.mockResolvedValueOnce({ kind: "invalid", field: "body" });
+  expect((await f.post("/support", body)).text).toContain(
+    "New private support request",
+  );
+  Object.assign(f.store, { time: { writesEnabled: true } });
+  expect((await f.get(`/support/${id}`)).text).not.toContain(
+    "Hold support test minutes",
+  );
+  expect((await fixture().post("/support", body)).status).toBe(422);
+});
 it("offers a fresh private intake without creating data and honors only bounded owner navigation", async () => {
   const f = fixture(),
     fresh = await f.get("/support/new");

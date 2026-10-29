@@ -1,45 +1,54 @@
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
+import { starterDraftConflicts } from "../support/starter-draft-conflicts.ts";
 import { createHash, randomBytes } from "node:crypto";
 import { testPool } from "../support/database.ts";
 import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { readdir } from "node:fs/promises";
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
+const origin = process.env.DNE_E2E_ORIGIN ?? "http://127.0.0.1:4317";
 const instruction =
   "Using only the sample details, create a short plan with clear actions and flag any missing information.";
 const verification =
   "Compare every detail against the supplied sample, check the limits, and correct any unsupported claims.";
-test("[L24] foundation and coaching hypotheses agree across page and server", async ({
+test("[L24] no-charge foundation access agrees across pages and server without paid or staff rights", async ({
   page,
 }) => {
   await page.goto("/readiness");
   await page
-    .getByRole("link", { name: "Access and coaching planning" })
+    .getByRole("link", { name: "Foundation access and optional coaching" })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Access and coaching planning" }),
+    page.getByRole("heading", { name: "No-charge foundation access" }),
   ).toBeVisible();
-  await expect(page.getByText("NO LIVE PURCHASE")).toBeVisible();
   await expect(
-    page.getByText("approved a no-purchase private/local preview", {
+    page.getByText("No coaching plan or payment is required", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("not a promise of a permanent price or term", {
       exact: false,
     }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("production terms remain undecided", { exact: false }),
   ).toBeVisible();
   const response = await page.request.get("/api/offer-hypotheses");
   expect(response.ok()).toBe(true);
   const catalog = await response.json();
-  expect(catalog.foundation.interimDecision).toBe(
-    "approved-no-purchase-private-preview",
-  );
-  expect(catalog.foundation.live).toBe("pending-owner-decision");
-  expect(catalog.foundation.liveActivationEnabled).toBe(false);
-  expect(catalog.foundation.priceCents).toBeNull();
-  expect(catalog.foundation.participationLimit).toBeNull();
-  expect(catalog.foundation.aiAllowance).toBeNull();
+  expect(catalog.foundation).toMatchObject({
+    policyVersion: "2026-10-27-initial-foundation-v1",
+    state: "available",
+    eligibility: "all-learner-backgrounds",
+    priceCents: 0,
+    currency: "CAD",
+    requiresPaidPlan: false,
+    term: "initial-access",
+    participationLimit: "per-space-capacity",
+    aiAllowance: 0,
+    paidServiceAllowance: 0,
+    staffAccess: false,
+  });
+  await expect(
+    page.getByText(catalog.foundation.policyVersion, { exact: false }),
+  ).toBeVisible();
+  await page.getByText("View historical coaching plans (unavailable)").click();
   for (const offer of catalog.coaching) {
     expect(offer.livePurchasable).toBe(false);
     await expect(
@@ -57,6 +66,33 @@ test("[L24] foundation and coaching hypotheses agree across page and server", as
     page.getByRole("button", { name: /buy|purchase|accept/i }),
   ).toHaveCount(0);
   expect((await page.request.get("/checkout")).status()).toBe(404);
+  await page.getByRole("link", { name: "Start or return to learning" }).click();
+  await expect(
+    page.getByRole("button", { name: "Start my learning path" }),
+  ).toBeVisible();
+  for (const [background, goal] of [
+    ["explorer", "everyday"],
+    ["professional", "work"],
+    ["technical", "build"],
+  ]) {
+    await page.context().clearCookies();
+    await page.goto("/");
+    await expect(
+      page.getByText("No-charge foundation access.", { exact: false }),
+    ).toBeVisible();
+    await begin(page, background, goal);
+    await fill(page);
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await page.goto("/learn");
+    await expect(
+      page.getByText("No-charge foundation access.", { exact: false }),
+    ).toBeVisible();
+    await expect(page.getByText("Draft saved", { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByText("Draft saved", { exact: true })).toBeVisible();
+    expect((await page.request.get("/editor/library")).status()).toBe(403);
+    expect((await page.request.get("/checkout/pilot")).status()).toBe(404);
+  }
 });
 test.afterAll(async () => {
   await pool.end();
@@ -65,7 +101,6 @@ async function begin(page: Page, background = "explorer", goal = "everyday") {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
   await page.getByRole("link", { name: "Open lesson" }).click();
@@ -185,7 +220,6 @@ for (const [id, background, goal, extraName, extraValue] of [
       .check();
     await page.getByLabel("Experience with AI").selectOption("some");
     await page.getByLabel("Keep an exploratory path open").check();
-    await page.getByLabel("I'll use invented or sample information").check();
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await expect(page).toHaveURL(/\/learn$/);
     const { id: learnerId } = await session(context);
@@ -228,7 +262,6 @@ test("[L29] exploratory learner revises a time-fitting plan without rewriting sa
   await page.getByLabel("Time zone (optional)").fill("UTC");
   await page.getByLabel("Weekly time available").selectOption("15");
   await page.getByLabel("Keep an exploratory path open").check();
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const plan = page.getByRole("region", { name: "Your starter plan" });
   await expect(plan).toContainText("Plan a small community event");
@@ -269,7 +302,6 @@ test("[L101] completed starter plan advances without attributing an earlier goal
   await page.getByLabel("Your starting point").selectOption("explorer");
   await page.getByLabel("What would you like to do?").selectOption("everyday");
   await page.getByLabel("Weekly time available").selectOption("15");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const plan = page.getByRole("region", { name: "Your starter plan" });
   await expect(plan).toContainText("Next session: try the sample exercise");
@@ -303,7 +335,6 @@ test("[L101] completed starter plan advances without attributing an earlier goal
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
     await other.getByLabel("Weekly time available").selectOption("15");
-    await other.getByLabel("I'll use invented or sample information").check();
     await other.getByRole("button", { name: "Start my learning path" }).click();
     await expect(
       other.getByRole("region", { name: "Your starter plan" }),
@@ -331,7 +362,6 @@ test("[L30] professional can correct an invalid time zone and retain a noncoding
   await page.getByLabel("Experience with AI").selectOption("some");
   await page.getByLabel("Time zone (optional)").fill("Mars/Olympus");
   await page.getByLabel("Weekly time available").selectOption("30");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page).not.toHaveURL(/\/learn$/);
@@ -340,7 +370,6 @@ test("[L30] professional can correct an invalid time zone and retain a noncoding
   await page.getByLabel("Experience with AI").selectOption("some");
   await page.getByLabel("Time zone (optional)").fill("America/Toronto");
   await page.getByLabel("Weekly time available").selectOption("30");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const plan = page.getByRole("region", { name: "Your starter plan" });
   await expect(plan).toContainText("Turn meeting notes into next steps");
@@ -379,9 +408,6 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
         await page.getByLabel("Experience with AI").selectOption("some");
         await page.getByLabel("Time zone (optional)").fill("UTC");
         await page.getByLabel("Weekly time available").selectOption("30");
-        await page
-          .getByLabel("I'll use invented or sample information")
-          .check();
         await page
           .getByRole("button", { name: "Start my learning path" })
           .click();
@@ -589,9 +615,6 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
       .getByLabel("Time zone (optional)")
       .fill("America/Vancouver");
     await unrelatedPage
-      .getByLabel("I'll use invented or sample information")
-      .check();
-    await unrelatedPage
       .getByRole("button", { name: "Start my learning path" })
       .click();
     await expect(unrelatedPage).toHaveURL(/\/learn$/);
@@ -621,9 +644,6 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         await page.getByLabel("Experience with AI").selectOption("");
         await page.getByLabel("Weekly time available").selectOption("60");
         await page.getByLabel("Time zone (optional)").fill("Mars/Olympus");
-        await page
-          .getByLabel("I'll use invented or sample information")
-          .check();
 
         const invalidResponse = page.waitForResponse(
           (response) =>
@@ -652,9 +672,7 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         await expect(page.getByLabel("Weekly time available")).toHaveValue(
           "60",
         );
-        await expect(
-          page.getByLabel("I'll use invented or sample information"),
-        ).toBeChecked();
+        await expect(page.locator('input[name="synthetic"]')).toHaveCount(0);
         const timezone = page.getByLabel("Time zone (optional)");
         await expect(timezone).toHaveValue("Mars/Olympus");
         await expect(timezone).toHaveAttribute("aria-invalid", "true");
@@ -668,6 +686,10 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
           .getByRole("link", { name: /Time zone/i });
         await expect(errorLink).toHaveAttribute("href", "#timezone");
         await page.locator("a.brand").focus();
+        await page.keyboard.press("Tab");
+        await expect(
+          page.getByRole("link", { name: "View access details" }),
+        ).toBeFocused();
         await page.keyboard.press("Tab");
         await expect(errorLink).toBeFocused();
         await page.keyboard.press("Enter");
@@ -684,25 +706,8 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         await expect(page.getByText("America/Vancouver")).toHaveCount(0);
         expect((await session(unrelatedContext)).id).toBe(unrelated.id);
 
-        if (background === "explorer") {
-          const missingAcknowledgement = await page.request.post("/start", {
-            headers: { Origin: origin },
-            form: {
-              csrf: await csrfToken(page),
-              background,
-              goal,
-              domain_tags: "finance",
-              experience: "",
-              timezone: "America/Toronto",
-              weekly_minutes: "60",
-            },
-          });
-          expect(missingAcknowledgement.status()).toBe(422);
-          expect(await missingAcknowledgement.text()).not.toMatch(
-            /name="synthetic"[^>]*checked/,
-          );
-          expect((await session(context)).id).toBeUndefined();
-        }
+        // MON-01: the corrected ordinary form below creates the member without
+        // any global invented-data pledge; invalid fields still created no record.
 
         await timezone.fill("America/Toronto");
         await page
@@ -724,9 +729,84 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
           time_zone: "America/Toronto",
           weekly_minutes: 60,
         });
+        // MON-03: an old onboarding form cannot replace this member or select
+        // the unrelated member, even when it supplies different valid choices.
+        const replay = await page.request.post("/start", {
+          maxRedirects: 0,
+          headers: { Origin: origin },
+          form: {
+            csrf: await csrfToken(page),
+            background:
+              background === "technical" ? "professional" : "technical",
+            goal: goal === "build" ? "work" : "build",
+            id: unrelated.id,
+          },
+        });
+        expect(replay.status()).toBe(303);
+        expect((await session(context)).id).toBe(member.id);
+        expect(
+          (
+            await pool.query(
+              "SELECT background,goal,domain_tags,experience,time_zone,weekly_minutes FROM learners WHERE id=$1",
+              [member.id],
+            )
+          ).rows,
+        ).toEqual(saved.rows);
+        expect(
+          (
+            await pool.query(
+              "SELECT count(*)::int AS count FROM workspaces WHERE owner_principal_id=$1",
+              [member.id],
+            )
+          ).rows[0].count,
+        ).toBe(1);
         await expect(
           page.getByRole("region", { name: "Your starter plan" }),
         ).toContainText(expectedExercise);
+        // MON-05/06: the visible account form edits the same private profile.
+        await expect(page.locator(".dashboard-head")).toContainText(
+          "Signed in",
+        );
+        await page
+          .getByRole("link", { name: "My account", exact: true })
+          .click();
+        await expect(
+          page.getByRole("heading", { name: "My account", exact: true }),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("heading", { name: "Email recovery is unavailable" }),
+        ).toBeVisible();
+        await expect(page.getByLabel("Your starting point")).toHaveValue(
+          background,
+        );
+        await expect(page.getByLabel("What would you like to do?")).toHaveValue(
+          goal,
+        );
+        await expect(page.getByLabel("Time zone (optional)")).toHaveValue(
+          "America/Toronto",
+        );
+        await page.getByLabel("Experience with AI").selectOption("some");
+        await page
+          .getByRole("button", { name: "Save my profile", exact: true })
+          .click();
+        await expect(page).toHaveURL(/\/learn$/);
+        expect((await session(context)).id).toBe(member.id);
+        expect((await session(unrelatedContext)).id).toBe(unrelated.id);
+        expect(
+          (
+            await pool.query(
+              "SELECT experience,time_zone FROM learners WHERE id=$1",
+              [member.id],
+            )
+          ).rows[0],
+        ).toEqual({ experience: "some", time_zone: "America/Toronto" });
+        expect(
+          (
+            await pool.query("SELECT time_zone FROM learners WHERE id=$1", [
+              unrelated.id,
+            ])
+          ).rows[0].time_zone,
+        ).toBe("America/Vancouver");
         await page.reload();
         await expect(page.getByLabel("Your starting point")).toHaveValue(
           background,
@@ -758,7 +838,6 @@ test("[L31] technical learner sees an experienced, private plan without a coding
   await page.getByLabel("Experience with AI").selectOption("experienced");
   await page.getByLabel("Time zone (optional)").fill("America/Vancouver");
   await page.getByLabel("Weekly time available").selectOption("120");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const plan = page.getByRole("region", { name: "Your starter plan" });
   await expect(plan).toContainText("Review a sign-up flow");
@@ -775,9 +854,6 @@ test("[L31] technical learner sees an experienced, private plan without a coding
     await anotherPage
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
-    await anotherPage
-      .getByLabel("I'll use invented or sample information")
-      .check();
     await anotherPage
       .getByRole("button", { name: "Start my learning path" })
       .click();
@@ -886,6 +962,7 @@ test("[L06] independent sessions cannot select another learner to read or overwr
         csrf,
         lesson_id: "clear-instructions",
         lesson_version: "1",
+        revision: "0",
         goal: "work",
         intent: "draft",
         instruction: "Own text",
@@ -923,6 +1000,7 @@ test("[L07] cross-origin and CSRF attacks cannot save or delete progress", async
         csrf: value!,
         lesson_id: "clear-instructions",
         lesson_version: "1",
+        revision: "0",
         goal: "everyday",
         intent: "complete",
         instruction,
@@ -970,6 +1048,7 @@ test("[L08] repeated or late submissions preserve the completed version", async 
       csrf,
       lesson_id: "clear-instructions",
       lesson_version: "1",
+      revision: "0",
       goal: "everyday",
       intent: "complete",
       instruction,
@@ -983,6 +1062,7 @@ test("[L08] repeated or late submissions preserve the completed version", async 
       csrf,
       lesson_id: "clear-instructions",
       lesson_version: "1",
+      revision: "0",
       goal: "everyday",
       intent: "draft",
       instruction: "Late draft",
@@ -994,6 +1074,7 @@ test("[L08] repeated or late submissions preserve the completed version", async 
   ).toEqual([before]);
   await page.reload();
   await expect(page.getByText(instruction, { exact: true })).toBeVisible();
+  await starterDraftConflicts(page, context);
 });
 test("[L09] deleting the preview removes owned records and invalidates the old cookie", async ({
   page,
@@ -1101,7 +1182,6 @@ test("[L11] multiple tabs, keyboard navigation, safe rendering and narrow layout
   await second.goto(origin);
   await page.getByLabel("Your starting point").selectOption("explorer");
   await page.getByLabel("What would you like to do?").selectOption("everyday");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/learn$/);

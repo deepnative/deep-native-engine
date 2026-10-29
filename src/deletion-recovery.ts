@@ -11,6 +11,7 @@ export interface DeletionRecoveryPage {
   failed: number;
   nextCursor: string | null;
   objectWrites?: ObjectWriteRecoveryPage;
+  evidenceDeletions: ObjectWriteRecoveryPage;
 }
 
 async function rollback(client: PoolClient) {
@@ -22,10 +23,11 @@ async function rollback(client: PoolClient) {
   }
 }
 
-async function finishMarkedMember(
+async function finishMarkedDeletion(
   pool: Pool,
   objects: ObjectStorage,
   memberId: string,
+  evidenceId?: string,
 ): Promise<boolean> {
   const client = await pool.connect();
   let released = false;
@@ -43,7 +45,7 @@ async function finishMarkedMember(
     }
     const workspace = await client.query<{ id: string }>(
       `SELECT id FROM workspaces
-       WHERE owner_principal_id=$1 AND deleting_at IS NOT NULL
+       WHERE owner_principal_id=$1 AND deleting_at IS ${evidenceId ? "" : "NOT "}NULL
        FOR UPDATE SKIP LOCKED`,
       [memberId],
     );
@@ -51,23 +53,37 @@ async function finishMarkedMember(
       await client.query("ROLLBACK");
       return false;
     }
+    if (evidenceId) {
+      const evidence = await client.query(
+        `SELECT id FROM evidence_objects WHERE id=$1 AND workspace_id=$2
+         AND quarantine_state='deleting' FOR UPDATE SKIP LOCKED`,
+        [evidenceId, workspace.rows[0].id],
+      );
+      if (!evidence.rows[0]) {
+        await client.query("ROLLBACK");
+        return false;
+      }
+    }
     const keys = await client.query<{ storage_key: string }>(
       `SELECT storage_key FROM evidence_objects WHERE workspace_id=$1
+       AND ($2::uuid IS NULL OR id=$2)
        UNION ALL
        SELECT d.storage_key FROM evidence_derivatives d
        JOIN evidence_objects e ON e.id=d.evidence_id
-       WHERE e.workspace_id=$1
+       WHERE e.workspace_id=$1 AND ($2::uuid IS NULL OR e.id=$2)
        ORDER BY storage_key`,
-      [workspace.rows[0].id],
+      [workspace.rows[0].id, evidenceId ?? null],
     );
     // Metadata and the durable marker survive any failed object removal.
-    for (const row of keys.rows) await objects.remove(row.storage_key);
+    for (const row of keys.rows) await objects.remove(row.storage_key, client);
     const deleted = await client.query(
-      "DELETE FROM principals WHERE id=$1 AND kind='member'",
-      [memberId],
+      evidenceId
+        ? "DELETE FROM evidence_objects WHERE id=$1 AND quarantine_state='deleting'"
+        : "DELETE FROM principals WHERE id=$1 AND kind='member'",
+      [evidenceId ?? memberId],
     );
     if (deleted.rowCount !== 1)
-      throw new Error("Marked member deletion could not be reconciled.");
+      throw new Error("Marked deletion could not be reconciled.");
     commitAttempted = true;
     await client.query("COMMIT");
     return true;
@@ -78,8 +94,10 @@ async function finishMarkedMember(
       client.release(error as Error);
       released = true;
       const remaining = await pool.query<{ id: string }>(
-        "SELECT id FROM principals WHERE id=$1 AND kind='member'",
-        [memberId],
+        evidenceId
+          ? "SELECT id FROM evidence_objects WHERE id=$1"
+          : "SELECT id FROM principals WHERE id=$1 AND kind='member'",
+        [evidenceId ?? memberId],
       );
       if (!remaining.rows[0]) return true;
     } else if (!(await rollback(client))) {
@@ -99,6 +117,7 @@ export async function recoverPendingMemberDeletions(
   cursor: string | null = null,
   limit = 10,
   objectWriteCursor: string | null = null,
+  evidenceCursor: string | null = null,
 ): Promise<DeletionRecoveryPage> {
   if (!Number.isInteger(limit) || limit < 1 || limit > 100)
     throw new Error("Invalid deletion recovery batch size.");
@@ -118,13 +137,48 @@ export async function recoverPendingMemberDeletions(
   let failed = 0;
   for (const candidate of candidates.rows) {
     try {
-      if (await finishMarkedMember(pool, objects, candidate.id)) completed++;
+      if (await finishMarkedDeletion(pool, objects, candidate.id)) completed++;
     } catch {
       // One broken object or row must not starve later accepted requests.
       failed++;
     }
   }
+  const evidenceCandidates = await pool.query<{
+    id: string;
+    member_id: string;
+  }>(
+    `SELECT e.id,e.owner_principal_id AS member_id FROM evidence_objects e
+     JOIN workspaces w ON w.id=e.workspace_id
+     WHERE e.quarantine_state='deleting' AND w.deleting_at IS NULL
+       AND ($1::uuid IS NULL OR e.id>$1::uuid) ORDER BY e.id LIMIT $2`,
+    [evidenceCursor, limit],
+  );
+  const evidenceDeletions: ObjectWriteRecoveryPage = {
+    examined: evidenceCandidates.rows.length,
+    completed: 0,
+    failed: 0,
+    nextCursor:
+      evidenceCandidates.rows.length === limit
+        ? evidenceCandidates.rows.at(-1)!.id
+        : null,
+  };
+  for (const candidate of evidenceCandidates.rows) {
+    try {
+      if (
+        await finishMarkedDeletion(
+          pool,
+          objects,
+          candidate.member_id,
+          candidate.id,
+        )
+      )
+        evidenceDeletions.completed++;
+    } catch {
+      evidenceDeletions.failed++;
+    }
+  }
   return {
+    evidenceDeletions,
     ...(objectWrites ? { objectWrites } : {}),
     examined: candidates.rows.length,
     completed,

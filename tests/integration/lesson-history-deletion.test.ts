@@ -58,7 +58,7 @@ async function fixture() {
     expect(await catalog.approve(reviewer, id, 1, true)).toBe(true);
     expect(await catalog.publish(editor, id, 1)).toBe(true);
   }
-  expect(await db.openLesson(owner.id, lesson.id, 1)).toBe(true);
+  expect(await db.openLesson(owner.token, lesson.id, 1)).toBe(true);
   const retained = async () =>
     (
       await pool.query(
@@ -137,10 +137,10 @@ type Operation = (typeof operations)[number];
 async function operationFixture(kind: Operation) {
   const f = await fixture();
   if (kind === "complete")
-    expect(await db.advanceLesson(f.owner.id, f.lesson.id, 1, "start")).toBe(
+    expect(await db.advanceLesson(f.owner.token, f.lesson.id, 1, "start")).toBe(
       true,
     );
-  const act = (api = db, id = f.owner.id) =>
+  const act = (api = db, id = f.owner.token) =>
     kind === "read"
       ? api.lessonActivities(id)
       : kind === "open"
@@ -176,8 +176,8 @@ it.each(operations)(
     const f = await operationFixture(kind),
       before = await f.retained();
     const other = await member();
-    if (kind === "read") expect(await f.act(db, other.id)).toEqual([]);
-    else if (kind !== "open") expect(await f.act(db, other.id)).toBe(false);
+    if (kind === "read") expect(await f.act(db, other.token)).toEqual([]);
+    else if (kind !== "open") expect(await f.act(db, other.token)).toBe(false);
     await denied(f.act(db, randomUUID()), kind);
     for (const state of ["revoked", "expired", "deleting"]) {
       await pool.query(

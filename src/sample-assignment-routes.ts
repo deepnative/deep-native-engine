@@ -19,6 +19,7 @@ import {
   reviewerSampleReference,
   sampleAssignmentCheck,
   sampleAssignmentForm,
+  sampleAssignmentPending,
   sampleAssignmentHistory,
   sampleAssignmentReceipt,
   sampleAssignmentRecovery,
@@ -171,6 +172,46 @@ export function mountSampleAssignmentRoutes(
         res,
         result.deadline,
         reviewerSampleReference(result.reference),
+      );
+    }),
+  );
+  app.get(
+    base + "/pending",
+    wrap(async (req, res) => {
+      if (
+        !fields(req.query, req.query.after === undefined ? [] : ["after"]) ||
+        (req.query.after !== undefined &&
+          (typeof req.query.after !== "string" ||
+            req.query.after.length > 1024))
+      )
+        return failure(res, "invalid");
+      const result = await store!.pending(
+        token(res),
+        req.query.after as string | undefined,
+      );
+      if (result.kind !== "ready") return failure(res, result.kind);
+      return send(
+        res,
+        result.deadline,
+        sampleAssignmentPending(result.items, result.next),
+      );
+    }),
+  );
+  app.get(
+    base + "/pending/:evidenceId/:sourceRevision",
+    wrap(async (req, res) => {
+      if (!fields(req.query, [])) return failure(res, "invalid");
+      const source = sampleAssignmentSource({
+        evidenceId: req.params.evidenceId,
+        sourceRevision: req.params.sourceRevision,
+      });
+      if (!source) return failure(res, "invalid");
+      const result = await store!.selectPending(token(res), source);
+      if (result.kind !== "ready") return failure(res, result.kind);
+      return send(
+        res,
+        result.deadline,
+        sampleAssignmentForm(nonce(res), result.source),
       );
     }),
   );

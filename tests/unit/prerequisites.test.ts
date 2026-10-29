@@ -170,6 +170,18 @@ it("fails closed for unavailable, retired, superseded and cyclic lesson referenc
     structuredPrerequisites: spec,
   };
   expect(
+    prerequisitesMet(
+      {
+        ...assignment,
+        structuredPrerequisites: null,
+        prerequisites: "Unknown approval",
+      },
+      [lesson, assignment],
+      completed,
+      [activity(new Date())],
+    ),
+  ).toBe(false);
+  expect(
     prerequisitesMet(assignment, [assignment], completed, [
       activity(new Date()),
     ]),
@@ -258,3 +270,91 @@ it("fails closed for unavailable, retired, superseded and cyclic lesson referenc
     ),
   ).toBe(false);
 });
+
+it("AUDIT-DAG-01 evaluates each exact lesson once in a completed shared graph, without retaining results across snapshots", () => {
+  let evaluations = 0;
+  const catalog = Array.from({ length: 37 }, (_, index) => {
+    const firstChild = index === 0 ? 1 : 1 + Math.ceil(index / 4) * 4;
+    return {
+      ...published(`SYN-${100 + index}`, index === 0 ? "assignment" : "lesson"),
+      get structuredPrerequisites(): PrerequisiteSpec {
+        evaluations++;
+        return {
+          schemaVersion: 1,
+          all:
+            firstChild >= 37
+              ? []
+              : Array.from({ length: 4 }, (_, child) => ({
+                  ...lessonAtom,
+                  id: `SYN-${100 + firstChild + child}`,
+                })),
+        };
+      },
+    };
+  });
+  const observed = catalog.slice(1).map((item) => ({
+    ...activity(new Date()),
+    contentId: item.id,
+  }));
+  expect(prerequisitesMet(catalog[0]!, catalog, undefined, observed)).toBe(
+    true,
+  );
+  expect(evaluations).toBe(catalog.length);
+  observed[0]!.startedAt = null;
+  expect(prerequisitesMet(catalog[0]!, catalog, undefined, observed)).toBe(
+    false,
+  );
+  observed[0]!.startedAt = new Date();
+  catalog[36]!.state = "retired";
+  expect(prerequisitesMet(catalog[0]!, catalog, undefined, observed)).toBe(
+    false,
+  );
+});
+
+it.each([30, 31])(
+  "AUDIT-DAG-01 preserves the depth limit when a cached subtree is reached after %i other lessons",
+  (length) => {
+    const leaf = published("SYN-701");
+    const shared = {
+      ...published("SYN-700"),
+      structuredPrerequisites: {
+        schemaVersion: 1 as const,
+        all: [{ ...lessonAtom, id: leaf.id }],
+      },
+    };
+    const chain = Array.from({ length }, (_, index) => ({
+      ...published(`SYN-${100 + index}`),
+      structuredPrerequisites: {
+        schemaVersion: 1 as const,
+        all: [
+          {
+            ...lessonAtom,
+            id: index === length - 1 ? shared.id : `SYN-${101 + index}`,
+          },
+        ],
+      },
+    }));
+    const root = {
+      ...published("SYN-799", "assignment"),
+      structuredPrerequisites: {
+        schemaVersion: 1 as const,
+        all: [
+          { ...lessonAtom, id: shared.id },
+          { ...lessonAtom, id: chain[0]!.id },
+        ],
+      },
+    };
+    const catalog = [root, shared, leaf, ...chain];
+    expect(
+      prerequisitesMet(
+        root,
+        catalog,
+        undefined,
+        catalog.map((item) => ({
+          ...activity(new Date()),
+          contentId: item.id,
+        })),
+      ),
+    ).toBe(length === 30);
+  },
+);

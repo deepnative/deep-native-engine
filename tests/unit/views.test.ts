@@ -1515,10 +1515,7 @@ it("renders a failed onboarding attempt for correction without a saved member", 
     timezone: "Mars/Olympus",
     weekly_minutes: "30",
   });
-  const html = welcome("token", [], {
-    ...edit,
-    syntheticAcknowledged: true,
-  });
+  const html = welcome("token", [], edit);
   expect(html).toContain("<title>Error in your onboarding");
   expect(html).toContain("Your changes were not saved");
   expect(html).toContain('href="#timezone"');
@@ -1526,7 +1523,7 @@ it("renders a failed onboarding attempt for correction without a saved member", 
   expect(html).toContain('<option value="build" selected>');
   expect(html).toContain('name="it_roles" value="security" checked');
   expect(html).toContain('<option value="30" selected>');
-  expect(html).toContain('name="synthetic" value="yes" required checked');
+  expect(html).not.toContain('name="synthetic"');
   expect(html).toContain('id="timezone-error"');
   expect(html).toContain('aria-describedby="timezone-help timezone-error"');
 });
@@ -1847,7 +1844,7 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v26" as const,
+    version: "local-member-records-v27" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2004,6 +2001,62 @@ it("distinguishes metered local test units and blocks repeat dispatch of termina
   expect(paused).not.toContain("Use one local test request</button>");
   expect(paused).not.toContain("Run local test request</button>");
 });
+
+it("CONPUB-01/02 ordinary proposal screens distinguish private submission from separate publication permission", () => {
+  const form = proposalListPage([], "csrf", undefined, true);
+  expect(form).toContain("Your private proposals");
+  expect(form).toContain("Editorial acceptance does not share it");
+  expect(form).toContain("Original contribution");
+  expect(form).not.toContain('name="sample_confirmed"');
+  expect(form).not.toContain("I used only invented");
+  const proposal: OwnerProposal = {
+    id: "11111111-1111-4111-8111-111111111111",
+    origin: "member",
+    title: "Ordinary <title>",
+    body: "Private original response",
+    sources: "Original author text",
+    state: "draft",
+    revision: 1,
+    createdAt: new Date("2026-10-27T12:00:00Z"),
+    submittedAt: null,
+    feedback: null,
+    rightsAttestedRevision: null,
+    rightsAttestedAt: null,
+  };
+  const preview = proposalPreviewPage(proposal, "csrf", true, true);
+  expect(preview).toContain("PRIVATE CONTRIBUTION");
+  expect(preview).not.toContain("This is not published");
+  expect(preview).toContain(
+    "Check editorial acceptance and sharing for current member-display permission",
+  );
+  expect(preview).toContain("No public or external reuse license is granted");
+  expect(preview).toContain("I created this contribution");
+  expect(preview).toContain("<h2>Original contribution</h2>");
+  expect(preview).toContain(
+    'for="edit-proposal-body">Original contribution</label>',
+  );
+  expect(preview).toContain("Your private proposals");
+  expect(preview).toContain("Inspect editorial acceptance and sharing");
+  expect(preview).not.toContain("Share this accepted revision");
+  const queue = moderationPage(
+    [
+      {
+        ...proposal,
+        state: "submitted",
+        submittedAt: new Date("2026-10-27T12:00:00Z"),
+      },
+    ],
+    "csrf",
+    new Date("2026-10-27T12:01:00Z"),
+    { memberContributions: true, nextCursor: null, continued: false },
+  );
+  expect(queue).toContain("Accept this revision privately");
+  expect(queue).toContain("Editorial acceptance stays private");
+  expect(queue).toContain("Send these requested changes privately");
+  expect(queue).not.toContain("Send these invented requested changes");
+  expect(queue).not.toContain("Share this accepted revision");
+});
+
 it("FOUND-04 library history returns to the recorded version even from a cached page", () => {
   const html = libraryPage([], { q: "" }, [
     {

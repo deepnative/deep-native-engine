@@ -12,25 +12,28 @@ export interface SampleAssignmentContinuation extends SampleAssignmentHistoryKey
 }
 /** Navigation only: every page independently rechecks current administrator
  * and workspace authority. The initial cursor expiry is never renewed. */
-export function sampleAssignmentCursor(secret: Buffer) {
+export function sampleAssignmentCursor(
+  secret: Buffer,
+  namespace = "sample-assignment-history",
+) {
   const signature = (
     token: string,
-    source: SampleAssignmentSource,
+    source: SampleAssignmentSource | undefined,
     body: string,
   ) =>
     createHmac("sha256", secret)
       .update(hash(token))
-      .update("\0sample-assignment-history\0")
-      .update(source.evidenceId)
+      .update(`\0${namespace}\0`)
+      .update(source?.evidenceId ?? "")
       .update("\0")
-      .update(String(source.sourceRevision))
+      .update(String(source?.sourceRevision ?? ""))
       .update("\0")
       .update(body)
       .digest("base64url");
   return {
     encode(
       token: string,
-      source: SampleAssignmentSource,
+      source: SampleAssignmentSource | undefined,
       key: SampleAssignmentHistoryKey,
       expires = Date.now() + 900000,
     ) {
@@ -41,7 +44,7 @@ export function sampleAssignmentCursor(secret: Buffer) {
     },
     decode(
       token: string,
-      source: SampleAssignmentSource,
+      source: SampleAssignmentSource | undefined,
       value: string | undefined,
     ): SampleAssignmentContinuation | null | "invalid" {
       if (value === undefined) return null;

@@ -1120,7 +1120,7 @@ it("shows honest track states and restricts the expert evidence roster", async (
   );
   expect(roster.text).toContain("No expert commitments are recorded");
 });
-it("shows the approved no-purchase preview while keeping production terms undecided", async () => {
+it("FAC-01/03 shows no-charge foundation access consistently while coaching stays unavailable", async () => {
   const agent = await managedAgent(
     app(storage(), { origin, secret: "secret" }),
   );
@@ -1133,12 +1133,17 @@ it("shows the approved no-purchase preview while keeping production terms undeci
     .set("Host", host)
     .expect(200);
   expect(catalog.body.foundation).toMatchObject({
-    interimDecision: "approved-no-purchase-private-preview",
-    live: "pending-owner-decision",
-    liveActivationEnabled: false,
-    priceCents: null,
-    participationLimit: null,
-    aiAllowance: null,
+    policyVersion: "2026-10-27-initial-foundation-v1",
+    state: "available",
+    eligibility: "all-learner-backgrounds",
+    priceCents: 0,
+    currency: "CAD",
+    requiresPaidPlan: false,
+    term: "initial-access",
+    participationLimit: "per-space-capacity",
+    aiAllowance: 0,
+    paidServiceAllowance: 0,
+    staffAccess: false,
   });
   expect(catalog.body.coaching).toHaveLength(6);
   expect(
@@ -1146,12 +1151,13 @@ it("shows the approved no-purchase preview while keeping production terms undeci
       (offer: { livePurchasable: boolean }) => offer.livePurchasable === false,
     ),
   ).toBe(true);
-  expect(planning.text).toContain("NO LIVE PURCHASE");
-  expect(planning.text).toContain(
-    "approved a no-purchase private/local preview",
-  );
+  expect(planning.text).toContain("No-charge foundation access");
+  expect(planning.text).toContain(catalog.body.foundation.policyVersion);
+  expect(planning.text).toContain("No coaching plan or payment is required");
   expect(planning.text).toContain("IT, other professions and general learners");
-  expect(planning.text).toContain("production terms remain undecided");
+  expect(planning.text).toContain("not a promise of a permanent price or term");
+  expect(planning.text).not.toContain("production terms remain undecided");
+  expect(planning.text).toContain('href="/learn"');
   expect(planning.text).not.toContain("Buy now");
   for (const offer of catalog.body.coaching) {
     expect(planning.text).toContain(offer.termsVersion);
@@ -1758,7 +1764,9 @@ it("serves a member-owned activity view only through the active session", async 
     expect.stringMatching(/^[a-f0-9]{64}$/),
     expect.any(Function),
   );
-  expect(db.lessonActivities).toHaveBeenCalledWith(member.id);
+  expect(db.lessonActivities).toHaveBeenCalledWith(
+    db.session.mock.calls.at(-1)![0],
+  );
   expect(attempts.list).toHaveBeenCalledWith(
     expect.stringMatching(/^[a-f0-9]{64}$/),
   );
@@ -1993,7 +2001,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v26",
+          version: "local-member-records-v27",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2033,7 +2041,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v26",
+    version: "local-member-records-v27",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -2275,7 +2283,11 @@ it("records only exact synthetic lesson openings and rejects invalid, stale or u
     .get("/library/SYN-105")
     .set("Host", host)
     .expect(200);
-  expect(db.openLesson).toHaveBeenCalledWith(member.id, item.id, 2);
+  expect(db.openLesson).toHaveBeenCalledWith(
+    db.session.mock.calls.at(-1)![0],
+    item.id,
+    2,
+  );
   expect(reader.text).toContain("Opened in reader");
   expect(reader.text).toContain("Start this lesson");
   db.openLesson.mockResolvedValueOnce(false);
@@ -2299,7 +2311,12 @@ it("records only exact synthetic lesson openings and rejects invalid, stale or u
   await post({ content_version: "2", intent: "complete" }).expect(422);
   expect(db.advanceLesson).not.toHaveBeenCalled();
   await post({ content_version: "2", intent: "start" }).expect(303);
-  expect(db.advanceLesson).toHaveBeenCalledWith(member.id, item.id, 2, "start");
+  expect(db.advanceLesson).toHaveBeenCalledWith(
+    db.session.mock.calls.at(-1)![0],
+    item.id,
+    2,
+    "start",
+  );
   await post({
     content_version: "2",
     intent: "complete",
@@ -2843,6 +2860,259 @@ it("does not expose the staff workflow page to a member", async () => {
   expect(receivedRequests).toBe(1);
   expect(denied.text).not.toContain("Create a synthetic draft");
 });
+it.each([true, false])(
+  "MON-02/07 keeps configured email recovery consistent on initial and invalid onboarding pages (%s)",
+  async (configured) => {
+    const db = storage();
+    const memberEmail = {
+      signOut: vi.fn(async () => "unavailable" as const),
+      ownedStatus: vi.fn().mockResolvedValue("unlinked"),
+      requestAttach: vi.fn().mockResolvedValue("sent"),
+      requestSignIn: vi.fn().mockResolvedValue(undefined),
+      consume: vi.fn().mockResolvedValue({ kind: "unavailable" }),
+    };
+    const agent = await managedAgent(
+      app(db, {
+        origin,
+        secret: "secret",
+        ...(configured ? { memberEmail } : {}),
+      }),
+    );
+    const home = await agent.get("/").set("Host", host).expect(200);
+    const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+    const invalid = await agent
+      .post("/start")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf,
+        background: "professional",
+        goal: "work",
+        timezone: "Mars/Olympus",
+        synthetic: "yes",
+      })
+      .expect(422);
+    for (const response of [home, invalid]) {
+      expect(response.text.includes('href="/email/sign-in"')).toBe(configured);
+      expect(response.text.includes(">Sign in</a>")).toBe(configured);
+    }
+    expect(invalid.text).toContain('value="Mars/Olympus"');
+    expect(db.create).not.toHaveBeenCalled();
+    expect(memberEmail.requestAttach).not.toHaveBeenCalled();
+    expect(memberEmail.requestSignIn).not.toHaveBeenCalled();
+    expect(memberEmail.consume).not.toHaveBeenCalled();
+  },
+);
+it.each(["linked", "unlinked", "unavailable", "disabled"] as const)(
+  "MON-05/06 shows only the signed-in member's account and %s email state",
+  async (emailState) => {
+    const db = storage();
+    db.session.mockResolvedValue({
+      kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
+      deadline: performance.now() + 60000,
+      learner: {
+        ...member,
+        background: "professional",
+        goal: "work",
+        timezone: "America/Toronto",
+        weeklyMinutes: 60,
+        domainTags: ["education"],
+      },
+    });
+    const memberEmail = {
+      signOut: vi.fn(async () => "unavailable" as const),
+      ownedStatus: vi.fn().mockResolvedValue(emailState),
+      requestAttach: vi.fn().mockResolvedValue("sent"),
+      requestSignIn: vi.fn().mockResolvedValue(undefined),
+      consume: vi.fn().mockResolvedValue({ kind: "unavailable" }),
+    };
+    const agent = await managedAgent(
+      app(db, {
+        origin,
+        secret: "secret",
+        ...(emailState === "disabled" ? {} : { memberEmail }),
+      }),
+    );
+    const account = await agent
+      .get("/account?memberId=another-member")
+      .set("Host", host)
+      .expect(200);
+    expect(account.text).toContain("My account");
+    expect(account.text).toContain("Signed in");
+    expect(account.text).toContain('value="America/Toronto"');
+    expect(account.text).toContain('<option value="professional" selected>');
+    expect(account.text).toContain('<option value="work" selected>');
+    expect(account.text).toContain(
+      'name="domain_tags" value="education" checked',
+    );
+    expect(account.text).toContain('action="/profile"');
+    expect(account.text).toContain(
+      emailState === "linked"
+        ? "Verified email linked"
+        : emailState === "unlinked"
+          ? "This browser only"
+          : "Email recovery is unavailable",
+    );
+    expect(account.text.includes('href="/email/attach"')).toBe(
+      emailState === "unlinked",
+    );
+    if (emailState === "disabled")
+      expect(memberEmail.ownedStatus).not.toHaveBeenCalled();
+    else
+      expect(memberEmail.ownedStatus).toHaveBeenCalledWith(
+        db.session.mock.calls[0]![0],
+      );
+    expect(memberEmail.requestAttach).not.toHaveBeenCalled();
+    expect(memberEmail.requestSignIn).not.toHaveBeenCalled();
+    expect(memberEmail.consume).not.toHaveBeenCalled();
+    const learning = await agent.get("/learn").set("Host", host).expect(200);
+    expect(learning.text).toMatch(
+      /dashboard-head[\s\S]*?Signed in[\s\S]*?href="\/account"[\s\S]*?<h1>/,
+    );
+  },
+);
+it.each(["new", "expired"] as const)(
+  "MON-06 refuses account data for a %s session",
+  async (kind) => {
+    const db = storage();
+    db.session.mockResolvedValue({ kind });
+    const memberEmail = {
+      signOut: vi.fn(async () => "unavailable" as const),
+      ownedStatus: vi.fn().mockResolvedValue("linked"),
+      requestAttach: vi.fn(),
+      requestSignIn: vi.fn(),
+      consume: vi.fn(),
+    };
+    const agent = await managedAgent(
+      app(db, { origin, secret: "secret", memberEmail }),
+    );
+    const denied = await agent
+      .get("/account?memberId=owned")
+      .set("Host", host)
+      .expect(303)
+      .expect("Location", "/");
+    expect(denied.text).not.toContain("America/Toronto");
+    expect(denied.text).not.toContain("Verified email linked");
+    expect(memberEmail.ownedStatus).not.toHaveBeenCalled();
+  },
+);
+it.each(["expired", "rotated", "replaced", "failed", "expired-reply"] as const)(
+  "MON-08 withholds a captured account when final authority becomes %s during email lookup",
+  async (change) => {
+    const db = storage();
+    const initial = {
+      kind: "active" as const,
+      expiresAt: new Date(Date.now() + 60000),
+      deadline: performance.now() + 60000,
+      learner: { ...member, timezone: "America/Toronto" },
+    };
+    db.session.mockResolvedValue(initial);
+    let entered!: () => void, release!: (status: "unavailable") => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const pending = new Promise<"unavailable">((resolve) => {
+      release = resolve;
+    });
+    const memberEmail = {
+      signOut: vi.fn(async () => "unavailable" as const),
+      ownedStatus: vi.fn(async () => {
+        entered();
+        return pending;
+      }),
+      requestAttach: vi.fn(),
+      requestSignIn: vi.fn(),
+      consume: vi.fn(),
+    };
+    const agent = await managedAgent(
+      app(db, { origin, secret: "secret", memberEmail }),
+    );
+    const response = agent
+      .get("/account")
+      .set("Host", host)
+      .then((value) => value);
+    await started;
+    if (change === "failed")
+      db.session.mockRejectedValue(new Error("private authority failure"));
+    else if (change === "replaced")
+      db.session.mockResolvedValue({
+        ...initial,
+        learner: { ...initial.learner, id: "another-member" },
+      });
+    else if (change === "expired-reply")
+      db.session.mockResolvedValue({
+        ...initial,
+        expiresAt: new Date(Date.now() - 1),
+        deadline: performance.now() - 1,
+      });
+    else
+      db.session.mockResolvedValue({
+        kind: change === "expired" ? "expired" : "new",
+      });
+    release("unavailable");
+    const denied = await response;
+    expect(denied.status).toBe(change === "failed" ? 503 : 303);
+    expect(denied.text).not.toContain("America/Toronto");
+    expect(denied.text).not.toContain("Signed in");
+    expect(denied.text).not.toContain("private authority failure");
+  },
+);
+it.each(["lookup", "render"] as const)(
+  "MON-08 withholds a profile crossing its original authority lifetime during %s",
+  async (phase) => {
+    const wall = Date.now();
+    let clock = 0;
+    const monotonic = vi
+      .spyOn(performance, "now")
+      .mockImplementation(() => clock);
+    const time = vi.spyOn(Date, "now").mockReturnValue(wall);
+    try {
+      const db = storage();
+      const original = {
+        kind: "active" as const,
+        expiresAt: new Date(wall + 1000),
+        deadline: 1000,
+        learner: { ...member, timezone: "America/Toronto" },
+      };
+      db.session
+        .mockResolvedValueOnce(original)
+        .mockImplementation(async () => ({
+          ...original,
+          expiresAt: new Date(wall + 60000),
+          deadline: 60000,
+          learner: {
+            ...original.learner,
+            get background() {
+              if (phase === "render") clock = 1001;
+              return member.background;
+            },
+          },
+        }));
+      const memberEmail = {
+        signOut: vi.fn(async () => "unavailable" as const),
+        ownedStatus: vi.fn(async () => {
+          if (phase === "lookup") clock = 1001;
+          return "linked" as const;
+        }),
+        requestAttach: vi.fn(),
+        requestSignIn: vi.fn(),
+        consume: vi.fn(),
+      };
+      const agent = await managedAgent(
+        app(db, { origin, secret: "secret", memberEmail }),
+      );
+      const denied = await agent.get("/account").set("Host", host);
+      expect(denied.status).toBe(303);
+      expect(denied.text).not.toContain("America/Toronto");
+      expect(denied.text).not.toContain("Signed in");
+    } finally {
+      monotonic.mockRestore();
+      time.mockRestore();
+    }
+  },
+);
 it("onboards only valid profiles and ignores caller-controlled ownership", async () => {
   const { agent, csrf } = await client();
   await agent
@@ -2877,7 +3147,7 @@ it("onboards only valid profiles and ignores caller-controlled ownership", async
     .expect(303)
     .expect("Location", "/learn");
 });
-it("retains safe onboarding choices and acknowledgement on an unsaved field error", async () => {
+it("retains safe onboarding choices on an unsaved field error", async () => {
   const { agent, csrf } = await client();
   const attempted = {
     csrf,
@@ -2915,9 +3185,7 @@ it("retains safe onboarding choices and acknowledgement on an unsaved field erro
   expect(invalid.text).toContain(
     'aria-describedby="timezone-help timezone-error"',
   );
-  expect(invalid.text).toContain(
-    'name="synthetic" value="yes" required checked',
-  );
+  expect(invalid.text).not.toContain('name="synthetic"');
   await agent.get("/").set("Host", host).expect(200);
   const unrelated = await managedAgent(app(db, { origin, secret: "secret" }));
   const otherPage = await unrelated.get("/").set("Host", host).expect(200);
@@ -2944,7 +3212,7 @@ it("retains safe onboarding choices and acknowledgement on an unsaved field erro
     }),
   );
 });
-it("rejects forged onboarding inputs and never infers a missing sample-data acknowledgement", async () => {
+it("MON-01 rejects forged onboarding inputs while ordinary profiles need no sample pledge", async () => {
   const { agent, csrf } = await client();
   const invalid = await agent
     .post("/start")
@@ -2970,7 +3238,6 @@ it("rejects forged onboarding inputs and never infers a missing sample-data ackn
     "experience",
     "weekly_minutes",
     "timezone",
-    "synthetic",
   ])
     expect(invalid.text).toContain(`href="#${field}"`);
   expect(invalid.text).toContain('name="domain_tags" value="finance" checked');
@@ -2982,17 +3249,14 @@ it("rejects forged onboarding inputs and never infers a missing sample-data ackn
   expect(invalid.text).not.toContain(
     'name="synthetic" value="yes" required checked',
   );
-  const missing = await agent
+  await agent
     .post("/start")
     .set("Host", host)
     .set("Origin", origin)
     .type("form")
     .send({ csrf, background: "explorer", goal: "everyday" })
-    .expect(422);
-  expect(missing.text).toContain('href="#synthetic"');
-  expect(missing.text).toContain('id="synthetic" type="checkbox"');
-  expect(missing.text).toContain('aria-describedby="synthetic-error"');
-  expect(db.create).not.toHaveBeenCalled();
+    .expect(303);
+  expect(db.create).toHaveBeenCalledOnce();
 });
 it("lets an active member revise their direction without selecting another owner", async () => {
   const { agent, csrf } = await client();
@@ -3047,7 +3311,7 @@ it("lets an active member revise their direction without selecting another owner
     .expect(303)
     .expect("Location", "/learn");
   expect(db.updateProfile).toHaveBeenCalledWith(
-    "owned",
+    db.session.mock.calls.at(-1)![0],
     expect.objectContaining({
       goal: "work",
       domainTags: ["education"],
@@ -3107,6 +3371,7 @@ it("retains invalid answers without claiming they were saved, then saves valid i
       csrf,
       lesson_id: LESSON.id,
       lesson_version: String(LESSON.version),
+      revision: "0",
       goal: "everyday",
       intent: "complete",
       instruction: "short",
@@ -3128,6 +3393,7 @@ it("retains invalid answers without claiming they were saved, then saves valid i
       csrf,
       lesson_id: LESSON.id,
       lesson_version: String(LESSON.version),
+      revision: "0",
       goal: "everyday",
       intent: "draft",
       instruction: "My private draft",
@@ -3135,7 +3401,7 @@ it("retains invalid answers without claiming they were saved, then saves valid i
     })
     .expect(303);
   expect(db.save).toHaveBeenCalledWith(
-    "owned",
+    db.session.mock.calls.at(-1)![0],
     expect.objectContaining({
       instruction: "My private draft",
       complete: false,
@@ -3782,6 +4048,7 @@ it("reports unknown pages and storage failures without leaking secrets or claimi
       csrf,
       lesson_id: LESSON.id,
       lesson_version: String(LESSON.version),
+      revision: "0",
       goal: "everyday",
       intent: "draft",
       instruction: attemptedInstruction,
@@ -3895,6 +4162,7 @@ it("never echoes stale exercise text after withdrawal, including validation and 
         csrf,
         lesson_id: LESSON.id,
         lesson_version: String(LESSON.version),
+        revision: "0",
         goal: "everyday",
         intent: "complete",
         instruction,
@@ -3935,6 +4203,7 @@ it("rejects a form pinned to another starter version before saving or echoing it
         csrf,
         lesson_id: LESSON.id,
         lesson_version: version,
+        revision: "0",
         intent: "draft",
         instruction: staleText,
       })
@@ -4014,7 +4283,11 @@ it("selects only an eligible published assignment for the active member and reje
   await post({}).expect(409);
   db.chooseAssignment.mockResolvedValueOnce(true);
   await post({}).expect(303);
-  expect(db.chooseAssignment).toHaveBeenLastCalledWith(member.id, item.id, 1);
+  expect(db.chooseAssignment).toHaveBeenLastCalledWith(
+    db.session.mock.calls.at(-1)![0],
+    item.id,
+    1,
+  );
   catalog.search.mockResolvedValue([{ ...item, state: "retired" }]);
   await post({}).expect(409);
 });
@@ -4051,7 +4324,7 @@ it("keeps private milestones local, validates edits and refuses stale or foreign
   await post("/milestones", input).expect(409);
   await post("/milestones", input).expect(303);
   expect(db.createMilestone).toHaveBeenLastCalledWith(
-    member.id,
+    db.session.mock.calls.at(-1)![0],
     expect.objectContaining({ reminderTimezone: "America/Toronto" }),
   );
   const saved = {
@@ -4094,7 +4367,7 @@ it("keeps private milestones local, validates edits and refuses stale or foreign
     complete: "yes",
   }).expect(303);
   expect(db.updateMilestone).toHaveBeenLastCalledWith(
-    member.id,
+    db.session.mock.calls.at(-1)![0],
     id,
     1,
     expect.objectContaining({ selfReportedComplete: true }),
@@ -4113,7 +4386,11 @@ it("keeps private milestones local, validates edits and refuses stale or foreign
     version: "2",
     confirm: "yes",
   }).expect(303);
-  expect(db.deleteMilestone).toHaveBeenLastCalledWith(member.id, id, 2);
+  expect(db.deleteMilestone).toHaveBeenLastCalledWith(
+    db.session.mock.calls.at(-1)![0],
+    id,
+    2,
+  );
   await post("/milestones", { ...input, csrf: "invalid" }).expect(403);
 });
 
@@ -4234,6 +4511,78 @@ it("compares only two selected submissions from an owned private attempt", async
   await get("?from=1&to=2").expect(422);
 });
 
+it("AHO-01/10 offers exact submitted-version copies only with a configured, enabled handoff", async () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const submittedAt = new Date("2026-10-27T10:00:00Z");
+  const attempts = {
+    ...disabledAttemptStore(),
+    detail: vi.fn().mockResolvedValue({
+      id,
+      contentId: "ASSIGN-545",
+      contentVersion: 1,
+      title: "Owned assignment",
+      rubric: "Explain one check",
+      rubricVersion: 1,
+      goalAtStart: "everyday",
+      response: "My submitted response",
+      revision: 2,
+      startedAt: submittedAt,
+      savedAt: submittedAt,
+      submittedAt,
+      currentPublished: true,
+      currentEligible: true,
+      submissionCount: 1,
+      submissions: [
+        {
+          sequence: 1,
+          response: "My submitted response",
+          submittedAt: submittedAt.toISOString(),
+        },
+      ],
+    }),
+  };
+  const assignmentEvidence = {
+    open: vi.fn().mockResolvedValue({ kind: "denied" }),
+    create: vi.fn().mockResolvedValue({ kind: "denied" }),
+    inspect: vi.fn().mockResolvedValue({ kind: "denied" }),
+  };
+  for (const state of [
+    { enabled: false, configured: true },
+    { enabled: true, configured: false },
+    { enabled: true, configured: true },
+  ]) {
+    const db = storage();
+    db.session.mockResolvedValue({
+      kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
+      learner: member,
+    });
+    const agent = await managedAgent(
+      app(db, {
+        origin,
+        secret: "secret",
+        attempts,
+        assignmentHandoff: state.enabled,
+        assignmentEvidence: state.configured ? assignmentEvidence : undefined,
+      }),
+    );
+    const response = await agent
+      .get(`/assignments/attempts/${id}`)
+      .set("Host", host)
+      .expect(200);
+    if (state.enabled && state.configured) {
+      expect(response.text).toContain(
+        `/assignments/attempts/${id}/handoff?sequence=1`,
+      );
+      expect(response.text).toContain("submitted privately");
+      expect(response.text).toContain("Private submission history");
+    } else {
+      expect(response.text).not.toContain("/handoff?");
+      expect(response.text).toContain("submitted locally");
+    }
+  }
+  expect(assignmentEvidence.create).not.toHaveBeenCalled();
+});
 it("keeps synthetic assignment attempts private through start, validation, conflicts, submission and deletion", async () => {
   const id = "11111111-1111-4111-8111-111111111111";
   const item = {
@@ -4927,7 +5276,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v26" as const,
+    version: "local-member-records-v27" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -5266,6 +5615,7 @@ it("recovers without echoing answers after a transactional stale-goal or unavail
         csrf,
         lesson_id: LESSON.id,
         lesson_version: "1",
+        revision: "0",
         goal: "everyday",
         intent: "draft",
         instruction: "Private attempted text",
@@ -5828,6 +6178,82 @@ it("HOSTED-12 presents accurate hosted persistence while concurrent local render
   expect(localHome.text).toContain("Your work stays on this computer");
   expect(localHome.text).toContain("LOCAL LEARNING PREVIEW");
 });
+
+it.each([undefined, "", "-1", "1.5", "01", "2147483647", ["0", "1"]])(
+  "AUDIT-DRAFT-02 rejects malformed starter revision %j before saving",
+  async (revision) => {
+    const { agent, csrf } = await client();
+    active();
+    await agent
+      .post("/exercise")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf,
+        lesson_id: LESSON.id,
+        lesson_version: String(LESSON.version),
+        goal: "everyday",
+        instruction: "Invented draft",
+        verification: "Compare notes",
+        intent: "draft",
+        revision,
+      })
+      .expect(409);
+    expect(db.save).not.toHaveBeenCalled();
+  },
+);
+it.each(["current", "withdrawn", "unavailable"] as const)(
+  "AUDIT-DRAFT-01 retains conflicting starter text only while private state is %s",
+  async (state) => {
+    const { agent, csrf } = await client();
+    active();
+    db.save.mockResolvedValueOnce("conflict");
+    if (state === "unavailable") db.withExerciseRead = async () => null;
+    if (state === "withdrawn")
+      db.withExerciseRead = async (_token, render) =>
+        render([
+          {
+            lessonId: LESSON.id,
+            version: LESSON.version,
+            instruction: null,
+            verification: null,
+            completedAt: new Date(),
+            withdrawnAt: new Date(),
+            goalAtStart: "everyday",
+            revision: 1,
+          },
+        ]);
+    const attempted = "Invented <script>conflict</script>";
+    const response = await agent
+      .post("/exercise")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf,
+        lesson_id: LESSON.id,
+        lesson_version: String(LESSON.version),
+        goal: "everyday",
+        revision: "0",
+        instruction: attempted,
+        verification: "Compare notes",
+        intent: "draft",
+      })
+      .expect(409);
+    if (state === "current") {
+      expect(response.text).toContain("Draft changed in another tab");
+      expect(response.text).toContain(
+        "Invented &lt;script&gt;conflict&lt;/script&gt;",
+      );
+      expect(response.text).not.toContain('action="/exercise"');
+    } else {
+      expect(response.text).toContain("Exercise unavailable");
+      expect(response.text).not.toContain("Invented");
+    }
+  },
+);
+
 it("FOUND-02 denies invalid imports and provides honest recovery for uncertain outcomes", async () => {
   const importer = {
     import:

@@ -23,7 +23,8 @@ async function member() {
   await db.create(value, { background: "explorer", goal: "everyday" });
   const session = await db.session(value);
   if (session.kind !== "active") throw Error("Synthetic member unavailable");
-  await db.save(session.learner.id, {
+  await db.save(value, {
+    revision: 0,
     instruction: "Private invented instruction",
     verification: "Private invented verification",
     complete: true,

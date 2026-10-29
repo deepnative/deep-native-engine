@@ -64,13 +64,15 @@ async function member(
   if (session.kind !== "active") throw Error("Missing invented member");
   return { token: value, id: session.learner.id };
 }
-async function prepare(id: string) {
+async function prepare(memberToken: string) {
   for (const contentId of ["FND-002", "FND-003"]) {
-    expect(await members.openLesson(id, contentId, 2)).toBe(true);
-    expect(await members.advanceLesson(id, contentId, 2, "start")).toBe(true);
-    expect(await members.advanceLesson(id, contentId, 2, "complete")).toBe(
-      true,
-    );
+    expect(await members.openLesson(memberToken, contentId, 2)).toBe(true);
+    expect(
+      await members.advanceLesson(memberToken, contentId, 2, "start"),
+    ).toBe(true);
+    expect(
+      await members.advanceLesson(memberToken, contentId, 2, "complete"),
+    ).toBe(true);
   }
 }
 it("ASN103-01 imports two whole immutable ordinary drafts once and preserves all original rows", async () => {
@@ -136,22 +138,26 @@ it("ASN103-02 all three backgrounds use observed preparation and retain private 
         { contentId: "FND-003", contentVersion: 2, observed: "not-started" },
       ],
     });
-    expect(await members.chooseAssignment(owner.id, "ASN-002", 2)).toBe(false);
-    expect(await members.openLesson(owner.id, "FND-002", 2)).toBe(true);
+    expect(await members.chooseAssignment(owner.token, "ASN-002", 2)).toBe(
+      false,
+    );
+    expect(await members.openLesson(owner.token, "FND-002", 2)).toBe(true);
     expect(
-      await members.advanceLesson(owner.id, "FND-002", 2, "complete"),
+      await members.advanceLesson(owner.token, "FND-002", 2, "complete"),
     ).toBe(false);
     expect((await readiness.get(owner.token, "ASN-002", 2))?.eligible).toBe(
       false,
     );
-    await prepare(owner.id);
+    await prepare(owner.token);
     expect((await readiness.get(owner.token, "ASN-002", 2))?.eligible).toBe(
       true,
     );
     expect((await readiness.get(outsider.token, "ASN-002", 2))?.eligible).toBe(
       false,
     );
-    expect(await members.chooseAssignment(owner.id, "ASN-002", 2)).toBe(true);
+    expect(await members.chooseAssignment(owner.token, "ASN-002", 2)).toBe(
+      true,
+    );
     const id = await attempts.start(owner.token);
     expect(id).not.toBeNull();
     const response =
@@ -183,8 +189,8 @@ it("ASN103-02 all three backgrounds use observed preparation and retain private 
 it("ASN103-03 changed goals and retired preparation remove current eligibility without rewriting private work", async () => {
   await published();
   const owner = await member("explorer", "build");
-  await prepare(owner.id);
-  expect(await members.chooseAssignment(owner.id, "ASN-001", 2)).toBe(true);
+  await prepare(owner.token);
+  expect(await members.chooseAssignment(owner.token, "ASN-001", 2)).toBe(true);
   const id = await attempts.start(owner.token);
   expect(
     await attempts.save(
@@ -197,7 +203,7 @@ it("ASN103-03 changed goals and retired preparation remove current eligibility w
   expect(await attempts.submit(owner.token, id!, 2)).toBe(true);
   const before = await attempts.detail(owner.token, id!);
   expect(
-    await members.updateProfile(owner.id, {
+    await members.updateProfile(owner.token, {
       background: "explorer",
       goal: "everyday",
       backgroundTags: [],
@@ -208,13 +214,13 @@ it("ASN103-03 changed goals and retired preparation remove current eligibility w
     }),
   ).toBe(true);
   expect(await readiness.get(owner.token, "ASN-001", 2)).toBeNull();
-  expect(await members.chooseAssignment(owner.id, "ASN-001", 2)).toBe(false);
+  expect(await members.chooseAssignment(owner.token, "ASN-001", 2)).toBe(false);
   expect((await readiness.get(owner.token, "ASN-002", 2))?.eligible).toBe(true);
   expect(await catalog.retire(editor, "FND-003")).toBe(true);
   expect((await readiness.get(owner.token, "ASN-002", 2))?.eligible).toBe(
     false,
   );
-  expect(await members.chooseAssignment(owner.id, "ASN-002", 2)).toBe(false);
+  expect(await members.chooseAssignment(owner.token, "ASN-002", 2)).toBe(false);
   const after = await attempts.detail(owner.token, id!);
   expect(after?.submissions).toEqual(before?.submissions);
   expect(after).toMatchObject({
@@ -255,8 +261,8 @@ it("ASN103-01 conflict, retirement and atomic write failure never replace or par
 it("ASN103-03 a published replacement never migrates a selected older assignment or permits a stale start", async () => {
   await published();
   const owner = await member("professional", "work");
-  await prepare(owner.id);
-  expect(await members.chooseAssignment(owner.id, "ASN-002", 2)).toBe(true);
+  await prepare(owner.token);
+  expect(await members.chooseAssignment(owner.token, "ASN-002", 2)).toBe(true);
   const id = await attempts.start(owner.token);
   const replacement = {
     ...(await reviewedAssignments())[1]!,
@@ -267,7 +273,7 @@ it("ASN103-03 a published replacement never migrates a selected older assignment
   expect(await catalog.submit(editor, "ASN-002", 3)).toBe(true);
   expect(await catalog.approve(reviewer, "ASN-002", 3, true)).toBe(true);
   expect(await catalog.publish(editor, "ASN-002", 3)).toBe(true);
-  expect(await members.chooseAssignment(owner.id, "ASN-002", 2)).toBe(false);
+  expect(await members.chooseAssignment(owner.token, "ASN-002", 2)).toBe(false);
   expect(await attempts.start(owner.token)).toBeNull();
   expect(await attempts.detail(owner.token, id!)).toMatchObject({
     contentVersion: 2,

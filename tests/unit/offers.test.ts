@@ -8,15 +8,19 @@ import {
 } from "../../src/offers.ts";
 
 describe("separate access and coaching hypotheses", () => {
-  it("records the approved no-purchase preview without approving production terms", () => {
+  it("FAC-01/03 records initial no-charge foundation access without paid or staff rights", () => {
     expect(FOUNDATION_ACCESS).toMatchObject({
-      preview: "synthetic-local-only",
-      interimDecision: "approved-no-purchase-private-preview",
-      live: "pending-owner-decision",
-      liveActivationEnabled: false,
-      priceCents: null,
-      participationLimit: null,
-      aiAllowance: null,
+      policyVersion: "2026-10-27-initial-foundation-v1",
+      state: "available",
+      eligibility: "all-learner-backgrounds",
+      priceCents: 0,
+      currency: "CAD",
+      requiresPaidPlan: false,
+      term: "initial-access",
+      participationLimit: "per-space-capacity",
+      aiAllowance: 0,
+      paidServiceAllowance: 0,
+      staffAccess: false,
     });
     expect(Object.isFrozen(FOUNDATION_ACCESS)).toBe(true);
     expect(

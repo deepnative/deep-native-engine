@@ -99,7 +99,6 @@ test("[L64] private sample availability respects verified coverage, time zone an
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
     await page.getByLabel("Time zone (optional)").fill("America/Toronto");
-    await page.getByLabel("I'll use invented or sample information").check();
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await page
       .getByRole("link", { name: "View sample appointment windows" })
@@ -154,9 +153,6 @@ test("[L64] private sample availability respects verified coverage, time zone an
       .getByLabel("Time zone (optional)")
       .fill("Europe/Berlin");
     await technicalPage
-      .getByLabel("I'll use invented or sample information")
-      .check();
-    await technicalPage
       .getByRole("button", { name: "Start my learning path" })
       .click();
     await technicalPage.goto("/availability");
@@ -186,9 +182,6 @@ test("[L64] private sample availability respects verified coverage, time zone an
       .getByLabel("Time zone (optional)")
       .fill("America/Vancouver");
     await otherLearnerPage
-      .getByLabel("I'll use invented or sample information")
-      .check();
-    await otherLearnerPage
       .getByRole("button", { name: "Start my learning path" })
       .click();
     await otherLearnerPage.goto("/availability");
@@ -208,9 +201,6 @@ test("[L64] private sample availability respects verified coverage, time zone an
     await noZonePage
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
-    await noZonePage
-      .getByLabel("I'll use invented or sample information")
-      .check();
     await noZonePage
       .getByRole("button", { name: "Start my learning path" })
       .click();

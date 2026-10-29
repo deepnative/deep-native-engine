@@ -220,8 +220,8 @@ export function localAiConsentStore(
       return;
     return row;
   }
-  async function bytes(row: Source) {
-    const data = await objects.get(row.storage_key);
+  async function bytes(client: PoolClient, row: Source) {
+    const data = await objects.get(row.storage_key, client);
     if (
       data.length !== row.byte_size ||
       data.length > MAX_EVIDENCE_BYTES ||
@@ -375,7 +375,7 @@ export function localAiConsentStore(
       const authorization = await receipt(client, token, id);
       if (
         !authorization ||
-        !(await bytes(authorization.row)) ||
+        !(await bytes(client, authorization.row)) ||
         !(await active(client, token))
       )
         return { kind: "denied" };
@@ -493,7 +493,7 @@ export function localAiConsentStore(
         const result: LocalAiChoice[] = [];
         for (const candidate of candidates) {
           const row = await source(client, token, candidate.id);
-          if (!row || !(await bytes(row))) continue;
+          if (!row || !(await bytes(client, row))) continue;
           const permission = (
             await client.query<Receipt>(
               "SELECT * FROM local_ai_receipts WHERE evidence_id=$1 ORDER BY granted_at DESC,id DESC LIMIT 1",
@@ -545,7 +545,11 @@ export function localAiConsentStore(
         { kind: "denied" },
         async (client) => {
           const row = await source(client, token, id);
-          if (!row || !(await bytes(row)) || !(await active(client, token)))
+          if (
+            !row ||
+            !(await bytes(client, row)) ||
+            !(await active(client, token))
+          )
             return { kind: "denied" };
           const existing = (
             await client.query<Receipt>(
@@ -660,7 +664,7 @@ export function localAiConsentStore(
           );
           return { kind: "denied" };
         }
-        const text = await bytes(authorized.row);
+        const text = await bytes(client, authorized.row);
         if (!text || !(await active(client, token))) {
           await client.query(
             "UPDATE adapter_jobs SET status='failed',attempt_token=NULL,lease_until=NULL,safe_error='provider_unavailable' WHERE id=$1",

@@ -106,7 +106,7 @@ it("HOSTED-09 upgrades an inherited HTTPS cookie without changing its original d
     expiresAt,
     hash(m.token),
   ]);
-  await db.save(m.learner.id, input);
+  await db.save(m.token, { ...input, revision: 0 });
   const before = await db.session(m.token);
   expect(before).toMatchObject({
     kind: "active",
@@ -186,7 +186,7 @@ it("recommends only current eligible published lessons without rewriting private
       await catalog.search({}),
       session.learner,
       await db.progress(session.learner.id),
-      await db.lessonActivities(session.learner.id),
+      await db.lessonActivities(id),
     );
   };
   expect(await recommend(first.token)).toBeNull();
@@ -195,7 +195,7 @@ it("recommends only current eligible published lessons without rewriting private
     id: lesson.id,
     version: 1,
   });
-  await db.updateProfile(first.learner.id, {
+  await db.updateProfile(first.token, {
     background: "explorer",
     goal: "build",
     backgroundTags: [],
@@ -205,7 +205,7 @@ it("recommends only current eligible published lessons without rewriting private
     exploratory: false,
   });
   expect(await recommend(first.token)).toBeNull();
-  await db.updateProfile(first.learner.id, {
+  await db.updateProfile(first.token, {
     background: "explorer",
     goal: "everyday",
     backgroundTags: [],
@@ -214,24 +214,22 @@ it("recommends only current eligible published lessons without rewriting private
     experience: null,
     exploratory: false,
   });
-  expect(await db.openLesson(first.learner.id, lesson.id, 1)).toBe(true);
-  expect(await db.advanceLesson(first.learner.id, lesson.id, 1, "start")).toBe(
+  expect(await db.openLesson(first.token, lesson.id, 1)).toBe(true);
+  expect(await db.advanceLesson(first.token, lesson.id, 1, "start")).toBe(true);
+  expect(await recommend(first.token)).toMatchObject({ version: 1 });
+  expect(await db.advanceLesson(first.token, lesson.id, 1, "complete")).toBe(
     true,
   );
-  expect(await recommend(first.token)).toMatchObject({ version: 1 });
-  expect(
-    await db.advanceLesson(first.learner.id, lesson.id, 1, "complete"),
-  ).toBe(true);
   expect(await recommend(first.token)).toBeNull();
   expect(await recommend(other.token)).toMatchObject({ version: 1 });
   await publish(2);
   expect(await recommend(first.token)).toMatchObject({ version: 2 });
   expect(
-    (await db.lessonActivities(first.learner.id)).find(
+    (await db.lessonActivities(first.token)).find(
       (item) => item.contentVersion === 1,
     )?.selfAssessedAt,
   ).toBeInstanceOf(Date);
-  expect((await db.lessonActivities(other.learner.id)).length).toBe(0);
+  expect((await db.lessonActivities(other.token)).length).toBe(0);
   expect(await catalog.retire(editor, lesson.id)).toBe(true);
   expect(await recommend(first.token)).toBeNull();
 });
@@ -304,7 +302,7 @@ it("keeps a sample practice note private and pinned through replay, replacement,
   expect(
     (await practice.current(second.token, lesson.id))!.response,
   ).toBeNull();
-  await db.updateProfile(first.learner.id, {
+  await db.updateProfile(first.token, {
     background: "professional",
     goal: "work",
     backgroundTags: [],
@@ -796,20 +794,20 @@ it("denies a local circle join when revocation commits during its circle lock wa
 it("withholds private career records during workspace deletion at the store and route", async () => {
   const owner = await member();
   const career = careerStore(pool);
-  await career.enable(owner.learner.id);
-  await career.createEntry(owner.learner.id, {
+  await career.enable(owner.token);
+  await career.createEntry(owner.token, {
     kind: "career",
     title: "Private invented career target",
     note: "Private invented note",
     nextAction: "Review invented examples",
     selfReportedOutcome: "Private invented outcome",
   });
-  await career.createDraft(owner.learner.id, {
+  await career.createDraft(owner.token, {
     kind: "proposal",
     title: "Private invented career draft",
     body: "Private invented draft details retained only for this fixture.",
   });
-  const before = await career.snapshot(owner.learner.id);
+  const before = await career.snapshot(owner.token);
   const privateTexts = [
     "Private invented career target",
     "Private invented note",
@@ -835,7 +833,7 @@ it("withholds private career records during workspace deletion at the store and 
         "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
         [owner.learner.id],
       );
-      expect.soft(await career.snapshot(owner.learner.id)).toBeNull();
+      expect.soft(await career.snapshot(owner.token)).toBeNull();
       const paths = [
         "/career/entries",
         `/career/entries/${before!.entries[0]!.id}/update`,
@@ -870,7 +868,7 @@ it("withholds private career records during workspace deletion at the store and 
     "UPDATE workspaces SET deleting_at=NULL WHERE owner_principal_id=$1",
     [owner.learner.id],
   );
-  expect(await career.snapshot(owner.learner.id)).toEqual(before);
+  expect(await career.snapshot(owner.token)).toEqual(before);
 });
 
 it.each([
@@ -885,13 +883,13 @@ it.each([
   async (change) => {
     const owner = await member();
     const career = careerStore(pool);
-    await career.enable(owner.learner.id);
-    await career.createDraft(owner.learner.id, {
+    await career.enable(owner.token);
+    await career.createDraft(owner.token, {
       kind: "proposal",
       title: "Invented locked draft",
       body: "Invented private content for the concurrency fixture.",
     });
-    const before = await career.snapshot(owner.learner.id);
+    const before = await career.snapshot(owner.token);
     const holder = await pool.connect();
     let pending: ReturnType<typeof career.snapshot> | undefined;
     const expires = change.endsWith("expiry");
@@ -925,7 +923,7 @@ it.each([
           "SELECT id FROM workspaces WHERE owner_principal_id=$1 FOR UPDATE",
           [owner.learner.id],
         );
-      pending = career.snapshot(owner.learner.id);
+      pending = career.snapshot(owner.token);
       await expect
         .poll(
           async () =>
@@ -969,15 +967,15 @@ it("keeps repeat career reads isolated and denies expired or revoked principals"
   const owner = await member(),
     outsider = await member();
   const career = careerStore(pool);
-  await career.enable(owner.learner.id);
-  await career.createDraft(owner.learner.id, {
+  await career.enable(owner.token);
+  await career.createDraft(owner.token, {
     kind: "proposal",
     title: "Invented owner draft",
     body: "Invented private owner details for isolation.",
   });
-  const before = await career.snapshot(owner.learner.id);
-  expect(await career.snapshot(owner.learner.id)).toEqual(before);
-  expect(await career.snapshot(outsider.learner.id)).toEqual({
+  const before = await career.snapshot(owner.token);
+  expect(await career.snapshot(owner.token)).toEqual(before);
+  expect(await career.snapshot(outsider.token)).toEqual({
     enabled: false,
     entries: [],
     drafts: [],
@@ -986,12 +984,12 @@ it("keeps repeat career reads isolated and denies expired or revoked principals"
     "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
     [owner.learner.id],
   );
-  expect(await career.snapshot(owner.learner.id)).toBeNull();
+  expect(await career.snapshot(owner.token)).toBeNull();
   await pool.query(
     "UPDATE principals SET revoked_at=NULL,expires_at=clock_timestamp() WHERE id=$1",
     [owner.learner.id],
   );
-  expect(await career.snapshot(owner.learner.id)).toBeNull();
+  expect(await career.snapshot(owner.token)).toBeNull();
 });
 
 it("keeps optional career plans and draft approvals private, versioned and removable", async () => {
@@ -1010,83 +1008,79 @@ it("keeps optional career plans and draft approvals private, versioned and remov
     title: "Invented proposal",
     body: "I would plan a private sample project with a small review step.",
   };
-  expect(await career.snapshot(owner.learner.id)).toEqual({
+  expect(await career.snapshot(owner.token)).toEqual({
     enabled: false,
     entries: [],
     drafts: [],
   });
-  expect(await career.createEntry(owner.learner.id, entry)).toBe(false);
-  expect(await career.createDraft(owner.learner.id, draft)).toBe(false);
-  expect(await career.enable(owner.learner.id)).toBe(true);
-  expect(await career.enable(owner.learner.id)).toBe(true);
-  expect(await career.createEntry(owner.learner.id, entry)).toBe(true);
-  expect(await career.createDraft(owner.learner.id, draft)).toBe(true);
-  let own = await career.snapshot(owner.learner.id);
+  expect(await career.createEntry(owner.token, entry)).toBe(false);
+  expect(await career.createDraft(owner.token, draft)).toBe(false);
+  expect(await career.enable(owner.token)).toBe(true);
+  expect(await career.enable(owner.token)).toBe(true);
+  expect(await career.createEntry(owner.token, entry)).toBe(true);
+  expect(await career.createDraft(owner.token, draft)).toBe(true);
+  let own = await career.snapshot(owner.token);
   expect(own).toMatchObject({
     enabled: true,
     entries: [{ ...entry, version: 1 }],
     drafts: [{ ...draft, approved: false, version: 1 }],
   });
-  expect(await career.snapshot(outsider.learner.id)).toEqual({
+  expect(await career.snapshot(outsider.token)).toEqual({
     enabled: false,
     entries: [],
     drafts: [],
   });
   const entryId = own!.entries[0]!.id;
   const draftId = own!.drafts[0]!.id;
-  expect(await career.updateEntry(outsider.learner.id, entryId, 1, entry)).toBe(
+  expect(await career.updateEntry(outsider.token, entryId, 1, entry)).toBe(
     false,
   );
-  expect(await career.approveDraft(outsider.learner.id, draftId, 1)).toBe(
-    false,
-  );
-  expect(await career.approveDraft(owner.learner.id, draftId, 1)).toBe(true);
-  expect(await career.approveDraft(owner.learner.id, draftId, 1)).toBe(false);
-  expect(await career.updateDraft(owner.learner.id, draftId, 1, draft)).toBe(
-    false,
-  );
+  expect(await career.approveDraft(outsider.token, draftId, 1)).toBe(false);
+  expect(await career.approveDraft(owner.token, draftId, 1)).toBe(true);
+  expect(await career.approveDraft(owner.token, draftId, 1)).toBe(false);
+  expect(await career.updateDraft(owner.token, draftId, 1, draft)).toBe(false);
   expect(
-    await career.updateDraft(owner.learner.id, draftId, 2, {
+    await career.updateDraft(owner.token, draftId, 2, {
       ...draft,
       body: "A revised invented proposal with fresh sample details only.",
     }),
   ).toBe(true);
-  own = await career.snapshot(owner.learner.id);
+  own = await career.snapshot(owner.token);
   expect(own!.drafts[0]).toMatchObject({ approved: false, version: 3 });
-  expect(await career.revokeDraft(owner.learner.id, draftId, 3)).toBe(false);
-  expect(await career.approveDraft(owner.learner.id, draftId, 3)).toBe(true);
-  expect(await career.revokeDraft(owner.learner.id, draftId, 4)).toBe(true);
+  expect(await career.revokeDraft(owner.token, draftId, 3)).toBe(false);
+  expect(await career.approveDraft(owner.token, draftId, 3)).toBe(true);
+  expect(await career.revokeDraft(owner.token, draftId, 4)).toBe(true);
   expect(
-    await career.updateEntry(owner.learner.id, entryId, 1, {
+    await career.updateEntry(owner.token, entryId, 1, {
       ...entry,
       selfReportedOutcome: "An invented next step happened",
     }),
   ).toBe(true);
-  expect(await career.deleteEntry(owner.learner.id, entryId, 1)).toBe(false);
-  expect(await career.deleteEntry(owner.learner.id, entryId, 2)).toBe(true);
-  expect(await career.deleteDraft(outsider.learner.id, draftId, 5)).toBe(false);
-  expect(await career.deleteDraft(owner.learner.id, draftId, 5)).toBe(true);
+  expect(await career.deleteEntry(owner.token, entryId, 1)).toBe(false);
+  expect(await career.deleteEntry(owner.token, entryId, 2)).toBe(true);
+  expect(await career.deleteDraft(outsider.token, draftId, 5)).toBe(false);
+  expect(await career.deleteDraft(owner.token, draftId, 5)).toBe(true);
   expect(
-    await career.createEntry(owner.learner.id, { ...entry, kind: "contract" }),
+    await career.createEntry(owner.token, { ...entry, kind: "contract" }),
   ).toBe(true);
   expect(
-    await career.createDraft(owner.learner.id, { ...draft, kind: "renewal" }),
+    await career.createDraft(owner.token, { ...draft, kind: "renewal" }),
   ).toBe(true);
-  expect(await career.disable(outsider.learner.id)).toBe(false);
-  expect(await career.disable(owner.learner.id)).toBe(true);
-  expect(await career.snapshot(owner.learner.id)).toEqual({
+  expect(await career.disable(outsider.token)).toBe(false);
+  expect(await career.disable(owner.token)).toBe(true);
+  expect(await career.snapshot(owner.token)).toEqual({
     enabled: false,
     entries: [],
     drafts: [],
   });
-  expect(await career.enable(owner.learner.id)).toBe(true);
-  expect(await career.snapshot(owner.learner.id)).toEqual({
+  expect(await career.enable(owner.token)).toBe(true);
+  expect(await career.snapshot(owner.token)).toEqual({
     enabled: true,
     entries: [],
     drafts: [],
   });
   await db.remove(owner.learner.id);
-  expect(await career.snapshot(owner.learner.id)).toBeNull();
+  expect(await career.snapshot(owner.token)).toBeNull();
 });
 const milestoneFixture: MilestoneInput = {
   goalTitle: "Saved invented private goal",
@@ -1108,7 +1102,7 @@ async function milestoneRows(memberId: string) {
 }
 it("withholds private milestones and denies mutations during workspace deletion at HTTP and store boundaries", async () => {
   const owner = await member();
-  const id = await db.createMilestone(owner.learner.id, milestoneFixture);
+  const id = await db.createMilestone(owner.token, milestoneFixture);
   const before = await milestoneRows(owner.learner.id);
   await withLoopback(
     app(db, {
@@ -1129,7 +1123,7 @@ it("withholds private milestones and denies mutations during workspace deletion 
         "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
         [owner.learner.id],
       );
-      expect.soft(await db.milestones(owner.learner.id)).toBeNull();
+      expect.soft(await db.milestones(owner.token)).toBeNull();
       const attempted = "Attempted invented private marker";
       const form = {
         csrf,
@@ -1178,7 +1172,7 @@ it("withholds private milestones and denies mutations during workspace deletion 
 
 it("withholds private milestone HTTP content when the owner expires during a read lock wait", async () => {
   const owner = await member();
-  await db.createMilestone(owner.learner.id, milestoneFixture);
+  await db.createMilestone(owner.token, milestoneFixture);
   const before = await milestoneRows(owner.learner.id);
   await withLoopback(
     app(db, {
@@ -1274,7 +1268,7 @@ it.each(
   async ({ operation, change }) => {
     const owner = await member();
     const id = (await db.createMilestone(
-      owner.learner.id,
+      owner.token,
       milestoneFixture,
     )) as string;
     const before = await milestoneRows(owner.learner.id);
@@ -1317,7 +1311,7 @@ it.each(
         await holder.query(
           "LOCK TABLE learning_milestones IN ACCESS EXCLUSIVE MODE",
         );
-      pending = operateMilestone(db, operation, owner.learner.id, id);
+      pending = operateMilestone(db, operation, owner.token, id);
       await expect
         .poll(
           async () =>
@@ -1353,7 +1347,7 @@ it.each(
   async ({ operation, change }) => {
     const owner = await member();
     const id = (await db.createMilestone(
-      owner.learner.id,
+      owner.token,
       milestoneFixture,
     )) as string;
     const fragment =
@@ -1368,7 +1362,7 @@ it.each(
     const pending = operateMilestone(
       first.controlled,
       operation,
-      owner.learner.id,
+      owner.token,
       id,
     );
     let loss: Promise<unknown> | undefined;
@@ -1397,9 +1391,7 @@ it.each(
           milestone_title: "Attempted race update",
           version: 2,
         });
-      expect(
-        await operateMilestone(db, operation, owner.learner.id, id),
-      ).toBeNull();
+      expect(await operateMilestone(db, operation, owner.token, id)).toBeNull();
       expect(await milestoneRows(owner.learner.id)).toEqual(after);
     } finally {
       first.resume.release();
@@ -1421,31 +1413,27 @@ it("keeps goal milestones private, rejects stale edits and cascades on member de
     reminderTimezone: "America/Toronto",
     selfReportedComplete: false,
   };
-  const id = await db.createMilestone(owner.learner.id, input);
+  const id = await db.createMilestone(owner.token, input);
   expect(id).toMatch(/^[0-9a-f-]{36}$/);
-  expect(await db.milestones(outsider.learner.id)).toEqual([]);
-  expect(await db.milestones(owner.learner.id)).toMatchObject([
+  expect(await db.milestones(outsider.token)).toEqual([]);
+  expect(await db.milestones(owner.token)).toMatchObject([
     { id, ...input, version: 1 },
   ]);
+  expect(await db.updateMilestone(outsider.token, id as string, 1, input)).toBe(
+    false,
+  );
   expect(
-    await db.updateMilestone(outsider.learner.id, id as string, 1, input),
-  ).toBe(false);
-  expect(
-    await db.updateMilestone(owner.learner.id, id as string, 1, {
+    await db.updateMilestone(owner.token, id as string, 1, {
       ...input,
       selfReportedComplete: true,
     }),
   ).toBe(true);
-  expect(
-    await db.updateMilestone(owner.learner.id, id as string, 1, input),
-  ).toBe(false);
-  expect(await db.deleteMilestone(outsider.learner.id, id as string, 2)).toBe(
+  expect(await db.updateMilestone(owner.token, id as string, 1, input)).toBe(
     false,
   );
-  expect(await db.deleteMilestone(owner.learner.id, id as string, 1)).toBe(
-    false,
-  );
-  expect(await db.milestones(owner.learner.id)).toMatchObject([
+  expect(await db.deleteMilestone(outsider.token, id as string, 2)).toBe(false);
+  expect(await db.deleteMilestone(owner.token, id as string, 1)).toBe(false);
+  expect(await db.milestones(owner.token)).toMatchObject([
     { id, version: 2, selfReportedComplete: true },
   ]);
   await expect(
@@ -1454,24 +1442,18 @@ it("keeps goal milestones private, rejects stale edits and cascades on member de
       [id],
     ),
   ).rejects.toThrow();
-  expect(await db.deleteMilestone(owner.learner.id, id as string, 2)).toBe(
-    true,
-  );
-  expect(await db.deleteMilestone(owner.learner.id, id as string, 2)).toBe(
+  expect(await db.deleteMilestone(owner.token, id as string, 2)).toBe(true);
+  expect(await db.deleteMilestone(owner.token, id as string, 2)).toBe(false);
+  expect(await db.updateMilestone(owner.token, id as string, 2, input)).toBe(
     false,
   );
-  expect(
-    await db.updateMilestone(owner.learner.id, id as string, 2, input),
-  ).toBe(false);
-  expect(await db.milestones(owner.learner.id)).toEqual([]);
-  expect(await db.createMilestone(owner.learner.id, input)).toMatch(
+  expect(await db.milestones(owner.token)).toEqual([]);
+  expect(await db.createMilestone(owner.token, input)).toMatch(
     /^[0-9a-f-]{36}$/,
   );
   await db.remove(owner.learner.id);
-  expect(await db.milestones(owner.learner.id)).toBeNull();
-  expect(
-    await db.deleteMilestone(owner.learner.id, id as string, 2),
-  ).toBeNull();
+  expect(await db.milestones(owner.token)).toBeNull();
+  expect(await db.deleteMilestone(owner.token, id as string, 2)).toBeNull();
 });
 it("stores a private pinned choice only for a currently published assignment and removes it with the member", async () => {
   const first = await member();
@@ -1498,7 +1480,7 @@ it("stores a private pinned choice only for a currently published assignment and
     domains: [],
     minimumExperience: "new" as const,
   };
-  expect(await db.chooseAssignment(first.learner.id, draft.id, 1)).toBe(false);
+  expect(await db.chooseAssignment(first.token, draft.id, 1)).toBe(false);
   expect(await catalog.createDraft(editorToken, draft)).toBe(true);
   await expect(
     pool.query(
@@ -1506,11 +1488,11 @@ it("stores a private pinned choice only for a currently published assignment and
       [draft.id],
     ),
   ).rejects.toThrow();
-  expect(await db.chooseAssignment(first.learner.id, draft.id, 1)).toBe(false);
+  expect(await db.chooseAssignment(first.token, draft.id, 1)).toBe(false);
   expect(await catalog.submit(editorToken, draft.id, 1)).toBe(true);
   expect(await catalog.approve(reviewerToken, draft.id, 1, true)).toBe(true);
   expect(await catalog.publish(editorToken, draft.id, 1)).toBe(true);
-  expect(await db.chooseAssignment(first.learner.id, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(first.token, draft.id, 1)).toBe(true);
   expect(await db.assignmentChoice(first.learner.id)).toEqual({
     contentId: draft.id,
     contentVersion: 1,
@@ -1526,12 +1508,12 @@ it("stores a private pinned choice only for a currently published assignment and
   expect(await catalog.submit(editorToken, draft.id, 2)).toBe(true);
   expect(await catalog.approve(reviewerToken, draft.id, 2, true)).toBe(true);
   expect(await catalog.publish(editorToken, draft.id, 2)).toBe(true);
-  expect(await db.chooseAssignment(first.learner.id, draft.id, 1)).toBe(false);
-  expect(await db.chooseAssignment(first.learner.id, draft.id, 2)).toBe(false);
-  await db.save(first.learner.id, input);
-  expect(await db.chooseAssignment(first.learner.id, draft.id, 2)).toBe(true);
+  expect(await db.chooseAssignment(first.token, draft.id, 1)).toBe(false);
+  expect(await db.chooseAssignment(first.token, draft.id, 2)).toBe(false);
+  await db.save(first.token, { ...input, revision: 0 });
+  expect(await db.chooseAssignment(first.token, draft.id, 2)).toBe(true);
   expect(await catalog.retire(editorToken, draft.id)).toBe(true);
-  expect(await db.chooseAssignment(first.learner.id, draft.id, 2)).toBe(false);
+  expect(await db.chooseAssignment(first.token, draft.id, 2)).toBe(false);
   expect(await db.assignmentChoice(first.learner.id)).toEqual({
     contentId: draft.id,
     contentVersion: 2,
@@ -1630,20 +1612,12 @@ it("enforces version-pinned synthetic lesson prerequisites for authoring, choice
   expect(await catalog.submit(editor, assignment.id, 1)).toBe(true);
   expect(await catalog.approve(reviewer, assignment.id, 1, true)).toBe(true);
   expect(await catalog.publish(editor, assignment.id, 1)).toBe(true);
-  expect(await db.chooseAssignment(owner.learner.id, assignment.id, 1)).toBe(
-    false,
-  );
-  expect(await db.openLesson(owner.learner.id, lesson.id, 1)).toBe(true);
-  expect(await db.chooseAssignment(owner.learner.id, assignment.id, 1)).toBe(
-    false,
-  );
-  expect(await db.advanceLesson(owner.learner.id, lesson.id, 1, "start")).toBe(
-    true,
-  );
-  expect(await db.chooseAssignment(owner.learner.id, assignment.id, 1)).toBe(
-    true,
-  );
-  expect(await db.chooseAssignment(outsider.learner.id, assignment.id, 1)).toBe(
+  expect(await db.chooseAssignment(owner.token, assignment.id, 1)).toBe(false);
+  expect(await db.openLesson(owner.token, lesson.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.token, assignment.id, 1)).toBe(false);
+  expect(await db.advanceLesson(owner.token, lesson.id, 1, "start")).toBe(true);
+  expect(await db.chooseAssignment(owner.token, assignment.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(outsider.token, assignment.id, 1)).toBe(
     false,
   );
   const attempts = attemptStore(pool);
@@ -1678,15 +1652,15 @@ it("enforces version-pinned synthetic lesson prerequisites for authoring, choice
     true,
   );
   expect(await catalog.publish(editor, assessedAssignment.id, 1)).toBe(true);
-  expect(
-    await db.chooseAssignment(owner.learner.id, assessedAssignment.id, 1),
-  ).toBe(false);
-  expect(
-    await db.advanceLesson(owner.learner.id, lesson.id, 1, "complete"),
-  ).toBe(true);
-  expect(
-    await db.chooseAssignment(owner.learner.id, assessedAssignment.id, 1),
-  ).toBe(true);
+  expect(await db.chooseAssignment(owner.token, assessedAssignment.id, 1)).toBe(
+    false,
+  );
+  expect(await db.advanceLesson(owner.token, lesson.id, 1, "complete")).toBe(
+    true,
+  );
+  expect(await db.chooseAssignment(owner.token, assessedAssignment.id, 1)).toBe(
+    true,
+  );
   const lesson2 = { ...lesson, version: 2, body: "Updated invented lesson" };
   expect(await catalog.createDraft(editor, lesson2)).toBe(true);
   expect(await catalog.submit(editor, lesson.id, 2)).toBe(true);
@@ -1696,17 +1670,13 @@ it("enforces version-pinned synthetic lesson prerequisites for authoring, choice
   expect(
     await attempts.save(owner.token, attemptId!, 2, "Changed invented answer."),
   ).toBe(false);
-  expect(await db.chooseAssignment(owner.learner.id, assignment.id, 1)).toBe(
-    false,
-  );
+  expect(await db.chooseAssignment(owner.token, assignment.id, 1)).toBe(false);
   expect((await attempts.detail(owner.token, attemptId!))?.response).toBe(
     "Invented answer checked against its source.",
   );
   expect(await catalog.retire(editor, lesson.id)).toBe(true);
-  expect(await db.chooseAssignment(owner.learner.id, assignment.id, 1)).toBe(
-    false,
-  );
-  expect(await db.lessonActivities(owner.learner.id)).toMatchObject([
+  expect(await db.chooseAssignment(owner.token, assignment.id, 1)).toBe(false);
+  expect(await db.lessonActivities(owner.token)).toMatchObject([
     { contentId: lesson.id, contentVersion: 1 },
   ]);
   expect(await attempts.detail(outsider.token, attemptId!)).toBeNull();
@@ -2361,8 +2331,8 @@ it("preserves private synthetic lesson activity across goal changes, versions an
     expect(await catalog.publish(editorToken, draft.id, version)).toBe(true);
   };
   await publish(1);
-  expect(await db.openLesson(owner.learner.id, draft.id, 1)).toBe(true);
-  const opened = (await db.lessonActivities(owner.learner.id))[0]!;
+  expect(await db.openLesson(owner.token, draft.id, 1)).toBe(true);
+  const opened = (await db.lessonActivities(owner.token))[0]!;
   expect(opened).toMatchObject({
     contentId: draft.id,
     contentVersion: 1,
@@ -2370,46 +2340,40 @@ it("preserves private synthetic lesson activity across goal changes, versions an
     selfAssessedAt: null,
     available: true,
   });
-  expect(await db.lessonActivities(outsider.learner.id)).toEqual([]);
-  expect(
-    await db.advanceLesson(outsider.learner.id, draft.id, 1, "start"),
-  ).toBe(false);
-  expect(
-    await db.advanceLesson(owner.learner.id, draft.id, 1, "complete"),
-  ).toBe(false);
-  expect(await db.advanceLesson(owner.learner.id, draft.id, 1, "start")).toBe(
+  expect(await db.lessonActivities(outsider.token)).toEqual([]);
+  expect(await db.advanceLesson(outsider.token, draft.id, 1, "start")).toBe(
+    false,
+  );
+  expect(await db.advanceLesson(owner.token, draft.id, 1, "complete")).toBe(
+    false,
+  );
+  expect(await db.advanceLesson(owner.token, draft.id, 1, "start")).toBe(true);
+  expect(await db.advanceLesson(owner.token, draft.id, 1, "complete")).toBe(
     true,
   );
-  expect(
-    await db.advanceLesson(owner.learner.id, draft.id, 1, "complete"),
-  ).toBe(true);
-  expect(await db.openLesson(owner.learner.id, draft.id, 1)).toBe(true);
-  expect((await db.lessonActivities(owner.learner.id))[0]!.openedAt).toEqual(
+  expect(await db.openLesson(owner.token, draft.id, 1)).toBe(true);
+  expect((await db.lessonActivities(owner.token))[0]!.openedAt).toEqual(
     opened.openedAt,
   );
   await pool.query("UPDATE learners SET goal='work' WHERE id=$1", [
     owner.learner.id,
   ]);
   expect(
-    (await db.lessonActivities(owner.learner.id))[0]!.selfAssessedAt,
+    (await db.lessonActivities(owner.token))[0]!.selfAssessedAt,
   ).toBeInstanceOf(Date);
   await publish(2);
-  expect((await db.lessonActivities(owner.learner.id))[0]!.available).toBe(
-    false,
-  );
-  expect(await db.openLesson(owner.learner.id, draft.id, 1)).toBe(false);
-  expect(await db.advanceLesson(owner.learner.id, draft.id, 1, "start")).toBe(
-    false,
-  );
-  expect(await db.openLesson(owner.learner.id, draft.id, 2)).toBe(true);
+  expect((await db.lessonActivities(owner.token))[0]!.available).toBe(false);
+  expect(await db.openLesson(owner.token, draft.id, 1)).toBe(false);
+  expect(await db.advanceLesson(owner.token, draft.id, 1, "start")).toBe(false);
+  expect(await db.openLesson(owner.token, draft.id, 2)).toBe(true);
   expect(
-    (await db.lessonActivities(owner.learner.id)).map(
+    (await db.lessonActivities(owner.token)).map(
       ({ contentVersion }) => contentVersion,
     ),
   ).toEqual([2, 1]);
   expect(await catalog.retire(editorToken, draft.id)).toBe(true);
   expect(
-    (await db.lessonActivities(owner.learner.id)).every(
+    (await db.lessonActivities(owner.token)).every(
       ({ available }) => !available,
     ),
   ).toBe(true);
@@ -2510,7 +2474,7 @@ it("PROGRESS-RET-01/02/03 preserves recorded lesson activity when a cached progr
       expect((await get("/progress", outsider.token)).text).not.toContain(
         draft.title,
       );
-      expect(await db.lessonActivities(outsider.learner.id)).toEqual([]);
+      expect(await db.lessonActivities(outsider.token)).toEqual([]);
       expect(await catalog.retire(editor, draft.id)).toBe(true);
       await get(`/library/${draft.id}?version=2`).expect(404);
       expect(await facts()).toEqual(recovered);
@@ -2609,6 +2573,15 @@ it("backfills and safely reruns authorization migration over populated learning 
         "utf8",
       ),
     );
+    const draftRevision = await readFile(
+      new URL(
+        "../../migrations/078-starter-draft-revision.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    await client.query(draftRevision);
+    await client.query(draftRevision);
     const migrated = store(client as unknown as Pool);
     await expect(migrated.session(activeToken)).resolves.toMatchObject({
       kind: "active",
@@ -2732,14 +2705,14 @@ it("staff audit sanitizes and preserves historical support reads on repeated mig
 
 it("persists drafts and completions across independent database connections and migrations", async () => {
   const { learner, token } = await member();
-  await db.save(learner.id, { ...input, complete: false });
+  await db.save(token, { revision: 0, ...input, complete: false });
   const reopened = testPool();
   try {
     expect(await store(reopened).progress(learner.id)).toMatchObject({
       instruction: input.instruction,
       completed_at: null,
     });
-    await db.save(learner.id, input);
+    await db.save(token, { ...input, revision: 1 });
     expect(
       (await store(reopened).progress(learner.id))?.completed_at,
     ).toBeInstanceOf(Date);
@@ -2770,13 +2743,13 @@ it("keeps each member's weekly plan preferences private and preserves saved prac
   expect(first).toMatchObject({
     learner: { timezone: "UTC", weeklyMinutes: 15 },
   });
-  await db.save(id, { ...input, complete: false });
+  await db.save(token, { revision: 0, ...input, complete: false });
   const other = await member();
   expect(other.learner).toMatchObject({
     timezone: null,
     weeklyMinutes: null,
   });
-  await db.updateProfile(id, {
+  await db.updateProfile(token, {
     background: "explorer",
     goal: "work",
     backgroundTags: [],
@@ -2820,8 +2793,8 @@ it("makes duplicate onboarding and simultaneous completion idempotent without cr
     complete: true,
   };
   await Promise.all([
-    db.save(learner.id, input),
-    db.save(learner.id, alternative),
+    db.save(token, { ...input, revision: 0 }),
+    db.save(token, { ...alternative, revision: 0 }),
   ]);
   const saved = await db.progress(learner.id);
   expect([input.instruction, alternative.instruction]).toContain(
@@ -2832,8 +2805,8 @@ it("makes duplicate onboarding and simultaneous completion idempotent without cr
       ? input.verification
       : alternative.verification,
   );
-  await db.save(learner.id, { ...alternative, complete: false });
-  await db.save(learner.id, alternative);
+  await db.save(token, { revision: 0, ...alternative, complete: false });
+  await db.save(token, { ...alternative, revision: 0 });
   expect(await db.progress(learner.id)).toEqual(saved);
   expect(
     (await pool.query("SELECT count(*) FROM exercises")).rows[0].count,
@@ -2841,25 +2814,35 @@ it("makes duplicate onboarding and simultaneous completion idempotent without cr
   const other = await member();
   expect(await db.progress(other.learner.id)).toBeUndefined();
 });
-it("keeps concurrent draft/completion coherent and complete", async () => {
-  const { learner } = await member();
-  await Promise.all([
-    db.save(learner.id, {
+it("keeps concurrent draft/completion coherent and requires the current revision to finish", async () => {
+  const { learner, token } = await member();
+  const outcomes = await Promise.all([
+    db.save(token, {
+      revision: 0,
       instruction: "unfinished",
       verification: "draft",
       complete: false,
     }),
-    db.save(learner.id, input),
+    db.save(token, { ...input, revision: 0 }),
   ]);
+  expect(outcomes.filter((result) => result === "saved")).toHaveLength(1);
+  const current = (await db.progress(learner.id))!;
+  expect(current.revision).toBe(1);
+  if (!current.completed_at) {
+    expect(outcomes).toContain("conflict");
+    expect(current.instruction).toBe("unfinished");
+    expect(await db.save(token, { ...input, revision: 1 })).toBe("saved");
+  } else expect(outcomes).toContain("conflict");
   expect(await db.progress(learner.id)).toMatchObject({
     instruction: input.instruction,
     verification: input.verification,
     completed_at: expect.any(Date),
   });
 });
+
 it("enforces expiry and deletion including cascaded exercise records", async () => {
   const { learner, token } = await member();
-  await db.save(learner.id, input);
+  await db.save(token, { ...input, revision: 0 });
   await pool.query(
     "UPDATE principals SET expires_at=CURRENT_TIMESTAMP WHERE id=$1",
     [learner.id],
@@ -3012,7 +2995,7 @@ it("pins one private assignment attempt, serializes drafts and preserves history
   expect(await catalog.submit(editor.token, draft.id, 1)).toBe(true);
   expect(await catalog.approve(reviewer.token, draft.id, 1, true)).toBe(true);
   expect(await catalog.publish(editor.token, draft.id, 1)).toBe(true);
-  expect(await db.chooseAssignment(owner.learner.id, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.token, draft.id, 1)).toBe(true);
   const ids = await Promise.all([
     attempts.start(owner.token),
     attempts.start(owner.token),
@@ -3090,7 +3073,7 @@ it("keeps synthetic assignment submissions immutable across private revisions an
   expect(await catalog.submit(editor.token, draft.id, 1)).toBe(true);
   expect(await catalog.approve(reviewer.token, draft.id, 1, true)).toBe(true);
   expect(await catalog.publish(editor.token, draft.id, 1)).toBe(true);
-  expect(await db.chooseAssignment(owner.learner.id, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.token, draft.id, 1)).toBe(true);
   const id = (await attempts.start(owner.token))!;
   expect(await attempts.revise(owner.token, id)).toBe(false);
   const firstText =
@@ -3143,7 +3126,7 @@ it("keeps synthetic assignment submissions immutable across private revisions an
   expect(ownedExport).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v26",
+      version: "local-member-records-v27",
       records: {
         assignmentSubmissions: [
           { attemptId: id, sequence: 1, response: firstText },
@@ -3212,7 +3195,7 @@ it("rolls back a failed assignment snapshot and backfills legacy submitted attem
   expect(await catalog.submit(editor.token, draft.id, 1)).toBe(true);
   expect(await catalog.approve(reviewer.token, draft.id, 1, true)).toBe(true);
   expect(await catalog.publish(editor.token, draft.id, 1)).toBe(true);
-  expect(await db.chooseAssignment(owner.learner.id, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.token, draft.id, 1)).toBe(true);
   const id = (await attempts.start(owner.token))!;
   const response =
     "This invented response is long enough for a local submission.";
@@ -3276,7 +3259,7 @@ it("keeps retired drafts readable but denies writes, and privacy deletion cascad
   expect(await catalog.submit(editor.token, draft.id, 1)).toBe(true);
   expect(await catalog.approve(reviewer.token, draft.id, 1, true)).toBe(true);
   expect(await catalog.publish(editor.token, draft.id, 1)).toBe(true);
-  expect(await db.chooseAssignment(owner.learner.id, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.token, draft.id, 1)).toBe(true);
   const id = (await attempts.start(owner.token))!;
   expect(
     await attempts.save(owner.token, id, 1, "Private synthetic draft text"),
@@ -3321,7 +3304,7 @@ it("keeps failed PostgreSQL attempt writes unconfirmed until a checked retry", a
   expect(await catalog.submit(editor.token, draft.id, 1)).toBe(true);
   expect(await catalog.approve(reviewer.token, draft.id, 1, true)).toBe(true);
   expect(await catalog.publish(editor.token, draft.id, 1)).toBe(true);
-  expect(await db.chooseAssignment(owner.learner.id, draft.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.token, draft.id, 1)).toBe(true);
   const id = (await attempts.start(owner.token))!;
   await pool.query(
     `CREATE FUNCTION test_reject_attempt_update() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -5174,7 +5157,7 @@ it("derives private workspace ownership and rejects cross-workspace references",
   const first = await member(),
     second = await member(),
     access = authorizationStore(pool);
-  await db.save(first.learner.id, input);
+  await db.save(first.token, { ...input, revision: 0 });
   await expect(
     access.readWorkspace(first.token, first.learner.id),
   ).resolves.toMatchObject({
@@ -5205,7 +5188,7 @@ it("enforces assignment roles, expiry and revocation without role self-escalatio
     moderator = await staff("moderator"),
     access = authorizationStore(pool),
     future = new Date(Date.now() + 60_000);
-  await db.save(owner.learner.id, input);
+  await db.save(owner.token, { ...input, revision: 0 });
   const coachGrant = await access.grantAssignment(
     admin.id,
     coach.id,
@@ -5379,7 +5362,7 @@ it("staff audit records each successful coach read before returning private work
     admin = await staff("platform_admin"),
     coach = await staff("coach"),
     access = authorizationStore(pool);
-  await db.save(owner.learner.id, input);
+  await db.save(owner.token, { ...input, revision: 0 });
   const grantId = await access.grantAssignment(
     admin.id,
     coach.id,
@@ -5417,7 +5400,7 @@ it("staff audit never copies a support purpose or private content into events", 
     operator = await staff("operator"),
     access = authorizationStore(pool),
     purpose = "Synthetic private case narrative excluded from audit";
-  await db.save(owner.learner.id, input);
+  await db.save(owner.token, { ...input, revision: 0 });
   await access.grantSupport(
     admin.id,
     operator.id,
@@ -5449,7 +5432,7 @@ it.each(["assignment", "support"] as const)(
   async (type) => {
     const fixture = await staffAuditFixture(type);
     const grants = [await fixture.create(), await fixture.create()];
-    await db.save(fixture.owner.learner.id, input);
+    await db.save(fixture.owner.token, { ...input, revision: 0 });
     await pool.query(
       `INSERT INTO exercises(learner_id,workspace_id,lesson_id,lesson_version,instruction,verification)
       VALUES($1,$1,'another-synthetic-lesson',1,'Second private draft','Second verification')`,
@@ -5719,7 +5702,7 @@ it("requires purpose-bound support access and records every privileged read", as
     operator = await staff("operator"),
     access = authorizationStore(pool),
     future = new Date(Date.now() + 60_000);
-  await db.save(owner.learner.id, input);
+  await db.save(owner.token, { ...input, revision: 0 });
   const supportGrant = await access.grantSupport(
     admin.id,
     operator.id,
@@ -5865,20 +5848,20 @@ it("limits cohort membership to its explicitly permitted shared content", async 
     ).resolves.toEqual({ kind: "denied" });
 });
 it("enforces relational constraints and parameterizes hostile content", async () => {
-  const { learner } = await member();
+  const { learner, token } = await member();
   await expect(
     pool.query("UPDATE learners SET background='admin' WHERE id=$1", [
       learner.id,
     ]),
   ).rejects.toMatchObject({ code: "23514" });
-  await expect(db.save(randomBytes(16).toString("hex"), input)).resolves.toBe(
-    "unavailable",
-  );
   await expect(
-    db.save(learner.id, { ...input, instruction: "a".repeat(2001) }),
+    db.save(randomBytes(16).toString("hex"), { ...input, revision: 0 }),
+  ).resolves.toBe("unavailable");
+  await expect(
+    db.save(token, { revision: 0, ...input, instruction: "a".repeat(2001) }),
   ).rejects.toMatchObject({ code: "23514" });
   const hostile = "'; DROP TABLE learners;-- <script>alert(1)</script>";
-  await db.save(learner.id, { ...input, instruction: hostile });
+  await db.save(token, { revision: 0, ...input, instruction: hostile });
   expect((await db.progress(learner.id))?.instruction).toBe(hostile);
   expect(
     (await pool.query("SELECT count(*) FROM learners")).rows[0].count,
@@ -6027,7 +6010,7 @@ it("attributes deterministic adapter jobs only to an active member and keeps ide
   expect(await memberExportStore(pool).exportOwned(owner.token)).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v26",
+      version: "local-member-records-v27",
       records: { adapterJobs: [{ id: first.id, mode: "test" }] },
     },
   });
@@ -6961,8 +6944,8 @@ it("recovers its own PostgreSQL completion after losing the acknowledgement", as
 it("withdraws completed starter exercise text idempotently while preserving history and isolation", async () => {
   const owner = await member(),
     other = await member();
-  await db.save(owner.learner.id, input);
-  await db.save(other.learner.id, input);
+  await db.save(owner.token, { ...input, revision: 0 });
+  await db.save(other.token, { ...input, revision: 0 });
   const before = await db.progress(owner.learner.id);
   expect(await db.withdrawExercise(owner.token, "clear-instructions", 1)).toBe(
     "withdrawn",
@@ -6971,7 +6954,8 @@ it("withdraws completed starter exercise text idempotently while preserving hist
     "already-withdrawn",
   );
   expect(
-    await db.save(owner.learner.id, {
+    await db.save(owner.token, {
+      revision: 0,
       ...input,
       instruction: "Stale private text",
     }),
@@ -7013,7 +6997,7 @@ it("withdraws completed starter exercise text idempotently while preserving hist
 it("reads mixed starter versions for owner progress without exposing withdrawn words or another member", async () => {
   const owner = await member(),
     other = await member();
-  await db.save(owner.learner.id, input);
+  await db.save(owner.token, { ...input, revision: 0 });
   await pool.query(
     `INSERT INTO exercises(learner_id,workspace_id,lesson_id,lesson_version,instruction,verification,completed_at,goal_at_start)
      VALUES($1,$1,'clear-instructions',2,'Older invented words','Older invented check',clock_timestamp(),'work'),
@@ -7066,7 +7050,7 @@ it("reads mixed starter versions for owner progress without exposing withdrawn w
 
 it("withdraws historical starter exercise versions after direction changes without rewriting completion", async () => {
   const owner = await member();
-  await db.save(owner.learner.id, input);
+  await db.save(owner.token, { ...input, revision: 0 });
   await pool.query(
     `INSERT INTO exercises(learner_id,workspace_id,lesson_id,lesson_version,instruction,verification,completed_at,goal_at_start)
     VALUES($1,$1,'clear-instructions',2,'Version two sample','Version two check',clock_timestamp(),'work')`,
@@ -7120,7 +7104,7 @@ it("withdraws historical starter exercise versions after direction changes witho
 it("denies starter exercise withdrawal and private rendering for foreign, staff, inactive or deleting identities", async () => {
   const owner = await member(),
     other = await member();
-  await db.save(owner.learner.id, input);
+  await db.save(owner.token, { ...input, revision: 0 });
   const operator = await staff("operator");
   for (const token of [other.token, operator.token, "missing"]) {
     expect(await db.withdrawExercise(token, "clear-instructions", 1)).toBe(
@@ -7136,7 +7120,7 @@ it("denies starter exercise withdrawal and private rendering for foreign, staff,
   );
   for (const state of ["expired", "revoked", "deleting"] as const) {
     const fixture = await member();
-    await db.save(fixture.learner.id, input);
+    await db.save(fixture.token, { ...input, revision: 0 });
     if (state === "deleting")
       await pool.query(
         "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE id=$1",
@@ -7163,7 +7147,7 @@ it("denies starter exercise withdrawal and private rendering for foreign, staff,
     });
   }
   const draft = await member();
-  await db.save(draft.learner.id, { ...input, complete: false });
+  await db.save(draft.token, { revision: 0, ...input, complete: false });
   expect(await db.withdrawExercise(draft.token, "clear-instructions", 1)).toBe(
     "unavailable",
   );
@@ -7176,7 +7160,7 @@ it("denies starter exercise withdrawal and private rendering for foreign, staff,
 
 it("enforces coherent starter exercise withdrawal markers in PostgreSQL", async () => {
   const owner = await member();
-  await db.save(owner.learner.id, { ...input, complete: false });
+  await db.save(owner.token, { revision: 0, ...input, complete: false });
   for (const change of [
     "instruction=NULL",
     "verification=NULL",
@@ -7189,7 +7173,7 @@ it("enforces coherent starter exercise withdrawal markers in PostgreSQL", async 
       ]),
     ).rejects.toMatchObject({ code: "23514" });
   }
-  await db.save(owner.learner.id, input);
+  await db.save(owner.token, { ...input, revision: 1 });
   await db.withdrawExercise(owner.token, "clear-instructions", 1);
   await expect(
     pool.query(
@@ -7203,7 +7187,7 @@ it.each(["update", "commit"] as const)(
   "does not report starter exercise withdrawal success after a lost %s acknowledgement",
   async (fault) => {
     const owner = await member();
-    await db.save(owner.learner.id, input);
+    await db.save(owner.token, { ...input, revision: 0 });
     const uncertain = store(
       wrappedPool(
         (client) =>
@@ -7277,10 +7261,10 @@ it.each(["read-first", "withdraw-first"] as const)(
   "serializes starter exercise response formation %s with withdrawal",
   async (order) => {
     const owner = await member();
-    await db.save(owner.learner.id, input);
+    await db.save(owner.token, { ...input, revision: 0 });
     const first = controlledExercise(
       order === "read-first"
-        ? "SELECT lesson_id AS"
+        ? "SELECT revision,lesson_id AS"
         : "UPDATE exercises SET instruction=NULL",
     );
     const a =
@@ -7328,10 +7312,11 @@ it.each(["save-first", "withdraw-first"] as const)(
   "prevents starter exercise text resurrection with %s ordering",
   async (order) => {
     const owner = await member();
-    await db.save(owner.learner.id, input);
+    await db.save(owner.token, { ...input, revision: 0 });
     if (order === "save-first") {
       const first = controlledExercise("SELECT goal FROM learners");
-      const saving = first.controlled.save(owner.learner.id, {
+      const saving = first.controlled.save(owner.token, {
+        revision: 0,
         ...input,
         instruction: "Stale text",
       });
@@ -7343,7 +7328,7 @@ it.each(["save-first", "withdraw-first"] as const)(
           (await blockingPids("SELECT id FROM workspaces")).length,
         ).toBeGreaterThan(0);
         first.resume.release();
-        expect(await saving).toBe("unchanged");
+        expect(await saving).toBe("conflict");
         expect(await withdrawal).toBe("withdrawn");
       } finally {
         first.resume.release();
@@ -7359,7 +7344,8 @@ it.each(["save-first", "withdraw-first"] as const)(
       let saving: Promise<string> | undefined;
       try {
         await first.reached.wait;
-        saving = db.save(owner.learner.id, {
+        saving = db.save(owner.token, {
+          revision: 0,
           ...input,
           instruction: "Stale text",
         });
@@ -7384,7 +7370,7 @@ it.each(["save-first", "withdraw-first"] as const)(
 
 it("rolls back starter exercise withdrawal when the owner expires during a workspace lock wait", async () => {
   const owner = await member();
-  await db.save(owner.learner.id, input);
+  await db.save(owner.token, { ...input, revision: 0 });
   const blocker = await pool.connect();
   let pending: Promise<string> | undefined;
   const expiry = new Date(Date.now() + 250);
@@ -7423,7 +7409,7 @@ it.each(["delete", "revoke", "deletion-marker"] as const)(
   "denies waiting starter exercise withdrawal when %s commits first",
   async (action) => {
     const owner = await member();
-    await db.save(owner.learner.id, input);
+    await db.save(owner.token, { ...input, revision: 0 });
     const blocker = await pool.connect();
     let pending: Promise<string> | undefined;
     try {
@@ -7472,7 +7458,7 @@ it.each(["delete", "revoke", "deletion-marker"] as const)(
   "orders starter exercise withdrawal before a concurrent %s",
   async (action) => {
     const owner = await member();
-    await db.save(owner.learner.id, input);
+    await db.save(owner.token, { ...input, revision: 0 });
     const first = controlledExercise("UPDATE exercises SET instruction=NULL");
     const pending = first.controlled.withdrawExercise(
       owner.token,

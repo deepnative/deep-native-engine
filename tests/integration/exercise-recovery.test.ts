@@ -34,7 +34,7 @@ async function fixture() {
   const session = await db.session(token);
   if (session.kind !== "active")
     throw new Error("Synthetic member unavailable");
-  await db.save(session.learner.id, prior);
+  await db.save(token, { ...prior, revision: 0 });
   return { token, id: session.learner.id };
 }
 
@@ -51,6 +51,7 @@ function postExercise(token: string, save: typeof db.save) {
         csrf: csrf(token, secret),
         lesson_id: "clear-instructions",
         lesson_version: "1",
+        revision: "1",
         goal: "everyday",
       }),
   );

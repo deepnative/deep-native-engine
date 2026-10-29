@@ -34,7 +34,6 @@ async function onboard(
   await page.goto(origin);
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const token = (await page.context().cookies()).find(
     (c) => c.name === COOKIE,
@@ -102,7 +101,8 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
       const privateText =
         "Invented private starter text must never appear in a discussion";
       expect(
-        await members.save(a.id, {
+        await members.save(a.token, {
+          revision: 0,
           instruction: privateText,
           verification: "Private invented check",
           complete: false,
@@ -285,7 +285,7 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
       const exported = await (
         await peer.request.get(`${origin}/api/member/export`)
       ).json();
-      expect(exported.version).toBe("local-member-records-v26");
+      expect(exported.version).toBe("local-member-records-v27");
       expect(
         exported.records.circlePosts.map((row: { body: string }) => row.body),
       ).toEqual([reply]);

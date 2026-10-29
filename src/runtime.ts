@@ -29,6 +29,8 @@ import { authorizationStore } from "./authorization.ts";
 import { evidenceStore, fileObjectStorage } from "./evidence.ts";
 import { preparedObjectStorage } from "./prepared-sample-storage.ts";
 import { preparedSampleStore } from "./prepared-samples.ts";
+import { assignmentEvidenceStore } from "./assignment-evidence.ts";
+import { assignmentObjectStorage } from "./assignment-evidence-storage.ts";
 import { deterministicRegistry } from "./adapters.ts";
 import { localAiConsentStore } from "./local-ai-consent.ts";
 import { localAiControlStore } from "./local-ai-control.ts";
@@ -36,6 +38,7 @@ import { catalogStore, seedDraftPack } from "./catalog.ts";
 import { reviewedAssignmentImportStore } from "./reviewed-assignments.ts";
 import { foundationImportStore } from "./foundation-import.ts";
 import { trackStore } from "./track-readiness.ts";
+import { publicationStore } from "./proposal-publication.ts";
 import { proposalStore } from "./proposals.ts";
 import { careerStore } from "./career.ts";
 import { circleDiscussionStore } from "./circle-discussion.ts";
@@ -98,15 +101,21 @@ export async function start(env: NodeJS.ProcessEnv) {
   try {
     await migrate(pool);
     await seedDraftPack(pool);
-    const objects = preparedObjectStorage(
+    const objects = assignmentObjectStorage(
       pool,
-      settings.hosted
-        ? azureObjectStorage(settings.hosted)
-        : fileObjectStorage(settings.privateStorageRoot),
+      preparedObjectStorage(
+        pool,
+        settings.hosted
+          ? azureObjectStorage(settings.hosted)
+          : fileObjectStorage(settings.privateStorageRoot),
+      ),
     );
     const eventReader = eventCatalogReader();
     const options = {
       ...settings,
+      assignmentEvidence: assignmentEvidenceStore(pool, {
+        enabled: settings.assignmentHandoff,
+      }),
       hostedOrigin: settings.hosted?.origin,
       memberEmail:
         settings.emailEndpoint && settings.emailSender && settings.hosted
@@ -165,7 +174,12 @@ export async function start(env: NodeJS.ProcessEnv) {
       foundationImport: foundationImportStore(pool),
       assignmentImport: reviewedAssignmentImportStore(pool),
       tracks: trackStore(pool),
-      proposals: proposalStore(pool),
+      proposals: proposalStore(pool, undefined, {
+        ordinaryEnabled: settings.memberContributions,
+      }),
+      publications: publicationStore(pool, {
+        enabled: settings.memberContributions,
+      }),
       career: careerStore(pool),
       circles: circleStore(pool),
       circleDiscussionEnabled: settings.circleDiscussion,
@@ -276,25 +290,26 @@ export async function start(env: NodeJS.ProcessEnv) {
       options.origin = new URL("http://127.0.0.1:" + address.port).origin;
     let cursor: string | null = null;
     let objectWriteCursor: string | null = null;
+    let evidenceCursor: string | null = null;
     let activeRecovery: Promise<void> | undefined;
     const recover = () => {
       if (activeRecovery) return;
       activeRecovery = (async () => {
         try {
-          const result = settings.hosted
-            ? await recoverPendingMemberDeletions(
-                pool,
-                objects,
-                cursor,
-                10,
-                objectWriteCursor,
-              )
-            : await recoverPendingMemberDeletions(pool, objects, cursor);
+          const result = await recoverPendingMemberDeletions(
+            pool,
+            objects,
+            cursor,
+            10,
+            objectWriteCursor,
+            evidenceCursor,
+          );
           cursor = result.nextCursor;
           objectWriteCursor = result.objectWrites?.nextCursor ?? null;
+          evidenceCursor = result.evidenceDeletions?.nextCursor ?? null;
           if (result.objectWrites?.failed)
             console.error("Private object cleanup remains unconfirmed.");
-          if (result.failed)
+          if (result.failed || result.evidenceDeletions?.failed)
             console.error("A pending local deletion will be retried.");
         } catch {
           console.error("Pending local deletion recovery is unavailable.");

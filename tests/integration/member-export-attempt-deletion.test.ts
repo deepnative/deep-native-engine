@@ -187,7 +187,7 @@ async function fixture() {
   expect(await catalog.submit(editorToken, content.id, 1)).toBe(true);
   expect(await catalog.approve(reviewerToken, content.id, 1, true)).toBe(true);
   expect(await catalog.publish(editorToken, content.id, 1)).toBe(true);
-  expect(await members.chooseAssignment(ownerId, content.id, 1)).toBe(true);
+  expect(await members.chooseAssignment(ownerToken, content.id, 1)).toBe(true);
   const attemptId = await attempts.start(ownerToken);
   expect(attemptId).toBeTruthy();
   const first = "Invented first private submission with source comparison.";

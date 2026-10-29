@@ -117,25 +117,25 @@ it("shows blocked published matching work, updates from real activity and never 
       )
     ).rows[0],
   ).toEqual({ activity: 0, choices: 0, attempts: 0 });
-  expect(await db.chooseAssignment(owner.id, assignment.id, 1)).toBe(false);
-  expect(await db.openLesson(owner.id, source.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.token, assignment.id, 1)).toBe(false);
+  expect(await db.openLesson(owner.token, source.id, 1)).toBe(true);
   expect(
     (await readiness.get(owner.token, assignment.id, 1))?.requirements[0]
       ?.observed,
   ).toBe("not-started");
-  expect(await db.advanceLesson(owner.id, source.id, 1, "start")).toBe(true);
+  expect(await db.advanceLesson(owner.token, source.id, 1, "start")).toBe(true);
   expect(await readiness.get(owner.token, assignment.id, 1)).toMatchObject({
     eligible: true,
     requirements: [{ observed: "started", satisfied: true }],
   });
-  expect(await db.chooseAssignment(owner.id, assignment.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.token, assignment.id, 1)).toBe(true);
   expect(
     (await readiness.get(outsider.token, assignment.id, 1))?.eligible,
   ).toBe(false);
   await pool.query("UPDATE learners SET goal='work' WHERE id=$1", [owner.id]);
   expect(await readiness.get(owner.token, assignment.id, 1)).toBeNull();
   expect(await readiness.list(owner.token)).toEqual([]);
-  expect(await db.chooseAssignment(owner.id, assignment.id, 1)).toBe(false);
+  expect(await db.chooseAssignment(owner.token, assignment.id, 1)).toBe(false);
   expect(await db.assignmentChoice(owner.id)).toEqual({
     contentId: assignment.id,
     contentVersion: 1,
@@ -145,7 +145,7 @@ it("shows blocked published matching work, updates from real activity and never 
 it("uses a repeatable snapshot against independent synthetic SQL progress writes", async () => {
   const owner = await member();
   const { source, assignment } = await fixtures();
-  await db.openLesson(owner.id, source.id, 1);
+  await db.openLesson(owner.token, source.id, 1);
   let changed = false;
   const concurrent = {
     connect: async () => {
@@ -191,7 +191,7 @@ it("uses a repeatable snapshot against independent synthetic SQL progress writes
 it("serializes a lesson start after the current prerequisite snapshot releases its workspace", async () => {
   const owner = await member();
   const { source, assignment } = await fixtures();
-  await db.openLesson(owner.id, source.id, 1);
+  await db.openLesson(owner.token, source.id, 1);
   let writing: Promise<boolean> | undefined;
   let blocked = false;
   const concurrent = {
@@ -203,7 +203,7 @@ it("serializes a lesson start after the current prerequisite snapshot releases i
           if (sql.includes("FROM content_versions cv") && !writing) {
             const pid = (await client.query("SELECT pg_backend_pid() AS pid"))
               .rows[0].pid;
-            writing = db.advanceLesson(owner.id, source.id, 1, "start");
+            writing = db.advanceLesson(owner.token, source.id, 1, "start");
             await expect
               .poll(
                 async () =>
@@ -280,20 +280,21 @@ it("guides nested exact self-assessment and local-exercise dependencies without 
     action: { kind: "lesson", contentId: leaf.id, contentVersion: 1 },
   });
   expect(initial?.requirements[1]?.action?.kind).toBe("exercise");
-  await db.openLesson(owner.id, leaf.id, 1);
-  await db.advanceLesson(owner.id, leaf.id, 1, "start");
+  await db.openLesson(owner.token, leaf.id, 1);
+  await db.advanceLesson(owner.token, leaf.id, 1, "start");
   expect(
     (await readiness.get(owner.token, assignment.id, 1))?.requirements[0]
       ?.requirements[0]?.satisfied,
   ).toBe(false);
-  await db.advanceLesson(owner.id, leaf.id, 1, "complete");
+  await db.advanceLesson(owner.token, leaf.id, 1, "complete");
   expect(
     (await readiness.get(owner.token, assignment.id, 1))?.requirements[0]
       ?.action?.contentId,
   ).toBe(parent.id);
-  await db.openLesson(owner.id, parent.id, 1);
-  await db.advanceLesson(owner.id, parent.id, 1, "start");
-  await db.save(owner.id, {
+  await db.openLesson(owner.token, parent.id, 1);
+  await db.advanceLesson(owner.token, parent.id, 1, "start");
+  await db.save(owner.token, {
+    revision: 0,
     instruction: "Invented task only",
     verification: "Check synthetic details",
     complete: true,
@@ -301,7 +302,7 @@ it("guides nested exact self-assessment and local-exercise dependencies without 
   expect((await readiness.get(owner.token, assignment.id, 1))?.eligible).toBe(
     true,
   );
-  expect(await db.chooseAssignment(owner.id, assignment.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.token, assignment.id, 1)).toBe(true);
 });
 
 it("hides retired and superseded exact source metadata without version substitution", async () => {
@@ -317,7 +318,7 @@ it("hides retired and superseded exact source metadata without version substitut
   expect(
     (await readiness.get(owner.token, assignment.id, 1))?.requirements,
   ).toEqual([unavailable]);
-  expect(await db.chooseAssignment(owner.id, assignment.id, 1)).toBe(false);
+  expect(await db.chooseAssignment(owner.token, assignment.id, 1)).toBe(false);
   expect(await catalog.retire(editor, source.id)).toBe(true);
   expect(
     (await readiness.get(owner.token, assignment.id, 1))?.requirements,
@@ -409,8 +410,8 @@ it("summarizes a completed wide shared DAG without contradicting SQL eligibility
         },
       });
       await publish(source);
-      expect(await db.openLesson(owner.id, source.id, 1)).toBe(true);
-      expect(await db.advanceLesson(owner.id, source.id, 1, "start")).toBe(
+      expect(await db.openLesson(owner.token, source.id, 1)).toBe(true);
+      expect(await db.advanceLesson(owner.token, source.id, 1, "start")).toBe(
         true,
       );
     }
@@ -435,7 +436,7 @@ it("summarizes a completed wide shared DAG without contradicting SQL eligibility
   expect(nodes.length).toBeLessThanOrEqual(256 * 8);
   expect(nodes.every((node) => node.satisfied)).toBe(true);
   expect(nodes.some((node) => node.kind === "unavailable")).toBe(false);
-  expect(await db.chooseAssignment(owner.id, assignment.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(owner.token, assignment.id, 1)).toBe(true);
 }, 30000);
 
 it("marks unmet audience-inaccessible lessons unavailable while retaining historically satisfied prerequisites", async () => {
@@ -459,9 +460,9 @@ it("marks unmet audience-inaccessible lessons unavailable while retaining histor
       requirements: [],
     },
   ]);
-  expect(await db.openLesson(owner.id, source.id, 1)).toBe(false);
-  expect(await db.openLesson(historical.id, source.id, 1)).toBe(true);
-  expect(await db.advanceLesson(historical.id, source.id, 1, "start")).toBe(
+  expect(await db.openLesson(owner.token, source.id, 1)).toBe(false);
+  expect(await db.openLesson(historical.token, source.id, 1)).toBe(true);
+  expect(await db.advanceLesson(historical.token, source.id, 1, "start")).toBe(
     true,
   );
   await pool.query("UPDATE learners SET goal='everyday' WHERE id=$1", [
@@ -473,7 +474,9 @@ it("marks unmet audience-inaccessible lessons unavailable while retaining histor
       requirements: [{ kind: "lesson", observed: "started", satisfied: true }],
     },
   );
-  expect(await db.chooseAssignment(historical.id, assignment.id, 1)).toBe(true);
+  expect(await db.chooseAssignment(historical.token, assignment.id, 1)).toBe(
+    true,
+  );
 });
 
 it("finds a safe last unmet leaf in a large valid tree and removes the action after retirement", async () => {
@@ -492,8 +495,8 @@ it("finds a safe last unmet leaf in a large valid tree and removes the action af
       },
     });
     await publish(source);
-    if (index !== 584 && (await db.openLesson(owner.id, source.id, 1)))
-      expect(await db.advanceLesson(owner.id, source.id, 1, "start")).toBe(
+    if (index !== 584 && (await db.openLesson(owner.token, source.id, 1)))
+      expect(await db.advanceLesson(owner.token, source.id, 1, "start")).toBe(
         true,
       );
   }
@@ -512,7 +515,7 @@ it("finds a safe last unmet leaf in a large valid tree and removes the action af
     ]);
   expect(before?.eligible).toBe(false);
   expect(actions(before!.requirements)).toEqual(["SYN-684"]);
-  expect(await db.chooseAssignment(owner.id, assignment.id, 1)).toBe(false);
+  expect(await db.chooseAssignment(owner.token, assignment.id, 1)).toBe(false);
   expect(await catalog.retire(editor, "SYN-684")).toBe(true);
   const after = await readiness.get(owner.token, assignment.id, 1);
   expect(after?.eligible).toBe(false);
@@ -539,7 +542,7 @@ it.each([
       verification: "Compare each step against the invented notes.",
       complete: state !== "a-draft-b-complete",
     };
-    await db.save(owner.id, answer);
+    await db.save(owner.token, { ...answer, revision: 0 });
     if (state === "withdrawn-a-complete")
       await db.withdrawExercise(
         owner.token,
@@ -548,7 +551,8 @@ it.each([
         "everyday",
       );
     await pool.query("UPDATE learners SET goal='work' WHERE id=$1", [owner.id]);
-    await db.save(owner.id, {
+    await db.save(owner.token, {
+      revision: 0,
       ...answer,
       complete: state === "a-draft-b-complete",
     });
@@ -583,7 +587,7 @@ it.each([
       eligible: true,
       requirements: [{ satisfied: true, observed: "completed" }],
     });
-    expect(await db.openLesson(owner.id, lesson.id, 1)).toBe(true);
-    expect(await db.chooseAssignment(owner.id, assignment.id, 1)).toBe(true);
+    expect(await db.openLesson(owner.token, lesson.id, 1)).toBe(true);
+    expect(await db.chooseAssignment(owner.token, assignment.id, 1)).toBe(true);
   },
 );

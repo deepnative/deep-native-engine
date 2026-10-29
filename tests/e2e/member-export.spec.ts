@@ -12,7 +12,6 @@ async function onboard(page: Page) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await page.getByLabel("What would you like to do?").selectOption("everyday");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }
@@ -111,7 +110,7 @@ test("[L61] current owner downloads private structured records while unrelated, 
       { id: receiptId, evidenceId: source.id },
     ]);
     expect(granted).toMatchObject({
-      version: "local-member-records-v26",
+      version: "local-member-records-v27",
       profile: { id: ownerId },
       records: {
         milestones: [{ milestoneTitle: "Owner-only milestone" }],
@@ -227,7 +226,7 @@ test("[L67] deterministic member jobs export only to their owner and disappear w
       requestFingerprint({ system: marker }),
     );
     const own = await (await page.request.get("/api/member/export")).json();
-    expect(own.version).toBe("local-member-records-v26");
+    expect(own.version).toBe("local-member-records-v27");
     expect(own.records.adapterJobs).toMatchObject([
       {
         id: owned.id,

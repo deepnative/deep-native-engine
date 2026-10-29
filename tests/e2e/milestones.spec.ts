@@ -18,7 +18,6 @@ async function onboard(
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
   if (timezone) await page.getByLabel("Time zone (optional)").fill(timezone);
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await page.getByRole("link", { name: "Plan goals and milestones" }).click();
   await expect(page).toHaveURL(/\/milestones$/);

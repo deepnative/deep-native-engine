@@ -58,10 +58,9 @@ test("[L53] three learner paths retain visible keyboard focus, actionable errors
     await tabTo(page, direction);
     await page.keyboard.press(goalKey);
     await expect(direction).toHaveValue(goal);
-    const sample = page.getByLabel("I'll use invented or sample information");
-    await tabTo(page, sample);
-    await page.keyboard.press("Space");
-    await expect(sample).toBeChecked();
+    // MON-01: keyboard onboarding uses ordinary profile choices, with no
+    // global invented-data pledge; feature-specific sharing stays separate.
+    await expect(page.locator('input[name="synthetic"]')).toHaveCount(0);
     const start = page.getByRole("button", { name: "Start my learning path" });
     await tabTo(page, start);
     await page.keyboard.press("Enter");

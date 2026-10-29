@@ -70,7 +70,7 @@ async function fixture(existing = false, changes: Partial<DraftContent> = {}) {
   };
   await publish(item);
   if (existing) {
-    expect(await db.chooseAssignment(owner.id, item.id, 1)).toBe(true);
+    expect(await db.chooseAssignment(owner.token, item.id, 1)).toBe(true);
     await pool.query(
       "UPDATE learner_assignment_choices SET chosen_at='2026-01-01' WHERE member_id=$1",
       [owner.id],
@@ -197,7 +197,7 @@ it.each(["technical", "professional", "explorer"] as const)(
     await fixture();
     const owner = await member(background),
       other = await member();
-    expect(await db.chooseAssignment(other.id, "SYN-956", 2)).toBe(true);
+    expect(await db.chooseAssignment(other.token, "SYN-956", 2)).toBe(true);
     const otherBefore = await snapshot(other.id);
     const response = await post(owner.token, db, {
       id: other.id,
@@ -430,8 +430,8 @@ it.each(["direction", "prerequisite", "retirement", "supersession"] as const)(
           ],
         },
       });
-      expect(await db.openLesson(owner.id, "SYN-955", 1)).toBe(true);
-      expect(await db.advanceLesson(owner.id, "SYN-955", 1, "start")).toBe(
+      expect(await db.openLesson(owner.token, "SYN-955", 1)).toBe(true);
+      expect(await db.advanceLesson(owner.token, "SYN-955", 1, "start")).toBe(
         true,
       );
     }

@@ -194,26 +194,29 @@ it("FOUND-03/04 all three backgrounds read six exact versions; replacement and r
     reviewer = await staff("reviewer");
   await importer.import(editor.token);
   await publish(editor.token, reviewer.token);
+  const memberTokens = new Map<string, string>();
   for (const background of ["explorer", "professional", "technical"] as const) {
     const member = token();
     await members.create(member, { background, goal: "everyday" });
     const session = await members.session(member);
     if (session.kind !== "active") throw Error("Missing member");
-    const id = session.learner.id;
+    memberTokens.set(session.learner.id, member);
     expect(await catalog.search({ background })).toHaveLength(6);
     for (const item of await reviewedFoundation())
-      expect(await members.openLesson(id, item.id, 2)).toBe(true);
-    expect(await members.advanceLesson(id, "FND-001", 2, "complete")).toBe(
+      expect(await members.openLesson(member, item.id, 2)).toBe(true);
+    expect(await members.advanceLesson(member, "FND-001", 2, "complete")).toBe(
       false,
     );
-    expect(await members.advanceLesson(id, "FND-001", 2, "start")).toBe(true);
-    expect(await members.advanceLesson(id, "FND-001", 2, "complete")).toBe(
+    expect(await members.advanceLesson(member, "FND-001", 2, "start")).toBe(
       true,
     );
-    const before = await members.lessonActivities(id);
+    expect(await members.advanceLesson(member, "FND-001", 2, "complete")).toBe(
+      true,
+    );
+    const before = await members.lessonActivities(member);
     expect(before).toHaveLength(6);
     expect(before.filter((x) => x.selfAssessedAt)).toHaveLength(1);
-    expect(await members.lessonActivities(id)).toEqual(before);
+    expect(await members.lessonActivities(member)).toEqual(before);
   }
   const replacement = {
     ...(await reviewedFoundation())[0]!,
@@ -230,12 +233,14 @@ it("FOUND-03/04 all three backgrounds read six exact versions; replacement and r
     )
   ).rows;
   for (const row of retained) {
+    const member = memberTokens.get(row.member_id);
+    if (!member) throw Error("Missing original member session");
     expect(
-      (await members.lessonActivities(row.member_id)).find(
+      (await members.lessonActivities(member)).find(
         (x) => x.contentId === "FND-001",
       )?.available,
     ).toBe(false);
-    expect(await members.openLesson(row.member_id, "FND-001", 2)).toBe(false);
+    expect(await members.openLesson(member, "FND-001", 2)).toBe(false);
   }
   await catalog.retire(editor.token, "FND-001");
   expect(await importer.import(editor.token)).toBe("conflict");

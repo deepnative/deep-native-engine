@@ -164,7 +164,8 @@ it("restores only a synthetic snapshot into a new database and preserves private
       if (session.kind !== "active")
         throw new Error("Synthetic restore member setup failed.");
       members.push({ token, learner: session.learner });
-      await db.save(session.learner.id, {
+      await db.save(token, {
+        revision: 0,
         instruction: `Synthetic ${background} snapshot instruction.`,
         verification: "Compare the invented source with its result.",
         complete: false,
@@ -258,7 +259,8 @@ it("restores only a synthetic snapshot into a new database and preserves private
     const expectedObjects = await objectManifest(snapshotObjects);
     expect(expectedObjects).toHaveLength(2);
     const captureMs = performance.now() - captureStart;
-    await db.save(owner.learner.id, {
+    await db.save(owner.token, {
+      revision: 1,
       instruction: "Synthetic write after the captured snapshot.",
       verification: "This newer draft must remain only in the source.",
       complete: false,
@@ -332,7 +334,8 @@ it("restores only a synthetic snapshot into a new database and preserves private
         "community-publication",
       ),
     ).toBe(false);
-    await recovered.save(owner.learner.id, {
+    await recovered.save(owner.token, {
+      revision: 1,
       instruction: "Synthetic verified write after recovery.",
       verification: "Confirm the restored database remains usable.",
       complete: true,

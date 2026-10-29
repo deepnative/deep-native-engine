@@ -8,8 +8,8 @@ export const sampleFeedbackPath = (id: string, reviewer = false) =>
   `${reviewer ? "/review" : ""}/evidence/${encodeURIComponent(id)}/feedback`;
 const label =
   '<p class="eyebrow">PRIVATE SAMPLE FEEDBACK · NOT FORMAL ASSESSMENT</p><p>Reviewer account attribution does not verify human authorship. This feedback is not a qualification, score, paid review or promise of an outcome. Draft time observations are self-reported and unbilled. Reserved test-minute receipts separately show simulated consumption and returns; they are not money or a paid service.</p>';
-function published(row: SampleFeedbackRecord) {
-  return `<article><h2>Published sample feedback</h2><p>Reviewer reference ${escape(row.authorId)} · source version ${row.sourceRevision} · published ${escape(row.publishedAt!.toISOString())}</p>${row.criteria.map((c) => `<section><h3>${escape(c.label)}</h3><blockquote>${escape(c.quote)}</blockquote><p>${escape(c.comment)}</p></section>`).join("")}<p>Unbilled draft observation — preparation: ${row.preparationMinutes ?? "not supplied"} minutes; review: ${row.reviewMinutes ?? "not supplied"} minutes.</p>${row.clarification ? `<h3>Your clarification</h3><p>${escape(row.clarification)}</p>` : ""}${row.answer ? `<h3>Reviewer answer</h3><p>${escape(row.answer)}</p>` : ""}</article>`;
+function published(row: SampleFeedbackRecord, assignment: boolean) {
+  return `<article><h2>${assignment ? "Published assignment feedback" : "Published sample feedback"}</h2><p>Reviewer reference ${escape(row.authorId)} · source version ${row.sourceRevision} · published ${escape(row.publishedAt!.toISOString())}</p>${row.criteria.map((c) => `<section><h3>${escape(c.label)}</h3><blockquote>${escape(c.quote)}</blockquote><p>${escape(c.comment)}</p></section>`).join("")}<p>Unbilled draft observation — preparation: ${row.preparationMinutes ?? "not supplied"} minutes; review: ${row.reviewMinutes ?? "not supplied"} minutes.</p>${row.clarification ? `<h3>Your clarification</h3><p>${escape(row.clarification)}</p>` : ""}${row.answer ? `<h3>Reviewer answer</h3><p>${escape(row.answer)}</p>` : ""}</article>`;
 }
 export function sampleFeedbackRecovery(
   title: string,
@@ -110,7 +110,7 @@ export function sampleFeedbackPage(
       ? view.records
           .map(
             (row) =>
-              published(row) +
+              published(row, Boolean(view.assignmentOrigin)) +
               (view.consent &&
               ((!reviewer && !row.clarification) ||
                 (reviewer && row.clarification && !row.answer))
@@ -118,10 +118,17 @@ export function sampleFeedbackPage(
                 : ""),
           )
           .join("")
-      : "<p>No published feedback is available for this sample.</p>";
+      : `<p>No published feedback is available for this ${view.assignmentOrigin ? "assignment" : "sample"}.</p>`;
   }
+  const title = view.assignmentOrigin
+    ? reviewer
+      ? "Review private assignment"
+      : "Your private assignment feedback"
+    : reviewer
+      ? "Review private sample"
+      : "Your private sample feedback";
   return page(
-    reviewer ? "Review private sample" : "Your private sample feedback",
-    `<nav class="breadcrumb"><a href="/evidence">Your private evidence</a></nav><section class="reading sample-feedback">${label}<h1>${reviewer ? "Review private sample" : "Your private sample feedback"}</h1><h2>${escape(view.title)}</h2>${view.origin ? `<p>${escape(view.origin.label)} · template ${escape(view.origin.templateId)} · version ${view.origin.templateVersion} · digest <code>${escape(view.origin.templateDigest)}</code></p>` : "<p>Provided-example origin is not recorded for this source.</p>"}<p>Source version ${view.sourceRevision} · ${view.consent ? "Private-review consent active" : "Consent withdrawn: published feedback remains private to its owner; no new clarification exchange is available."}</p><details open><summary>Exact source sample</summary><pre class="content-text">${escape(view.source)}</pre></details>${reviewer ? reviewControls(view, csrf, path) : `<p><a href="/evidence/${encodeURIComponent(view.evidenceId)}/review-allocation">Reserve review test minutes</a></p>`}${content}${view.next ? `<p><a href="${path}?after=${encodeURIComponent(view.next)}">Next feedback page</a></p>` : ""}${reviewer ? '<p><a href="/review/worklist">Your sample feedback worklist</a></p><p>The source owner controls consent, revisions and deletion.</p>' : '<p><a href="/evidence">Manage source revisions, consent and deletion</a></p>'}</section>`,
+    title,
+    `<nav class="breadcrumb"><a href="/evidence">Your private evidence</a></nav><section class="reading sample-feedback">${view.assignmentOrigin ? '<p class="eyebrow">PRIVATE ASSIGNMENT FEEDBACK · NOT FORMAL ASSESSMENT</p><p>Reviewer account attribution does not verify human authorship. This feedback is not a qualification, formal assessment or promise of an outcome.</p>' : label}<h1>${title}</h1><h2>${escape(view.title)}</h2>${view.assignmentOrigin ? `<p>${escape(view.assignmentOrigin.label)} · assignment ${escape(view.assignmentOrigin.contentId)} · version ${view.assignmentOrigin.contentVersion} · submission ${view.assignmentOrigin.sequence} · rubric ${view.assignmentOrigin.rubricVersion}</p>` : view.origin ? `<p>${escape(view.origin.label)} · template ${escape(view.origin.templateId)} · version ${view.origin.templateVersion} · digest <code>${escape(view.origin.templateDigest)}</code></p>` : "<p>Provided-example origin is not recorded for this source.</p>"}<p>Source version ${view.sourceRevision} · ${view.consent ? "Private-review consent active" : "Consent withdrawn: published feedback remains private to its owner; no new clarification exchange is available."}</p><details open><summary>${view.assignmentOrigin ? "Exact submitted response" : "Exact source sample"}</summary><pre class="content-text">${view.assignmentOrigin ? escape(view.source).replace(/\r/g, "&#13;") : escape(view.source)}</pre></details>${reviewer ? reviewControls(view, csrf, path) : view.assignmentOrigin ? "" : `<p><a href="/evidence/${encodeURIComponent(view.evidenceId)}/review-allocation">Reserve review test minutes</a></p>`}${content}${view.next ? `<p><a href="${path}?after=${encodeURIComponent(view.next)}">Next feedback page</a></p>` : ""}${reviewer ? '<p><a href="/review/worklist">Your sample feedback worklist</a></p><p>The source owner controls consent, revisions and deletion.</p>' : '<p><a href="/evidence">Manage source revisions, consent and deletion</a></p>'}</section>`,
   );
 }

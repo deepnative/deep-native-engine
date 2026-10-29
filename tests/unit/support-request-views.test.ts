@@ -55,6 +55,25 @@ const minutes: SupportTimeReceipt = {
   supportMinutes: 0,
   preparationMinutes: 0,
 };
+it("SI-01 real private intake uses deliberate consent without an invented-information claim and retains escaped validation text", () => {
+  const initial = supportIntakePage("nonce", "key", undefined, [], true);
+  expect(initial).toContain("New private support request");
+  expect(initial).toContain('name="confirm" value="yes" required');
+  expect(initial).not.toContain('name="synthetic"');
+  expect(initial).not.toContain(" checked");
+  expect(initial).toContain("no guaranteed response time");
+  const invalid = supportIntakePage(
+    "nonce",
+    "key",
+    { subject: "<private>", body: "<body>", synthetic: false, confirm: true },
+    [{ field: "confirm", message: "Confirm private sharing" }],
+    true,
+  );
+  expect(invalid).toContain("&lt;private&gt;");
+  expect(invalid).toContain('required checked aria-invalid="true"');
+  expect(invalid).toContain('href="#confirm"');
+  expect(invalid).toContain("Confirm private sharing");
+});
 it("offers an explicit bounded allocation only for available time support and eligible request states", () => {
   const available = supportMemberDetailPage(member, "csrf", null);
   expect(available).toContain("Hold support test minutes");
@@ -105,8 +124,8 @@ it("makes intake deliberate, bounded and honest before any request exists", () =
   expect(html).toContain('name="synthetic" value="yes" required');
   expect(html).not.toContain(" checked");
   expect(html).not.toContain('role="alert"');
-  expect(html).toContain("coverage unverified");
-  expect(html).toContain("no response deadline");
+  expect(html).toContain("does not create a paid allowance or service promise");
+  expect(html).toContain("no guaranteed response time");
 });
 it("links every invalid field while safely preserving exact attempted text and receipt key", () => {
   const html = supportIntakePage(
@@ -152,8 +171,8 @@ it("shows bounded empty and populated owner histories with text-free withdrawal 
   expect(html).toContain("Invented &lt;subject&gt;");
   expect(html).not.toContain("MUST NOT LEAK");
   expect(html).toContain("Withdrawn request");
-  expect(html).toContain("Acknowledged locally");
-  expect(html).toContain("Resolved locally");
+  expect(html).toContain("Acknowledged");
+  expect(html).toContain("Resolved");
   expect(html).toContain('datetime="2026-10-02T12:00:00.000Z"');
   expect(html).toContain("/support?after=opaque%2B%2F%3D");
   expect(html).toContain("at most 20");
@@ -172,7 +191,7 @@ it("renders only member-visible replies and retains independent acknowledgement 
           {
             id: "reply",
             body: "  <reply>\n",
-            attribution: "Synthetic operator",
+            attribution: "Support operator",
             createdAt: date,
           },
         ],
@@ -181,7 +200,7 @@ it("renders only member-visible replies and retains independent acknowledgement 
     },
     "csrf",
   );
-  expect(html).toContain("Synthetic operator");
+  expect(html).toContain("Support operator");
   expect(html).toContain("  &lt;reply&gt;\n</pre>");
   expect(html).toContain(`/support/${id}?after=cursor`);
   expect(html).toContain("No separate acknowledgement recorded");
@@ -200,7 +219,7 @@ it("suppresses all content, replies and forms for a withdrawn member receipt", (
           {
             id: "reply",
             body: "PRIVATE REPLY",
-            attribution: "Synthetic operator",
+            attribution: "Support operator",
             createdAt: date,
           },
         ],
@@ -281,14 +300,14 @@ it("labels mixed staff history, pages with its exact grant, and makes resolved r
             id: "1",
             kind: "reply",
             body: "Visible <reply>",
-            attribution: "Synthetic operator",
+            attribution: "Support operator",
             createdAt: date,
           },
           {
             id: "2",
             kind: "internal-note",
             body: "Private <note>",
-            attribution: "Synthetic operator",
+            attribution: "Support operator",
             createdAt: date,
           },
         ],

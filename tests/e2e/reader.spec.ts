@@ -20,7 +20,6 @@ async function onboard(
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }
@@ -518,7 +517,7 @@ test("[L81] three learning backgrounds withdraw an exact private note with keybo
         }[];
       };
     };
-    expect(exported.version).toBe("local-member-records-v26");
+    expect(exported.version).toBe("local-member-records-v27");
     expect(exported.records.privatePractice).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

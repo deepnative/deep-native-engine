@@ -193,7 +193,8 @@ it.each([
     const member = await members.session(author);
     if (member.kind !== "active") throw Error("Missing invented author");
     expect(
-      await members.save(member.learner.id, {
+      await members.save(author, {
+        revision: 0,
         instruction: privateText,
         verification: "Invented private check",
         complete: true,

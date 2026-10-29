@@ -20,7 +20,6 @@ async function onboard(
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
 }
 async function syntheticLesson(id: string) {
@@ -401,7 +400,7 @@ test("[L105] all three audiences export ordered session pairs and withdraw all t
     await respond(page, second);
     const csrf = await page.locator('input[name="csrf"]').first().inputValue();
     const before = await exported(page);
-    expect(before.version).toBe("local-member-records-v26");
+    expect(before.version).toBe("local-member-records-v27");
     expect(before.records.practiceSessions).toEqual([
       expect.objectContaining({
         id: sessionId,

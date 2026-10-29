@@ -6,7 +6,6 @@ async function begin(page: Page, background: string, goal: string) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await page.getByRole("link", { name: "Open lesson" }).click();
 }
@@ -80,7 +79,7 @@ test("[L86] three learner backgrounds withdraw completed starter text privately"
     const after = await page.request.get("/api/member/export");
     expect(after.status()).toBe(200);
     const exported = await after.json();
-    expect(exported.version).toBe("local-member-records-v26");
+    expect(exported.version).toBe("local-member-records-v27");
     expect(exported.records.exercises).toMatchObject([
       { instruction: null, verification: null, state: "withdrawn" },
     ]);
@@ -100,6 +99,7 @@ test("[L86] three learner backgrounds withdraw completed starter text privately"
         csrf,
         lesson_id: "clear-instructions",
         lesson_version: "1",
+        revision: "0",
         goal: goal!,
         intent: "complete",
         instruction,

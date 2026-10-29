@@ -65,3 +65,14 @@ it("REVADM-06/08 rejects malformed, oversized, forged and impossible history key
       "invalid",
     );
 });
+
+it("INTAKE-05 pending navigation cannot be replayed as assignment history or across staff sessions", () => {
+  const intake = sampleAssignmentCursor(secret, "sample-assignment-intake");
+  const encoded = intake.encode(token, undefined, key);
+  expect(intake.decode(token, undefined, encoded)).toMatchObject(key);
+  expect(intake.decode("b".repeat(64), undefined, encoded)).toBe("invalid");
+  expect(cursor.decode(token, source, encoded)).toBe("invalid");
+  expect(
+    intake.decode(token, undefined, cursor.encode(token, source, key)),
+  ).toBe("invalid");
+});

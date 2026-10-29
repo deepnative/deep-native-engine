@@ -70,7 +70,6 @@ async function onboard(page: Page, background: string, goal: string) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
 }
 async function chooseAndStart(page: Page, title: string) {
@@ -531,7 +530,7 @@ test("[L66] a member privately revises a submitted synthetic assignment without 
   await expect(history).toContainText(first);
   await expect(history).toContainText(second);
   const exported = await (await page.request.get("/api/member/export")).json();
-  expect(exported.version).toBe("local-member-records-v26");
+  expect(exported.version).toBe("local-member-records-v27");
   expect(exported.records.assignmentSubmissions).toMatchObject([
     { attemptId, sequence: 1, response: first },
     { attemptId, sequence: 2, response: second },

@@ -1,3 +1,8 @@
+import {
+  mountPublicationRoutes,
+  mountPublicationStaffRoutes,
+} from "./proposal-publication-routes.ts";
+import type { PublicationStore } from "./proposal-publication.ts";
 import { mountWorkflowReviewStaffRoutes } from "./workflow-review-staff-routes.ts";
 import type { WorkflowReviewStaffStore } from "./workflow-review-staff.ts";
 import type { StaffEntryStore } from "./staff-entry.ts";
@@ -6,6 +11,8 @@ import { mountSupportAssignmentRoutes } from "./support-assignment-routes.ts";
 import type { SupportAssignmentStore } from "./support-assignment.ts";
 import { mountSampleAssignmentRoutes } from "./sample-assignment-routes.ts";
 import { preparedSamplesEnabled } from "./prepared-samples.ts";
+import type { AssignmentEvidenceStore } from "./assignment-evidence.ts";
+import { mountAssignmentEvidenceRoutes } from "./assignment-evidence-routes.ts";
 import { mountPreparedSampleRoutes } from "./prepared-sample-routes.ts";
 import type { PreparedSampleStore } from "./prepared-samples.ts";
 import type { SampleAssignmentStore } from "./sample-assignment-values.ts";
@@ -37,6 +44,7 @@ import { randomUUID } from "node:crypto";
 import { COOKIE, cookieOptions, token, csrf, validCsrf } from "./session.ts";
 import type { MemberEmailAccess } from "./member-email-access.ts";
 import { mountMemberEmailRoutes } from "./member-email-routes.ts";
+import { mountStarterGuidanceRoutes } from "./starter-guidance-routes.ts";
 import {
   disabledSupportRequestStore,
   type SupportRequestStore,
@@ -50,6 +58,7 @@ import {
 } from "./validation.ts";
 import {
   welcome,
+  accountPage,
   attemptOperationRecoveryPage,
   dashboard,
   privateProgressPage,
@@ -96,7 +105,7 @@ import {
   circleMembershipRecoveryPage,
   usefulnessRecoveryPage,
   assignmentAttemptsPage,
-  assignmentAttemptPage,
+  assignmentAttemptPage as assignmentAttemptView,
   assignmentComparisonPage,
   assignmentPortfolioStatement,
   assignmentWriteRecoveryPage,
@@ -191,6 +200,7 @@ import {
 } from "./attempts.ts";
 import { compareResponses } from "./attempt-compare.ts";
 import { disabledMetricsStore, type MetricsStore } from "./metrics.ts";
+import { registerMetricsReportRoutes } from "./metrics-report-routes.ts";
 import {
   disabledLedgerReconciliationStore,
   type LedgerReconciliationStore,
@@ -304,6 +314,7 @@ function currentStarter(
   );
   return row
     ? {
+        revision: row.revision,
         instruction: row.instruction,
         verification: row.verification,
         completed_at: row.completedAt,
@@ -329,6 +340,8 @@ export function app(
     evidence?: EvidenceStore;
     preparedSamples?: PreparedSampleStore;
     preparedReviewSamples?: boolean;
+    assignmentEvidence?: AssignmentEvidenceStore;
+    assignmentHandoff?: boolean;
     localAiConsent?: LocalAiConsentStore;
     localAiControl?: LocalAiControlStore;
     catalog?: CatalogStore;
@@ -336,6 +349,8 @@ export function app(
     assignmentImport?: FoundationImportStore;
     tracks?: TrackStore;
     proposals?: ProposalStore;
+    publications?: PublicationStore;
+    memberContributions?: boolean;
     career?: CareerStore;
     circles?: CircleStore;
     circleDiscussion?: CircleDiscussionStore;
@@ -352,6 +367,7 @@ export function app(
     practice?: PracticeStore;
     practiceSessions?: PracticeSessionStore;
     supportRequests?: SupportRequestStore;
+    privateSupportIntake?: boolean;
     supportAssignment?: SupportAssignmentStore;
     localSupportAssignment?: boolean;
     sampleAssignments?: SampleAssignmentStore;
@@ -385,6 +401,12 @@ export function app(
   },
 ) {
   const app = express();
+  const assignmentAttemptPage = (
+    ...args: Parameters<typeof assignmentAttemptView>
+  ) => {
+    args[6] = Boolean(options.assignmentHandoff && options.assignmentEvidence);
+    return assignmentAttemptView(...args);
+  };
   const mode = options.mode ?? "demo";
   const adapters = options.adapters ?? adapterReadiness({}, mode);
   const authorization = options.authorization ?? disabledAuthorizationStore();
@@ -652,6 +674,7 @@ export function app(
     }
     res.send(expertRegistryPage(records));
   });
+  registerMetricsReportRoutes(app, metrics);
   app.get("/operator/metrics", async (_req, res) => {
     const snapshot = await metrics.snapshot(res.locals.token as string);
     if (!snapshot) {
@@ -802,6 +825,7 @@ export function app(
     }
     res.redirect(303, "/operator/test-receipts");
   });
+  mountPublicationStaffRoutes(app, options.publications);
   app.get("/moderate/proposals", async (req, res) => {
     const continuation = req.query.after;
     const queue = await proposals.moderationPage(
@@ -820,6 +844,7 @@ export function app(
       moderationPage(queue.items, res.locals.csrf as string, new Date(), {
         nextCursor: queue.nextCursor,
         continued: continuation !== undefined,
+        memberContributions: options.memberContributions === true,
       }),
     );
   });
@@ -1190,20 +1215,28 @@ export function app(
         ? token(undefined)
         : (res.locals.token as string);
     res.cookie(COOKIE, fresh, cookieOptions(options.origin));
-    const html = welcome(csrf(fresh, options.secret));
     res.send(
-      options.memberEmail
-        ? html.replace(
-            "clearing its cookie loses access.",
-            'clearing its cookie loses access unless you link an email after starting. <a href="/email/sign-in">Return to saved learning by email</a>.',
-          )
-        : html,
+      welcome(
+        csrf(fresh, options.secret),
+        [],
+        undefined,
+        Boolean(options.memberEmail),
+      ),
     );
   });
   app.post("/start", async (req, res) => {
     const start = profileStart(req.body as Fields);
     if (!start.input) {
-      res.status(422).send(welcome(res.locals.csrf as string, [], start));
+      res
+        .status(422)
+        .send(
+          welcome(
+            res.locals.csrf as string,
+            [],
+            start,
+            Boolean(options.memberEmail),
+          ),
+        );
       return;
     }
     await store.create(res.locals.token as string, start.input);
@@ -1212,6 +1245,7 @@ export function app(
   app.use(
     [
       "/learn",
+      "/account",
       "/progress",
       "/lesson",
       "/exercise",
@@ -1226,6 +1260,8 @@ export function app(
       "/milestones",
       "/career",
       "/contribute",
+      "/contributions",
+      "/contribution-requests",
       "/evidence",
       "/circles",
       "/events",
@@ -1234,7 +1270,10 @@ export function app(
       "/workflow-feedback",
     ],
     async (req, res, next) => {
-      const session = await store.session(res.locals.token as string);
+      const session =
+        req.baseUrl === "/account"
+          ? await store.session(res.locals.token as string, "account")
+          : await store.session(res.locals.token as string);
       if (session.kind !== "active") {
         const write =
           req.method === "POST"
@@ -1295,6 +1334,7 @@ export function app(
         return;
       }
       res.locals.learner = session.learner;
+      res.locals.memberDeadline = session.deadline;
       if (req.method === "GET" && cookieOptions(options.origin).secure)
         res.cookie(
           COOKIE,
@@ -1304,6 +1344,7 @@ export function app(
       next();
     },
   );
+  mountStarterGuidanceRoutes(app);
   if (options.sampleFeedback && options.reviewTime)
     mountReviewTimeRoutes(
       app,
@@ -1352,6 +1393,7 @@ export function app(
   mountSupportRequestRoutes(
     app,
     options.supportRequests ?? disabledSupportRequestStore(),
+    options.privateSupportIntake,
   );
   app.get("/availability", async (_req, res) => {
     const member = res.locals.learner as Learner;
@@ -1871,7 +1913,17 @@ export function app(
     }
     res.redirect(303, "/evidence");
   });
+  mountPublicationRoutes(
+    app,
+    options.publications,
+    options.memberContributions === true,
+  );
   mountPreparedSampleRoutes(app, options.preparedSamples, options);
+  mountAssignmentEvidenceRoutes(
+    app,
+    options.assignmentEvidence,
+    options.assignmentHandoff === true,
+  );
   app.post("/evidence/:evidenceId/download", async (req, res) => {
     const result = await evidence.issueDownload(
       res.locals.token as string,
@@ -2217,7 +2269,14 @@ export function app(
         );
       return;
     }
-    res.send(proposalListPage(owned, res.locals.csrf as string, workflow));
+    res.send(
+      proposalListPage(
+        owned,
+        res.locals.csrf as string,
+        workflow,
+        options.memberContributions === true,
+      ),
+    );
   });
   app.post("/contribute", async (req, res) => {
     const fields = (req.body ?? {}) as Fields;
@@ -2311,6 +2370,7 @@ export function app(
         proposal,
         res.locals.csrf as string,
         !proposal.workflowId || current?.version === proposal.workflowVersion,
+        Boolean(options.publications),
       ),
     );
   });
@@ -2698,7 +2758,6 @@ export function app(
     res.redirect(303, `/workflow-feedback/${req.params.id}`);
   });
   app.get("/library", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const q = typeof req.query.q === "string" ? req.query.q : "";
     const goal =
       typeof req.query.goal === "string" ? req.query.goal : undefined;
@@ -2712,12 +2771,11 @@ export function app(
       libraryPage(
         await catalog.search({ q, goal, background, domain }),
         { q, goal, background, domain },
-        await store.lessonActivities(member.id),
+        await store.lessonActivities(res.locals.token as string),
       ),
     );
   });
   app.get("/library/:id", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const item = await catalog.published(req.params.id as string);
     if (!item) {
       res
@@ -2748,7 +2806,13 @@ export function app(
       return;
     }
     if (item.kind === "lesson") {
-      if (!(await store.openLesson(member.id, item.id, item.version))) {
+      if (
+        !(await store.openLesson(
+          res.locals.token as string,
+          item.id,
+          item.version,
+        ))
+      ) {
         res
           .status(409)
           .send(
@@ -2762,7 +2826,7 @@ export function app(
     }
     const activity =
       item.kind === "lesson"
-        ? (await store.lessonActivities(member.id)).find(
+        ? (await store.lessonActivities(res.locals.token as string)).find(
             (entry) =>
               entry.contentId === item.id &&
               entry.contentVersion === item.version,
@@ -3265,10 +3329,9 @@ export function app(
         );
       return;
     }
-    const member = res.locals.learner as Learner;
     if (
       !(await store.advanceLesson(
-        member.id,
+        res.locals.token as string,
         req.params.id as string,
         version,
         action,
@@ -3515,6 +3578,41 @@ export function app(
     }
     res.redirect(303, "/editor/library");
   });
+  app.get("/account", async (_req, res) => {
+    const memberToken = res.locals.token as string;
+    const memberId = (res.locals.learner as Learner).id;
+    let deadline = res.locals.memberDeadline as number;
+    if (!Number.isFinite(deadline) || performance.now() >= deadline)
+      return res.redirect(303, "/");
+    const status = options.memberEmail
+      ? await options.memberEmail.ownedStatus(memberToken)
+      : "unavailable";
+    let current: Awaited<ReturnType<Store["session"]>>;
+    try {
+      current = await store.session(memberToken, "account");
+    } catch {
+      return res
+        .status(503)
+        .send(
+          errorPage(
+            "Account unavailable",
+            "Your account could not be checked. Try again later; your saved work is unchanged.",
+          ),
+        );
+    }
+    if (current.kind !== "active" || current.learner.id !== memberId)
+      return res.redirect(303, "/");
+    deadline = Math.min(deadline, current.deadline as number);
+    if (!Number.isFinite(deadline) || performance.now() >= deadline)
+      return res.redirect(303, "/");
+    const html = accountPage(
+      current.learner,
+      res.locals.csrf as string,
+      status,
+    );
+    if (performance.now() >= deadline) return res.redirect(303, "/");
+    return res.send(html);
+  });
   app.get("/learn", async (_req, res) => {
     const member = res.locals.learner as Learner;
     const [progress, published, choice, activity, readiness] =
@@ -3522,7 +3620,7 @@ export function app(
         store.progress(member.id),
         catalog.search({}),
         store.assignmentChoice(member.id),
-        store.lessonActivities(member.id),
+        store.lessonActivities(res.locals.token as string),
         assignmentReadiness.list(res.locals.token as string),
       ]);
     if (readiness === null) {
@@ -3551,7 +3649,7 @@ export function app(
       options.memberEmail
         ? html.replace(
             "</main>",
-            '<p><a class="button secondary" href="/email/attach">Link email to keep access to this learning record</a></p></main>',
+            '<p><a class="button secondary" href="/email/attach">Email access</a></p></main>',
           )
         : html,
     );
@@ -3594,7 +3692,7 @@ export function app(
   app.get("/progress", async (_req, res) => {
     const member = res.locals.learner as Learner;
     const [lessons, memberAttempts, reports] = await Promise.all([
-      store.lessonActivities(member.id),
+      store.lessonActivities(res.locals.token as string),
       attempts.list(res.locals.token as string),
       usefulness.list(res.locals.token as string),
     ]);
@@ -3708,7 +3806,7 @@ export function app(
     const version = Number(fields.content_version);
     const [progress, activity] = await Promise.all([
       store.progress(member.id),
-      store.lessonActivities(member.id),
+      store.lessonActivities(res.locals.token as string),
     ]);
     const options = eligibleAssignments(
       await catalog.search({}),
@@ -3719,7 +3817,7 @@ export function app(
     const selected =
       Number.isSafeInteger(version) &&
       options.some((item) => item.id === id && item.version === version)
-        ? await store.chooseAssignment(member.id, id, version)
+        ? await store.chooseAssignment(res.locals.token as string, id, version)
         : false;
     if (selected === null) {
       res
@@ -4301,7 +4399,7 @@ export function app(
       );
   app.get("/milestones", async (_req, res) => {
     const member = res.locals.learner as Learner;
-    const rows = await store.milestones(member.id);
+    const rows = await store.milestones(res.locals.token as string);
     if (rows === null) {
       milestoneDenied(res);
       return;
@@ -4312,7 +4410,7 @@ export function app(
     const member = res.locals.learner as Learner;
     const parsed = parseMilestone(req.body as Fields, member.timezone);
     if (parsed.errors.length) {
-      const rows = await store.milestones(member.id);
+      const rows = await store.milestones(res.locals.token as string);
       if (rows === null) {
         milestoneDenied(res);
         return;
@@ -4330,7 +4428,10 @@ export function app(
         );
       return;
     }
-    const result = await store.createMilestone(member.id, parsed.input);
+    const result = await store.createMilestone(
+      res.locals.token as string,
+      parsed.input,
+    );
     if (result === null) {
       milestoneDenied(res);
       return;
@@ -4369,7 +4470,7 @@ export function app(
     }
     const parsed = parseMilestone(req.body as Fields, member.timezone);
     if (parsed.errors.length) {
-      const rows = await store.milestones(member.id);
+      const rows = await store.milestones(res.locals.token as string);
       if (rows === null) {
         milestoneDenied(res);
         return;
@@ -4389,7 +4490,7 @@ export function app(
       return;
     }
     const result = await store.updateMilestone(
-      member.id,
+      res.locals.token as string,
       id,
       version,
       parsed.input,
@@ -4412,7 +4513,6 @@ export function app(
     res.redirect(303, "/milestones");
   });
   app.post("/milestones/:id/delete", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const fields = req.body as Fields;
     const version = Number(fields.version);
@@ -4423,7 +4523,7 @@ export function app(
       version < 1
     );
     const result = valid
-      ? await store.deleteMilestone(member.id, id, version)
+      ? await store.deleteMilestone(res.locals.token as string, id, version)
       : false;
     if (result === null) {
       milestoneDenied(res);
@@ -4467,8 +4567,7 @@ export function app(
         ),
       );
   app.get("/career", async (_req, res) => {
-    const member = res.locals.learner as Learner;
-    const snapshot = await career.snapshot(member.id);
+    const snapshot = await career.snapshot(res.locals.token as string);
     if (!snapshot) {
       careerDenied(res);
       return;
@@ -4487,28 +4586,27 @@ export function app(
     return true;
   };
   app.post("/career/enable", async (req, res) => {
-    const member = res.locals.learner as Learner;
     if ((req.body as Fields).confirm !== "yes") {
       careerConflict(res);
       return;
     }
-    if (!careerChanged(res, await career.enable(member.id))) return;
+    if (!careerChanged(res, await career.enable(res.locals.token as string)))
+      return;
     res.redirect(303, "/career");
   });
   app.post("/career/disable", async (req, res) => {
-    const member = res.locals.learner as Learner;
     if ((req.body as Fields).confirm !== "yes") {
       careerConflict(res);
       return;
     }
-    if (!careerChanged(res, await career.disable(member.id))) return;
+    if (!careerChanged(res, await career.disable(res.locals.token as string)))
+      return;
     res.redirect(303, "/career");
   });
   app.post("/career/entries", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const parsed = parseCareerEntry(req.body as Fields);
     if (parsed.errors.length) {
-      const snapshot = await career.snapshot(member.id);
+      const snapshot = await career.snapshot(res.locals.token as string);
       if (!snapshot) {
         careerDenied(res);
         return;
@@ -4520,12 +4618,16 @@ export function app(
       );
       return;
     }
-    if (!careerChanged(res, await career.createEntry(member.id, parsed.input)))
+    if (
+      !careerChanged(
+        res,
+        await career.createEntry(res.locals.token as string, parsed.input),
+      )
+    )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/entries/:id/update", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
     if (version === null) {
@@ -4534,7 +4636,7 @@ export function app(
     }
     const parsed = parseCareerEntry(req.body as Fields);
     if (parsed.errors.length) {
-      const snapshot = await career.snapshot(member.id);
+      const snapshot = await career.snapshot(res.locals.token as string);
       if (!snapshot) {
         careerDenied(res);
         return;
@@ -4550,29 +4652,37 @@ export function app(
     if (
       !careerChanged(
         res,
-        await career.updateEntry(member.id, id, version, parsed.input),
+        await career.updateEntry(
+          res.locals.token as string,
+          id,
+          version,
+          parsed.input,
+        ),
       )
     )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/entries/:id/delete", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
     if ((req.body as Fields).confirm !== "yes" || version === null) {
       careerConflict(res);
       return;
     }
-    if (!careerChanged(res, await career.deleteEntry(member.id, id, version)))
+    if (
+      !careerChanged(
+        res,
+        await career.deleteEntry(res.locals.token as string, id, version),
+      )
+    )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/drafts", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const parsed = parseCareerDraft(req.body as Fields);
     if (parsed.errors.length) {
-      const snapshot = await career.snapshot(member.id);
+      const snapshot = await career.snapshot(res.locals.token as string);
       if (!snapshot) {
         careerDenied(res);
         return;
@@ -4584,12 +4694,16 @@ export function app(
       );
       return;
     }
-    if (!careerChanged(res, await career.createDraft(member.id, parsed.input)))
+    if (
+      !careerChanged(
+        res,
+        await career.createDraft(res.locals.token as string, parsed.input),
+      )
+    )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/drafts/:id/update", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
     if (version === null) {
@@ -4598,7 +4712,7 @@ export function app(
     }
     const parsed = parseCareerDraft(req.body as Fields);
     if (parsed.errors.length) {
-      const snapshot = await career.snapshot(member.id);
+      const snapshot = await career.snapshot(res.locals.token as string);
       if (!snapshot) {
         careerDenied(res);
         return;
@@ -4614,45 +4728,62 @@ export function app(
     if (
       !careerChanged(
         res,
-        await career.updateDraft(member.id, id, version, parsed.input),
+        await career.updateDraft(
+          res.locals.token as string,
+          id,
+          version,
+          parsed.input,
+        ),
       )
     )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/drafts/:id/approve", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
     if ((req.body as Fields).confirm !== "yes" || version === null) {
       careerConflict(res);
       return;
     }
-    if (!careerChanged(res, await career.approveDraft(member.id, id, version)))
+    if (
+      !careerChanged(
+        res,
+        await career.approveDraft(res.locals.token as string, id, version),
+      )
+    )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/drafts/:id/revoke", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
     if ((req.body as Fields).confirm !== "yes" || version === null) {
       careerConflict(res);
       return;
     }
-    if (!careerChanged(res, await career.revokeDraft(member.id, id, version)))
+    if (
+      !careerChanged(
+        res,
+        await career.revokeDraft(res.locals.token as string, id, version),
+      )
+    )
       return;
     res.redirect(303, "/career");
   });
   app.post("/career/drafts/:id/delete", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const id = req.params.id as string;
     const version = careerVersion(id, req.body as Fields);
     if ((req.body as Fields).confirm !== "yes" || version === null) {
       careerConflict(res);
       return;
     }
-    if (!careerChanged(res, await career.deleteDraft(member.id, id, version)))
+    if (
+      !careerChanged(
+        res,
+        await career.deleteDraft(res.locals.token as string, id, version),
+      )
+    )
       return;
     res.redirect(303, "/career");
   });
@@ -4665,7 +4796,7 @@ export function app(
           store.progress(member.id),
           catalog.search({}),
           store.assignmentChoice(member.id),
-          store.lessonActivities(member.id),
+          store.lessonActivities(res.locals.token as string),
           assignmentReadiness.list(res.locals.token as string),
         ]);
       if (readiness === null) {
@@ -4696,7 +4827,7 @@ export function app(
         );
       return;
     }
-    if (!(await store.updateProfile(member.id, edit.input))) {
+    if (!(await store.updateProfile(res.locals.token as string, edit.input))) {
       res
         .status(403)
         .send(
@@ -4806,6 +4937,22 @@ export function app(
         );
       return;
     }
+    const revision =
+      typeof form.revision === "string" &&
+      /^(0|[1-9][0-9]*)$/.test(form.revision)
+        ? Number(form.revision)
+        : NaN;
+    if (!Number.isInteger(revision) || revision < 0 || revision >= 2147483647) {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Exercise form out of date",
+            "Open the current lesson before saving. This form has no valid saved draft revision.",
+          ),
+        );
+      return;
+    }
     const input = submission(form);
     if (input.errors.length) {
       const html = await store.withExerciseRead(
@@ -4815,7 +4962,7 @@ export function app(
             ? null
             : lesson(
                 member,
-                { ...input, completed_at: null },
+                { ...input, revision, completed_at: null },
                 res.locals.csrf as string,
                 input.errors,
                 rows,
@@ -4836,8 +4983,9 @@ export function app(
       return;
     }
     try {
-      const outcome = await store.save(member.id, {
+      const outcome = await store.save(res.locals.token as string, {
         ...input,
+        revision,
         goal: member.goal,
       });
       if (outcome === "stale-goal" || outcome === "unavailable") {
@@ -4848,6 +4996,30 @@ export function app(
               "Exercise form out of date",
               "Your direction or session changed. Open your learning path and the current lesson before saving.",
             ),
+          );
+        return;
+      }
+      if (outcome === "conflict") {
+        const recovery = await store.withExerciseRead(
+          res.locals.token as string,
+          (rows) =>
+            currentStarter(rows, member.goal)?.withdrawn_at
+              ? null
+              : exerciseWriteRecoveryPage(
+                  input.instruction,
+                  input.verification,
+                  member.goal,
+                  true,
+                ),
+        );
+        res
+          .status(409)
+          .send(
+            recovery ??
+              errorPage(
+                "Exercise unavailable",
+                "Open your current lesson before saving.",
+              ),
           );
         return;
       }

@@ -69,7 +69,6 @@ for (const [index, [background, goal]] of audiences.entries()) {
       await page.goto(origin + "/");
       await page.getByLabel("Your starting point").selectOption(background);
       await page.getByLabel("What would you like to do?").selectOption(goal);
-      await page.getByLabel("I'll use invented or sample information").check();
       await page
         .getByRole("button", { name: "Start my learning path" })
         .click();
@@ -424,9 +423,6 @@ for (const [index, [background, goal]] of audiences.entries()) {
         await original
           .getByLabel("What would you like to do?")
           .selectOption(goal);
-        await original
-          .getByLabel("I'll use invented or sample information")
-          .check();
         await original
           .getByRole("button", { name: "Start my learning path" })
           .click();

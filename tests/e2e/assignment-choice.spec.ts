@@ -57,7 +57,6 @@ async function onboard(page: Page, background: string, goal: string) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }
@@ -234,7 +233,6 @@ test("[L33] professional sees a domain match only after observed foundation prac
     .getByLabel("Education")
     .check();
   await page.getByLabel("Experience with AI").selectOption("some");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const choices = page.getByRole("region", {
     name: "Choose a practice assignment",

@@ -64,6 +64,36 @@ function expectUnverifiedAuthorship(html: string) {
     "Reviewer account attribution does not verify human authorship.",
   );
 }
+it("AHO-05 presents published assignment feedback as private member work without a formal assessment claim", () => {
+  const html = sampleFeedbackPage(
+    {
+      ...view(),
+      records: [{ ...record(), publishedAt: new Date("2026-10-27T12:00:00Z") }],
+      assignmentOrigin: {
+        kind: "member-assignment-submission",
+        attemptId: id,
+        sequence: 1,
+        contentId: "ASSIGN-OWN",
+        contentVersion: 2,
+        rubricVersion: 1,
+        submittedAt: new Date("2026-10-27T11:00:00Z"),
+        sourceSha256: "a".repeat(64),
+        acknowledgedAt: new Date("2026-10-27T11:10:00Z"),
+        label: "Member assignment submission · private · unreviewed",
+      },
+    },
+    "csrf",
+    false,
+  );
+  expect(html).toContain("PRIVATE ASSIGNMENT FEEDBACK · NOT FORMAL ASSESSMENT");
+  expect(html).toContain("Published assignment feedback");
+  expect(html).toContain(
+    "Reviewer account attribution does not verify human authorship.",
+  );
+  expect(html).not.toContain("Published sample feedback");
+  expect(html).not.toContain("Reserved test-minute receipts");
+  expect(html).not.toContain("Reserve review test minutes");
+});
 it("PREPARED-03 identifies a provided unreviewed source to member and reviewer without claiming authorship or assessment", () => {
   const template = PREPARED_SAMPLES[0]!;
   for (const reviewer of [false, true]) {

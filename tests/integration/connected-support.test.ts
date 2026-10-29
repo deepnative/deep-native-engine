@@ -319,8 +319,8 @@ it("shows current request actions and a single newest grant-specific receipt acr
   for (const control of [
     "Save internal note",
     "Send member-visible reply",
-    "Acknowledge request locally",
-    "Resolve request locally",
+    "Acknowledge request",
+    "Resolve request",
   ])
     expect(html).not.toContain(control);
 });

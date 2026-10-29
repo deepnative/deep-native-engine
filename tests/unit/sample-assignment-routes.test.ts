@@ -52,6 +52,25 @@ function fixture(
   };
   const deadline = performance.now() + 60000;
   const port = {
+    pending: vi.fn<SampleAssignmentStore["pending"]>().mockResolvedValue({
+      kind: "ready",
+      deadline,
+      items: [
+        {
+          evidenceId,
+          sourceRevision: 1,
+          submittedAt: "2026-10-06T09:00:00.000000Z",
+        },
+      ],
+      next: null,
+    }),
+    selectPending: vi
+      .fn<SampleAssignmentStore["selectPending"]>()
+      .mockResolvedValue({
+        kind: "ready",
+        deadline,
+        source: { evidenceId, sourceRevision: 1 },
+      }),
     open: vi
       .fn<SampleAssignmentStore["open"]>()
       .mockResolvedValue({ kind: "ready", deadline }),
@@ -542,5 +561,96 @@ it("REVADM-08 withholds a late revocation receipt without creating an assignment
     expect(response.text).not.toContain("Retry this exact assignment");
     expect(f.port.revoke).toHaveBeenCalledOnce();
     expect(f.port.assign).not.toHaveBeenCalled();
+  });
+});
+
+it("INTAKE-01/02 discovers references and prefills the existing explicit assignment form without granting access", async () => {
+  const f = fixture();
+  await withLoopback(f.app, async (s) => {
+    const response = await get(s, base + "/pending")
+      .expect(200)
+      .expect("Cache-Control", "no-store");
+    expect(response.text).toContain("Pending feedback requests");
+    expect(response.text).toContain(evidenceId);
+    expect(response.text).not.toContain(reviewerId);
+    const selected = await get(s, `${base}/pending/${evidenceId}/1`).expect(
+      200,
+    );
+    expect(selected.text).toContain(`value="${evidenceId}"`);
+    expect(selected.text).toContain('value="1"');
+    expect(selected.text).toContain("Check exact sample references");
+    expect(f.port.selectPending).toHaveBeenCalledWith(token, {
+      evidenceId,
+      sourceRevision: 1,
+    });
+    expect(f.port.assign).not.toHaveBeenCalled();
+    expect(f.port.check).not.toHaveBeenCalled();
+  });
+});
+it("INTAKE-05 exposes bounded continuation and an honest empty page", async () => {
+  const f = fixture();
+  f.port.pending.mockResolvedValue({
+    kind: "ready",
+    deadline: performance.now() + 60000,
+    items: [],
+    next: "safe.next",
+  });
+  await withLoopback(f.app, async (s) => {
+    const response = await get(s, base + "/pending?after=previous").expect(200);
+    expect(f.port.pending).toHaveBeenCalledWith(token, "previous");
+    expect(response.text).toContain("No pending feedback requests");
+    expect(response.text).toContain(
+      'href="/operator/sample-assignments/pending?after=safe.next"',
+    );
+  });
+});
+it.each([
+  "?extra=1",
+  "?after=a&after=b",
+  "?after=" + "a".repeat(1025),
+  "/bad/1",
+  `/${evidenceId}/0`,
+  `/${evidenceId}/1?extra=1`,
+])("INTAKE-04 rejects malformed intake navigation %s", async (suffix) => {
+  const f = fixture();
+  await withLoopback(f.app, async (s) => {
+    await get(s, base + "/pending" + suffix).expect(422);
+  });
+  expect(f.port.pending).not.toHaveBeenCalled();
+  expect(f.port.selectPending).not.toHaveBeenCalled();
+});
+it.each(["denied", "unavailable", "invalid"] as const)(
+  "INTAKE-04 withholds references after a %s recheck",
+  async (kind) => {
+    const f = fixture();
+    f.port.pending.mockResolvedValue({ kind });
+    f.port.selectPending.mockResolvedValue({ kind });
+    await withLoopback(f.app, async (s) => {
+      for (const path of [
+        base + "/pending",
+        `${base}/pending/${evidenceId}/1`,
+      ]) {
+        const response = await get(s, path).expect(
+          kind === "denied" ? 403 : kind === "unavailable" ? 503 : 422,
+        );
+        expect(response.text).not.toContain(evidenceId);
+      }
+    });
+  },
+);
+it("INTAKE-04 withholds intake metadata when its authority expires before HTTP acceptance or storage fails", async () => {
+  const f = fixture();
+  f.port.pending.mockResolvedValue({
+    kind: "ready",
+    items: [{ evidenceId, sourceRevision: 1, submittedAt: input.startsAt }],
+    next: null,
+    deadline: performance.now() - 1,
+  });
+  f.port.selectPending.mockRejectedValue(Error("Private SQL failure"));
+  await withLoopback(f.app, async (s) => {
+    const expired = await get(s, base + "/pending").expect(403);
+    expect(expired.text).not.toContain(evidenceId);
+    const failed = await get(s, `${base}/pending/${evidenceId}/1`).expect(503);
+    expect(failed.text).not.toMatch(/Private SQL|11111111/);
   });
 });

@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  supportIntakeInboxPage,
   assignmentHomePage,
   assignmentReferencePage,
   assignmentConfirmPage,
@@ -17,6 +18,34 @@ const attempt: AssignmentAttempt = {
   startsAt: "2026-10-06T12:00:00.000Z",
   expiresAt: "2026-10-06T13:00:00.000Z",
 };
+it("SI-01 inbox renders receipt lifecycle only with deliberate assignment for open requests and bounded navigation", () => {
+  const item = {
+    requestId: 'receipt<"',
+    receivedAt: at,
+    acknowledgedAt: null,
+    resolvedAt: null,
+    withdrawnAt: null,
+  };
+  const html = supportIntakeInboxPage('csrf"<', {
+    items: [
+      item,
+      { ...item, acknowledgedAt: at, resolvedAt: at },
+      { ...item, withdrawnAt: at },
+    ],
+    nextCursor: "opaque&cursor",
+  });
+  expect(html).toContain("receipt&lt;&quot;");
+  expect(html).toContain('value="csrf&quot;&lt;"');
+  expect(html).toContain("No separate acknowledgement recorded");
+  expect(html).toContain("Open; no resolution recorded");
+  expect(html.match(/Check operator for this request/g)).toHaveLength(1);
+  expect(html).toContain("after=opaque%26cursor");
+  expect(html).toContain("No new assignment offered for this closed request");
+  expect(html).not.toContain('name="subject"');
+  const empty = supportIntakeInboxPage("csrf", { items: [], nextCursor: null });
+  expect(empty).toContain("No support receipts on this page");
+  expect(empty).not.toContain("Next intake receipts");
+});
 it("lets administrators check only exact references and inspect without choosing an authority or directory", () => {
   const html = assignmentHomePage('csrf"<');
   expect(html).toContain(

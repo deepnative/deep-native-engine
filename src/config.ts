@@ -82,6 +82,12 @@ export function config(env: NodeJS.ProcessEnv) {
     throw new Error("Private evidence storage cannot be served publicly.");
   const localStaffEntry = env.DNE_LOCAL_STAFF_ENTRY ?? "disabled";
   const preparedReviewSamples = env.DNE_PREPARED_REVIEW_SAMPLES ?? "disabled";
+  const memberContributions = env.DNE_MEMBER_CONTRIBUTIONS ?? "disabled";
+  if (!["enabled", "disabled"].includes(memberContributions))
+    throw Error("DNE_MEMBER_CONTRIBUTIONS must be enabled or disabled.");
+  const assignmentHandoff = env.DNE_ASSIGNMENT_HANDOFF ?? "disabled";
+  if (!["enabled", "disabled"].includes(assignmentHandoff))
+    throw Error("DNE_ASSIGNMENT_HANDOFF must be enabled or disabled.");
   if (!["enabled", "disabled"].includes(preparedReviewSamples))
     throw Error("DNE_PREPARED_REVIEW_SAMPLES must be enabled or disabled.");
   if (!["enabled", "disabled"].includes(localStaffEntry))
@@ -90,6 +96,9 @@ export function config(env: NodeJS.ProcessEnv) {
   if (!["enabled", "disabled"].includes(localTestUnitIssuance))
     throw Error("DNE_LOCAL_TEST_UNIT_ISSUANCE must be enabled or disabled.");
   const localSupportAssignment = env.DNE_LOCAL_SUPPORT_ASSIGNMENT ?? "disabled";
+  const privateSupportIntake = env.DNE_PRIVATE_SUPPORT_INTAKE ?? "disabled";
+  if (!["enabled", "disabled"].includes(privateSupportIntake))
+    throw Error("DNE_PRIVATE_SUPPORT_INTAKE must be enabled or disabled.");
   if (!["enabled", "disabled"].includes(localSupportAssignment))
     throw Error("DNE_LOCAL_SUPPORT_ASSIGNMENT must be enabled or disabled.");
   const sampleAssignmentAdministration =
@@ -153,11 +162,14 @@ export function config(env: NodeJS.ProcessEnv) {
   if (!["enabled", "disabled"].includes(eventAttendance))
     throw Error("DNE_EVENT_ATTENDANCE must be enabled or disabled.");
   return {
+    memberContributions: memberContributions === "enabled",
+    assignmentHandoff: assignmentHandoff === "enabled",
     preparedReviewSamples: preparedReviewSamples === "enabled",
     localStaffEntry: localStaffEntry === "enabled",
     localTestUnitIssuance: localTestUnitIssuance === "enabled",
     workflowReviewRequests: workflowReviewRequests === "enabled",
     localSupportAssignment: localSupportAssignment === "enabled",
+    privateSupportIntake: privateSupportIntake === "enabled",
     sampleAssignmentAdministration:
       sampleAssignmentAdministration === "enabled",
     localHoldInspectionReads: localHoldInspectionReads === "enabled",

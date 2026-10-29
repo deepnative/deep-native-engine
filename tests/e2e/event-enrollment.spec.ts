@@ -25,7 +25,6 @@ async function onboard(
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
   await page.getByLabel("Time zone (optional)").fill("America/Toronto");
-  await page.getByLabel("I'll use invented or sample information").check();
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const token = (await page.context().cookies()).find(
     (cookie) => cookie.name === COOKIE,
@@ -152,7 +151,7 @@ for (const [index, [background, goal]] of (
         const exported = await (
           await participant.request.get(`${origin}/api/member/export`)
         ).json();
-        expect(exported.version).toBe("local-member-records-v26");
+        expect(exported.version).toBe("local-member-records-v27");
         expect(exported.records.eventEnrollments).toHaveLength(1);
         expect(exported.records.eventEnrollments[0].id).toBe(
           new URL(participant === page ? receipt : peerReceipt).pathname

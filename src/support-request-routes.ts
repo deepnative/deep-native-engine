@@ -46,6 +46,7 @@ const attempt = (req: Request) => ({
   subject: typeof req.body?.subject === "string" ? req.body.subject : "",
   body: typeof req.body?.body === "string" ? req.body.body : "",
   synthetic: req.body?.synthetic === "yes",
+  confirm: req.body?.confirm === "yes",
 });
 const unavailable =
   "The support result cannot be confirmed. Inspect the saved state before deciding what to do next. Nothing is retried automatically.";
@@ -95,6 +96,7 @@ function queryValid(req: Request, allowed: string[]) {
 export function mountSupportRequestRoutes(
   app: Express,
   store: SupportRequestStore,
+  privateIntake = false,
 ) {
   const route =
     (handler: (req: Request, res: Response) => Promise<unknown> | unknown) =>
@@ -272,7 +274,15 @@ export function mountSupportRequestRoutes(
     route((req, res) => {
       if (!queryValid(req, []))
         return notice(res, 400, "Unexpected support query fields.");
-      return res.send(supportIntakePage(res.locals.csrf, randomUUID()));
+      return res.send(
+        supportIntakePage(
+          res.locals.csrf,
+          randomUUID(),
+          undefined,
+          [],
+          privateIntake,
+        ),
+      );
     }),
   );
   app.get(
@@ -304,7 +314,7 @@ export function mountSupportRequestRoutes(
           "idempotencyKey",
           "subject",
           "body",
-          "synthetic",
+          privateIntake ? "confirm" : "synthetic",
         ]) ||
         typeof req.body.csrf !== "string" ||
         !uuid(req.body.idempotencyKey)
@@ -324,17 +334,27 @@ export function mountSupportRequestRoutes(
         errors.push({
           field: "body",
           message:
-            "Enter a nonblank sample request of at most 2,000 characters without invalid text characters.",
+            "Enter a nonblank request of at most 2,000 characters without invalid text characters.",
         });
-      if (!attempted.synthetic)
+      if (!(privateIntake ? attempted.confirm : attempted.synthetic))
         errors.push({
-          field: "synthetic",
-          message: "Confirm that you used only invented or sample information.",
+          field: privateIntake ? "confirm" : "synthetic",
+          message: privateIntake
+            ? "Confirm that you want to send this private request without a guaranteed response time."
+            : "Confirm that you used only invented or sample information.",
         });
       if (errors.length)
         return res
           .status(422)
-          .send(supportIntakePage(res.locals.csrf, key, attempted, errors));
+          .send(
+            supportIntakePage(
+              res.locals.csrf,
+              key,
+              attempted,
+              errors,
+              privateIntake,
+            ),
+          );
       let result: Awaited<ReturnType<SupportRequestStore["create"]>>;
       try {
         result = await store.create(res.locals.token, {
@@ -351,15 +371,21 @@ export function mountSupportRequestRoutes(
         return res.redirect(303, `/support/${result.receipt.requestId}`);
       if (result.kind === "invalid")
         return res.status(422).send(
-          supportIntakePage(res.locals.csrf, key, attempted, [
-            {
-              field:
-                result.field === "idempotencyKey"
-                  ? "support-form"
-                  : result.field,
-              message: "Check this field before sending the request.",
-            },
-          ]),
+          supportIntakePage(
+            res.locals.csrf,
+            key,
+            attempted,
+            [
+              {
+                field:
+                  result.field === "idempotencyKey"
+                    ? "support-form"
+                    : result.field,
+                message: "Check this field before sending the request.",
+              },
+            ],
+            privateIntake,
+          ),
         );
       if (result.kind === "denied")
         return resultFailure(res, result.kind, "/support");
@@ -412,7 +438,8 @@ export function mountSupportRequestRoutes(
         supportMemberDetailPage(
           result.value,
           res.locals.csrf,
-          result.value.supportTime ?? (store.time ? null : undefined),
+          result.value.supportTime ??
+            (store.time && !privateIntake ? null : undefined),
           store.time?.writesEnabled ?? false,
         ),
       );

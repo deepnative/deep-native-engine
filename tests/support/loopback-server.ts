@@ -11,9 +11,12 @@ export async function listenLoopback(
 }
 
 export async function closeLoopback(server: Server): Promise<void> {
-  await new Promise<void>((resolve, reject) =>
-    server.close((error) => (error ? reject(error) : resolve())),
-  );
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+    // Callers await their expected responses before fixture teardown. Stop
+    // accepting first, then close leftover preconnects or unfinished requests.
+    server.closeAllConnections();
+  });
 }
 
 export async function withLoopback<T>(

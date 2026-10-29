@@ -34,7 +34,6 @@ test("[L89] retained starter versions remain private, exact and text-free after 
     await page.goto("/");
     await page.getByLabel("Your starting point").selectOption(background);
     await page.getByLabel("What would you like to do?").selectOption(goal);
-    await page.getByLabel("I'll use invented or sample information").check();
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await page.goto("/lesson");
     await page
@@ -140,9 +139,6 @@ test("[L89] retained starter versions remain private, exact and text-free after 
       await otherPage
         .getByLabel("What would you like to do?")
         .selectOption("everyday");
-      await otherPage
-        .getByLabel("I'll use invented or sample information")
-        .check();
       await otherPage
         .getByRole("button", { name: "Start my learning path" })
         .click();
