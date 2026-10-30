@@ -1,7 +1,15 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { Pool } from "pg";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest";
 import { migrate, store } from "../../src/store.ts";
 import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
 import { syntheticLedger, type LedgerCategory } from "../../src/ledger.ts";
@@ -10,6 +18,7 @@ import {
   type LedgerReconciliationSnapshot,
 } from "../../src/ledger-reconciliation.ts";
 import { testPool } from "../support/database.ts";
+import { ledgerFixtureObservation } from "../support/ledger-fixture-observation.ts";
 
 const pool = testPool(),
   db = store(pool),
@@ -639,6 +648,8 @@ describe.each(["fresh", "after member erasure"] as const)(
   "large retained ledger snapshot %s",
   (history) => {
     let f: Awaited<ReturnType<typeof fixture>>;
+    let observation: ReturnType<typeof ledgerFixtureObservation>;
+    afterEach(() => observation?.seal());
     async function ownedHistory(memberId: string) {
       const result = await pool.query<{
         members: number;
@@ -657,7 +668,8 @@ describe.each(["fresh", "after member erasure"] as const)(
     // Prepare the retained dataset under the existing hook deadline. The actual
     // authorized snapshot and original report assertions retain the 5-second
     // test deadline; production statements independently remain bounded to 5s.
-    beforeEach(async () => {
+    beforeEach(async ({ task }) => {
+      observation = ledgerFixtureObservation(task.meta);
       async function seed(ownerId: string) {
         await pool.query(
           `WITH seeded AS (
@@ -670,31 +682,40 @@ describe.each(["fresh", "after member erasure"] as const)(
         );
       }
       if (history === "after member erasure") {
-        const retired = await member();
-        f = await fixture();
-        await Promise.all([seed(retired.id), seed(f.owner.id)]);
+        const retired = await observation.step("retired-member", member);
+        f = await observation.step("survivor-fixture", fixture);
+        await Promise.all([
+          observation.step("retired-seed", () => seed(retired.id)),
+          observation.step("survivor-seed", () => seed(f.owner.id)),
+        ]);
+        // Refresh bulk-load statistics before the ordinary erasure cascades.
+        await observation.step("analyze-before-erasure", () =>
+          pool.query(
+            "ANALYZE synthetic_entitlement_grants; ANALYZE synthetic_entitlement_events",
+          ),
+        );
         const full = { members: 1, grants: 22000, events: 22000 };
         // fixture() also creates one existing review-minutes grant/event.
         const survivor = { members: 1, grants: 22001, events: 22001 };
         expect(
-          await Promise.all([
-            ownedHistory(retired.id),
-            ownedHistory(f.owner.id),
-          ]),
+          await observation.step("counts-before-erasure", () =>
+            Promise.all([ownedHistory(retired.id), ownedHistory(f.owner.id)]),
+          ),
         ).toEqual([full, survivor]);
-        await db.remove(retired.id);
+        await observation.step("ordinary-erasure", () => db.remove(retired.id));
         expect(
-          await Promise.all([
-            ownedHistory(retired.id),
-            ownedHistory(f.owner.id),
-          ]),
+          await observation.step("counts-after-erasure", () =>
+            Promise.all([ownedHistory(retired.id), ownedHistory(f.owner.id)]),
+          ),
         ).toEqual([{ members: 0, grants: 0, events: 0 }, survivor]);
-        await pool.query(
-          "ANALYZE synthetic_entitlement_grants; ANALYZE synthetic_entitlement_events",
+        await observation.step("analyze-after-erasure", () =>
+          pool.query(
+            "ANALYZE synthetic_entitlement_grants; ANALYZE synthetic_entitlement_events",
+          ),
         );
       } else {
-        f = await fixture();
-        await seed(f.owner.id);
+        f = await observation.step("survivor-fixture", fixture);
+        await observation.step("survivor-seed", () => seed(f.owner.id));
       }
     });
     it("keeps aggregate arithmetic exact beyond a 32-bit integer without returning source records", async () => {
