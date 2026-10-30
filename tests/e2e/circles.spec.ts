@@ -31,6 +31,23 @@ test("[L44] three learning backgrounds can opt into a suitable local topic witho
     const item = page
       .getByRole("listitem")
       .filter({ has: page.getByRole("heading", { name: title! }) });
+    // CIRCONTACT-01: the same ordinary contact is visible for every background.
+    const contact = page.getByRole("region", {
+      name: "Circle moderation contact",
+    });
+    await expect(contact).toBeVisible();
+    await expect(
+      contact.getByRole("link", { name: "info@deepnative.io" }),
+    ).toHaveAttribute("href", "mailto:info@deepnative.io");
+    await expect(contact).toContainText(
+      "No response time or backup coverage is promised.",
+    );
+    await expect(contact).toContainText(
+      "Emailing does not submit that report.",
+    );
+    await expect(contact).toContainText(
+      "Keep private assignments and evidence out of email.",
+    );
     await expect(item).toContainText("Matches your current goal");
     await item.getByRole("button", { name: `Join ${title}` }).click();
     await expect(item).toContainText("You joined this local circle");
