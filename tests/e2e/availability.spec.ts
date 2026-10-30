@@ -98,6 +98,9 @@ test("[L64] private sample availability respects verified coverage, time zone an
     await page
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
+    await page
+      .getByText("Personalize your path (optional)", { exact: true })
+      .click();
     await page.getByLabel("Time zone (optional)").fill("America/Toronto");
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await page
@@ -150,6 +153,9 @@ test("[L64] private sample availability respects verified coverage, time zone an
       .getByLabel("What would you like to do?")
       .selectOption("build");
     await technicalPage
+      .getByText("Personalize your path (optional)", { exact: true })
+      .click();
+    await technicalPage
       .getByLabel("Time zone (optional)")
       .fill("Europe/Berlin");
     await technicalPage
@@ -178,6 +184,9 @@ test("[L64] private sample availability respects verified coverage, time zone an
     await otherLearnerPage
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
+    await otherLearnerPage
+      .getByText("Personalize your path (optional)", { exact: true })
+      .click();
     await otherLearnerPage
       .getByLabel("Time zone (optional)")
       .fill("America/Vancouver");

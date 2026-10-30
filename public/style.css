@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Nunito Sans";
+  src: url("/assets/fonts/NunitoSans.ttf") format("truetype");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
   --ink: #19352d;
@@ -922,4 +930,297 @@ footer span {
 /* Reviewed source URLs and hashes must not expand the narrow reader viewport. */
 .reading dd {
   overflow-wrap: anywhere;
+}
+
+/* The public entrance has its own learning identity; saved work keeps its UI. */
+body:has(.welcome-page) {
+  --ink: #182c49;
+  --muted: #506079;
+  --paper: #fffdf7;
+  --line: #d6ddeb;
+  --accent: #2454d6;
+  --lime: #ffe18b;
+  --radius: 16px;
+  font-family: "Nunito Sans", sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  caret-color: var(--accent);
+  scrollbar-color: #7d8eb4 var(--paper);
+}
+body:has(.welcome-page) ::selection {
+  background: var(--lime);
+  color: var(--ink);
+}
+body:has(.welcome-page) :focus-visible {
+  outline-color: #a34d08;
+}
+body:has(.welcome-page) .site-header,
+body:has(.welcome-page) main,
+body:has(.welcome-page) footer {
+  max-width: 1280px;
+}
+body:has(.welcome-page) .site-header {
+  min-height: 92px;
+}
+body:has(.welcome-page) .brand {
+  letter-spacing: -0.02em;
+}
+body:has(.welcome-page) .preview-tag {
+  letter-spacing: 0.08em;
+}
+.welcome-page h1,
+.welcome-page h2 {
+  text-wrap: balance;
+}
+.landing-hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: clamp(32px, 5vw, 76px);
+  padding: 64px 0;
+}
+.landing-intro h1 {
+  font-size: clamp(42px, 5.3vw, 70px);
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+  font-weight: 900;
+  margin-bottom: 24px;
+}
+.landing-intro .lead {
+  max-width: 42ch;
+  font-size: 19px;
+  line-height: 1.6;
+  margin-bottom: 28px;
+}
+.welcome-page .button,
+.welcome-page button {
+  min-height: 52px;
+  padding: 14px 24px;
+  font-size: 16px;
+  font-weight: 800;
+  border-radius: 12px;
+}
+.welcome-page .button:hover,
+.welcome-page button:hover {
+  background: #173eaa;
+}
+.landing-access {
+  font-size: 13px;
+  line-height: 1.8;
+  margin: 16px 0 0;
+}
+.landing-example {
+  background: #234bc2;
+  color: white;
+  border-radius: 16px;
+  padding: 30px;
+}
+.landing-example h2 {
+  font-size: clamp(26px, 2.6vw, 34px);
+  font-weight: 850;
+  line-height: 1.13;
+  letter-spacing: -0.025em;
+  margin-bottom: 22px;
+}
+.landing-example p {
+  color: #e4ebff;
+}
+.landing-example .example-source {
+  padding: 0 0 18px;
+  border-bottom: 1px solid #6f8de1;
+  font-size: 15px;
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+.landing-example .example-question {
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.5;
+  color: white;
+  margin-bottom: 16px;
+}
+.example-answers {
+  display: grid;
+  gap: 10px;
+}
+.example-answers details {
+  background: #fff;
+  color: var(--ink);
+  border-radius: 12px;
+  overflow: clip;
+}
+.example-answers summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+  list-style: none;
+}
+.example-answers summary::-webkit-details-marker {
+  display: none;
+}
+.example-answers summary:hover {
+  background: #eef3ff;
+}
+.example-answers summary:focus-visible {
+  outline: 3px solid #a34d08;
+  outline-offset: -4px;
+}
+.answer-letter {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  height: 28px;
+  border: 1px solid #9caecf;
+  border-radius: 8px;
+  color: #234bc2;
+  font-weight: 850;
+}
+.example-answers details[open] .answer-letter {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: var(--ink);
+}
+.landing-feedback {
+  margin: 0 16px 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.landing-feedback p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.landing-example .example-caption {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 18px 0 0;
+}
+.landing-path {
+  display: flex;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 28px 0;
+  margin: 0;
+  border-block: 1px solid var(--line);
+  list-style: none;
+}
+.landing-path li {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.path-number {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--lime);
+  font-size: 20px;
+  font-weight: 850;
+}
+.landing-path h2 {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  margin: 0 0 4px;
+}
+.landing-path p {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+.welcome-page .onboard {
+  gap: clamp(32px, 6vw, 90px);
+  padding: 64px 0;
+  border-top: 0;
+  scroll-margin-top: 24px;
+}
+.welcome-page .onboard h2 {
+  font-size: clamp(30px, 3.2vw, 42px);
+  font-weight: 850;
+  letter-spacing: -0.025em;
+  margin-bottom: 20px;
+}
+.welcome-page .onboard > div > p {
+  max-width: 45ch;
+}
+.welcome-page .onboard .small {
+  font-size: 13px;
+}
+.welcome-page input,
+.welcome-page select {
+  border-color: #9caecf;
+}
+.welcome-page input::placeholder {
+  color: var(--muted);
+}
+.onboarding-options {
+  border-block: 1px solid var(--line);
+  margin: 22px 0;
+}
+.onboarding-options > summary {
+  padding: 16px 0;
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+}
+.onboarding-options[open] > summary {
+  margin-bottom: 14px;
+}
+@media (max-width: 760px) {
+  .landing-hero {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    padding: 40px 0;
+  }
+  .landing-intro h1 {
+    font-size: clamp(42px, 8.5vw, 64px);
+  }
+  .landing-intro .lead {
+    font-size: 18px;
+  }
+  .landing-example {
+    padding: 24px;
+  }
+  .landing-path {
+    flex-direction: column;
+    gap: 24px;
+  }
+  .welcome-page .onboard {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 40px 0;
+  }
+  .welcome-page .onboard form {
+    padding: 24px;
+  }
+}
+@media (max-width: 420px) {
+  body:has(.welcome-page) .site-header,
+  body:has(.welcome-page) main,
+  body:has(.welcome-page) footer {
+    padding-inline: 20px;
+  }
+  body:has(.welcome-page) .site-header {
+    flex-wrap: wrap;
+    align-content: center;
+    gap: 12px;
+    padding-block: 20px;
+  }
+  .landing-example,
+  .welcome-page .onboard form {
+    padding: 20px;
+  }
+  .landing-start {
+    width: 100%;
+  }
 }

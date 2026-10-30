@@ -14,7 +14,12 @@ async function onboard(
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
-  if (timezone) await page.getByLabel("Time zone (optional)").fill(timezone);
+  if (timezone) {
+    await page
+      .getByText("Personalize your path (optional)", { exact: true })
+      .click();
+    await page.getByLabel("Time zone (optional)").fill(timezone);
+  }
   await page.getByRole("button", { name: "Start my learning path" }).click();
 }
 

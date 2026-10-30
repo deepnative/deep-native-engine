@@ -216,6 +216,9 @@ for (const [id, background, goal, extraName, extraValue] of [
     await page.getByLabel("Your starting point").selectOption(background);
     await page.getByLabel("What would you like to do?").selectOption(goal);
     await page
+      .getByText("Personalize your path (optional)", { exact: true })
+      .click();
+    await page
       .locator(`input[name="${extraName}"][value="${extraValue}"]`)
       .check();
     await page.getByLabel("Experience with AI").selectOption("some");
@@ -258,6 +261,9 @@ test("[L29] exploratory learner revises a time-fitting plan without rewriting sa
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await page
+    .getByText("Personalize your path (optional)", { exact: true })
+    .click();
   await page.getByLabel("Experience with AI").selectOption("new");
   await page.getByLabel("Time zone (optional)").fill("UTC");
   await page.getByLabel("Weekly time available").selectOption("15");
@@ -301,6 +307,9 @@ test("[L101] completed starter plan advances without attributing an earlier goal
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await page
+    .getByText("Personalize your path (optional)", { exact: true })
+    .click();
   await page.getByLabel("Weekly time available").selectOption("15");
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const plan = page.getByRole("region", { name: "Your starter plan" });
@@ -334,6 +343,9 @@ test("[L101] completed starter plan advances without attributing an earlier goal
     await other
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
+    await other
+      .getByText("Personalize your path (optional)", { exact: true })
+      .click();
     await other.getByLabel("Weekly time available").selectOption("15");
     await other.getByRole("button", { name: "Start my learning path" }).click();
     await expect(
@@ -359,6 +371,9 @@ test("[L30] professional can correct an invalid time zone and retain a noncoding
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("professional");
   await page.getByLabel("What would you like to do?").selectOption("work");
+  await page
+    .getByText("Personalize your path (optional)", { exact: true })
+    .click();
   await page.getByLabel("Experience with AI").selectOption("some");
   await page.getByLabel("Time zone (optional)").fill("Mars/Olympus");
   await page.getByLabel("Weekly time available").selectOption("30");
@@ -402,6 +417,9 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
         await page
           .getByLabel("What would you like to do?")
           .selectOption(startingGoal);
+        await page
+          .getByText("Personalize your path (optional)", { exact: true })
+          .click();
         await page
           .locator('input[name="domain_tags"][value="education"]')
           .check();
@@ -612,6 +630,9 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
       .getByLabel("What would you like to do?")
       .selectOption("build");
     await unrelatedPage
+      .getByText("Personalize your path (optional)", { exact: true })
+      .click();
+    await unrelatedPage
       .getByLabel("Time zone (optional)")
       .fill("America/Vancouver");
     await unrelatedPage
@@ -629,8 +650,33 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
       try {
         const page = await context.newPage();
         await page.goto("/");
+        const exampleOptions = page.locator('details[name="landing-example"]');
+        await expect(exampleOptions).toHaveCount(2);
+        await expect(
+          page.locator('details[name="landing-example"][open]'),
+        ).toHaveCount(0);
+        expect((await session(context)).id).toBeUndefined();
+        for (const [index, key] of ["Enter", "Space"].entries()) {
+          const option = exampleOptions.nth(index);
+          await expect(option.locator(".landing-feedback")).not.toBeVisible();
+          await option.locator("summary").focus();
+          await page.keyboard.press(key);
+          await expect(option.locator(".landing-feedback")).toBeVisible();
+          await expect(
+            page.locator('details[name="landing-example"][open]'),
+          ).toHaveCount(1);
+          expect((await session(context)).id).toBeUndefined();
+        }
+        expect(
+          (await page.request.get("/learn", { maxRedirects: 0 })).status(),
+        ).toBe(303);
         await page.getByLabel("Your starting point").selectOption(background);
         await page.getByLabel("What would you like to do?").selectOption(goal);
+        const optional = page.locator("details.onboarding-options");
+        await expect(optional).not.toHaveAttribute("open", "");
+        await optional.locator("summary").focus();
+        await page.keyboard.press("Enter");
+        await expect(optional).toHaveAttribute("open", "");
         await page
           .locator('input[name="domain_tags"][value="education"]')
           .check();
@@ -662,6 +708,7 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         );
         await expect(page).toHaveTitle(/error/i);
         await expect(page.getByRole("alert")).toContainText(/not saved/i);
+        await expect(optional).toHaveAttribute("open", "");
         await expect(
           page.locator('input[name="domain_tags"][value="finance"]'),
         ).toBeChecked();
@@ -686,11 +733,15 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
           .getByRole("link", { name: /Time zone/i });
         await expect(errorLink).toHaveAttribute("href", "#timezone");
         await page.locator("a.brand").focus();
-        await page.keyboard.press("Tab");
-        await expect(
-          page.getByRole("link", { name: "View access details" }),
-        ).toBeFocused();
-        await page.keyboard.press("Tab");
+        for (let tab = 0; tab < 20; tab += 1) {
+          await page.keyboard.press("Tab");
+          if (
+            await errorLink.evaluate(
+              (element) => element === document.activeElement,
+            )
+          )
+            break;
+        }
         await expect(errorLink).toBeFocused();
         await page.keyboard.press("Enter");
         await expect(timezone).toBeFocused();
@@ -835,6 +886,9 @@ test("[L31] technical learner sees an experienced, private plan without a coding
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("technical");
   await page.getByLabel("What would you like to do?").selectOption("build");
+  await page
+    .getByText("Personalize your path (optional)", { exact: true })
+    .click();
   await page.getByLabel("Experience with AI").selectOption("experienced");
   await page.getByLabel("Time zone (optional)").fill("America/Vancouver");
   await page.getByLabel("Weekly time available").selectOption("120");

@@ -29,6 +29,9 @@ for (const [index, background] of [
       await page
         .getByLabel("What would you like to do?")
         .selectOption("everyday");
+      await page
+        .getByText("Personalize your path (optional)", { exact: true })
+        .click();
       await page.getByLabel("Time zone (optional)").fill("America/Toronto");
       await page
         .getByRole("button", { name: "Start my learning path" })

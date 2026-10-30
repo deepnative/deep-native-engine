@@ -1,6 +1,6 @@
 ---
-name: "Deep Native local learning reader"
-description: "The implemented visual system for source-grounded practice and private browser notebooks."
+name: "Deep Native learning surfaces"
+description: "Scoped visual systems for the account welcome page and the separate local learning reader."
 colors:
   ink: "#172c46"
   muted: "#51647c"
@@ -26,7 +26,60 @@ colors:
   on-navy-muted: "#dce8f7"
   selection: "#cdddfc"
   on-navy-line: "#6b84a5"
+  landing-ink: "#182c49"
+  landing-muted: "#506079"
+  landing-paper: "#fffdf7"
+  landing-line: "#d6ddeb"
+  landing-blue: "#2454d6"
+  landing-blue-hover: "#173eaa"
+  landing-lesson-blue: "#234bc2"
+  landing-yellow: "#ffe18b"
+  landing-focus: "#a34d08"
+  landing-control-line: "#9caecf"
+  landing-answer-hover: "#eef3ff"
+  landing-on-blue-muted: "#e4ebff"
+  landing-source-line: "#6f8de1"
 typography:
+  landing-display:
+    fontFamily: "Nunito Sans, sans-serif"
+    fontSize: "clamp(42px, 5.3vw, 70px)"
+    fontWeight: 900
+    lineHeight: 1.06
+    letterSpacing: "-0.035em"
+  landing-display-mobile:
+    fontFamily: "Nunito Sans, sans-serif"
+    fontSize: "clamp(42px, 8.5vw, 64px)"
+    fontWeight: 900
+    lineHeight: 1.06
+    letterSpacing: "-0.035em"
+  landing-example-title:
+    fontFamily: "Nunito Sans, sans-serif"
+    fontSize: "clamp(26px, 2.6vw, 34px)"
+    fontWeight: 850
+    lineHeight: 1.13
+    letterSpacing: "-0.025em"
+  landing-section-title:
+    fontFamily: "Nunito Sans, sans-serif"
+    fontSize: "clamp(30px, 3.2vw, 42px)"
+    fontWeight: 850
+    lineHeight: 1.22
+    letterSpacing: "-0.025em"
+  landing-lead:
+    fontFamily: "Nunito Sans, sans-serif"
+    fontSize: "19px"
+    lineHeight: 1.6
+  landing-answer:
+    fontFamily: "Nunito Sans, sans-serif"
+    fontSize: "15px"
+    fontWeight: 700
+    lineHeight: 1.5
+  landing-button:
+    fontFamily: "Nunito Sans, sans-serif"
+    fontSize: "16px"
+    fontWeight: 800
+  landing-body:
+    fontFamily: "Nunito Sans, sans-serif"
+    lineHeight: 1.7
   brand:
     fontFamily: "Inter, sans-serif"
     fontSize: "18px"
@@ -145,6 +198,8 @@ typography:
     fontWeight: 400
     lineHeight: 1.5
 rounded:
+  landing-panel: "16px"
+  landing-control: "12px"
   progress: "3px"
   code: "4px"
   status: "6px"
@@ -172,6 +227,31 @@ spacing:
   "30": "30px"
   "40": "40px"
 components:
+  landing-button-primary:
+    backgroundColor: "{colors.landing-blue}"
+    textColor: "{colors.surface}"
+    typography: "{typography.landing-button}"
+    rounded: "{rounded.landing-control}"
+    padding: "14px 24px"
+  landing-button-primary-hover:
+    backgroundColor: "{colors.landing-blue-hover}"
+  landing-example:
+    backgroundColor: "{colors.landing-lesson-blue}"
+    textColor: "{colors.surface}"
+    rounded: "{rounded.landing-panel}"
+    padding: "30px"
+  landing-answer:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.landing-ink}"
+    typography: "{typography.landing-answer}"
+    rounded: "{rounded.landing-control}"
+    padding: "16px"
+  landing-field:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.landing-ink}"
+    rounded: "{rounded.step}"
+    padding: "12px"
+    width: "100%"
   button-primary:
     backgroundColor: "{colors.blue}"
     textColor: "{colors.surface}"
@@ -270,7 +350,7 @@ components:
     padding: "11px 18px"
 ---
 
-# Design System: Deep Native local learning reader
+# Design System: Deep Native learning surfaces
 
 ## Overview
 
@@ -278,18 +358,23 @@ components:
 
 The Working Notebook is calm, explicit and practical. Cool paper surrounds white working surfaces; deep navy gives the current lesson a clear entry point. Blue connects actions and current position, while source context and checked responses have their own restrained colors. The reader uses familiar controls, named navigation and compact stroke icons so its authored examples and the learner’s writing carry the experience.
 
-This is a code-derived record of assets/docs/learning-design/reader, captured on 28 October 2026. It covers this local reader only. It does not establish a visual migration of the hosted application or a production release. PRODUCT.md records product constraints; .impeccable/surfaces/assets-docs-learning-design-reader.md owns the surface direction. The tokens below describe the implemented CSS, with literal reused values extracted where no CSS custom property exists.
+The account welcome page adds a separate **First Small Win** identity: warm paper, friendly heavy Nunito Sans headings, confident blue actions and small yellow sequence markers. A native sample exercise lets visitors inspect useful reasoning before choosing their starting point. Its colors and controls belong to this entrance only; the signed-in workspace retains its existing design.
+
+This code-derived record preserves the local reader captured on 28 October 2026 and adds the account landing implementation captured on 30 October 2026. Unprefixed tokens describe `assets/docs/learning-design/reader`; `landing-*` tokens describe the welcome page in `src/views.ts` and `public/style.css`. The page-level palette and font are scoped through `body:has(.welcome-page)`. PRODUCT.md records product constraints; `.impeccable/surfaces/assets-docs-learning-design-reader.md` and `.impeccable/surfaces/src-views-ts.md` own their respective surface directions. This source snapshot does not establish deployment or production acceptance.
 
 **Key Characteristics:**
 
-- A single self-hosted sans family with a compact, deliberate hierarchy.
+- A self-hosted sans family for each surface: Inter for the reader, Nunito Sans for the account landing.
 - Flat surfaces distinguished by tone, fine borders and open spacing.
 - Named learning, practice and private-work destinations with visible current state.
 - Explicit saving and evidence-based status labels beside the work they describe.
+- A visibly unsaved sample and native optional-profile disclosure on the account landing.
 
 ## Colors
 
 The palette uses cool neutrals and a distinct color for each kind of interaction. The frontmatter is the normative value list; names below explain application without redefining those values.
+
+The following unprefixed roles remain the local reader palette. The account landing uses its own `landing-*` palette: **Learning blue** for actions, **Lesson blue** for the sample exercise, **Butter yellow** for sequence markers and the opened answer letter, **Warm paper** for the page, and **Deep blue ink** for content. White answer and form surfaces sit against that paper. Supporting text, dividers, control borders, answer hover and text on blue each use their recorded landing roles. **Amber focus** identifies keyboard focus; yellow is not a score or completion state.
 
 ### Primary
 
@@ -317,6 +402,14 @@ The palette uses cool neutrals and a distinct color for each kind of interaction
 
 ## Typography
 
+### Account landing
+
+**Display and body family:** Nunito Sans, with sans-serif fallback. The normal variable font is self-hosted at `public/fonts/NunitoSans.ttf` and served at `/assets/fonts/NunitoSans.ttf`, with declared weights (200–900) and `font-display: swap`. `public/fonts/OFL.txt` and `public/fonts/provenance.json` retain the SIL Open Font License 1.1, pinned Google Fonts revision and file hashes. No remote font request is needed at runtime.
+
+The `landing-display` role gives the entrance its friendly, heavy headline; `landing-example-title` and `landing-section-title` distinguish the sample and the starting-point form. Lead text uses `landing-lead`, reduced to (18px) below the landing mobile breakpoint. Answer labels use `landing-answer`; primary actions use `landing-button`. The sample source and feedback use (15px) text with (1.6) leading. Access and recovery explanations remain (13px), and the unsaved sample caption is (12px). These roles do not replace the reader’s type scale or the signed-in application’s inherited font.
+
+### Local reader
+
 **Display and body family:** Inter, with sans-serif fallback. The variable font is self-hosted at `assets/docs/learning-design/reader/fonts/InterVariable.woff2`, with weights (100–900), normal style, optical sizing and `font-display: swap`. The adjacent `LICENSE.txt` and `provenance.json` retain the SIL Open Font License and pinned upstream provenance. No remote font request is needed. Inline code alone uses a monospace fallback.
 
 Page headings use the `headline` role, resume headings `resume-title`, section headings `section-title`, and authored lesson headings `lesson-title`. They share compact negative tracking and a strong variable weight. Body and lesson-body roles differ in leading, allowing exercise prose more breathing room. Button, navigation, source and status roles retain their own observed sizes instead of imposing a new mathematical scale.
@@ -328,6 +421,14 @@ At the mobile breakpoint, page headlines use `headline-mobile`, ordinary section
 **The Readable Work Rule.** Keep writing fields at the implemented body size on small screens, preserve visible field labels, and keep paragraphs narrow enough to scan alongside their source.
 
 ## Layout
+
+### Account landing
+
+The header, main content and footer share a maximum width (1280px). A two-column hero pairs the introduction with the working sample, followed by a horizontal three-step explanation and a two-column onboarding section. Hero and onboarding sections use vertical padding (64px). The introduction stays within (42ch); onboarding explanations stay within (45ch). The full page retains the existing header, footer and skip link.
+
+At a maximum width of (760px), the hero and onboarding become single columns, major vertical padding reduces to (40px), and the three learning steps stack. The sample and form use (24px) padding. At a maximum width of (420px), page gutters and panel padding become (20px), the header may wrap, and the primary hero action spans the available width. The native optional-profile disclosure controls the form’s length; it is not a separate page or modal.
+
+### Local reader
 
 The desktop shell uses a sticky, independently scrollable left rail (220px) and a flexible main region capped at (1500px), with main horizontal padding (40px). Learn uses a main path and activity context column (260px), separated by a gap (28px). A lesson uses a white working article and source column (270px), also separated by (28px). The source column is sticky at (24px) while wide; the learner can also use “Check the source” and “Back to exercise” controls.
 
@@ -345,17 +446,37 @@ The four lesson stages remain visible as a four-column control at every size. Co
 
 ## Elevation & Depth
 
+The account landing also stays flat: a solid lesson-blue sample, white answer and form surfaces, and fine borders establish depth without shadows. Keyboard focus uses an amber outline (3px) with offset (4px); answer summaries use the same outline inset by (4px) so the clipped rounded answer remains visibly focused. The landing adds no animation or transition vocabulary.
+
 The reader is flat at rest. Background tones, borders and whitespace establish hierarchy; the current lesson stage adds a blue inset underline (2px). Keyboard focus uses a solid blue outline (3px) with offset (4px). The stylesheet declares an ambient `--shadow` value but does not apply it to a component; it is deliberately not promoted into this system’s elevation vocabulary.
 
 **The Flat Surface Rule.** Use tonal fills and fine borders to separate regions. The active stage’s inset underline is a state indicator, not elevation.
 
 ## Shapes
 
+The account landing uses `landing-panel` rounding for the sample and onboarding form, `landing-control` for actions and answer disclosures, and the existing `step` radius for native fields. Answer letters sit in small outlined squares (8px rounding); opened letters turn yellow. The learning-path numbers use yellow circles (42px). These are sequence and disclosure markers, not reward badges.
+
 Main working and context panels use `surface` rounding; answer choices, details and feedback use `choice`; buttons, textareas and main navigation use `control`; route and stage controls use `step`; status labels use `status`. Borders are fine (1px). Circular stage numerals are sequence markers. Compact inline SVGs use geometric strokes (1.8px) and normally occupy (20px); they accompany meaningful text. The brand’s `dn` text mark is retained.
 
 The smaller `progress`, `code` and `record-select` corners apply to the position bar, inline code and earlier-notebook selector. `brand` and `resume-visual` describe the existing text-mark and lesson-number containers. These roles document the implemented shapes; they do not add new variants.
 
 ## Components
+
+### Account landing actions and sample
+
+The hero link scrolls to the starting-point form; the form’s submit button uses the same “Start my learning path” label. Both have blue fill, white text, `landing-control` rounding and a minimum height (52px); hover uses `landing-blue-hover`. The submit action spans the form width. The existing brand, access-details link and conditional sign-in link remain ordinary named links.
+
+The sample exercise is a blue panel with source text, a question and two native answer disclosures. Each white answer exposes corrective or confirming reasoning through its summary. The disclosures share a native group name; the opened answer letter turns yellow. The sample explicitly says “Sample exercise. Nothing is saved.” It creates no account, completion, grade, AI request or saved-progress claim. Keyboard focus remains visible inside the clipped answer surface.
+
+### Account landing fields and recovery
+
+Two required native selects, “Your starting point” and “What would you like to do?”, remain visible above the submit action. Native selects and text fields have white backgrounds, the landing control border, existing field rounding and visible labels. Background tags, domains, IT specialties, AI experience, time zone, weekly time and the exploratory-path checkbox remain inside “Personalize your path (optional)”. That native disclosure opens on any field-error response; safe attempted values, field-linked errors and the error summary remain visible and associated with their controls.
+
+Privacy, simulation and environment-specific storage/recovery explanations stay alongside the form. The shared profile-field helper uses compact disclosure only on the welcome page; account/profile editing retains its existing expanded presentation. The CSS identity is limited to the welcome page and its surrounding shell.
+
+**The Honest Sample Rule.** Keep the unsaved sample label beside the exercise, retain native disclosure and field behavior, and do not depict an opened answer as earned progress.
+
+### Local reader components
 
 ### Buttons
 
@@ -385,7 +506,7 @@ The navy resume panel offers the current lesson or applied case with a single co
 
 **The Explicit Notebook Rule.** Keep the save action and browser-only storage explanation together. A navigation change or typed draft must not be styled as proof of a successful save.
 
-The sidecar contains isolated visual specimens of implemented components; these do not execute saving, routing, answer evaluation or notebook recovery. Its eight-step tonal ramps are generated previews, not additional application color tokens. The source evidence is `style.css`, `reader.mjs`, font provenance, and the supplied desktop, mobile, lesson and reduced-height mobile save captures under `.impeccable/review/`. The latest review disposition applies only to the reachable-save, typography and blue-progress fixes; this document does not extend it to whole-surface or production acceptance.
+The sidecar preserves the reader’s isolated visual specimens and adds landing specimens. Native disclosure specimens can open, but none performs account creation, saving, routing, answer evaluation or notebook recovery. Its eight-step tonal ramps are generated previews, not additional application color tokens. Reader source evidence is `style.css`, `reader.mjs`, font provenance, and the supplied desktop, mobile, lesson and reduced-height mobile save captures under `.impeccable/review/`. The reader’s latest review disposition applies only to the reachable-save, typography and blue-progress fixes. Landing source evidence is `src/views.ts`, the scoped block in `public/style.css`, and `public/fonts/provenance.json`; landing screenshots and visual review remain a separate acceptance step. Neither record establishes production acceptance.
 
 ## Do's and Don'ts
 
@@ -396,9 +517,12 @@ The sidecar contains isolated visual specimens of implemented components; these 
 - Do keep the primary lesson save action reachable while the learner writes.
 - Do describe progress using checked practices, written lessons, recorded self-checks, and the current step.
 - Do retain separate route drafts and the distinction between a first draft and its revision.
+- Do keep landing tokens scoped to the welcome page and preserve the reader and signed-in workspace identities.
+- Do keep the sample’s unsaved label and the form’s privacy, recovery and field-error explanations visible.
 
 ### Don't:
 
 - Don’t style self-checks or activity counts as mastery, grades, credentials, or independent review.
 - Don’t imply automatic saving, account synchronization, public sharing, or a contacted reviewer.
 - Don’t promote these local reader tokens into a claim that the hosted application has been restyled.
+- Don’t treat opening a sample answer or choosing a background as completion, admission, staff access or a paid plan.

@@ -62,7 +62,8 @@ LEARNING_FILES = {str(LEARNING_ROOT / name) for name in (
     "reader/browser-notebook.mjs", "reader/local-entry.mjs",
 )}
 DESIGN_FILES = {"DESIGN.md", "PRODUCT.md", ".impeccable/.gitignore", ".impeccable/config.json",
-                ".impeccable/design.json", ".impeccable/surfaces/assets-docs-learning-design-reader.md"}
+                ".impeccable/design.json", ".impeccable/surfaces/assets-docs-learning-design-reader.md",
+                ".impeccable/surfaces/src-views-ts.md"}
 
 APP_FILES = {
     ".env.example", ".nvmrc", "compose.yaml", "eslint.config.mjs", "package.json", "package-lock.json",
@@ -79,6 +80,7 @@ APP_FILES = {
     "assets/docs/content/events/preview-events.json",
     "assets/docs/content/learning-workspace/v1/course.json",
     "public/learning-workspace-storage.js", "public/learning-workspace.js",
+    "public/fonts/NunitoSans.ttf", "public/fonts/OFL.txt", "public/fonts/provenance.json",
 }
 # Azure landing-zone onboarding and synthetic demo preview (issue #525):
 # declarative Terraform plus the container build. CI checks formatting;

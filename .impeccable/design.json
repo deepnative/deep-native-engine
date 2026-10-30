@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-28T16:15:35.646300Z",
-  "title": "Design System: Deep Native local learning reader",
+  "generatedAt": "2026-10-30T13:44:36.584050Z",
+  "title": "Design System: Deep Native learning surfaces",
   "extensions": {
     "colorMeta": {
       "ink": {
@@ -363,6 +363,201 @@
           "oklch(87% 0.0262 255.52)",
           "oklch(95% 0.0087 255.52)"
         ]
+      },
+      "landing-ink": {
+        "role": "neutral",
+        "displayName": "Landing deep blue ink",
+        "canonical": "#182c49",
+        "tonalRamp": [
+          "oklch(15% 0.0148 257.68)",
+          "oklch(27% 0.0297 257.68)",
+          "oklch(39% 0.0445 257.68)",
+          "oklch(51% 0.0593 257.68)",
+          "oklch(63% 0.0593 257.68)",
+          "oklch(75% 0.0475 257.68)",
+          "oklch(87% 0.0267 257.68)",
+          "oklch(95% 0.0089 257.68)"
+        ]
+      },
+      "landing-muted": {
+        "role": "neutral",
+        "displayName": "Landing supporting slate",
+        "canonical": "#506079",
+        "tonalRamp": [
+          "oklch(15% 0.0112 259.21)",
+          "oklch(27% 0.0225 259.21)",
+          "oklch(39% 0.0337 259.21)",
+          "oklch(51% 0.0450 259.21)",
+          "oklch(63% 0.0450 259.21)",
+          "oklch(75% 0.0360 259.21)",
+          "oklch(87% 0.0202 259.21)",
+          "oklch(95% 0.0067 259.21)"
+        ]
+      },
+      "landing-paper": {
+        "role": "neutral",
+        "displayName": "Landing warm paper",
+        "canonical": "#fffdf7",
+        "tonalRamp": [
+          "oklch(15% 0.0020 91.48)",
+          "oklch(27% 0.0041 91.48)",
+          "oklch(39% 0.0061 91.48)",
+          "oklch(51% 0.0082 91.48)",
+          "oklch(63% 0.0082 91.48)",
+          "oklch(75% 0.0065 91.48)",
+          "oklch(87% 0.0037 91.48)",
+          "oklch(95% 0.0012 91.48)"
+        ]
+      },
+      "landing-line": {
+        "role": "neutral",
+        "displayName": "Landing fine line",
+        "canonical": "#d6ddeb",
+        "tonalRamp": [
+          "oklch(15% 0.0052 264.46)",
+          "oklch(27% 0.0103 264.46)",
+          "oklch(39% 0.0155 264.46)",
+          "oklch(51% 0.0206 264.46)",
+          "oklch(63% 0.0206 264.46)",
+          "oklch(75% 0.0165 264.46)",
+          "oklch(87% 0.0093 264.46)",
+          "oklch(95% 0.0031 264.46)"
+        ]
+      },
+      "landing-blue": {
+        "role": "primary",
+        "displayName": "Landing learning blue",
+        "canonical": "#2454d6",
+        "tonalRamp": [
+          "oklch(15% 0.0400 264.43)",
+          "oklch(27% 0.0800 264.43)",
+          "oklch(39% 0.1200 264.43)",
+          "oklch(51% 0.1600 264.43)",
+          "oklch(63% 0.1600 264.43)",
+          "oklch(75% 0.1280 264.43)",
+          "oklch(87% 0.0720 264.43)",
+          "oklch(95% 0.0240 264.43)"
+        ]
+      },
+      "landing-blue-hover": {
+        "role": "primary",
+        "displayName": "Landing learning blue hover",
+        "canonical": "#173eaa",
+        "tonalRamp": [
+          "oklch(15% 0.0400 264.41)",
+          "oklch(27% 0.0800 264.41)",
+          "oklch(39% 0.1200 264.41)",
+          "oklch(51% 0.1600 264.41)",
+          "oklch(63% 0.1600 264.41)",
+          "oklch(75% 0.1280 264.41)",
+          "oklch(87% 0.0720 264.41)",
+          "oklch(95% 0.0240 264.41)"
+        ]
+      },
+      "landing-lesson-blue": {
+        "role": "primary",
+        "displayName": "Landing lesson blue",
+        "canonical": "#234bc2",
+        "tonalRamp": [
+          "oklch(15% 0.0400 265.16)",
+          "oklch(27% 0.0800 265.16)",
+          "oklch(39% 0.1200 265.16)",
+          "oklch(51% 0.1600 265.16)",
+          "oklch(63% 0.1600 265.16)",
+          "oklch(75% 0.1280 265.16)",
+          "oklch(87% 0.0720 265.16)",
+          "oklch(95% 0.0240 265.16)"
+        ]
+      },
+      "landing-yellow": {
+        "role": "secondary",
+        "displayName": "Landing butter yellow",
+        "canonical": "#ffe18b",
+        "tonalRamp": [
+          "oklch(15% 0.0276 90.85)",
+          "oklch(27% 0.0553 90.85)",
+          "oklch(39% 0.0829 90.85)",
+          "oklch(51% 0.1106 90.85)",
+          "oklch(63% 0.1106 90.85)",
+          "oklch(75% 0.0885 90.85)",
+          "oklch(87% 0.0498 90.85)",
+          "oklch(95% 0.0166 90.85)"
+        ]
+      },
+      "landing-focus": {
+        "role": "tertiary",
+        "displayName": "Landing amber focus",
+        "canonical": "#a34d08",
+        "tonalRamp": [
+          "oklch(15% 0.0333 50.42)",
+          "oklch(27% 0.0666 50.42)",
+          "oklch(39% 0.0999 50.42)",
+          "oklch(51% 0.1332 50.42)",
+          "oklch(63% 0.1332 50.42)",
+          "oklch(75% 0.1066 50.42)",
+          "oklch(87% 0.0600 50.42)",
+          "oklch(95% 0.0200 50.42)"
+        ]
+      },
+      "landing-control-line": {
+        "role": "neutral",
+        "displayName": "Landing control line",
+        "canonical": "#9caecf",
+        "tonalRamp": [
+          "oklch(15% 0.0130 262.54)",
+          "oklch(27% 0.0259 262.54)",
+          "oklch(39% 0.0389 262.54)",
+          "oklch(51% 0.0518 262.54)",
+          "oklch(63% 0.0518 262.54)",
+          "oklch(75% 0.0415 262.54)",
+          "oklch(87% 0.0233 262.54)",
+          "oklch(95% 0.0078 262.54)"
+        ]
+      },
+      "landing-answer-hover": {
+        "role": "primary",
+        "displayName": "Landing answer hover",
+        "canonical": "#eef3ff",
+        "tonalRamp": [
+          "oklch(15% 0.0042 267.79)",
+          "oklch(27% 0.0085 267.79)",
+          "oklch(39% 0.0127 267.79)",
+          "oklch(51% 0.0169 267.79)",
+          "oklch(63% 0.0169 267.79)",
+          "oklch(75% 0.0136 267.79)",
+          "oklch(87% 0.0076 267.79)",
+          "oklch(95% 0.0025 267.79)"
+        ]
+      },
+      "landing-on-blue-muted": {
+        "role": "neutral",
+        "displayName": "Landing secondary text on blue",
+        "canonical": "#e4ebff",
+        "tonalRamp": [
+          "oklch(15% 0.0070 270.42)",
+          "oklch(27% 0.0140 270.42)",
+          "oklch(39% 0.0210 270.42)",
+          "oklch(51% 0.0281 270.42)",
+          "oklch(63% 0.0281 270.42)",
+          "oklch(75% 0.0225 270.42)",
+          "oklch(87% 0.0126 270.42)",
+          "oklch(95% 0.0042 270.42)"
+        ]
+      },
+      "landing-source-line": {
+        "role": "neutral",
+        "displayName": "Landing source divider",
+        "canonical": "#6f8de1",
+        "tonalRamp": [
+          "oklch(15% 0.0325 267.87)",
+          "oklch(27% 0.0651 267.87)",
+          "oklch(39% 0.0976 267.87)",
+          "oklch(51% 0.1302 267.87)",
+          "oklch(63% 0.1302 267.87)",
+          "oklch(75% 0.1041 267.87)",
+          "oklch(87% 0.0586 267.87)",
+          "oklch(95% 0.0195 267.87)"
+        ]
       }
     },
     "typographyMeta": {
@@ -453,6 +648,38 @@
       "resume-title-mobile": {
         "displayName": "Mobile resume heading",
         "purpose": "Mobile resume heading in the implemented reader."
+      },
+      "landing-display": {
+        "displayName": "Landing Display",
+        "purpose": "Welcome headline only; account landing scope."
+      },
+      "landing-display-mobile": {
+        "displayName": "Landing Display Mobile",
+        "purpose": "Welcome headline at maximum width 760px."
+      },
+      "landing-example-title": {
+        "displayName": "Landing Example Title",
+        "purpose": "Native sample exercise heading."
+      },
+      "landing-section-title": {
+        "displayName": "Landing Section Title",
+        "purpose": "Starting-point form heading."
+      },
+      "landing-lead": {
+        "displayName": "Landing Lead",
+        "purpose": "Welcome introduction; reduces to 18px at maximum width 760px."
+      },
+      "landing-answer": {
+        "displayName": "Landing Answer",
+        "purpose": "Native sample-answer summary labels."
+      },
+      "landing-button": {
+        "displayName": "Landing Button",
+        "purpose": "Hero start link and onboarding submit action."
+      },
+      "landing-body": {
+        "displayName": "Landing Body",
+        "purpose": "Account landing prose; does not replace reader or signed-in typography."
       }
     },
     "shadows": [
@@ -486,6 +713,14 @@
       {
         "name": "mobile-max",
         "value": "720px"
+      },
+      {
+        "name": "landing-stack-max",
+        "value": "760px"
+      },
+      {
+        "name": "landing-small-mobile-max",
+        "value": "420px"
       }
     ]
   },
@@ -569,50 +804,64 @@
       "description": "Four current-position controls; these are not completion scores.",
       "html": "<nav class=\"ds-stages\" aria-label=\"Lesson stages\"><button aria-current=\"step\"><span>1</span>See an example</button><button><span>2</span>Try it</button><button><span>3</span>Fresh case</button><button><span>4</span>Your work</button></nav>",
       "css": ".ds-stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;}.ds-stages button{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:7px;min-height:66px;border:0;border-radius:9px;padding:10px 5px;background:var(--surface-subtle, #edf2f8);font-family:Inter,sans-serif;font-size:12px;line-height:1.4;color:var(--muted, #51647c);cursor:pointer;}.ds-stages button:hover{background:var(--blue-soft, #eaf0ff);color:var(--blue, #2459d6);}.ds-stages button[aria-current=\"step\"]{color:var(--blue, #2459d6);background:var(--blue-soft, #eaf0ff);box-shadow:inset 0 -2px var(--blue, #2459d6);font-weight:700;}.ds-stages span{width:21px;height:21px;border-radius:50%;display:grid;place-items:center;font-size:12px;border:1px solid var(--line-strong, #afbed1);}.ds-stages button[aria-current=\"step\"] span{color:var(--surface, #ffffff);background:var(--blue, #2459d6);border-color:var(--blue, #2459d6);}.ds-stages button:focus-visible{outline:3px solid var(--focus, #174dbb);outline-offset:4px;}"
+    },
+    {
+      "name": "Landing primary action",
+      "kind": "button",
+      "refersTo": "landing-button-primary",
+      "description": "Welcome start action; this visual specimen does not navigate or create an account.",
+      "html": "<button class=\"ds-landing-primary\" type=\"button\">Start my learning path</button>",
+      "css": ".ds-landing-primary { display:inline-flex; align-items:center; justify-content:center; min-height:52px; padding:14px 24px; border:1px solid #2454d6; border-radius:12px; background:#2454d6; color:#fff; font-family:\"Nunito Sans\",sans-serif; font-size:16px; font-weight:800; cursor:pointer; } .ds-landing-primary:hover { background:#173eaa; } .ds-landing-primary:focus-visible { outline:3px solid #a34d08; outline-offset:4px; }"
+    },
+    {
+      "name": "Landing starting-point field",
+      "kind": "input",
+      "refersTo": "landing-field",
+      "description": "A visibly labelled required native select, one of the two initial profile fields.",
+      "html": "<div class=\"ds-landing-field\"><label for=\"ds-landing-background\">Your starting point</label><select id=\"ds-landing-background\" required><option value=\"\">Choose one</option></select></div>",
+      "css": ".ds-landing-field { color:#182c49; font-family:\"Nunito Sans\",sans-serif; } .ds-landing-field label { display:block; font-size:14px; font-weight:650; margin:0 0 9px; } .ds-landing-field select { width:100%; border:1px solid #9caecf; border-radius:9px; padding:12px; background:#fff; color:#182c49; font:inherit; margin-bottom:22px; } .ds-landing-field select:focus-visible { outline:3px solid #a34d08; outline-offset:4px; }"
+    },
+    {
+      "name": "Landing unsaved sample",
+      "kind": "custom",
+      "refersTo": "landing-example",
+      "description": "The native sample exercise opens supplied reasoning and keeps the unsaved disclosure adjacent; no progress is recorded.",
+      "html": "<section class=\"ds-landing-example\" aria-labelledby=\"ds-example-title\"><h2 id=\"ds-example-title\">Your first small win.<br>A clearer instruction.</h2><p class=\"ds-example-source\">The note: “Book swap. Saturday, 10 am. Community room. Bring one book.”</p><p class=\"ds-example-question\">You need a short invitation. Which instruction gives AI enough to work with?</p><div class=\"ds-example-answers\"><details name=\"ds-landing-example\"><summary><span class=\"ds-answer-letter\" aria-hidden=\"true\">A</span><span>“Write a great invitation to our event.”</span></summary><div class=\"ds-landing-feedback\"><strong>Give it something concrete.</strong><p>“Great” leaves the details open. Include the note and ask for a short invitation, so AI has the time, place and what to bring.</p></div></details><details name=\"ds-landing-example\"><summary><span class=\"ds-answer-letter\" aria-hidden=\"true\">B</span><span>“Using this note, write a two-sentence invitation. Keep the time, place and what to bring. Add no new facts.”</span></summary><div class=\"ds-landing-feedback\"><strong>That's a useful starting point.</strong><p>You supplied a source, a clear task and a boundary. Next, check that the answer keeps all three details and invents nothing.</p></div></details></div><p class=\"ds-example-caption\">Choose an answer to see why. Sample exercise. Nothing is saved.</p></section>",
+      "css": ".ds-landing-example { padding:30px; border-radius:16px; background:#234bc2; color:#fff; font-family:\"Nunito Sans\",sans-serif; } .ds-landing-example h2 { margin:0 0 22px; font-size:clamp(26px,2.6vw,34px); font-weight:850; line-height:1.13; letter-spacing:-.025em; text-wrap:balance; } .ds-example-source { margin:0 0 18px; padding:0 0 18px; border-bottom:1px solid #6f8de1; color:#e4ebff; font-size:15px; line-height:1.6; } .ds-example-question { margin:0 0 16px; font-size:16px; font-weight:750; line-height:1.5; } .ds-example-answers { display:grid; gap:10px; } .ds-example-answers details { background:#fff; color:#182c49; border-radius:12px; overflow:clip; } .ds-example-answers summary { display:flex; align-items:flex-start; gap:12px; padding:16px; cursor:pointer; font-size:15px; font-weight:700; line-height:1.5; list-style:none; } .ds-example-answers summary::-webkit-details-marker { display:none; } .ds-example-answers summary:hover { background:#eef3ff; } .ds-example-answers summary:focus-visible { outline:3px solid #a34d08; outline-offset:-4px; } .ds-answer-letter { display:grid; place-items:center; flex:0 0 28px; height:28px; border:1px solid #9caecf; border-radius:8px; color:#234bc2; font-weight:850; } .ds-example-answers details[open] .ds-answer-letter { background:#ffe18b; border-color:#ffe18b; color:#182c49; } .ds-landing-feedback { margin:0 16px 18px; padding-top:16px; border-top:1px solid #d6ddeb; font-size:15px; line-height:1.5; } .ds-landing-feedback p { margin:6px 0 0; color:#506079; line-height:1.6; } .ds-example-caption { margin:18px 0 0; color:#e4ebff; font-size:12px; line-height:1.6; }"
+    },
+    {
+      "name": "Landing optional profile disclosure",
+      "kind": "custom",
+      "description": "Native optional-profile disclosure with one representative field; the application opens it after a field error.",
+      "html": "<details class=\"ds-onboarding-options\"><summary>Personalize your path (optional)</summary><label for=\"ds-timezone\">Time zone (optional)</label><input id=\"ds-timezone\" type=\"text\" maxlength=\"64\" placeholder=\"e.g. America/Toronto\" aria-describedby=\"ds-timezone-help\"><p id=\"ds-timezone-help\">Use a location-style time zone. This preview does not schedule appointments.</p></details>",
+      "css": ".ds-onboarding-options { border-block:1px solid #d6ddeb; margin:22px 0; color:#182c49; font-family:\"Nunito Sans\",sans-serif; } .ds-onboarding-options > summary { padding:16px 0; color:#2454d6; font-weight:800; font-size:14px; cursor:pointer; } .ds-onboarding-options[open] > summary { margin-bottom:14px; } .ds-onboarding-options label { display:block; margin:0 0 9px; font-size:14px; font-weight:650; } .ds-onboarding-options input { width:100%; border:1px solid #9caecf; border-radius:9px; padding:12px; background:#fff; color:#182c49; font:inherit; margin-bottom:22px; } .ds-onboarding-options input::placeholder { color:#506079; } .ds-onboarding-options p { font-size:13px; line-height:1.7; color:#506079; } .ds-onboarding-options :focus-visible { outline:3px solid #a34d08; outline-offset:4px; }"
     }
   ],
   "narrative": {
     "northStar": "The Working Notebook",
-    "overview": "The Working Notebook is calm, explicit and practical. Cool paper surrounds white working surfaces; deep navy gives the current lesson a clear entry point. Blue connects actions and current position, while source context and checked responses have their own restrained colors. The reader uses familiar controls, named navigation and compact stroke icons so its authored examples and the learner’s writing carry the experience.\n\nThis is a code-derived record of assets/docs/learning-design/reader, captured on 28 October 2026. It covers this local reader only. It does not establish a visual migration of the hosted application or a production release. PRODUCT.md records product constraints; .impeccable/surfaces/assets-docs-learning-design-reader.md owns the surface direction. The tokens below describe the implemented CSS, with literal reused values extracted where no CSS custom property exists.",
+    "overview": "The Working Notebook is calm, explicit and practical. Cool paper surrounds white working surfaces; deep navy gives the current lesson a clear entry point. Blue connects actions and current position, while source context and checked responses have their own restrained colors. The reader uses familiar controls, named navigation and compact stroke icons so its authored examples and the learner’s writing carry the experience.\n\nThe account welcome page adds a separate **First Small Win** identity: warm paper, friendly heavy Nunito Sans headings, confident blue actions and small yellow sequence markers. A native sample exercise lets visitors inspect useful reasoning before choosing their starting point. Its colors and controls belong to this entrance only; the signed-in workspace retains its existing design.\n\nThis code-derived record preserves the local reader captured on 28 October 2026 and adds the account landing implementation captured on 30 October 2026. Unprefixed tokens describe `assets/docs/learning-design/reader`; `landing-*` tokens describe the welcome page in `src/views.ts` and `public/style.css`. The page-level palette and font are scoped through `body:has(.welcome-page)`. PRODUCT.md records product constraints; `.impeccable/surfaces/assets-docs-learning-design-reader.md` and `.impeccable/surfaces/src-views-ts.md` own their respective surface directions. This source snapshot does not establish deployment or production acceptance.",
     "keyCharacteristics": [
-      "A single self-hosted sans family with a compact, deliberate hierarchy.",
+      "A self-hosted sans family for each surface: Inter for the reader, Nunito Sans for the account landing.",
       "Flat surfaces distinguished by tone, fine borders and open spacing.",
       "Named learning, practice and private-work destinations with visible current state.",
-      "Explicit saving and evidence-based status labels beside the work they describe."
+      "Explicit saving and evidence-based status labels beside the work they describe.",
+      "A visibly unsaved sample and native optional-profile disclosure on the account landing."
     ],
-    "rules": [
-      {
-        "name": "Semantic Color",
-        "body": "Use blue for action and current position, teal for source context, green for a checked match, and amber for reconsideration. Pair these colors with explanatory text; color alone does not carry the result.",
-        "section": "colors"
-      },
-      {
-        "name": "Readable Work",
-        "body": "Keep writing fields at the implemented body size on small screens, preserve visible field labels, and keep paragraphs narrow enough to scan alongside their source.",
-        "section": "typography"
-      },
-      {
-        "name": "Flat Surface",
-        "body": "Use tonal fills and fine borders to separate regions. The active stage’s inset underline is a state indicator, not elevation.",
-        "section": "elevation"
-      },
-      {
-        "name": "Explicit Notebook",
-        "body": "Keep the save action and browser-only storage explanation together. A navigation change or typed draft must not be styled as proof of a successful save.",
-        "section": "components"
-      }
-    ],
+    "rules": [],
     "dos": [
       "Do keep source context visually distinct and reachable from the exercise.",
       "Do preserve named controls, visible keyboard focus, and text descriptions of current state.",
       "Do keep the primary lesson save action reachable while the learner writes.",
       "Do describe progress using checked practices, written lessons, recorded self-checks, and the current step.",
-      "Do retain separate route drafts and the distinction between a first draft and its revision."
+      "Do retain separate route drafts and the distinction between a first draft and its revision.",
+      "Do keep landing tokens scoped to the welcome page and preserve the reader and signed-in workspace identities.",
+      "Do keep the sample’s unsaved label and the form’s privacy, recovery and field-error explanations visible."
     ],
     "donts": [
       "Don’t style self-checks or activity counts as mastery, grades, credentials, or independent review.",
       "Don’t imply automatic saving, account synchronization, public sharing, or a contacted reviewer.",
-      "Don’t promote these local reader tokens into a claim that the hosted application has been restyled."
+      "Don’t promote these local reader tokens into a claim that the hosted application has been restyled.",
+      "Don’t treat opening a sample answer or choosing a background as completion, admission, staff access or a paid plan."
     ]
   }
 }
