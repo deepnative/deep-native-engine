@@ -2,22 +2,26 @@ import { resolve } from "node:path";
 import { BaseSequencer, type TestSpecification } from "vitest/node";
 import { defineConfig } from "vitest/config";
 import diagnostics from "./tests/support/integration-diagnostics-reporter.ts";
-const assignmentEvidence = "tests/integration/assignment-evidence.test.ts";
+const priorityFiles = [
+  "tests/integration/assignment-evidence.test.ts",
+  "tests/integration/program-enrollment-lifetime.test.ts",
+];
 
 class IntegrationSequencer extends BaseSequencer {
   override async sort(
     files: TestSpecification[],
   ): Promise<TestSpecification[]> {
     const sorted = await super.sort(files);
-    const target = resolve(this.ctx.config.root, assignmentEvidence);
-    const index = sorted.findIndex(
-      ({ moduleId }) => resolve(moduleId) === target,
+    const priorities = priorityFiles.map((file) =>
+      resolve(this.ctx.config.root, file),
     );
-    if (index <= 0) return sorted;
     return [
-      sorted[index]!,
-      ...sorted.slice(0, index),
-      ...sorted.slice(index + 1),
+      ...priorities.flatMap((target) =>
+        sorted.filter(({ moduleId }) => resolve(moduleId) === target),
+      ),
+      ...sorted.filter(
+        ({ moduleId }) => !priorities.includes(resolve(moduleId)),
+      ),
     ];
   }
 }

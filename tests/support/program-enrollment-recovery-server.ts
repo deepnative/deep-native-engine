@@ -12,15 +12,10 @@ import { programEnrollmentStore } from "../../src/program-enrollments.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
 import { listenLoopback, closeLoopback } from "./loopback-server.ts";
 import { dropAttendanceBrowserDatabase } from "./attendance-browser-database.ts";
-import type { ProgramEnrollmentObservation } from "./program-enrollment-observation.ts";
 
 /** Actual application and PostgreSQL with test-owned email/transport boundaries.
  * There are no fault routes or production switches, and no outbound delivery. */
-export async function programEnrollmentFixture(
-  observation?: ProgramEnrollmentObservation,
-) {
-  const step: ProgramEnrollmentObservation["step"] =
-    observation?.step ?? ((_phase, action) => action());
+export async function programEnrollmentFixture() {
   const base = process.env.DNE_TEST_DATABASE_URL;
   if (!base || !/^\/dne_test_[a-f0-9]{32}$/.test(new URL(base).pathname))
     throw Error("Generated verification database required");
@@ -105,13 +100,13 @@ export async function programEnrollmentFixture(
   let created = false;
   let server: Awaited<ReturnType<typeof listenLoopback>> | undefined;
   try {
-    await step("create", () => admin.query(`CREATE DATABASE "${name}"`));
+    await admin.query(`CREATE DATABASE "${name}"`);
     created = true;
-    await step("migrate", () => migrate(pool));
-    await step("seed", () => seedDraftPack(pool));
+    await migrate(pool);
+    await seedDraftPack(pool);
     const router = express();
     router.use((req, res, next) => application(req, res, next));
-    server = await step("listener", () => listenLoopback(router));
+    server = await listenLoopback(router);
     const address = server.address();
     if (!address || typeof address === "string")
       throw Error("Owned loopback listener unavailable");
@@ -179,14 +174,12 @@ export async function programEnrollmentFixture(
       return { editor, reviewer };
     }
     async function close() {
-      await step("close-listener", () => closeLoopback(server!));
-      await step("close-pool", () => pool.end());
+      await closeLoopback(server!);
+      await pool.end();
       try {
-        await step("close-drain-and-drop", () =>
-          dropAttendanceBrowserDatabase(admin, name),
-        );
+        await dropAttendanceBrowserDatabase(admin, name);
       } finally {
-        await step("close-admin", () => admin.end());
+        await admin.end();
       }
     }
     return {
@@ -206,15 +199,12 @@ export async function programEnrollmentFixture(
       close,
     };
   } catch (error) {
-    if (server) await step("close-listener", () => closeLoopback(server!));
-    await step("close-pool", () => pool.end());
+    if (server) await closeLoopback(server);
+    await pool.end();
     try {
-      if (created)
-        await step("close-drain-and-drop", () =>
-          dropAttendanceBrowserDatabase(admin, name),
-        );
+      if (created) await dropAttendanceBrowserDatabase(admin, name);
     } finally {
-      await step("close-admin", () => admin.end());
+      await admin.end();
     }
     throw error;
   }

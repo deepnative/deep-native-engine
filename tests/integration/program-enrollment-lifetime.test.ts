@@ -10,10 +10,6 @@ import { COOKIE, csrf } from "../../src/session.ts";
 import { hash } from "../../src/store.ts";
 import { app } from "../../src/app.ts";
 import { programEnrollmentStore } from "../../src/program-enrollments.ts";
-import {
-  programEnrollmentObservation,
-  type ProgramEnrollmentObservation,
-} from "../support/program-enrollment-observation.ts";
 
 const intent = {
   programVersion: 1,
@@ -37,19 +33,13 @@ const formFields = (html: string) =>
       ...html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g),
     ].map((match) => [match[1]!, match[2]!]),
   );
-async function ready(observation?: ProgramEnrollmentObservation) {
-  const step: ProgramEnrollmentObservation["step"] =
-    observation?.step ?? ((_phase, action) => action());
-  const f = await programEnrollmentFixture(observation);
+async function ready() {
+  const f = await programEnrollmentFixture();
   try {
-    const editorial = await step("publication", () => f.publish());
-    const admin = await step("admin", () => f.staff("platform_admin"));
+    const editorial = await f.publish();
+    const admin = await f.staff("platform_admin");
     expect(
-      (
-        await step("open", () =>
-          f.programs.change(admin.token, "open", 1, PROGRAM_DIGEST),
-        )
-      ).kind,
+      (await f.programs.change(admin.token, "open", 1, PROGRAM_DIGEST)).kind,
     ).toBe("ready");
     return { ...f, editorial, admin };
   } catch (error) {
@@ -80,60 +70,35 @@ async function blocked(pool: Pool) {
     { timeout: 2000, interval: 10 },
   );
 }
-it("PROGRAM-03/ENR-03 admits only one concurrent winner for the last local simulation place", async ({
-  task,
-  onTestFinished,
-}) => {
-  const observation = programEnrollmentObservation(task.meta);
-  onTestFinished(() => observation.seal());
-  const f = await observation.step("ready", () => ready(observation));
+it("PROGRAM-03/ENR-03 admits only one concurrent winner for the last local simulation place", async () => {
+  const f = await ready();
   try {
     for (let n = 0; n < 19; n++) {
-      const member = await observation.step(
-        "capacity-member",
-        () => f.member(),
-        n,
-      );
+      const member = await f.member();
       expect(
-        (
-          await observation.step(
-            "capacity-admission",
-            () => f.programs.enroll(member.token, randomUUID(), intent),
-            n,
-          )
-        ).kind,
+        (await f.programs.enroll(member.token, randomUUID(), intent)).kind,
       ).toBe("ready");
     }
-    const a = await observation.step("final-member-a", () =>
-        f.member("professional"),
-      ),
-      b = await observation.step("final-member-b", () => f.member("technical"));
+    const a = await f.member("professional"),
+      b = await f.member("technical");
     const result = await Promise.all([
-      observation.step("concurrent-admission-a", () =>
-        f.programs.enroll(a.token, randomUUID(), intent),
-      ),
-      observation.step("concurrent-admission-b", () =>
-        f.programs.enroll(b.token, randomUUID(), intent),
-      ),
+      f.programs.enroll(a.token, randomUUID(), intent),
+      f.programs.enroll(b.token, randomUUID(), intent),
     ]);
     expect(result.map((r) => r.kind).sort()).toEqual(["full", "ready"]);
     expect(
       (
-        await observation.step("count", () =>
-          f.pool.query(
-            "SELECT count(*)::integer n FROM local_program_enrollments",
-          ),
+        await f.pool.query(
+          "SELECT count(*)::integer n FROM local_program_enrollments",
         )
       ).rows[0].n,
     ).toBe(20);
-    expect(
-      await observation.step("overview", () => f.programs.overview()),
-    ).toMatchObject({
+    expect(await f.programs.overview()).toMatchObject({
       kind: "ready",
       value: { availability: "full", remaining: 0 },
     });
   } finally {
-    await observation.step("close", () => f.close());
+    await f.close();
   }
 }, 15000);
 it("PROGRAM-02/03 serializes concurrent same-account keys into one immutable receipt", async () => {
