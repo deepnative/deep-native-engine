@@ -34,6 +34,9 @@ test("[F-ROADMAP-08-A] three IT specialties enter common foundation without spec
         .getByLabel("What would you like to do?")
         .selectOption(specialty.goal);
       await page
+        .getByText("Personalize your path (optional)", { exact: true })
+        .click();
+      await page
         .getByRole("group", { name: "IT specialties (optional)" })
         .getByLabel(specialty.label)
         .check();

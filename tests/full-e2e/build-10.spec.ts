@@ -41,6 +41,9 @@ test("[F-BUILD-10-B] invalid input recovers and an empty member gets an honest n
     await page
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
+    await page
+      .getByText("Personalize your path (optional)", { exact: true })
+      .click();
     await page.getByLabel("Time zone (optional)").fill("Mars/Olympus");
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await expect(page.getByRole("alert")).toContainText("time zone");
