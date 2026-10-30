@@ -21,6 +21,10 @@ const codes = [
   "57P01",
   "53300",
 ] as const;
+const shard = process.env.DNE_INTEGRATION_SHARD;
+if (shard !== undefined && shard !== "1" && shard !== "2")
+  throw Error("Invalid integration lane");
+const directory = shard ? `artifacts/integration-shards/${shard}` : "artifacts";
 
 function field(error: unknown, key: string): unknown {
   return error && typeof error === "object"
@@ -90,9 +94,9 @@ function signature(error: unknown) {
 
 const reporter = {
   onTestRunEnd(_modules: unknown, unhandledErrors: ReadonlyArray<unknown>) {
-    mkdirSync("artifacts", { recursive: true });
+    mkdirSync(directory, { recursive: true });
     writeFileSync(
-      "artifacts/integration-unhandled.json",
+      `${directory}/${shard ? "unhandled.json" : "integration-unhandled.json"}`,
       JSON.stringify({
         schema: "integration-unhandled-v1",
         count: Math.min(unhandledErrors.length, 99),

@@ -673,6 +673,10 @@ describe.each(["fresh", "after member erasure"] as const)(
         const retired = await member();
         f = await fixture();
         await Promise.all([seed(retired.id), seed(f.owner.id)]);
+        // Refresh bulk-load statistics before the ordinary erasure cascades.
+        await pool.query(
+          "ANALYZE synthetic_entitlement_grants; ANALYZE synthetic_entitlement_events",
+        );
         const full = { members: 1, grants: 22000, events: 22000 };
         // fixture() also creates one existing review-minutes grant/event.
         const survivor = { members: 1, grants: 22001, events: 22001 };
