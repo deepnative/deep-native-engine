@@ -61,7 +61,8 @@ LEARNING_FILES = {str(LEARNING_ROOT / name) for name in (
     "reader/reader.mjs", "reader/review-guidance.json", "reader/style.css",
 )}
 DESIGN_FILES = {"DESIGN.md", "PRODUCT.md", ".impeccable/.gitignore", ".impeccable/config.json",
-                ".impeccable/design.json", ".impeccable/surfaces/assets-docs-learning-design-reader.md"}
+                ".impeccable/design.json", ".impeccable/surfaces/assets-docs-learning-design-reader.md",
+                ".impeccable/surfaces/src-views-ts.md"}
 
 APP_FILES = {
     ".env.example", ".nvmrc", "compose.yaml", "eslint.config.mjs", "package.json", "package-lock.json",
@@ -76,6 +77,7 @@ APP_FILES = {
     "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "scripts/full-release-evidence.mjs", "tests/e2e/scenarios.json", "tests/e2e/cross-browser-scenarios.json", "tests/e2e/full-mvp-approval.json", "src/main.ts", "migrations/001-learning.sql",
     "assets/docs/content/circles/preview-circles.json", "public/pages-demo.js", "public/attempt-save.js", "public/member-export.js", "public/evidence-export.js", "public/exercise-error-focus.js",
     "assets/docs/content/events/preview-events.json",
+    "public/fonts/NunitoSans.ttf", "public/fonts/OFL.txt", "public/fonts/provenance.json",
 }
 # Azure landing-zone onboarding and synthetic demo preview (issue #525):
 # declarative Terraform plus the container build. CI checks formatting;

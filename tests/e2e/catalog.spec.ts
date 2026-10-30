@@ -825,6 +825,9 @@ test("[L75] staff audience tags follow synthetic versions into learner choices",
     await page
       .getByLabel("What would you like to do?")
       .selectOption("everyday");
+    await page
+      .getByText("Personalize your path (optional)", { exact: true })
+      .click();
     await page.locator('input[name="domain_tags"][value="education"]').check();
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await expect(
@@ -861,6 +864,9 @@ test("[L75] staff audience tags follow synthetic versions into learner choices",
     await professionalPage
       .getByLabel("What would you like to do?")
       .selectOption("work");
+    await professionalPage
+      .getByText("Personalize your path (optional)", { exact: true })
+      .click();
     await professionalPage
       .locator('input[name="domain_tags"][value="finance"]')
       .check();
