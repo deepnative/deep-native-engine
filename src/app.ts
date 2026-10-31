@@ -1,3 +1,9 @@
+import { mountLearningWorkspaceRoutes } from "./learning-workspace-routes.ts";
+import { mountLearningWorkspaceAssets } from "./learning-workspace-assets.ts";
+import { mountLearningWorkspacePages } from "./learning-workspace-pages.ts";
+import { mountLearningWorkspaceRecords } from "./learning-workspace-records.ts";
+import type { LearningWorkspaceStore } from "./learning-workspace-store.ts";
+import type { LearningWorkspacePublicationStore } from "./learning-workspace-publication.ts";
 import {
   mountPublicationRoutes,
   mountPublicationStaffRoutes,
@@ -348,6 +354,8 @@ export function app(
     localAiConsent?: LocalAiConsentStore;
     localAiControl?: LocalAiControlStore;
     catalog?: CatalogStore;
+    learningWorkspace?: LearningWorkspaceStore;
+    learningWorkspacePublication?: LearningWorkspacePublicationStore;
     programs?: ProgramStore;
     foundationImport?: FoundationImportStore;
     assignmentImport?: FoundationImportStore;
@@ -498,7 +506,16 @@ export function app(
     "/contribute",
     express.urlencoded({ extended: false, limit: "64kb" }),
   );
-  app.use(express.urlencoded({ extended: false, limit: "16kb" }));
+  const ordinaryForm = express.urlencoded({ extended: false, limit: "16kb" });
+  app.use((req, res, next) => {
+    if (
+      options.learningWorkspace &&
+      (req.path === "/api/learning-workspace" ||
+        req.path.startsWith("/api/learning-workspace/"))
+    )
+      return next();
+    return ordinaryForm(req, res, next);
+  });
   app.use(cookieParser());
   mountStaffEntryRoutes(app, options.staffEntry, options, {
     library: Boolean(options.catalog),
@@ -565,6 +582,12 @@ export function app(
     }
     res.locals.token = session;
     res.locals.csrf = csrf(session, options.secret);
+    next();
+  });
+  if (options.learningWorkspace)
+    mountLearningWorkspaceRoutes(app, options.learningWorkspace, options);
+  app.use((req, res, next) => {
+    const session = res.locals.token as string;
     const write = attemptWritePath.exec(req.originalUrl.split("?")[0]!);
     const reflectionWrite = attemptReflectionWritePath.exec(
       req.originalUrl.split("?")[0]!,
@@ -1363,6 +1386,22 @@ export function app(
       next();
     },
   );
+  if (options.learningWorkspace) {
+    mountLearningWorkspaceRecords(app, options.learningWorkspace, options);
+    if (options.learningWorkspacePublication) {
+      mountLearningWorkspaceAssets(
+        app,
+        options.learningWorkspace,
+        options.learningWorkspacePublication,
+        options,
+      );
+      mountLearningWorkspacePages(
+        app,
+        options.learningWorkspace,
+        options.learningWorkspacePublication,
+      );
+    }
+  }
   mountStarterGuidanceRoutes(app);
   if (options.sampleFeedback && options.reviewTime)
     mountReviewTimeRoutes(
@@ -3384,7 +3423,15 @@ export function app(
         );
       return;
     }
-    res.send(staffLibraryPage(items, res.locals.csrf as string));
+    const html = staffLibraryPage(items, res.locals.csrf as string);
+    res.send(
+      options.learningWorkspacePublication
+        ? html.replace(
+            "</main>",
+            '<p><a href="/editor/library/learning-workspace">Review the learning workspace</a></p></main>',
+          )
+        : html,
+    );
   });
   for (const [path, label, pack, importer] of [
     [
@@ -3653,7 +3700,7 @@ export function app(
         );
       return;
     }
-    const html = dashboard(
+    let html = dashboard(
       member,
       progress,
       res.locals.csrf as string,
@@ -3664,6 +3711,11 @@ export function app(
       undefined,
       readiness,
     );
+    if (options.learningWorkspace)
+      html = html.replace(
+        "</main>",
+        '<p><a href="/learn">Open learning workspace</a> · <a href="/learn/notebooks">Saved notebooks</a></p></main>',
+      );
     res.send(
       options.memberEmail
         ? html.replace(

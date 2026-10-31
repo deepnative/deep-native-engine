@@ -79,7 +79,7 @@ test("[L86] three learner backgrounds withdraw completed starter text privately"
     const after = await page.request.get("/api/member/export");
     expect(after.status()).toBe(200);
     const exported = await after.json();
-    expect(exported.version).toBe("local-member-records-v27");
+    expect(exported.version).toBe("local-member-records-v28");
     expect(exported.records.exercises).toMatchObject([
       { instruction: null, verification: null, state: "withdrawn" },
     ]);
