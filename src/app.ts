@@ -1,3 +1,8 @@
+import {
+  mountSimpleInvoiceRoutes,
+  type InvoiceSender,
+} from "./simple-invoice-routes.ts";
+import type { SimpleInvoiceStore } from "./simple-invoice-store.ts";
 import { mountLearningWorkspaceRoutes } from "./learning-workspace-routes.ts";
 import { mountLearningWorkspaceAssets } from "./learning-workspace-assets.ts";
 import { mountLearningWorkspacePages } from "./learning-workspace-pages.ts";
@@ -357,6 +362,8 @@ export function app(
     learningWorkspace?: LearningWorkspaceStore;
     learningWorkspacePublication?: LearningWorkspacePublicationStore;
     programs?: ProgramStore;
+    simpleInvoices?: SimpleInvoiceStore;
+    invoiceSender?: InvoiceSender;
     foundationImport?: FoundationImportStore;
     assignmentImport?: FoundationImportStore;
     tracks?: TrackStore;
@@ -559,6 +566,7 @@ export function app(
       options.localTestUnitIssuance === true,
     eventRehearsals: Boolean(options.eventRehearsals),
     workflowReviews: Boolean(options.workflowReviewStaff),
+    invoices: Boolean(options.simpleInvoices),
     localAi: Boolean(options.localAiControl),
     receipts: Boolean(options.manualObservations),
   });
@@ -1402,6 +1410,7 @@ export function app(
       );
     }
   }
+  mountSimpleInvoiceRoutes(app, options.simpleInvoices, options);
   mountStarterGuidanceRoutes(app);
   if (options.sampleFeedback && options.reviewTime)
     mountReviewTimeRoutes(

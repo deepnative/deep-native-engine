@@ -1224,3 +1224,115 @@ body:has(.welcome-page) .preview-tag {
     width: 100%;
   }
 }
+
+/* Course billing stays a readable task surface and a clean printable document. */
+.invoice-workspace,
+.invoice-document,
+.invoice-controls {
+  max-width: 760px;
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+}
+.invoice-workspace h1,
+.invoice-document h1 {
+  font-family: "Nunito Sans", sans-serif;
+  font-size: clamp(30px, 5vw, 44px);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+.invoice-workspace article,
+.invoice-controls,
+.invoice-workspace > form {
+  margin-block: 32px;
+  padding-block: 24px;
+  border-top: 1px solid var(--line);
+}
+.invoice-workspace form,
+.invoice-controls form {
+  max-width: 620px;
+}
+.invoice-workspace input:not([type="checkbox"]):not([type="hidden"]),
+.invoice-controls input:not([type="checkbox"]):not([type="hidden"]) {
+  width: 100%;
+  min-height: 44px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+}
+.invoice-workspace fieldset {
+  padding: 16px;
+  margin-block: 24px;
+  border: 1px solid var(--line);
+}
+.invoice-workspace :is(input, select),
+.invoice-controls input {
+  caret-color: var(--accent);
+}
+.invoice-document table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-block: 24px;
+}
+.invoice-document :is(th, td) {
+  padding: 12px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+.invoice-document :is(th, td):last-child {
+  text-align: right;
+  min-width: 100px;
+  font-variant-numeric: tabular-nums;
+}
+.invoice-document caption {
+  text-align: left;
+  font-weight: 700;
+  padding-block: 8px;
+}
+.invoice-document dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 24px;
+  max-width: 400px;
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+}
+.invoice-document dd {
+  margin: 0;
+  text-align: right;
+}
+.invoice-instructions {
+  white-space: pre-line;
+}
+@media print {
+  body:has(.invoice-document) {
+    background: white;
+    color: black;
+  }
+  body:has(.invoice-document)
+    :is(.site-header, footer, .skip, .invoice-controls) {
+    display: none;
+  }
+  body:has(.invoice-document) main {
+    width: auto;
+    max-width: none;
+    padding: 0;
+    margin: 0;
+  }
+  .invoice-document {
+    max-width: none;
+    margin: 0;
+  }
+  .invoice-document tr,
+  .invoice-document dl {
+    break-inside: avoid;
+  }
+}
+.invoice-reference {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  margin-top: -12px;
+}

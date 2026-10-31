@@ -20,7 +20,10 @@ vi.mock("@azure/communication-email", () => ({
     beginSend = sdk.beginSend;
   },
 }));
-import { azureEmailSender } from "../../src/azure-email-sender.ts";
+import {
+  azureEmailSender,
+  azureInvoiceSender,
+} from "../../src/azure-email-sender.ts";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -72,4 +75,59 @@ it("does not report delivery when the provider does not confirm it", async () =>
       "invented-identity",
     ).send("member@example.com", "private-link"),
   ).rejects.toThrow("Email send was not confirmed");
+});
+
+it("OFFPUR-02 sends individual course invoices using a separate message from sign-in", async () => {
+  const sender = azureInvoiceSender(
+    "https://synthetic.communication.azure.com",
+    "noreply@example.com",
+    "invented-identity",
+  );
+  const doc = {
+    number: "DN-invented",
+    issuedOn: "2026-10-31",
+    issuer: "Invented issuer",
+    billedTo: "陳",
+    lines: [
+      { description: "Course A version 2", amountCents: 1000 },
+      { description: "Course B version 1", amountCents: 2001 },
+    ],
+    billing: { kind: "one_time" as const },
+    currency: "CAD" as const,
+    taxCents: 390,
+    paidCents: 0,
+    instructions: "Invented instructions",
+    sample: false,
+  };
+  await sender.send(
+    "invented@example.invalid",
+    doc,
+    "https://example.invalid/account/purchases/invoices/invented",
+  );
+  const message = sdk.beginSend.mock.calls[0]![0];
+  expect(message.recipients).toEqual({
+    to: [{ address: "invented@example.invalid" }],
+  });
+  expect(message.content.subject).toBe("Deep Native invoice DN-invented");
+  expect(message.content.plainText).toContain("Total: CAD 33.91");
+  expect(message.content.plainText).toContain("Course A version 2: CAD 10.00");
+  expect(message.content.plainText).toContain("陳");
+  expect(message.content.plainText).not.toContain("15 minutes");
+  expect(message.content.plainText).toContain("No automatic payment");
+  await sender.send(
+    "invented@example.invalid",
+    { ...doc, sample: true },
+    "private-invoice",
+  );
+  expect(sdk.beginSend.mock.calls[1]![0].content.plainText).toContain(
+    "NOT PAYABLE",
+  );
+  sdk.pollUntilDone.mockResolvedValueOnce({ status: "Failed" });
+  await expect(
+    sender.send("invented@example.invalid", doc, "private-invoice"),
+  ).rejects.toThrow("not confirmed");
+  sdk.beginSend.mockRejectedValueOnce(Error("Provider unavailable"));
+  await expect(
+    sender.send("invented@example.invalid", doc, "private-invoice"),
+  ).rejects.toThrow("Provider unavailable");
 });

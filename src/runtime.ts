@@ -1,3 +1,5 @@
+import { simpleInvoiceSettings } from "./simple-invoice-config.ts";
+import { simpleInvoiceStore } from "./simple-invoice-store.ts";
 import { learningWorkspaceStore } from "./learning-workspace-store.ts";
 import { learningWorkspacePublicationStore } from "./learning-workspace-publication.ts";
 import { resolveLearningWorkspaceBundle } from "./learning-workspace-pack.ts";
@@ -24,7 +26,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.ts";
 import { memberEmailAccess } from "./member-email-access.ts";
-import { azureEmailSender } from "./azure-email-sender.ts";
+import { azureEmailSender, azureInvoiceSender } from "./azure-email-sender.ts";
 import { azureObjectStorage } from "./azure-object-storage.ts";
 import { migrate, store } from "./store.ts";
 import { app } from "./app.ts";
@@ -115,7 +117,26 @@ export async function start(env: NodeJS.ProcessEnv) {
       ),
     );
     const eventReader = eventCatalogReader();
+    const invoiceSettings = simpleInvoiceSettings(
+      env,
+      Boolean(settings.hosted),
+    );
+    const invoices = invoiceSettings
+      ? simpleInvoiceStore(pool, invoiceSettings)
+      : undefined;
     const options = {
+      simpleInvoices: invoices,
+      invoiceSender: !invoiceSettings
+        ? undefined
+        : invoiceSettings.sample
+          ? { send: async () => {} }
+          : settings.emailEndpoint && settings.emailSender && settings.hosted
+            ? azureInvoiceSender(
+                settings.emailEndpoint,
+                settings.emailSender,
+                settings.hosted.managedIdentityClientId,
+              )
+            : undefined,
       ...settings,
       assignmentEvidence: assignmentEvidenceStore(pool, {
         enabled: settings.assignmentHandoff,
@@ -323,6 +344,11 @@ export async function start(env: NodeJS.ProcessEnv) {
             console.error("A pending local deletion will be retried.");
         } catch {
           console.error("Pending local deletion recovery is unavailable.");
+        }
+        if (invoices) {
+          const billing = await invoices.generateScheduled();
+          if (billing.kind !== "ready")
+            console.error("Recurring invoice generation remains unconfirmed.");
         }
       })().finally(() => {
         activeRecovery = undefined;

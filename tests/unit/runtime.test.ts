@@ -16,10 +16,17 @@ const doubles = vi.hoisted(() => ({
   poolOptions: {} as Record<string, unknown>,
   databasePassword: vi.fn(),
   emailSender: vi.fn(),
+  invoiceSender: vi.fn(),
+  invoiceStore: vi.fn(),
+  generateInvoices: vi.fn(),
   memberEmail: vi.fn(),
 }));
 vi.mock("../../src/azure-email-sender.ts", () => ({
   azureEmailSender: doubles.emailSender,
+  azureInvoiceSender: doubles.invoiceSender,
+}));
+vi.mock("../../src/simple-invoice-store.ts", () => ({
+  simpleInvoiceStore: doubles.invoiceStore,
 }));
 vi.mock("../../src/member-email-access.ts", () => ({
   memberEmailAccess: doubles.memberEmail,
@@ -98,6 +105,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   doubles.app.mockImplementation(() => ({ listen: doubles.listen }));
   doubles.end.mockResolvedValue(undefined);
+  doubles.invoiceStore.mockReturnValue({
+    generateScheduled: doubles.generateInvoices,
+  });
+  doubles.generateInvoices.mockResolvedValue({
+    kind: "ready",
+    value: { created: 0 },
+  });
+  doubles.invoiceSender.mockReturnValue({ send: vi.fn() });
   doubles.migrate.mockResolvedValue(undefined);
   doubles.seed.mockResolvedValue(12);
   doubles.azureStorage.mockReturnValue({
@@ -509,5 +524,58 @@ it("AUDIT-DELETE-01 advances individual recovery independently and reports safe 
   } finally {
     log.mockRestore();
     vi.useRealTimers();
+  }
+});
+
+it("OFFPUR-10 runs accepted recurring agreements without browser traffic and awaits shutdown", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  server();
+  const running = await start({ ...env, DNE_INVOICE_MODE: "sample" });
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    expect(doubles.generateInvoices).toHaveBeenCalledOnce();
+    const options = doubles.app.mock.calls[0]![1];
+    await expect(options.invoiceSender.send()).resolves.toBeUndefined();
+    doubles.generateInvoices.mockResolvedValueOnce({ kind: "unavailable" });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(log).toHaveBeenCalledWith(
+      "Recurring invoice generation remains unconfirmed.",
+    );
+  } finally {
+    await running.close();
+    log.mockRestore();
+    vi.useRealTimers();
+  }
+});
+it("OFFPUR-07 uses existing hosted mail only for explicitly configured invoices", async () => {
+  const billing = {
+    DNE_INVOICE_MODE: "configured",
+    DNE_INVOICE_ISSUER: "Configured test issuer",
+    DNE_INVOICE_PAYMENT_INSTRUCTIONS: "Configured test instructions",
+    DNE_INVOICE_CURRENCY: "CAD",
+  };
+  server();
+  const local = await start({ ...env, ...billing });
+  try {
+    expect(doubles.app.mock.calls.at(-1)![1].invoiceSender).toBeUndefined();
+  } finally {
+    await local.close();
+  }
+  server();
+  const running = await start({
+    ...hostedEnv,
+    ...billing,
+    DNE_EMAIL_ENDPOINT: "https://synthetic.communication.azure.com",
+    DNE_EMAIL_SENDER: "noreply@example.invalid",
+  });
+  try {
+    expect(doubles.invoiceSender).toHaveBeenCalledWith(
+      "https://synthetic.communication.azure.com",
+      "noreply@example.invalid",
+      hostedEnv.DNE_AZURE_MANAGED_IDENTITY_CLIENT_ID,
+    );
+  } finally {
+    await running.close();
   }
 });

@@ -15,7 +15,7 @@ let server: Server;
 afterEach(async () => {
   if (server) await closeLoopback(server);
 });
-function fixture() {
+function fixture(invoices = false) {
   const create = vi.fn(),
     session = vi.fn().mockResolvedValue({ kind: "missing" });
   const staffList = vi.fn().mockResolvedValue([]);
@@ -29,6 +29,9 @@ function fixture() {
   const options = {
     origin,
     secret,
+    simpleInvoices: invoices
+      ? ({} as import("../../src/simple-invoice-store.ts").SimpleInvoiceStore)
+      : undefined,
     localStaffEntry: true,
     staffEntry: { admit },
     catalog: { ...disabledCatalogStore(), staffList },
@@ -97,4 +100,22 @@ it("STAFF-01-COEXIST staff mutation selects staff CSRF while preserving the lear
     .type("form")
     .send({ csrf: csrf(learner, secret), state: "paused", confirm: "yes" })
     .expect(403);
+});
+
+it("OFFPUR-05 exposes configured billing tools only to the current platform administrator", async () => {
+  const f = fixture(true);
+  server = await listenLoopback(f.application);
+  const get = () =>
+    request(server)
+      .get("/staff")
+      .set("Host", host)
+      .set("Cookie", `dne_staff=${staff}`);
+  expect((await get()).text).not.toContain('href="/operator/invoices"');
+  f.admit.mockResolvedValue({
+    kind: "ready",
+    role: "platform_admin",
+    deadline: performance.now() + 60000,
+    expiresAt: new Date(Date.now() + 60000),
+  });
+  expect((await get()).text).toContain('href="/operator/invoices"');
 });

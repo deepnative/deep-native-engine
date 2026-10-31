@@ -30,6 +30,10 @@ it.each(["preconnect", "unfinished-http"] as const)(
       closing: Promise<void> | undefined;
     let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
+      expect(server.address()).toMatchObject({
+        address: "127.0.0.1",
+        family: "IPv4",
+      });
       const connected = once(server, "connection");
       client = createConnection(
         Number(new URL(origin(server)).port),

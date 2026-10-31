@@ -42,6 +42,7 @@ export interface StaffTools {
   studyUnits?: boolean;
   eventRehearsals?: boolean;
   workflowReviews?: boolean;
+  invoices?: boolean;
   localAi: boolean;
   receipts: boolean;
 }
@@ -120,6 +121,11 @@ function links(role: StaffRole, tools: StaffTools) {
   }
   if (role === "platform_admin")
     choices.push(
+      [
+        tools.invoices === true,
+        "/operator/invoices",
+        "Course billing and invoices",
+      ],
       [
         tools.studyUnits === true,
         "/operator/study-test-units",
