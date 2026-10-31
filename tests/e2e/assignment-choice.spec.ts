@@ -229,6 +229,9 @@ test("[L33] professional sees a domain match only after observed foundation prac
   await page.getByLabel("Your starting point").selectOption("professional");
   await page.getByLabel("What would you like to do?").selectOption("work");
   await page
+    .getByText("Personalize your path (optional)", { exact: true })
+    .click();
+  await page
     .getByRole("group", { name: "Domains of interest (optional)" })
     .getByLabel("Education")
     .check();

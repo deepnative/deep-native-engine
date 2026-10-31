@@ -14,6 +14,9 @@ async function onboard(page: Page, specialty: "security" | "analysis") {
     .getByLabel("What would you like to do?")
     .selectOption(specialty === "security" ? "build" : "work");
   await page
+    .getByText("Personalize your path (optional)", { exact: true })
+    .click();
+  await page
     .getByRole("group", { name: "IT specialties (optional)" })
     .getByLabel(
       specialty === "security" ? "Cybersecurity" : "Business analysis",

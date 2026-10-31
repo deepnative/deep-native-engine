@@ -1507,6 +1507,51 @@ it("links multiple profile errors and escapes attempted text without reflecting 
   expect(html).toContain('id="exploratory" type="checkbox"');
   expect(html).toContain('aria-describedby="exploratory-error"');
 });
+it("[LAND-01] offers an unsaved native example before compact onboarding", () => {
+  const html = welcome("token");
+  expect(html).toMatch(/class="[^"]*\bwelcome-page\b[^"]*"/);
+  const examples = [
+    ...html.matchAll(
+      /<details\b[^>]*\bname="landing-example"[^>]*>([\s\S]*?)<\/details>/g,
+    ),
+  ];
+  expect(examples).toHaveLength(2);
+  for (const example of examples) {
+    expect(example[1]).toMatch(/<summary\b[^>]*>[\s\S]*?\S[\s\S]*?<\/summary>/);
+    expect(example[1]?.split("</summary>")[1]).toMatch(/\S/);
+    expect(example[0]).not.toMatch(/<(?:form|input)\b/);
+  }
+  expect(html).toMatch(/nothing is saved/i);
+  const optional = html.match(
+    /<details\b[^>]*\bclass="onboarding-options"[^>]*>/,
+  );
+  expect(optional).not.toBeNull();
+  expect(optional?.[0]).not.toMatch(/\sopen(?:\s|=|>)/);
+  expect(html).toContain("Personalize your path (optional)</summary>");
+});
+it("[LAND-02] expands optional onboarding fields after an error without losing the attempt", () => {
+  const edit = profileEdit({
+    background: "technical",
+    goal: "build",
+    it_roles: "security",
+    timezone: "Mars/Olympus",
+    weekly_minutes: "30",
+  });
+  const html = welcome("token", [], edit);
+  const optional = html.match(
+    /<details\b[^>]*\bclass="onboarding-options"[^>]*>/,
+  );
+  expect(optional).not.toBeNull();
+  expect(optional?.[0]).toMatch(/\sopen(?:\s|=|>)/);
+  expect(html).toContain('<option value="technical" selected>');
+  expect(html).toContain('<option value="build" selected>');
+  expect(html).toContain('name="it_roles" value="security" checked');
+  expect(html).toContain('<option value="30" selected>');
+  expect(html).toContain('value="Mars/Olympus"');
+  expect(html).toContain('href="#timezone"');
+  expect(html).toContain('id="timezone-error"');
+  expect(html).toContain('aria-describedby="timezone-help timezone-error"');
+});
 it("renders a failed onboarding attempt for correction without a saved member", () => {
   const edit = profileEdit({
     background: "technical",

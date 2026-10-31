@@ -85,6 +85,9 @@ async function onboard(
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
   await page.getByLabel("What would you like to do?").selectOption(goal);
+  await page
+    .getByText("Personalize your path (optional)", { exact: true })
+    .click();
   if (background === "technical")
     await page
       .getByRole("group", { name: "IT specialties (optional)" })
