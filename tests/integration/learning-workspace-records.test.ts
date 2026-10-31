@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import express from "express";
 import request from "supertest";
+import { withLoopback } from "../support/loopback-server.ts";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { migrate, store } from "../../src/store.ts";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -33,6 +34,7 @@ const origin = "http://localhost",
   base = "/learn/notebooks";
 const app = express();
 app.use((req, res, next) => {
+  res.set("X-Owned-Records-Fixture", "learning-records");
   res.locals.token = req.get("x-test-member");
   next();
 });
@@ -100,7 +102,19 @@ function decision(id: number): LearningDecision {
   };
 }
 function get(member: string, path: string) {
-  return request(app).get(path).set("x-test-member", member);
+  return withLoopback(app, async (server) => {
+    expect(server.address()).toMatchObject({
+      address: "127.0.0.1",
+      family: "IPv4",
+    });
+    const response = await request(server)
+      .get(path)
+      .set("x-test-member", member);
+    expect(response.headers["x-owned-records-fixture"]).toBe(
+      "learning-records",
+    );
+    return response;
+  });
 }
 function remove(
   member: string,
@@ -108,16 +122,18 @@ function remove(
   operationId: string,
   expectedRevision: number,
 ) {
-  return request(app)
-    .post(`${base}/${id}/delete`)
-    .set({ "x-test-member": member, origin })
-    .type("form")
-    .send({
-      csrf: csrf(member, secret),
-      operationId,
-      expectedRevision: String(expectedRevision),
-      confirm: "yes",
-    });
+  return withLoopback(app, (server) =>
+    request(server)
+      .post(`${base}/${id}/delete`)
+      .set({ "x-test-member": member, origin })
+      .type("form")
+      .send({
+        csrf: csrf(member, secret),
+        operationId,
+        expectedRevision: String(expectedRevision),
+        confirm: "yes",
+      }),
+  );
 }
 
 it("LWORK-05 retained recovery renders all27 fields after retirement and downloads exact writing with 20-decision continuation", async () => {
