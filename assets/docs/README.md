@@ -1,5 +1,7 @@
 # Documentation and assets
 
+- [Individual course invoices](SIMPLE-COURSE-INVOICES.md): registration-first course consolidation, explicit one-time/monthly terms, offline receipts, private printable invoices and default-off/sample configuration.
+
 - [Reviewed workflows](REVIEWED-WORKFLOWS.md): ordinary editorially reviewed manual examples, source and rights facts, exact downloads, maintenance and retained private version history.
 - [Prepared private examples](PRIVATE-PREPARED-SAMPLES.md): fixed invented-source choice, separate acknowledgements, normal browser feedback, original-instruction recovery, provenance and compatible creation rollback.
 - [Private support-minute permissions](PRIVATE-SUPPORT-MINUTE-PERMISSIONS.md): exact member-held request/allocation references, finite administrator browser permission, original-operation recovery and native operator settlement.

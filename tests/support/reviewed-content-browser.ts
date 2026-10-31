@@ -17,7 +17,11 @@ import { foundationImportStore } from "../../src/foundation-import.ts";
 import { reviewedFoundation } from "../../src/foundation-pack.ts";
 import { dropAttendanceBrowserDatabase } from "./attendance-browser-database.ts";
 
-export async function reviewedContentFixture(browser: Browser, info: TestInfo) {
+export async function reviewedContentFixture(
+  browser: Browser,
+  info: TestInfo,
+  options: { sampleInvoices?: boolean } = {},
+) {
   const original = process.env.DNE_TEST_DATABASE_URL;
   if (
     !original ||
@@ -76,6 +80,7 @@ export async function reviewedContentFixture(browser: Browser, info: TestInfo) {
       DNE_APP_MODE: "test",
       DNE_PRIVATE_STORAGE_ROOT: storage,
       DNE_LOCAL_STAFF_ENTRY: "enabled",
+      DNE_INVOICE_MODE: options.sampleInvoices ? "sample" : "disabled",
     });
     const origin = running.origin;
     await info.attach("reviewed-content-fixture", {

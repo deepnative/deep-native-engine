@@ -863,7 +863,7 @@ export function accountPage(
       : "<p>Sign-out requires a verified email so you can return to your saved work.</p>";
   return page(
     "My account",
-    `<section class="reading"><p class="eyebrow">Signed in</p><h1>My account</h1><p>Your learning profile and saved work belong to this account. Changing these preferences does not create another account or grant staff or paid-service access.</p><p><a href="/learn">Return to learning</a></p>${recovery}${signOut}<section class="profile-form"><h2>Your learning profile</h2><p>Update your goals and preferences. Experience is self-reported; no job title or payment is required.</p><form method="post" action="/profile">${hidden(csrf)}${profileFields(learner)}<button type="submit">Save my profile</button></form></section></section>`,
+    `<section class="reading"><p class="eyebrow">Signed in</p><h1>My account</h1><p>Student reference: <code>${escape(learner.id)}</code>. Share this reference with course support when arranging your courses.</p><p>Your learning profile and saved work belong to this account. Changing these preferences does not create another account or grant staff or paid-service access.</p><p><a href="/learn">Return to learning</a> · <a href="/account/purchases">Courses and invoices</a></p>${recovery}${signOut}<section class="profile-form"><h2>Your learning profile</h2><p>Update your goals and preferences. Experience is self-reported; no job title or payment is required.</p><form method="post" action="/profile">${hidden(csrf)}${profileFields(learner)}<button type="submit">Save my profile</button></form></section></section>`,
   );
 }
 export function dashboard(
