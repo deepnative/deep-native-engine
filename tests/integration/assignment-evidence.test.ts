@@ -83,6 +83,7 @@ beforeEach(async () => {
   await pool.query("TRUNCATE principals,cohorts CASCADE");
   vi.clearAllMocks();
 });
+// Administrative DROP waits for a cluster checkpoint.
 afterAll(async () => {
   try {
     if (observerDatabase) {
@@ -98,7 +99,7 @@ afterAll(async () => {
   } finally {
     await pool.end();
   }
-});
+}, 90000);
 async function member() {
   const token = randomBytes(32).toString("hex");
   await db.create(token, { background: "explorer", goal: "everyday" });
