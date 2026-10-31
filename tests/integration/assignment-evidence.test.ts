@@ -74,7 +74,10 @@ beforeAll(async () => {
   observerDatabase.marked = true;
   url.pathname = `/${name}`;
   observerDatabase.foreign = new Pool({ connectionString: url.toString() });
-  await migrate(observerDatabase.foreign);
+  // The foreign observer control needs only a real table lock.
+  await observerDatabase.foreign.query(
+    "CREATE TABLE assignment_attempts (id uuid)",
+  );
 }, 30000);
 beforeEach(async () => {
   await pool.query("TRUNCATE principals,cohorts CASCADE");
