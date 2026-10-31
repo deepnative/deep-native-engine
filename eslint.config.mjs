@@ -5,9 +5,18 @@ export default ts.config(
   js.configs.recommended,
   ...ts.configs.recommended,
   {
-    files: ["public/*.js"],
+    files: [
+      "public/*.js",
+      "assets/docs/learning-design/reader/{reader,feedback,contribution,browser-notebook,local-entry}.mjs",
+    ],
     languageOptions: {
-      globals: { document: "readonly", window: "readonly" },
+      globals: {
+        document: "readonly",
+        window: "readonly",
+        URLSearchParams: "readonly",
+        structuredClone: "readonly",
+        Blob: "readonly",
+      },
     },
   },
   {

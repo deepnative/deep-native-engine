@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { hash } from "./store.ts";
+import { decodeLearningText } from "./learning-workspace-text.ts";
 import {
   ASSIGNMENT_ORIGIN_JOIN,
   ASSIGNMENT_ORIGIN_SQL,
@@ -439,6 +440,34 @@ const sections = {
     "id",
     true,
   ),
+  // Append only: preserve every existing cursor-v2 section position.
+  learningNotebooks: section(
+    `id,content_id AS "contentId",content_version AS "contentVersion",
+     content_hash AS "contentHash",variant,revision,decision_sequence AS "decisionSequence",
+     draft_revision AS "draftRevision",draft_based_on_sequence AS "draftBasedOnDecisionSequence",
+     metadata,created_at AS "createdAt",saved_at AS "savedAt",deleted_at AS "deletedAt"`,
+    "learning_workspace_notebooks WHERE member_id=$1",
+    "id",
+    true,
+  ),
+  learningWriting: section(
+    `f.notebook_id AS "notebookId",f.field_key AS field,f.value_json AS "_encodedWriting"`,
+    `learning_workspace_fields f JOIN learning_workspace_notebooks n ON n.id=f.notebook_id
+     WHERE n.member_id=$1 AND n.deleted_at IS NULL AND n.id=ANY($4::uuid[])`,
+    "f.notebook_id,f.field_key",
+  ),
+  learningFeedbackDecisions: section(
+    `d.notebook_id AS "notebookId",d.sequence,d.metadata,d.accepted_at AS "acceptedAt"`,
+    `learning_workspace_decisions d JOIN learning_workspace_notebooks n ON n.id=d.notebook_id
+     WHERE n.member_id=$1 AND n.deleted_at IS NULL AND n.id=ANY($4::uuid[])`,
+    "d.notebook_id,d.sequence",
+  ),
+  learningFeedbackWriting: section(
+    `f.notebook_id AS "notebookId",f.sequence,f.field_key AS field,f.value_json AS "_encodedWriting"`,
+    `learning_workspace_decision_fields f JOIN learning_workspace_notebooks n ON n.id=f.notebook_id
+     WHERE n.member_id=$1 AND n.deleted_at IS NULL AND n.id=ANY($4::uuid[])`,
+    "f.notebook_id,f.sequence,f.field_key",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -452,7 +481,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v27";
+  version: "local-member-records-v28";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -586,7 +615,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v27",
+          version: "local-member-records-v28",
           profile: owner.rows[0],
           records,
           testUnitHistory: {
@@ -718,6 +747,38 @@ export function memberExportStore(
             );
             values.push(parents.rows.map((row) => row.id));
           }
+          if (
+            name === "learningWriting" ||
+            name === "learningFeedbackDecisions" ||
+            name === "learningFeedbackWriting"
+          ) {
+            const [table, childKey] = {
+              learningWriting: [
+                "learning_workspace_fields",
+                "f.notebook_id,f.field_key",
+              ],
+              learningFeedbackDecisions: [
+                "learning_workspace_decisions",
+                "f.notebook_id,f.sequence",
+              ],
+              learningFeedbackWriting: [
+                "learning_workspace_decision_fields",
+                "f.notebook_id,f.sequence,f.field_key",
+              ],
+            }[name];
+            // A repeatable snapshot can predate a wait for workspace access.
+            // Lock changed parents before reading text, also on continuation,
+            // so deletion during that wait fails rather than returning old words.
+            const parents = await client.query<{ id: string }>(
+              `SELECT n.id FROM learning_workspace_notebooks n
+               WHERE n.member_id=$1 AND n.deleted_at IS NULL AND EXISTS(
+                 SELECT 1 FROM ${table} f WHERE f.notebook_id=n.id
+                   AND jsonb_build_array(${childKey})>$3::jsonb)
+               ORDER BY n.id LIMIT $2 FOR SHARE OF n`,
+              values,
+            );
+            values.push(parents.rows.map((row) => row.id));
+          }
           const rows = (
             await client.query<{ _key: Key; [key: string]: unknown }>(
               sql,
@@ -730,6 +791,17 @@ export function memberExportStore(
               break pages;
             }
             const { _key, ...record } = row;
+            if (
+              name === "learningWriting" ||
+              name === "learningFeedbackWriting"
+            ) {
+              // Decode before pagination measures bytes. Never cast to JSONB in
+              // SQL: PostgreSQL cannot represent every accepted UTF-16 value.
+              record.text = decodeLearningText(
+                record._encodedWriting as string,
+              );
+              delete record._encodedWriting;
+            }
             const next = encode(
               [2, index, _key, payload.page.number + 1, expires],
               token,

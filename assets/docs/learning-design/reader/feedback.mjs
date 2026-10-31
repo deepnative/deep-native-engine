@@ -33,12 +33,15 @@ export function newFeedbackState(route) {
 }
 export function currentFeedbackArtifact(route, state) {
   const last = state.records.at(-1);
-  return last ? { id: last.toVersion, text: last.text } : initial(route);
+  return last
+    ? { id: last.toVersion, text: last.text }
+    : (state.base?.artifact ?? initial(route));
 }
-function artifactVersions(route, state) {
+function artifactVersions(route, state, savedHistory = []) {
   return [
     ...cases[route].versions,
-    ...state.records
+    ...savedHistory
+      .concat(state.records)
       .filter((r) => r.decision === "revise")
       .map((r) => ({ id: r.toVersion, text: r.text })),
   ];
@@ -57,11 +60,21 @@ export function validFeedbackState(state, route) {
     ![draft.text, draft.reason, draft.question].every(text)
   )
     return false;
-  let current = initial(route);
+  const base = state.base;
+  if (
+    base &&
+    (!Number.isInteger(base.sequence) ||
+      base.sequence < 0 ||
+      !Number.isInteger(base.artifact?.id) ||
+      base.artifact.id < initial(route).id ||
+      !text(base.artifact.text))
+  )
+    return false;
+  let current = base?.artifact ?? initial(route);
   for (const [index, r] of state.records.entries()) {
     if (
       !r ||
-      r.id !== index + 1 ||
+      r.id !== (base?.sequence ?? 0) + index + 1 ||
       !Object.hasOwn(labels, r.decision) ||
       ![r.text, r.reason, r.question, r.proposedText].every(text) ||
       !r.reason.trim() ||
@@ -105,7 +118,7 @@ export function addFeedbackDecision(route, state) {
   )
     return "There is no newer draft to point to. Revise or explain why you decline.";
   state.records.push({
-    id: state.records.length + 1,
+    id: (state.base?.sequence ?? 0) + state.records.length + 1,
     commentVersion: cases[route].commentVersion,
     fromVersion: current.id,
     toVersion: current.id + (draft.decision === "revise" ? 1 : 0),
@@ -118,15 +131,23 @@ export function addFeedbackDecision(route, state) {
   state.draft = emptyDraft(currentFeedbackArtifact(route, state).text);
   return null;
 }
-export function feedbackHistory(state) {
-  return state.records
+export function feedbackHistory(state, savedHistory = []) {
+  return savedHistory
+    .concat(state.records)
     .map(
       (r) =>
         `<section class="decision-record"><h4>Decision ${r.id} · ${escape(labels[r.decision])}</h4><p class="quiet">Comment on v${r.commentVersion} · ${r.decision === "revise" ? `new draft v${r.toVersion} from v${r.fromVersion}` : `retained draft v${r.toVersion}`} · learner decision, no new review</p><p><strong>Reason:</strong> ${escape(r.reason)}</p><pre>${escape(r.text)}</pre>${r.question ? `<p><strong>Clarification kept in this notebook:</strong> ${escape(r.question)}</p>` : ""}${r.decision !== "revise" && r.proposedText !== r.text ? `<details><summary>Unapplied proposal retained</summary><pre>${escape(r.proposedText)}</pre></details>` : ""}</section>`,
     )
     .join("");
 }
-export function renderFeedback(route, state, notice = "") {
+export function renderFeedback(
+  route,
+  state,
+  notice = "",
+  savedHistory = [],
+  nextCursor = null,
+  account = false,
+) {
   const data = cases[route],
     current = currentFeedbackArtifact(route, state),
     draft = state.draft;
@@ -135,9 +156,10 @@ export function renderFeedback(route, state, notice = "") {
     <p>Use this invented case to practise. Keep a correction or a reason for retaining the wording. No question is sent to a reviewer.</p>
     <div class="feedback-context"><div><h3>Source</h3><p id="feedback-source">${escape(data.source)}</p></div><div id="feedback-comment"><h3>Comment on v${data.commentVersion}</h3><p>${escape(data.comment)}</p><p class="quiet">Supplied practice feedback · its version stays fixed. It is not a review of later writing.</p></div></div>
     <div id="feedback-current"><h3>Current draft · v${current.id}</h3><pre>${escape(current.text)}</pre></div>
-    <details id="feedback-versions"><summary>All artifact versions (${artifactVersions(route, state).length})</summary>${artifactVersions(
+    <details id="feedback-versions"><summary>${nextCursor ? "Recent artifact versions" : "All artifact versions"} (${artifactVersions(route, state, savedHistory).length})</summary>${artifactVersions(
       route,
       state,
+      savedHistory,
     )
       .map(
         (v) =>
@@ -157,10 +179,10 @@ export function renderFeedback(route, state, notice = "") {
     <label class="writing-label" for="feedback-reason">My reason</label><textarea id="feedback-reason" data-feedback-field="reason" maxlength="30000" rows="3" placeholder="Point to the source or the change already made.">${escape(draft.reason)}</textarea>
     <label class="writing-label" for="feedback-question">Clarification to keep (optional)</label><textarea id="feedback-question" data-feedback-field="question" maxlength="30000" rows="2" placeholder="Which source would settle the uncertainty? This stays in your notebook.">${escape(draft.question)}</textarea>
     <details><summary>Compare with source-based guidance</summary><p>${escape(data.guidance)}</p><p class="quiet">This is supplied guidance. Your reasoning is not automatically graded.</p></details>
-    <button class="primary" type="submit">Add decision to my notebook</button><p id="feedback-notice" role="status">${escape(notice || "A decision needs your reason. Adding it keeps an in-page record; use Save in this browser to retain it after reload.")}</p></form>
-    <div id="feedback-decisions"><h3>Your decision record</h3>${feedbackHistory(state) || "<p>No decision recorded yet.</p>"}</div><p class="quiet">A recorded decision is not a mastery result or an independent review. Additional fresh-case notes remain available below.</p></section>`;
+    <button class="primary" type="submit">Add decision to my notebook</button><p id="feedback-notice" role="status">${escape(notice || `A decision needs your reason. Adding it keeps an in-page record; use ${account ? "Save my work" : "Save in this browser"} to retain it after reload.`)}</p></form>
+    <div id="feedback-decisions"><h3>Your decision record</h3>${feedbackHistory(state, savedHistory) || "<p>No decision recorded yet.</p>"}${nextCursor ? '<button class="secondary" id="feedback-older" type="button">Load earlier decisions</button><p class="quiet">Showing recent decisions. Earlier decisions remain saved.</p>' : ""}</div><p class="quiet">A recorded decision is not a mastery result or an independent review. Additional fresh-case notes remain available below.</p></section>`;
 }
-export function exportFeedback(route, state) {
+export function exportFeedback(route, state, savedHistory = []) {
   const data = cases[route];
   const lines = [
     "\nLesson 6 feedback decision workspace",
@@ -169,9 +191,9 @@ export function exportFeedback(route, state) {
     `Comment on v${data.commentVersion}: ${data.comment}`,
     "Supplied practice feedback. No question was sent; no independent review is claimed.",
   ];
-  for (const v of artifactVersions(route, state))
+  for (const v of artifactVersions(route, state, savedHistory))
     lines.push(`Draft v${v.id}: ${v.text}`);
-  for (const r of state.records) {
+  for (const r of savedHistory.concat(state.records)) {
     lines.push(
       `Decision ${r.id}: ${labels[r.decision]}; comment v${r.commentVersion}; artifact v${r.fromVersion} → v${r.toVersion}`,
       `Reason: ${r.reason}`,

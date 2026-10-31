@@ -29,6 +29,7 @@ try {
     "public",
     "migrations",
     "assets/docs/content",
+    "assets/docs/learning-design/reader",
     "tests/unit",
     "tests/e2e",
     "tests/support",

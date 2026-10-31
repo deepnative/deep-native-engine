@@ -64,6 +64,13 @@ import type { ManualObservationStore } from "../../src/manual-observations.ts";
 import type { AssignmentReadinessStore } from "../../src/assignment-readiness.ts";
 import { SlotHoldFailure, type MemberSlotHolds } from "../../src/slot-holds.ts";
 import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
+import { csrf } from "../../src/session.ts";
+import type { LearningWorkspaceStore } from "../../src/learning-workspace-store.ts";
+import type { LearningWorkspacePublicationStore } from "../../src/learning-workspace-publication.ts";
+import {
+  LEARNING_WORKSPACE_CONTENT,
+  learningWorkspacePack,
+} from "../../src/learning-workspace-pack.ts";
 it("serves goal-matched event previews only to active members and never accepts enrollment", async () => {
   const db = storage();
   const agent = await managedAgent(app(db, { origin, secret: "secret" }));
@@ -1218,6 +1225,141 @@ function storage() {
     remove: vi.fn<Store["remove"]>().mockResolvedValue(undefined),
   };
 }
+
+it("LWORK-01/07 mounts eligible account learning before the earlier learning route", async () => {
+  const bearer = "a".repeat(64);
+  const db = storage();
+  const pack = await learningWorkspacePack();
+  const learning = {
+    source: vi.fn<LearningWorkspaceStore["source"]>().mockResolvedValue({
+      kind: "ok",
+      value: pack,
+    }),
+    list: vi.fn<LearningWorkspaceStore["list"]>().mockResolvedValue({
+      kind: "ok",
+      value: { items: [], nextCursor: null },
+    }),
+  } as unknown as LearningWorkspaceStore;
+  const publication = {
+    preview: vi
+      .fn<LearningWorkspacePublicationStore["preview"]>()
+      .mockResolvedValue({
+        kind: "denied",
+      }),
+    import: vi.fn<LearningWorkspacePublicationStore["import"]>(),
+  };
+  const agent = await managedAgent(
+    app(db, {
+      origin,
+      secret: "secret",
+      learningWorkspace: learning,
+      learningWorkspacePublication: publication,
+    }),
+  );
+  const cookie = `dne_preview=${bearer}`;
+  for (const [goal, variant] of [
+    ["everyday", "everyday"],
+    ["work", "work"],
+    ["build", "technical"],
+  ] as const) {
+    db.session.mockResolvedValue({
+      kind: "active",
+      expiresAt: new Date(Date.now() + 60_000),
+      learner: { ...member, goal },
+    });
+    const opened = await agent
+      .get("/learn")
+      .set("Host", host)
+      .set("Cookie", cookie)
+      .expect(200);
+    expect(opened.text).toContain(`data-workspace-route="${variant}"`);
+    expect(learning.source).toHaveBeenLastCalledWith(bearer, {
+      contentId: LEARNING_WORKSPACE_CONTENT.id,
+      contentVersion: LEARNING_WORKSPACE_CONTENT.version,
+      contentHash: LEARNING_WORKSPACE_CONTENT.contentHash,
+      variant,
+    });
+    const earlier = await agent
+      .get("/learn/records")
+      .set("Host", host)
+      .set("Cookie", cookie)
+      .expect(303);
+    expect(earlier.headers.location).toBe("/learn?view=records");
+    const prior = await agent
+      .get("/learn?view=records")
+      .set("Host", host)
+      .set("Cookie", cookie)
+      .expect(200);
+    expect(prior.text).toContain("Your starter plan");
+    expect(prior.text).toContain('href="/learn/notebooks"');
+  }
+  expect(learning.source).toHaveBeenCalledTimes(3);
+  vi.mocked(learning.source).mockResolvedValue({ kind: "source-unavailable" });
+  const retired = await agent
+    .get("/learn")
+    .set("Host", host)
+    .set("Cookie", cookie)
+    .expect(200);
+  expect(retired.text).toContain("Your starter plan");
+  expect(retired.text).not.toContain("data-workspace-route=");
+  expect(publication.import).not.toHaveBeenCalled();
+});
+
+it("LWORK-02/06 keeps JSON writes outside the form parser and returns JSON denial before storage", async () => {
+  const bearer = "b".repeat(64);
+  const db = storage();
+  const learning = {
+    save: vi.fn<LearningWorkspaceStore["save"]>().mockResolvedValue({
+      kind: "saved",
+      notebookId: "own",
+      revision: 2,
+      decisionSequence: 0,
+      savedAt: new Date("2026-10-29T12:00:00Z"),
+    }),
+  } as unknown as LearningWorkspaceStore;
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", learningWorkspace: learning }),
+  );
+  const path = "/api/learning-workspace/notebooks/own/draft";
+  const cookie = `dne_preview=${bearer}`;
+  const body = {
+    operationId: "10000000-0000-4000-8000-000000000001",
+    expectedRevision: 1,
+    state: { exact: "invented writing ".repeat(1300) },
+    basedOnDecisionSequence: 0,
+  };
+  const denied = await agent
+    .put(path)
+    .set("Host", host)
+    .set("Cookie", cookie)
+    .set("Origin", origin)
+    .set("X-CSRF-Token", "forged")
+    .send(body)
+    .expect(403);
+  expect(denied.body).toEqual({ kind: "denied" });
+  expect(denied.headers["content-type"]).toMatch(/json/);
+  expect(learning.save).not.toHaveBeenCalled();
+  const accepted = await agent
+    .put(path)
+    .set("Host", host)
+    .set("Cookie", cookie)
+    .set("Origin", origin)
+    .set("X-CSRF-Token", csrf(bearer, "secret"))
+    .send(body)
+    .expect(200);
+  expect(accepted.body.kind).toBe("saved");
+  expect(learning.save).toHaveBeenCalledExactlyOnceWith(bearer, "own", body);
+  const ordinary = await agent
+    .post("/start")
+    .set("Host", host)
+    .set("Cookie", cookie)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf: "forged", background: "explorer", goal: "everyday" })
+    .expect(403);
+  expect(ordinary.headers["content-type"]).toMatch(/html/);
+  expect(db.create).not.toHaveBeenCalled();
+});
 function evidenceStorage() {
   return {
     ...disabledEvidenceStore(),
@@ -1634,6 +1776,32 @@ it("FOUND-01 offers the reviewed foundation import explicitly without publishing
   expect(response.text).toContain("Importing does not publish");
   expect(catalog.publish).not.toHaveBeenCalled();
 });
+it("LWORK-05 links the complete editorial learning bundle from the staff library", async () => {
+  const catalog = catalogMock();
+  catalog.staffList.mockResolvedValue([]);
+  const publication = {
+    preview: vi.fn<LearningWorkspacePublicationStore["preview"]>(),
+    import: vi.fn<LearningWorkspacePublicationStore["import"]>(),
+  };
+  const agent = await managedAgent(
+    app(storage(), {
+      origin,
+      secret: "secret",
+      catalog,
+      learningWorkspacePublication: publication,
+    }),
+  );
+  const response = await agent
+    .get("/editor/library")
+    .set("Host", host)
+    .expect(200);
+  expect(response.text).toContain(
+    'href="/editor/library/learning-workspace">Review the learning workspace</a>',
+  );
+  expect(response.text).toContain("Import six reviewed foundation drafts");
+  expect(publication.preview).not.toHaveBeenCalled();
+  expect(publication.import).not.toHaveBeenCalled();
+});
 it("ASN103-01 offers both reviewed assignment drafts without publishing them", async () => {
   const catalog = catalogMock();
   catalog.staffList.mockResolvedValue([]);
@@ -2001,7 +2169,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v27",
+          version: "local-member-records-v28",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2041,7 +2209,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v27",
+    version: "local-member-records-v28",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -5276,7 +5444,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v27" as const,
+    version: "local-member-records-v28" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),

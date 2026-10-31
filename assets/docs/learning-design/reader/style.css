@@ -136,6 +136,50 @@ svg {
   grid-template-columns: 220px minmax(0, 1fr);
   min-height: 100vh;
 }
+.account-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 14px;
+}
+.account-navigation nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+.account-navigation a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+}
+.workspace-opening {
+  max-width: 72ch;
+  margin: 48px auto;
+  padding: 0 20px;
+}
+.workspace-records {
+  max-width: 80ch;
+  padding-top: 32px;
+  padding-bottom: 48px;
+}
+.workspace-records .notebook {
+  padding-inline: 0;
+}
+.workspace-records .notebook h2 {
+  margin-top: 32px;
+}
+.workspace-records .record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
 .sidebar {
   position: sticky;
   top: 0;
