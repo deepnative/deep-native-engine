@@ -67,7 +67,7 @@ async function accept(member: Page, cadence = "one-time") {
   ).toBeVisible();
   return member.url().split("/").at(-1)!;
 }
-test("L266 registered student accepts two courses on one printable individual invoice and staff records offline funds", async ({
+test("[L266] registered student accepts two courses on one printable individual invoice and staff records offline funds", async ({
   browser,
 }, info) => {
   const f = await reviewedContentFixture(browser, info, {
@@ -135,7 +135,7 @@ test("L266 registered student accepts two courses on one printable individual in
     await f.close();
   }
 });
-test("L267 monthly course agreement requires explicit acceptance and cancellation stops future invoices", async ({
+test("[L267] monthly course agreement requires explicit acceptance and cancellation stops future invoices", async ({
   browser,
 }, info) => {
   const f = await reviewedContentFixture(browser, info, {
@@ -175,7 +175,7 @@ test("L267 monthly course agreement requires explicit acceptance and cancellatio
     await f.close();
   }
 });
-test("L268 private invoices deny outsiders and unpaid corrections retain the original document", async ({
+test("[L268] private invoices deny outsiders and unpaid corrections retain the original document", async ({
   browser,
 }, info) => {
   const f = await reviewedContentFixture(browser, info, {
