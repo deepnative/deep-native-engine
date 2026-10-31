@@ -1,5 +1,7 @@
 # Account learning workspace — #34
 
+Current-main reconciliation on 31 October 2026 preserves the workspace and program integration while incorporating verified main `aa7a1e1`, including the interactive landing, circle contact and sequential native integration scheduling. The earlier combined `bef6e1d` full gate remains failed at assignment-observer teardown despite passing assertions. Its original reports are retained. The reconciled revision requires its own complete verification; PR #562's passing gate establishes the landing prerequisite, not this workspace's acceptance. Production remains parked.
+
 Implementation evidence on 29 October 2026: application wiring and migration registration are implemented on `codex/34-account-learning`. Before program integration, the six registered member/editorial journeys passed all 12 desktop/mobile executions against the actual runtime and PostgreSQL, with no retries, skips or unexpected errors. The combined program/workspace revision `e4cbda3c9f93f4dfd5823af3b32036f98fd1c5be` subsequently passed the same complete 12-case browser file on Linux with real PostgreSQL, both original projects, no retries, skips, unexpected results or global errors. Exact-commit delivery and hosted status are recorded on [live issue #34](https://github.com/deepnative/deep-native-engine/issues/34); these component results do not establish merged, hosted or full-MVP behavior. Production remains parked.
 
 ## Member journey

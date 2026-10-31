@@ -460,8 +460,8 @@ export async function runIntegration(root = process.cwd()) {
       mkdirSync(path.join(destination, String(index)));
     }
     stage = "native lane execution";
-    requireGate(!interrupted, "Integration execution interrupted");
     for (const [position, resource] of resources.entries()) {
+      requireGate(!interrupted, "Integration execution interrupted");
       const index = position + 1;
       const connection = new URL(url);
       connection.pathname = `/${resource.database.name}`;
@@ -478,9 +478,9 @@ export async function runIntegration(root = process.cwd()) {
           children,
         ),
       );
+      evidence.lanes.push(await pending.at(-1));
     }
     const outcomes = await Promise.all(pending);
-    evidence.lanes = outcomes;
     stage = "original lane evidence";
     const lanes = outcomes.map((child) => ({
       index: child.index,

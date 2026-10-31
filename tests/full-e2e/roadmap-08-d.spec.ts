@@ -89,6 +89,9 @@ test("[F-ROADMAP-08-D] project-management learner submits a noncoding assignment
     await page.getByLabel("Your starting point").selectOption("technical");
     await page.getByLabel("What would you like to do?").selectOption("build");
     await page
+      .getByText("Personalize your path (optional)", { exact: true })
+      .click();
+    await page
       .getByRole("group", { name: "IT specialties (optional)" })
       .getByLabel("Project, program and delivery management")
       .check();

@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
 import {
   mkdtempSync,
   mkdirSync,
@@ -10,6 +11,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { setImmediate } from "node:timers";
+import { Pool } from "pg";
+import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
 import {
   controlUrl,
   createLaneDatabase,
@@ -19,6 +23,19 @@ import {
   mergeUnhandled,
   runIntegration,
 } from "../../scripts/integration-runner.mjs";
+
+vi.mock("node:child_process", async (importOriginal) => ({
+  ...(await importOriginal()),
+  spawn: vi.fn(),
+}));
+vi.mock("pg", () => ({ Pool: vi.fn(function () {}) }));
+vi.mock("../support/attendance-browser-database.ts", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    dropAttendanceBrowserDatabase: vi.fn(actual.dropAttendanceBrowserDatabase),
+  };
+});
 
 const directories = [];
 afterEach(() => {
@@ -105,7 +122,7 @@ function fixture() {
   }));
   return { expected, lanes };
 }
-it("merges both original lane reports while retaining every file, assertion and raw count", () => {
+it("LAND-SCHED-04 merges both original lane reports while retaining every file, assertion and raw count", () => {
   const { expected, lanes } = fixture();
   const original = JSON.stringify(lanes);
   const result = mergeIntegrationReports(expected, lanes);
@@ -407,6 +424,139 @@ it("fails a malformed administrative target without exposing it or claiming test
     lanes: [],
     error: "Integration verification failed during configuration.",
   });
+});
+function controlledNativeRun() {
+  const root = directory();
+  mkdirSync(path.join(root, "tests/integration"), { recursive: true });
+  const files = ["first", "second"].map((name) => {
+    const file = path.join(root, `tests/integration/${name}.test.ts`);
+    writeFileSync(file, "");
+    return file;
+  });
+  vi.stubEnv(
+    "DNE_TEST_DATABASE_URL",
+    `postgresql://invented:private@127.0.0.1/dne_test_${"a".repeat(32)}`,
+  );
+  const databases = new Map();
+  vi.mocked(Pool).mockImplementation(function () {
+    return {
+      on: vi.fn(),
+      end: vi.fn(async () => {}),
+      query: vi.fn(async (sql, values) => {
+        if (sql.startsWith("CREATE DATABASE"))
+          databases.set(sql.match(/"([^"]+)"/)[1], { oid: "42" });
+        if (sql.startsWith("COMMENT ON DATABASE"))
+          databases.get(sql.match(/"([^"]+)"/)[1]).marker =
+            sql.match(/IS '([^']+)'/)[1];
+        if (sql.includes("count(*)"))
+          return { rows: [{ n: databases.has(values[0]) ? 1 : 0 }] };
+        if (sql.startsWith("SELECT oid"))
+          return {
+            rows: databases.has(values[0]) ? [databases.get(values[0])] : [],
+          };
+        return { rows: [] };
+      }),
+    };
+  });
+  vi.mocked(dropAttendanceBrowserDatabase).mockImplementation(
+    async (_admin, name) => {
+      databases.delete(name);
+    },
+  );
+  const launched = [];
+  vi.mocked(spawn).mockImplementation((_command, args) => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.kill = vi.fn();
+    const index = Number(
+      args.find((arg) => arg.startsWith("--shard=")).match(/=(\d)/)[1],
+    );
+    const report = fixture().lanes[index - 1].report;
+    report.testResults[0].name = files[index - 1];
+    child.finish = (exitStatus = 0) => {
+      const destination = path.join(
+        root,
+        `artifacts/integration-shards/${index}`,
+      );
+      writeFileSync(
+        path.join(destination, "results.json"),
+        JSON.stringify(report),
+      );
+      writeFileSync(
+        path.join(destination, "unhandled.json"),
+        JSON.stringify(zero()),
+      );
+      child.emit("close", exitStatus, null);
+    };
+    launched.push(child);
+    return child;
+  });
+  return { root, launched, databases };
+}
+it("LAND-SCHED-01 starts the second native lane only after the first closes", async () => {
+  const { root, launched, databases } = controlledNativeRun();
+  const run = runIntegration(root);
+  await vi.waitFor(() => expect(launched.length).toBeGreaterThanOrEqual(1));
+  const launchedBeforeFirstClose = launched.length;
+  launched[0].finish();
+  await vi.waitFor(() => expect(launched).toHaveLength(2));
+  launched[1].finish();
+  expect(await run).toBe(0);
+  expect(launchedBeforeFirstClose).toBe(1);
+  expect(databases.size).toBe(0);
+});
+it("LAND-SCHED-02 runs lane two after an ordinary lane-one failure and retains failure evidence", async () => {
+  const { root, launched, databases } = controlledNativeRun();
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  const run = runIntegration(root);
+  await vi.waitFor(() => expect(launched.length).toBeGreaterThanOrEqual(1));
+  launched[0].finish(1);
+  await vi.waitFor(() => expect(launched).toHaveLength(2));
+  launched[1].finish();
+  expect(await run).toBe(1);
+  expect(error).toHaveBeenCalled();
+  expect(
+    JSON.parse(
+      readFileSync(
+        path.join(root, "artifacts/integration-shards.json"),
+        "utf8",
+      ),
+    ),
+  ).toMatchObject({
+    exitStatus: 1,
+    lanes: [{ exitStatus: 1 }, { exitStatus: 0 }],
+  });
+  expect(databases.size).toBe(0);
+});
+it("LAND-SCHED-03 does not start lane two after interruption and closes its child before cleanup", async () => {
+  const { root, launched, databases } = controlledNativeRun();
+  const previous = new Set(process.listeners("SIGTERM"));
+  const run = runIntegration(root);
+  await vi.waitFor(() => expect(launched.length).toBeGreaterThanOrEqual(1));
+  const stop = process
+    .listeners("SIGTERM")
+    .find((listener) => !previous.has(listener));
+  stop();
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(launched).toHaveLength(1);
+  expect(launched[0].kill).toHaveBeenCalledWith("SIGTERM");
+  expect(databases.size).toBe(2);
+  launched[0].emit("close", null, "SIGTERM");
+  expect(await run).toBe(1);
+  expect(
+    JSON.parse(
+      readFileSync(
+        path.join(root, "artifacts/integration-shards.json"),
+        "utf8",
+      ),
+    ),
+  ).toMatchObject({
+    exitStatus: 1,
+    lanes: [{ index: 1, signal: "SIGTERM" }],
+    resources: [{ removed: true }, { removed: true }],
+  });
+  expect(databases.size).toBe(0);
 });
 it("refuses CLI filters before starting resources and never echoes their private values", () => {
   const marker = "invented-private-filter-value";
