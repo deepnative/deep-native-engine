@@ -16,6 +16,8 @@ Open `http://127.0.0.1:3000`. `make setup` installs the local hook, runs `npm ci
 
 ## One full gate locally before push
 
+Use the [commit/push/merge testing strategy](LOCAL-VERIFICATION-PLAYBOOK.md#commit-push-and-merge-testing-strategy) for focused development checks, final-commit verification, receipt reuse and merge-base changes. No automatic full baseline or full gate per local commit is required. Review and handoff inspect intact original proof unless it is unavailable/invalid or explicit reproduction is requested. `make verify` always starts a full campaign; receipt reuse belongs to the ordinary pre-push path.
+
 Follow the [shared execution playbook](LOCAL-VERIFICATION-PLAYBOOK.md) for the dated18m30 benchmark, group profiles, process ownership, receipt reuse and deployment-only handoff.
 
 `make verify` executes:

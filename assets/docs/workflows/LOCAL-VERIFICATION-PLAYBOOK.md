@@ -29,9 +29,37 @@ Stage times are rounded; command boundaries include small launcher/report overhe
 
 These counts describe that revision; derive future expected inventory from the current approved registers and source. Cold setup, dependency/browser installation, hardware, architecture, cache warmth, network, database work and competing load can change timings. The delivery also had preserved failed earlier-source campaigns and a specifically tested cleanup remedy; **18m30s is the final successful campaign, not total feature lead time or a first-attempt claim**.
 
+## Commit, push and merge testing strategy
+
+Use focused checks to develop the change, then one complete local gate on the final clean commit intended for push. Ordinary local commits, review and handoff do not each require another full campaign. This replaces the former automatic full baseline; it does not reduce the required pre-push gate, including for documentation-only changes.
+
+| Stage | Required evidence and action |
+| --- | --- |
+| Baseline and editing | Record a meaningful failing behavioral test for missing behavior, or an honest passing focused baseline for delivered behavior. Run formatting, lint/types and affected unit, PostgreSQL and browser checks as applicable. Inspect callers, shared fixtures and provisional journeys when shared behavior changes. |
+| Final push candidate | Finish code, documentation and source self-review; commit and confirm a clean checkout. Run the complete `make verify` once on that exact revision and inspect its original reports. A dirty run cannot prove the later commit. |
+| Push | Use the ordinary installed hook. It validates the intact exact-commit/runtime/artifact receipt and avoids a duplicate campaign; missing or changed proof runs the complete gate. Coordinate capacity before pushing if fallback is possible. |
+| Review and handoff | Inspect the original exact-revision reports and receipt rather than automatically rerunning. A claim of independent reproduction requires an actual separately coordinated run; report inspection alone is not reproduction. |
+| Merge | Recheck current PR head/base and actual protections. If the combined source differs from the tested tree, integrate the current base, review and fully verify the new clean commit before pushing/merging. Use the expected head SHA; this guard alone does not lock the base. |
+| Resulting main | Read back actual merge SHA, tree and parents against the tested source and reviewed base/head. A matching merge needs no duplicate full test run. Any mismatch blocks completion and requires investigation. |
+| GitHub Actions | Azure deployment only, with existing source, preservation and readiness guards. No branch/PR/main test suite, test-proof promotion or retired CI-test status. Deployment and public-journey evidence remain separate from local acceptance. |
+
+After a successful gate, keep its original reports and private browser blobs intact through push/review. Do not run more tests into its artifact paths or amend the commit to add the result. Record final results in the issue/PR or an external evidence directory. A new commit (even a same-tree amend), changed runtime/group selection or added/changed/missing hashed artifact invalidates receipt reuse. `make verify` always starts a new campaign; it is not a receipt-inspection command. Never copy or edit a receipt to transfer a pass between checkouts or revisions.
+
+### Focused checks during development
+
+Use the existing commands; no new runner is needed. In a prepared owned checkout, an example focused unit check is:
+
+```sh
+node node_modules/vitest/vitest.mjs run tests/unit/domain.test.ts --coverage.enabled=false --reporter=default
+```
+
+Replace the file with the affected unit tests. This development-only command disables coverage and replaces JSON reporting with console output; it does not write the acceptance unit/coverage reports or create an acceptance receipt. The final `make verify` still measures every included application module at the unchanged thresholds. Use `npm run format:check`, `npm run lint` and `npm run typecheck` before freezing the candidate; retain any captured focused output outside `artifacts/`.
+
+`npm run test:integration` and `npm run test:e2e` are complete-inventory acceptance wrappers and intentionally reject filters. A focused native Vitest/Playwright invocation must use its own generated, marked database, private storage and owned server/port with the existing fixture helpers and ordinary cleanup. Never borrow an active gate or preview database: fixtures can truncate tables. Inspect all output paths before running; reporter overrides alone do not redirect custom diagnostics or screenshots written directly by tests. Run focused native/browser checks before the final gate, with separate output or a separate owned checkout when needed to preserve existing proof. Preserve the first failure and record selected files/scenarios and limits; a subset pass is not full acceptance.
+
 ## Procedure every delivery agent follows
 
-1. **Claim one bounded issue and isolate source.** Check live ownership and dependencies. Use an owned `codex/` worktree, preserve foreign work and preview resources, record AC/scenario IDs and the recommended model/effort. Establish an honest baseline; reproduce missing behavior before fixing it.
+1. **Claim one bounded issue and isolate source.** Check live ownership and dependencies. Use an owned `codex/` worktree, preserve foreign work and preview resources, record AC/scenario IDs and the recommended model/effort. Establish the focused baseline above; reproduce missing behavior before fixing it. Run a full baseline only for a concrete diagnostic need or an explicit reproduction request.
 2. **Prepare once.** Run `make bootstrap` once per checkout with Python 3.11+; use the Node version in `.nvmrc` and locked dependencies. Follow [setup](VERIFICATION.md#reproduce-the-complete-check). Inspect existing resources before setup; never reset or restart somebody else's database or preview. Keep preview data separate from gate databases.
 3. **Choose groups explicitly or use `auto`.** Follow the profiles below. Keep the same selection and runtime for verification and push. Record the actual CPU/memory allocation, group count and resource identity; do not change the machine to match a benchmark without authorization.
 4. **Serialize full campaigns.** Before starting, check the live gate owner/process/session and shared fixture. Claim capacity, then run one full campaign. Primary groups use separate databases, private files, ephemeral loopback servers and reports; other checks can use port4317. Isolated groups do not authorize competing full campaigns. An observation timeout means observe the SAME process again, not cancel/restart/duplicate it.
