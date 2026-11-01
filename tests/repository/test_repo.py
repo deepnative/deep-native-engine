@@ -360,6 +360,36 @@ class RepositoryFixture(unittest.TestCase):
         self.assertLess(workflow.index("id: artifact_scan"), workflow.index("name: Preserve verification reports"))
         self.assertEqual(workflow.count("steps.artifact_scan.outcome == 'success'"), 2)
 
+    def test_ci_ubuntu_archive_selection_preserves_signed_sources_and_denies_unknown_setup(self):
+        workflow = (self.root / ".github/workflows/repository-checks.yml").read_text()
+        name = "      - name: Select the Ubuntu archive directly\n"
+        self.assertIn(name, workflow, "CIAPT01: browser setup must avoid mirror failover")
+        self.assertLess(workflow.index(name), workflow.index("npx playwright install --with-deps chromium firefox webkit"))
+        block = workflow.split(name, 1)[1].split("      - ", 1)[0]
+        script = "\n".join(line[10:] for line in block.split("        run: |\n", 1)[1].splitlines())
+        binary = self.root / "fixture-bin"
+        binary.mkdir()
+        sudo = binary / "sudo"
+        sudo.write_text('#!/bin/sh\nexec "$@"\n')
+        sudo.chmod(0o700)
+        sources = self.root / "ubuntu.sources"
+        mirror = "mirror+file:/etc/apt/apt-mirrors.txt"
+        original = f"Types: deb\nURIs: {mirror}\nSuites: noble noble-updates noble-security\nComponents: main universe restricted multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n"
+        env = {**os.environ, "PATH": str(binary) + os.pathsep + os.environ["PATH"]}
+        for value in (original, original.replace(mirror, mirror.replace(".txt", "Xtxt"))):
+            with self.subTest(source=value):
+                sources.write_text(value)
+                result = subprocess.run(
+                    ["bash", "-e", "-c", script.replace("/etc/apt/sources.list.d/ubuntu.sources", str(sources))],
+                    env=env, capture_output=True, text=True,
+                )
+                if value == original:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(sources.read_text(), original.replace(mirror, "https://archive.ubuntu.com/ubuntu"))
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(sources.read_text(), value)
+
     def test_local_circle_capacity_change_requires_reviewed_gate_update(self):
         path = self.root / "assets/docs/content/circles/preview-circles.json"
         circles = json.loads(path.read_text())
