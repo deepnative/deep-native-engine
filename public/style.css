@@ -933,7 +933,8 @@ footer span {
 }
 
 /* The public entrance has its own learning identity; saved work keeps its UI. */
-body:has(.welcome-page) {
+body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal) {
+  min-height: 100vh;
   --ink: #182c49;
   --muted: #506079;
   --paper: #fffdf7;
@@ -947,25 +948,33 @@ body:has(.welcome-page) {
   caret-color: var(--accent);
   scrollbar-color: #7d8eb4 var(--paper);
 }
-body:has(.welcome-page) ::selection {
+body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
+  ::selection {
   background: var(--lime);
   color: var(--ink);
 }
-body:has(.welcome-page) :focus-visible {
+body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
+  :focus-visible {
   outline-color: #a34d08;
 }
-body:has(.welcome-page) .site-header,
-body:has(.welcome-page) main,
-body:has(.welcome-page) footer {
+body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
+  .site-header,
+body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
+  main,
+body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
+  footer {
   max-width: 1280px;
 }
-body:has(.welcome-page) .site-header {
+body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
+  .site-header {
   min-height: 92px;
 }
-body:has(.welcome-page) .brand {
+body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
+  .brand {
   letter-spacing: -0.02em;
 }
-body:has(.welcome-page) .preview-tag {
+body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
+  .preview-tag {
   letter-spacing: 0.08em;
 }
 .welcome-page h1,
@@ -1205,12 +1214,16 @@ body:has(.welcome-page) .preview-tag {
   }
 }
 @media (max-width: 420px) {
-  body:has(.welcome-page) .site-header,
-  body:has(.welcome-page) main,
-  body:has(.welcome-page) footer {
+  body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
+    .site-header,
+  body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
+    main,
+  body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
+    footer {
     padding-inline: 20px;
   }
-  body:has(.welcome-page) .site-header {
+  body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
+    .site-header {
     flex-wrap: wrap;
     align-content: center;
     gap: 12px;
@@ -1335,4 +1348,31 @@ body:has(.welcome-page) .preview-tag {
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   margin-top: -12px;
+}
+
+/* The legacy learning flow shares the welcome identity without changing staff tools. */
+body:has(.dashboard-head, .lesson-heading, .learning-portal) {
+  accent-color: var(--accent);
+}
+body:has(.dashboard-head, .lesson-heading, .learning-portal)
+  :is(button, input, textarea, select) {
+  font-family: inherit;
+}
+body:has(.dashboard-head, .lesson-heading, .learning-portal)
+  :is(button, .button):hover {
+  background: #173eaa;
+}
+body:has(.dashboard-head, .lesson-heading, .learning-portal) .secondary {
+  border-color: #9caecf;
+}
+body:has(.dashboard-head, .lesson-heading, .learning-portal) .secondary:hover {
+  background: #eef3ff;
+}
+body:has(.dashboard-head) :is(.progress-card, .learning-plan) {
+  background: #eef3ff;
+  border-color: var(--line);
+}
+
+body:has(.lesson-heading) .guidance-choice:has(input:checked) {
+  background: #eef3ff;
 }

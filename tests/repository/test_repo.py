@@ -459,7 +459,8 @@ class RepositoryFixture(unittest.TestCase):
         gate.validate_scope(self.root, gate.repository_files(self.root))
         for name in ("assets/docs/learning-design/reader/extra.mjs",
                      "assets/docs/learning-design/authoring/extra.html",
-                     ".impeccable/injected.js"):
+                     ".impeccable/injected.js",
+                     "assets/docs/learning-design/reader/fonts/unreviewed.ttf"):
             with self.subTest(name=name):
                 path = self.root / name
                 path.parent.mkdir(parents=True, exist_ok=True)

@@ -245,6 +245,22 @@ for (const [background, goal, route, sourceFact, freshFact, correction] of [
         member.getByRole("heading", { name: "Your learning path" }),
       ).toBeVisible();
       await expect(member.locator("#course-path [data-lesson]")).toHaveCount(7);
+      await expect(member.locator("body")).toHaveCSS(
+        "background-color",
+        "rgb(255, 253, 247)",
+      );
+      await expect(member.locator("body")).toHaveCSS(
+        "font-family",
+        '"Nunito Sans", sans-serif',
+      );
+      await expect
+        .poll(() =>
+          member.evaluate(async () => {
+            await document.fonts.ready;
+            return document.fonts.check('16px "Nunito Sans"');
+          }),
+        )
+        .toBe(true);
       await expect(
         member.getByRole("navigation", { name: "Main navigation" }),
       ).toContainText("Learn");

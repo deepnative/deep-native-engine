@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type { Server } from "node:http";
+import { closeLoopback } from "./loopback-server.ts";
 import { app } from "../../src/app.ts";
 import { store } from "../../src/store.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
@@ -120,10 +121,7 @@ export async function startSupportTimeGrantRecoveryServer(
     return {
       origin: options.origin,
       observation,
-      close: () =>
-        new Promise<void>((resolve, reject) =>
-          owned.close((error) => (error ? reject(error) : resolve())),
-        ),
+      close: () => closeLoopback(owned),
     };
   } catch (error) {
     server?.close();

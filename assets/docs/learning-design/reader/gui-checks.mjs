@@ -458,6 +458,18 @@ await check(
 
 await check("GUI-04 keyboard next focuses the new exercise", async (page) => {
   await open(page);
+  await expect(page.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(255, 253, 247)",
+  );
+  await expect(page.locator("body")).toHaveCSS(
+    "font-family",
+    '"Nunito Sans", sans-serif',
+  );
+  await page.evaluate(() => document.fonts.ready);
+  expect(
+    await page.evaluate(() => document.fonts.check('16px "Nunito Sans"')),
+  ).toBe(true);
   await page.locator("#next").press("Enter");
   const exercise = page.getByRole("region", { name: "Try it", exact: true });
   await expect(exercise).toBeVisible();

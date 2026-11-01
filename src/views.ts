@@ -82,7 +82,7 @@ export function escape(value: string) {
   );
 }
 export function page(title: string, body: string) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a><header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a><span class="preview-tag">${hostingText("LOCAL LEARNING PREVIEW", "AZURE HOSTED LEARNING")}</span></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><span>${hostingText("Local preview · Use sample information only.", "Azure-hosted service · Learning records are stored in Azure PostgreSQL. Uploaded private files use private Azure storage; provided examples remain bundled source. Follow each form's data and sharing choices.")} No AI provider, payment or formal assessment is connected. <a href="/programs">Explore programs</a> · <a href="/my-courses">My courses</a> · <a href="/circles">Local circles</a> · <a href="/workflows">Workflow demonstrations</a> · <a href="/readiness">Integration readiness</a>.</span></footer></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a><header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><span>${hostingText("Local preview · Use sample information only.", "Azure-hosted service · Learning records are stored in Azure PostgreSQL. Uploaded private files use private Azure storage; provided examples remain bundled source. Follow each form's data and sharing choices.")} No AI provider, payment or formal assessment is connected. <a href="/programs">Explore programs</a> · <a href="/my-courses">My courses</a> · <a href="/circles">Local circles</a> · <a href="/workflows">Workflow demonstrations</a> · <a href="/readiness">Integration readiness</a>.</span></footer></body></html>`;
 }
 export function memberExportPage(
   payload: MemberExportPayload,
@@ -828,7 +828,7 @@ export function privateProgressPage(
 ) {
   return page(
     "Your private learning activity",
-    `<section class="error-page"><p class="eyebrow">${hostingText("PRIVATE LOCAL PREVIEW", "PRIVATE HOSTED LEARNING")} · SYNTHETIC WORK</p><h1>Your private learning activity</h1><p>Opening a lesson, saving a draft, reporting completion and submitting an assignment are different actions. None is a qualified assessment or proof of skill.</p>${PRIVATE_PRACTICE_RETURN}${
+    `<section class="error-page learning-portal"><p class="eyebrow">${hostingText("PRIVATE LOCAL PREVIEW", "PRIVATE HOSTED LEARNING")} · SYNTHETIC WORK</p><h1>Your private learning activity</h1><p>Opening a lesson, saving a draft, reporting completion and submitting an assignment are different actions. None is a qualified assessment or proof of skill.</p>${PRIVATE_PRACTICE_RETURN}${
       items.length
         ? `<ol>${items
             .map(

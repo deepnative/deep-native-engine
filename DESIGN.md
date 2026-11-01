@@ -1,25 +1,25 @@
 ---
 name: "Deep Native learning surfaces"
-description: "Scoped visual systems for the account welcome page and the separate local learning reader."
+description: "One visual identity for the welcome page, account learning portal and standalone reader."
 colors:
-  ink: "#172c46"
-  muted: "#51647c"
-  paper: "#f5f7fb"
+  ink: "#182c49"
+  muted: "#506079"
+  paper: "#fffdf7"
   surface: "#ffffff"
   surface-subtle: "#edf2f8"
-  line: "#d9e2ee"
-  line-strong: "#afbed1"
-  blue: "#2459d6"
-  blue-hover: "#1845b0"
+  line: "#d6ddeb"
+  line-strong: "#9caecf"
+  blue: "#2454d6"
+  blue-hover: "#173eaa"
   blue-soft: "#eaf0ff"
-  navy: "#17365f"
+  navy: "#234bc2"
   green: "#18715c"
   green-soft: "#e9f5ef"
   teal: "#146576"
   teal-soft: "#eaf5f7"
   amber: "#875619"
   amber-soft: "#fff4e3"
-  focus: "#174dbb"
+  focus: "#a34d08"
   source-line: "#bddce2"
   repair-line: "#dfbf8c"
   checked-line: "#a5d5bd"
@@ -81,114 +81,114 @@ typography:
     fontFamily: "Nunito Sans, sans-serif"
     lineHeight: 1.7
   brand:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "18px"
     fontWeight: 780
     lineHeight: 1.6
     letterSpacing: "-0.025em"
   feedback-title:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "1.4rem"
     fontWeight: 720
     lineHeight: 1.25
   practice-return-title:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "22px"
     fontWeight: 720
     lineHeight: 1.25
   resume-number:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "30px"
     fontWeight: 650
     lineHeight: 1.6
   section-title-mobile:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "1.3rem"
     fontWeight: 720
     lineHeight: 1.25
   lesson-title-mobile:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "19px"
     fontWeight: 720
     lineHeight: 1.25
   resume-title-mobile:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "1.6rem"
     fontWeight: 720
     lineHeight: 1.25
   headline:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "2rem"
     fontWeight: 720
     lineHeight: 1.25
     letterSpacing: "-0.025em"
   headline-mobile:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "1.7rem"
     fontWeight: 720
     lineHeight: 1.25
     letterSpacing: "-0.025em"
   resume-title:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "1.8rem"
     fontWeight: 720
     lineHeight: 1.25
     letterSpacing: "-0.025em"
   section-title:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "1.45rem"
     fontWeight: 720
     lineHeight: 1.25
     letterSpacing: "-0.025em"
   lesson-title:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "1.25rem"
     fontWeight: 720
     lineHeight: 1.25
     letterSpacing: "-0.025em"
   subtitle:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "1.075rem"
     fontWeight: 720
     lineHeight: 1.25
     letterSpacing: "-0.01em"
   body:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "16px"
     fontWeight: 400
     lineHeight: 1.6
   lesson-body:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "16px"
     fontWeight: 400
     lineHeight: 1.7
   lesson-body-mobile:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "15px"
     fontWeight: 400
     lineHeight: 1.7
   button-label:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "14px"
     fontWeight: 680
     lineHeight: 1.5
   nav-label:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "15px"
     fontWeight: 650
     lineHeight: 1.6
   field:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "16px"
     fontWeight: 400
     lineHeight: 1.7
   source-body:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.7
   status-label:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Nunito Sans, sans-serif"
     fontSize: "12px"
     fontWeight: 550
     lineHeight: 1.6
@@ -356,15 +356,15 @@ components:
 
 **Creative North Star: "The Working Notebook"**
 
-The Working Notebook is calm, explicit and practical. Cool paper surrounds white working surfaces; deep navy gives the current lesson a clear entry point. Blue connects actions and current position, while source context and checked responses have their own restrained colors. The reader uses familiar controls, named navigation and compact stroke icons so its authored examples and the learner’s writing carry the experience.
+The Working Notebook is calm, explicit and practical. Warm paper surrounds white working surfaces; deep navy gives the current lesson a clear entry point. Blue connects actions and current position, while source context and checked responses have their own restrained colors. The reader uses familiar controls, named navigation and compact stroke icons so its authored examples and the learner’s writing carry the experience.
 
-The account welcome page adds a separate **First Small Win** identity: warm paper, friendly heavy Nunito Sans headings, confident blue actions and small yellow sequence markers. A native sample exercise lets visitors inspect useful reasoning before choosing their starting point. Its colors and controls belong to this entrance only; the signed-in workspace retains its existing design.
+The account welcome page adds a separate **First Small Win** identity: warm paper, friendly heavy Nunito Sans headings, confident blue actions and small yellow sequence markers. A native sample exercise lets visitors inspect useful reasoning before choosing their starting point. Its warm-paper, blue-action and Nunito Sans identity continues into the learning portal. The portal keeps its task-focused layout, semantic feedback and explicit saving.
 
-This code-derived record preserves the local reader captured on 28 October 2026 and adds the account landing implementation captured on 30 October 2026. Unprefixed tokens describe `assets/docs/learning-design/reader`; `landing-*` tokens describe the welcome page in `src/views.ts` and `public/style.css`. The page-level palette and font are scoped through `body:has(.welcome-page)`. PRODUCT.md records product constraints; `.impeccable/surfaces/assets-docs-learning-design-reader.md` and `.impeccable/surfaces/src-views-ts.md` own their respective surface directions. This source snapshot does not establish deployment or production acceptance.
+This code-derived record preserves the local reader captured on 28 October 2026 and adds the account landing implementation captured on 30 October 2026. Unprefixed tokens describe `assets/docs/learning-design/reader`; `landing-*` tokens describe the welcome page in `src/views.ts` and `public/style.css`. The shared page-level palette and font are scoped to welcome, legacy learning dashboard, starter lesson and learning activity markers. Staff tools retain their original styling. The notebook stylesheet uses the same identity directly. PRODUCT.md records product constraints; `.impeccable/surfaces/assets-docs-learning-design-reader.md` and `.impeccable/surfaces/src-views-ts.md` own their respective surface directions. This source snapshot does not establish deployment or production acceptance.
 
 **Key Characteristics:**
 
-- A self-hosted sans family for each surface: Inter for the reader, Nunito Sans for the account landing.
+- One self-hosted Nunito Sans family across welcome and learning, with a compact reading scale in the portal.
 - Flat surfaces distinguished by tone, fine borders and open spacing.
 - Named learning, practice and private-work destinations with visible current state.
 - Explicit saving and evidence-based status labels beside the work they describe.
@@ -394,7 +394,7 @@ The following unprefixed roles remain the local reader palette. The account land
 ### Neutral
 
 - **Reading ink** (`ink`) and **supporting slate** (`muted`): primary content and explanatory labels.
-- **Cool paper** (`paper`), **white surface** (`surface`) and **soft inset** (`surface-subtle`): page, work regions and secondary control backgrounds.
+- **Warm paper** (`paper`), **white surface** (`surface`) and **soft inset** (`surface-subtle`): page, work regions and secondary control backgrounds.
 - **Fine line** (`line`) and **control line** (`line-strong`): dividers and interactive boundaries.
 - **Selection blue** (`selection`): selected text, paired with navy text. **Navy panel line** (`on-navy-line`): the small lesson-number outline inside the resume panel.
 
@@ -406,11 +406,11 @@ The following unprefixed roles remain the local reader palette. The account land
 
 **Display and body family:** Nunito Sans, with sans-serif fallback. The normal variable font is self-hosted at `public/fonts/NunitoSans.ttf` and served at `/assets/fonts/NunitoSans.ttf`, with declared weights (200–900) and `font-display: swap`. `public/fonts/OFL.txt` and `public/fonts/provenance.json` retain the SIL Open Font License 1.1, pinned Google Fonts revision and file hashes. No remote font request is needed at runtime.
 
-The `landing-display` role gives the entrance its friendly, heavy headline; `landing-example-title` and `landing-section-title` distinguish the sample and the starting-point form. Lead text uses `landing-lead`, reduced to (18px) below the landing mobile breakpoint. Answer labels use `landing-answer`; primary actions use `landing-button`. The sample source and feedback use (15px) text with (1.6) leading. Access and recovery explanations remain (13px), and the unsaved sample caption is (12px). These roles do not replace the reader’s type scale or the signed-in application’s inherited font.
+The `landing-display` role gives the entrance its friendly, heavy headline; `landing-example-title` and `landing-section-title` distinguish the sample and the starting-point form. Lead text uses `landing-lead`, reduced to (18px) below the landing mobile breakpoint. Answer labels use `landing-answer`; primary actions use `landing-button`. The sample source and feedback use (15px) text with (1.6) leading. Access and recovery explanations remain (13px), and the unsaved sample caption is (12px). The portal shares this font and palette while retaining its smaller task-oriented type scale.
 
 ### Local reader
 
-**Display and body family:** Inter, with sans-serif fallback. The variable font is self-hosted at `assets/docs/learning-design/reader/fonts/InterVariable.woff2`, with weights (100–900), normal style, optical sizing and `font-display: swap`. The adjacent `LICENSE.txt` and `provenance.json` retain the SIL Open Font License and pinned upstream provenance. No remote font request is needed. Inline code alone uses a monospace fallback.
+**Display and body family:** Nunito Sans, with sans-serif fallback, weights200–900 and `font-display: swap`. The account asset route serves the original `public/fonts/NunitoSans.ttf`; the standalone reader includes the same hash-verified bytes at `fonts/NunitoSans.ttf`, with adjacent `NunitoSans-OFL.txt` and provenance. The older Inter asset remains available for compatibility. No remote font request is needed. Inline code alone uses a monospace fallback.
 
 Page headings use the `headline` role, resume headings `resume-title`, section headings `section-title`, and authored lesson headings `lesson-title`. They share compact negative tracking and a strong variable weight. Body and lesson-body roles differ in leading, allowing exercise prose more breathing room. Button, navigation, source and status roles retain their own observed sizes instead of imposing a new mathematical scale.
 
@@ -472,7 +472,7 @@ The sample exercise is a blue panel with source text, a question and two native 
 
 Two required native selects, “Your starting point” and “What would you like to do?”, remain visible above the submit action. Native selects and text fields have white backgrounds, the landing control border, existing field rounding and visible labels. Background tags, domains, IT specialties, AI experience, time zone, weekly time and the exploratory-path checkbox remain inside “Personalize your path (optional)”. That native disclosure opens on any field-error response; safe attempted values, field-linked errors and the error summary remain visible and associated with their controls.
 
-Privacy, simulation and environment-specific storage/recovery explanations stay alongside the form. The shared profile-field helper uses compact disclosure only on the welcome page; account/profile editing retains its existing expanded presentation. The CSS identity is limited to the welcome page and its surrounding shell.
+Privacy, simulation and environment-specific storage/recovery explanations stay alongside the form. The shared profile-field helper uses compact disclosure only on the welcome page; account/profile editing retains its existing expanded presentation. Welcome and learning share their brand palette and font; portal layouts and factual recovery copy remain unchanged.
 
 **The Honest Sample Rule.** Keep the unsaved sample label beside the exercise, retain native disclosure and field behavior, and do not depict an opened answer as earned progress.
 
@@ -517,7 +517,7 @@ The sidecar preserves the reader’s isolated visual specimens and adds landing 
 - Do keep the primary lesson save action reachable while the learner writes.
 - Do describe progress using checked practices, written lessons, recorded self-checks, and the current step.
 - Do retain separate route drafts and the distinction between a first draft and its revision.
-- Do keep landing tokens scoped to the welcome page and preserve the reader and signed-in workspace identities.
+- Do carry the same warm-paper, blue-action and Nunito identity through welcome and learning, while retaining the portal’s task-oriented layout and semantic states.
 - Do keep the sample’s unsaved label and the form’s privacy, recovery and field-error explanations visible.
 
 ### Don't:
