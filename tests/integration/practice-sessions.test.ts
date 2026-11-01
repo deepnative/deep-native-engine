@@ -7,7 +7,7 @@ import {
   type PracticeSessionStore,
 } from "../../src/practice-sessions.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { testPool } from "../support/database.ts";
 const pool = testPool(),
   db = store(pool),

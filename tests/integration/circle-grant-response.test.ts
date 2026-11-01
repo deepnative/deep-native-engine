@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from "pg";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { circleGrantAdminStore } from "../../src/circle-grant-admin.ts";
 import type { CircleGrantAdminStore } from "../../src/circle-grant-values.ts";
 import { migrate, store } from "../../src/store.ts";

@@ -88,7 +88,7 @@ export function metricsStore(pool: Pool): MetricsStore {
         usefulnessNotYet: number;
       }>(
         `WITH authorized AS (
-           SELECT 1 FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
+           SELECT 1 FROM principals p JOIN authorized_staff_profiles s ON s.principal_id=p.id
            WHERE p.token_hash=$1 AND p.kind='staff'
              AND s.role IN ('operator','platform_admin')
              AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP

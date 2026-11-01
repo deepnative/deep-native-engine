@@ -136,7 +136,7 @@ function fixture(
               },
             ],
       );
-    if (sql.includes("FROM staff_profiles"))
+    if (sql.includes("FROM authorized_staff_profiles"))
       return result(
         options.role === null
           ? []

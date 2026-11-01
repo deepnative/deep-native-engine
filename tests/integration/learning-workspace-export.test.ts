@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore } from "../../src/catalog.ts";
 import {
   learningWorkspacePack,

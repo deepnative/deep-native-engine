@@ -32,7 +32,7 @@ export function reviewedContentImportStore(
           if (!principal) throw new PracticeLifetimeFailure("denied");
           await tx.observe([principal.expires]);
           const editor = await tx.query(
-            "SELECT principal_id FROM staff_profiles WHERE principal_id=$1 AND role='editor' FOR SHARE",
+            "SELECT principal_id FROM authorized_staff_profiles WHERE principal_id=$1 AND role='editor' FOR SHARE",
             [principal.id],
           );
           if (!editor.rows[0]) throw new PracticeLifetimeFailure("denied");

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { hash, migrate } from "../../src/store.ts";
 import { sampleAssignmentStore } from "../../src/sample-assignment.ts";
 import { testPool } from "../support/database.ts";

@@ -6,6 +6,8 @@ Deep Native Engine helps curious learners, IT practitioners and professionals in
 
 [Try the GitHub Pages sample](https://deepnative.io/deep-native-engine/#sample-demo): choose a direction, practise with an invented brief, deliberately save a draft, self-check, and reload progress in the same browser tab. These simulated actions never change an account or call an AI provider. [Open the existing user portal](https://engine.deepnative.io/learn) for the separate Azure application and its saved sample work. See the [sample walkthrough and limits](assets/docs/PAGES-SAMPLE-DEMO.md).
 
+Owner administration uses verified selected identities and deliberate finite entry; see [administrator access](assets/docs/ADMINISTRATOR-ACCESS.md). Legacy administrator credentials grant no authority.
+
 ## What you can do
 
 - **Arrange individual course billing after registration.** Optional native invoicing lets staff consolidate exact course items and prepare one-time or monthly terms for your explicit acceptance. Inspect your own printable invoice, pay offline, and see staff-recorded receipts. Monthly invoices can be cancelled without erasing prior invoices. Invoicing is off by default; the local sample is not payable. See [course invoices and configuration](assets/docs/SIMPLE-COURSE-INVOICES.md).

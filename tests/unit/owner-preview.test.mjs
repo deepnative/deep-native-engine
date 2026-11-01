@@ -89,6 +89,12 @@ vi.mock("pg", async (importOriginal) => {
           "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=$1"
         )
           return { rows: [{ n: 0 }] };
+        if (
+          /^INSERT INTO (principals|workspaces|member_email_identities|administrator_sessions)\b/.test(
+            text,
+          )
+        )
+          return { rows: [] };
         throw new Error("Unexpected simulated control query");
       }
       async end() {

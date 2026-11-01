@@ -407,7 +407,7 @@ export function studyFixtureLedgerOnConnection(
           `SELECT r.id FROM browser_study_fixture_requests r
            JOIN principals m ON m.id=r.member_id
            JOIN principals a ON a.id=r.administrator_id
-           JOIN staff_profiles s ON s.principal_id=a.id
+           JOIN authorized_staff_profiles s ON s.principal_id=a.id
            JOIN workspaces w ON w.id=r.workspace_id
            WHERE r.id=$1 AND r.member_id=$2 AND r.policy='browser-study-fixture-v1'
              AND r.grant_id IS NULL AND r.withdrawn_at IS NULL

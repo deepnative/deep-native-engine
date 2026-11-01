@@ -5,7 +5,7 @@ import type { Pool } from "pg";
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { app } from "../../src/app.ts";
 import { store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { proposalStore } from "../../src/proposals.ts";
 import { testPool } from "../support/database.ts";
 const pool = testPool();

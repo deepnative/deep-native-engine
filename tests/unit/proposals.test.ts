@@ -365,7 +365,7 @@ function moderationFixture(
                 },
               ],
       };
-    if (statement.startsWith("SELECT role FROM staff_profiles"))
+    if (statement.startsWith("SELECT role FROM authorized_staff_profiles"))
       return { rows: options.profile === false ? [] : [{ role: "moderator" }] };
     if (statement.startsWith("SELECT mp.id,mp.member_id"))
       return {

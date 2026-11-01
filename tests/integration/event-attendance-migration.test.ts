@@ -15,7 +15,7 @@ import {
 } from "vitest";
 import { attendanceExportObservation } from "../support/attendance-export-observation.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { eventRehearsalStore } from "../../src/event-rehearsals.ts";
 import { rehearsalSnapshot } from "../../src/event-rehearsal-values.ts";
 import { eventEnrollmentStore } from "../../src/event-enrollments.ts";

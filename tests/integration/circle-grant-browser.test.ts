@@ -6,7 +6,7 @@ import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import request from "supertest";
 import { start } from "../../src/runtime.ts";
 import { hash, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { circleStore } from "../../src/circles.ts";
 import {
   CIRCLE_DISCUSSION_POLICY,

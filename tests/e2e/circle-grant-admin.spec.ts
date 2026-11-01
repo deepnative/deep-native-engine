@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { start } from "../../src/runtime.ts";
 import { store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { COOKIE } from "../../src/session.ts";
 import { testPool } from "../support/database.ts";
 import { startCircleGrantRecoveryServer } from "../support/circle-grant-recovery-server.ts";

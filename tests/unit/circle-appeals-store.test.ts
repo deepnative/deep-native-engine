@@ -133,7 +133,7 @@ function fixture(writes = true) {
         );
       if (sql.startsWith("SELECT id FROM principals WHERE token_hash"))
         return result(state.identity ? [{ id: owner }] : []);
-      if (sql.includes("JOIN staff_profiles s ON"))
+      if (sql.includes("JOIN authorized_staff_profiles s ON"))
         return result(
           state.staffObservation
             ? [{ id: staff, grant_id: grant, role: "moderator" }]
@@ -150,7 +150,7 @@ function fixture(writes = true) {
         );
       if (sql.includes("FROM workspaces WHERE owner_principal_id=ANY"))
         return result(state.workspace ? [{ owner_principal_id: owner }] : []);
-      if (sql.startsWith("SELECT role FROM staff_profiles"))
+      if (sql.startsWith("SELECT role FROM authorized_staff_profiles"))
         return result(state.role ? [{ role: "moderator" }] : []);
       if (sql.startsWith("SELECT id FROM preview_circle_moderator_grants"))
         return result(state.grant ? [{ id: grant }] : []);

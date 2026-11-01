@@ -1,3 +1,4 @@
+import { administratorEntry } from "./administrator-entry.ts";
 import { simpleInvoiceSettings } from "./simple-invoice-config.ts";
 import { simpleInvoiceStore } from "./simple-invoice-store.ts";
 import { learningWorkspaceStore } from "./learning-workspace-store.ts";
@@ -165,6 +166,7 @@ export async function start(env: NodeJS.ProcessEnv) {
         enabled: settings.localTestUnitIssuance,
       }),
       staffEntry: staffEntryStore(pool),
+      administratorEntry: administratorEntry(pool),
       workflowReviewStaff: workflowReviewStaffStore(
         pool,
         { enabled: settings.workflowReviewRequests, mode: settings.mode },

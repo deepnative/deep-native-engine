@@ -127,7 +127,7 @@ function fixture(
             ? state.administrator
             : null;
       rows = selected ? [selected] : [];
-    } else if (sql.includes("FROM staff_profiles"))
+    } else if (sql.includes("FROM authorized_staff_profiles"))
       rows =
         state.profile === null ? [] : [{ id: adminId, role: state.profile }];
     else if (sql.includes("FROM workspaces"))

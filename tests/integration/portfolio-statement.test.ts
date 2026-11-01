@@ -3,7 +3,7 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { app } from "../../src/app.ts";
 import { attemptStore } from "../../src/attempts.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { COOKIE } from "../../src/session.ts";
 import { migrate, store } from "../../src/store.ts";

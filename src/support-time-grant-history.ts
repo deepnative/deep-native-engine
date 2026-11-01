@@ -77,7 +77,7 @@ export async function supportMinuteProject(
     FROM support_time_grants g JOIN support_time_allocations a ON a.id=g.allocation_id AND a.request_id=g.request_id
     JOIN support_requests r ON r.id=a.request_id AND r.member_id=a.member_id
     JOIN workspaces w ON w.id=r.workspace_id AND w.owner_principal_id=a.member_id AND w.deleting_at IS NULL
-    LEFT JOIN principals p ON p.id=g.staff_id LEFT JOIN staff_profiles sp ON sp.principal_id=p.id LEFT JOIN principals m ON m.id=a.member_id
+    LEFT JOIN principals p ON p.id=g.staff_id LEFT JOIN authorized_staff_profiles sp ON sp.principal_id=p.id LEFT JOIN principals m ON m.id=a.member_id
     WHERE g.id=$1 AND g.granted_by=$2 AND a.id=$3 AND r.id=$4 AND a.member_id=$5 AND r.workspace_id=$6 AND g.staff_id=$7)
     SELECT ceiling,allocation_state AS "allocationState",revoked_at AS "revokedAt",staff_role AS role,source_available AS "sourceAvailable",revoked_at IS NULL AS "canRevoke",
     CASE WHEN revoked_at IS NOT NULL THEN 'revoked' WHEN expires_at<=clock_timestamp() THEN 'expired'

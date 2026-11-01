@@ -8,7 +8,7 @@ import type { Pool } from "pg";
 import { start } from "../../src/runtime.ts";
 import { migrate, store } from "../../src/store.ts";
 import { circleStore } from "../../src/circles.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { circleDiscussionStore } from "../../src/circle-discussion.ts";
 import { COOKIE } from "../../src/session.ts";
 import { testPool } from "../support/database.ts";

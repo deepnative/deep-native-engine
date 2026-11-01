@@ -149,7 +149,7 @@ export function programEnrollmentStore(
         if (staff) {
           const role = (
             await tx.query<{ role: string }>(
-              "SELECT role FROM staff_profiles WHERE principal_id=$1 FOR SHARE",
+              "SELECT role FROM authorized_staff_profiles WHERE principal_id=$1 FOR SHARE",
               [actor.id],
             )
           ).rows[0];

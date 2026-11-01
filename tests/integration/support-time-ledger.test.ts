@@ -3,7 +3,7 @@ import { performance } from "node:perf_hooks";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { migrate, store } from "../../src/store.ts";
 import { supportRequestStore } from "../../src/support-requests.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import {
   supportLedgerOnConnection,
   syntheticLedger,

@@ -31,7 +31,7 @@ function context() {
       rows = (values?.[0] as string[]).flatMap((id) =>
         id === member ? (state.actor ? [state.actor] : []) : [state.other],
       );
-    else if (sql.includes("FROM staff_profiles"))
+    else if (sql.includes("FROM authorized_staff_profiles"))
       rows = [
         { id: member, role: state.role },
         { id: staff, role: state.otherRole },

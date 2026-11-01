@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { circleDiscussionStore } from "../../src/circle-discussion.ts";
 import { circleGrantAdminStore } from "../../src/circle-grant-admin.ts";
 import { migrate } from "../../src/store.ts";

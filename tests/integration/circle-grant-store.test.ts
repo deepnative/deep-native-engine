@@ -1,6 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
-import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+import {
+  authorizationStore,
+  type StaffRole,
+} from "../support/administrator-fixture.ts";
 import { circleGrantAdminStore } from "../../src/circle-grant-admin.ts";
 import { circleDiscussionStore } from "../../src/circle-discussion.ts";
 import { migrate, store } from "../../src/store.ts";

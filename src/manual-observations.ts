@@ -79,7 +79,7 @@ export function manualObservationStore(pool: Pool): ManualObservationStore {
       const rows = (
         await pool.query<ManualObservation & { authorized: string }>(
           `WITH authorized AS MATERIALIZED (
-             SELECT p.id FROM principals p JOIN staff_profiles s
+             SELECT p.id FROM principals p JOIN authorized_staff_profiles s
                ON s.principal_id=p.id AND s.role='platform_admin'
              WHERE p.token_hash=$1 AND p.kind='staff'
                AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
@@ -117,7 +117,7 @@ export function manualObservationStore(pool: Pool): ManualObservationStore {
         await client.query("BEGIN");
         const actor = (
           await client.query<{ id: string }>(
-            `SELECT p.id FROM principals p JOIN staff_profiles s
+            `SELECT p.id FROM principals p JOIN authorized_staff_profiles s
                ON s.principal_id=p.id AND s.role='platform_admin'
              WHERE p.token_hash=$1 AND p.kind='staff'
                AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP

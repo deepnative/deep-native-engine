@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startPreparedSampleRecoveryServer } from "../support/prepared-sample-recovery-server.ts";
 import { testPool } from "../support/database.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { store } from "../../src/store.ts";
 import {
   PREPARED_SAMPLES,

@@ -1,7 +1,7 @@
 import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
 

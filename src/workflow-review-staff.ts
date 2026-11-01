@@ -190,8 +190,8 @@ async function historicalGrant(
       `SELECT g.request_id AS request,g.moderator_id AS moderator,g.administrator_id AS administrator,g.starts_at AS starts,g.expires_at AS expires,g.revoked_at AS revoked,
     (g.expires_at<=clock_timestamp() OR r.expires_at<=clock_timestamp()) AS expired,
     g.starts_at>clock_timestamp() AS scheduled,
-    EXISTS(SELECT 1 FROM principals owner JOIN principals m ON m.id=g.moderator_id JOIN staff_profiles mp ON mp.principal_id=m.id AND mp.role='moderator'
-      JOIN principals a ON a.id=g.administrator_id JOIN staff_profiles ap ON ap.principal_id=a.id AND ap.role='platform_admin'
+    EXISTS(SELECT 1 FROM principals owner JOIN principals m ON m.id=g.moderator_id JOIN authorized_staff_profiles mp ON mp.principal_id=m.id AND mp.role='moderator'
+      JOIN principals a ON a.id=g.administrator_id JOIN authorized_staff_profiles ap ON ap.principal_id=a.id AND ap.role='platform_admin'
       WHERE owner.id=r.member_id AND owner.kind='member' AND m.kind='staff' AND a.kind='staff'
       AND owner.revoked_at IS NULL AND m.revoked_at IS NULL AND a.revoked_at IS NULL
       AND owner.expires_at>clock_timestamp() AND m.expires_at>clock_timestamp() AND a.expires_at>clock_timestamp()) AS authority

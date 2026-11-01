@@ -50,7 +50,7 @@ function fixture(staff = true) {
     let rows: unknown[] = [];
     if (sql.includes("WITH instant"))
       rows = [{ remaining: "60000", valid: true, observed: new Date() }];
-    else if (sql.includes("FROM staff_profiles WHERE"))
+    else if (sql.includes("FROM authorized_staff_profiles WHERE"))
       rows = state.profile ? [{}] : [];
     else if (
       sql.includes("SELECT g.expires_at AS expires FROM review_time_grants")

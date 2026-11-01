@@ -4,7 +4,7 @@ import request from "supertest";
 import type { Pool, PoolClient } from "pg";
 import { app } from "../../src/app.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
 import { eventEnrollmentStore } from "../../src/event-enrollments.ts";
 import { eventRehearsalStore } from "../../src/event-rehearsals.ts";

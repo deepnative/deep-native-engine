@@ -9,7 +9,7 @@ import {
   vi,
 } from "vitest";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { studyUnitFixtureStore } from "../../src/study-unit-fixtures.ts";
 import { testPool } from "../support/database.ts";

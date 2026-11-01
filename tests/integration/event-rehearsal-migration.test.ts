@@ -4,7 +4,7 @@ import { beforeAll, beforeEach, afterAll, expect, it } from "vitest";
 import { migrate, store } from "../../src/store.ts";
 import { eventEnrollmentStore } from "../../src/event-enrollments.ts";
 import { eventRehearsalStore } from "../../src/event-rehearsals.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { EVENT_PREVIEWS } from "../../src/events.ts";
 import { rehearsalSnapshot } from "../../src/event-rehearsal-values.ts";
 import { testPool } from "../support/database.ts";

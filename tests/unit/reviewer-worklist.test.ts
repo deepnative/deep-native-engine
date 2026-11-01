@@ -53,7 +53,7 @@ function fixture(count = 1) {
           ? [{ id: id(500), expires: new Date(Date.now() + 3600000) }]
           : [],
       };
-    if (sql.includes("FROM staff_profiles"))
+    if (sql.includes("FROM authorized_staff_profiles"))
       return { rows: state.role ? [{ principal_id: id(500) }] : [] };
     if (sql.startsWith("SELECT s.id"))
       return {

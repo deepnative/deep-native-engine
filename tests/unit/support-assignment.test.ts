@@ -101,7 +101,7 @@ function fixture(
           (values[0] as string[]).includes(p.id),
         ),
       };
-    if (sql.includes("FROM staff_profiles"))
+    if (sql.includes("FROM authorized_staff_profiles"))
       return {
         rows: state.roles.filter((p) => (values[0] as string[]).includes(p.id)),
       };

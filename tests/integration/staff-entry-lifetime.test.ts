@@ -6,7 +6,7 @@ import { app } from "../../src/app.ts";
 import { withLoopback } from "../support/loopback-server.ts";
 import { entryNonce, entryCsrf } from "../../src/staff-entry-integrity.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import {
   staffEntryStore,
   type StaffEntryResult,

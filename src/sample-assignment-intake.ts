@@ -29,7 +29,7 @@ const selection = `SELECT e.id AS "evidenceId",e.revision_number AS "sourceRevis
  AND NOT EXISTS (
   SELECT 1 FROM reviewer_evidence_grants g JOIN assignment_grants a ON a.id=g.assignment_id
   JOIN principals r ON r.id=g.reviewer_id AND r.kind='staff' AND r.revoked_at IS NULL
-  JOIN staff_profiles rp ON rp.principal_id=r.id AND rp.role='reviewer'
+  JOIN authorized_staff_profiles rp ON rp.principal_id=r.id AND rp.role='reviewer'
   WHERE g.submission_id=s.id AND g.purpose=$1 AND g.revoked_at IS NULL
    AND a.staff_id=r.id AND a.staff_role='reviewer' AND a.workspace_id=w.id AND a.revoked_at IS NULL
    AND LEAST(a.expires_at,g.expires_at,r.expires_at)>GREATEST(a.starts_at,g.starts_at,clock_timestamp())

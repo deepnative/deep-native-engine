@@ -1,7 +1,10 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { beforeAll, beforeEach, afterAll, expect, it } from "vitest";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore, STAFF_ROLES } from "../../src/authorization.ts";
+import {
+  authorizationStore,
+  STAFF_ROLES,
+} from "../support/administrator-fixture.ts";
 import { supportRequestStore } from "../../src/support-requests.ts";
 import {
   supportAssignmentStore,

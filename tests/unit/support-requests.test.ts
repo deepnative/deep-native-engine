@@ -113,7 +113,7 @@ function fixture(
       return {
         rows: people.filter((r) => (values[0] as string[]).includes(r.id)),
       };
-    if (sql.includes("FROM staff_profiles"))
+    if (sql.includes("FROM authorized_staff_profiles"))
       return {
         rows: [
           { id: operator, role: "operator" },
@@ -457,9 +457,9 @@ it("requires current staff kind, profile, precise grant and unchanged request sc
             { id: owner, kind: "staff" },
           ]
         : undefined,
-    (sql) => (sql.includes("FROM staff_profiles") ? [] : undefined),
+    (sql) => (sql.includes("FROM authorized_staff_profiles") ? [] : undefined),
     (sql) =>
-      sql.includes("FROM staff_profiles")
+      sql.includes("FROM authorized_staff_profiles")
         ? [{ id: operator, role: "content_editor" }]
         : undefined,
   ];
@@ -800,14 +800,14 @@ it("authorizes grant administration from current real staff roles and refuses sc
     ((sql) =>
       sql.startsWith("SELECT member_id") ? [] : undefined) as Override,
     ((sql) =>
-      sql.includes("FROM staff_profiles")
+      sql.includes("FROM authorized_staff_profiles")
         ? [
             { id: admin, role: "operator" },
             { id: operator, role: "operator" },
           ]
         : undefined) as Override,
     ((sql) =>
-      sql.includes("FROM staff_profiles")
+      sql.includes("FROM authorized_staff_profiles")
         ? [
             { id: admin, role: "platform_admin" },
             { id: operator, role: "platform_admin" },
@@ -879,7 +879,7 @@ it("authorizes grant administration from current real staff roles and refuses sc
     ((sql) =>
       sql.startsWith("SELECT g.request_id") ? [] : undefined) as Override,
     ((sql) =>
-      sql.includes("FROM staff_profiles")
+      sql.includes("FROM authorized_staff_profiles")
         ? [{ id: admin, role: "operator" }]
         : undefined) as Override,
     ...[null, { requestId: id(55) }, { staffId: admin }].map(

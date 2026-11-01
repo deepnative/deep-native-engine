@@ -1,3 +1,4 @@
+import { bindSyntheticAdministrator } from "../support/administrator-fixture.ts";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, readFile, readdir } from "node:fs/promises";
@@ -30,8 +31,8 @@ beforeEach(async () => {
 });
 afterEach(() => rm(root, { recursive: true, force: true }));
 afterAll(() => pool.end());
-async function fixture(connection = pool) {
-  const f = await sampleAssignmentFixture(connection, root),
+async function fixture(connection = pool, legacy = false) {
+  const f = await sampleAssignmentFixture(connection, root, legacy),
     minutes = reviewTimeStore(connection, { mode: "test", enabled: true });
   const startsAt = (
     (
@@ -1010,6 +1011,10 @@ it("REVIEW-GRANT-06 upgrade067 preserves legacy grants, repeats safely, immutabl
       )
       .sort())
       await client.query(await readFile(new URL(name, directory), "utf8"));
+    // Historical pre-identity source, confined to this isolated legacy schema.
+    await client.query(
+      "CREATE VIEW authorized_staff_profiles AS SELECT * FROM staff_profiles",
+    );
     const connection = {
         query: client.query.bind(client),
         connect: async () => ({
@@ -1017,7 +1022,7 @@ it("REVIEW-GRANT-06 upgrade067 preserves legacy grants, repeats safely, immutabl
           release() {},
         }),
       } as unknown as Pool,
-      f = await fixture(connection);
+      f = await fixture(connection, true);
     const legacy = await reviewTimeGrants(connection, {
       mode: "test",
       enabled: true,
@@ -1030,7 +1035,7 @@ it("REVIEW-GRANT-06 upgrade067 preserves legacy grants, repeats safely, immutabl
       f.input.operationId,
     );
     if (legacy.kind !== "applied") throw Error("legacy required");
-    const legacyErasure = await fixture(connection);
+    const legacyErasure = await fixture(connection, true);
     await expect(
       legacyErasure.evidence.removeWorkspace(legacyErasure.ownerToken),
     ).rejects.toThrow("Review source links permit only source erasure");
@@ -1053,6 +1058,10 @@ it("REVIEW-GRANT-06 upgrade067 preserves legacy grants, repeats safely, immutabl
         administration: "recovery-only",
       }),
       operationId = randomUUID();
+    expect((await s.receipt(f.administratorToken, legacy.grantId)).kind).toBe(
+      "denied",
+    );
+    await bindSyntheticAdministrator(connection, f.administratorId, f.end);
     expect((await s.receipt(f.administratorToken, legacy.grantId)).kind).toBe(
       "ready",
     );

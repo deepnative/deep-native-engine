@@ -3,7 +3,10 @@ import { test, expect, type Page } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { testPool } from "../support/database.ts";
 import { store } from "../../src/store.ts";
-import { authorizationStore, STAFF_ROLES } from "../../src/authorization.ts";
+import {
+  authorizationStore,
+  STAFF_ROLES,
+} from "../support/administrator-fixture.ts";
 import { supportRequestStore } from "../../src/support-requests.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";

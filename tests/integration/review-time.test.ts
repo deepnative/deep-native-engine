@@ -1,3 +1,4 @@
+import { authorizationStore as legacyAuthorizationStore } from "../../src/authorization.ts";
 import { ledgerReconciliationStore } from "../../src/ledger-reconciliation.ts";
 import {
   afterAll,
@@ -14,7 +15,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { testPool } from "../support/database.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import {
   sampleFeedbackStore,
@@ -41,9 +42,13 @@ function saved(result: SampleFeedbackResult) {
   if (result.kind !== "saved") throw Error("Expected saved sample feedback");
   return result;
 }
-async function fixture(purpose = SAMPLE_FEEDBACK_PURPOSE, connection = pool) {
+async function fixture(
+  purpose = SAMPLE_FEEDBACK_PURPOSE,
+  connection = pool,
+  legacy = false,
+) {
   const db = store(connection),
-    auth = authorizationStore(connection);
+    auth = (legacy ? legacyAuthorizationStore : authorizationStore)(connection);
   const ownerToken = randomBytes(32).toString("hex"),
     reviewerToken = randomBytes(32).toString("hex");
   await db.create(ownerToken, { background: "professional", goal: "everyday" });
@@ -1061,7 +1066,11 @@ it("upgrades populated pre-review-time feedback twice without converting unbille
         return { query: client.query.bind(client), release() {} };
       },
     } as unknown as import("pg").Pool;
-    const f = await fixture(SAMPLE_FEEDBACK_PURPOSE, scoped);
+    // Historical pre-identity schema only; current migration083 replaces this view.
+    await client.query(
+      "CREATE VIEW authorized_staff_profiles AS SELECT * FROM staff_profiles",
+    );
+    const f = await fixture(SAMPLE_FEEDBACK_PURPOSE, scoped, true);
     const feedbackId = randomUUID();
     await client.query(
       `

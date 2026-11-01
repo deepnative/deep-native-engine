@@ -6,7 +6,7 @@ import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import request from "supertest";
 import { start } from "../../src/runtime.ts";
 import { store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { supportRequestStore } from "../../src/support-requests.ts";
 import { testPool } from "../support/database.ts";
 import { COOKIE } from "../../src/session.ts";

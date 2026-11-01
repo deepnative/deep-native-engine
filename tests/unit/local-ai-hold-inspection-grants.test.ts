@@ -91,7 +91,7 @@ function fixture() {
       ];
     else if (sql.includes("FROM principals WHERE id=$1"))
       rows = state.operatorCurrent ? [{ id: operator }] : [];
-    else if (sql.includes("FROM staff_profiles"))
+    else if (sql.includes("FROM authorized_staff_profiles"))
       rows = [
         { id: admin, role: state.actorRole },
         { id: operator, role: state.operatorRole },

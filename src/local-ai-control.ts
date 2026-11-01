@@ -48,7 +48,7 @@ export function localAiControlStore(pool: Pool): LocalAiControlStore {
   async function admin(client: PoolClient, token: string): Promise<boolean> {
     const args = [hash(token)];
     const predicate =
-      "FROM principals p JOIN staff_profiles s ON s.principal_id=p.id WHERE p.token_hash=$1 AND p.kind='staff' AND s.role='platform_admin' AND p.revoked_at IS NULL AND p.expires_at>clock_timestamp()";
+      "FROM principals p JOIN authorized_staff_profiles s ON s.principal_id=p.id WHERE p.token_hash=$1 AND p.kind='staff' AND s.role='platform_admin' AND p.revoked_at IS NULL AND p.expires_at>clock_timestamp()";
     const locked = await client.query(
       `SELECT p.id ${predicate} FOR SHARE OF p,s`,
       args,

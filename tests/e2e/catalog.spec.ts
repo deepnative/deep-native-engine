@@ -1,7 +1,10 @@
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+import {
+  authorizationStore,
+  type StaffRole,
+} from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { proposalStore } from "../../src/proposals.ts";
 import { testPool } from "../support/database.ts";

@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Pool, PoolClient } from "pg";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { hash, migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";

@@ -6,7 +6,7 @@ import {
   circleDiscussionStore,
   CIRCLE_DISCUSSION_POLICY,
 } from "../../src/circle-discussion.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { testPool } from "../support/database.ts";
 const pool = testPool(),
   members = store(pool),

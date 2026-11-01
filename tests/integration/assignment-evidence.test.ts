@@ -5,7 +5,7 @@ import { beforeAll, beforeEach, afterAll, expect, it, vi } from "vitest";
 import { testPool } from "../support/database.ts";
 import { migrate, store } from "../../src/store.ts";
 import { attemptStore } from "../../src/attempts.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore } from "../../src/catalog.ts";
 import { assignmentEvidenceStore } from "../../src/assignment-evidence.ts";
 import { assignmentObjectStorage } from "../../src/assignment-evidence-storage.ts";

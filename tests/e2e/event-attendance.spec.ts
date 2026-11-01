@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { start } from "../../src/runtime.ts";
 import { migrate } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 // Staff credentials must not appear in retained network traces.
 async function dropOwnedDatabase(control: Pool, name: string) {
   const active = (

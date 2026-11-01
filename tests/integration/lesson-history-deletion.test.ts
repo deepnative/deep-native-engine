@@ -5,7 +5,7 @@ import request from "supertest";
 import { app } from "../../src/app.ts";
 import { COOKIE } from "../../src/session.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
 import { withLoopback } from "../support/loopback-server.ts";

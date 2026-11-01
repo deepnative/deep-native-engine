@@ -23,7 +23,10 @@ import {
   requestFingerprint,
   runAdapterJob,
 } from "../../src/jobs.ts";
-import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+import {
+  authorizationStore,
+  type StaffRole,
+} from "../support/administrator-fixture.ts";
 import {
   evidenceStore,
   fileObjectStorage,

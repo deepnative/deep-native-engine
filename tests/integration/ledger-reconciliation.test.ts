@@ -11,7 +11,10 @@ import {
   it,
 } from "vitest";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+import {
+  authorizationStore,
+  type StaffRole,
+} from "../support/administrator-fixture.ts";
 import { syntheticLedger, type LedgerCategory } from "../../src/ledger.ts";
 import {
   ledgerReconciliationStore,

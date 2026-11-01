@@ -438,7 +438,7 @@ export function ledgerReconciliationStore(
         if (!principal) throw new AccessDenied();
         const profile = (
           await client.query(
-            "SELECT role FROM staff_profiles WHERE principal_id=$1 AND role IN ('operator','platform_admin') FOR SHARE",
+            "SELECT role FROM authorized_staff_profiles WHERE principal_id=$1 AND role IN ('operator','platform_admin') FOR SHARE",
             [principal.id],
           )
         ).rows[0];

@@ -10,7 +10,7 @@ import type { Pool } from "pg";
 import { test, expect, type Page, type Browser } from "@playwright/test";
 import { app } from "../../src/app.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { supportRequestStore } from "../../src/support-requests.ts";
 import { supportAssignmentStore } from "../../src/support-assignment.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";

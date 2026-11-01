@@ -78,7 +78,7 @@ async function fixture(mode: "test" | "live" = "test") {
           ? [{ id: "own-principal", expires: new Date(Date.now() + 60000) }]
           : [],
       );
-    if (sql.includes("FROM staff_profiles"))
+    if (sql.includes("FROM authorized_staff_profiles"))
       return rows([{ role: state.role }]);
     if (sql.includes("FROM workspaces"))
       return rows(state.workspace ? [{ id: "own-workspace" }] : []);

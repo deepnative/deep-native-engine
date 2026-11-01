@@ -2,7 +2,7 @@ import { test, expect, devices, type BrowserContext } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { migrate } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { eventRehearsalStore } from "../../src/event-rehearsals.ts";
 import { rehearsalSnapshot } from "../../src/event-rehearsal-values.ts";
 import { startAttendanceRecoveryServer } from "../support/event-attendance-recovery-server.ts";

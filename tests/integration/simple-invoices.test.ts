@@ -3,7 +3,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, seedDraftPack } from "../../src/catalog.ts";
 import { foundationImportStore } from "../../src/foundation-import.ts";
 import { reviewedFoundation } from "../../src/foundation-pack.ts";

@@ -1,6 +1,6 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { supportRequestStore } from "../../src/support-requests.ts";
 import { COOKIE } from "../../src/session.ts";
 import { testPool } from "../support/database.ts";

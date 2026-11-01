@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, afterEach, afterAll, it, expect } from "vitest";
 import { randomBytes } from "node:crypto";
 import { testPool } from "../support/database.ts";
 import { migrate } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 
 const pool = testPool();

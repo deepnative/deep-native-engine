@@ -81,7 +81,7 @@ function fixture(
       rows = state.actor
         ? [{ id: actorId, expires: new Date(+at + 60000) }]
         : [];
-    else if (sql.includes("FROM staff_profiles"))
+    else if (sql.includes("FROM authorized_staff_profiles"))
       rows = state.profile === null ? [] : [{ role: state.profile }];
     else if (sql.includes("AS future")) rows = [{ future: state.future }];
     else if (
@@ -179,7 +179,9 @@ it("EVCANCEL-05 missing selected principal denies without role or event lookup",
   f.state.actor = false;
   expect(await f.store.admin(token)).toEqual({ kind: "denied" });
   expect(
-    f.query.mock.calls.some(([sql]) => sql.includes("FROM staff_profiles")),
+    f.query.mock.calls.some(([sql]) =>
+      sql.includes("FROM authorized_staff_profiles"),
+    ),
   ).toBe(false);
 });
 it.each(["preview", "inspect", "inspectOperation", "cancel"] as const)(

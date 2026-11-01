@@ -151,7 +151,7 @@ export function publicationStore(
         if (staff) {
           const profile = (
             await tx.query<{ role: string }>(
-              "SELECT role FROM staff_profiles WHERE principal_id=$1 AND role IN ('moderator','platform_admin') FOR SHARE",
+              "SELECT role FROM authorized_staff_profiles WHERE principal_id=$1 AND role IN ('moderator','platform_admin') FOR SHARE",
               [actor.id],
             )
           ).rows[0];

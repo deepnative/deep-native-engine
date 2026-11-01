@@ -4,7 +4,7 @@ import request from "supertest";
 import { beforeAll, beforeEach, afterAll, expect, it } from "vitest";
 import { app } from "../../src/app.ts";
 import { attemptStore } from "../../src/attempts.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { migrate, store } from "../../src/store.ts";
 import { COOKIE, csrf } from "../../src/session.ts";

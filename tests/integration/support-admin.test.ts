@@ -1,3 +1,4 @@
+import { bindSyntheticAdministrator } from "../support/administrator-fixture.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { spawn } from "node:child_process";
 import {
@@ -143,6 +144,14 @@ describe("private support administrator request actions", () => {
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "dne-support-admin-grant-"));
     expect((await run(root)).code).toBe(0);
+    const selected = JSON.parse(
+      await readFile(join(root, "support-admin", "admin.json"), "utf8"),
+    );
+    await bindSyntheticAdministrator(
+      pool,
+      selected.id,
+      new Date(selected.expiresAt),
+    );
     directory = join(root, "support-admin");
     memberToken = randomBytes(32).toString("hex");
     support = supportRequestStore(pool);
@@ -223,6 +232,14 @@ it("creates and revokes separate support-time purpose grants from protected loca
   const root = await mkdtemp(join(tmpdir(), "dne-support-time-admin-"));
   try {
     expect((await run(root)).code).toBe(0);
+    const selected = JSON.parse(
+      await readFile(join(root, "support-admin", "admin.json"), "utf8"),
+    );
+    await bindSyntheticAdministrator(
+      pool,
+      selected.id,
+      new Date(selected.expiresAt),
+    );
     const directory = join(root, "support-admin"),
       token = randomBytes(32).toString("hex"),
       members = store(pool),

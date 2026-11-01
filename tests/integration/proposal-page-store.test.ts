@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import type { Pool } from "pg";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { proposalStore } from "../../src/proposals.ts";
 import { hash, migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";

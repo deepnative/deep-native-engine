@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { testPool } from "../support/database.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, seedDraftPack } from "../../src/catalog.ts";
 import { foundationImportStore } from "../../src/foundation-import.ts";
 import { reviewedFoundation } from "../../src/foundation-pack.ts";

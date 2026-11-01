@@ -3,7 +3,7 @@ import type { Pool, PoolClient, QueryResult } from "pg";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import request from "supertest";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { syntheticLedger, type LedgerCategory } from "../../src/ledger.ts";
 import { memberSlotHolds } from "../../src/slot-holds.ts";
 import { availabilityStore } from "../../src/availability.ts";

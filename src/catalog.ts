@@ -140,7 +140,7 @@ const columns = `id,version,kind,origin,title,body,owner,sources,rights,goals,ba
   rubric,rubric_version AS "rubricVersion",state,requires_qualified_signoff AS "requiresQualifiedSignoff",
   reviewed_at AS "reviewedAt",published_at AS "publishedAt"`;
 function role(role: "editor" | "reviewer") {
-  return `EXISTS(SELECT 1 FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
+  return `EXISTS(SELECT 1 FROM principals p JOIN authorized_staff_profiles s ON s.principal_id=p.id
     WHERE p.token_hash=$1 AND p.kind='staff' AND s.role='${role}'
       AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP)`;
 }
@@ -153,7 +153,7 @@ export function catalogStore(pool: Pool): CatalogStore {
           goals,backgrounds,domains,prerequisites,structured_prerequisites,
           minimum_experience,rubric,rubric_version,created_by)
          SELECT $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$18::jsonb,$15,$16,$17,p.id
-         FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
+         FROM principals p JOIN authorized_staff_profiles s ON s.principal_id=p.id
          WHERE p.token_hash=$1 AND p.kind='staff' AND s.role='editor'
            AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
            AND $3=(SELECT COALESCE(MAX(version),0)+1 FROM content_versions WHERE id=$2)
@@ -199,7 +199,7 @@ export function catalogStore(pool: Pool): CatalogStore {
       const result = await pool.query(
         `UPDATE content_versions SET state='approved',reviewed_by=p.id,
            reviewed_at=CURRENT_TIMESTAMP,rights_confirmed=true
-         FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
+         FROM principals p JOIN authorized_staff_profiles s ON s.principal_id=p.id
          WHERE content_versions.id=$2 AND content_versions.version=$3
            AND content_versions.state='in_review' AND content_versions.created_by IS DISTINCT FROM p.id
            AND NOT content_versions.requires_qualified_signoff
@@ -301,7 +301,7 @@ export function catalogStore(pool: Pool): CatalogStore {
          SELECT $1,$2,cv.id,cv.version,cv.rubric_version,p.id,$6
          FROM content_versions cv
          JOIN principals p ON p.token_hash=$3 AND p.kind='staff'
-         JOIN staff_profiles s ON s.principal_id=p.id AND s.role='reviewer'
+         JOIN authorized_staff_profiles s ON s.principal_id=p.id AND s.role='reviewer'
          JOIN assignment_grants g ON g.staff_id=p.id AND g.staff_role='reviewer'
            AND g.workspace_id=$2 AND g.revoked_at IS NULL
            AND g.starts_at<=CURRENT_TIMESTAMP AND g.expires_at>CURRENT_TIMESTAMP

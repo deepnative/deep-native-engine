@@ -181,7 +181,7 @@ export function sampleFeedbackStore(
             role: string | null;
             expires: Date;
           }>(
-            `SELECT p.id,p.kind,s.role,p.expires_at AS expires FROM principals p LEFT JOIN staff_profiles s ON s.principal_id=p.id
+            `SELECT p.id,p.kind,s.role,p.expires_at AS expires FROM principals p LEFT JOIN authorized_staff_profiles s ON s.principal_id=p.id
      WHERE p.token_hash=$1 AND p.revoked_at IS NULL AND p.expires_at>clock_timestamp() FOR SHARE OF p`,
             [hash(token)],
           )
@@ -198,7 +198,7 @@ export function sampleFeedbackStore(
         if (actorExclusion) {
           const profile = (
             await tx.query(
-              "SELECT 1 FROM staff_profiles WHERE principal_id=$1 AND role='reviewer' FOR SHARE",
+              "SELECT 1 FROM authorized_staff_profiles WHERE principal_id=$1 AND role='reviewer' FOR SHARE",
               [identity.id],
             )
           ).rows[0];
