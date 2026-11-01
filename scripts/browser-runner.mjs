@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -151,6 +151,15 @@ export async function runBrowsers(root = process.cwd()) {
     requireGate(
       merged.exitStatus === 0 && !interrupted,
       "Browser report merge failed",
+    );
+    const packaging = spawnSync(
+      process.env.PYTHON ?? "python3",
+      ["scripts/repo.py", "prepare-browser-reports", String(lanes.length)],
+      { cwd: root, stdio: "ignore", timeout: 30000 },
+    );
+    requireGate(
+      packaging.status === 0 && !packaging.error && !packaging.signal,
+      "Browser report packaging failed",
     );
     evidence.exitStatus = 0;
   } catch {

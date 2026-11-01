@@ -816,6 +816,69 @@ class RepositoryFixture(unittest.TestCase):
             self.assertEqual(gate.verify(self.root), 1)
         self.assertFalse(gate.verification_receipt_path(self.root).exists())
 
+    def browser_blobs(self, content=None):
+        import hashlib
+        directory = self.root / "artifacts/browser-shards/blobs"
+        resources = directory / "resources"
+        resources.mkdir(parents=True)
+        trace = io.BytesIO()
+        with zipfile.ZipFile(trace, "w") as archive:
+            archive.writestr("test.trace", content or '{"type":"context-options"}')
+        data = trace.getvalue()
+        name = "resources/" + hashlib.sha1(data).hexdigest() + ".zip"
+        (directory / name).write_bytes(data)
+        for index in range(1, 5):
+            with zipfile.ZipFile(directory / f"shard-{index}.zip", "w") as archive:
+                archive.writestr("report.jsonl", json.dumps({"shard": index}) + "\n")
+                archive.writestr(name, data)
+        return directory, name
+
+    def test_browser_blobs_preserve_originals_and_scan_all_expanded_content(self):
+        directory, name = self.browser_blobs()
+        with self.assertRaisesRegex(gate.GateError, "Nested archive"):
+            gate.scan_artifacts(self.root)
+        gate.preserve_browser_blobs(self.root, 4)
+        self.assertEqual(gate.scan_artifacts(self.root)["status"], "passed")
+        manifest = json.loads((directory.parent / "blob-manifest.json").read_text())
+        self.assertEqual(len(manifest["archives"]), 4)
+        vault = gate.verification_git_directory(self.root) / manifest["directory"]
+        for index in range(1, 5):
+            self.assertEqual(json.loads((directory / f"shard-{index}.jsonl").read_text()), {"shard": index})
+            self.assertTrue((vault / f"shard-{index}.zip").is_file())
+        self.assertTrue((directory / name).is_file())
+        self.assertFalse(list(directory.glob("shard-*.zip")))
+
+    def test_browser_blobs_reject_changed_or_unsafe_expanded_resources(self):
+        directory, name = self.browser_blobs()
+        (directory / name).write_bytes(b"changed")
+        with self.assertRaises(gate.GateError):
+            gate.preserve_browser_blobs(self.root, 4)
+        self.assertEqual(len(list(directory.glob("shard-*.zip"))), 4)
+
+    def test_expanded_browser_traces_still_reject_credential_markers(self):
+        self.browser_blobs("ghp_" + "q" * 36)
+        gate.preserve_browser_blobs(self.root, 4)
+        with self.assertRaisesRegex(gate.GateError, "github-token"):
+            gate.scan_artifacts(self.root)
+
+    def test_browser_blobs_reject_path_traversal_before_moving_originals(self):
+        directory, _ = self.browser_blobs()
+        with zipfile.ZipFile(directory / "shard-1.zip", "a") as archive:
+            archive.writestr("../escaped", "untrusted")
+        with self.assertRaises(gate.GateError):
+            gate.preserve_browser_blobs(self.root, 4)
+        self.assertEqual(len(list(directory.glob("shard-*.zip"))), 4)
+        self.assertFalse((self.root / "escaped").exists())
+
+    def test_browser_blob_original_tampering_invalidates_receipt(self):
+        self.browser_blobs()
+        gate.preserve_browser_blobs(self.root, 4)
+        self.passed_receipt()
+        manifest = json.loads((self.root / "artifacts/browser-shards/blob-manifest.json").read_text())
+        vault = gate.verification_git_directory(self.root) / manifest["directory"]
+        (vault / "shard-1.zip").write_bytes(b"changed")
+        self.assertFalse(gate.has_verification_receipt(self.root))
+
     def test_failed_verification_blocks_push(self):
         with patch.object(gate, "verify", return_value=1), self.assertRaisesRegex(gate.GateError, "verification failed"):
             gate.pre_push(self.root, self.push_line())

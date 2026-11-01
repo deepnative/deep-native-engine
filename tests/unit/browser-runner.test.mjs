@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
+vi.mock("node:child_process", () => ({ spawn: vi.fn(), spawnSync: vi.fn() }));
 vi.mock("pg", () => ({ Pool: vi.fn() }));
 vi.mock("../../scripts/integration-runner.mjs", () => ({
   testLaneCount: () => 4,
@@ -12,7 +12,7 @@ vi.mock("../../scripts/integration-runner.mjs", () => ({
   createLaneDatabase: vi.fn(),
   dropLaneDatabase: vi.fn(),
 }));
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { Pool } from "pg";
 import {
   createLaneDatabase,
@@ -27,6 +27,7 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true });
 });
 function fixture() {
+  vi.mocked(spawnSync).mockReturnValue({ status: 0 });
   const root = mkdtempSync(path.join(tmpdir(), "browser-runner-test-"));
   roots.push(root);
   vi.mocked(Pool).mockImplementation(function () {
@@ -78,10 +79,12 @@ it("SPEED04 launches all browser shards with distinct databases, storage and loo
       .lanes,
   ).toHaveLength(4);
 });
-it.each(["shard", "merge"])(
+it.each(["shard", "merge", "packaging"])(
   "SPEED04 fails closed on an original %s failure",
   async (stage) => {
     const { root, children } = fixture();
+    if (stage === "packaging")
+      vi.mocked(spawnSync).mockReturnValue({ status: 1 });
     const run = runBrowsers(root);
     await vi.waitFor(() => expect(children).toHaveLength(4));
     children
@@ -89,9 +92,9 @@ it.each(["shard", "merge"])(
       .forEach((child, index) =>
         child.emit("close", stage === "shard" && index === 0 ? 1 : 0, null),
       );
-    if (stage === "merge") {
+    if (stage !== "shard") {
       await vi.waitFor(() => expect(children).toHaveLength(5));
-      children[4].emit("close", 1, null);
+      children[4].emit("close", stage === "merge" ? 1 : 0, null);
     }
     expect(await run).toBe(1);
     expect(dropLaneDatabase).toHaveBeenCalledTimes(4);

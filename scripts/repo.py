@@ -14,6 +14,8 @@ import tomllib
 import unittest
 import zipfile
 import threading
+import shutil
+import tempfile
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
@@ -629,8 +631,75 @@ def verification_receipt_path(root):
     return value if value.is_absolute() else root / value
 
 
+def verification_git_directory(root):
+    return Path(git(root, "rev-parse", "--absolute-git-dir"))
+
+
+def preserve_browser_blobs(root, count):
+    """Keep original containers privately; scan every original report and extracted trace normally."""
+    require(count in (4, 8), "Invalid browser report count")
+    directory = root / "artifacts/browser-shards/blobs"
+    expected = {f"shard-{index}.zip" for index in range(1, count + 1)}
+    require({p.name for p in directory.glob("*.zip")} == expected, "Incomplete browser blob inventory")
+    plans = []
+    for name in sorted(expected):
+        file = directory / name
+        require(file.is_file() and not file.is_symlink() and file.stat().st_size <= MAX_ARTIFACT_BYTES,
+                "Unsafe browser blob")
+        with zipfile.ZipFile(file) as archive:
+            members = archive.infolist()
+            require(0 < len(members) <= MAX_ZIP_MEMBERS and
+                    sum(member.file_size for member in members) <= MAX_ZIP_TOTAL_BYTES,
+                    "Browser blob exceeds supported bounds")
+            seen = set()
+            hashes = {}
+            for member in members:
+                require(member.filename not in seen and
+                        (member.filename == "report.jsonl" or re.fullmatch(r"resources/[a-f0-9]{40}\.[a-z0-9]+", member.filename)) and
+                        stat.S_IFMT(member.external_attr >> 16) in (0, stat.S_IFREG) and
+                        not member.flag_bits & 1 and member.compress_type in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED) and
+                        member.file_size <= MAX_ZIP_MEMBER_BYTES, "Unsafe browser blob member")
+                seen.add(member.filename)
+                data = archive.read(member)
+                hashes[member.filename] = hashlib.sha256(data).hexdigest()
+                if member.filename != "report.jsonl":
+                    expanded = directory / member.filename
+                    require(expanded.is_file() and not expanded.is_symlink() and
+                            expanded.resolve().is_relative_to(directory.resolve()) and
+                            hashlib.sha256(expanded.read_bytes()).hexdigest() == hashes[member.filename],
+                            "Expanded browser resource does not match original")
+            require("report.jsonl" in seen, "Original browser report missing")
+            plans.append((file, hashes))
+    vault = Path(tempfile.mkdtemp(prefix="browser-blobs-", dir=verification_git_directory(root)))
+    records = []
+    for file, hashes in plans:
+        with zipfile.ZipFile(file) as archive:
+            file.with_suffix(".jsonl").write_bytes(archive.read("report.jsonl"))
+        records.append({"name": file.name, "sha256": hashlib.sha256(file.read_bytes()).hexdigest(), "members": hashes})
+        shutil.move(file, vault / file.name)
+    (directory.parent / "blob-manifest.json").write_text(json.dumps({"schema": "expanded-browser-blobs-v1",
+        "directory": vault.name, "archives": records}, indent=2) + "\n")
+
+
+def check_original_browser_blobs(root):
+    file = root / "artifacts/browser-shards/blob-manifest.json"
+    if not file.exists():
+        return
+    manifest = json.loads(file.read_text())
+    require(manifest.get("schema") == "expanded-browser-blobs-v1" and
+            re.fullmatch(r"browser-blobs-[a-zA-Z0-9_-]+", manifest.get("directory", "")), "Invalid original blob location")
+    vault = verification_git_directory(root) / manifest["directory"]
+    require(not vault.is_symlink() and len(manifest["archives"]) in (4, 8), "Invalid original blob inventory")
+    for row in manifest["archives"]:
+        require(re.fullmatch(r"shard-[1-8]\.zip", row["name"]), "Invalid original blob identity")
+        archive = vault / row["name"]
+        require(archive.is_file() and not archive.is_symlink() and
+                hashlib.sha256(archive.read_bytes()).hexdigest() == row["sha256"], "Original browser blob changed")
+
+
 def verification_fingerprint(root):
     revision = state(root)
+    check_original_browser_blobs(root)
     require(not revision["dirty"], "Verification receipt requires clean source")
     repository = json.loads((root / "artifacts/repository-verification.json").read_text())
     application = json.loads((root / "artifacts/application-verification.json").read_text())
@@ -867,6 +936,10 @@ def pre_push(root, lines):
 
 
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "prepare-browser-reports":
+        require(sys.argv[2] in ("4", "8"), "Invalid browser report count")
+        preserve_browser_blobs(ROOT, int(sys.argv[2]))
+        return 0
     require(len(sys.argv) == 2, "Usage: python3 scripts/repo.py bootstrap|verify|pre-push|scan-artifacts")
     command = sys.argv[1]
     if command == "bootstrap":
