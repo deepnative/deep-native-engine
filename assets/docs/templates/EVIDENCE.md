@@ -2,11 +2,15 @@
 
 - Issue / PR / accountable owner / independent reviewer:
 - Scope and authorization (planning, tooling, application slice, release):
-- Local commit and tree / clean or dirty / CI tested SHA:
-- Merge SHA / resulting main CI / local synchronization:
+- Local tested commit/tree / clean or dirty / original report and receipt hashes:
+- Merge SHA / actual main tree and parents / local synchronization:
 - Merged delivery branch/worktree cleanup or safety blocker:
 - Date, OS, runtime/dependency versions:
-- Commands and exit statuses / report links:
+- Commands and exit statuses / original report links:
+- Gate owner and process/session / actual terminal state:
+- Runtime, allocated CPU/RAM, selected group count and isolated fixture identity:
+- Full-gate start/end/duration / protected-push duration / receipt reused or full fallback:
+- Azure deployment run/revision/readiness and public journey, only when authorized (not a test run):
 
 | Acceptance criterion / BDD scenario ID | Observable result | Executable test or artifact evidence | Remaining gap |
 | --- | --- | --- | --- |
@@ -35,3 +39,5 @@ For application work, record unit raw covered/total counts for each metric and m
 - Changed README capabilities, or not applicable for documentation/tooling:
 - Limitations / unavailable-access blocker, owner and next action:
 - Parent/qualified/full-MVP/deployment state (distinct from this demo):
+
+Use the [shared local verification playbook](../workflows/LOCAL-VERIFICATION-PLAYBOOK.md). Timings are dated observations, not guarantees; preserve failed campaigns separately and do not manufacture CI test evidence.

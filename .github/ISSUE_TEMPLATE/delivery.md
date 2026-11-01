@@ -43,8 +43,10 @@ List commands, scenario-to-test mappings, expected artifacts, and review decisio
 ## Definition of done
 
 - [ ] Every AC has linked evidence; unresolved external prerequisites are explicit.
-- [ ] Required checks passed on the intended revision before push and in CI.
+- [ ] Complete local verification passed on the exact clean intended revision before the ordinary protected push.
 - [ ] Current diff and evidence self-reviewed and recorded; blocking findings resolved and any actually required separate review completed.
 - [ ] Docs, decisions, handoff, and relevant rollback/operations records updated.
 - [ ] Work claim, assignee, lifecycle/blocker labels and project Status reflect the actual outcome; partial delivery stays open.
 - [ ] Scope was authorized by the accountable owner; no repeat merge approval or inferred live/commercial readiness.
+
+Follow the [shared local verification playbook](../../assets/docs/workflows/LOCAL-VERIFICATION-PLAYBOOK.md). Read back the merged main tree/parents; GitHub Actions only deploys to Azure, with no PR/main test or proof-promotion job.
