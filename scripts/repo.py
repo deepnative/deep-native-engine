@@ -40,11 +40,11 @@ SKILLS = {"dne-plan-issue", "dne-deliver-issue", "dne-review-change", "dne-hando
 SETUP_FILES = {
     "AGENTS.md", "CLAUDE.md", "README.md", "CONTRIBUTING.md", ".gitignore", "Makefile",
     ".githooks/pre-push", ".github/pull_request_template.md",
-    ".github/ISSUE_TEMPLATE/delivery.md", ".github/workflows/repository-checks.yml",
+    ".github/ISSUE_TEMPLATE/delivery.md",
     "docs/planning/README.md", "scripts/repo.py", "tests/repository/test_repo.py",
 }
 PRODUCT_SITE_FILES = {
-    ".github/workflows/product-pages.yml", "site/index.html", "site/styles.css", "site/favicon.svg",
+    "site/index.html", "site/styles.css", "site/favicon.svg",
 }
 LEARNING_ROOT = Path("assets/docs/learning-design")
 LEARNING_FILES = {str(LEARNING_ROOT / name) for name in (
@@ -76,8 +76,7 @@ APP_FILES = {
     "scripts/private-preview.mjs", "scripts/private-preview.d.mts",
     # Two explicitly isolated integration lanes; raw union/process/resource
     # invariants are exercised by tooling units and real PostgreSQL evidence.
-    "scripts/integration-runner.mjs", "scripts/browser-runner.mjs", "scripts/promote-verification.py",
-    "tests/repository/test_promotion.py",
+    "scripts/integration-runner.mjs", "scripts/browser-runner.mjs",
     "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "scripts/full-release-evidence.mjs", "tests/e2e/scenarios.json", "tests/e2e/cross-browser-scenarios.json", "tests/e2e/full-mvp-approval.json", "src/main.ts", "migrations/001-learning.sql",
     "assets/docs/content/circles/preview-circles.json", "public/pages-demo.js", "public/attempt-save.js", "public/member-export.js", "public/evidence-export.js", "public/exercise-error-focus.js",
     "assets/docs/content/events/preview-events.json",
