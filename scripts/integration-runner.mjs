@@ -9,12 +9,17 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Pool } from "pg";
 import { dropAttendanceBrowserDatabase } from "../tests/support/attendance-browser-database.ts";
 import { requireGate } from "./quality-gates.mjs";
+
+export function testLaneCount(cpus = availableParallelism()) {
+  return cpus >= 12 ? 8 : 4;
+}
+const LANES = Array.from({ length: testLaneCount() }, (_, index) => index + 1);
 
 const LIMIT = 1024 * 1024;
 const signatures = {
@@ -107,8 +112,8 @@ export function mergeUnhandled(reports) {
     }
   }
   requireGate(
-    reports.length === 4,
-    "All four integration lane diagnostics required",
+    reports.length === LANES.length,
+    "All integration lane diagnostics required",
   );
   return {
     schema: "integration-unhandled-v1",
@@ -120,10 +125,10 @@ export function mergeUnhandled(reports) {
 
 export function mergeIntegrationReports(expectedFiles, lanes) {
   requireGate(
-    lanes.length === 4 &&
-      new Set(lanes.map((lane) => lane.index)).size === 4 &&
-      lanes.every((lane) => [1, 2, 3, 4].includes(lane.index)),
-    "Four distinct integration lanes required",
+    lanes.length === LANES.length &&
+      new Set(lanes.map((lane) => lane.index)).size === LANES.length &&
+      lanes.every((lane) => LANES.includes(lane.index)),
+    "Complete distinct integration lanes required",
   );
   const unhandled = mergeUnhandled(lanes.map((lane) => lane.unhandled));
   requireGate(unhandled.count === 0, "Integration lane unhandled errors");
@@ -344,7 +349,7 @@ function launch(index, root, env, children) {
       "run",
       "--config",
       "vitest.integration.config.ts",
-      `--shard=${index}/4`,
+      `--shard=${index}/${LANES.length}`,
     ],
     { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] },
   );
@@ -404,6 +409,7 @@ function launch(index, root, env, children) {
 export async function runIntegration(root = process.cwd()) {
   const evidence = {
     schema: "integration-lanes-v1",
+    laneCount: LANES.length,
     started: new Date().toISOString(),
     exitStatus: 1,
     lanes: [],
@@ -442,7 +448,7 @@ export async function runIntegration(root = process.cwd()) {
       interrupted = true;
     });
     stage = "owned lane setup";
-    for (const index of [1, 2, 3, 4]) {
+    for (const index of LANES) {
       requireGate(!interrupted, "Integration execution interrupted");
       let database;
       try {

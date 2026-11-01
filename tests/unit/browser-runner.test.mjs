@@ -7,6 +7,7 @@ import { afterEach, expect, it, vi } from "vitest";
 vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
 vi.mock("pg", () => ({ Pool: vi.fn() }));
 vi.mock("../../scripts/integration-runner.mjs", () => ({
+  testLaneCount: () => 4,
   controlUrl: vi.fn(() => new URL("postgresql://invented@127.0.0.1/postgres")),
   createLaneDatabase: vi.fn(),
   dropLaneDatabase: vi.fn(),

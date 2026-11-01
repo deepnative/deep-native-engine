@@ -21,9 +21,14 @@ import {
   integrationFiles,
   mergeIntegrationReports,
   mergeUnhandled,
+  testLaneCount,
   runIntegration,
 } from "../../scripts/integration-runner.mjs";
 
+vi.mock("node:os", async (importOriginal) => ({
+  ...(await importOriginal()),
+  availableParallelism: () => 8,
+}));
 vi.mock("node:child_process", async (importOriginal) => ({
   ...(await importOriginal()),
   spawn: vi.fn(),
@@ -562,7 +567,7 @@ it("keeps the two diagnostic writers distinct and rejects unbounded lane selecto
   const mkdir = vi.fn(),
     write = vi.fn();
   vi.doMock("node:fs", () => ({ mkdirSync: mkdir, writeFileSync: write }));
-  for (const lane of ["1", "2", "3", "4"]) {
+  for (const lane of ["1", "2", "3", "4", "5", "6", "7", "8"]) {
     vi.resetModules();
     vi.stubEnv("DNE_INTEGRATION_SHARD", lane);
     const { default: reporter } =
@@ -602,4 +607,11 @@ it("contains evidence-write failures at the real CLI boundary without leaking pr
   expect(result.stderr).toContain("evidence could not be preserved");
   expect(result.stderr).not.toContain(marker);
   expect(result.stderr).not.toContain(root);
+});
+
+it("SPEED04 uses eight isolated lanes on a large local runner and four on smaller CI hosts", () => {
+  expect(testLaneCount(12)).toBe(8);
+  expect(testLaneCount(18)).toBe(8);
+  expect(testLaneCount(8)).toBe(4);
+  expect(testLaneCount(2)).toBe(4);
 });

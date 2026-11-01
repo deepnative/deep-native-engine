@@ -15,13 +15,19 @@ import {
   controlUrl,
   createLaneDatabase,
   dropLaneDatabase,
+  testLaneCount,
 } from "./integration-runner.mjs";
 import { requireGate } from "./quality-gates.mjs";
 
 // Keep each file's ordered tests together; each process owns its database/server/storage.
 export async function runBrowsers(root = process.cwd()) {
+  const lanes = Array.from(
+    { length: testLaneCount() },
+    (_, index) => index + 1,
+  );
   const evidence = {
     schema: "browser-shards-v1",
+    laneCount: lanes.length,
     started: new Date().toISOString(),
     exitStatus: 1,
     lanes: [],
@@ -70,7 +76,7 @@ export async function runBrowsers(root = process.cwd()) {
       connectionTimeoutMillis: 3000,
     });
     admin.on("error", stop);
-    for (const index of [1, 2, 3, 4]) {
+    for (const index of lanes) {
       requireGate(!interrupted, "Browser execution interrupted");
       let database;
       try {
@@ -104,7 +110,7 @@ export async function runBrowsers(root = process.cwd()) {
         launch(
           [
             "test",
-            `--shard=${resource.index}/4`,
+            `--shard=${resource.index}/${lanes.length}`,
             "--reporter=blob",
             `--output=artifacts/browser-results/shard-${resource.index}`,
           ],
@@ -126,7 +132,7 @@ export async function runBrowsers(root = process.cwd()) {
     evidence.lanes = await Promise.all(pending);
     requireGate(
       !interrupted &&
-        evidence.lanes.length === 4 &&
+        evidence.lanes.length === lanes.length &&
         evidence.lanes.every((lane) => lane.exitStatus === 0),
       "Browser shard failed",
     );
