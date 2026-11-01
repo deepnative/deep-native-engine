@@ -637,7 +637,7 @@ def verification_git_directory(root):
 
 def preserve_browser_blobs(root, count):
     """Keep original containers privately; scan every original report and extracted trace normally."""
-    require(count in (4, 8), "Invalid browser report count")
+    require(type(count) is int and 1 <= count <= 8, "Invalid browser report count")
     directory = root / "artifacts/browser-shards/blobs"
     expected = {f"shard-{index}.zip" for index in range(1, count + 1)}
     require({p.name for p in directory.glob("*.zip")} == expected, "Incomplete browser blob inventory")
@@ -689,7 +689,7 @@ def check_original_browser_blobs(root):
     require(manifest.get("schema") == "expanded-browser-blobs-v1" and
             re.fullmatch(r"browser-blobs-[a-zA-Z0-9_-]+", manifest.get("directory", "")), "Invalid original blob location")
     vault = verification_git_directory(root) / manifest["directory"]
-    require(not vault.is_symlink() and len(manifest["archives"]) in (4, 8), "Invalid original blob inventory")
+    require(not vault.is_symlink() and 1 <= len(manifest["archives"]) <= 8, "Invalid original blob inventory")
     for row in manifest["archives"]:
         require(re.fullmatch(r"shard-[1-8]\.zip", row["name"]), "Invalid original blob identity")
         archive = vault / row["name"]
@@ -698,6 +698,8 @@ def check_original_browser_blobs(root):
 
 
 def verification_fingerprint(root):
+    selection = os.environ.get("DNE_TEST_GROUPS", "auto")
+    require(selection == "auto" or re.fullmatch(r"[1-8]", selection), "Invalid test group count")
     revision = state(root)
     check_original_browser_blobs(root)
     require(not revision["dirty"], "Verification receipt requires clean source")
@@ -713,9 +715,12 @@ def verification_fingerprint(root):
         if file.is_file():
             with file.open("rb") as stream:
                 files[str(file.relative_to(root))] = hashlib.file_digest(stream, "sha256").hexdigest()
-    node = subprocess.run(["node", "--version"], check=True, capture_output=True, text=True).stdout.strip()
+    runtime = json.loads(subprocess.run(["node", "--input-type=module", "-e",
+        "import {availableParallelism,totalmem} from 'node:os';console.log(JSON.stringify({version:process.version,cpus:availableParallelism(),memory:Math.min(totalmem(),process.constrainedMemory()||Infinity)}))"],
+        check=True, capture_output=True, text=True).stdout)
     return {"revision": revision, "python": platform.python_version(),
-            "platform": platform.platform(), "node": node, "artifacts": files}
+            "platform": platform.platform(), "runtime": runtime,
+            "test_groups": os.environ.get("DNE_TEST_GROUPS", "auto"), "artifacts": files}
 
 
 def write_verification_receipt(root):
@@ -846,6 +851,8 @@ def verify(root):
     try:
         verification_receipt_path(root).unlink(missing_ok=True)
         report.update(state(root))
+        selection = os.environ.get("DNE_TEST_GROUPS", "auto")
+        require(selection == "auto" or re.fullmatch(r"[1-8]", selection), "Invalid test group count")
         stage = "repository assets"
         report["secret_scan"] = validate(root)
         stage = "repository tests"
@@ -937,7 +944,7 @@ def pre_push(root, lines):
 
 def main():
     if len(sys.argv) == 3 and sys.argv[1] == "prepare-browser-reports":
-        require(sys.argv[2] in ("4", "8"), "Invalid browser report count")
+        require(re.fullmatch(r"[1-8]", sys.argv[2]), "Invalid browser report count")
         preserve_browser_blobs(ROOT, int(sys.argv[2]))
         return 0
     require(len(sys.argv) == 2, "Usage: python3 scripts/repo.py bootstrap|verify|pre-push|scan-artifacts")

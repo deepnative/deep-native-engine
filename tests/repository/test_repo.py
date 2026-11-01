@@ -816,7 +816,7 @@ class RepositoryFixture(unittest.TestCase):
             self.assertEqual(gate.verify(self.root), 1)
         self.assertFalse(gate.verification_receipt_path(self.root).exists())
 
-    def browser_blobs(self, content=None):
+    def browser_blobs(self, content=None, count=4):
         import hashlib
         directory = self.root / "artifacts/browser-shards/blobs"
         resources = directory / "resources"
@@ -827,7 +827,7 @@ class RepositoryFixture(unittest.TestCase):
         data = trace.getvalue()
         name = "resources/" + hashlib.sha1(data).hexdigest() + ".zip"
         (directory / name).write_bytes(data)
-        for index in range(1, 5):
+        for index in range(1, count + 1):
             with zipfile.ZipFile(directory / f"shard-{index}.zip", "w") as archive:
                 archive.writestr("report.jsonl", json.dumps({"shard": index}) + "\n")
                 archive.writestr(name, data)
@@ -847,6 +847,13 @@ class RepositoryFixture(unittest.TestCase):
             self.assertTrue((vault / f"shard-{index}.zip").is_file())
         self.assertTrue((directory / name).is_file())
         self.assertFalse(list(directory.glob("shard-*.zip")))
+
+    def test_browser_packaging_accepts_complete_smaller_selected_count(self):
+        directory, _ = self.browser_blobs(count=2)
+        gate.preserve_browser_blobs(self.root, 2)
+        manifest = json.loads((directory.parent / "blob-manifest.json").read_text())
+        self.assertEqual(len(manifest["archives"]), 2)
+        self.assertEqual(gate.scan_artifacts(self.root)["status"], "passed")
 
     def test_browser_blobs_reject_changed_or_unsafe_expanded_resources(self):
         directory, name = self.browser_blobs()
@@ -878,6 +885,20 @@ class RepositoryFixture(unittest.TestCase):
         vault = gate.verification_git_directory(self.root) / manifest["directory"]
         (vault / "shard-1.zip").write_bytes(b"changed")
         self.assertFalse(gate.has_verification_receipt(self.root))
+
+    def test_changed_test_group_configuration_invalidates_receipt(self):
+        with patch.dict(os.environ, DNE_TEST_GROUPS="2"):
+            self.passed_receipt()
+        with patch.dict(os.environ, DNE_TEST_GROUPS="4"):
+            self.assertFalse(gate.has_verification_receipt(self.root))
+
+    def test_invalid_groups_fail_before_full_gate_resources(self):
+        with patch.dict(os.environ, DNE_TEST_GROUPS="private-invalid-selection"), patch.object(gate, "validate") as validate:
+            self.assertEqual(gate.verify(self.root), 1)
+        validate.assert_not_called()
+        report = (self.root / "artifacts/repository-verification.json").read_text()
+        self.assertIn("Invalid test group count", report)
+        self.assertNotIn("private-invalid-selection", report)
 
     def test_failed_verification_blocks_push(self):
         with patch.object(gate, "verify", return_value=1), self.assertRaisesRegex(gate.GateError, "verification failed"):

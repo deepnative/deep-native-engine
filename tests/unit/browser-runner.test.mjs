@@ -7,7 +7,7 @@ import { afterEach, expect, it, vi } from "vitest";
 vi.mock("node:child_process", () => ({ spawn: vi.fn(), spawnSync: vi.fn() }));
 vi.mock("pg", () => ({ Pool: vi.fn() }));
 vi.mock("../../scripts/integration-runner.mjs", () => ({
-  testLaneCount: () => 4,
+  testLaneCount: vi.fn(() => 4),
   controlUrl: vi.fn(() => new URL("postgresql://invented@127.0.0.1/postgres")),
   createLaneDatabase: vi.fn(),
   dropLaneDatabase: vi.fn(),
@@ -17,6 +17,7 @@ import { Pool } from "pg";
 import {
   createLaneDatabase,
   dropLaneDatabase,
+  testLaneCount,
 } from "../../scripts/integration-runner.mjs";
 import { runBrowsers } from "../../scripts/browser-runner.mjs";
 const roots = [];
@@ -26,7 +27,8 @@ afterEach(() => {
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
 });
-function fixture() {
+function fixture(count = 4) {
+  vi.mocked(testLaneCount).mockReturnValue(count);
   vi.mocked(spawnSync).mockReturnValue({ status: 0 });
   const root = mkdtempSync(path.join(tmpdir(), "browser-runner-test-"));
   roots.push(root);
@@ -114,4 +116,22 @@ it("SPEED04 retains owned resources until every interrupted browser process clos
   children[3].emit("close", null, "SIGTERM");
   expect(await run).toBe(1);
   expect(dropLaneDatabase).toHaveBeenCalledTimes(4);
+});
+
+it("SPEED06 runs two isolated browser groups and packages the complete selected count", async () => {
+  const { root, children } = fixture(2);
+  const run = runBrowsers(root);
+  await vi.waitFor(() => expect(children).toHaveLength(2));
+  expect(vi.mocked(spawn).mock.calls[0][1]).toContain("--shard=1/2");
+  expect(vi.mocked(spawn).mock.calls[1][1]).toContain("--shard=2/2");
+  children.slice().forEach((child) => child.emit("close", 0, null));
+  await vi.waitFor(() => expect(children).toHaveLength(3));
+  children[2].emit("close", 0, null);
+  expect(await run).toBe(0);
+  expect(vi.mocked(spawnSync).mock.calls[0][1]).toEqual([
+    "scripts/repo.py",
+    "prepare-browser-reports",
+    "2",
+  ]);
+  expect(dropLaneDatabase).toHaveBeenCalledTimes(2);
 });

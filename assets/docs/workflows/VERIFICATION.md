@@ -107,9 +107,43 @@ Before creating restore resources, the restore adapter checks the explicit `DNE_
 
 After verification, retain any failed fixture needed for diagnosis and its exact cleanup responsibility. A matching generated name alone is not ownership. Only when no gate/preview/session uses this instance, all databases created in the campaign have been ordinarily removed with actual absence confirmed, and the creation record and mount identities still match, orderly stop and remove **this recorded container**. Use `docker stop --timeout -1 "$DNE_TEST_POSTGRES_CONTAINER"` to wait for shutdown, then `docker rm "$DNE_TEST_POSTGRES_CONTAINER"`. Confirm no remaining container references the exact recorded volume before `docker volume rm "$DNE_TEST_POSTGRES_VOLUME"`. Do not force removal, prune by prefix or conceal a failed DROP by deleting the instance. Remove only these per-command environment options to return to the default fixture; no persistent Git, Docker or PostgreSQL configuration changes are required.
 
+## Configurable local resources
+
+Test groups and Docker resource limits are separate settings. Select any complete group count from `1` through `8`, or use memory-aware `auto`:
+
+```sh
+export DNE_TEST_GROUPS=4
+make verify
+git push
+```
+
+Keep the same exported selection for verification and push: the receipt binds this setting and detected CPU/memory capacity. A different setting invalidates reuse. Every selection still runs the complete approved inventory, with the same coverage thresholds, deadlines and zero retries. Invalid selections fail before test resources are created. CI reads repository variable `DNE_TEST_GROUPS`, defaulting to `4`.
+
+Auto mode considers available CPUs and the smaller of system memory and the process/container memory limit. It budgets about4GiB per group, capped at eight groups on>=12CPUs and four otherwise, with at least one group. Explicit selections override that heuristic; they do not allocate memory or guarantee that a smaller machine has enough capacity.
+
+| Example profile | Docker VM RAM | Test groups | Build-cache retention target |
+| --- | ---: | ---: | ---: |
+| Small | 8GiB | 2 | 5GB |
+| Standard | 16GiB | 4 | 10GB |
+| Large | 64GiB | 8 | 40GB |
+
+These are starting budgets, not benchmark guarantees or new minimum requirements. Configure actual RAM through Colima (for example, `colima start --memory 16` after an orderly maintenance stop). Set a smaller build-cache target by merging this into the existing `docker` section of `~/.colima/default/colima.yaml`, preserving other settings:
+
+```yaml
+docker:
+  builder:
+    gc:
+      enabled: true
+      defaultKeepStorage: 10GB
+```
+
+Apply VM/daemon changes only during an authorized restart window, preserving and restoring existing containers and volumes. Cache garbage collection removes eligible unused build cache; its retention target is not a hard quota for all images, volumes or active builds. Reducing cache retention does not shrink the Docker data disk. An existing expanded disk must not be shrunk or recreated to select a smaller profile.
+
+See [Colima configuration](https://colima.run/docs/configuration/), [Docker cache collection](https://docs.docker.com/build/cache/garbage-collection/), and the [Node constrained-memory contract](https://nodejs.org/docs/latest-v24.x/api/process.html#processconstrainedmemory).
+
 ## Integration file lanes
 
-The ordinary `npm run test:integration` command runs isolated Vitest file shards concurrently: eight on hosts exposing at least twelve CPUs, otherwise four. Each retains one worker, the existing deadlines, `retry: 0`, and every native test. All children settle before cleanup; any child failure fails the aggregate. The primary browser command likewise starts the same capacity-based number of independent Playwright processes, each with its own generated marked database, private files, loopback app port and report output. File order remains sequential within each shard. Original blob reports are merged by Playwright into the standard JSON report; all approved journeys and desktop/mobile projects remain required. Playwright's native merge extracts resources, including trace ZIPs. Packaging verifies those bytes against each original blob and retains every original JSONL report separately. Original compressed blobs remain in a private worktree Git-metadata vault; the published manifest records their hashes and every original member hash. The uploaded artifacts contain the complete expanded reports and trace ZIPs, which pass the unchanged scanner individually. Nested archives remain rejected, and local receipt validation also checks the private originals. Cross-browser and provisional stages retain their complete existing matrices. The CI allowance remains 120 minutes; measured wall time, not that allowance, establishes improvement.
+The ordinary `npm run test:integration` command runs the complete test inventory across configurable isolated Vitest file shards concurrently. Each retains one worker, the existing deadlines, `retry: 0`, and every native test. All children settle before cleanup; any child failure fails the aggregate. The primary browser command likewise starts the same capacity-based number of independent Playwright processes, each with its own generated marked database, private files, loopback app port and report output. File order remains sequential within each shard. Original blob reports are merged by Playwright into the standard JSON report; all approved journeys and desktop/mobile projects remain required. Playwright's native merge extracts resources, including trace ZIPs. Packaging verifies those bytes against each original blob and retains every original JSONL report separately. Original compressed blobs remain in a private worktree Git-metadata vault; the published manifest records their hashes and every original member hash. The uploaded artifacts contain the complete expanded reports and trace ZIPs, which pass the unchanged scanner individually. Nested archives remain rejected, and local receipt validation also checks the private originals. Cross-browser and provisional stages retain their complete existing matrices. The CI allowance remains 120 minutes; measured wall time, not that allowance, establishes improvement.
 
 The integration sequencer retains Vitest's inherited hash sharding, then prioritizes the exact `tests/integration/assignment-evidence.test.ts` and `tests/integration/program-enrollment-lifetime.test.ts` paths within their already selected lanes. If they share a lane, assignment runs first and program second; every other file keeps its inherited cache-aware order. All selected lanes, the full file inventory, documented deadlines, retry setting, native assertions, cleanup and reports remain required. This scheduling change does not establish the cause of earlier timeouts or a passing full gate.
 
@@ -117,7 +151,7 @@ The assignment-evidence suite gives only its foreign-observer database `afterAll
 
 The integration runner requires the parent's generated loopback test-database URL, then creates one additional random database per lane with independently recorded catalog OIDs and ownership comments. Each child receives its own database, temporary private storage, cache and report destinations. The parent's database is reserved for subsequent browser stages. Do not enable file parallelism against one shared database: existing native fixtures deliberately truncate their own tables. Lock-wait observations must identify their own database or captured unique backend/fixture identity; a matching SQL string in another database is insufficient evidence of the intended race.
 
-Original results and fixed-category unhandled-error reports remain under `artifacts/integration-shards/1/` through the selected lane count (`4` or `8`). `artifacts/integration-shards.json` records each child exit, signal, bounded output classifications, timing and cleanup outcome. Only a complete, disjoint union matching every current integration test file can produce the aggregate `integration-results.json`. Missing, duplicate, foreign, empty, failed, skipped or retried evidence; any nonzero/signalled child; invalid/unhandled diagnostics; or cleanup uncertainty fails the command even when some JSON assertions passed. Both original lane reports remain available for review. The generated-artifact scans still run unchanged before display/upload.
+Original results and fixed-category unhandled-error reports remain under `artifacts/integration-shards/1/` through the selected lane count (`1` through `8`). `artifacts/integration-shards.json` records each child exit, signal, bounded output classifications, timing and cleanup outcome. Only a complete, disjoint union matching every current integration test file can produce the aggregate `integration-results.json`. Missing, duplicate, foreign, empty, failed, skipped or retried evidence; any nonzero/signalled child; invalid/unhandled diagnostics; or cleanup uncertainty fails the command even when some JSON assertions passed. Both original lane reports remain available for review. The generated-artifact scans still run unchanged before display/upload.
 
 The runner closes its own children before cleanup and requires each database's exact OID and ownership comment before the existing zero-session drain barrier and one ordinary DROP. It never forces a live session away or repeats an uncertain DROP. Unconfirmed resources remain listed for guarded recovery rather than being deleted by prefix. Temporary storage is removed only after its database removal is confirmed. Never copy an internal lane environment into a preview or run a second full gate alongside this campaign.
 

@@ -9,15 +9,29 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { availableParallelism, tmpdir } from "node:os";
+import { availableParallelism, totalmem, tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Pool } from "pg";
 import { dropAttendanceBrowserDatabase } from "../tests/support/attendance-browser-database.ts";
 import { requireGate } from "./quality-gates.mjs";
 
-export function testLaneCount(cpus = availableParallelism()) {
-  return cpus >= 12 ? 8 : 4;
+export function testLaneCount(
+  cpus = availableParallelism(),
+  memoryBytes = Math.min(totalmem(), process.constrainedMemory() || Infinity),
+  selection = process.env.DNE_TEST_GROUPS ?? "auto",
+) {
+  requireGate(
+    selection === "auto" ||
+      (selection.length === 1 && /^[1-8]$/u.test(selection)),
+    "Invalid test group count",
+  );
+  if (selection !== "auto") return Number(selection);
+  const memoryGroups = Math.max(
+    1,
+    Math.floor(Math.round(memoryBytes / 2 ** 30) / 4),
+  );
+  return Math.min(cpus >= 12 ? 8 : 4, memoryGroups);
 }
 const LANES = Array.from({ length: testLaneCount() }, (_, index) => index + 1);
 

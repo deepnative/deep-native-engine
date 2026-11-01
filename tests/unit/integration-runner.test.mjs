@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
@@ -25,6 +25,15 @@ import {
   runIntegration,
 } from "../../scripts/integration-runner.mjs";
 
+const originalGroups = vi.hoisted(() => {
+  const value = process.env.DNE_TEST_GROUPS;
+  process.env.DNE_TEST_GROUPS = "4";
+  return value;
+});
+afterAll(() => {
+  if (originalGroups === undefined) delete process.env.DNE_TEST_GROUPS;
+  else process.env.DNE_TEST_GROUPS = originalGroups;
+});
 vi.mock("node:os", async (importOriginal) => ({
   ...(await importOriginal()),
   availableParallelism: () => 8,
@@ -434,14 +443,16 @@ it("fails a malformed administrative target without exposing it or claiming test
     error: "Integration verification failed during configuration.",
   });
 });
-function controlledNativeRun() {
+function controlledNativeRun(count = 4) {
   const root = directory();
   mkdirSync(path.join(root, "tests/integration"), { recursive: true });
-  const files = ["first", "second", "third", "fourth"].map((name) => {
-    const file = path.join(root, `tests/integration/${name}.test.ts`);
-    writeFileSync(file, "");
-    return file;
-  });
+  const files = ["first", "second", "third", "fourth"]
+    .slice(0, count)
+    .map((name) => {
+      const file = path.join(root, `tests/integration/${name}.test.ts`);
+      writeFileSync(file, "");
+      return file;
+    });
   vi.stubEnv(
     "DNE_TEST_DATABASE_URL",
     `postgresql://invented:private@127.0.0.1/dne_test_${"a".repeat(32)}`,
@@ -609,9 +620,42 @@ it("contains evidence-write failures at the real CLI boundary without leaking pr
   expect(result.stderr).not.toContain(root);
 });
 
-it("SPEED04 uses eight isolated lanes on a large local runner and four on smaller CI hosts", () => {
-  expect(testLaneCount(12)).toBe(8);
-  expect(testLaneCount(18)).toBe(8);
-  expect(testLaneCount(8)).toBe(4);
-  expect(testLaneCount(2)).toBe(4);
+it("SPEED06 chooses conservative automatic groups for available CPU and memory", () => {
+  expect(testLaneCount(12, 64 * 2 ** 30, "auto")).toBe(8);
+  expect(testLaneCount(12, 16 * 2 ** 30, "auto")).toBe(4);
+  expect(testLaneCount(8, 8 * 2 ** 30, "auto")).toBe(2);
+  expect(testLaneCount(2, 4 * 2 ** 30, "auto")).toBe(1);
+});
+it("SPEED06 honors explicit group counts without changing the full test inventory", () => {
+  for (const count of [1, 2, 3, 4, 5, 6, 7, 8])
+    expect(testLaneCount(12, 16 * 2 ** 30, String(count))).toBe(count);
+});
+it.each(["0", "9", "-1", "2.5", "", " 2", "2\n", "private-invalid-value"])(
+  "SPEED06 rejects invalid group selection",
+  (value) => {
+    expect(() => testLaneCount(12, 16 * 2 ** 30, value)).toThrow(
+      "Invalid test group count",
+    );
+  },
+);
+
+it("SPEED06 runs and aggregates a complete two-group native campaign", async () => {
+  vi.stubEnv("DNE_TEST_GROUPS", "2");
+  vi.resetModules();
+  const { runIntegration: configuredRun } =
+    await import("../../scripts/integration-runner.mjs");
+  const { root, launched, databases } = controlledNativeRun(2);
+  const run = configuredRun(root);
+  await vi.waitFor(() => expect(launched).toHaveLength(2));
+  for (const child of launched) child.finish();
+  expect(await run).toBe(0);
+  expect(databases.size).toBe(0);
+  expect(
+    JSON.parse(
+      readFileSync(
+        path.join(root, "artifacts/integration-shards.json"),
+        "utf8",
+      ),
+    ).laneCount,
+  ).toBe(2);
 });
