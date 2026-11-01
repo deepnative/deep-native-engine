@@ -934,6 +934,7 @@ footer span {
 
 /* The public entrance has its own learning identity; saved work keeps its UI. */
 body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal) {
+  min-height: 100vh;
   --ink: #182c49;
   --muted: #506079;
   --paper: #fffdf7;
