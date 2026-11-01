@@ -1,7 +1,8 @@
+import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
 import { catalogStore } from "../../src/catalog.ts";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
-import type { Pool, PoolClient } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { testPool } from "../support/database.ts";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 import { app } from "../../src/app.ts";
@@ -11,11 +12,58 @@ import { administratorEntry } from "../../src/administrator-entry.ts";
 import { authorizationStore } from "../../src/authorization.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
 import { simpleInvoiceStore } from "../../src/simple-invoice-store.ts";
-const pool = testPool();
+const control = testPool();
+let pool: Pool,
+  resource: { name: string; oid: number; marker: string } | undefined;
+let parent: { principals: number; content: number };
 let courseVersion = 0;
-test.beforeAll(() => migrate(pool));
-test.beforeEach(() => pool.query("TRUNCATE principals CASCADE"));
-test.afterAll(() => pool.end());
+const parentCounts = async () =>
+  (
+    await control.query<{ principals: number; content: number }>(
+      "SELECT (SELECT count(*)::integer FROM principals) AS principals,(SELECT count(*)::integer FROM content_versions) AS content",
+    )
+  ).rows[0]!;
+test.beforeEach(async () => {
+  parent = await parentCounts();
+  const name = "dne_test_" + randomBytes(16).toString("hex"),
+    marker = "administrator-browser-565-" + randomBytes(16).toString("hex");
+  await control.query(`CREATE DATABASE "${name}"`);
+  await control.query(`COMMENT ON DATABASE "${name}" IS '${marker}'`);
+  const oid = (
+    await control.query<{ oid: number }>(
+      "SELECT oid FROM pg_database WHERE datname=$1",
+      [name],
+    )
+  ).rows[0]!.oid;
+  resource = { name, oid, marker };
+  const url = new URL(process.env.DNE_TEST_DATABASE_URL!);
+  url.pathname = "/" + name;
+  pool = new Pool({ connectionString: url.href });
+  await migrate(pool);
+  await test
+    .info()
+    .attach("administrator-owned-database", {
+      body: JSON.stringify(resource),
+      contentType: "application/json",
+    });
+});
+test.afterEach(async () => {
+  await pool?.end();
+  if (resource) {
+    const actual = (
+      await control.query<{ oid: number; marker: string }>(
+        "SELECT oid,shobj_description(oid,'pg_database') AS marker FROM pg_database WHERE datname=$1",
+        [resource.name],
+      )
+    ).rows[0];
+    expect(actual).toEqual({ oid: resource.oid, marker: resource.marker });
+    await dropAttendanceBrowserDatabase(control, resource.name);
+    resource = undefined;
+  }
+  // The shared browser lane's identities and seeded curriculum are never ours to clear.
+  expect(await parentCounts()).toEqual(parent);
+});
+test.afterAll(() => control.end());
 async function fixture(
   page: Page,
   address = "shi@deepnative.io",
