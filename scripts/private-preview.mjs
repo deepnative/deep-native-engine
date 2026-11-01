@@ -1,7 +1,7 @@
 // Opt-in owner-run rehearsal tooling. Application behavior stays in src/.
 import { performance } from "node:perf_hooks";
 import { spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { cp, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
@@ -169,7 +169,7 @@ export async function launchPreview(env) {
     runtimeRoot,
     provider: "deterministic local test only; no live services",
     fixture:
-      "One invented non-qualified lesson and five finite synthetic staff identities only; no member, grant, queue, feedback, completion, allowance, support request, discussion, proposal, event schedule or participation seeded.",
+      "One invented non-qualified lesson, five finite synthetic staff identities and one local-only verification anchor without a learner profile or learning work; no grant, queue, feedback, completion, allowance, support request, discussion, proposal, event schedule or participation seeded.",
   };
   const save = () =>
     writeFile(metadataFile, JSON.stringify(metadata, null, 2) + "\n", {
@@ -403,6 +403,31 @@ export async function launchPreview(env) {
       administratorCredential,
       "platform_admin",
       expiry,
+    );
+    // Explicit synthetic binding in this newly generated loopback-only database.
+    // It represents verification in the rehearsal, never an actual owner inbox.
+    if (!/^dne_test_[a-f0-9]{32}$/.test(database))
+      throw failure("fixture identity");
+    const syntheticOwner = randomUUID(),
+      syntheticSession = randomBytes(32).toString("hex");
+    await fixturePool.query(
+      "INSERT INTO principals(id,token_hash,kind,expires_at) VALUES($1,$2,'member',$3)",
+      [syntheticOwner, syntheticSession, expiry],
+    );
+    await fixturePool.query(
+      "INSERT INTO workspaces(id,owner_principal_id) VALUES($1,$1)",
+      [syntheticOwner],
+    );
+    await fixturePool.query(
+      "INSERT INTO member_email_identities(email_hash,principal_id) VALUES($1,$2)",
+      [
+        createHash("sha256").update("shi@deepnative.io").digest("hex"),
+        syntheticOwner,
+      ],
+    );
+    await fixturePool.query(
+      "INSERT INTO administrator_sessions(staff_id,member_id,member_token_hash,expires_at) VALUES($1,$2,$3,$4)",
+      [administratorId, syntheticOwner, syntheticSession, expiry],
     );
     const reviewerId = await auth.provisionStaff(
       reviewerCredential,
