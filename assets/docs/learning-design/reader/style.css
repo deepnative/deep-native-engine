@@ -1,30 +1,30 @@
 @font-face {
-  font-family: "Inter";
-  src: url("fonts/InterVariable.woff2") format("woff2");
+  font-family: "Nunito Sans";
+  src: url("fonts/NunitoSans.ttf") format("truetype");
   font-style: normal;
-  font-weight: 100 900;
+  font-weight: 200 900;
   font-display: swap;
 }
 :root {
   color-scheme: light;
-  --ink: #172c46;
-  --muted: #51647c;
-  --paper: #f5f7fb;
+  --ink: #182c49;
+  --muted: #506079;
+  --paper: #fffdf7;
   --surface: #ffffff;
   --surface-subtle: #edf2f8;
-  --line: #d9e2ee;
-  --line-strong: #afbed1;
-  --blue: #2459d6;
-  --blue-hover: #1845b0;
+  --line: #d6ddeb;
+  --line-strong: #9caecf;
+  --blue: #2454d6;
+  --blue-hover: #173eaa;
   --blue-soft: #eaf0ff;
-  --navy: #17365f;
+  --navy: #234bc2;
   --green: #18715c;
   --green-soft: #e9f5ef;
   --teal: #146576;
   --teal-soft: #eaf5f7;
   --amber: #875619;
   --amber-soft: #fff4e3;
-  --focus: #174dbb;
+  --focus: #a34d08;
   --radius: 14px;
   --shadow: 0 8px 24px rgb(23 44 70 / 6%);
 }
@@ -39,7 +39,7 @@ body {
   color: var(--ink);
   background: var(--paper);
   font:
-    16px/1.6 "Inter",
+    16px/1.6 "Nunito Sans",
     sans-serif;
   font-optical-sizing: auto;
 }

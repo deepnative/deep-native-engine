@@ -116,6 +116,22 @@ it("provides only the five allowlisted generic rendering assets at the exact ver
     );
   }
   expect(store.source).not.toHaveBeenCalled();
+  const brandFont = await request(server).get(`${base}/fonts/NunitoSans.ttf`);
+  expect(brandFont.status).toBe(200);
+  expect(brandFont.headers["content-type"]).toBe("font/ttf");
+  expect(brandFont.body).toEqual(
+    await readFile(
+      new URL("../../public/fonts/NunitoSans.ttf", import.meta.url),
+    ),
+  );
+  expect(brandFont.body).toEqual(
+    await readFile(
+      new URL(
+        "../../assets/docs/learning-design/reader/fonts/NunitoSans.ttf",
+        import.meta.url,
+      ),
+    ),
+  );
   const font = await request(server).get(`${base}/fonts/InterVariable.woff2`);
   expect(font.status).toBe(200);
   expect(font.headers["content-type"]).toBe("font/woff2");
@@ -152,6 +168,9 @@ it("fails closed for denied, missing or malformed sources and unavailable assets
     kind: "unavailable",
   });
   vi.mocked(readFile).mockRejectedValue(new Error("private path"));
+  expect(
+    (await request(server).get(`${base}/fonts/NunitoSans.ttf`)).body,
+  ).toEqual({ kind: "unavailable" });
   expect(
     (await request(server).get(`${base}/fonts/InterVariable.woff2`)).status,
   ).toBe(503);

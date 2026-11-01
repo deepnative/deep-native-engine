@@ -58,6 +58,20 @@ export function mountLearningWorkspaceAssets(
   options: { origin: string; secret: string },
 ) {
   app.get(
+    `${LEARNING_WORKSPACE_ASSET_BASE}/fonts/NunitoSans.ttf`,
+    async (req, res) => {
+      privateResponse(req, res);
+      try {
+        const bytes = await readFile(
+          new URL("../public/fonts/NunitoSans.ttf", import.meta.url),
+        );
+        return res.type("font/ttf").send(bytes);
+      } catch {
+        return failure(res, "unavailable");
+      }
+    },
+  );
+  app.get(
     `${LEARNING_WORKSPACE_ASSET_BASE}/fonts/InterVariable.woff2`,
     async (req, res) => {
       privateResponse(req, res);

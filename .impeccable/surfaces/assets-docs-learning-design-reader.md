@@ -28,3 +28,6 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 ## Evidence boundary
 
 No synthetic engagement metrics or AI assistant. Existing deterministic feedback stays labelled and writing self-checks remain the learner's judgment. No raster illustrations are required. Named navigation and text are the content.
+
+## Portal identity alignment (1 November2026)
+The owner requested consistency with the landing page: use its warm paper, deep blue ink, blue actions and self-hosted Nunito Sans, with the existing compact lesson scale. Preserve route drafts, explicit saving, semantic feedback, named controls and responsive layout. This scope changes no publication or account access rule.

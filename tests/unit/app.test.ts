@@ -6334,7 +6334,8 @@ it("HOSTED-12 presents accurate hosted persistence while concurrent local render
     request(local).get("/").set("Host", host),
   ]);
   expect(publicHome.status).toBe(200);
-  expect(publicHome.text).toContain("AZURE HOSTED LEARNING");
+  expect(publicHome.text).not.toContain("AZURE HOSTED LEARNING");
+  expect(publicHome.text).not.toContain('class="preview-tag"');
   expect(publicHome.text).toContain(
     "Your learning work is stored on this Azure-hosted service.",
   );
@@ -6344,7 +6345,7 @@ it("HOSTED-12 presents accurate hosted persistence while concurrent local render
     "No AI provider, payment or formal assessment is connected.",
   );
   expect(localHome.text).toContain("Your work stays on this computer");
-  expect(localHome.text).toContain("LOCAL LEARNING PREVIEW");
+  expect(localHome.text).not.toContain("LOCAL LEARNING PREVIEW");
 });
 
 it.each([undefined, "", "-1", "1.5", "01", "2147483647", ["0", "1"]])(

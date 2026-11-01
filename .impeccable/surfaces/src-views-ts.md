@@ -7,7 +7,7 @@ related_targets: ["public/style.css"]
 
 ## Scope
 
-Mode: Persuade. Only the account application's welcome/onboarding landing at `/`; member workspaces and the separate local reader retain their existing designs. This is a code-led implementation of the user's already chosen Duolingo/Quantic/Khan learning-product synthesis. Routine design decisions are delegated; no new concept approval round is needed.
+Mode: Persuade. The welcome landing at `/` remains Persuade. The learner dashboard, starter lesson and activity view use the same palette/font in Operate mode; their task layouts and behavior stay intact. Staff tools are outside this theme change. This is a code-led implementation of the user's already chosen Duolingo/Quantic/Khan learning-product synthesis. Routine design decisions are delegated; no new concept approval round is needed.
 
 ## Direction contract
 
