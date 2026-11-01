@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Pool } from "pg";
 import { start } from "../../src/runtime.ts";
-import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+import {
+  authorizationStore,
+  type StaffRole,
+} from "../support/administrator-fixture.ts";
 import { store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
 import { COOKIE } from "../../src/session.ts";

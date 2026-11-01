@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { beforeAll, beforeEach, afterAll, expect, it } from "vitest";
 import { hash, migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { memberExportStore } from "../../src/member-export.ts";
 import { eventEnrollmentStore } from "../../src/event-enrollments.ts";
 import { eventCancellationStore } from "../../src/event-cancellations.ts";

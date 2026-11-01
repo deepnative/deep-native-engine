@@ -29,7 +29,7 @@ export function staffEntryStore(pool: Pool): StaffEntryStore {
           await tx.observe([principal.expires]);
           const profile = (
             await tx.query<{ role: StaffRole }>(
-              "SELECT role FROM staff_profiles WHERE principal_id=$1 FOR SHARE",
+              "SELECT role FROM authorized_staff_profiles WHERE principal_id=$1 FOR SHARE",
               [principal.id],
             )
           ).rows[0];

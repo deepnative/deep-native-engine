@@ -4,7 +4,7 @@ import type { Pool } from "pg";
 import { memberExportStore } from "../../src/member-export.ts";
 import { testPool } from "../support/database.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { supportRequestStore } from "../../src/support-requests.ts";
 import { supportTimeGrantAdminStore } from "../../src/support-time-grant-admin.ts";

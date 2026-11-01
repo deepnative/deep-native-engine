@@ -11,7 +11,7 @@ import { Pool } from "pg";
 import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
 import { app } from "../../src/app.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
 import { studyUnitFixtureStore } from "../../src/study-unit-fixtures.ts";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";

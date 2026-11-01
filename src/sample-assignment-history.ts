@@ -108,7 +108,7 @@ export async function sampleAssignmentProject(
      LEFT JOIN reviewer_evidence_grants g ON g.id=$1 AND g.assignment_id=a.id AND g.reviewer_id=$4 AND g.submission_id=$5 AND g.purpose=$7
      LEFT JOIN evidence_review_submissions s ON s.id=$5
      LEFT JOIN evidence_objects e ON e.id=s.evidence_id AND e.id=$8
-     LEFT JOIN principals p ON p.id=$4 LEFT JOIN staff_profiles profile ON profile.principal_id=p.id
+     LEFT JOIN principals p ON p.id=$4 LEFT JOIN authorized_staff_profiles profile ON profile.principal_id=p.id
      WHERE w.id=$2 AND w.deleting_at IS NULL`,
       [
         candidate.exactGrantId,

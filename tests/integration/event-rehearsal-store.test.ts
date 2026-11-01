@@ -5,7 +5,7 @@ import { memberExportStore } from "../../src/member-export.ts";
 import { memberEventCatalog } from "../../src/member-event-catalog.ts";
 import { eventEnrollmentStore } from "../../src/event-enrollments.ts";
 import { eventCancellationStore } from "../../src/event-cancellations.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { eventRehearsalStore } from "../../src/event-rehearsals.ts";
 import { eventCatalogReader } from "../../src/event-catalog.ts";
 import {

@@ -983,7 +983,10 @@ it("persisted pause rejects new queue requests and stale pending dispatch withou
 });
 
 import { localAiControlStore } from "../../src/local-ai-control.ts";
-import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+import {
+  authorizationStore,
+  type StaffRole,
+} from "../support/administrator-fixture.ts";
 const control = localAiControlStore(pool);
 afterEach(async () => {
   await pool.query(

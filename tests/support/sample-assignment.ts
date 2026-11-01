@@ -1,16 +1,21 @@
+import { authorizationStore as legacyAuthorizationStore } from "../../src/authorization.ts";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "./administrator-fixture.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { sampleAssignmentStore } from "../../src/sample-assignment.ts";
 import { sampleFeedbackStore } from "../../src/sample-feedback.ts";
 import { reviewerWorklistStore } from "../../src/reviewer-worklist.ts";
 
 export const sampleAssignmentToken = () => randomBytes(32).toString("hex");
-export async function sampleAssignmentFixture(pool: Pool, root: string) {
+export async function sampleAssignmentFixture(
+  pool: Pool,
+  root: string,
+  legacy = false,
+) {
   const members = store(pool),
-    auth = authorizationStore(pool),
+    auth = (legacy ? legacyAuthorizationStore : authorizationStore)(pool),
     ownerToken = sampleAssignmentToken(),
     administratorToken = sampleAssignmentToken(),
     reviewerToken = sampleAssignmentToken();

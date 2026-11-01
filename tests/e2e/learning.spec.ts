@@ -3,7 +3,10 @@ import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import { starterDraftConflicts } from "../support/starter-draft-conflicts.ts";
 import { createHash, randomBytes } from "node:crypto";
 import { testPool } from "../support/database.ts";
-import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+import {
+  authorizationStore,
+  type StaffRole,
+} from "../support/administrator-fixture.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { readdir } from "node:fs/promises";
 const pool = testPool();

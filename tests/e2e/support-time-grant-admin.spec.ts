@@ -2,7 +2,7 @@ import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { testPool } from "../support/database.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { COOKIE } from "../../src/session.ts";
 import { startSupportTimeGrantRecoveryServer } from "../support/support-time-grant-recovery-server.ts";

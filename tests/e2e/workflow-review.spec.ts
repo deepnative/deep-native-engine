@@ -11,7 +11,7 @@ import {
 } from "@playwright/test";
 import { start } from "../../src/runtime.ts";
 import { store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { testPool } from "../support/database.ts";
 import { startWorkflowReviewRecoveryServer } from "../support/workflow-review-recovery-server.ts";
 const pool = testPool(),

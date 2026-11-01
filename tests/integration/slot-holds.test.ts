@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { availabilityStore } from "../../src/availability.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { syntheticSlotHolds } from "../../src/slot-holds.ts";

@@ -6,7 +6,7 @@ import { test, expect } from "@playwright/test";
 import { app } from "../../src/app.ts";
 import { store } from "../../src/store.ts";
 import { attemptStore } from "../../src/attempts.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
 const pool = testPool();

@@ -1,3 +1,5 @@
+import { mountAdministratorEntry } from "./administrator-entry-routes.ts";
+import type { AdministratorEntry } from "./administrator-entry.ts";
 import {
   mountSimpleInvoiceRoutes,
   type InvoiceSender,
@@ -341,6 +343,7 @@ function currentStarter(
 export function app(
   store: Store,
   options: {
+    administratorEntry?: AdministratorEntry;
     localStaffEntry?: boolean;
     staffEntry?: StaffEntryStore;
     localHoldInspectionReads?: boolean;
@@ -524,6 +527,7 @@ export function app(
     return ordinaryForm(req, res, next);
   });
   app.use(cookieParser());
+  mountAdministratorEntry(app, options.administratorEntry, options);
   mountStaffEntryRoutes(app, options.staffEntry, options, {
     library: Boolean(options.catalog),
     worklist:

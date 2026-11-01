@@ -334,7 +334,7 @@ export function proposalStore(
         await client.observe([principal.expires_at]);
         const profile = (
           await client.query<{ role: ModerationActor["role"] }>(
-            `SELECT role FROM staff_profiles WHERE principal_id=$1
+            `SELECT role FROM authorized_staff_profiles WHERE principal_id=$1
          AND role IN ('moderator','platform_admin') FOR SHARE`,
             [principal.id],
           )

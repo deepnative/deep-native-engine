@@ -13,7 +13,7 @@ import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { localAiConsentStore } from "../../src/local-ai-consent.ts";
 import { deterministicRegistry } from "../../src/adapters.ts";
 import { jobStore, requestFingerprint } from "../../src/jobs.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();

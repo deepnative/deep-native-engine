@@ -74,9 +74,9 @@ export function workflowReviewWorklist(pool: Pool, secret: string) {
       AND f.revision=g.source_revision AND f.revision=r.source_revision AND f.workflow_id=r.workflow_id AND f.workflow_version=r.workflow_version
     JOIN principals owner ON owner.id=r.member_id AND owner.kind='member' AND owner.revoked_at IS NULL AND owner.expires_at>clock_timestamp()
     JOIN principals admin ON admin.id=g.administrator_id AND admin.kind='staff' AND admin.revoked_at IS NULL AND admin.expires_at>clock_timestamp()
-    JOIN staff_profiles ap ON ap.principal_id=admin.id AND ap.role='platform_admin'
+    JOIN authorized_staff_profiles ap ON ap.principal_id=admin.id AND ap.role='platform_admin'
     JOIN principals mod ON mod.id=g.moderator_id AND mod.kind='staff' AND mod.revoked_at IS NULL AND mod.expires_at>clock_timestamp()
-    JOIN staff_profiles mp ON mp.principal_id=mod.id AND mp.role='moderator'
+    JOIN authorized_staff_profiles mp ON mp.principal_id=mod.id AND mp.role='moderator'
     WHERE g.id=ANY($1::uuid[]) AND g.moderator_id=$2 AND g.revoked_at IS NULL AND r.withdrawn_at IS NULL
       AND g.expires_at>clock_timestamp() AND r.expires_at>clock_timestamp() ORDER BY g.created_at,g.id`,
           [scanned.map((r) => r.id), c.actorId],

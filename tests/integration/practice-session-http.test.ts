@@ -6,7 +6,7 @@ import { migrate, store } from "../../src/store.ts";
 import { practiceSessionStore } from "../../src/practice-sessions.ts";
 import { practiceStore } from "../../src/practice.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
 import { testPool } from "../support/database.ts";
 import { withLoopback } from "../support/loopback-server.ts";

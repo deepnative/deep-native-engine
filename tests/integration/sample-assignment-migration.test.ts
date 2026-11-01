@@ -1,3 +1,4 @@
+import { bindSyntheticAdministrator } from "../support/administrator-fixture.ts";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -32,7 +33,11 @@ it("REVADM-08 upgrades populated migration059 without inventing receipts or rewr
       query: client.query.bind(client),
       connect: async () => ({ query: client.query.bind(client), release() {} }),
     } as unknown as Pool;
-    const f = await sampleAssignmentFixture(connection, root);
+    // Historical schema models pre-identity authority only for original seed data.
+    await client.query(
+      "CREATE VIEW authorized_staff_profiles AS SELECT * FROM staff_profiles",
+    );
+    const f = await sampleAssignmentFixture(connection, root, true);
     const assignment = await f.auth.grantAssignment(
       f.administratorId,
       f.reviewerId,
@@ -89,6 +94,15 @@ it("REVADM-08 upgrades populated migration059 without inventing receipts or rewr
       (await client.query("SELECT * FROM private_sample_assignment_operations"))
         .rows,
     ).toEqual([]);
+    expect(
+      (
+        await f.assignments.history(f.administratorToken, {
+          evidenceId: f.input.evidenceId,
+          sourceRevision: 1,
+        })
+      ).kind,
+    ).toBe("denied");
+    await bindSyntheticAdministrator(connection, f.administratorId, f.end);
     const history = await f.assignments.history(f.administratorToken, {
       evidenceId: f.input.evidenceId,
       sourceRevision: 1,

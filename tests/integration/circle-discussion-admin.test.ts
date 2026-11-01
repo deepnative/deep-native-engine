@@ -1,3 +1,4 @@
+import { bindSyntheticAdministrator } from "../support/administrator-fixture.ts";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, writeFile, lstat, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -95,6 +96,12 @@ it("bootstraps private synthetic moderator credentials and manages an exact audi
     expect((await command(root, ["circle-grant", "invalid.json"])).code).toBe(
       1,
     );
+    // Legacy bootstrap credentials carry no current verified administrator binding.
+    expect((await command(root, ["circle-grant", "grant.json"])).code).toBe(1);
+    await bindSyntheticAdministrator(pool, admin.id, new Date(admin.expiresAt));
+    expect((await command(root, ["circle-grant", "invalid.json"])).code).toBe(
+      1,
+    );
     const granted = await command(root, ["circle-grant", "grant.json"]);
     expect(granted.code).toBe(0);
     const receipt = JSON.parse(granted.out);
@@ -139,10 +146,17 @@ it("bootstraps private synthetic moderator credentials and manages an exact audi
       expect(output.out + output.err).not.toContain(moderator.token);
     }
     expect((await command(root, ["circle-bootstrap"])).code).toBe(1);
+    // Explicit verification adds one synthetic member anchor, not another staff identity.
     expect(
-      (await pool.query("SELECT count(*)::integer n FROM principals")).rows[0]
-        .n,
-    ).toBe(2);
+      (
+        await pool.query(
+          "SELECT kind,count(*)::integer n FROM principals GROUP BY kind ORDER BY kind",
+        )
+      ).rows,
+    ).toEqual([
+      { kind: "member", n: 1 },
+      { kind: "staff", n: 2 },
+    ]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

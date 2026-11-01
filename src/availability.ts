@@ -136,7 +136,7 @@ export function availabilityStore(pool: Pool): AvailabilityStore {
         const authorized = (
           await client.query<{ id: string }>(
             `SELECT p.id FROM principals p
-             JOIN staff_profiles sp ON sp.principal_id=p.id
+             JOIN authorized_staff_profiles sp ON sp.principal_id=p.id
              WHERE p.token_hash=$1 AND p.kind='staff'
                AND sp.role IN ('operator','platform_admin')
                AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP`,
@@ -261,7 +261,7 @@ export function availabilityStore(pool: Pool): AvailabilityStore {
          WHERE s.id=$1 AND s.retired_at IS NULL
            AND EXISTS (
              SELECT 1 FROM principals p
-             JOIN staff_profiles sp ON sp.principal_id=p.id
+             JOIN authorized_staff_profiles sp ON sp.principal_id=p.id
              WHERE p.token_hash=$2 AND p.kind='staff'
                AND sp.role IN ('operator','platform_admin')
                AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP

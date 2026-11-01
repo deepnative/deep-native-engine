@@ -67,7 +67,7 @@ export function reviewTimeGrants(
             return deny();
           const roles = (
             await tx.query<{ id: string; role: string }>(
-              "SELECT principal_id AS id,role FROM staff_profiles WHERE principal_id=ANY($1::uuid[]) ORDER BY principal_id FOR SHARE",
+              "SELECT principal_id AS id,role FROM authorized_staff_profiles WHERE principal_id=ANY($1::uuid[]) ORDER BY principal_id FOR SHARE",
               [[admin.id, reviewer.id]],
             )
           ).rows;
@@ -165,7 +165,7 @@ export function reviewTimeGrants(
           if (
             !(
               await tx.query(
-                "SELECT 1 FROM staff_profiles WHERE principal_id=$1 AND role='platform_admin' FOR SHARE",
+                "SELECT 1 FROM authorized_staff_profiles WHERE principal_id=$1 AND role='platform_admin' FOR SHARE",
                 [admin.id],
               )
             ).rowCount

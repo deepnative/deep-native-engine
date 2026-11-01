@@ -2,7 +2,7 @@ import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { testPool } from "../support/database.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { COOKIE } from "../../src/session.ts";
 const pool = testPool();

@@ -1,7 +1,7 @@
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { availabilityStore } from "../../src/availability.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { hash } from "../../src/store.ts";

@@ -3,7 +3,7 @@ import express from "express";
 import { Pool, type PoolClient } from "pg";
 import { app } from "../../src/app.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+import { authorizationStore, type StaffRole } from "./administrator-fixture.ts";
 import { catalogStore, seedDraftPack } from "../../src/catalog.ts";
 import { foundationImportStore } from "../../src/foundation-import.ts";
 import { reviewedFoundation } from "../../src/foundation-pack.ts";

@@ -1,7 +1,7 @@
 import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { deterministicRegistry } from "../../src/adapters.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { localAiConsentStore } from "../../src/local-ai-consent.ts";

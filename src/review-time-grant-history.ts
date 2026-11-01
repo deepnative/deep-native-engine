@@ -84,7 +84,7 @@ export async function reviewGrantProject(
  FROM review_time_grants g JOIN review_time_allocations a ON a.id=g.allocation_id
  JOIN workspaces w ON w.id=a.workspace_id AND w.deleting_at IS NULL
  LEFT JOIN evidence_objects e ON e.id=a.evidence_id LEFT JOIN evidence_review_submissions s ON s.id=a.submission_id
- LEFT JOIN principals p ON p.id=g.staff_id LEFT JOIN staff_profiles sp ON sp.principal_id=p.id LEFT JOIN principals m ON m.id=a.member_id
+ LEFT JOIN principals p ON p.id=g.staff_id LEFT JOIN authorized_staff_profiles sp ON sp.principal_id=p.id LEFT JOIN principals m ON m.id=a.member_id
  WHERE g.id=$1 AND g.granted_by=$2)
  SELECT allocation_state AS "allocationState",ceiling,revoked_at AS "revokedAt",source_available AS "sourceAvailable",revoked_at IS NULL AS "canRevoke",
  CASE WHEN revoked_at IS NOT NULL THEN 'revoked' WHEN expires_at<=clock_timestamp() THEN 'expired'

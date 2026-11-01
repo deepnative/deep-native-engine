@@ -6,7 +6,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import request from "supertest";
 import { start } from "../../src/runtime.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+import {
+  authorizationStore,
+  type StaffRole,
+} from "../support/administrator-fixture.ts";
 import { circleStore } from "../../src/circles.ts";
 import {
   circleDiscussionStore,

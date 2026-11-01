@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { memberExportStore } from "../../src/member-export.ts";
 import { workflowFeedbackStore } from "../../src/workflow-feedback.ts";
 import { workflowReviewStore } from "../../src/workflow-review.ts";

@@ -584,7 +584,7 @@ export function supportRequestStore(
   ): Promise<Map<string, string>> {
     const rows = (
       await ctx.client.query<{ id: string; role: string }>(
-        "SELECT principal_id AS id,role FROM staff_profiles WHERE principal_id=ANY($1::uuid[]) ORDER BY principal_id FOR SHARE",
+        "SELECT principal_id AS id,role FROM authorized_staff_profiles WHERE principal_id=ANY($1::uuid[]) ORDER BY principal_id FOR SHARE",
         [Array.from(new Set(ids)).sort()],
       )
     ).rows;
@@ -840,7 +840,7 @@ export function supportRequestStore(
         `SELECT r.id AS "requestId",selected.id AS "grantId",selected.allocation_id AS "allocationId"
       FROM support_requests r JOIN LATERAL (
         SELECT g.id,g.allocation_id FROM support_time_grants g
-        JOIN staff_profiles p ON p.principal_id=g.staff_id AND p.role=g.staff_role
+        JOIN authorized_staff_profiles p ON p.principal_id=g.staff_id AND p.role=g.staff_role
         WHERE g.request_id=r.id AND g.staff_id=$2 AND g.purpose='support-time-local-v1'
         AND g.revoked_at IS NULL AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp()
         ORDER BY g.created_at DESC,g.id DESC LIMIT 1
@@ -1153,7 +1153,7 @@ export function supportRequestStore(
               `SELECT r.id AS "requestId",r.member_id AS "memberId",r.workspace_id AS "workspaceId",g.id AS "grantId",g.allocation_id AS "allocationId",${at("g.created_at")}
             FROM support_time_grants g JOIN support_requests r ON r.id=g.request_id
             JOIN principals p ON p.id=r.member_id AND p.kind='member'
-            JOIN staff_profiles profile ON profile.principal_id=g.staff_id AND profile.role=g.staff_role
+            JOIN authorized_staff_profiles profile ON profile.principal_id=g.staff_id AND profile.role=g.staff_role
             WHERE g.staff_id=$1 AND g.purpose='support-time-local-v1' AND g.revoked_at IS NULL AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp()
             AND p.revoked_at IS NULL AND p.expires_at>clock_timestamp()
             AND ($2::timestamptz IS NULL OR (g.created_at,g.id)<($2::timestamptz,$3::uuid))
@@ -1522,7 +1522,7 @@ export function supportRequestStore(
           await ctx.client.query<Candidate>(
             `SELECT r.id AS "requestId",r.member_id AS "memberId",r.workspace_id AS "workspaceId",selected.id AS "grantId",${at("r.received_at")}
            FROM support_requests r JOIN workspaces w ON w.id=r.workspace_id AND w.deleting_at IS NULL
-           JOIN LATERAL (SELECT g.id FROM support_request_grants g JOIN staff_profiles p ON p.principal_id=g.staff_id AND p.role=g.staff_role
+           JOIN LATERAL (SELECT g.id FROM support_request_grants g JOIN authorized_staff_profiles p ON p.principal_id=g.staff_id AND p.role=g.staff_role
              WHERE g.request_id=r.id AND g.staff_id=$1 AND g.purpose=$4 AND g.revoked_at IS NULL
              AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp() ORDER BY g.id LIMIT 1) selected ON TRUE
            WHERE r.withdrawn_at IS NULL AND ($2::timestamptz IS NULL OR (r.received_at,r.id)<($2::timestamptz,$3::uuid))

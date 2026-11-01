@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { beforeAll, beforeEach, afterAll, it, expect } from "vitest";
 import type { Pool } from "pg";
 import { migrate } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { eventRehearsalStore } from "../../src/event-rehearsals.ts";
 import { rehearsalSnapshot } from "../../src/event-rehearsal-values.ts";
 import { testPool } from "../support/database.ts";

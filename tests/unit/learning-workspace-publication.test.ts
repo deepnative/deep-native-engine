@@ -22,7 +22,7 @@ const query = vi.fn(async (sql: string) => ({
     ? principal
       ? [{ id: "editor-id", expires }]
       : []
-    : sql.includes("FROM staff_profiles")
+    : sql.includes("FROM authorized_staff_profiles")
       ? role
         ? [{ role }]
         : []

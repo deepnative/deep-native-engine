@@ -119,7 +119,7 @@ function fixture(o: Options = {}) {
           expiresAt: future,
           active: true,
         }));
-    else if (sql.includes("FROM staff_profiles WHERE"))
+    else if (sql.includes("FROM authorized_staff_profiles WHERE"))
       rows = [
         { id: operator, role: "operator" },
         { id: admin, role: "platform_admin" },
@@ -307,7 +307,10 @@ it.each([
               expiresAt: future,
             },
           ];
-        if (caseName === "role" && sql.includes("FROM staff_profiles WHERE"))
+        if (
+          caseName === "role" &&
+          sql.includes("FROM authorized_staff_profiles WHERE")
+        )
           return [{ id: operator, role: "reviewer" }];
         if (caseName === "workspace" && sql.includes("FROM workspaces\n"))
           return [{ id: member, memberId: member, deletingAt: date }];
@@ -503,7 +506,7 @@ it("fails closed for missing or mismatched grant/revocation dependencies", async
   for (const fragment of [
     "FROM support_requests r JOIN support_time_allocations",
     "SELECT state FROM support_time_allocations",
-    "FROM staff_profiles WHERE",
+    "FROM authorized_staff_profiles WHERE",
   ]) {
     expect(
       await fixture({

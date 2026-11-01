@@ -4,7 +4,7 @@ import { reviewerWorklistCursor } from "../../src/reviewer-worklist-cursor.ts";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { testPool } from "../support/database.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { evidenceStore, type ObjectStorage } from "../../src/evidence.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { localAiConsentStore } from "../../src/local-ai-consent.ts";

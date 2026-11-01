@@ -5,7 +5,7 @@ import {
   type MemberExportPayload,
 } from "../../src/member-export.ts";
 import { syntheticLedger, type LedgerCategory } from "../../src/ledger.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
 

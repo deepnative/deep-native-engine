@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { start } from "../../src/runtime.ts";
 import { testPool } from "../support/database.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { store } from "../../src/store.ts";
 import {
   PREPARED_SAMPLES,

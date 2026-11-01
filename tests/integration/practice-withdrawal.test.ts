@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { migrate, store } from "../../src/store.ts";
 import { practiceStore } from "../../src/practice.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import type { Pool } from "pg";
 import {
   memberExportStore,

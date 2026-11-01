@@ -79,7 +79,7 @@ function fixture(
       rows = state.people.filter((p) =>
         (values[0] as string[]).includes(p.id as string),
       );
-    else if (sql.includes("FROM staff_profiles"))
+    else if (sql.includes("FROM authorized_staff_profiles"))
       rows = state.roles.filter((p) => (values[0] as string[]).includes(p.id));
     else if (sql.includes("timestamptz>clock_timestamp()"))
       rows = state.futureMissing ? [] : [{ valid: state.future }];
@@ -509,6 +509,6 @@ it("CIRADM-05 rejects malformed inspection, history and revoke instructions with
 });
 it("CIRADM-04 withholds raw database failures instead of fabricating a receipt", async () => {
   const f = fixture();
-  f.state.fail = "FROM staff_profiles";
+  f.state.fail = "FROM authorized_staff_profiles";
   expect(await f.store.admin(token)).toEqual({ kind: "unavailable" });
 });

@@ -66,7 +66,7 @@ function fixture() {
           (values?.[1] == null || credentialHashes.get(found.id) === values[1])
             ? [found]
             : [];
-      } else if (sql.includes("FROM staff_profiles"))
+      } else if (sql.includes("FROM authorized_staff_profiles"))
         rows = (values?.[0] as string[]).flatMap((id) =>
           profiles.has(id) ? [{ id, role: profiles.get(id)! }] : [],
         );
@@ -160,7 +160,9 @@ it.each([false, true])(
     expect(locks[0]!.sql).toContain("FOR SHARE");
     expect(locks[2]!.sql).toContain("FOR SHARE");
     expect(
-      f.queries.findIndex((q) => q.sql.includes("FROM staff_profiles")),
+      f.queries.findIndex((q) =>
+        q.sql.includes("FROM authorized_staff_profiles"),
+      ),
     ).toBeGreaterThan(f.queries.indexOf(locks[2]!));
   },
 );

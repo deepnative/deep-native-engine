@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import type { Pool, PoolClient } from "pg";
 import request from "supertest";
 import { app } from "../../src/app.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { proposalStore } from "../../src/proposals.ts";
 import { hash, migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";

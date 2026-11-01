@@ -11,7 +11,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { start } from "../../src/runtime.ts";
-import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+import { authorizationStore, type StaffRole } from "./administrator-fixture.ts";
 import { catalogStore } from "../../src/catalog.ts";
 import { foundationImportStore } from "../../src/foundation-import.ts";
 import { reviewedFoundation } from "../../src/foundation-pack.ts";

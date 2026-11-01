@@ -4,7 +4,7 @@ import request from "supertest";
 import { withLoopback } from "../support/loopback-server.ts";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore } from "../../src/catalog.ts";
 import {
   learningWorkspaceStore,

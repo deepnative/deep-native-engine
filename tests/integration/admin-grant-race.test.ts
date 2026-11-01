@@ -4,7 +4,7 @@ import type { Pool } from "pg";
 import {
   authorizationStore,
   type AuthorizationStore,
-} from "../../src/authorization.ts";
+} from "../support/administrator-fixture.ts";
 import { migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
 

@@ -72,7 +72,7 @@ function fixture() {
         { id: admin, role: state.adminRole },
         { id: reviewer, role: state.reviewerRole },
       ];
-    else if (sql.includes("SELECT 1 FROM staff_profiles"))
+    else if (sql.includes("SELECT 1 FROM authorized_staff_profiles"))
       rows = state.adminRole === "platform_admin" ? [{}] : [];
     else if (sql.includes("FROM workspaces w"))
       rows = state.workspace ? [{ id: allocation }] : [];

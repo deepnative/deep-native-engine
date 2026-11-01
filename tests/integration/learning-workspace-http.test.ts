@@ -4,7 +4,7 @@ import { once } from "node:events";
 import cookieParser from "cookie-parser";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore } from "../../src/catalog.ts";
 import { COOKIE, csrf, token, validCsrf } from "../../src/session.ts";
 import {

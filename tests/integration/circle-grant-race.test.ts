@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { circleGrantAdminStore } from "../../src/circle-grant-admin.ts";
 import { circleDiscussionStore } from "../../src/circle-discussion.ts";
 import { hash, migrate } from "../../src/store.ts";

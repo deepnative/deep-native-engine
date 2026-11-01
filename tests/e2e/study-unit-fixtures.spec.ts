@@ -13,7 +13,7 @@ import { Pool } from "pg";
 import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
 import { start } from "../../src/runtime.ts";
 import { migrate } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 // Trusted bootstrap credentials never enter retained network traces/captures.
 test.use({ trace: "off" });

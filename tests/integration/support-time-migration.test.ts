@@ -29,6 +29,10 @@ it("upgrades populated legacy support requests and note grants twice without bac
         return { query: client.query.bind(client), release() {} };
       },
     } as unknown as Pool;
+    // Model the historical pre-identity authorization surface only in this isolated legacy schema.
+    await client.query(
+      "CREATE VIEW authorized_staff_profiles AS SELECT * FROM staff_profiles",
+    );
     const members = store(scoped),
       support = supportRequestStore(scoped),
       auth = authorizationStore(scoped);

@@ -1,7 +1,7 @@
 import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { hash } from "../../src/store.ts";
 import { COOKIE } from "../../src/session.ts";

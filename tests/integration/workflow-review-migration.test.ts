@@ -1,8 +1,9 @@
+import { bindSyntheticAdministrator } from "../support/administrator-fixture.ts";
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import type { Pool } from "pg";
 import { afterAll, expect, it } from "vitest";
-import { migrate, store } from "../../src/store.ts";
+import { migrate, store, hash } from "../../src/store.ts";
 import { authorizationStore } from "../../src/authorization.ts";
 import { workflowFeedbackStore } from "../../src/workflow-feedback.ts";
 import { workflowReviewStore } from "../../src/workflow-review.ts";
@@ -55,6 +56,10 @@ it("WFREV-08 populated migration063 upgrades without rewriting notes or inventin
       .filter((n) => /^\d{3}-.+\.sql$/.test(n) && Number(n.slice(0, 3)) <= 63)
       .sort())
       await pool.query(await readFile(new URL(name, directory), "utf8"));
+    // Model the historical pre-identity authorization surface only in this isolated legacy schema.
+    await pool.query(
+      "CREATE VIEW authorized_staff_profiles AS SELECT * FROM staff_profiles",
+    );
     const member = fresh(),
       other = fresh(),
       db = store(pool),
@@ -188,6 +193,20 @@ it("WFREV-08 populated migration063 upgrades without rewriting notes or inventin
     });
     const populated = await snapshot();
     await migrate(pool);
+    expect(
+      (await staff.check(admin, intent.receipt.requestId, moderatorId)).kind,
+    ).toBe("denied");
+    const administrator = (
+      await pool.query<{ id: string; expires_at: Date }>(
+        "SELECT id,expires_at FROM principals WHERE token_hash=$1",
+        [hash(admin)],
+      )
+    ).rows[0]!;
+    await bindSyntheticAdministrator(
+      pool,
+      administrator.id,
+      administrator.expires_at,
+    );
     expect(await snapshot()).toEqual(populated);
     expect(await notes()).toEqual(before);
     const paused = workflowReviewStaffStore(

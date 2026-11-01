@@ -119,7 +119,7 @@ function fixture(
             ? []
             : [{ id: ownerId, expires: new Date(Date.now() + 60000) }],
       };
-    if (sql.includes("SELECT role FROM staff_profiles"))
+    if (sql.includes("SELECT role FROM authorized_staff_profiles"))
       return { rows: options.staff === false ? [] : [{ role: "moderator" }] };
     if (sql.includes("SELECT id FROM workspaces WHERE owner_principal_id=$1"))
       return { rows: options.workspace === false ? [] : [{ id: workspaceId }] };

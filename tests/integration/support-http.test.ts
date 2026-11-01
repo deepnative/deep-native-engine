@@ -5,7 +5,7 @@ import type { Server } from "node:http";
 import { app } from "../../src/app.ts";
 import { migrate, store } from "../../src/store.ts";
 import { supportRequestStore } from "../../src/support-requests.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { memberExportStore } from "../../src/member-export.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
 import { testPool } from "../support/database.ts";

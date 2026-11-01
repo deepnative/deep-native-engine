@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { store, migrate } from "../../src/store.ts";
 import { circleStore } from "../../src/circles.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import {
   circleDiscussionStore,
   CIRCLE_DISCUSSION_POLICY,

@@ -166,13 +166,13 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
          SELECT $1,$2,$3,$4,$5,$6,$7
          WHERE $6>CURRENT_TIMESTAMP
            AND EXISTS(
-             SELECT 1 FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
+             SELECT 1 FROM principals p JOIN authorized_staff_profiles s ON s.principal_id=p.id
              WHERE p.id=$7 AND p.kind='staff' AND s.role='platform_admin'
                AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
              FOR SHARE OF p
            )
            AND EXISTS(
-             SELECT 1 FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
+             SELECT 1 FROM principals p JOIN authorized_staff_profiles s ON s.principal_id=p.id
              WHERE p.id=$2 AND p.kind='staff' AND s.role=$3
                AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
            )
@@ -213,7 +213,7 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
           `WITH changed AS (UPDATE ${table} g SET revoked_at=CURRENT_TIMESTAMP
            WHERE g.id=$2 AND g.revoked_at IS NULL
              AND EXISTS(
-               SELECT 1 FROM principals p JOIN staff_profiles s ON s.principal_id=p.id
+               SELECT 1 FROM principals p JOIN authorized_staff_profiles s ON s.principal_id=p.id
                WHERE p.id=$1 AND p.kind='staff' AND s.role='platform_admin'
                  AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
                FOR SHARE OF p
@@ -303,14 +303,14 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
              AND g.revoked_at IS NULL AND g.starts_at<=CURRENT_TIMESTAMP
              AND g.expires_at>CURRENT_TIMESTAMP
              AND EXISTS(
-               SELECT 1 FROM principals p JOIN staff_profiles profile
+               SELECT 1 FROM principals p JOIN authorized_staff_profiles profile
                  ON profile.principal_id=p.id
                WHERE p.id=$7 AND p.kind='staff' AND profile.role='platform_admin'
                  AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
                FOR SHARE OF p
              )
              AND EXISTS(
-               SELECT 1 FROM principals p JOIN staff_profiles profile
+               SELECT 1 FROM principals p JOIN authorized_staff_profiles profile
                  ON profile.principal_id=p.id
                WHERE p.id=$2 AND p.kind='staff' AND profile.role='reviewer'
                  AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP
@@ -371,7 +371,7 @@ export function authorizationStore(pool: Pool): AuthorizationStore {
           await client.query<WorkspaceDecision>(
             `WITH identity AS (
                SELECT p.id,p.kind,s.role
-               FROM principals p LEFT JOIN staff_profiles s ON s.principal_id=p.id
+               FROM principals p LEFT JOIN authorized_staff_profiles s ON s.principal_id=p.id
                WHERE p.token_hash=$1 AND p.revoked_at IS NULL
                  AND p.expires_at>clock_timestamp()
                FOR SHARE OF p

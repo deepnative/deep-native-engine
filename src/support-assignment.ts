@@ -222,7 +222,7 @@ export function supportAssignmentStore(
     await ctx.tx.observe(ctx.deadlines);
     const profiles = (
       await ctx.tx.query<{ id: string; role: string }>(
-        "SELECT principal_id AS id,role FROM staff_profiles WHERE principal_id=ANY($1::uuid[]) ORDER BY principal_id FOR SHARE",
+        "SELECT principal_id AS id,role FROM authorized_staff_profiles WHERE principal_id=ANY($1::uuid[]) ORDER BY principal_id FOR SHARE",
         [[...new Set([ctx.actorId, ...staff])].sort()],
       )
     ).rows;

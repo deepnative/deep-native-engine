@@ -25,7 +25,7 @@ beforeEach(() => {
   query.mockImplementation(async (sql: string) => ({
     rows: sql.includes("FROM principals")
       ? [{ id: "editor", expires }]
-      : sql.includes("FROM staff_profiles")
+      : sql.includes("FROM authorized_staff_profiles")
         ? [{ principal_id: "editor" }]
         : sql.includes("FROM content_versions")
           ? rows

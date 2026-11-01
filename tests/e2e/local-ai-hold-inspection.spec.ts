@@ -2,7 +2,7 @@ import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { localAiConsentStore } from "../../src/local-ai-consent.ts";

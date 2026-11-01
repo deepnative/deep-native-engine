@@ -7,7 +7,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { randomBytes } from "node:crypto";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { store } from "../../src/store.ts";
 import { COOKIE } from "../../src/session.ts";
 import { testPool } from "../support/database.ts";

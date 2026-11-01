@@ -8,7 +8,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import { start } from "../../src/runtime.ts";
 import { store } from "../../src/store.ts";
 import { attemptStore } from "../../src/attempts.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore } from "../../src/catalog.ts";
 import { COOKIE } from "../../src/session.ts";
 

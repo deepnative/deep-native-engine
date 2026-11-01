@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import type { Pool } from "pg";
 import { testPool } from "../support/database.ts";
 import { migrate, store } from "../../src/store.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { assignmentReadinessStore } from "../../src/assignment-readiness.ts";
 const pool = testPool();

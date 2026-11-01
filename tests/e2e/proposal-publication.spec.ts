@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Pool } from "pg";
 import { start } from "../../src/runtime.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { testPool } from "../support/database.ts";
 import { startPublicationRecoveryServer } from "../support/proposal-publication-recovery-server.ts";
 const control = testPool(),

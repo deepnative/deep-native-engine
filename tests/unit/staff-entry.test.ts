@@ -7,6 +7,7 @@ function fixture() {
   const state = {
     principal: true,
     profile: true,
+    administratorBound: true,
     role: "operator",
     expires: new Date(Date.now() + 60000),
     remaining: "60000",
@@ -23,8 +24,14 @@ function fixture() {
           ? [{ id: "test-id", expires: state.expires }]
           : [],
       };
-    if (sql.includes("FROM staff_profiles"))
-      return { rows: state.profile ? [{ role: state.role }] : [] };
+    if (sql.includes("FROM authorized_staff_profiles"))
+      return {
+        rows:
+          state.profile &&
+          (state.role !== "platform_admin" || state.administratorBound)
+            ? [{ role: state.role }]
+            : [],
+      };
     if (sql.startsWith("WITH instant"))
       return {
         rows: [{ remaining: "60000", valid: true, observed: new Date() }],
@@ -170,4 +177,11 @@ it("STAFF-06-FAULTS bounds unknown BEGIN/query completion, discards connection a
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("ADMINONLY03 denies an unattributed legacy administrator credential", async () => {
+  const f = fixture();
+  f.state.role = "platform_admin";
+  f.state.administratorBound = false;
+  expect(await f.store.admit(token)).toEqual({ kind: "denied" });
 });

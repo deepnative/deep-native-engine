@@ -108,7 +108,7 @@ export function reviewerWorklistStore(
           if (
             !(
               await tx.query(
-                "SELECT principal_id FROM staff_profiles WHERE principal_id=$1 AND role='reviewer' FOR SHARE",
+                "SELECT principal_id FROM authorized_staff_profiles WHERE principal_id=$1 AND role='reviewer' FOR SHARE",
                 [actor.id],
               )
             ).rows.length

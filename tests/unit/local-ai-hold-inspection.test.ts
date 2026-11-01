@@ -76,7 +76,7 @@ function fixture(count = 1) {
       };
     if (sql.includes("FROM principals"))
       return { rows: state.actor ? [{ id: id(500) }] : [] };
-    if (sql.includes("FROM staff_profiles"))
+    if (sql.includes("FROM authorized_staff_profiles"))
       return {
         rows: [{ id: id(state.actorChanged ? 501 : 500), role: state.role }],
       };

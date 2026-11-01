@@ -83,7 +83,7 @@ export async function attendanceActors(
   const profiles = new Map(
     (
       await context.tx.query<{ id: string; role: string }>(
-        `SELECT principal_id AS id,role FROM staff_profiles
+        `SELECT principal_id AS id,role FROM authorized_staff_profiles
          WHERE principal_id=ANY($1::uuid[]) ORDER BY principal_id FOR SHARE`,
         [ordered],
       )

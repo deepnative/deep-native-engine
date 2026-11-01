@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { circleDiscussionStore } from "../../src/circle-discussion.ts";
 import { circleStore } from "../../src/circles.ts";
 import { memberEmailAccess } from "../../src/member-email-access.ts";

@@ -1,7 +1,7 @@
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { syntheticLedger, type LedgerCategory } from "../../src/ledger.ts";
 import { store } from "../../src/store.ts";
 import { COOKIE } from "../../src/session.ts";

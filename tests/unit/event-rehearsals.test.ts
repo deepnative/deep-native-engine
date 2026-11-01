@@ -47,7 +47,7 @@ function fixture(
       rows = state.actor
         ? [{ id: actorId, expires: new Date(+at + 60000) }]
         : [];
-    else if (sql.includes("FROM staff_profiles"))
+    else if (sql.includes("FROM authorized_staff_profiles"))
       rows = state.role === null ? [] : [{ role: state.role }];
     else if (sql.includes("AS valid")) rows = [{ valid: state.valid }];
     else if (sql.includes("AS count")) rows = [{ count: state.count }];
@@ -101,7 +101,9 @@ it("REHSCHED-05 missing current principal cannot access roles or schedules", asy
   f.state.actor = false;
   expect(await f.service.admin(token)).toEqual({ kind: "denied" });
   expect(
-    f.query.mock.calls.some(([sql]) => sql.includes("FROM staff_profiles")),
+    f.query.mock.calls.some(([sql]) =>
+      sql.includes("FROM authorized_staff_profiles"),
+    ),
   ).toBe(false);
 });
 it.each([{ writes: false }, { registration: false }, {}])(

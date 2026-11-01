@@ -5,7 +5,10 @@ import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import request from "supertest";
 import { start } from "../../src/runtime.ts";
-import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
+import {
+  authorizationStore,
+  type StaffRole,
+} from "../support/administrator-fixture.ts";
 import { store } from "../../src/store.ts";
 import { workflowFeedbackStore } from "../../src/workflow-feedback.ts";
 import { testPool } from "../support/database.ts";

@@ -6,7 +6,7 @@ import { migrate, store } from "../../src/store.ts";
 import { evidenceStore, type ObjectStorage } from "../../src/evidence.ts";
 import { deterministicRegistry } from "../../src/adapters.ts";
 import { localAiConsentStore } from "../../src/local-ai-consent.ts";
-import { authorizationStore } from "../../src/authorization.ts";
+import { authorizationStore } from "../support/administrator-fixture.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 
 const pool = testPool();

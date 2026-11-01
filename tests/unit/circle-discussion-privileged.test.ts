@@ -88,7 +88,9 @@ function fixture(overrides: Partial<GrantFixture> = {}, writes = true) {
             : []),
         ],
       };
-    if (sql.startsWith("SELECT principal_id,role FROM staff_profiles"))
+    if (
+      sql.startsWith("SELECT principal_id,role FROM authorized_staff_profiles")
+    )
       return {
         rows: [
           ...(state.adminRole
@@ -99,7 +101,7 @@ function fixture(overrides: Partial<GrantFixture> = {}, writes = true) {
             : []),
         ],
       };
-    if (sql.startsWith("SELECT s.role FROM staff_profiles"))
+    if (sql.startsWith("SELECT s.role FROM authorized_staff_profiles"))
       return { rows: state.fitsLifetime ? [{ role: state.staffRole }] : [] };
     if (sql.includes("WHERE idempotency_key=$1"))
       return { rows: state.prior ? [state.prior] : [] };
@@ -372,7 +374,7 @@ function moderatorFixture(
             : []),
         ],
       };
-    if (sql.startsWith("SELECT role FROM staff_profiles"))
+    if (sql.startsWith("SELECT role FROM authorized_staff_profiles"))
       return { rows: state.profile ? [{ role: "moderator" }] : [] };
     if (sql.startsWith("SELECT id FROM preview_circle_moderator_grants"))
       return { rows: state.currentGrant ? [{ id: grant }] : [] };

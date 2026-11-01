@@ -584,7 +584,7 @@ export function circleDiscussionStore(
       return null;
     const profiles = (
       await client.query<{ principal_id: string; role: string }>(
-        "SELECT principal_id,role FROM staff_profiles WHERE principal_id=ANY($1::uuid[]) ORDER BY principal_id FOR SHARE",
+        "SELECT principal_id,role FROM authorized_staff_profiles WHERE principal_id=ANY($1::uuid[]) ORDER BY principal_id FOR SHARE",
         [ids],
       )
     ).rows;
@@ -617,7 +617,7 @@ export function circleDiscussionStore(
         role: "moderator" | "platform_admin";
       }>(
         `SELECT p.id,g.id grant_id,s.role FROM principals p
-      JOIN staff_profiles s ON s.principal_id=p.id JOIN preview_circle_moderator_grants g ON g.staff_id=p.id AND g.staff_role=s.role
+      JOIN authorized_staff_profiles s ON s.principal_id=p.id JOIN preview_circle_moderator_grants g ON g.staff_id=p.id AND g.staff_role=s.role
       WHERE p.token_hash=$1 AND p.kind='staff' AND p.revoked_at IS NULL AND p.expires_at>clock_timestamp()
       AND s.role IN ('moderator','platform_admin') AND g.circle_id=$2 AND g.purpose=$3 AND g.revoked_at IS NULL
       AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp() ORDER BY g.id LIMIT 1`,
@@ -672,7 +672,7 @@ export function circleDiscussionStore(
     const members = new Set(workspaces.map((w) => w.owner_principal_id));
     const profile = (
       await client.query<{ role: "moderator" | "platform_admin" }>(
-        "SELECT role FROM staff_profiles WHERE principal_id=$1 AND role IN ('moderator','platform_admin') FOR SHARE",
+        "SELECT role FROM authorized_staff_profiles WHERE principal_id=$1 AND role IN ('moderator','platform_admin') FOR SHARE",
         [observation.actor],
       )
     ).rows[0];
@@ -1745,7 +1745,7 @@ export function circleDiscussionStore(
             : conflict;
         const staff = (
           await client.query<{ role: "moderator" | "platform_admin" }>(
-            "SELECT s.role FROM staff_profiles s JOIN principals p ON p.id=s.principal_id WHERE s.principal_id=$1 AND p.expires_at>=$2 AND $2::timestamptz>clock_timestamp()",
+            "SELECT s.role FROM authorized_staff_profiles s JOIN principals p ON p.id=s.principal_id WHERE s.principal_id=$1 AND p.expires_at>=$2 AND $2::timestamptz>clock_timestamp()",
             [staffId, expiresAt],
           )
         ).rows[0];
