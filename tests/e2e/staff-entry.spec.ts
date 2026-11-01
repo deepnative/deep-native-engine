@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { testPool } from "../support/database.ts";
@@ -14,7 +15,7 @@ const pool = testPool(),
   auth = authorizationStore(pool),
   support = supportRequestStore(pool),
   ledger = syntheticLedger(pool),
-  origin = process.env.DNE_STAFF_BROWSER_ORIGIN ?? "http://127.0.0.1:4317";
+  origin = process.env.DNE_STAFF_BROWSER_ORIGIN ?? browserOrigin;
 test.afterAll(() => pool.end());
 const fresh = () => randomBytes(32).toString("hex");
 async function signin(page: Page, credential: string) {

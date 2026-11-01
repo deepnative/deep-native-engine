@@ -26,7 +26,7 @@ class IntegrationSequencer extends BaseSequencer {
   }
 }
 const shard = process.env.DNE_INTEGRATION_SHARD;
-if (shard !== undefined && shard !== "1" && shard !== "2")
+if (shard !== undefined && !["1", "2", "3", "4"].includes(shard))
   throw Error("Invalid integration lane");
 export default defineConfig({
   ...(shard

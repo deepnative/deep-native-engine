@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { store } from "../../src/store.ts";
@@ -11,7 +12,7 @@ const pool = testPool(),
   support = supportRequestStore(pool),
   auth = authorizationStore(pool),
   ledger = syntheticLedger(pool);
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 const audiences = [
   ["explorer", "everyday"],
   ["professional", "work"],

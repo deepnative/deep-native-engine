@@ -1,6 +1,7 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
 
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 
 async function begin(page: Page, background: string, goal: string) {
   await page.goto("/");

@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import { testPool } from "../support/database.ts";
@@ -104,7 +105,7 @@ test("[L82] three backgrounds discover synthetic events by keyboard without enro
       await page.goto(`/events/${id}/${version}`);
     }
     const forged = await page.request.post(`/events/${id}/${version}/enroll`, {
-      headers: { Origin: "http://127.0.0.1:4317" },
+      headers: { Origin: browserOrigin },
       form: { csrf },
       maxRedirects: 0,
     });
@@ -175,7 +176,7 @@ test("[L82] three backgrounds discover synthetic events by keyboard without enro
     {
       name: "dne_preview",
       value: staffToken,
-      url: "http://127.0.0.1:4317",
+      url: browserOrigin,
     },
   ]);
   await page.goto("/events");

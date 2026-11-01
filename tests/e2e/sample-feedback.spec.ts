@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { testPool } from "../support/database.ts";
@@ -6,7 +7,7 @@ import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { store } from "../../src/store.ts";
 import { COOKIE } from "../../src/session.ts";
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 test.afterAll(async () => pool.end());
 const sampleText = `An invented team checks every factual claim.
   Keep indentation and line breaks.

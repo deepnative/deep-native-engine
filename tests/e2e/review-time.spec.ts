@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { testPool } from "../support/database.ts";
@@ -5,7 +6,7 @@ import { authorizationStore } from "../../src/authorization.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 // Normal staff entry sends a protected credential; retain no network traces.
 test.use({ trace: "off" });
 async function staffSignIn(page: Page, credential: string) {

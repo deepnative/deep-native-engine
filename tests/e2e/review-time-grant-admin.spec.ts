@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { testPool } from "../support/database.ts";
@@ -10,7 +11,7 @@ import { startReviewTimeGrantRecoveryServer } from "../support/review-time-grant
 test.use({ trace: "off" });
 const pool = testPool();
 test.afterAll(() => pool.end());
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 const base = "/operator/review-time-grants";
 const audiences = [
   ["explorer", "everyday"],

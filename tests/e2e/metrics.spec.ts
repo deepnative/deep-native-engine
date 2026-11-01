@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { test, expect } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -5,7 +6,7 @@ import { store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 test.afterAll(async () => pool.end());
 
 test("[L47] operator sees labelled preview aggregates while a learner cannot read them", async ({

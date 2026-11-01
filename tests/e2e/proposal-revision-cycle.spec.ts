@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import {
   test,
   expect,
@@ -13,7 +14,7 @@ import { testPool } from "../support/database.ts";
 const pool = testPool(),
   auth = authorizationStore(pool),
   members = store(pool),
-  origin = "http://127.0.0.1:4317";
+  origin = browserOrigin;
 const audiences = [
   ["explorer", "everyday"],
   ["professional", "work"],

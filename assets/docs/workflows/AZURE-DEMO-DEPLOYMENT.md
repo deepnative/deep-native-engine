@@ -36,6 +36,8 @@ Expected incremental baseline is approximately US$18/month for B1ms+32GiB, plus 
 
 ## Subsequent releases and restart
 
+Main `Repository checks` now validates exact-source promotion from the original successful same-repository PR verification, retaining its run/attempt and artifact digest. The main push check fails closed when that proof or the actual merge identity differs; deployment still requires successful canonical push evidence on current main, and never trusts a local receipt.
+
 The workflow runs after successful `Repository checks` on current main only when `DNE_DURABLE_RELEASE_ENABLED=true`, or by manual dispatch. It uses OIDC, verifies source revision and durable configuration, builds SHA-tagged app/proxy images, rechecks current main and app state immediately before the patch, then changes both images while preserving the durable environment, database, container, grants and ingress. A new preservation receipt is refused for an already durable image-only roll. It does not run Terraform destroy or reset a database.
 
 An ordinary Container App revision restart reconnects to the same managed PostgreSQL and Blob container; it must not recreate empty data. Existing member cookies remain on their original hostname. Finite staff credentials/grants still expire; do not renew them silently. The explicit support administration command uses the same database identity boundary and writes private credentials only to its guarded private operator directory. Local `make preview` is a separate temporary rehearsal and is never a recovery substitute for hosted data.

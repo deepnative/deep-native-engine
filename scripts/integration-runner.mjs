@@ -107,8 +107,8 @@ export function mergeUnhandled(reports) {
     }
   }
   requireGate(
-    reports.length === 2,
-    "Both integration lane diagnostics required",
+    reports.length === 4,
+    "All four integration lane diagnostics required",
   );
   return {
     schema: "integration-unhandled-v1",
@@ -120,10 +120,10 @@ export function mergeUnhandled(reports) {
 
 export function mergeIntegrationReports(expectedFiles, lanes) {
   requireGate(
-    lanes.length === 2 &&
-      new Set(lanes.map((lane) => lane.index)).size === 2 &&
-      lanes.every((lane) => [1, 2].includes(lane.index)),
-    "Two distinct integration lanes required",
+    lanes.length === 4 &&
+      new Set(lanes.map((lane) => lane.index)).size === 4 &&
+      lanes.every((lane) => [1, 2, 3, 4].includes(lane.index)),
+    "Four distinct integration lanes required",
   );
   const unhandled = mergeUnhandled(lanes.map((lane) => lane.unhandled));
   requireGate(unhandled.count === 0, "Integration lane unhandled errors");
@@ -344,7 +344,7 @@ function launch(index, root, env, children) {
       "run",
       "--config",
       "vitest.integration.config.ts",
-      `--shard=${index}/2`,
+      `--shard=${index}/4`,
     ],
     { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] },
   );
@@ -442,7 +442,7 @@ export async function runIntegration(root = process.cwd()) {
       interrupted = true;
     });
     stage = "owned lane setup";
-    for (const index of [1, 2]) {
+    for (const index of [1, 2, 3, 4]) {
       requireGate(!interrupted, "Integration execution interrupted");
       let database;
       try {
@@ -478,9 +478,9 @@ export async function runIntegration(root = process.cwd()) {
           children,
         ),
       );
-      evidence.lanes.push(await pending.at(-1));
     }
     const outcomes = await Promise.all(pending);
+    evidence.lanes = outcomes;
     stage = "original lane evidence";
     const lanes = outcomes.map((child) => ({
       index: child.index,

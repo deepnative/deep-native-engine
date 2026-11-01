@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -9,7 +10,7 @@ const pool = testPool(),
   members = store(pool),
   auth = authorizationStore(pool),
   ledger = syntheticLedger(pool),
-  origin = "http://127.0.0.1:4317",
+  origin = browserOrigin,
   reportPath = "/operator/ledger-reconciliation";
 const audiences = [
   ["explorer", "everyday"],

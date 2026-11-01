@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -75,7 +76,7 @@ test("[L65] a private plan recommends only a current eligible sample lesson", as
   await expect(suggestion).not.toContainText("Invented next reading");
 
   const unrelated = await browser.newContext({
-    baseURL: "http://127.0.0.1:4317",
+    baseURL: browserOrigin,
   });
   try {
     const other = await unrelated.newPage();

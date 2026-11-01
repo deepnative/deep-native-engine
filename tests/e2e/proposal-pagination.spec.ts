@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { expect, test, type Page } from "@playwright/test";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -5,7 +6,7 @@ import { proposalStore } from "../../src/proposals.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 
 test.afterAll(async () => {
   await pool.end();

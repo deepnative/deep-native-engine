@@ -74,7 +74,8 @@ APP_FILES = {
     "scripts/private-preview.mjs", "scripts/private-preview.d.mts",
     # Two explicitly isolated integration lanes; raw union/process/resource
     # invariants are exercised by tooling units and real PostgreSQL evidence.
-    "scripts/integration-runner.mjs",
+    "scripts/integration-runner.mjs", "scripts/browser-runner.mjs", "scripts/promote-verification.py",
+    "tests/repository/test_promotion.py",
     "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "scripts/full-release-evidence.mjs", "tests/e2e/scenarios.json", "tests/e2e/cross-browser-scenarios.json", "tests/e2e/full-mvp-approval.json", "src/main.ts", "migrations/001-learning.sql",
     "assets/docs/content/circles/preview-circles.json", "public/pages-demo.js", "public/attempt-save.js", "public/member-export.js", "public/evidence-export.js", "public/exercise-error-focus.js",
     "assets/docs/content/events/preview-events.json",
@@ -623,6 +624,43 @@ def state(root):
             "dirty": bool(git(root, "status", "--porcelain", "--untracked-files=all"))}
 
 
+def verification_receipt_path(root):
+    value = Path(git(root, "rev-parse", "--git-path", "verification-receipt.json"))
+    return value if value.is_absolute() else root / value
+
+
+def verification_fingerprint(root):
+    revision = state(root)
+    require(not revision["dirty"], "Verification receipt requires clean source")
+    repository = json.loads((root / "artifacts/repository-verification.json").read_text())
+    application = json.loads((root / "artifacts/application-verification.json").read_text())
+    require(repository.get("exit_status") == 0 and application.get("exitStatus") == 0,
+            "Verification receipt requires successful original reports")
+    require(all(repository.get(key) == value for key, value in revision.items()) and
+            application.get("revision") == revision, "Verification reports describe different source")
+    files = {}
+    for file in sorted((root / "artifacts").rglob("*")):
+        require(not file.is_symlink(), "Verification artifacts must not contain symlinks")
+        if file.is_file():
+            with file.open("rb") as stream:
+                files[str(file.relative_to(root))] = hashlib.file_digest(stream, "sha256").hexdigest()
+    node = subprocess.run(["node", "--version"], check=True, capture_output=True, text=True).stdout.strip()
+    return {"revision": revision, "python": platform.python_version(),
+            "platform": platform.platform(), "node": node, "artifacts": files}
+
+
+def write_verification_receipt(root):
+    fingerprint = verification_fingerprint(root)
+    verification_receipt_path(root).write_text(json.dumps(fingerprint) + "\n")
+
+
+def has_verification_receipt(root):
+    try:
+        return json.loads(verification_receipt_path(root).read_text()) == verification_fingerprint(root)
+    except Exception:
+        return False
+
+
 def run_application(root):
     # The application runner publishes fixed stage diagnostics and a report.
     # Its child output must not bypass this repository-level console boundary.
@@ -737,6 +775,7 @@ def verify(root):
               "command": "python scripts/repo.py verify", "exit_status": 1}
     stage = "revision identification"
     try:
+        verification_receipt_path(root).unlink(missing_ok=True)
         report.update(state(root))
         stage = "repository assets"
         report["secret_scan"] = validate(root)
@@ -772,6 +811,13 @@ def verify(root):
         except Exception:
             report["exit_status"] = 1
             print("Repository verification report could not be written.", file=sys.stderr)
+    if report["exit_status"] == 0 and not report.get("dirty", True):
+        try:
+            write_verification_receipt(root)
+        except Exception:
+            report["exit_status"] = 1
+            output.write_text(json.dumps(report, indent=2) + "\n")
+            print("Verification receipt could not be established.", file=sys.stderr)
     print(f"Repository verification {'PASS' if report['exit_status'] == 0 else 'FAIL'}; application status: {report['application_status']}.")
     return report["exit_status"]
 
@@ -814,7 +860,7 @@ def pre_push(root, lines):
     if not validate_push(root, lines):
         return 0
     before = state(root)
-    code = verify(root)
+    code = 0 if has_verification_receipt(root) else verify(root)
     require(code == 0, "Pre-push verification failed")
     require(state(root) == before, "Checkout changed during verification; commit and verify again")
     return 0

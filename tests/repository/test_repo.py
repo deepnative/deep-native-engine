@@ -776,6 +776,46 @@ class RepositoryFixture(unittest.TestCase):
             with self.subTest(line=line), self.assertRaisesRegex(gate.GateError, "Malformed"):
                 gate.validate_push(self.root, line)
 
+    def passed_receipt(self):
+        revision = gate.state(self.root)
+        artifacts = self.root / "artifacts"
+        artifacts.mkdir(exist_ok=True)
+        (artifacts / "repository-verification.json").write_text(json.dumps({**revision, "exit_status": 0}))
+        (artifacts / "application-verification.json").write_text(json.dumps({"revision": revision, "exitStatus": 0}))
+        gate.write_verification_receipt(self.root)
+
+    def test_exact_unchanged_receipt_avoids_second_full_run(self):
+        self.passed_receipt()
+        with patch.object(gate, "verify", side_effect=AssertionError("duplicate full run")):
+            self.assertEqual(gate.pre_push(self.root, self.push_line()), 0)
+
+    def test_altered_report_receipt_requires_full_verification(self):
+        self.passed_receipt()
+        (self.root / "artifacts/application-verification.json").write_text('{"exitStatus":1}')
+        with patch.object(gate, "verify", return_value=1) as verify, self.assertRaises(gate.GateError):
+            gate.pre_push(self.root, self.push_line())
+        verify.assert_called_once()
+
+    def test_new_commit_cannot_reuse_receipt(self):
+        self.passed_receipt()
+        (self.root / "README.md").write_text("new source")
+        gate.git(self.root, "add", "README.md")
+        gate.git(self.root, "commit", "-qm", "new source")
+        with patch.object(gate, "verify", return_value=1), self.assertRaises(gate.GateError):
+            gate.pre_push(self.root, self.push_line())
+
+    def test_failed_reports_cannot_create_receipt(self):
+        self.passed_receipt()
+        (self.root / "artifacts/repository-verification.json").write_text('{"exit_status":1}')
+        with self.assertRaises(gate.GateError):
+            gate.write_verification_receipt(self.root)
+
+    def test_new_failed_gate_invalidates_previous_receipt(self):
+        self.passed_receipt()
+        with patch.object(gate, "validate", side_effect=gate.GateError("failed gate")):
+            self.assertEqual(gate.verify(self.root), 1)
+        self.assertFalse(gate.verification_receipt_path(self.root).exists())
+
     def test_failed_verification_blocks_push(self):
         with patch.object(gate, "verify", return_value=1), self.assertRaisesRegex(gate.GateError, "verification failed"):
             gate.pre_push(self.root, self.push_line())
@@ -843,7 +883,8 @@ class RepositoryFixture(unittest.TestCase):
                         gate.unittest.defaultTestLoader, "discover", return_value=suite), patch.object(
                         gate, "verify_application", return_value={"unitCoverage": {}, "journeys": {}}), patch.object(
                         gate, "verify_local_learning", return_value={"cases": {"reader-checks": 1}}), patch.object(
-                        gate, "scan_artifacts", return_value={"status": "passed"}):
+                        gate, "scan_artifacts", return_value={"status": "passed"}), patch.object(
+                        gate, "write_verification_receipt"):
                     self.assertEqual(gate.verify(self.root), expected_status)
                 report = (self.root / "artifacts/repository-verification.json").read_text()
                 self.assertNotIn(marker, report + stdout.getvalue() + stderr.getvalue())
