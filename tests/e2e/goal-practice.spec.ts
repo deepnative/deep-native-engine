@@ -92,6 +92,7 @@ test("[L102] three audiences keep exact private starter practice when changing g
     const withdraw = page.getByLabel(
       "Withdraw both saved text fields for version 1",
     );
+    await withdraw.scrollIntoViewIfNeeded();
     await withdraw.focus();
     await page.keyboard.press("Space");
     await expect(withdraw).toBeChecked();

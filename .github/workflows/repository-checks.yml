@@ -37,6 +37,17 @@ jobs:
       - run: npm ci
       - name: Start PostgreSQL
         run: docker compose up -d --wait
+      - name: Select the Ubuntu archive directly
+        run: |
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          source = Path('/etc/apt/sources.list.d/ubuntu.sources')
+          original = source.read_text()
+          mirror = 'mirror+file:/etc/apt/apt-mirrors.txt'
+          if mirror not in original:
+              raise SystemExit('Expected Ubuntu mirror source is missing; inspect the runner image.')
+          source.write_text(original.replace(mirror, 'https://archive.ubuntu.com/ubuntu'))
+          PY
       - run: npx playwright install --with-deps chromium firefox webkit
       - name: Run the shared verification command
         run: make verify
