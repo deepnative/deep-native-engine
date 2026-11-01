@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
@@ -36,7 +37,7 @@ test("[L61] current owner downloads private structured records while unrelated, 
   browser,
 }) => {
   const otherContext = await browser.newContext({
-    baseURL: "http://127.0.0.1:4317",
+    baseURL: browserOrigin,
   });
   try {
     const otherPage = await otherContext.newPage();
@@ -197,7 +198,7 @@ test("[L67] deterministic member jobs export only to their owner and disappear w
   browser,
 }) => {
   const otherContext = await browser.newContext({
-    baseURL: "http://127.0.0.1:4317",
+    baseURL: browserOrigin,
   });
   try {
     const other = await otherContext.newPage();
@@ -268,7 +269,7 @@ test("[L90] owner downloads every bounded live page with safe continuation and c
   browser,
 }) => {
   const otherContext = await browser.newContext({
-    baseURL: "http://127.0.0.1:4317",
+    baseURL: browserOrigin,
   });
   try {
     await onboard(page);

@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import { starterDraftConflicts } from "../support/starter-draft-conflicts.ts";
 import { createHash, randomBytes } from "node:crypto";
@@ -6,7 +7,7 @@ import { authorizationStore, type StaffRole } from "../../src/authorization.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { readdir } from "node:fs/promises";
 const pool = testPool();
-const origin = process.env.DNE_E2E_ORIGIN ?? "http://127.0.0.1:4317";
+const origin = process.env.DNE_E2E_ORIGIN ?? browserOrigin;
 const instruction =
   "Using only the sample details, create a short plan with clear actions and flag any missing information.";
 const verification =

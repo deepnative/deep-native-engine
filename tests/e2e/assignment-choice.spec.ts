@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -88,7 +89,7 @@ test("[L32] explorer chooses a private, published noncoding sample and reloads i
   await expect(choices).toContainText("Your chosen sample");
   await page.reload();
   await expect(choices).toContainText("Your chosen sample");
-  const other = await browser.newContext({ baseURL: "http://127.0.0.1:4317" });
+  const other = await browser.newContext({ baseURL: browserOrigin });
   try {
     const anotherPage = await other.newPage();
     await onboard(anotherPage, "explorer", "everyday");
@@ -292,7 +293,7 @@ test("[L34] technical learner's self-report and retired content cannot bypass el
   await expect(choices).not.toContainText(title);
   const csrf = await page.locator('input[name="csrf"]').first().inputValue();
   const response = await page.request.post("/assignments/select", {
-    headers: { origin: "http://127.0.0.1:4317" },
+    headers: { origin: browserOrigin },
     form: { csrf, content_id: id, content_version: "1" },
   });
   expect(response.status()).toBe(409);
@@ -325,7 +326,7 @@ test("[L63] a version-pinned lesson unlocks only its owner's synthetic assignmen
   await expect(choices).not.toContainText(title);
   const csrf = await page.locator('input[name="csrf"]').first().inputValue();
   const forged = await page.request.post("/assignments/select", {
-    headers: { origin: "http://127.0.0.1:4317" },
+    headers: { origin: browserOrigin },
     form: { csrf, content_id: assignmentId, content_version: "1" },
   });
   expect(forged.status()).toBe(409);
@@ -340,7 +341,7 @@ test("[L63] a version-pinned lesson unlocks only its owner's synthetic assignmen
   await expect(choices).toContainText("Your chosen sample");
 
   const outsider = await browser.newContext({
-    baseURL: "http://127.0.0.1:4317",
+    baseURL: browserOrigin,
   });
   try {
     const otherPage = await outsider.newPage();
@@ -353,7 +354,7 @@ test("[L63] a version-pinned lesson unlocks only its owner's synthetic assignmen
       .first()
       .inputValue();
     const denied = await otherPage.request.post("/assignments/select", {
-      headers: { origin: "http://127.0.0.1:4317" },
+      headers: { origin: browserOrigin },
       form: { csrf: otherCsrf, content_id: assignmentId, content_version: "1" },
     });
     expect(denied.status()).toBe(409);

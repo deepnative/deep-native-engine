@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { store } from "../../src/store.ts";
@@ -20,7 +21,7 @@ const objects = fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!),
     mode: "test",
     enabled: true,
   });
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 test.afterAll(() => pool.end());
 async function signIn(page: Page, token: string) {
   await page.context().clearCookies();

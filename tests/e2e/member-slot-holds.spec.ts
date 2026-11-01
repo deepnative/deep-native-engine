@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -6,7 +7,7 @@ import { syntheticLedger } from "../../src/ledger.ts";
 import { hash } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 test.afterAll(async () => pool.end());
 async function start(page: Page, context: BrowserContext, background: string) {
   await page.goto("/");

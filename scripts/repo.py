@@ -14,6 +14,8 @@ import tomllib
 import unittest
 import zipfile
 import threading
+import shutil
+import tempfile
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
@@ -38,11 +40,11 @@ SKILLS = {"dne-plan-issue", "dne-deliver-issue", "dne-review-change", "dne-hando
 SETUP_FILES = {
     "AGENTS.md", "CLAUDE.md", "README.md", "CONTRIBUTING.md", ".gitignore", "Makefile",
     ".githooks/pre-push", ".github/pull_request_template.md",
-    ".github/ISSUE_TEMPLATE/delivery.md", ".github/workflows/repository-checks.yml",
+    ".github/ISSUE_TEMPLATE/delivery.md",
     "docs/planning/README.md", "scripts/repo.py", "tests/repository/test_repo.py",
 }
 PRODUCT_SITE_FILES = {
-    ".github/workflows/product-pages.yml", "site/index.html", "site/styles.css", "site/favicon.svg",
+    "site/index.html", "site/styles.css", "site/favicon.svg",
 }
 LEARNING_ROOT = Path("assets/docs/learning-design")
 LEARNING_FILES = {str(LEARNING_ROOT / name) for name in (
@@ -74,7 +76,7 @@ APP_FILES = {
     "scripts/private-preview.mjs", "scripts/private-preview.d.mts",
     # Two explicitly isolated integration lanes; raw union/process/resource
     # invariants are exercised by tooling units and real PostgreSQL evidence.
-    "scripts/integration-runner.mjs",
+    "scripts/integration-runner.mjs", "scripts/browser-runner.mjs",
     "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "scripts/full-release-evidence.mjs", "tests/e2e/scenarios.json", "tests/e2e/cross-browser-scenarios.json", "tests/e2e/full-mvp-approval.json", "src/main.ts", "migrations/001-learning.sql",
     "assets/docs/content/circles/preview-circles.json", "public/pages-demo.js", "public/attempt-save.js", "public/member-export.js", "public/evidence-export.js", "public/exercise-error-focus.js",
     "assets/docs/content/events/preview-events.json",
@@ -623,6 +625,115 @@ def state(root):
             "dirty": bool(git(root, "status", "--porcelain", "--untracked-files=all"))}
 
 
+def verification_receipt_path(root):
+    value = Path(git(root, "rev-parse", "--git-path", "verification-receipt.json"))
+    return value if value.is_absolute() else root / value
+
+
+def verification_git_directory(root):
+    return Path(git(root, "rev-parse", "--absolute-git-dir"))
+
+
+def preserve_browser_blobs(root, count):
+    """Keep original containers privately; scan every original report and extracted trace normally."""
+    require(type(count) is int and 1 <= count <= 8, "Invalid browser report count")
+    directory = root / "artifacts/browser-shards/blobs"
+    expected = {f"shard-{index}.zip" for index in range(1, count + 1)}
+    require({p.name for p in directory.glob("*.zip")} == expected, "Incomplete browser blob inventory")
+    plans = []
+    for name in sorted(expected):
+        file = directory / name
+        require(file.is_file() and not file.is_symlink() and file.stat().st_size <= MAX_ARTIFACT_BYTES,
+                "Unsafe browser blob")
+        with zipfile.ZipFile(file) as archive:
+            members = archive.infolist()
+            require(0 < len(members) <= MAX_ZIP_MEMBERS and
+                    sum(member.file_size for member in members) <= MAX_ZIP_TOTAL_BYTES,
+                    "Browser blob exceeds supported bounds")
+            seen = set()
+            hashes = {}
+            for member in members:
+                require(member.filename not in seen and
+                        (member.filename == "report.jsonl" or re.fullmatch(r"resources/[a-f0-9]{40}\.[a-z0-9]+", member.filename)) and
+                        stat.S_IFMT(member.external_attr >> 16) in (0, stat.S_IFREG) and
+                        not member.flag_bits & 1 and member.compress_type in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED) and
+                        member.file_size <= MAX_ZIP_MEMBER_BYTES, "Unsafe browser blob member")
+                seen.add(member.filename)
+                data = archive.read(member)
+                hashes[member.filename] = hashlib.sha256(data).hexdigest()
+                if member.filename != "report.jsonl":
+                    expanded = directory / member.filename
+                    require(expanded.is_file() and not expanded.is_symlink() and
+                            expanded.resolve().is_relative_to(directory.resolve()) and
+                            hashlib.sha256(expanded.read_bytes()).hexdigest() == hashes[member.filename],
+                            "Expanded browser resource does not match original")
+            require("report.jsonl" in seen, "Original browser report missing")
+            plans.append((file, hashes))
+    vault = Path(tempfile.mkdtemp(prefix="browser-blobs-", dir=verification_git_directory(root)))
+    records = []
+    for file, hashes in plans:
+        with zipfile.ZipFile(file) as archive:
+            file.with_suffix(".jsonl").write_bytes(archive.read("report.jsonl"))
+        records.append({"name": file.name, "sha256": hashlib.sha256(file.read_bytes()).hexdigest(), "members": hashes})
+        shutil.move(file, vault / file.name)
+    (directory.parent / "blob-manifest.json").write_text(json.dumps({"schema": "expanded-browser-blobs-v1",
+        "directory": vault.name, "archives": records}, indent=2) + "\n")
+
+
+def check_original_browser_blobs(root):
+    file = root / "artifacts/browser-shards/blob-manifest.json"
+    if not file.exists():
+        return
+    manifest = json.loads(file.read_text())
+    require(manifest.get("schema") == "expanded-browser-blobs-v1" and
+            re.fullmatch(r"browser-blobs-[a-zA-Z0-9_-]+", manifest.get("directory", "")), "Invalid original blob location")
+    vault = verification_git_directory(root) / manifest["directory"]
+    require(not vault.is_symlink() and 1 <= len(manifest["archives"]) <= 8, "Invalid original blob inventory")
+    for row in manifest["archives"]:
+        require(re.fullmatch(r"shard-[1-8]\.zip", row["name"]), "Invalid original blob identity")
+        archive = vault / row["name"]
+        require(archive.is_file() and not archive.is_symlink() and
+                hashlib.sha256(archive.read_bytes()).hexdigest() == row["sha256"], "Original browser blob changed")
+
+
+def verification_fingerprint(root):
+    selection = os.environ.get("DNE_TEST_GROUPS", "auto")
+    require(selection == "auto" or re.fullmatch(r"[1-8]", selection), "Invalid test group count")
+    revision = state(root)
+    check_original_browser_blobs(root)
+    require(not revision["dirty"], "Verification receipt requires clean source")
+    repository = json.loads((root / "artifacts/repository-verification.json").read_text())
+    application = json.loads((root / "artifacts/application-verification.json").read_text())
+    require(repository.get("exit_status") == 0 and application.get("exitStatus") == 0,
+            "Verification receipt requires successful original reports")
+    require(all(repository.get(key) == value for key, value in revision.items()) and
+            application.get("revision") == revision, "Verification reports describe different source")
+    files = {}
+    for file in sorted((root / "artifacts").rglob("*")):
+        require(not file.is_symlink(), "Verification artifacts must not contain symlinks")
+        if file.is_file():
+            with file.open("rb") as stream:
+                files[str(file.relative_to(root))] = hashlib.file_digest(stream, "sha256").hexdigest()
+    runtime = json.loads(subprocess.run(["node", "--input-type=module", "-e",
+        "import {availableParallelism,totalmem} from 'node:os';console.log(JSON.stringify({version:process.version,cpus:availableParallelism(),memory:Math.min(totalmem(),process.constrainedMemory()||Infinity)}))"],
+        check=True, capture_output=True, text=True).stdout)
+    return {"revision": revision, "python": platform.python_version(),
+            "platform": platform.platform(), "runtime": runtime,
+            "test_groups": os.environ.get("DNE_TEST_GROUPS", "auto"), "artifacts": files}
+
+
+def write_verification_receipt(root):
+    fingerprint = verification_fingerprint(root)
+    verification_receipt_path(root).write_text(json.dumps(fingerprint) + "\n")
+
+
+def has_verification_receipt(root):
+    try:
+        return json.loads(verification_receipt_path(root).read_text()) == verification_fingerprint(root)
+    except Exception:
+        return False
+
+
 def run_application(root):
     # The application runner publishes fixed stage diagnostics and a report.
     # Its child output must not bypass this repository-level console boundary.
@@ -737,7 +848,10 @@ def verify(root):
               "command": "python scripts/repo.py verify", "exit_status": 1}
     stage = "revision identification"
     try:
+        verification_receipt_path(root).unlink(missing_ok=True)
         report.update(state(root))
+        selection = os.environ.get("DNE_TEST_GROUPS", "auto")
+        require(selection == "auto" or re.fullmatch(r"[1-8]", selection), "Invalid test group count")
         stage = "repository assets"
         report["secret_scan"] = validate(root)
         stage = "repository tests"
@@ -772,6 +886,13 @@ def verify(root):
         except Exception:
             report["exit_status"] = 1
             print("Repository verification report could not be written.", file=sys.stderr)
+    if report["exit_status"] == 0 and not report.get("dirty", True):
+        try:
+            write_verification_receipt(root)
+        except Exception:
+            report["exit_status"] = 1
+            output.write_text(json.dumps(report, indent=2) + "\n")
+            print("Verification receipt could not be established.", file=sys.stderr)
     print(f"Repository verification {'PASS' if report['exit_status'] == 0 else 'FAIL'}; application status: {report['application_status']}.")
     return report["exit_status"]
 
@@ -814,13 +935,17 @@ def pre_push(root, lines):
     if not validate_push(root, lines):
         return 0
     before = state(root)
-    code = verify(root)
+    code = 0 if has_verification_receipt(root) else verify(root)
     require(code == 0, "Pre-push verification failed")
     require(state(root) == before, "Checkout changed during verification; commit and verify again")
     return 0
 
 
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "prepare-browser-reports":
+        require(re.fullmatch(r"[1-8]", sys.argv[2]), "Invalid browser report count")
+        preserve_browser_blobs(ROOT, int(sys.argv[2]))
+        return 0
     require(len(sys.argv) == 2, "Usage: python3 scripts/repo.py bootstrap|verify|pre-push|scan-artifacts")
     command = sys.argv[1]
     if command == "bootstrap":

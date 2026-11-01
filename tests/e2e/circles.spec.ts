@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { createHash } from "node:crypto";
 import { test, expect, request, type Page } from "@playwright/test";
 import { testPool } from "../support/database.ts";
@@ -100,10 +101,10 @@ test("[L45] the last seat has one winner and joining grants no cohort content", 
   const clients = await Promise.all(
     candidates.map(({ cookie }) =>
       request.newContext({
-        baseURL: "http://127.0.0.1:4317",
+        baseURL: browserOrigin,
         extraHTTPHeaders: {
           Cookie: `dne_preview=${cookie}`,
-          Origin: "http://127.0.0.1:4317",
+          Origin: browserOrigin,
         },
       }),
     ),
@@ -126,7 +127,7 @@ test("[L45] the last seat has one winner and joining grants no cohort content", 
       {
         name: "dne_preview",
         value: candidates[winner]!.cookie,
-        url: "http://127.0.0.1:4317",
+        url: browserOrigin,
       },
     ]);
     await page.goto("/circles");
@@ -330,7 +331,7 @@ test("[L46] deletion withholds own membership listing; leaving, forged, expired 
     {
       name: "dne_preview",
       value: "0".repeat(64),
-      url: "http://127.0.0.1:4317",
+      url: browserOrigin,
     },
   ]);
   await page.goto("/circles");

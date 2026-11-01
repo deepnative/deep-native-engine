@@ -9,12 +9,31 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, totalmem, tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Pool } from "pg";
 import { dropAttendanceBrowserDatabase } from "../tests/support/attendance-browser-database.ts";
 import { requireGate } from "./quality-gates.mjs";
+
+export function testLaneCount(
+  cpus = availableParallelism(),
+  memoryBytes = Math.min(totalmem(), process.constrainedMemory() || Infinity),
+  selection = process.env.DNE_TEST_GROUPS ?? "auto",
+) {
+  requireGate(
+    selection === "auto" ||
+      (selection.length === 1 && /^[1-8]$/u.test(selection)),
+    "Invalid test group count",
+  );
+  if (selection !== "auto") return Number(selection);
+  const memoryGroups = Math.max(
+    1,
+    Math.floor(Math.round(memoryBytes / 2 ** 30) / 4),
+  );
+  return Math.min(cpus >= 12 ? 8 : 4, memoryGroups);
+}
+const LANES = Array.from({ length: testLaneCount() }, (_, index) => index + 1);
 
 const LIMIT = 1024 * 1024;
 const signatures = {
@@ -107,8 +126,8 @@ export function mergeUnhandled(reports) {
     }
   }
   requireGate(
-    reports.length === 2,
-    "Both integration lane diagnostics required",
+    reports.length === LANES.length,
+    "All integration lane diagnostics required",
   );
   return {
     schema: "integration-unhandled-v1",
@@ -120,10 +139,10 @@ export function mergeUnhandled(reports) {
 
 export function mergeIntegrationReports(expectedFiles, lanes) {
   requireGate(
-    lanes.length === 2 &&
-      new Set(lanes.map((lane) => lane.index)).size === 2 &&
-      lanes.every((lane) => [1, 2].includes(lane.index)),
-    "Two distinct integration lanes required",
+    lanes.length === LANES.length &&
+      new Set(lanes.map((lane) => lane.index)).size === LANES.length &&
+      lanes.every((lane) => LANES.includes(lane.index)),
+    "Complete distinct integration lanes required",
   );
   const unhandled = mergeUnhandled(lanes.map((lane) => lane.unhandled));
   requireGate(unhandled.count === 0, "Integration lane unhandled errors");
@@ -344,7 +363,7 @@ function launch(index, root, env, children) {
       "run",
       "--config",
       "vitest.integration.config.ts",
-      `--shard=${index}/2`,
+      `--shard=${index}/${LANES.length}`,
     ],
     { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] },
   );
@@ -404,6 +423,7 @@ function launch(index, root, env, children) {
 export async function runIntegration(root = process.cwd()) {
   const evidence = {
     schema: "integration-lanes-v1",
+    laneCount: LANES.length,
     started: new Date().toISOString(),
     exitStatus: 1,
     lanes: [],
@@ -442,7 +462,7 @@ export async function runIntegration(root = process.cwd()) {
       interrupted = true;
     });
     stage = "owned lane setup";
-    for (const index of [1, 2]) {
+    for (const index of LANES) {
       requireGate(!interrupted, "Integration execution interrupted");
       let database;
       try {
@@ -478,9 +498,9 @@ export async function runIntegration(root = process.cwd()) {
           children,
         ),
       );
-      evidence.lanes.push(await pending.at(-1));
     }
     const outcomes = await Promise.all(pending);
+    evidence.lanes = outcomes;
     stage = "original lane evidence";
     const lanes = outcomes.map((child) => ({
       index: child.index,

@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -7,7 +8,7 @@ import { COOKIE } from "../../src/session.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 test.use({ trace: "on" });
 test.afterAll(async () => pool.end());
 

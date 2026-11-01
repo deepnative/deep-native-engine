@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { store } from "../../src/store.ts";
@@ -8,7 +9,7 @@ import { testPool } from "../support/database.ts";
 const pool = testPool(),
   members = store(pool),
   ledger = syntheticLedger(pool);
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 test.afterAll(async () => pool.end());
 async function session(page: Page, token: string) {
   await page.context().clearCookies();

@@ -1,9 +1,10 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 test.afterAll(async () => pool.end());
 
 async function tabTo(page: Page, target: ReturnType<Page["getByRole"]>) {

@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -13,8 +14,7 @@ import {
 } from "../../src/prepared-sample-values.ts";
 import { COOKIE } from "../../src/session.ts";
 const pool = testPool();
-const origin =
-  process.env.DNE_PREPARED_BROWSER_ORIGIN ?? "http://127.0.0.1:4317";
+const origin = process.env.DNE_PREPARED_BROWSER_ORIGIN ?? browserOrigin;
 // Staff credentials belong only in password fields, never retained network traces.
 test.use({ trace: "off" });
 test.afterAll(() => pool.end());

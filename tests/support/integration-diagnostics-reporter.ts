@@ -22,7 +22,7 @@ const codes = [
   "53300",
 ] as const;
 const shard = process.env.DNE_INTEGRATION_SHARD;
-if (shard !== undefined && shard !== "1" && shard !== "2")
+if (shard !== undefined && !/^[1-8]$/u.test(shard))
   throw Error("Invalid integration lane");
 const directory = shard ? `artifacts/integration-shards/${shard}` : "artifacts";
 

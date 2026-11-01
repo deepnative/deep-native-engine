@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
@@ -21,9 +21,23 @@ import {
   integrationFiles,
   mergeIntegrationReports,
   mergeUnhandled,
+  testLaneCount,
   runIntegration,
 } from "../../scripts/integration-runner.mjs";
 
+const originalGroups = vi.hoisted(() => {
+  const value = process.env.DNE_TEST_GROUPS;
+  process.env.DNE_TEST_GROUPS = "4";
+  return value;
+});
+afterAll(() => {
+  if (originalGroups === undefined) delete process.env.DNE_TEST_GROUPS;
+  else process.env.DNE_TEST_GROUPS = originalGroups;
+});
+vi.mock("node:os", async (importOriginal) => ({
+  ...(await importOriginal()),
+  availableParallelism: () => 8,
+}));
 vi.mock("node:child_process", async (importOriginal) => ({
   ...(await importOriginal()),
   spawn: vi.fn(),
@@ -76,6 +90,8 @@ function fixture() {
   const expected = [
     path.resolve("tests/integration/first.test.ts"),
     path.resolve("tests/integration/second.test.ts"),
+    path.resolve("tests/integration/third.test.ts"),
+    path.resolve("tests/integration/fourth.test.ts"),
   ];
   const lanes = expected.map((name, position) => ({
     index: position + 1,
@@ -122,20 +138,22 @@ function fixture() {
   }));
   return { expected, lanes };
 }
-it("LAND-SCHED-04 merges both original lane reports while retaining every file, assertion and raw count", () => {
+it("LAND-SCHED-04 merges all four original lane reports while retaining every file, assertion and raw count", () => {
   const { expected, lanes } = fixture();
   const original = JSON.stringify(lanes);
   const result = mergeIntegrationReports(expected, lanes);
   expect(result).toMatchObject({
     success: true,
-    numTotalTests: 2,
-    numPassedTests: 2,
-    numTotalTestSuites: 2,
-    numPassedTestSuites: 2,
+    numTotalTests: 4,
+    numPassedTests: 4,
+    numTotalTestSuites: 4,
+    numPassedTestSuites: 4,
     numPendingTests: 0,
     startTime: 100,
   });
-  expect(result.testResults.map((file) => file.name)).toEqual(expected);
+  expect(result.testResults.map((file) => file.name)).toEqual(
+    [...expected].sort(),
+  );
   expect(result.testResults.map((file) => file.assertionResults)).toEqual(
     lanes.map((lane) => lane.report.testResults[0].assertionResults),
   );
@@ -152,7 +170,7 @@ it.each([
   [
     "foreign lane",
     (x) => {
-      x.lanes[1].index = 3;
+      x.lanes[1].index = 9;
     },
   ],
   [
@@ -245,7 +263,7 @@ it.each([
   );
 });
 it("requires valid original diagnostics from both lanes and retains only fixed signatures", () => {
-  expect(mergeUnhandled([zero(), zero()])).toEqual(zero());
+  expect(mergeUnhandled([zero(), zero(), zero(), zero()])).toEqual(zero());
   expect(() => mergeUnhandled([zero()])).toThrow();
   expect(() => mergeUnhandled([zero(), undefined])).toThrow();
   const signature = {
@@ -262,7 +280,7 @@ it("requires valid original diagnostics from both lanes and retains only fixed s
     truncated: false,
     signatures: [signature],
   };
-  const merged = mergeUnhandled([report, report]);
+  const merged = mergeUnhandled([report, report, zero(), zero()]);
   expect(merged.count).toBe(2);
   expect(JSON.stringify(merged)).not.toContain("invented private output");
   const { expected, lanes } = fixture();
@@ -425,14 +443,16 @@ it("fails a malformed administrative target without exposing it or claiming test
     error: "Integration verification failed during configuration.",
   });
 });
-function controlledNativeRun() {
+function controlledNativeRun(count = 4) {
   const root = directory();
   mkdirSync(path.join(root, "tests/integration"), { recursive: true });
-  const files = ["first", "second"].map((name) => {
-    const file = path.join(root, `tests/integration/${name}.test.ts`);
-    writeFileSync(file, "");
-    return file;
-  });
+  const files = ["first", "second", "third", "fourth"]
+    .slice(0, count)
+    .map((name) => {
+      const file = path.join(root, `tests/integration/${name}.test.ts`);
+      writeFileSync(file, "");
+      return file;
+    });
   vi.stubEnv(
     "DNE_TEST_DATABASE_URL",
     `postgresql://invented:private@127.0.0.1/dne_test_${"a".repeat(32)}`,
@@ -494,68 +514,52 @@ function controlledNativeRun() {
   });
   return { root, launched, databases };
 }
-it("LAND-SCHED-01 starts the second native lane only after the first closes", async () => {
+it("LAND-SCHED-01 starts four isolated native lanes before any lane closes", async () => {
   const { root, launched, databases } = controlledNativeRun();
   const run = runIntegration(root);
-  await vi.waitFor(() => expect(launched.length).toBeGreaterThanOrEqual(1));
-  const launchedBeforeFirstClose = launched.length;
-  launched[0].finish();
-  await vi.waitFor(() => expect(launched).toHaveLength(2));
-  launched[1].finish();
-  expect(await run).toBe(0);
-  expect(launchedBeforeFirstClose).toBe(1);
-  expect(databases.size).toBe(0);
-});
-it("LAND-SCHED-02 runs lane two after an ordinary lane-one failure and retains failure evidence", async () => {
-  const { root, launched, databases } = controlledNativeRun();
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
-  const run = runIntegration(root);
-  await vi.waitFor(() => expect(launched.length).toBeGreaterThanOrEqual(1));
-  launched[0].finish(1);
-  await vi.waitFor(() => expect(launched).toHaveLength(2));
-  launched[1].finish();
-  expect(await run).toBe(1);
-  expect(error).toHaveBeenCalled();
+  await vi.waitFor(() => expect(launched).toHaveLength(4));
+  expect(databases.size).toBe(4);
   expect(
-    JSON.parse(
-      readFileSync(
-        path.join(root, "artifacts/integration-shards.json"),
-        "utf8",
-      ),
-    ),
-  ).toMatchObject({
-    exitStatus: 1,
-    lanes: [{ exitStatus: 1 }, { exitStatus: 0 }],
-  });
+    new Set(
+      vi
+        .mocked(spawn)
+        .mock.calls.map((call) => call[2].env.DNE_TEST_DATABASE_URL),
+    ).size,
+  ).toBe(4);
+  for (const child of launched) child.finish();
+  expect(await run).toBe(0);
   expect(databases.size).toBe(0);
 });
-it("LAND-SCHED-03 does not start lane two after interruption and closes its child before cleanup", async () => {
+it("LAND-SCHED-02 retains every concurrent lane outcome when one fails", async () => {
+  const { root, launched, databases } = controlledNativeRun();
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const run = runIntegration(root);
+  await vi.waitFor(() => expect(launched).toHaveLength(4));
+  launched.forEach((child, index) => child.finish(index === 0 ? 1 : 0));
+  expect(await run).toBe(1);
+  const evidence = JSON.parse(
+    readFileSync(path.join(root, "artifacts/integration-shards.json"), "utf8"),
+  );
+  expect(evidence.lanes.map((lane) => lane.exitStatus)).toEqual([1, 0, 0, 0]);
+  expect(databases.size).toBe(0);
+});
+it("LAND-SCHED-03 waits for all interrupted children before owned cleanup", async () => {
   const { root, launched, databases } = controlledNativeRun();
   const previous = new Set(process.listeners("SIGTERM"));
   const run = runIntegration(root);
-  await vi.waitFor(() => expect(launched.length).toBeGreaterThanOrEqual(1));
+  await vi.waitFor(() => expect(launched).toHaveLength(4));
   const stop = process
     .listeners("SIGTERM")
     .find((listener) => !previous.has(listener));
   stop();
+  for (const child of launched)
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+  for (const child of launched.slice(0, 3))
+    child.emit("close", null, "SIGTERM");
   await new Promise((resolve) => setImmediate(resolve));
-  expect(launched).toHaveLength(1);
-  expect(launched[0].kill).toHaveBeenCalledWith("SIGTERM");
-  expect(databases.size).toBe(2);
-  launched[0].emit("close", null, "SIGTERM");
+  expect(databases.size).toBe(4);
+  launched[3].emit("close", null, "SIGTERM");
   expect(await run).toBe(1);
-  expect(
-    JSON.parse(
-      readFileSync(
-        path.join(root, "artifacts/integration-shards.json"),
-        "utf8",
-      ),
-    ),
-  ).toMatchObject({
-    exitStatus: 1,
-    lanes: [{ index: 1, signal: "SIGTERM" }],
-    resources: [{ removed: true }, { removed: true }],
-  });
   expect(databases.size).toBe(0);
 });
 it("refuses CLI filters before starting resources and never echoes their private values", () => {
@@ -574,7 +578,7 @@ it("keeps the two diagnostic writers distinct and rejects unbounded lane selecto
   const mkdir = vi.fn(),
     write = vi.fn();
   vi.doMock("node:fs", () => ({ mkdirSync: mkdir, writeFileSync: write }));
-  for (const lane of ["1", "2"]) {
+  for (const lane of ["1", "2", "3", "4", "5", "6", "7", "8"]) {
     vi.resetModules();
     vi.stubEnv("DNE_INTEGRATION_SHARD", lane);
     const { default: reporter } =
@@ -614,4 +618,44 @@ it("contains evidence-write failures at the real CLI boundary without leaking pr
   expect(result.stderr).toContain("evidence could not be preserved");
   expect(result.stderr).not.toContain(marker);
   expect(result.stderr).not.toContain(root);
+});
+
+it("SPEED06 chooses conservative automatic groups for available CPU and memory", () => {
+  expect(testLaneCount(12, 64 * 2 ** 30, "auto")).toBe(8);
+  expect(testLaneCount(12, 16 * 2 ** 30, "auto")).toBe(4);
+  expect(testLaneCount(8, 8 * 2 ** 30, "auto")).toBe(2);
+  expect(testLaneCount(2, 4 * 2 ** 30, "auto")).toBe(1);
+});
+it("SPEED06 honors explicit group counts without changing the full test inventory", () => {
+  for (const count of [1, 2, 3, 4, 5, 6, 7, 8])
+    expect(testLaneCount(12, 16 * 2 ** 30, String(count))).toBe(count);
+});
+it.each(["0", "9", "-1", "2.5", "", " 2", "2\n", "private-invalid-value"])(
+  "SPEED06 rejects invalid group selection",
+  (value) => {
+    expect(() => testLaneCount(12, 16 * 2 ** 30, value)).toThrow(
+      "Invalid test group count",
+    );
+  },
+);
+
+it("SPEED06 runs and aggregates a complete two-group native campaign", async () => {
+  vi.stubEnv("DNE_TEST_GROUPS", "2");
+  vi.resetModules();
+  const { runIntegration: configuredRun } =
+    await import("../../scripts/integration-runner.mjs");
+  const { root, launched, databases } = controlledNativeRun(2);
+  const run = configuredRun(root);
+  await vi.waitFor(() => expect(launched).toHaveLength(2));
+  for (const child of launched) child.finish();
+  expect(await run).toBe(0);
+  expect(databases.size).toBe(0);
+  expect(
+    JSON.parse(
+      readFileSync(
+        path.join(root, "artifacts/integration-shards.json"),
+        "utf8",
+      ),
+    ).laneCount,
+  ).toBe(2);
 });

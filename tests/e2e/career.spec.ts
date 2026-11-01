@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
 import { COOKIE } from "../../src/session.ts";
 import { hash } from "../../src/store.ts";
@@ -5,7 +6,7 @@ import { testPool } from "../support/database.ts";
 const pool = testPool();
 test.afterAll(async () => pool.end());
 
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 
 async function onboard(page: Page, background: string, goal: string) {
   await page.goto("/");

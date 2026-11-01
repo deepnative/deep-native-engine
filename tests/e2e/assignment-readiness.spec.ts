@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -91,7 +92,7 @@ test("[L83] three learning backgrounds follow an exact prerequisite before choos
       index === 0
         ? page.context()
         : await browser.newContext({
-            baseURL: "http://127.0.0.1:4317",
+            baseURL: browserOrigin,
             viewport: page.viewportSize()!,
             isMobile: !desktop,
             hasTouch: !desktop,
@@ -136,7 +137,7 @@ test("[L83] three learning backgrounds follow an exact prerequisite before choos
       expect(after.rows[0].count).toBe(before.rows[0].count);
 
       const forged = await learnerPage.request.post("/assignments/select", {
-        headers: { origin: "http://127.0.0.1:4317" },
+        headers: { origin: browserOrigin },
         form: {
           csrf,
           content_id: assignmentId,
@@ -193,7 +194,7 @@ test("[L83] three learning backgrounds follow an exact prerequisite before choos
   expect(staleSource.status()).toBe(409);
   await page.goto("/learn");
   const staleChoice = await page.request.post("/assignments/select", {
-    headers: { origin: "http://127.0.0.1:4317" },
+    headers: { origin: browserOrigin },
     form: {
       csrf: await page.locator('input[name="csrf"]').first().inputValue(),
       content_id: assignmentId,

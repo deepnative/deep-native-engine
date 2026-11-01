@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
@@ -6,7 +7,7 @@ import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 test.afterAll(async () => pool.end());
 
 function sample(id: string, version: number, title: string): DraftContent {

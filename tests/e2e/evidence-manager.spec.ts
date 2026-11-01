@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
@@ -11,7 +12,7 @@ import {
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
+const origin = browserOrigin;
 test.afterAll(async () => {
   await pool.end();
 });

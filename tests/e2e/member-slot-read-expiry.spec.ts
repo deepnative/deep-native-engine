@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -228,7 +229,7 @@ for (const [index, background] of [
       });
       await recover.focus();
       await page.keyboard.press("Enter");
-      await expect(page).toHaveURL("http://127.0.0.1:4317/");
+      await expect(page).toHaveURL(`${browserOrigin}/`);
       await expect(
         page.getByRole("button", { name: "Start my learning path" }),
       ).toBeVisible();

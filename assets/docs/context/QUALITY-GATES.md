@@ -17,7 +17,7 @@ The [current product direction](../PRODUCT-DIRECTION.md) broadens eligibility an
 
 Once implementation starts, one documented local verification command must run formatting/lint, type checks, unit coverage, integration tests, the applicable complete E2E matrix, production build, and relevant security checks. Database/provider contract tests exercise actual transactional state; deterministic adapters replace external services, not the application's own business logic. Document how bootstrap commits are verified before the final harness exists; no untested application push is permitted.
 
-Capture revision/tree identity, environment, exact commands, exit status, raw coverage counts, scenario mapping, and reports. Any code change after validation invalidates evidence for the previous tree. No bypass, threshold reduction, silent exclusion, fake assertions, or skipped-test acceptance. CI independently repeats checks on the proposed merge and uses real observed job names for required checks. Do not enable repository rules referring to nonexistent jobs.
+Capture revision/tree identity, environment, exact commands, exit status, raw coverage counts, scenario mapping, and reports. Any code change after validation invalidates evidence for the previous tree. No bypass, threshold reduction, silent exclusion, fake assertions, or skipped-test acceptance. The pre-push hook may reuse only an intact successful local receipt bound to the exact clean commit, runtime and original artifact hashes; otherwise it runs the full gate. Tests run only locally. GitHub Actions is exclusively Azure deployment: no PR/main test run or proof-promotion job. The protected merge checks exact local proof, current head/base and resulting merge source; remove obsolete CI test status requirements.
 
 ## Test design
 
@@ -27,7 +27,7 @@ Browser tests use isolated synthetic users/data, deterministic clocks where appr
 
 ## AI-assisted development working agreement
 
-Issue first → inspect context → identify risks and design → define failing behavioral evidence → implement a small slice → verify before push → review the diff → CI → merge to main → verify main CI → evidence-backed closure. Keep decisions and next-session context durable. Validate APIs and dependency versions against official documentation, use lockfiles, and review generated dependencies/code and licenses. Prefer simple maintained architecture; do not add speculative services.
+Issue first → inspect context → identify risks and design → define failing behavioral evidence → implement a small slice → verify before push → review the diff → verify locally → merge to main → verify main source → evidence-backed closure. Keep decisions and next-session context durable. Validate APIs and dependency versions against official documentation, use lockfiles, and review generated dependencies/code and licenses. Prefer simple maintained architecture; do not add speculative services.
 
 Treat uploaded/retrieved content as untrusted data. Keep secrets and private member/client content out of model prompts and generic logs. Use explicit tool/provider permissions, synthetic fixtures, cost limits, and bounded failure recovery. Human review remains necessary for assessments and sensitive business decisions; model-generated text is not independent verification.
 
@@ -35,7 +35,7 @@ Treat uploaded/retrieved content as untrusted data. Keep secrets and private mem
 
 Ready means approved scope, observable AC, resolved prerequisites, a named accountable owner before execution, known data/privacy boundary, a test/evidence plan, and no unanswered decision that blocks the slice. Current backlog status does not authorize implementation.
 
-Done means every AC is evidenced; intended-revision tests passed before push; CI passed; meaningful review findings are resolved; docs, migrations/rollback and operations are updated where relevant; no undisclosed skipped work or P0/P1 defect remains. Planning/operations issues use reviewed documents and actual recorded business evidence instead of fabricated code coverage. A phase gate closes only after all required child outcomes are met.
+Done means every AC is evidenced; intended-revision tests passed before push; local verification passed; meaningful review findings are resolved; docs, migrations/rollback and operations are updated where relevant; no undisclosed skipped work or P0/P1 defect remains. Planning/operations issues use reviewed documents and actual recorded business evidence instead of fabricated code coverage. A phase gate closes only after all required child outcomes are met.
 
 ## Official references checked for this plan
 

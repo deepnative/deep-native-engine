@@ -1,3 +1,4 @@
+import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -18,7 +19,7 @@ test("[L64] private sample availability respects verified coverage, time zone an
   browser,
   page,
 }, testInfo) => {
-  const origin = "http://127.0.0.1:4317";
+  const origin = browserOrigin;
   const outsider = await browser.newContext({ baseURL: origin });
   const technical = await browser.newContext({ baseURL: origin });
   const otherLearner = await browser.newContext({ baseURL: origin });

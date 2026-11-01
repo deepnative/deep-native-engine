@@ -227,8 +227,6 @@ class RepositoryFixture(unittest.TestCase):
         self.assertIn("ref-sha256:", result.stderr)
         self.assertNotIn(marker, result.stdout + result.stderr)
         self.assertNotIn(private_entry, result.stdout + result.stderr)
-        workflow = (self.root / ".github/workflows/repository-checks.yml").read_text()
-        self.assertIn("steps.artifact_scan.outcome == 'success'", workflow)
 
     def test_zip_scan_accepts_safe_trace_and_catches_boundary_spanning_marker(self):
         artifact = self.root / "artifacts/browser-results/trace.zip"
@@ -354,41 +352,14 @@ class RepositoryFixture(unittest.TestCase):
         self.assertIn("ref-sha256:", str(caught.exception))
         self.assertNotIn(marker, str(caught.exception))
 
-    def test_ci_artifact_display_and_upload_require_safe_scan(self):
-        workflow = (self.root / ".github/workflows/repository-checks.yml").read_text()
-        self.assertLess(workflow.index("id: artifact_scan"), workflow.index("name: Show verification evidence"))
-        self.assertLess(workflow.index("id: artifact_scan"), workflow.index("name: Preserve verification reports"))
-        self.assertEqual(workflow.count("steps.artifact_scan.outcome == 'success'"), 2)
-
-    def test_ci_ubuntu_archive_selection_preserves_signed_sources_and_denies_unknown_setup(self):
-        workflow = (self.root / ".github/workflows/repository-checks.yml").read_text()
-        name = "      - name: Select the Ubuntu archive directly\n"
-        self.assertIn(name, workflow, "CIAPT01: browser setup must avoid mirror failover")
-        self.assertLess(workflow.index(name), workflow.index("npx playwright install --with-deps chromium firefox webkit"))
-        block = workflow.split(name, 1)[1].split("      - ", 1)[0]
-        script = "\n".join(line[10:] for line in block.split("        run: |\n", 1)[1].splitlines())
-        binary = self.root / "fixture-bin"
-        binary.mkdir()
-        sudo = binary / "sudo"
-        sudo.write_text('#!/bin/sh\nexec "$@"\n')
-        sudo.chmod(0o700)
-        sources = self.root / "ubuntu.sources"
-        mirror = "mirror+file:/etc/apt/apt-mirrors.txt"
-        original = f"Types: deb\nURIs: {mirror}\nSuites: noble noble-updates noble-security\nComponents: main universe restricted multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n"
-        env = {**os.environ, "PATH": str(binary) + os.pathsep + os.environ["PATH"]}
-        for value in (original, original.replace(mirror, mirror.replace(".txt", "Xtxt"))):
-            with self.subTest(source=value):
-                sources.write_text(value)
-                result = subprocess.run(
-                    ["bash", "-e", "-c", script.replace("/etc/apt/sources.list.d/ubuntu.sources", str(sources))],
-                    env=env, capture_output=True, text=True,
-                )
-                if value == original:
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertEqual(sources.read_text(), original.replace(mirror, "https://archive.ubuntu.com/ubuntu"))
-                else:
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertEqual(sources.read_text(), value)
+    def test_owner_deploy_only_actions(self):
+        workflows = {p.name for p in (self.root / ".github/workflows").glob("*.yml")}
+        self.assertEqual(workflows, {"deploy-azure.yml"})
+        workflow = (self.root / ".github/workflows/deploy-azure.yml").read_text()
+        self.assertNotIn("workflow_run:", workflow)
+        self.assertNotIn("repository-checks", workflow)
+        self.assertNotIn("make verify", workflow)
+        self.assertIn("branches: [main]", workflow)
 
     def test_local_circle_capacity_change_requires_reviewed_gate_update(self):
         path = self.root / "assets/docs/content/circles/preview-circles.json"
@@ -550,7 +521,7 @@ class RepositoryFixture(unittest.TestCase):
                 with self.assertRaisesRegex(gate.GateError, "Outside verified"):
                     gate.validate(self.root)
                 path.unlink()
-        for name in (".github/workflows/product-pages.yml", "site/index.html", "site/styles.css", "site/favicon.svg"):
+        for name in ("site/index.html", "site/styles.css", "site/favicon.svg"):
             with self.subTest(missing=name):
                 path = self.root / name
                 original = path.read_bytes()
@@ -583,21 +554,6 @@ class RepositoryFixture(unittest.TestCase):
                 with self.assertRaisesRegex(gate.GateError, "Unsafe product site"):
                     gate.validate(self.root)
         page.write_text(original)
-
-    def test_pages_stages_only_the_reviewed_sample_module(self):
-        import textwrap
-        workflow = (self.root / ".github/workflows/product-pages.yml").read_text()
-        stamp = workflow.split("      - name: Stamp the public build revision\n", 1)[1]
-        script = textwrap.dedent(stamp.split("        run: |\n", 1)[1].split("      - name: Configure Pages\n", 1)[0])
-        (self.root / "public/private-example.txt").write_text("must not be published")
-        result = subprocess.run(["sh", "-eu", "-c", script], cwd=self.root,
-                                env={**os.environ, "DNE_REVISION": "a" * 40}, capture_output=True)
-        self.assertEqual(result.returncode, 0)
-        self.assertEqual({p.name for p in (self.root / "site").iterdir()},
-                         {"index.html", "styles.css", "favicon.svg", "demo.js", "build.json"})
-        self.assertEqual((self.root / "site/demo.js").read_bytes(),
-                         (self.root / "public/pages-demo.js").read_bytes())
-        self.assertEqual(json.loads((self.root / "site/build.json").read_text()), {"revision": "a" * 40})
 
     def test_product_site_rejects_svg_script_and_css_remote_resources(self):
         icon = self.root / "site/favicon.svg"
@@ -776,6 +732,130 @@ class RepositoryFixture(unittest.TestCase):
             with self.subTest(line=line), self.assertRaisesRegex(gate.GateError, "Malformed"):
                 gate.validate_push(self.root, line)
 
+    def passed_receipt(self):
+        revision = gate.state(self.root)
+        artifacts = self.root / "artifacts"
+        artifacts.mkdir(exist_ok=True)
+        (artifacts / "repository-verification.json").write_text(json.dumps({**revision, "exit_status": 0}))
+        (artifacts / "application-verification.json").write_text(json.dumps({"revision": revision, "exitStatus": 0}))
+        gate.write_verification_receipt(self.root)
+
+    def test_exact_unchanged_receipt_avoids_second_full_run(self):
+        self.passed_receipt()
+        with patch.object(gate, "verify", side_effect=AssertionError("duplicate full run")):
+            self.assertEqual(gate.pre_push(self.root, self.push_line()), 0)
+
+    def test_altered_report_receipt_requires_full_verification(self):
+        self.passed_receipt()
+        (self.root / "artifacts/application-verification.json").write_text('{"exitStatus":1}')
+        with patch.object(gate, "verify", return_value=1) as verify, self.assertRaises(gate.GateError):
+            gate.pre_push(self.root, self.push_line())
+        verify.assert_called_once()
+
+    def test_new_commit_cannot_reuse_receipt(self):
+        self.passed_receipt()
+        (self.root / "README.md").write_text("new source")
+        gate.git(self.root, "add", "README.md")
+        gate.git(self.root, "commit", "-qm", "new source")
+        with patch.object(gate, "verify", return_value=1), self.assertRaises(gate.GateError):
+            gate.pre_push(self.root, self.push_line())
+
+    def test_failed_reports_cannot_create_receipt(self):
+        self.passed_receipt()
+        (self.root / "artifacts/repository-verification.json").write_text('{"exit_status":1}')
+        with self.assertRaises(gate.GateError):
+            gate.write_verification_receipt(self.root)
+
+    def test_new_failed_gate_invalidates_previous_receipt(self):
+        self.passed_receipt()
+        with patch.object(gate, "validate", side_effect=gate.GateError("failed gate")):
+            self.assertEqual(gate.verify(self.root), 1)
+        self.assertFalse(gate.verification_receipt_path(self.root).exists())
+
+    def browser_blobs(self, content=None, count=4):
+        import hashlib
+        directory = self.root / "artifacts/browser-shards/blobs"
+        resources = directory / "resources"
+        resources.mkdir(parents=True)
+        trace = io.BytesIO()
+        with zipfile.ZipFile(trace, "w") as archive:
+            archive.writestr("test.trace", content or '{"type":"context-options"}')
+        data = trace.getvalue()
+        name = "resources/" + hashlib.sha1(data).hexdigest() + ".zip"
+        (directory / name).write_bytes(data)
+        for index in range(1, count + 1):
+            with zipfile.ZipFile(directory / f"shard-{index}.zip", "w") as archive:
+                archive.writestr("report.jsonl", json.dumps({"shard": index}) + "\n")
+                archive.writestr(name, data)
+        return directory, name
+
+    def test_browser_blobs_preserve_originals_and_scan_all_expanded_content(self):
+        directory, name = self.browser_blobs()
+        with self.assertRaisesRegex(gate.GateError, "Nested archive"):
+            gate.scan_artifacts(self.root)
+        gate.preserve_browser_blobs(self.root, 4)
+        self.assertEqual(gate.scan_artifacts(self.root)["status"], "passed")
+        manifest = json.loads((directory.parent / "blob-manifest.json").read_text())
+        self.assertEqual(len(manifest["archives"]), 4)
+        vault = gate.verification_git_directory(self.root) / manifest["directory"]
+        for index in range(1, 5):
+            self.assertEqual(json.loads((directory / f"shard-{index}.jsonl").read_text()), {"shard": index})
+            self.assertTrue((vault / f"shard-{index}.zip").is_file())
+        self.assertTrue((directory / name).is_file())
+        self.assertFalse(list(directory.glob("shard-*.zip")))
+
+    def test_browser_packaging_accepts_complete_smaller_selected_count(self):
+        directory, _ = self.browser_blobs(count=2)
+        gate.preserve_browser_blobs(self.root, 2)
+        manifest = json.loads((directory.parent / "blob-manifest.json").read_text())
+        self.assertEqual(len(manifest["archives"]), 2)
+        self.assertEqual(gate.scan_artifacts(self.root)["status"], "passed")
+
+    def test_browser_blobs_reject_changed_or_unsafe_expanded_resources(self):
+        directory, name = self.browser_blobs()
+        (directory / name).write_bytes(b"changed")
+        with self.assertRaises(gate.GateError):
+            gate.preserve_browser_blobs(self.root, 4)
+        self.assertEqual(len(list(directory.glob("shard-*.zip"))), 4)
+
+    def test_expanded_browser_traces_still_reject_credential_markers(self):
+        self.browser_blobs("ghp_" + "q" * 36)
+        gate.preserve_browser_blobs(self.root, 4)
+        with self.assertRaisesRegex(gate.GateError, "github-token"):
+            gate.scan_artifacts(self.root)
+
+    def test_browser_blobs_reject_path_traversal_before_moving_originals(self):
+        directory, _ = self.browser_blobs()
+        with zipfile.ZipFile(directory / "shard-1.zip", "a") as archive:
+            archive.writestr("../escaped", "untrusted")
+        with self.assertRaises(gate.GateError):
+            gate.preserve_browser_blobs(self.root, 4)
+        self.assertEqual(len(list(directory.glob("shard-*.zip"))), 4)
+        self.assertFalse((self.root / "escaped").exists())
+
+    def test_browser_blob_original_tampering_invalidates_receipt(self):
+        self.browser_blobs()
+        gate.preserve_browser_blobs(self.root, 4)
+        self.passed_receipt()
+        manifest = json.loads((self.root / "artifacts/browser-shards/blob-manifest.json").read_text())
+        vault = gate.verification_git_directory(self.root) / manifest["directory"]
+        (vault / "shard-1.zip").write_bytes(b"changed")
+        self.assertFalse(gate.has_verification_receipt(self.root))
+
+    def test_changed_test_group_configuration_invalidates_receipt(self):
+        with patch.dict(os.environ, DNE_TEST_GROUPS="2"):
+            self.passed_receipt()
+        with patch.dict(os.environ, DNE_TEST_GROUPS="4"):
+            self.assertFalse(gate.has_verification_receipt(self.root))
+
+    def test_invalid_groups_fail_before_full_gate_resources(self):
+        with patch.dict(os.environ, DNE_TEST_GROUPS="private-invalid-selection"), patch.object(gate, "validate") as validate:
+            self.assertEqual(gate.verify(self.root), 1)
+        validate.assert_not_called()
+        report = (self.root / "artifacts/repository-verification.json").read_text()
+        self.assertIn("Invalid test group count", report)
+        self.assertNotIn("private-invalid-selection", report)
+
     def test_failed_verification_blocks_push(self):
         with patch.object(gate, "verify", return_value=1), self.assertRaisesRegex(gate.GateError, "verification failed"):
             gate.pre_push(self.root, self.push_line())
@@ -843,7 +923,8 @@ class RepositoryFixture(unittest.TestCase):
                         gate.unittest.defaultTestLoader, "discover", return_value=suite), patch.object(
                         gate, "verify_application", return_value={"unitCoverage": {}, "journeys": {}}), patch.object(
                         gate, "verify_local_learning", return_value={"cases": {"reader-checks": 1}}), patch.object(
-                        gate, "scan_artifacts", return_value={"status": "passed"}):
+                        gate, "scan_artifacts", return_value={"status": "passed"}), patch.object(
+                        gate, "write_verification_receipt"):
                     self.assertEqual(gate.verify(self.root), expected_status)
                 report = (self.root / "artifacts/repository-verification.json").read_text()
                 self.assertNotIn(marker, report + stdout.getvalue() + stderr.getvalue())
@@ -890,36 +971,23 @@ class RepositoryFixture(unittest.TestCase):
         self.assertIn("console-restored", result)
 
 
-class PagesRevisionSelection(unittest.TestCase):
-    """Execute the real pre-checkout selector; fake only the gh API transport."""
-
+class AzureRevisionSelection(unittest.TestCase):
+    """Run the deployment selector locally; GitHub never runs this test."""
     SHA = "a" * 40
     OTHER_SHA = "b" * 40
     REPO = "deepnative/deep-native-engine"
-    PREFIX = f"repos/{REPO}"
-    WORKFLOW = ".github/workflows/repository-checks.yml"
-    MAIN = f"{PREFIX}/commits/main"
-    WORKFLOW_API = f"{PREFIX}/actions/workflows/repository-checks.yml"
-    EXACT = f"{PREFIX}/actions/runs/600"
-    LIST = f"{WORKFLOW_API}/runs?branch=main&event=push&status=success&head_sha={SHA}&per_page=100"
+    MAIN = f"repos/{REPO}/commits/main"
 
     def fixtures(self):
-        identity = {"id": 7, "full_name": self.REPO}
-        run = {"id": 600, "workflow_id": 42, "path": self.WORKFLOW,
-               "event": "push", "head_branch": "main", "head_sha": self.SHA,
-               "run_attempt": 1, "status": "completed", "conclusion": "success",
-               "repository": identity, "head_repository": dict(identity)}
-        return {self.MAIN: {"sha": self.SHA},
-                self.WORKFLOW_API: {"id": 42, "path": self.WORKFLOW, "state": "active"},
-                self.EXACT: run, self.LIST: {"total_count": 0, "workflow_runs": []}}
+        return {self.MAIN: {"sha": self.SHA}}
 
     def execute(self, fixtures=None, **overrides):
         import textwrap
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            workflow = (SOURCE / ".github/workflows/product-pages.yml").read_text()
-            step = workflow.split("      - name: Select the verified current main revision\n", 1)[1]
-            body = step.split("        run: |\n", 1)[1].split("      - name: Check out the verified revision\n", 1)[0]
+            workflow = (SOURCE / ".github/workflows/deploy-azure.yml").read_text()
+            step = workflow.split("      - name: Select the current main revision\n", 1)[1]
+            body = step.split("        run: |\n", 1)[1].split("      - name: Check out the selected revision\n", 1)[0]
             (root / "selector.sh").write_text(textwrap.dedent(body))
             (root / "fixtures.json").write_text(json.dumps(fixtures or self.fixtures()))
             # No network or real token: endpoint-specific responses, with jq support
@@ -965,7 +1033,8 @@ class PagesRevisionSelection(unittest.TestCase):
             env.update(PATH=str(root) + os.pathsep + env["PATH"], DNE_FAKE_ROOT=str(root),
                        GH_TOKEN="synthetic-no-real-credential", GITHUB_OUTPUT=str(root / "output"),
                        DNE_REPOSITORY=self.REPO, DNE_REPOSITORY_ID="7", DNE_EVENT_SHA=self.SHA,
-                       DNE_EVENT_NAME="workflow_run", DNE_EVENT_RUN_ID="600", DNE_EVENT_ATTEMPT="1")
+                       DNE_EVENT_NAME="push", DNE_EVENT_RUN_ID="600", DNE_EVENT_ATTEMPT="1")
+            env.update(DNE_REF="refs/heads/main")
             env.update(overrides)
             result = subprocess.run(["bash", str(root / "selector.sh")], env=env,
                                     text=True, capture_output=True, timeout=15)
@@ -973,125 +1042,27 @@ class PagesRevisionSelection(unittest.TestCase):
             calls = [json.loads(line) for line in (root / "calls.jsonl").read_text().splitlines()] if (root / "calls.jsonl").exists() else []
             return result, output, calls
 
-    def assert_denied(self, fixtures=None, **env):
-        result, output, calls = self.execute(fixtures, **env)
+    def test_selects_current_main_without_any_test_run_lookup(self):
+        for event in ["push", "workflow_dispatch"]:
+            result, output, calls = self.execute(DNE_EVENT_NAME=event)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(output, f"sha={self.SHA}\neligible=true\n")
+            self.assertEqual(len(calls), 1)
+            self.assertIn(self.MAIN, calls[0])
+
+    def test_stale_main_skips_and_invalid_source_or_api_fails_closed(self):
+        result, output, _ = self.execute(DNE_EVENT_SHA=self.OTHER_SHA)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(output, "eligible=false\n")
+        for field, value in [("DNE_REF", "refs/heads/feature"), ("DNE_EVENT_NAME", "pull_request"),
+                             ("DNE_EVENT_SHA", "bad"), ("DNE_REPOSITORY", "../bad")]:
+            result, output, _ = self.execute(**{field: value})
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(output, "")
+        result, output, _ = self.execute({self.MAIN: {"__error__": "private-failure"}})
         self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("private-failure", result.stdout + result.stderr)
         self.assertEqual(output, "")
-        self.assertNotIn("synthetic-private-api-response", result.stdout + result.stderr)
-        self.assertNotIn("synthetic-no-real-credential", result.stdout + result.stderr)
-        return calls
-
-    def test_successful_exact_event_does_not_need_refreshed_run_list(self):
-        result, output, calls = self.execute()
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(output, f"sha={self.SHA}\neligible=true\n")
-        self.assertTrue(any(self.EXACT in call for call in calls))
-        self.assertFalse(any(self.LIST in call for call in calls))
-
-    def test_stale_event_skips_without_reading_verification(self):
-        result, output, calls = self.execute(DNE_EVENT_SHA=self.OTHER_SHA)
-        self.assertEqual(result.returncode, 0)
-        self.assertEqual(output, "eligible=false\n")
-        self.assertEqual(len(calls), 1)
-
-    def test_changed_main_during_verification_skips_without_emitting_sha(self):
-        data = self.fixtures()
-        data[self.MAIN] = [{"sha": self.SHA}, {"sha": self.OTHER_SHA}]
-        result, output, _ = self.execute(data)
-        self.assertEqual(result.returncode, 0)
-        self.assertEqual(output, "eligible=false\n")
-
-    def test_event_run_identity_and_result_must_all_match(self):
-        import copy
-        for field, value in [("id", 601), ("id", True), ("workflow_id", 43),
-                             ("path", ".github/workflows/other.yml"), ("path", self.WORKFLOW + "@other"),
-                             ("event", "pull_request"), ("head_branch", "feature"),
-                             ("head_sha", self.OTHER_SHA), ("run_attempt", 2), ("run_attempt", True),
-                             ("status", "in_progress"), ("conclusion", "failure"),
-                             ("conclusion", "cancelled"), ("conclusion", "skipped"),
-                             ("conclusion", "neutral"), ("conclusion", None),
-                             ("repository", {"id": 8, "full_name": self.REPO}),
-                             ("repository", {"id": 7, "full_name": "other/repo"}),
-                             ("head_repository", {"id": 8, "full_name": "other/repo"}),
-                             ("head_repository", None)]:
-            with self.subTest(field=field, value=value):
-                data = copy.deepcopy(self.fixtures());data[self.EXACT][field] = value
-                self.assert_denied(data)
-        for field in self.fixtures()[self.EXACT]:
-            with self.subTest(missing=field):
-                data = self.fixtures();del data[self.EXACT][field]
-                self.assert_denied(data)
-
-    def test_documented_run_path_main_ref_and_later_matching_attempt(self):
-        data = self.fixtures();data[self.EXACT]["path"] += "@main"
-        data[self.EXACT]["run_attempt"] = 2
-        result, output, _ = self.execute(data, DNE_EVENT_ATTEMPT="2")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(output, f"sha={self.SHA}\neligible=true\n")
-
-    def test_workflow_identity_must_resolve_to_active_expected_path(self):
-        for value in [{"id": True, "path": self.WORKFLOW, "state": "active"},
-                      {"id": 42, "path": ".github/workflows/other.yml", "state": "active"},
-                      {"id": 42, "path": self.WORKFLOW, "state": "disabled_manually"}, {}, None]:
-            with self.subTest(value=value):
-                data = self.fixtures();data[self.WORKFLOW_API] = value
-                self.assert_denied(data)
-
-    def test_api_uncertainty_and_malformed_responses_fail_closed_privately(self):
-        for endpoint in [self.MAIN, self.WORKFLOW_API, self.EXACT]:
-            for value in [{"__error__": "synthetic-private-api-response"},
-                          "synthetic-private-api-response", "null", "[]", {}]:
-                with self.subTest(endpoint=endpoint, value=value):
-                    data = self.fixtures();data[endpoint] = value
-                    self.assert_denied(data)
-        data = self.fixtures();data[self.MAIN] = [{"sha": self.SHA}, {"__error__": "synthetic-private-api-response"}]
-        self.assert_denied(data)
-
-    def test_invalid_event_metadata_never_selects_a_revision(self):
-        for field, value in [("DNE_EVENT_NAME", "pull_request"), ("DNE_EVENT_RUN_ID", ""),
-                             ("DNE_EVENT_RUN_ID", "600/attempts/1"), ("DNE_EVENT_ATTEMPT", "0"),
-                             ("DNE_EVENT_ATTEMPT", ""), ("DNE_REPOSITORY_ID", ""),
-                             ("DNE_REPOSITORY_ID", "-1"), ("DNE_REPOSITORY", "../other/repo"),
-                             ("DNE_EVENT_SHA", "bad\neligible=true"), ("DNE_EVENT_SHA", "")]:
-            with self.subTest(field=field, value=value):
-                self.assert_denied(**{field: value})
-
-    def test_manual_dispatch_independently_checks_exact_successful_current_run(self):
-        data = self.fixtures();data[self.LIST] = {"total_count": 1, "workflow_runs": [dict(data[self.EXACT])]}
-        result, output, calls = self.execute(data, DNE_EVENT_NAME="workflow_dispatch", DNE_EVENT_RUN_ID="", DNE_EVENT_ATTEMPT="")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(output, f"sha={self.SHA}\neligible=true\n")
-        self.assertTrue(any(self.LIST in call for call in calls))
-        self.assertTrue(any(self.EXACT in call for call in calls))
-        data[self.EXACT]["conclusion"] = "failure"
-        self.assert_denied(data, DNE_EVENT_NAME="workflow_dispatch")
-
-    def test_manual_dispatch_exact_lookup_cannot_trust_only_the_list(self):
-        for field, value in [("id", 601), ("run_attempt", 2), ("workflow_id", 43),
-                             ("head_repository", None), ("status", "in_progress")]:
-            with self.subTest(field=field):
-                data = self.fixtures()
-                data[self.LIST] = {"workflow_runs": [dict(data[self.EXACT])]}
-                data[self.EXACT] = dict(data[self.EXACT], **{field: value})
-                self.assert_denied(data, DNE_EVENT_NAME="workflow_dispatch")
-
-    def test_manual_dispatch_missing_or_wrong_list_evidence_cannot_publish(self):
-        for value in [{"total_count": 0, "workflow_runs": []}, {}, None,
-                      {"workflow_runs": "wrong"}, {"workflow_runs": [{"id": 600}]},
-                      {"workflow_runs": [{"id": 600, "head_sha": self.SHA, "conclusion": "success"}]},
-                      {"__error__": "synthetic-private-api-response"}]:
-            with self.subTest(value=value):
-                data = self.fixtures();data[self.LIST] = value
-                self.assert_denied(data, DNE_EVENT_NAME="workflow_dispatch")
-
-    def test_manual_dispatch_stale_list_and_changed_main_cannot_publish(self):
-        data = self.fixtures();data[self.LIST] = {"workflow_runs": [dict(data[self.EXACT], head_sha=self.OTHER_SHA)]}
-        self.assert_denied(data, DNE_EVENT_NAME="workflow_dispatch")
-        data = self.fixtures();data[self.LIST] = {"workflow_runs": [data[self.EXACT]]}
-        data[self.MAIN] = [{"sha": self.SHA}, {"sha": self.OTHER_SHA}]
-        result, output, _ = self.execute(data, DNE_EVENT_NAME="workflow_dispatch")
-        self.assertEqual(result.returncode, 0)
-        self.assertEqual(output, "eligible=false\n")
 
 
 class AzureReleasePreservation(unittest.TestCase):
@@ -1209,7 +1180,7 @@ class AzureReleasePreservation(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             workflow = (SOURCE / ".github/workflows/deploy-azure.yml").read_text()
-            step = workflow.split("      - name: Roll the Container App to the verified images\n", 1)[1]
+            step = workflow.split("      - name: Roll the Container App to the selected images\n", 1)[1]
             body = step.split("        run: |\n", 1)[1].split("      - name: Wait for the revision", 1)[0]
             (root / "roll.sh").write_text(textwrap.dedent(body))
             app = self.app()
