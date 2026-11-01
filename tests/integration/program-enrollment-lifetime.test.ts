@@ -11,6 +11,11 @@ import { hash } from "../../src/store.ts";
 import { app } from "../../src/app.ts";
 import { programEnrollmentStore } from "../../src/program-enrollments.ts";
 
+import {
+  programEnrollmentObservation,
+  type ProgramEnrollmentObservation,
+} from "../support/program-enrollment-observation.ts";
+
 const intent = {
   programVersion: 1,
   termVersion: 1,
@@ -33,13 +38,19 @@ const formFields = (html: string) =>
       ...html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g),
     ].map((match) => [match[1]!, match[2]!]),
   );
-async function ready() {
-  const f = await programEnrollmentFixture();
+async function ready(observation?: ProgramEnrollmentObservation) {
+  const step: ProgramEnrollmentObservation["step"] =
+    observation?.step ?? ((_phase, action) => action());
+  const f = await programEnrollmentFixture(observation);
   try {
-    const editorial = await f.publish();
-    const admin = await f.staff("platform_admin");
+    const editorial = await step("publication", () => f.publish());
+    const admin = await step("admin", () => f.staff("platform_admin"));
     expect(
-      (await f.programs.change(admin.token, "open", 1, PROGRAM_DIGEST)).kind,
+      (
+        await step("open", () =>
+          f.programs.change(admin.token, "open", 1, PROGRAM_DIGEST),
+        )
+      ).kind,
     ).toBe("ready");
     return { ...f, editorial, admin };
   } catch (error) {
@@ -101,53 +112,77 @@ it("PROGRAM-03/ENR-03 admits only one concurrent winner for the last local simul
     await f.close();
   }
 }, 15000);
-it("PROGRAM-02/03 serializes concurrent same-account keys into one immutable receipt", async () => {
-  const f = await ready();
+it("PROGRAM-02/03 serializes concurrent same-account keys into one immutable receipt", async ({
+  task,
+  onTestFinished,
+}) => {
+  const observation = programEnrollmentObservation(task.meta);
+  onTestFinished(() => observation.seal());
+  const f = await observation.step("ready", () => ready(observation));
   try {
-    const member = await f.member();
+    const member = await observation.step("member", () => f.member());
     const result = await Promise.all([
-      f.programs.enroll(member.token, randomUUID(), intent),
-      f.programs.enroll(member.token, randomUUID(), intent),
+      observation.step("concurrent-admission-a", () =>
+        f.programs.enroll(member.token, randomUUID(), intent),
+      ),
+      observation.step("concurrent-admission-b", () =>
+        f.programs.enroll(member.token, randomUUID(), intent),
+      ),
     ]);
     expect(result[0]).toEqual(result[1]);
     expect(result[0].kind).toBe("ready");
     expect(f.state.inserts).toBe(1);
-    const receipt = await f.programs.mine(member.token);
+    const receipt = await observation.step("receipt", () =>
+      f.programs.mine(member.token),
+    );
     if (receipt.kind !== "ready" || !receipt.value)
       throw Error("Own receipt missing");
     await expect(
-      f.pool.query(
-        "UPDATE local_program_enrollments SET enrolled_at=clock_timestamp() WHERE id=$1",
-        [receipt.value.id],
+      observation.step("immutable-update", () =>
+        f.pool.query(
+          "UPDATE local_program_enrollments SET enrolled_at=clock_timestamp() WHERE id=$1",
+          [receipt.value!.id],
+        ),
       ),
     ).rejects.toThrow("immutable");
     await expect(
-      f.pool.query("DELETE FROM local_program_enrollments WHERE id=$1", [
-        receipt.value.id,
-      ]),
+      observation.step("retained-delete", () =>
+        f.pool.query("DELETE FROM local_program_enrollments WHERE id=$1", [
+          receipt.value!.id,
+        ]),
+      ),
     ).rejects.toThrow("retained");
   } finally {
-    await f.close();
+    await observation.step("close", () => f.close());
   }
 });
-it("PROGRAM-03 observes closure that commits while admission waits", async () => {
-  const f = await ready();
-  const lock = await f.pool.connect();
+it("PROGRAM-03 observes closure that commits while admission waits", async ({
+  task,
+  onTestFinished,
+}) => {
+  const observation = programEnrollmentObservation(task.meta);
+  onTestFinished(() => observation.seal());
+  const f = await observation.step("ready", () => ready(observation));
+  const lock = await observation.step("lock-connect", () => f.pool.connect());
   try {
-    const member = await f.member();
-    await lock.query("BEGIN");
-    await lock.query(
-      "UPDATE local_program_terms SET state='closed',revision=3 WHERE id='local-foundation-1'",
+    const member = await observation.step("member", () => f.member());
+    await observation.step("lock-begin", () => lock.query("BEGIN"));
+    await observation.step("closure-update", () =>
+      lock.query(
+        "UPDATE local_program_terms SET state='closed',revision=3 WHERE id='local-foundation-1'",
+      ),
     );
-    const admission = f.programs.enroll(member.token, randomUUID(), intent);
-    await blocked(f.pool);
-    await lock.query("COMMIT");
+    const admission = observation.step("admission", () =>
+      f.programs.enroll(member.token, randomUUID(), intent),
+    );
+    await observation.step("blocked", () => blocked(f.pool));
+    await observation.step("closure-commit", () => lock.query("COMMIT"));
     expect(await admission).toEqual({ kind: "stale" });
     expect(f.state.inserts).toBe(0);
   } finally {
-    await lock.query("ROLLBACK");
+    await observation.step("rollback", () => lock.query("ROLLBACK"));
     lock.release();
-    await f.close();
+    await observation.step("close", () => f.close());
   }
 });
 it("PROGRAM-03 retains an admission committed before a waiting closure", async () => {
