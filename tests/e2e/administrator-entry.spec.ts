@@ -40,12 +40,10 @@ test.beforeEach(async () => {
   url.pathname = "/" + name;
   pool = new Pool({ connectionString: url.href });
   await migrate(pool);
-  await test
-    .info()
-    .attach("administrator-owned-database", {
-      body: JSON.stringify(resource),
-      contentType: "application/json",
-    });
+  await test.info().attach("administrator-owned-database", {
+    body: JSON.stringify(resource),
+    contentType: "application/json",
+  });
 });
 test.afterEach(async () => {
   await pool?.end();
