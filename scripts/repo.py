@@ -59,6 +59,7 @@ LEARNING_FILES = {str(LEARNING_ROOT / name) for name in (
     "prototype/style.css", "reader/build.py", "reader/checks.mjs", "reader/contribution.mjs",
     "reader/course.mjs", "reader/feedback-cases.json", "reader/feedback.mjs",
     "reader/fonts/InterVariable.woff2", "reader/fonts/LICENSE.txt", "reader/fonts/provenance.json",
+    "reader/fonts/NunitoSans.ttf", "reader/fonts/NunitoSans-OFL.txt",
     "reader/gui-checks.mjs", "reader/index.html", "reader/learning.feature",
     "reader/reader.mjs", "reader/review-guidance.json", "reader/style.css",
     "reader/browser-notebook.mjs", "reader/local-entry.mjs",
