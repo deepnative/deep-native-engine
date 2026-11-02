@@ -1,4 +1,5 @@
 import { CIRCLES } from "./circles.ts";
+import { defaultWindow } from "./staff-window.ts";
 import { CIRCLE_DISCUSSION_POLICY } from "./circle-discussion.ts";
 import { escape, hidden, page } from "./views.ts";
 import type {
@@ -73,10 +74,18 @@ export function circleGrantConfirmPage(
   csrf: string,
   check: CircleGrantCheck,
   attempt: CircleGrantAttempt,
+  now = new Date(),
 ) {
+  const window =
+    attempt.expiresAt === ""
+      ? {
+          ...attempt,
+          expiresAt: defaultWindow(check.expiresAt, now).expiresAt,
+        }
+      : attempt;
   return page(
     "Confirm circle moderation grant",
-    `<section class="reading">${notice}<h1>Confirm circle moderation grant</h1><p>Checked target role: ${escape(check.role)}. Maximum target credential expiry: ${time(check.expiresAt)}.</p>${check.creationEnabled ? creationForm(csrf, attempt, false) : "<p>Creating grants is paused. This check does not create access.</p>"}${navigation}</section>`,
+    `<section class="reading">${notice}<h1>Confirm circle moderation grant</h1><p>Checked target role: ${escape(check.role)}. Maximum target credential expiry: ${time(check.expiresAt)}.</p>${check.creationEnabled ? creationForm(csrf, window, false) : "<p>Creating grants is paused. This check does not create access.</p>"}${navigation}</section>`,
   );
 }
 export function circleGrantReceiptPage(

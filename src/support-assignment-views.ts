@@ -1,4 +1,5 @@
 import { escape, hidden, page } from "./views.ts";
+import { defaultWindow } from "./staff-window.ts";
 import type {
   AssignmentReference,
   AssignmentHistory,
@@ -63,10 +64,16 @@ export function assignmentConfirmPage(
   csrf: string,
   attempt: AssignmentAttempt,
   operatorExpiresAt?: Date,
+  now = new Date(),
 ): string {
+  const fresh = attempt.startsAt === "" && attempt.expiresAt === "";
+  const window =
+    fresh && operatorExpiresAt
+      ? { ...attempt, ...defaultWindow(operatorExpiresAt, now) }
+      : attempt;
   return page(
     "Confirm support assignment",
-    `<section class="reading">${notice}<h1>Confirm support assignment</h1><p>Allow this operator to view and respond only to this request during the window you confirm. This does not grant effort recording or access to other requests.</p>${operatorExpiresAt ? `<p>Maximum operator credential expiry (UTC): ${time(operatorExpiresAt)}</p>` : ""}${assignmentForm(csrf, attempt, false)}${navigation}</section>`,
+    `<section class="reading">${notice}<h1>Confirm support assignment</h1><p>Allow this operator to view and respond only to this request during the window you confirm. This does not grant effort recording or access to other requests.</p>${operatorExpiresAt ? `<p>Maximum operator credential expiry (UTC): ${time(operatorExpiresAt)}</p>` : ""}${assignmentForm(csrf, window, false)}${navigation}</section>`,
   );
 }
 export function assignmentHistoryPage(

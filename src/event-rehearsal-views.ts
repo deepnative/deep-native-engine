@@ -1,4 +1,5 @@
 import { escape, hidden, page } from "./views.ts";
+import { upcomingExample } from "./staff-window.ts";
 import {
   REHEARSAL_TEMPLATE,
   type RehearsalSnapshot,
@@ -12,8 +13,8 @@ const base = "/operator/event-rehearsals";
 const integrity = (csrf: string) => hidden(escape(csrf));
 const notice = `<p class="eyebrow">INVENTED PRIVATE REHEARSAL</p><p>Schedule a local learning rehearsal using the trusted sample template. This is not a real clinic, expert service, recording, attendance record or paid booking. No member directory is shown.</p>`;
 const nav = `<p><a href="${base}">Rehearsal scheduling</a> · <a href="/operator/event-cancellations">Event cancellation</a> · <a href="/staff">Your staff tools</a></p>`;
-const instruction = (startsAt = "") =>
-  `<label>Trusted template<input name="templateId" readonly required value="${escape(REHEARSAL_TEMPLATE.id)}"></label><label>Template version<input name="templateVersion" readonly required value="${REHEARSAL_TEMPLATE.version}"></label><label>Start in UTC<input name="startsAt" required maxlength="24" placeholder="2026-10-07T15:30:00.000Z" value="${escape(startsAt)}"></label><p>Use the full UTC format shown. Starts must be two minutes to thirty days ahead of the database clock. The template sets duration and sample capacity.</p>`;
+const instruction = (startsAt = "", example = upcomingExample()) =>
+  `<label>Trusted template<input name="templateId" readonly required value="${escape(REHEARSAL_TEMPLATE.id)}"></label><label>Template version<input name="templateVersion" readonly required value="${REHEARSAL_TEMPLATE.version}"></label><label>Start in UTC<input name="startsAt" required maxlength="24" placeholder="${escape(example)}" value="${escape(startsAt)}"></label><p>Use the full UTC format shown. Starts must be two minutes to thirty days ahead of the database clock. The template sets duration and sample capacity.</p>`;
 function checkedFields(attempt: RehearsalAttempt) {
   return `${Object.entries(attempt.snapshot)
     .map(
@@ -26,10 +27,15 @@ function checkedFields(attempt: RehearsalAttempt) {
 }
 const inspect = (csrf: string, attempt: RehearsalAttempt) =>
   `<form method="post" action="${base}/inspect" target="_blank">${integrity(csrf)}${checkedFields(attempt)}<button type="submit">Inspect saved result in a new tab</button></form>`;
-export function eventRehearsalHome(csrf: string, enabled: boolean) {
+export function eventRehearsalHome(
+  csrf: string,
+  enabled: boolean,
+  now = new Date(),
+) {
+  const example = upcomingExample(now);
   return page(
     "Schedule a private rehearsal",
-    `<section class="reading">${notice}<h1>Schedule a private rehearsal</h1><p>${enabled ? "Check a proposed schedule before deliberately confirming it." : "New scheduling is paused. Saved rehearsals and protected inspection remain available."}</p>${enabled ? `<form method="post" action="${base}/check">${integrity(csrf)}${instruction()}<button type="submit">Check proposed schedule</button></form>` : ""}<h2>Inspect an original instruction</h2><p>Use the original template, UTC start and key. Inspection creates nothing and never retries a schedule.</p><form method="post" action="${base}/inspect">${integrity(csrf)}${instruction()}<label>Original submission key<input name="key" required maxlength="36" autocomplete="off"></label><button type="submit">Inspect original instruction</button></form>${nav}</section>`,
+    `<section class="reading">${notice}<h1>Schedule a private rehearsal</h1><p>${enabled ? "Check a proposed schedule before deliberately confirming it." : "New scheduling is paused. Saved rehearsals and protected inspection remain available."}</p>${enabled ? `<form method="post" action="${base}/check">${integrity(csrf)}${instruction("", example)}<button type="submit">Check proposed schedule</button></form>` : ""}<h2>Inspect an original instruction</h2><p>Use the original template, UTC start and key. Inspection creates nothing and never retries a schedule.</p><form method="post" action="${base}/inspect">${integrity(csrf)}${instruction("", example)}<label>Original submission key<input name="key" required maxlength="36" autocomplete="off"></label><button type="submit">Inspect original instruction</button></form>${nav}</section>`,
   );
 }
 export function eventRehearsalConfirm(
