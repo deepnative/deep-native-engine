@@ -1523,3 +1523,33 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   cursor: pointer;
   min-height: 44px;
 }
+
+/* My account: one readable column with a single left edge. */
+.account-page {
+  max-width: 760px;
+  margin: 42px 0 70px;
+}
+.account-page code {
+  overflow-wrap: anywhere;
+}
+.account-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 28px 0 0;
+}
+.account-page > section {
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+}
+.account-page > section h2 {
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+.account-page > section > p:last-child {
+  margin-bottom: 0;
+}
+.account-page > .profile-form form {
+  margin-top: 20px;
+}
