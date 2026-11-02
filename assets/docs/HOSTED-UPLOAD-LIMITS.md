@@ -30,7 +30,7 @@ The existing Azure production parking and deployment controls are unchanged. Fol
 
 ## Behavioral evidence
 
-Admission scenarios ADMIT-01..09 run against the real HTTP application and PostgreSQL in `tests/integration/upload-admission-http.test.ts`, including a held-open concurrent upload, a second and restarted instance on the same database, spoofed headers, a held advisory lock and an unreachable database. Browser journey L277 shows a refused member keeping their typed sample and saving it after the window. Before the change, ADMIT-02 observed 201 for a member's eleventh upload against expected 429.
+Admission scenarios ADMIT-01..09 run against the real HTTP application and PostgreSQL in `tests/integration/upload-admission-http.test.ts`, including a held-open concurrent upload, a second and restarted instance on the same database, spoofed headers, a held advisory lock and an unreachable database. Browser journey L278 shows a refused member keeping their typed sample and saving it after the window. Before the change, ADMIT-02 observed 201 for a member's eleventh upload against expected 429.
 
 The owned native nginx fixture has an upstream observer that accepts 16 MiB and logs only method plus normalized path, so its own default 1 MiB limit cannot masquerade as a refusal at the public proxy. Before the proxy change, BCAP-01 observed 200 and one upstream request for 1 MiB + 1, against expected 413 and zero upstream requests. An earlier status-only probe had passed because the observer inherited nginx's default limit; that result is preserved as a fixture-masking baseline, not the meaningful red.
 

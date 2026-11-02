@@ -32,7 +32,7 @@ async function saved(prefix: string) {
   );
 }
 
-test("[L277] a member over the upload budget keeps their typed sample and saves it after waiting", async ({
+test("[L278] a member over the upload budget keeps their typed sample and saves it after waiting", async ({
   page,
 }) => {
   const prefix = `admit-${randomBytes(6).toString("hex")}`;

@@ -24,6 +24,8 @@ const parentCounts = async () =>
     )
   ).rows[0]!;
 test.beforeEach(async () => {
+  // Every case gets a fresh database; its first synthetic course starts at version1.
+  courseVersion = 0;
   parent = await parentCounts();
   const name = "dne_test_" + randomBytes(16).toString("hex"),
     marker = "administrator-browser-565-" + randomBytes(16).toString("hex");
@@ -219,8 +221,11 @@ test("[L269] both verified owner identities explicitly enter finite billing admi
       ).toBeVisible();
       await page.getByRole("button", { name: "Enter administration" }).click();
       await expect(
-        page.getByRole("heading", { name: "Course billing administration" }),
+        page.getByRole("heading", { name: "Administration console" }),
       ).toBeVisible();
+      await page
+        .getByRole("link", { name: "Courses and invoices", exact: true })
+        .click();
       await page.getByLabel("Student account reference").selectOption(f.id);
       await page
         .getByRole("checkbox", { name: /Invented owner-entry course/ })
@@ -343,7 +348,7 @@ test("[L271] deliberate end and member signout revoke admin access while retaini
     await page.goto(f.origin + "/admin");
     await page.getByRole("button", { name: "Enter administration" }).click();
     await expect(
-      page.getByRole("heading", { name: "Course billing administration" }),
+      page.getByRole("heading", { name: "Administration console" }),
     ).toBeVisible();
     const outsider = await other.newPage();
     expect(
@@ -359,7 +364,7 @@ test("[L271] deliberate end and member signout revoke admin access while retaini
     await page.goto(f.origin + "/admin");
     await page.getByRole("button", { name: "Enter administration" }).click();
     await expect(
-      page.getByRole("heading", { name: "Course billing administration" }),
+      page.getByRole("heading", { name: "Administration console" }),
     ).toBeVisible();
     await page.goto(f.origin + "/account");
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
@@ -403,8 +408,80 @@ test("[L272] lost entry acknowledgement returns no staff cookie and recovers onl
       .click();
     await page.getByRole("button", { name: "Enter administration" }).click();
     await expect(
-      page.getByRole("heading", { name: "Course billing administration" }),
+      page.getByRole("heading", { name: "Administration console" }),
     ).toBeVisible();
+  } finally {
+    await closeLoopback(f.server);
+  }
+});
+
+test("[L277] ADMINCON01–04 selects an exact learner, composes existing terms and keeps private work isolated", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  try {
+    await f.verify();
+    await f.publishCourse();
+    await page.goto(f.origin + "/admin");
+    await page.getByRole("button", { name: "Enter administration" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Administration console" }),
+    ).toBeVisible();
+    await page.getByLabel("Exact learner account reference").fill(f.id);
+    await page.getByRole("button", { name: "Find learner" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Selected learner", exact: true }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      ),
+    ).toBe(false);
+    await page.screenshot({
+      path: test.info().outputPath("console-selected.png"),
+      fullPage: true,
+    });
+    await expect(
+      page.getByText("Invented retained learning draft", { exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("link", { name: "Compose courses for this learner" })
+      .click();
+    await expect(page.getByLabel("Student account reference")).toHaveValue(
+      f.id,
+    );
+    await page
+      .getByRole("checkbox", { name: /Invented owner-entry course/ })
+      .check();
+    await page
+      .getByLabel("Amount for Invented owner-entry course (CAD)", {
+        exact: true,
+      })
+      .fill("12.00");
+    await page
+      .getByLabel("Starts on (UTC date)")
+      .fill(new Date().toISOString().slice(0, 10));
+    await page
+      .getByRole("button", { name: "Prepare course billing proposal" })
+      .click();
+    expect(
+      (await pool.query("SELECT owner_id,state FROM simple_invoice_plans"))
+        .rows,
+    ).toEqual([{ owner_id: f.id, state: "offered" }]);
+    expect(
+      (await pool.query("SELECT count(*)::int AS n FROM simple_invoices"))
+        .rows[0].n,
+    ).toBe(0);
+    await page.goto(f.origin + "/admin");
+    await page
+      .getByRole("button", { name: "End administration for this sign-in" })
+      .click();
+    expect(
+      (await page.goto(f.origin + "/operator?ownerId=" + f.id))?.status(),
+    ).toBe(403);
+    expect(await f.members.progress(f.id)).toMatchObject({
+      instruction: "Invented retained learning draft",
+    });
   } finally {
     await closeLoopback(f.server);
   }

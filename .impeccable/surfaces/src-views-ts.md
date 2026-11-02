@@ -2,7 +2,7 @@
 version: 1
 slug: "src-views-ts"
 primary_target: "src/views.ts"
-related_targets: ["public/style.css"]
+related_targets: ["public/style.css", "src/administrator-entry-routes.ts"]
 ---
 
 ## Scope
@@ -26,3 +26,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 ## Constraints
 
 Preserve native labels, CSRF, all profile fields, safe attempted values and field-linked errors. Open optional fields on an error response. Keep account/profile content, layout and behavior unchanged while applying the shared identity. No fake learners, streaks, completion, accreditation, AI calls, pricing promises or support capacity. Preserve old preview resources; show this source in a fresh owned local preview.
+
+
+## Administrator console — Operate
+
+The verified-owner `/operator` console shares this identity with compact task text and existing flat form/list controls. Learners, Courses/services and Invoices are named destinations; an exact learner reference opens minimal enrollment/billing summaries and existing proposal functions. Keep private writing/files/email out of the console, finite authority explicit, and learning identity separate. Disabled billing remains disabled; published lesson candidates do not promise staffed services. Long references/actions wrap on mobile. ADMINCON01–04 and L277 own behavioral evidence; original missing-route failure, captures and final-source results are recorded on #570. This brief does not establish deployment or commercial acceptance.

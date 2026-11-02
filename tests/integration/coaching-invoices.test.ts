@@ -145,6 +145,9 @@ it("HOUR02/03/04/07 different member rates produce private exact invoices, expli
     second = ready(await invoices.invoice(b.token, bi.invoiceId));
   expect(first.totalCents).toBe(20340);
   expect(second.totalCents).toBe(12000);
+  expect(
+    ready(await invoices.adminOverview(admin, a.id)).invoices.map((i) => i.id),
+  ).toEqual([ai.invoiceId]);
   expect(first.document.coaching).toMatchObject({
     month,
     minutes: 90,

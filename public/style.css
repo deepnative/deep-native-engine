@@ -1328,3 +1328,12 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   font-variant-numeric: tabular-nums;
   margin-top: -12px;
 }
+
+.administrator-console {
+  overflow-wrap: anywhere;
+}
+
+.administrator-console > section {
+  padding-left: 0;
+  margin-block: 32px;
+}
