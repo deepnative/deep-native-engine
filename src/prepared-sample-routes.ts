@@ -11,6 +11,7 @@ import {
   preparedReceiptPage,
   preparedRecoveryPage,
 } from "./prepared-sample-views.ts";
+import { underLease, type AdmitCopy } from "./upload-admission.ts";
 const exact = (
   value: unknown,
   names: string[],
@@ -32,6 +33,7 @@ export function mountPreparedSampleRoutes(
     mode?: ApplicationMode;
     origin: string;
     hostedOrigin?: string;
+    admit?: AdmitCopy;
   },
 ) {
   const failure = (
@@ -126,7 +128,16 @@ export function mountPreparedSampleRoutes(
     });
     if (!attempt) return failure(res, "invalid");
     try {
-      const result = await store!.create(res.locals.token as string, attempt);
+      if (
+        options.admit &&
+        !(await options.admit(req, res, (action) =>
+          preparedRecoveryPage(res.locals.csrf as string, action, attempt),
+        ))
+      )
+        return;
+      const result = await underLease(res, () =>
+        store!.create(res.locals.token as string, attempt),
+      );
       if (result.kind !== "created" && result.kind !== "replayed")
         return failure(res, result.kind, attempt);
       return send(

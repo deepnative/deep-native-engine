@@ -12,6 +12,7 @@ import type {
 import { ASSIGNMENT_ORIGIN_LABEL } from "../../src/assignment-evidence-values.ts";
 import { config } from "../../src/config.ts";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
+import type { AdmitCopy } from "../../src/upload-admission.ts";
 const servers = new Set<Server>();
 afterEach(async () => {
   for (const server of servers) await closeLoopback(server);
@@ -59,7 +60,7 @@ const input = () => ({
   sourceSha256: source.sourceSha256,
   privateReview: "yes",
 });
-async function fixture(enabled = true, present = true) {
+async function fixture(enabled = true, present = true, admit?: AdmitCopy) {
   const store = {
     open: vi.fn<AssignmentEvidenceStore["open"]>().mockResolvedValue({
       kind: "ready",
@@ -84,7 +85,12 @@ async function fixture(enabled = true, present = true) {
     res.locals.csrf = "nonce";
     next();
   });
-  mountAssignmentEvidenceRoutes(app, present ? store : undefined, enabled);
+  mountAssignmentEvidenceRoutes(
+    app,
+    present ? store : undefined,
+    enabled,
+    admit,
+  );
   const server = await listenLoopback(app);
   servers.add(server);
   return { server, store };
@@ -325,4 +331,59 @@ it("AHO-10 accepts explicit local or hosted creation and rejects ambiguous confi
     DNE_ASSIGNMENT_HANDOFF: "enabled",
   };
   expect(config(hosted).assignmentHandoff).toBe(true);
+});
+
+const wait = "Wait 5 seconds, then upload again. Saved evidence is unchanged.";
+it("ADMIT-11 renders a refused assignment copy with the original request and creates nothing", async () => {
+  const admit = vi.fn<AdmitCopy>(async (_req, res, render) => {
+    res.status(429).send(render(wait));
+    return false;
+  });
+  const f = await fixture(true, true, admit);
+  const instruction = input();
+  const refused = await request(f.server)
+    .post(base)
+    .type("form")
+    .send(instruction)
+    .expect(429);
+  expect(refused.text).toContain(wait);
+  expect(refused.text).toContain(`value="${instruction.operationId}"`);
+  expect(refused.text).toContain(`action="${ASSIGNMENT_INSPECT_PATH}"`);
+  expect(f.store.create).not.toHaveBeenCalled();
+});
+it("ADMIT-13 holds an admitted assignment copy's lease until the copy finishes", async () => {
+  const lease = { working: false, release: vi.fn(async () => undefined) };
+  const admit = vi.fn<AdmitCopy>(async (_req, res) => {
+    res.locals.uploadLease = lease;
+    return true;
+  });
+  const f = await fixture(true, true, admit);
+  f.store.create.mockImplementationOnce(async () => {
+    expect(lease.working).toBe(true);
+    expect(lease.release).not.toHaveBeenCalled();
+    return { kind: "created", receipt, deadline: performance.now() + 60000 };
+  });
+  await request(f.server).post(base).type("form").send(input()).expect(200);
+  expect(admit).toHaveBeenCalledOnce();
+  expect(lease.release).toHaveBeenCalledOnce();
+});
+it("ADMIT-10 admits neither disabled, invalid nor inspection requests for assignment copies", async () => {
+  const admit = vi.fn<AdmitCopy>(async () => true);
+  await request((await fixture(false, true, admit)).server)
+    .post(base)
+    .type("form")
+    .send(input())
+    .expect(404);
+  const f = await fixture(true, true, admit);
+  await request(f.server)
+    .post(base)
+    .type("form")
+    .send({ ...input(), sequence: "0" })
+    .expect(422);
+  await request(f.server)
+    .post(ASSIGNMENT_INSPECT_PATH)
+    .type("form")
+    .send({ csrf: "nonce", operationId: randomUUID() })
+    .expect(200);
+  expect(admit).not.toHaveBeenCalled();
 });

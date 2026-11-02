@@ -318,9 +318,20 @@ it("PREPARED-02 rejects tampered templates, extra command fields, CSRF and unack
 });
 it("PREPARED-04 concurrent original actions retain exactly one source and changed valid payload conflicts", async () => {
   const m = await member();
-  const responses = await Promise.all(
+  const concurrent = await Promise.all(
     Array.from({ length: 4 }, () => m.post("/evidence/prepared", m.input)),
   );
+  // ADMIT-10 (#587): copies share the member's two concurrent upload slots,
+  // so an overlapping action may be refused; repeating it replays the source.
+  const responses = [];
+  for (const response of concurrent) {
+    if (response.status === 429) {
+      expect(response.text).toContain("Saved evidence is unchanged.");
+      expect(response.text).toContain(`value="${m.input.operationId}"`);
+      responses.push(await m.post("/evidence/prepared", m.input));
+    } else responses.push(response);
+  }
+  expect(concurrent.map((r) => r.status)).toContain(200);
   expect(responses.map((r) => r.status)).toEqual([200, 200, 200, 200]);
   const ids = responses.map(
     (r) => r.text.match(/data-prepared-evidence="([a-f0-9-]+)"/)![1],

@@ -8,7 +8,13 @@ The proxy preserves both owned entry points' exact original Host/Origin pairing 
 
 ## Shared upload admission
 
-Three evidence upload routes are admitted against a shared budget before anything is saved: `POST /api/evidence` before its body is read, and the sample form (`POST /evidence`) and sample revision form (`POST /evidence/:id/revise`) after their small form body is checked, so a refused member keeps the title and text they typed. Prepared-sample copies and assignment-evidence copies also create evidence records but are not admitted yet; see the scope section below. The team chose these bounds under the 27 October #315 disposition:
+Five evidence-creating routes are admitted against one shared budget before anything is saved:
+
+- `POST /api/evidence`, before its body is read.
+- The sample form (`POST /evidence`) and sample revision form (`POST /evidence/:id/revise`), after their small form body is checked, so a refused member keeps the title and text they typed.
+- Prepared-sample copies (`POST /evidence/prepared`) and assignment-evidence copies (`POST /assignments/attempts/:id/handoff`), after the route is confirmed enabled and the copy instruction is valid ([#587](https://github.com/deepnative/deep-native-engine/issues/587)). A refused copy shows the route's recovery page with the original instruction kept, so the member can inspect it or deliberately repeat it later.
+
+A copy uses the same member, signed-out and whole-service windows and concurrency slots as an upload; it does not get a separate allowance. Read-only inspection (`POST /evidence/prepared/inspect`, `/assignment-feedback/inspect` and the handoff preview) is never admitted, so a member over budget can still check whether an earlier copy saved. Repeating the same copy instruction is admitted like any other request; after the window it replays the original receipt without creating a second copy. The team chose these bounds under the 27 October #315 disposition:
 
 | Budget | Limit |
 | --- | --- |
@@ -24,13 +30,15 @@ The operator diagnosis signal is `upload_admission_denials`: one count per hour 
 
 ## Scope and remaining work
 
-[#315](https://github.com/deepnative/deep-native-engine/issues/315) now covers the early 1 MiB body boundary and shared rate/concurrency admission for evidence creation. Prepared-sample copies (`POST /evidence/prepared`) and assignment-evidence copies (`POST /assignments/attempts/:id/handoff`) create evidence records from content already on the service, not new member bytes; they and every other API surface are outside this control and remain under [#42](https://github.com/deepnative/deep-native-engine/issues/42). This change adds no new service, provider, WAF or DDoS protection claim, and a fixed-window limit allows up to twice a budget across a window boundary. Source and local fixture evidence do not prove a live deployment or full hosted abuse protection.
+[#315](https://github.com/deepnative/deep-native-engine/issues/315) covers the early 1 MiB body boundary and shared rate/concurrency admission for evidence uploads, and [#587](https://github.com/deepnative/deep-native-engine/issues/587) extends that admission to the two evidence copy routes. Every other API surface is outside this control and remains under [#42](https://github.com/deepnative/deep-native-engine/issues/42). This change adds no new service, provider, WAF or DDoS protection claim, and a fixed-window limit allows up to twice a budget across a window boundary. Source and local fixture evidence do not prove a live deployment or full hosted abuse protection.
 
 The existing Azure production parking and deployment controls are unchanged. Follow the [deployment guide](workflows/AZURE-DEMO-DEPLOYMENT.md) and current owner instructions before any authorized release. Do not enable a parked workflow or deploy this change as part of local validation.
 
 ## Behavioral evidence
 
 Admission scenarios ADMIT-01..09 run against the real HTTP application and PostgreSQL in `tests/integration/upload-admission-http.test.ts`, including a held-open concurrent upload, a second and restarted instance on the same database, spoofed headers, a held advisory lock and an unreachable database. Browser journey L278 shows a refused member keeping their typed sample and saving it after the window. Before the change, ADMIT-02 observed 201 for a member's eleventh upload against expected 429.
+
+Copy scenarios ADMIT-10..13 run in `tests/integration/upload-copy-admission-http.test.ts`: both copy routes refused once the budget is used, copies counted in the same windows, inspection while over budget, replay of the original copy after the window, and both routes failing closed under a held advisory lock. Browser journey L279 shows a refused provided copy kept and repeated after the window. Before the change, a member over budget still got a prepared-sample copy (200 against expected 429), and admitted copies left no window rows. PREPARED-04's four concurrent identical copies may now include a refusal from the member's two concurrent slots; each refused one is repeated and must replay the same single source.
 
 The owned native nginx fixture has an upstream observer that accepts 16 MiB and logs only method plus normalized path, so its own default 1 MiB limit cannot masquerade as a refusal at the public proxy. Before the proxy change, BCAP-01 observed 200 and one upstream request for 1 MiB + 1, against expected 413 and zero upstream requests. An earlier status-only probe had passed because the observer inherited nginx's default limit; that result is preserved as a fixture-masking baseline, not the meaningful red.
 
