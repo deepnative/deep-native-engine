@@ -118,6 +118,8 @@ export async function reviewedContentFixture(
       const actor = await page();
       await actor.goto(origin);
 
+      await actor.getByLabel("Display name").fill("Sample learner");
+
       await actor.getByLabel("Your starting point").selectOption(background);
       await chooseLearningGoal(actor, goal);
       await actor

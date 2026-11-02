@@ -364,3 +364,40 @@ it("ADMINCON04 denies direct malformed or expired console requests without autho
   ).toBe(503);
   expect(f.fn).not.toHaveBeenCalled();
 });
+it("NAME03/05 names are primary, escaped and distinguishable without exposing private data", async () => {
+  const f = fixture();
+  const first = {
+    id: "11111111-1111-4111-8111-111111111111",
+    displayName: "李明 <Sam>",
+    background: "explorer",
+    goal: "work",
+  };
+  f.state.directory = {
+    kind: "ready",
+    value: {
+      members: [
+        first,
+        { ...first, id: "22222222-2222-4222-8222-222222222222" },
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          background: "professional",
+          goal: "everyday",
+        },
+      ],
+      courses: [],
+    },
+  };
+  const response = await (
+    await http(f.app)
+  )
+    .get("/operator")
+    .set("Cookie", `dne_staff=${credential}`);
+  expect(response.status).toBe(200);
+  expect(response.text).toContain(">李明 &lt;Sam&gt;</a>");
+  expect(response.text).toContain("Exploring AI");
+  expect(response.text).toContain("Make everyday work clearer");
+  expect(response.text).toContain("Name needed");
+  for (const member of f.state.directory.value.members)
+    expect(response.text).toContain(member.id);
+  expect(response.text).not.toContain("<Sam>");
+});

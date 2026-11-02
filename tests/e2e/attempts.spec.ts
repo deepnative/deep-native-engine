@@ -70,6 +70,7 @@ async function publish(
 }
 async function onboard(page: Page, background: string, goal: string) {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption(background);
   await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -540,7 +541,7 @@ test("[L66] a member privately revises a submitted synthetic assignment without 
   await expect(history).toContainText(first);
   await expect(history).toContainText(second);
   const exported = await (await page.request.get("/api/member/export")).json();
-  expect(exported.version).toBe("local-member-records-v30");
+  expect(exported.version).toBe("local-member-records-v31");
   expect(exported.records.assignmentSubmissions).toMatchObject([
     { attemptId, sequence: 1, response: first },
     { attemptId, sequence: 2, response: second },

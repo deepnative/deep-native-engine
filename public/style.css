@@ -1494,3 +1494,32 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
     gap: 4px;
   }
 }
+
+.member-directory {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+.member-display-name {
+  overflow-wrap: anywhere;
+}
+.member-directory li {
+  border-bottom: 1px solid var(--line);
+  padding: 1rem 0;
+  overflow-wrap: anywhere;
+}
+.member-directory li > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 700;
+  font-size: 1.15rem;
+}
+.member-directory p {
+  margin: 0.25rem 0 0.5rem;
+}
+.member-directory summary {
+  cursor: pointer;
+  min-height: 44px;
+}

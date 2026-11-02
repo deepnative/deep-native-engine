@@ -57,6 +57,7 @@ function sample(id: string, title: string): DraftContent {
 
 async function onboard(page: Page, background: string, goal: string) {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption(background);
   await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -228,6 +229,7 @@ test("[L33] professional sees a domain match only after observed foundation prac
     prerequisites: "LOCAL-FIRST-EXERCISE-COMPLETE",
   });
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("professional");
   await chooseLearningGoal(page, "work");
   await page

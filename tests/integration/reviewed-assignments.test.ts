@@ -204,6 +204,7 @@ it("ASN103-03 changed goals and retired preparation remove current eligibility w
   const before = await attempts.detail(owner.token, id!);
   expect(
     await members.updateProfile(owner.token, {
+      displayName: "Sample learner",
       background: "explorer",
       goal: "everyday",
       backgroundTags: [],

@@ -4,6 +4,8 @@ import type { Pool, PoolClient } from "pg";
 import { LESSON, type LearnerProfile } from "./content.ts";
 import type { MilestoneInput } from "./milestones.ts";
 export interface Learner extends Pick<LearnerProfile, "background" | "goal"> {
+  // Existing accounts retain access until they supply their required name.
+  displayName?: string | null;
   id: string;
   backgroundTags?: LearnerProfile["backgroundTags"];
   domainTags?: LearnerProfile["domainTags"];
@@ -232,6 +234,7 @@ export async function migrate(pool: Pool) {
       "084-monthly-coaching.sql",
       "085-upload-admission.sql",
       "086-billing-profiles.sql",
+      "087-member-display-names.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
@@ -301,7 +304,7 @@ export function store(pool: Pool): Store {
         await pool.query<
           Learner & { active: boolean; expiresAt: Date; remainingMs: string }
         >(
-          `SELECT l.id,l.background,l.goal,l.background_tags AS "backgroundTags",
+          `SELECT l.id,l.display_name AS "displayName",l.background,l.goal,l.background_tags AS "backgroundTags",
                   l.domain_tags AS "domainTags",l.it_roles AS "itRoles",
                   l.experience,l.exploratory,l.time_zone AS timezone,
                   l.weekly_minutes AS "weeklyMinutes",
@@ -330,6 +333,9 @@ export function store(pool: Pool): Store {
         ...(deadline === undefined ? {} : { deadline }),
         learner: {
           id: row.id,
+          ...(row.displayName === undefined
+            ? {}
+            : { displayName: row.displayName }),
           background: row.background,
           goal: row.goal,
           ...(row.backgroundTags === undefined
@@ -361,8 +367,8 @@ export function store(pool: Pool): Store {
          ), member AS (
            INSERT INTO learners(id,token_hash,background,goal,expires_at,
                                 background_tags,domain_tags,it_roles,experience,exploratory,
-                                time_zone,weekly_minutes)
-           SELECT id,token_hash,$3,$4,expires_at,$5,$6,$7,$8,$9,$10,$11 FROM identity
+                                time_zone,weekly_minutes,display_name)
+           SELECT id,token_hash,$3,$4,expires_at,$5,$6,$7,$8,$9,$10,$11,$12 FROM identity
            RETURNING id
          )
          INSERT INTO workspaces(id,owner_principal_id)
@@ -379,6 +385,7 @@ export function store(pool: Pool): Store {
           profile.exploratory ?? false,
           profile.timezone ?? null,
           profile.weeklyMinutes ?? null,
+          profile.displayName ?? null,
         ],
       );
     },
@@ -388,7 +395,7 @@ export function store(pool: Pool): Store {
           const result = await client.query(
             `UPDATE learners SET background=$2,goal=$3,background_tags=$4,
           domain_tags=$5,it_roles=$6,experience=$7,exploratory=$8,
-          time_zone=$9,weekly_minutes=$10 WHERE id=$1`,
+          time_zone=$9,weekly_minutes=$10,display_name=$11 WHERE id=$1`,
             [
               memberId,
               profile.background,
@@ -400,6 +407,7 @@ export function store(pool: Pool): Store {
               profile.exploratory,
               profile.timezone ?? null,
               profile.weeklyMinutes ?? null,
+              profile.displayName,
             ],
           );
           return result.rowCount === 1;

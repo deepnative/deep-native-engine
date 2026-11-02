@@ -15,7 +15,7 @@ async function offer(f: Fixture, member: Page, cadence = "one_time") {
     .getByRole("link", { name: "Course billing and invoices", exact: true })
     .click();
   await admin.page
-    .getByLabel("Student account reference")
+    .getByLabel("Learner", { exact: true })
     .selectOption(reference);
   for (const [id, amount] of [
     ["FND-001", "10.00"],

@@ -21,6 +21,7 @@ async function member() {
   return { token, id: session.learner.id };
 }
 const input = {
+  display_name: "Sample learner",
   background: "professional",
   goal: "work",
   domain_tags: "education",
@@ -324,6 +325,7 @@ it("cannot report a profile save after its learner row is absent", async () => {
   await pool.query("DELETE FROM learners WHERE id=$1", [owner.id]);
   expect(
     await db.updateProfile(owner.token, {
+      displayName: "Sample learner",
       background: "explorer",
       goal: "everyday",
       backgroundTags: [],

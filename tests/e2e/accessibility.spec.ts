@@ -50,6 +50,9 @@ test("[L53] three learner paths retain visible keyboard focus, actionable errors
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/#main$/);
 
+    const name = page.getByLabel("Display name", { exact: true });
+    await tabTo(page, name);
+    await page.keyboard.type("Keyboard learner");
     const startingPoint = page.getByLabel("Your starting point");
     await tabTo(page, startingPoint);
     for (const key of backgroundKeys) await page.keyboard.press(key);

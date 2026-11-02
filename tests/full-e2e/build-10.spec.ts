@@ -24,6 +24,7 @@ async function memberId(context: BrowserContext) {
 
 async function startMember(page: Page) {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -38,6 +39,7 @@ test("[F-BUILD-10-B] invalid input recovers and an empty member gets an honest n
   let ownerId = "";
   await requiredCheck(1, async () => {
     await page.goto("/");
+    await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption("explorer");
     await chooseLearningGoal(page, "everyday");
     await page
@@ -58,6 +60,8 @@ test("[F-BUILD-10-B] invalid input recovers and an empty member gets an honest n
       [hash],
     );
     expect(uncreated.rowCount).toBe(0);
+
+    await page.getByLabel("Display name").fill("Sample learner");
 
     await page.getByLabel("Your starting point").selectOption("explorer");
     await chooseLearningGoal(page, "everyday");

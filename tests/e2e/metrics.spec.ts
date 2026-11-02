@@ -35,6 +35,7 @@ test("[L47] operator sees labelled preview aggregates while a learner cannot rea
       await operator.request.get("/operator/metrics")
     ).json();
     await page.goto("/");
+    await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption("explorer");
     await chooseLearningGoal(page, "everyday");
     await page.getByRole("button", { name: "Start my learning path" }).click();

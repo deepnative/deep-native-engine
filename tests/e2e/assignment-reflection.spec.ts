@@ -64,6 +64,7 @@ function sample(id: string, version: number, rubric: string): DraftContent {
 
 async function onboard(page: Page, background: string, goal: string) {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption(background);
   await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();

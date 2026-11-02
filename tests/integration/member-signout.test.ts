@@ -209,6 +209,7 @@ it("MOUT-01/04 a copied member bearer loses HTTP reads and writes and ends the b
         .set("Cookie", `${COOKIE}=${owner.token}`)
         .type("form")
         .send({
+          display_name: "Sample learner",
           csrf: csrf(owner.token, secret),
           background: "explorer",
           goal: "everyday",

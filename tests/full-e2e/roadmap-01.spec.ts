@@ -116,6 +116,7 @@ test("[F-ROADMAP-01-B] publishing content does not assess a learner", async ({
 
   await requiredCheck(1, async () => {
     await page.goto("/");
+    await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption("explorer");
     await chooseLearningGoal(page, "everyday");
     await page.getByRole("button", { name: "Start my learning path" }).click();

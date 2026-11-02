@@ -27,6 +27,7 @@ test("[L102] three audiences keep exact private starter practice when changing g
   ] as const) {
     await page.context().clearCookies();
     await page.goto("/");
+    await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption(background);
     await chooseLearningGoal(page, a);
     await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -41,6 +42,7 @@ test("[L102] three audiences keep exact private starter practice when changing g
     await page.goto("/learn");
     // PARTNAV-03: preserve the original L102 history and withdrawal checks
     // while also observing discovery after background and goal changes.
+    await page.getByLabel("Display name").fill("Sample learner");
     await page
       .getByLabel("Your starting point")
       .selectOption(background === "explorer" ? "professional" : "explorer");
@@ -117,6 +119,7 @@ test("[L102] three audiences keep exact private starter practice when changing g
     expect(JSON.stringify(payload)).not.toContain(first);
     expect(JSON.stringify(payload)).toContain(second);
     await page.goto("/learn");
+    await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption(background);
     await chooseLearningGoal(page, a);
     await page.getByRole("button", { name: "Save my direction" }).click();

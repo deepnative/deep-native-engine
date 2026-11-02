@@ -142,6 +142,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
     const feedback = "Check each invented claim against its provided source.";
     try {
       await page.goto("/");
+      await page.getByLabel("Display name").fill("Sample learner");
       await page.getByLabel("Your starting point").selectOption(background);
       await chooseLearningGoal(page, goal);
       await page

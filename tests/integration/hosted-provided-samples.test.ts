@@ -92,7 +92,13 @@ async function member(
     .set("Origin", origin)
     .set("Cookie", cookie)
     .type("form")
-    .send({ csrf: nonce(home.text), background, goal, synthetic: "yes" })
+    .send({
+      display_name: "Sample learner",
+      csrf: nonce(home.text),
+      background,
+      goal,
+      synthetic: "yes",
+    })
     .expect(303);
   const get = (path: string) =>
     request(server).get(path).set("Host", host).set("Cookie", cookie);

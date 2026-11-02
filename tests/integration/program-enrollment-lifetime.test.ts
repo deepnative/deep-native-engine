@@ -569,6 +569,7 @@ it("PROGRAM-15/ENR-06 resumes a new student's exact public choice without implic
     const welcome = await get("/", cookies);
     expect(welcome.status).toBe(200);
     const start = await post("/start", cookies, {
+      display_name: "Sample learner",
       csrf: csrf(token, f.secret),
       background: "explorer",
       goal: "everyday",
@@ -578,6 +579,7 @@ it("PROGRAM-15/ENR-06 resumes a new student's exact public choice without implic
     const session = await f.members.session(token);
     expect(session.kind).toBe("active");
     await post("/start", cookies, {
+      display_name: "Sample learner",
       csrf: csrf(token, f.secret),
       background: "technical",
       goal: "build",

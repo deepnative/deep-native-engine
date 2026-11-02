@@ -14,6 +14,7 @@ test.afterAll(async () => pool.end());
 
 async function onboard(page: Page, background: "explorer" | "professional") {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption(background);
   await chooseLearningGoal(
     page,

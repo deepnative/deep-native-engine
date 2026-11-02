@@ -87,6 +87,7 @@ test("[F-ROADMAP-08-D] project-management learner submits a noncoding assignment
 
   await requiredCheck(1, async () => {
     await page.goto("/");
+    await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption("technical");
     await chooseLearningGoal(page, "build");
     await page
@@ -169,6 +170,7 @@ test("[F-ROADMAP-08-D] project-management learner submits a noncoding assignment
     try {
       const otherPage = await outsider.newPage();
       await otherPage.goto("/");
+      await otherPage.getByLabel("Display name").fill("Sample learner");
       await otherPage
         .getByLabel("Your starting point")
         .selectOption("explorer");

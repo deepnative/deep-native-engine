@@ -32,6 +32,7 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
   const privateText = `Invented member-only outcome ${randomUUID()}`;
   const privateBytes = Buffer.from(privateText);
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -88,6 +89,7 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
   try {
     const outsiderPage = await outsider.newPage();
     await outsiderPage.goto("/");
+    await outsiderPage.getByLabel("Display name").fill("Sample learner");
     await outsiderPage
       .getByLabel("Your starting point")
       .selectOption("explorer");

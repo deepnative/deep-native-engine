@@ -76,6 +76,7 @@ test("[L198] ATTEND-06/08 member deliberately inspects and repeats original perm
       .click();
     const reference = await staff.locator("code").innerText();
     await page.goto(origin);
+    await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption("professional");
     await chooseLearningGoal(page, "work");
     await page

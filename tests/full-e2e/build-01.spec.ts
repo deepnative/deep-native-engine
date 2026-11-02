@@ -10,6 +10,7 @@ test.afterAll(async () => pool.end());
 
 async function onboard(page: Page, specialty: "security" | "analysis") {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("technical");
   await chooseLearningGoal(page, specialty === "security" ? "build" : "work");
   await page

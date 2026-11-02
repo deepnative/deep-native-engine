@@ -82,6 +82,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
         await auth.provisionStaff(reviewerCredential, "reviewer", expires),
       );
       await page.goto(origin + "/");
+      await page.getByLabel("Display name").fill("Sample learner");
       await page.getByLabel("Your starting point").selectOption(background);
       await chooseLearningGoal(page, goal);
       await page

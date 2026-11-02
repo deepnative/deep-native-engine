@@ -70,6 +70,7 @@ async function publishLessons(paths: Path[]) {
 
 async function onboard(page: Page, path: Path) {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption(path.background);
   await chooseLearningGoal(page, path.goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();

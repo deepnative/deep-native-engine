@@ -192,6 +192,7 @@ test("[L200] TESTISSUE-06/08 all audiences deliberately inspect and recover orig
         contexts.push(context);
         const page = await context.newPage();
         await page.goto(options.origin);
+        await page.getByLabel("Display name").fill("Sample learner");
         await page.getByLabel("Your starting point").selectOption(background);
         await chooseLearningGoal(page, goal);
         await page

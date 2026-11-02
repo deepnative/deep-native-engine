@@ -34,6 +34,7 @@ test("[L89] retained starter versions remain private, exact and text-free after 
     ["technical", "build"],
   ] as const) {
     await page.goto("/");
+    await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption(background);
     await chooseLearningGoal(page, goal);
     await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -133,6 +134,7 @@ test("[L89] retained starter versions remain private, exact and text-free after 
     try {
       const otherPage = await outsider.newPage();
       await otherPage.goto("/");
+      await otherPage.getByLabel("Display name").fill("Sample learner");
       await otherPage
         .getByLabel("Your starting point")
         .selectOption("explorer");

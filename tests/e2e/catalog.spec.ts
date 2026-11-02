@@ -319,6 +319,7 @@ async function useToken(context: BrowserContext, value: string) {
 }
 async function onboard(page: Page, background = "explorer", goal = "everyday") {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption(background);
   await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -826,6 +827,7 @@ test("[L75] staff audience tags follow synthetic versions into learner choices",
     );
 
     await page.goto("/");
+    await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption("explorer");
     await chooseLearningGoal(page, "everyday");
     await page
@@ -861,6 +863,7 @@ test("[L75] staff audience tags follow synthetic versions into learner choices",
 
     const professionalPage = await professionalContext.newPage();
     await professionalPage.goto("/");
+    await professionalPage.getByLabel("Display name").fill("Sample learner");
     await professionalPage
       .getByLabel("Your starting point")
       .selectOption("professional");

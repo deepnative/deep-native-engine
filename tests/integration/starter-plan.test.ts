@@ -65,6 +65,7 @@ it("advances only the owner's saved exercise and keeps an earlier goal historica
   expect(withdrawn).not.toContain("review your saved starter exercise");
   expect(withdrawn).not.toContain("try the sample exercise");
   await db.updateProfile(owner.token, {
+    displayName: "Sample learner",
     background: "explorer",
     goal: "work",
     backgroundTags: [],

@@ -199,6 +199,7 @@ it("recommends only current eligible published lessons without rewriting private
     version: 1,
   });
   await db.updateProfile(first.token, {
+    displayName: "Sample learner",
     background: "explorer",
     goal: "build",
     backgroundTags: [],
@@ -209,6 +210,7 @@ it("recommends only current eligible published lessons without rewriting private
   });
   expect(await recommend(first.token)).toBeNull();
   await db.updateProfile(first.token, {
+    displayName: "Sample learner",
     background: "explorer",
     goal: "everyday",
     backgroundTags: [],
@@ -306,6 +308,7 @@ it("keeps a sample practice note private and pinned through replay, replacement,
     (await practice.current(second.token, lesson.id))!.response,
   ).toBeNull();
   await db.updateProfile(first.token, {
+    displayName: "Sample learner",
     background: "professional",
     goal: "work",
     backgroundTags: [],
@@ -2753,6 +2756,7 @@ it("keeps each member's weekly plan preferences private and preserves saved prac
     weeklyMinutes: null,
   });
   await db.updateProfile(token, {
+    displayName: "Sample learner",
     background: "explorer",
     goal: "work",
     backgroundTags: [],
@@ -3133,7 +3137,7 @@ it("keeps synthetic assignment submissions immutable across private revisions an
   expect(ownedExport).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v30",
+      version: "local-member-records-v31",
       records: {
         assignmentSubmissions: [
           { attemptId: id, sequence: 1, response: firstText },
@@ -6017,7 +6021,7 @@ it("attributes deterministic adapter jobs only to an active member and keeps ide
   expect(await memberExportStore(pool).exportOwned(owner.token)).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v30",
+      version: "local-member-records-v31",
       records: { adapterJobs: [{ id: first.id, mode: "test" }] },
     },
   });

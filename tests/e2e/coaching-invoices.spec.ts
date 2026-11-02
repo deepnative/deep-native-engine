@@ -102,6 +102,7 @@ async function fixture(browser: Browser, info: TestInfo, enabled = true) {
   async function member() {
     const p = await page();
     await p.goto(origin);
+    await p.getByLabel("Display name").fill("Sample learner");
     await p.getByLabel("Your starting point").selectOption("explorer");
     await chooseLearningGoal(p, "everyday");
     await p.getByRole("button", { name: "Start my learning path" }).click();
@@ -319,9 +320,11 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
       fullPage: true,
     });
     await admin.goto(`${f.origin}/operator/coaching`);
-    await expect(
-      admin.getByRole("link", { name: `${a.id} · ${pastMonth}`, exact: true }),
-    ).toBeVisible();
+    const pending = admin.locator(
+      `a[href="/operator/coaching/${a.id}?month=${pastMonth}"]`,
+    );
+    await expect(pending).toBeVisible();
+    await expect(pending).toHaveText(`Sample learner · ${pastMonth}`);
     completed = true;
   } finally {
     await f.close(completed);
