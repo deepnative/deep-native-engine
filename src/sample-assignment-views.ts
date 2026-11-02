@@ -1,4 +1,5 @@
 import { escape, hidden, page } from "./views.ts";
+import { defaultWindow } from "./staff-window.ts";
 import {
   SAMPLE_ASSIGNMENT_PATH as base,
   SAMPLE_ASSIGNMENT_PAGE_SIZE,
@@ -64,14 +65,16 @@ export function sampleAssignmentCheck(
   csrf: string,
   operationId: string,
   attemptWindow?: Pick<SampleAssignmentInput, "startsAt" | "expiresAt">,
+  now = new Date(),
 ): string {
+  const window = attemptWindow ?? defaultWindow(check.reviewerExpiresAt, now);
   const input: SampleAssignmentInput = {
     evidenceId: check.evidenceId,
     sourceRevision: check.sourceRevision,
     reviewerId: check.reviewerId,
     operationId,
-    startsAt: attemptWindow?.startsAt ?? "",
-    expiresAt: attemptWindow?.expiresAt ?? "",
+    startsAt: window.startsAt,
+    expiresAt: window.expiresAt,
   };
   return page(
     "Confirm private sample assignment",

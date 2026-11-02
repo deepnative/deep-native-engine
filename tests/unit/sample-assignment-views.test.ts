@@ -317,3 +317,23 @@ it("REVADM-01/06 shows only the current reviewer's noncredential reference and e
   expect(html).not.toContain("SECRET");
   expect(html).not.toContain("PRIVATE_MEMBER");
 });
+
+it("STAFF-WINDOW-01 pre-fills an editable finite window on a fresh check", () => {
+  const form = formAt(
+    sampleAssignmentCheck(
+      {
+        ...input,
+        sourceStatus: "eligible",
+        reviewerExpiresAt: "2026-11-02T21:43:19.758Z",
+      },
+      "csrf",
+      input.operationId,
+      undefined,
+      new Date("2026-11-02T18:04:05.678Z"),
+    ),
+    `${base}/assign`,
+  );
+  fieldValue(form, "startsAt", "2026-11-02T18:04:05.678Z");
+  fieldValue(form, "expiresAt", "2026-11-02T21:43:19.758Z");
+  expect(form).not.toContain("readonly");
+});

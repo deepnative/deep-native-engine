@@ -156,7 +156,11 @@ it("CIRADM-01 current explicit own-reference and unchecked exact confirmation di
   expect(confirmation.text).toContain("circle-discussion-test-v1");
   expect(field(confirmation.text, "staffId")).toBe(f.target.id);
   expect(field(confirmation.text, "circleId")).toBe("everyday-ai");
-  expect(field(confirmation.text, "expiresAt")).toBe("");
+  // #596: an editable default expiry within the target credential.
+  const expiry = field(confirmation.text, "expiresAt");
+  expect(expiry).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  expect(Date.parse(expiry)).toBeGreaterThan(Date.now());
+  expect(Date.parse(expiry)).toBeLessThanOrEqual(+f.target.expiresAt);
   expect(confirmation.text).not.toMatch(/type="checkbox"[^>]*checked/);
   expect(confirmation.text).toMatch(/name="idempotencyKey"[^>]*readonly/);
   const self = await checked(f, "self");

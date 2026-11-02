@@ -244,3 +244,15 @@ it("CIRADM-07 displays only surviving audit facts for erased sources without rec
     circleGrantHistoryPage("csrf", { ...history, items: [absent] }),
   ).toContain("source-absent</dd>");
 });
+
+it("STAFF-WINDOW-01 pre-fills an editable grant expiry no later than the moderator's", () => {
+  const html = circleGrantConfirmPage(
+    "csrf",
+    { ...check, expiresAt: new Date("2026-11-02T21:43:19.758Z") },
+    { ...attempt, expiresAt: "" },
+    new Date("2026-11-02T18:04:05.678Z"),
+  );
+  expect(html).toContain(
+    'name="expiresAt" type="text" maxlength="24" value="2026-11-02T21:43:19.758Z" required',
+  );
+});
