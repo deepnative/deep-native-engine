@@ -37,8 +37,10 @@ const context = (index: number, reversed = false): Vitest =>
   ({
     config: { root, shard: { index, count: 2 } },
     cache: {
-      getFileTestResults: (key: string) => {
-        const position = names.findIndex((name) => key.endsWith(name));
+      getTestSpecificationResult: (spec: TestSpecification) => {
+        const position = names.findIndex((name) =>
+          spec.moduleId.endsWith(name),
+        );
         return {
           failed: reversed ? position % 2 === 0 : position % 2 !== 0,
           duration: reversed ? position + 1 : names.length - position,
