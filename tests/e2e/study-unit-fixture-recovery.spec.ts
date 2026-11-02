@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import {
   test,
   expect,
@@ -192,7 +193,7 @@ test("[L200] TESTISSUE-06/08 all audiences deliberately inspect and recover orig
         const page = await context.newPage();
         await page.goto(options.origin);
         await page.getByLabel("Your starting point").selectOption(background);
-        await page.getByLabel("What would you like to do?").selectOption(goal);
+        await chooseLearningGoal(page, goal);
         await page
           .getByRole("button", { name: "Start my learning path", exact: true })
           .click();

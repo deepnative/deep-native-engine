@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, devices, type BrowserContext } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Pool } from "pg";
@@ -76,7 +77,7 @@ test("[L198] ATTEND-06/08 member deliberately inspects and repeats original perm
     const reference = await staff.locator("code").innerText();
     await page.goto(origin);
     await page.getByLabel("Your starting point").selectOption("professional");
-    await page.getByLabel("What would you like to do?").selectOption("work");
+    await chooseLearningGoal(page, "work");
     await page
       .getByRole("button", { name: "Start my learning path", exact: true })
       .click();

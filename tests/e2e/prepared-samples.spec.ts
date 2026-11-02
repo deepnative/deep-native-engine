@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
@@ -68,7 +69,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
       );
       await page.goto(origin + "/");
       await page.getByLabel("Your starting point").selectOption(background);
-      await page.getByLabel("What would you like to do?").selectOption(goal);
+      await chooseLearningGoal(page, goal);
       await page
         .getByRole("button", { name: "Start my learning path" })
         .click();
@@ -314,9 +315,10 @@ for (const [index, [background, goal]] of audiences.entries()) {
       // PREPARED-06: a changed learning goal does not relabel the original
       // provided source. Editing creates pending member text, not another
       // trusted fixture or a transfer of the old reviewer's access/feedback.
-      await page
-        .getByLabel("What would you like to do?")
-        .selectOption(audiences[(index + 1) % audiences.length]![1]);
+      await chooseLearningGoal(
+        page,
+        audiences[(index + 1) % audiences.length]![1],
+      );
       await page.getByRole("button", { name: "Save my direction" }).click();
       await page.goto(origin + "/evidence");
       await expect(source).toContainText(PROVIDED_SAMPLE_LABEL);
@@ -420,9 +422,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
         await original
           .getByLabel("Your starting point")
           .selectOption(background);
-        await original
-          .getByLabel("What would you like to do?")
-          .selectOption(goal);
+        await chooseLearningGoal(original, goal);
         await original
           .getByRole("button", { name: "Start my learning path" })
           .click();

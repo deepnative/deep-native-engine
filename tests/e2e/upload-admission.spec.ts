@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { testPool } from "../support/database.ts";
@@ -10,7 +11,7 @@ test.afterAll(async () => {
 async function onboard(page: Page) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("professional");
-  await page.getByLabel("What would you like to do?").selectOption("work");
+  await chooseLearningGoal(page, "work");
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }

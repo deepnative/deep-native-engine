@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type BrowserContext } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -87,7 +88,7 @@ test("[F-ROADMAP-08-D] project-management learner submits a noncoding assignment
   await requiredCheck(1, async () => {
     await page.goto("/");
     await page.getByLabel("Your starting point").selectOption("technical");
-    await page.getByLabel("What would you like to do?").selectOption("build");
+    await chooseLearningGoal(page, "build");
     await page
       .getByText("Personalize your path (optional)", { exact: true })
       .click();
@@ -171,9 +172,7 @@ test("[F-ROADMAP-08-D] project-management learner submits a noncoding assignment
       await otherPage
         .getByLabel("Your starting point")
         .selectOption("explorer");
-      await otherPage
-        .getByLabel("What would you like to do?")
-        .selectOption("everyday");
+      await chooseLearningGoal(otherPage, "everyday");
       await otherPage
         .getByRole("button", { name: "Start my learning path" })
         .click();

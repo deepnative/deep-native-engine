@@ -77,12 +77,15 @@ test("[F-BUILD-10-A] narrow layout and keyboard-only core learning journey", asy
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto("/");
     const background = page.getByLabel("Your starting point");
-    const goal = page.getByLabel("What would you like to do?");
+    const goal = page.getByRole("radio", {
+      name: "Understand AI and try something useful",
+      exact: true,
+    });
     await expect(page.locator('input[name="synthetic"]')).toHaveCount(0);
     const start = page.getByRole("button", { name: "Start my learning path" });
     await fitsNarrowViewport(page, [background, goal, start]);
     await background.selectOption("explorer");
-    await goal.selectOption("everyday");
+    await goal.check();
     await start.click();
     await expect(page).toHaveURL(/\/learn$/);
     const open = page.getByRole("link", { name: "Open lesson" });
@@ -138,10 +141,13 @@ test("[F-BUILD-10-A] narrow layout and keyboard-only core learning journey", asy
     await tabTo(page, background);
     await page.keyboard.press("e");
     await expect(background).toHaveValue("explorer");
-    const goal = page.getByLabel("What would you like to do?");
+    const goal = page.getByRole("radio", {
+      name: "Understand AI and try something useful",
+      exact: true,
+    });
     await tabTo(page, goal);
-    await page.keyboard.press("u");
-    await expect(goal).toHaveValue("everyday");
+    await page.keyboard.press("Space");
+    await expect(goal).toBeChecked();
     await expect(page.locator('input[name="synthetic"]')).toHaveCount(0);
     await tabTo(
       page,

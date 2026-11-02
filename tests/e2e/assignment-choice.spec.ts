@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
@@ -57,7 +58,7 @@ function sample(id: string, title: string): DraftContent {
 async function onboard(page: Page, background: string, goal: string) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
-  await page.getByLabel("What would you like to do?").selectOption(goal);
+  await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }
@@ -228,7 +229,7 @@ test("[L33] professional sees a domain match only after observed foundation prac
   });
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("professional");
-  await page.getByLabel("What would you like to do?").selectOption("work");
+  await chooseLearningGoal(page, "work");
   await page
     .getByText("Personalize your path (optional)", { exact: true })
     .click();
@@ -257,7 +258,7 @@ test("[L33] professional sees a domain match only after observed foundation prac
   await expect(choices).toContainText(title);
   await choices.getByRole("button", { name: `Choose ${title}` }).click();
   await expect(choices).toContainText("Your chosen sample");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Save my direction" }).click();
   await expect(choices).toContainText("no longer available");
   await expect(choices).not.toContainText(title);

@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, type Page } from "@playwright/test";
 import { observeNativeSubmission } from "./native-submission-observation.ts";
 
@@ -27,7 +28,7 @@ test("[L102] three audiences keep exact private starter practice when changing g
     await page.context().clearCookies();
     await page.goto("/");
     await page.getByLabel("Your starting point").selectOption(background);
-    await page.getByLabel("What would you like to do?").selectOption(a);
+    await chooseLearningGoal(page, a);
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await page.goto("/lesson");
     const first = `Invented ${background} first goal plan with source checks.`;
@@ -43,7 +44,7 @@ test("[L102] three audiences keep exact private starter practice when changing g
     await page
       .getByLabel("Your starting point")
       .selectOption(background === "explorer" ? "professional" : "explorer");
-    await page.getByLabel("What would you like to do?").selectOption(b);
+    await chooseLearningGoal(page, b);
     await page.getByRole("button", { name: "Save my direction" }).click();
     await expect(
       page.getByRole("progressbar", { name: "Exercises completed" }),
@@ -117,7 +118,7 @@ test("[L102] three audiences keep exact private starter practice when changing g
     expect(JSON.stringify(payload)).toContain(second);
     await page.goto("/learn");
     await page.getByLabel("Your starting point").selectOption(background);
-    await page.getByLabel("What would you like to do?").selectOption(a);
+    await chooseLearningGoal(page, a);
     await page.getByRole("button", { name: "Save my direction" }).click();
     await expect(
       page.getByRole("progressbar", { name: "Exercises completed" }),

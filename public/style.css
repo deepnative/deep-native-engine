@@ -1338,26 +1338,159 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   margin-block: 32px;
 }
 
+/* Path choices share the reader's home, briefcase and code vocabulary. */
+.welcome-page .path-choices {
+  border: 0;
+  padding: 0;
+  margin: 24px 0 16px;
+  min-width: 0;
+}
+.welcome-page .path-choices legend {
+  font-weight: 800;
+  padding: 0 0 12px;
+}
+.path-choices > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.welcome-page .path-choice {
+  --path-color: #18715c;
+  --path-tint: #e9f5ef;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 28px 8px 12px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+  cursor: pointer;
+  text-align: center;
+}
+.welcome-page .path-choice[data-path="work"] {
+  --path-color: #2459d6;
+  --path-tint: #eaf0ff;
+}
+.welcome-page .path-choice[data-path="build"] {
+  --path-color: #875619;
+  --path-tint: #fff4e3;
+}
+.welcome-page .path-choice input {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--path-color);
+}
+.welcome-page .path-art {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 22px;
+  background: var(--path-color);
+  color: white;
+}
+.path-art svg {
+  width: 40px;
+  height: 40px;
+}
+.welcome-page .path-choice strong {
+  font-size: 16px;
+}
+.welcome-page .path-description {
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 400;
+}
+.welcome-page .path-selected {
+  color: var(--path-color);
+  font-size: 12px;
+  font-weight: 800;
+  visibility: hidden;
+  margin-top: auto;
+}
+.welcome-page .path-choice:hover,
+.welcome-page .path-choice:has(:checked) {
+  border-color: var(--path-color);
+  background: var(--path-tint);
+}
+.welcome-page .path-choice:has(:checked) .path-selected {
+  visibility: visible;
+}
+.welcome-page .path-choice:has(:focus-visible) {
+  outline: 3px solid #a34d08;
+  outline-offset: 4px;
+}
+@media (max-width: 420px) {
+  .path-choices > div {
+    gap: 6px;
+  }
+  .welcome-page .path-choice {
+    padding-inline: 4px;
+  }
+  .welcome-page .path-art {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+  }
+  .path-art svg {
+    width: 32px;
+    height: 32px;
+  }
+  .welcome-page .path-choice strong {
+    font-size: 14px;
+  }
+}
+
 /* Keep account actions visible at every width, including without JavaScript. */
 .site-header {
   flex-wrap: wrap;
   padding-top: 18px;
   padding-bottom: 18px;
 }
-.main-navigation {
+.main-navigation,
+.guidance-header nav {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 20px;
+  gap: 4px;
   font-size: 0.9rem;
 }
-.main-navigation a {
+.main-navigation a,
+.guidance-header nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 8px;
   color: var(--ink);
-  text-underline-offset: 0.25em;
+  font-weight: 700;
+  text-decoration: none;
+}
+.main-navigation a:hover,
+.guidance-header nav a:hover {
+  color: var(--accent);
+  background: #eaf0ff;
+}
+.main-navigation a[href="/account"],
+.guidance-header nav a[href="/account"] {
+  color: white;
+  background: var(--accent);
+}
+.main-navigation a[href="/account"]:hover,
+.guidance-header nav a[href="/account"]:hover {
+  background: #173eaa;
 }
 @media (max-width: 760px) {
   .main-navigation {
     width: 100%;
-    gap: 12px 18px;
+    gap: 4px;
   }
 }

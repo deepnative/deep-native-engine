@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -47,7 +48,7 @@ test("[F-BUILD-10-C] pending save and uncertain storage result recover without d
 
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const choices = page.getByRole("region", {
     name: "Choose a practice assignment",

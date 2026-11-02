@@ -97,6 +97,9 @@ function fixture(disabled = false) {
 }
 it("HOUR01/02/09 keeps empty, disabled, sample and configured states honest and escapes private recipient text", async () => {
   const f = fixture();
+  expect((await f.get("/account/coaching")).text).toContain(
+    "Request coaching invoice",
+  );
   expect((await f.get("/operator/coaching")).text).toContain("Pending months");
   f.service.adminOverview.mockResolvedValueOnce(
     ready({ members: [], coachingPending: [] }),

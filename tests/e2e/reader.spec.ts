@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { COOKIE } from "../../src/session.ts";
 import { hash } from "../../src/store.ts";
@@ -20,7 +21,7 @@ async function onboard(
 ) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
-  await page.getByLabel("What would you like to do?").selectOption(goal);
+  await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }
@@ -110,7 +111,7 @@ test("[L42] exploratory reader distinguishes opening, start and self-report afte
       .getByText("Self-assessed complete", { exact: false }),
   ).toBeVisible();
   await page.goto("/learn");
-  await page.getByLabel("What would you like to do?").selectOption("work");
+  await chooseLearningGoal(page, "work");
   await page.getByRole("button", { name: "Save my direction" }).click();
   await page.goto("/library");
   await expect(
@@ -272,7 +273,7 @@ test("[L55] all learner backgrounds can compare a synthetic reflection with its 
   ] as const) {
     await page.goto("/learn");
     await page.getByLabel("Your starting point").selectOption(background);
-    await page.getByLabel("What would you like to do?").selectOption(goal);
+    await chooseLearningGoal(page, goal);
     await page.getByRole("button", { name: "Save my direction" }).click();
     await page.goto(`/library/${id}`);
     await page
@@ -374,7 +375,7 @@ test("[L58] cross-audience private practice persists one exact sample version an
   ] as const) {
     await page.goto("/learn");
     await page.getByLabel("Your starting point").selectOption(background);
-    await page.getByLabel("What would you like to do?").selectOption(goal);
+    await chooseLearningGoal(page, goal);
     await page.getByRole("button", { name: "Save my direction" }).click();
     await page.goto(`/library/${id}/practice`);
     await expect(

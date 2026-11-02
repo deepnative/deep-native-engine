@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash } from "node:crypto";
 import {
   expect,
@@ -14,7 +15,7 @@ test.afterAll(async () => pool.end());
 async function startLesson(page: Page, background: string, goal: string) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
-  await page.getByLabel("What would you like to do?").selectOption(goal);
+  await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await page.getByRole("link", { name: "Open lesson" }).click();
 }

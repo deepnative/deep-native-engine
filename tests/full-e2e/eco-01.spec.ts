@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash } from "node:crypto";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { testPool } from "../support/database.ts";
@@ -10,7 +11,7 @@ test.afterAll(async () => pool.end());
 async function startGeneralLearner(page: Page) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }

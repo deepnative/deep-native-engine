@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
@@ -12,7 +13,7 @@ test.afterAll(async () => pool.end());
 async function onboard(page: Page) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }
@@ -88,13 +89,13 @@ test("[L65] a private plan recommends only a current eligible sample lesson", as
     await unrelated.close();
   }
 
-  await page.getByLabel("What would you like to do?").selectOption("build");
+  await chooseLearningGoal(page, "build");
   await page.getByRole("button", { name: "Save my direction" }).click();
   await expect(suggestion).not.toContainText("Invented next reading");
   await page.goto("/progress");
   await expect(page.locator("main ol")).toContainText("version 1");
   await page.goto("/learn");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Save my direction" }).click();
   await publish(2, "Invented next reading revised");
   await page.reload();

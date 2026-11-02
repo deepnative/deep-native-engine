@@ -82,7 +82,7 @@ export function escape(value: string) {
   );
 }
 export function accountActionLinks() {
-  return '<a href="/account/coaching">Coaching hours</a><a href="/admin">Administration</a><a href="/account/sign-out">Sign out</a>';
+  return '<a href="/account/coaching">Top up hours</a><a href="/admin">Administration</a><a href="/account/sign-out">Sign out</a>';
 }
 
 export function page(title: string, body: string) {
@@ -185,10 +185,39 @@ function profileFields(
       )
       .join("")}</div></fieldset>${errorText(name)}`;
   };
+  const pathDetails = {
+    everyday: [
+      "Everyday",
+      "AI for life outside work",
+      '<path d="m3 11 9-8 9 8M5 10v11h14V10M9 21v-7h6v7"/>',
+    ],
+    work: [
+      "Work",
+      "Make your next task clearer",
+      '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V4h8v3M3 12h18M10 12v3h4v-3"/>',
+    ],
+    build: [
+      "Technical",
+      "Build a better workflow",
+      '<rect x="2" y="4" width="20" height="16" rx="3"/><path d="m9 9-3 3 3 3m6-6 3 3-3 3"/>',
+    ],
+  };
+  const goal = attempted ? attempted.goal : learner?.goal;
+  const goalChoices = compact
+    ? `<fieldset id="goal" class="path-choices" tabindex="-1"${fieldError("goal") ? ' aria-invalid="true" aria-describedby="goal-error"' : ""}><legend>What would you like to do?</legend><div>${Object.entries(
+        GOALS,
+      )
+        .map(([key, label]) => {
+          const [title, description, drawing] =
+            pathDetails[key as keyof typeof pathDetails];
+          return `<label class="path-choice" data-path="${key}"><input type="radio" name="goal" value="${key}" aria-label="${label}" required${goal === key ? " checked" : ""}><span class="path-art"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${drawing}</svg></span><strong>${title}</strong><span class="path-description">${description}</span><span class="path-selected">Selected path</span></label>`;
+        })
+        .join("")}</div></fieldset>${errorText("goal")}`
+    : select("goal", "What would you like to do?", GOALS, goal, true);
   const timezoneError = fieldError("timezone");
   const exploratoryError = fieldError("exploratory");
   return `${select("background", "Your starting point", BACKGROUNDS, attempted ? attempted.background : learner?.background, true)}
-    ${select("goal", "What would you like to do?", GOALS, attempted ? attempted.goal : learner?.goal, true)}
+    ${goalChoices}
     <p class="small">You can add more interests or change your goal later. These choices never determine admission or payment.</p>
     ${compact ? `<details class="onboarding-options"${errors.length ? " open" : ""}><summary>Personalize your path (optional)</summary>` : ""}
     ${checks("background_tags", "Other starting points (optional)", BACKGROUNDS, attempted ? attempted.backgroundTags : (learner?.backgroundTags ?? []))}
