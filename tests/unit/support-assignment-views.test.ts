@@ -223,3 +223,22 @@ it("keeps unavailable states read-only without a complete validated retry contex
     assignmentNoticePage("Unavailable", { requestId: "request" }),
   ).toContain('href="/operator/support-assignment/history?requestId=request"');
 });
+
+it("STAFF-WINDOW-01 pre-fills an editable support window up to the operator's expiry", () => {
+  const html = assignmentConfirmPage(
+    "csrf",
+    { ...attempt, startsAt: "", expiresAt: "" },
+    new Date("2026-11-09T00:00:00.000Z"),
+    new Date("2026-11-02T18:04:05.678Z"),
+  );
+  expect(html).toContain('value="2026-11-02T18:04:05.678Z"');
+  expect(html).toContain('value="2026-11-03T18:04:05.678Z"');
+  expect(
+    assignmentConfirmPage(
+      "csrf",
+      attempt,
+      new Date("2026-11-09T00:00:00.000Z"),
+      new Date("2026-11-02T18:04:05.678Z"),
+    ),
+  ).toContain('value="2026-10-06T13:00:00.000Z"');
+});
