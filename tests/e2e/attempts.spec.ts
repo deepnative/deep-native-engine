@@ -118,6 +118,14 @@ test("[L48] general learner saves, submits and deletes only a private synthetic 
   await onboard(page, "explorer", "everyday");
   const attemptId = await chooseAndStart(page, title);
   await expect(page.getByText("started only")).toBeVisible();
+  // #595: the pinned brief is on the page the learner writes on.
+  await expect(
+    page
+      .getByRole("region", { name: "Assignment brief" })
+      .getByText(
+        "Use invented details and check the outcome against this sample brief.",
+      ),
+  ).toBeVisible();
   await page
     .getByLabel("Private sample response")
     .fill(
