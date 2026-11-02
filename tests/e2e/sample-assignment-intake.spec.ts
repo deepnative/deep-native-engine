@@ -242,6 +242,13 @@ for (const [index, [background, goal]] of audiences.entries()) {
       await expect(admin.locator("body")).not.toContainText(
         example.text.trim(),
       );
+      // #596: a fresh check pre-fills an editable UTC window.
+      await expect(
+        admin.getByLabel("Starts at (UTC)", { exact: true }),
+      ).toHaveValue(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      await expect(
+        admin.getByLabel("Expires at (UTC)", { exact: true }),
+      ).toHaveValue(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
       await admin
         .getByLabel("Starts at (UTC)", { exact: true })
         .fill(new Date(Date.now() - 60000).toISOString());

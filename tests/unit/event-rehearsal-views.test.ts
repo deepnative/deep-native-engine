@@ -76,3 +76,13 @@ it("REHSCHED-06 unavailable outcome preserves original instruction without autom
     'action="/operator/event-rehearsals/schedule"',
   );
 });
+
+it("STAFF-WINDOW-02 shows a current start example instead of a past date", () => {
+  const html = eventRehearsalHome(
+    "csrf",
+    true,
+    new Date("2026-11-02T18:04:05.678Z"),
+  );
+  expect(html).toContain('placeholder="2026-11-03T18:00:00.000Z"');
+  expect(html).not.toContain("2026-10-07T15:30:00.000Z");
+});
