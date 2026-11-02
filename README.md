@@ -1,5 +1,8 @@
 # Deep Native Engine
 
+Reusable **Billing recipient** details live separately from learning and sign-in identity. Review saved details on each course proposal or new coaching month; only explicit acceptance creates a sample invoice, and later profile edits never change issued history. A signed proposal link resumes the same account’s selection after ordinary registration/email recovery, without transferring another learner’s offer. The profile exports with private records and is erased with the account; live payments and invoice email remain off. See [billing profiles](assets/docs/BILLING-PROFILES.md).
+
+
 Members with a verified email can sign out through **My account** and deliberately return by email to the same saved learning. Sign-out invalidates the current bearer, including copied cookies; browser-only accounts must verify email first. An uncertain result offers account inspection and email return without automatically repeating the action.
 
 Deep Native Engine helps curious learners, IT practitioners and professionals in other fields learn to use AI in practical ways. You can start without coding or a career plan: choose a direction, try a small exercise and decide what to learn next.

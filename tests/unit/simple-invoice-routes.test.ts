@@ -72,7 +72,12 @@ function fixture(disabled = false, noSender = false) {
     finishEmail: vi.fn().mockResolvedValue(ready({ invoiceId: id })),
   };
   const sender = { send: vi.fn().mockResolvedValue(undefined) };
+  const profiles = {
+    read: vi.fn().mockResolvedValue(ready(null)),
+    save: vi.fn().mockResolvedValue(ready({ revision: 1 })),
+  };
   const options = {
+    billingProfiles: profiles,
     origin,
     secret,
     invoiceSender: noSender ? undefined : sender,
@@ -106,7 +111,7 @@ function fixture(disabled = false, noSender = false) {
           ...fields,
         }),
     );
-  return { service, sender, options, app, get, post };
+  return { service, profiles, sender, options, app, get, post };
 }
 const base = "/account/purchases",
   admin = "/operator/invoices";
@@ -483,4 +488,131 @@ it("ADMINCON02 preserves exact learner selection and rejects forged selection qu
     422,
   );
   expect((await f.get("/operator/invoices?unexpected=x")).status).toBe(403);
+});
+it("BILLPROFILE02 offers a separate private billing profile even when invoices are disabled", async () => {
+  const f = fixture(true);
+  const response = await f.get("/account/billing");
+  expect(response.status).toBe(200);
+  expect(response.text).toContain("Billing recipient");
+  expect(response.text).toContain("does not change your sign-in email");
+});
+it("BILLPROFILE02/04 isolates profile validation, stale forms, unavailable outcomes and escaped prefills", async () => {
+  const f = fixture();
+  f.profiles.read.mockResolvedValue(
+    ready({
+      name: "Invented <recipient>",
+      email: "billing@example.invalid",
+      revision: 2,
+    }),
+  );
+  let r = await f.get("/account/billing");
+  expect(r.text).toContain("Invented &lt;recipient&gt;");
+  expect(r.headers["cache-control"]).toBe("no-store");
+  expect(
+    (
+      await f.post("/account/billing", {
+        name: "Invented",
+        email: "billing@example.invalid",
+        revision: "2",
+      })
+    ).headers.location,
+  ).toBe("/account/billing");
+  expect(f.profiles.save).toHaveBeenCalledWith(token, {
+    name: "Invented",
+    email: "billing@example.invalid",
+    revision: 2,
+  });
+  for (const kind of ["denied", "invalid", "conflict", "unavailable"]) {
+    f.profiles.read.mockResolvedValueOnce({ kind });
+    expect((await f.get("/account/billing")).status).toBe(
+      { denied: 403, invalid: 422, conflict: 409, unavailable: 503 }[kind],
+    );
+    f.profiles.save.mockResolvedValueOnce({ kind });
+    expect(
+      (
+        await f.post("/account/billing", {
+          name: "Invented",
+          email: "billing@example.invalid",
+        })
+      ).status,
+    ).toBe(
+      { denied: 403, invalid: 422, conflict: 409, unavailable: 503 }[kind],
+    );
+  }
+  expect((await f.get("/account/billing?ownerId=" + id)).status).toBe(403);
+  expect(
+    (
+      await f.post("/account/billing", {
+        name: "Invented",
+        email: "billing@example.invalid",
+        ownerId: id,
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await f.post(
+        "/account/billing",
+        { name: "Invented" },
+        "https://other.invalid",
+      )
+    ).status,
+  ).toBe(403);
+  f.service.overview.mockResolvedValue(
+    ready({
+      plans: [{ id, terms, state: "offered", revision: 1 }],
+      invoices: [],
+    }),
+  );
+  r = await f.get(base);
+  expect(r.text).toContain("Invented &lt;recipient&gt;");
+  f.profiles.read.mockResolvedValueOnce({ kind: "unavailable" });
+  expect((await f.get(base)).status).toBe(503);
+  const bare = express();
+  bare.use(express.urlencoded({ extended: false }));
+  bare.use((_req, res, next) => {
+    res.locals.token = token;
+    next();
+  });
+  mountSimpleInvoiceRoutes(bare, undefined, { origin, secret });
+  expect(
+    (await withLoopback(bare, (s) => request(s).get("/account/billing")))
+      .status,
+  ).toBe(503);
+  expect(
+    (
+      await withLoopback(bare, (s) =>
+        request(s)
+          .post("/account/billing")
+          .set("Origin", origin)
+          .type("form")
+          .send({ csrf: csrf(token, secret) }),
+      )
+    ).status,
+  ).toBe(503);
+  expect(
+    (await withLoopback(bare, (s) => request(s).get("/account/billing?bad=1")))
+      .status,
+  ).toBe(403);
+  const legacy = express();
+  legacy.use((_req, res, next) => {
+    res.locals.token = token;
+    next();
+  });
+  mountSimpleInvoiceRoutes(legacy, f.service as unknown as SimpleInvoiceStore, {
+    origin,
+    secret,
+  });
+  expect((await withLoopback(legacy, (s) => request(s).get(base))).status).toBe(
+    200,
+  );
+});
+
+it("BILLPROFILE02 preserves empty invalid attempted recipient fields with a safe recovery message", async () => {
+  const f = fixture();
+  f.profiles.save.mockResolvedValue({ kind: "invalid" });
+  const r = await f.post("/account/billing");
+  expect(r.status).toBe(422);
+  expect(r.text).toContain("Recipient not saved");
+  expect(r.text).toContain('value=""');
 });

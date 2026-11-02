@@ -1,3 +1,4 @@
+import type { BillingProfile, BillingProfileStore } from "./billing-profile.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { csrf, validCsrf } from "./session.ts";
@@ -48,10 +49,21 @@ function error(
       ),
     );
 }
+function billingPage(profile: BillingProfile, anti: string, message = "") {
+  return page(
+    "Billing recipient",
+    `<section class="invoice-workspace"><h1>Billing recipient</h1>${message ? `<p role="alert">${escape(message)}</p>` : ""}<p>Save the name and email to suggest on future course proposals. This does not change your sign-in email, authorize a charge, enroll you, or edit an issued invoice. Review the recipient and exact terms each time.</p><form method="post" action="/account/billing">${hidden("csrf", anti)}${hidden("revision", profile.revision)}<label>Invoice recipient name<input name="name" autocomplete="name" maxlength="200" value="${escape(profile.name)}" required></label><label>Invoice email<input name="email" type="email" autocomplete="email" maxlength="254" value="${escape(profile.email)}" required></label><button>Save billing recipient</button></form><p>Do not enter card numbers, CVV, bank credentials or payment secrets. This private profile is included in your account export and removed with your learning account; issued financial records follow their separate retention policy.</p><p><a href="${memberPath}">Review courses and invoices</a> · <a href="/account">My account</a></p></section>`,
+  );
+}
 export function mountSimpleInvoiceRoutes(
   app: Express,
   store: SimpleInvoiceStore | undefined,
-  options: { origin: string; secret: string; invoiceSender?: InvoiceSender },
+  options: {
+    origin: string;
+    secret: string;
+    invoiceSender?: InvoiceSender;
+    billingProfiles?: BillingProfileStore;
+  },
 ) {
   const token = (res: Response) => res.locals.token as string;
   const protect = (res: Response) =>
@@ -102,22 +114,63 @@ export function mountSimpleInvoiceRoutes(
     }
     return true;
   };
+  app.get("/account/billing", async (req, res) => {
+    if (!valid(req, res)) return;
+    if (!options.billingProfiles) return error(res, "unavailable");
+    const result = await options.billingProfiles.read(token(res));
+    if (result.kind !== "ready") return error(res, result.kind);
+    return res.send(
+      billingPage(
+        result.value ?? { name: "", email: "", revision: 0 },
+        csrf(token(res), options.secret),
+      ),
+    );
+  });
+  app.post("/account/billing", async (req, res) => {
+    if (!valid(req, res, ["name", "email"])) return;
+    if (!options.billingProfiles) return error(res, "unavailable");
+    const result = await options.billingProfiles.save(token(res), {
+      name: req.body.name,
+      email: req.body.email,
+      revision: Number(req.body.revision),
+    });
+    if (result.kind === "ready") return res.redirect(303, "/account/billing");
+    if (result.kind === "invalid" || result.kind === "conflict")
+      return res.status(result.kind === "invalid" ? 422 : 409).send(
+        billingPage(
+          {
+            name: req.body.name ?? "",
+            email: req.body.email ?? "",
+            revision: Number(req.body.revision),
+          },
+          csrf(token(res), options.secret),
+          result.kind === "invalid"
+            ? "Recipient not saved. Enter a name and valid email address."
+            : "Recipient not saved: another edit changed the profile. Copy your details and reopen Billing recipient before saving.",
+        ),
+      );
+    return error(res, result.kind);
+  });
   app.get(memberPath, async (req, res) => {
     if (!valid(req, res)) return;
     if (!store)
       return res.send(
         page(
           "Courses and invoices",
-          '<h1>Courses and invoices</h1><p><a href="/account/coaching">Monthly coaching hours</a></p><p>No payable offer is configured. Your registration, learning access and saved work remain available.</p><p><a href="/learn">Return to learning</a> · <a href="/account">My account</a></p>',
+          '<h1>Courses and invoices</h1><p><a href="/account/billing">Billing recipient</a></p><p><a href="/account/coaching">Monthly coaching hours</a></p><p>No payable offer is configured. Your registration, learning access and saved work remain available.</p><p><a href="/learn">Return to learning</a> · <a href="/account">My account</a></p>',
         ),
       );
     const result = await store.overview(token(res));
     if (result.kind !== "ready") return error(res, result.kind);
+    const profile = options.billingProfiles
+      ? await options.billingProfiles.read(token(res))
+      : { kind: "ready" as const, value: null };
+    if (profile.kind !== "ready") return error(res, profile.kind);
     const anti = csrf(token(res), options.secret);
     return res.send(
       page(
         "Courses and invoices",
-        `<section class="invoice-workspace"><h1>Courses and invoices</h1><p><a href="/account/coaching">Monthly coaching hours</a></p><p>Registration does not create a charge. Review your consolidated courses and billing terms before accepting. Recurring invoices never take payment automatically. Cancel an existing monthly agreement before accepting a replacement.</p>${result.value.plans.map((plan) => `<article><h2>Course bundle</h2><p>${plan.terms.sample ? "SAMPLE · NOT PAYABLE" : "Prepared course offer"} · ${escape(plan.state)}</p><ul>${plan.terms.courses.map((c) => `<li>${escape(c.description)} · ${escape(c.id)} version ${c.version} · CAD ${(c.amountCents / 100).toFixed(2)}</li>`).join("")}</ul><p>${plan.terms.cadence === "one_time" ? "One-time invoice" : "Monthly invoices until cancelled"} · starts ${escape(plan.terms.startsOn)} · tax CAD ${(plan.terms.taxCents / 100).toFixed(2)}</p><p><strong>${plan.terms.cadence === "monthly" ? "Total each month" : "Total"}: CAD ${(invoiceTotal(plan.terms) / 100).toFixed(2)}</strong></p><p>Invoice issuer: ${escape(plan.terms.issuer)}</p><p class="invoice-instructions">${escape(plan.terms.instructions)}</p>${plan.state === "offered" ? `<form method="post" action="${memberPath}/plans/${plan.id}/accept">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", plan.revision)}<label>Invoice recipient name<input name="name" maxlength="200" required></label><label>Invoice email<input type="email" name="email" maxlength="254" required></label><label class="check"><input type="checkbox" name="confirm" value="accept" required><span>I accept these exact courses and ${plan.terms.cadence === "monthly" ? "monthly recurring invoices until I cancel" : "one-time billing terms"}. Issued financial invoices can be retained for accounting after learning-account deletion.</span></label><button>Accept courses and create invoice</button></form>` : plan.state === "active" ? `<form method="post" action="${memberPath}/plans/${plan.id}/cancel">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", plan.revision)}<label class="check"><input type="checkbox" name="confirm" value="cancel" required><span>Stop future invoices; retain already issued invoices.</span></label><button class="secondary">Cancel future billing</button></form>` : ""}</article>`).join("") || "<p>No course bundle has been prepared for this account.</p>"}<h2>Your invoices</h2><ul>${result.value.invoices.map((i) => `<li><a href="${memberPath}/invoices/${i.id}">${escape(i.document.number)}</a> · CAD ${(i.totalCents / 100).toFixed(2)} · ${i.voidReason ? "Void" : i.paidCents === i.totalCents ? "Paid" : i.paidCents ? "Partially paid" : "Awaiting offline payment"} · ${i.document.sample ? "Sample, not payable" : "Invoice"}</li>`).join("")}</ul><p><a href="/learn">Return to learning</a> · <a href="/account">My account</a></p></section>`,
+        `<section class="invoice-workspace"><h1>Courses and invoices</h1><p><a href="/account/billing">Billing recipient</a></p><p><a href="/account/coaching">Monthly coaching hours</a></p><p>Registration does not create a charge. Review your consolidated courses and billing terms before accepting. Recurring invoices never take payment automatically. Cancel an existing monthly agreement before accepting a replacement.</p>${result.value.plans.map((plan) => `<article id="plan-${plan.id}"><h2>Course bundle</h2><p><a href="/courses/proposals/${plan.id}">Reopen this proposal after sign-in</a></p><p>${plan.terms.sample ? "SAMPLE · NOT PAYABLE" : "Prepared course offer"} · ${escape(plan.state)}</p><ul>${plan.terms.courses.map((c) => `<li>${escape(c.description)} · ${escape(c.id)} version ${c.version} · CAD ${(c.amountCents / 100).toFixed(2)}</li>`).join("")}</ul><p>${plan.terms.cadence === "one_time" ? "One-time invoice" : "Monthly invoices until cancelled"} · starts ${escape(plan.terms.startsOn)} · tax CAD ${(plan.terms.taxCents / 100).toFixed(2)}</p><p><strong>${plan.terms.cadence === "monthly" ? "Total each month" : "Total"}: CAD ${(invoiceTotal(plan.terms) / 100).toFixed(2)}</strong></p><p>Invoice issuer: ${escape(plan.terms.issuer)}</p><p class="invoice-instructions">${escape(plan.terms.instructions)}</p>${plan.state === "offered" ? `<form method="post" action="${memberPath}/plans/${plan.id}/accept">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", plan.revision)}<label>Invoice recipient name<input name="name" maxlength="200" value="${escape(profile.value?.name ?? "")}" required></label><label>Invoice email<input type="email" name="email" maxlength="254" value="${escape(profile.value?.email ?? "")}" required></label><label class="check"><input type="checkbox" name="confirm" value="accept" required><span>I accept these exact courses and ${plan.terms.cadence === "monthly" ? "monthly recurring invoices until I cancel" : "one-time billing terms"}. Issued financial invoices can be retained for accounting after learning-account deletion.</span></label><button>Accept courses and create invoice</button></form>` : plan.state === "active" ? `<form method="post" action="${memberPath}/plans/${plan.id}/cancel">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", plan.revision)}<label class="check"><input type="checkbox" name="confirm" value="cancel" required><span>Stop future invoices; retain already issued invoices.</span></label><button class="secondary">Cancel future billing</button></form>` : ""}</article>`).join("") || "<p>No course bundle has been prepared for this account.</p>"}<h2>Your invoices</h2><ul>${result.value.invoices.map((i) => `<li><a href="${memberPath}/invoices/${i.id}">${escape(i.document.number)}</a> · CAD ${(i.totalCents / 100).toFixed(2)} · ${i.voidReason ? "Void" : i.paidCents === i.totalCents ? "Paid" : i.paidCents ? "Partially paid" : "Awaiting offline payment"} · ${i.document.sample ? "Sample, not payable" : "Invoice"}</li>`).join("")}</ul><p><a href="/learn">Return to learning</a> · <a href="/account">My account</a></p></section>`,
       ),
     );
   });

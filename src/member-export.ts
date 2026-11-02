@@ -492,6 +492,12 @@ const sections = {
     "id",
     true,
   ),
+  billingProfile: section(
+    "name,email,revision",
+    "billing_profiles WHERE owner_id=$1",
+    "owner_id",
+    true,
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -505,7 +511,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v29";
+  version: "local-member-records-v30";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -639,7 +645,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v29",
+          version: "local-member-records-v30",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

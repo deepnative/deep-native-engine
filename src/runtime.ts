@@ -1,3 +1,4 @@
+import { billingProfileStore } from "./billing-profile.ts";
 import { administratorEntry } from "./administrator-entry.ts";
 import { simpleInvoiceSettings } from "./simple-invoice-config.ts";
 import { simpleInvoiceStore } from "./simple-invoice-store.ts";
@@ -127,6 +128,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       : undefined;
     const options = {
       simpleInvoices: invoices,
+      billingProfiles: billingProfileStore(pool),
       invoiceSender: !invoiceSettings
         ? undefined
         : invoiceSettings.sample

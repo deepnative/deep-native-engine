@@ -1,3 +1,5 @@
+import { billingProfileStore } from "../../src/billing-profile.ts";
+import { memberExportStore } from "../../src/member-export.ts";
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import request from "supertest";
@@ -28,7 +30,9 @@ const invoices = simpleInvoiceStore(pool, settings),
   origin = "http://127.0.0.1:3000",
   secret = "native-invoice-test";
 const sent: string[] = [];
+const profiles = billingProfileStore(pool);
 const application = app(members, {
+  billingProfiles: profiles,
   origin,
   secret,
   mode: "test",
@@ -518,4 +522,186 @@ it("OFFPUR-10 a replacement course proposal cannot create two active recurring b
     }),
   );
   expect((await invoices.accept(m.token, input)).kind).toBe("ready");
+});
+
+it("BILLPROFILE02 persists only own recipient, validates fields, serializes concurrent edits and exports/erases the private profile", async () => {
+  const m = await member(),
+    other = await member();
+  expect(await profiles.read(m.token)).toEqual({ kind: "ready", value: null });
+  const input = {
+    name: "陳 Invented profile",
+    email: " BILLING@EXAMPLE.INVALID ",
+    revision: 0,
+  };
+  const saved = ready(await profiles.save(m.token, input));
+  expect(saved).toEqual({
+    ...input,
+    email: "billing@example.invalid",
+    revision: 1,
+  });
+  expect(await profiles.read(other.token)).toEqual({
+    kind: "ready",
+    value: null,
+  });
+  expect(await profiles.read(admin)).toEqual({ kind: "denied" });
+  const raced = await Promise.all([
+    profiles.save(m.token, { ...input, revision: 1, name: "First" }),
+    profiles.save(m.token, { ...input, revision: 1, name: "Second" }),
+  ]);
+  expect(raced.map((x) => x.kind).sort()).toEqual(["conflict", "ready"]);
+  expect(
+    await profiles.save(m.token, { ...input, email: "invalid", revision: 2 }),
+  ).toEqual({ kind: "invalid" });
+  expect(
+    (
+      await post("/account/billing", m.token, {
+        name: "Forged",
+        email: "safe@example.invalid",
+        revision: "2",
+        ownerId: other.id,
+      })
+    ).status,
+  ).toBe(403);
+  const records: Record<string, unknown[]> = {};
+  let cursor: string | undefined;
+  do {
+    const result = await memberExportStore(pool).exportOwned(m.token, cursor);
+    if (result.kind !== "ready") throw Error("Export unavailable");
+    for (const [key, rows] of Object.entries(result.payload.records))
+      records[key] = [...(records[key] ?? []), ...rows];
+    cursor = result.payload.page.nextCursor ?? undefined;
+  } while (cursor);
+  expect(records.billingProfile).toEqual([ready(await profiles.read(m.token))]);
+  await members.remove(m.id);
+  expect(
+    (
+      await pool.query("SELECT 1 FROM billing_profiles WHERE owner_id=$1", [
+        m.id,
+      ])
+    ).rowCount,
+  ).toBe(0);
+  expect(await profiles.read(m.token)).toEqual({ kind: "denied" });
+});
+it("BILLPROFILE03 profile edits never rewrite accepted one-time/monthly recipient snapshots or duplicate invoices", async () => {
+  for (const cadence of ["one_time", "monthly"] as const) {
+    const m = await member();
+    const original = {
+      name: "Original recipient",
+      email: "original@example.invalid",
+      revision: 0,
+    };
+    ready(await profiles.save(m.token, original));
+    const p = ready(await invoices.propose(admin, proposal(m.id, cadence)));
+    const rendered = await get("/account/purchases", m.token);
+    expect(rendered.text).toContain('value="original@example.invalid"');
+    expect(rendered.text).toContain(`/courses/proposals/${p.planId}`);
+    const input = {
+      planId: p.planId,
+      operationId: randomUUID(),
+      expectedRevision: 1,
+      name: original.name,
+      email: original.email,
+    };
+    const accepted = ready(await invoices.accept(m.token, input));
+    ready(
+      await profiles.save(m.token, {
+        name: "Changed recipient",
+        email: "changed@example.invalid",
+        revision: 1,
+      }),
+    );
+    expect(ready(await invoices.accept(m.token, input))).toEqual(accepted);
+    expect(
+      ready(await invoices.invoice(m.token, accepted.invoiceId)).document,
+    ).toMatchObject({
+      billedTo: original.name,
+      recipientEmail: original.email,
+    });
+    expect(ready(await invoices.overview(m.token)).invoices).toHaveLength(1);
+    expect(
+      ready(
+        await invoices.cancel(m.token, {
+          planId: p.planId,
+          expectedRevision: ready(await invoices.overview(m.token)).plans[0]!
+            .revision,
+          operationId: randomUUID(),
+        }),
+      ),
+    ).toEqual({ cancelled: true });
+    expect(ready(await profiles.read(m.token))).toMatchObject({
+      name: "Changed recipient",
+      revision: 2,
+    });
+  }
+});
+it("BILLPROFILE02/04 profile remains available with billing disabled and denied during deletion or expired access", async () => {
+  const m = await member(),
+    application = app(members, {
+      origin,
+      secret,
+      mode: "test",
+      billingProfiles: profiles,
+    });
+  const r = await withLoopback(application, (s) =>
+    request(s)
+      .get("/account/billing")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${m.token}`),
+  );
+  expect(r.status).toBe(200);
+  expect(r.text).toContain("does not change your sign-in email");
+  await pool.query(
+    "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE id=$1",
+    [m.id],
+  );
+  expect(
+    await profiles.save(m.token, {
+      name: "No save",
+      email: "none@example.invalid",
+      revision: 0,
+    }),
+  ).toEqual({ kind: "denied" });
+  const n = await member();
+  await pool.query(
+    "UPDATE principals SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+    [n.id],
+  );
+  expect(await profiles.read(n.token)).toEqual({ kind: "denied" });
+});
+it("BILLPROFILE02/04 an acknowledged profile commit with a lost response stays inspectable without another edit or charge", async () => {
+  const m = await member();
+  let lost = true;
+  const fault = {
+    async connect() {
+      const client = await pool.connect();
+      return {
+        query: async (sql: string, args?: unknown[]) => {
+          const r = await client.query(sql, args);
+          if (sql === "COMMIT" && lost) {
+            lost = false;
+            throw Error("Invented lost profile acknowledgement");
+          }
+          return r;
+        },
+        release: (error?: Error) => client.release(error),
+      } as unknown as PoolClient;
+    },
+  } as unknown as Pool;
+  const input = {
+    name: "Invented retained recipient",
+    email: "retained@example.invalid",
+    revision: 0,
+  };
+  expect(await billingProfileStore(fault).save(m.token, input)).toEqual({
+    kind: "unavailable",
+  });
+  expect(ready(await profiles.read(m.token))).toEqual({
+    ...input,
+    revision: 1,
+  });
+  expect(await profiles.save(m.token, input)).toEqual({ kind: "conflict" });
+  expect(ready(await invoices.overview(m.token))).toEqual({
+    plans: [],
+    invoices: [],
+  });
 });
