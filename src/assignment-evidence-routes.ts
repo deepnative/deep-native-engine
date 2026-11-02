@@ -11,6 +11,7 @@ import {
   assignmentReceiptPage,
   assignmentRecoveryPage,
 } from "./assignment-evidence-views.ts";
+import { underLease, type AdmitCopy } from "./upload-admission.ts";
 
 const exact = (
   value: unknown,
@@ -32,6 +33,7 @@ export function mountAssignmentEvidenceRoutes(
   app: Express,
   store: AssignmentEvidenceStore | undefined,
   enabled: boolean,
+  admit?: AdmitCopy,
 ) {
   function failure(
     res: Response,
@@ -125,9 +127,19 @@ export function mountAssignmentEvidenceRoutes(
     });
     if (!instruction) return failure(res, "invalid");
     try {
-      const result = await store.create(
-        res.locals.token as string,
-        instruction,
+      if (
+        admit &&
+        !(await admit(req, res, (action) =>
+          assignmentRecoveryPage(
+            res.locals.csrf as string,
+            action,
+            instruction,
+          ),
+        ))
+      )
+        return;
+      const result = await underLease(res, () =>
+        store.create(res.locals.token as string, instruction),
       );
       if (result.kind !== "created" && result.kind !== "replayed")
         return failure(res, result.kind, instruction);
