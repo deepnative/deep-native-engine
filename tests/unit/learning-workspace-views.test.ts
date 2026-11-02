@@ -13,6 +13,8 @@ it("LWORK-01/07 gives the account reader its private context and preserves earli
     expect(html).toContain(`${LEARNING_WORKSPACE_ASSET_BASE}/style.css`);
     expect(html).toContain('src="/assets/learning-workspace.js"');
     expect(html).toContain('aria-label="Account and learning services"');
+    expect(html).toContain('class="workspace-brand"');
+    expect(html).toContain('aria-label="Deep Native learning home"');
     for (const path of [
       "/account",
       "/account/sign-out",
