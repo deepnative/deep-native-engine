@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { PREPARED_SAMPLES } from "../../src/prepared-sample-values.ts";
@@ -15,7 +16,7 @@ test("[L279] a member over the upload budget keeps a refused provided copy and r
   const example = PREPARED_SAMPLES[0]!;
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
   await page.goto("/evidence");
