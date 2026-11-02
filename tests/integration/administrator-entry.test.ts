@@ -53,7 +53,11 @@ it("ADMINONLY01/04 enters both exact normalized verified owner identities withou
     expect(r.kind).toBe("ready");
     if (r.kind !== "ready" || !r.credential || !r.expires)
       throw Error("No administration");
-    expect(+r.expires).toBeLessThanOrEqual(Date.now() + 8 * 3600000);
+    // Authority is issued by PostgreSQL; the host and Docker VM clocks can differ.
+    const serverNow = (
+      await pool.query<{ now: Date }>("SELECT clock_timestamp() AS now")
+    ).rows[0]!.now;
+    expect(+r.expires).toBeLessThanOrEqual(+serverNow + 8 * 3600000);
     expect(await staffEntryStore(pool).admit(r.credential)).toMatchObject({
       kind: "ready",
       role: "platform_admin",
@@ -307,4 +311,89 @@ it("ADMINONLY03 ending administration serializes with a concurrent direct read w
     resume();
     await ending;
   }
+});
+
+it("ADMINCON01/02 selects only minimal exact-account enrollment and billing summaries without exposing writing", async () => {
+  const f = await fixture();
+  const entered = await entry.enter(f.token);
+  if (entered.kind !== "ready" || !entered.credential)
+    throw Error("No current admin");
+  const otherToken = randomBytes(32).toString("hex");
+  await members.create(otherToken, {
+    background: "professional",
+    goal: "work",
+  });
+  const other = await members.session(otherToken);
+  if (other.kind !== "active") throw Error("No second learner");
+  await members.save(otherToken, {
+    revision: 0,
+    instruction: "PRIVATE CONSOLE SENTINEL",
+    verification: "Not administrator content",
+    complete: false,
+  });
+  const before = (await pool.query("SELECT count(*)::int AS n FROM principals"))
+    .rows[0];
+  const list = await entry.console!(entered.credential);
+  expect(list.kind).toBe("ready");
+  const selected = await entry.console!(entered.credential, other.learner.id);
+  expect(selected).toMatchObject({
+    kind: "ready",
+    value: {
+      members: [
+        { id: other.learner.id, background: "professional", goal: "work" },
+      ],
+      selected: {
+        member: { id: other.learner.id },
+        plans: [],
+        invoices: [],
+        enrollments: [],
+      },
+    },
+  });
+  expect(JSON.stringify(selected)).not.toContain("PRIVATE CONSOLE SENTINEL");
+  expect(
+    (await pool.query("SELECT count(*)::int AS n FROM principals")).rows[0],
+  ).toEqual(before);
+  expect(await entry.console!(entered.credential, randomUUID())).toEqual({
+    kind: "not-found",
+  });
+  expect(
+    await invoices.adminOverview(entered.credential, other.learner.id),
+  ).toMatchObject({
+    kind: "ready",
+    value: { members: [{ id: other.learner.id }] },
+  });
+  expect((await invoices.adminOverview(entered.credential, "wrong")).kind).toBe(
+    "invalid",
+  );
+});
+it("ADMINCON04 denies learner, unbound, revoked, malformed and expired console authority", async () => {
+  const f = await fixture(),
+    entered = await entry.enter(f.token);
+  if (entered.kind !== "ready" || !entered.credential)
+    throw Error("No current admin");
+  expect(await entry.console!(f.token)).toEqual({ kind: "denied" });
+  expect(await entry.console!(entered.credential, "not-an-id")).toEqual({
+    kind: "denied",
+  });
+  expect(await entry.end(f.token)).toEqual({ kind: "ready" });
+  expect(await entry.console!(entered.credential, f.id)).toEqual({
+    kind: "denied",
+  });
+  const legacy = randomBytes(32).toString("hex");
+  await authorizationStore(pool).provisionStaff(
+    legacy,
+    "platform_admin",
+    new Date(Date.now() + 60000),
+  );
+  expect(await entry.console!(legacy)).toEqual({ kind: "denied" });
+  const g = await fixture("tom@deepnative.io"),
+    second = await entry.enter(g.token);
+  if (second.kind !== "ready" || !second.credential)
+    throw Error("No second admin");
+  await pool.query(
+    "UPDATE principals SET expires_at=clock_timestamp()-interval '1 second' WHERE token_hash=$1",
+    [hash(second.credential)],
+  );
+  expect(await entry.console!(second.credential)).toEqual({ kind: "denied" });
 });

@@ -8,6 +8,8 @@ function fixture() {
     workspace: true,
     identity: true,
     previous: false,
+    admin: true,
+    listed: true,
     fail: "",
     expires: new Date(Date.now() + 60000),
     session_expires: new Date(Date.now() + 30000),
@@ -15,6 +17,24 @@ function fixture() {
   const query = vi.fn(async (sql: string) => {
     if (state.fail && sql.startsWith(state.fail))
       throw Error("private database failure");
+    if (sql.startsWith("SELECT p.expires_at"))
+      return { rows: state.admin ? [{ expires: state.expires }] : [] };
+    if (sql.startsWith("SELECT l.id"))
+      return {
+        rows: state.listed
+          ? [
+              {
+                id: "11111111-1111-4111-8111-111111111111",
+                background: "professional",
+                goal: "work",
+              },
+            ]
+          : [],
+      };
+    if (sql.startsWith("SELECT id,version,title"))
+      return {
+        rows: [{ id: "FND-001", version: 2, title: "Invented lesson" }],
+      };
     if (sql.startsWith("SELECT p.id"))
       return {
         rows: state.owner
@@ -117,4 +137,45 @@ it("ADMINONLY05 fails closed at database and unknown commit boundaries without r
   const f = fixture();
   f.state.session_expires = new Date(NaN);
   expect(await f.store.enter(token)).toEqual({ kind: "unavailable" });
+});
+
+it("ADMINCON01/02 reads a bounded minimal directory and exact member summaries without private writing", async () => {
+  const f = fixture(),
+    id = "11111111-1111-4111-8111-111111111111";
+  expect(await f.store.console!(token)).toMatchObject({
+    kind: "ready",
+    value: { members: [{ id, background: "professional", goal: "work" }] },
+  });
+  const result = await f.store.console!(token, id);
+  expect(result).toMatchObject({
+    kind: "ready",
+    value: {
+      selected: { member: { id }, plans: [], invoices: [], enrollments: [] },
+    },
+  });
+  expect(
+    f.query.mock.calls.some(([s]) =>
+      /INSERT|UPDATE|DELETE|instruction|response_text/.test(s),
+    ),
+  ).toBe(false);
+  f.state.listed = false;
+  expect(await f.store.console!(token, id)).toEqual({ kind: "not-found" });
+  expect(await f.store.console!(token)).toMatchObject({
+    kind: "ready",
+    value: { members: [] },
+  });
+});
+it("ADMINCON04 fences console reads by exact finite admin authority and fails closed on unknown outcomes", async () => {
+  const f = fixture();
+  expect(await f.store.console!("wrong")).toEqual({ kind: "denied" });
+  expect(await f.store.console!(token, "wrong")).toEqual({ kind: "denied" });
+  expect(f.query).not.toHaveBeenCalled();
+  f.state.admin = false;
+  expect(await f.store.console!(token)).toEqual({ kind: "denied" });
+  for (const fail of ["SELECT l.id", "COMMIT"]) {
+    const g = fixture();
+    g.state.fail = fail;
+    expect(await g.store.console!(token)).toEqual({ kind: "unavailable" });
+    expect(g.release).toHaveBeenCalledOnce();
+  }
 });

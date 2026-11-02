@@ -473,3 +473,14 @@ it("HOUR08 coaching invoice controls direct an unpaid correction back to the ret
     "Paid or partially paid corrections are unavailable",
   );
 });
+
+it("ADMINCON02 preserves exact learner selection and rejects forged selection queries", async () => {
+  const f = fixture();
+  expect((await f.get("/operator/invoices?ownerId=" + id)).status).toBe(200);
+  expect(f.service.adminOverview).toHaveBeenLastCalledWith(token, id);
+  expect((await f.get("/operator/invoices?ownerId=wrong")).status).toBe(422);
+  expect((await f.get("/operator/invoices?ownerId=a&ownerId=b")).status).toBe(
+    422,
+  );
+  expect((await f.get("/operator/invoices?unexpected=x")).status).toBe(403);
+});

@@ -81,3 +81,5 @@ The [documentation index](assets/docs/README.md) includes the original context, 
 The welcome page and learning portal share warm paper, blue actions and self-hosted Nunito Sans. Both the published notebook and earlier starter lessons retain their existing explicit saving, privacy and publication rules.
 
 Account, billing and administration pages use the same warm-paper, blue-action and Nunito Sans identity as the landing page; task layouts and semantic success/warning states remain distinct.
+
+Verified owners can deliberately enter the [administrator console](assets/docs/ADMINISTRATOR-CONSOLE.md), select an exact learner, inspect enrollment/billing summaries and compose existing course proposals without exposing private writing. Disabled invoicing stays disabled.

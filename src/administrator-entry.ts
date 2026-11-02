@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
+import { invoiceUuid } from "./simple-invoice-values.ts";
 import { hash } from "./store.ts";
 import {
   practiceTransaction,
@@ -12,7 +13,29 @@ const selected = ["shi@deepnative.io", "tom@deepnative.io"].map((address) =>
 export type AdministratorResult =
   | { kind: "ready"; credential?: string; expires?: Date }
   | { kind: "denied" | "unavailable" };
+export interface AdministratorConsole {
+  members: Array<{ id: string; background: string; goal: string }>;
+  courses: Array<{ id: string; version: number; title: string }>;
+  selected?: {
+    member: { id: string; background: string; goal: string };
+    enrollments: Array<{ id: string; title: string }>;
+    plans: Array<{ id: string; state: string }>;
+    invoices: Array<{
+      id: string;
+      number: string;
+      totalCents: string;
+      delivery: string;
+    }>;
+  };
+}
+export type AdministratorConsoleResult =
+  | { kind: "ready"; value: AdministratorConsole }
+  | { kind: "denied" | "unavailable" | "not-found" };
 export interface AdministratorEntry {
+  console?(
+    credential: string,
+    ownerId?: string,
+  ): Promise<AdministratorConsoleResult>;
   status(memberToken: string): Promise<AdministratorResult>;
   enter(memberToken: string): Promise<AdministratorResult>;
   end(memberToken: string): Promise<AdministratorResult>;
@@ -89,6 +112,90 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
     }
   }
   return {
+    async console(credential, ownerId) {
+      if (
+        !/^[a-f0-9]{64}$/.test(credential) ||
+        (ownerId !== undefined && !invoiceUuid(ownerId))
+      )
+        return { kind: "denied" };
+      try {
+        return await practiceTransaction(pool, async (tx) => {
+          const staff = (
+            await tx.query<{ expires: Date }>(
+              `SELECT p.expires_at AS expires FROM principals p
+             JOIN authorized_staff_profiles s ON s.principal_id=p.id
+             WHERE p.token_hash=$1 AND p.kind='staff' AND p.revoked_at IS NULL
+               AND p.expires_at>clock_timestamp() AND s.role='platform_admin'
+             FOR SHARE OF p,s`,
+              [hash(credential)],
+            )
+          ).rows[0];
+          if (!staff) throw new PracticeLifetimeFailure("denied");
+          await tx.observe([staff.expires]);
+          const members = (
+            await tx.query<AdministratorConsole["members"][number]>(
+              `SELECT l.id,l.background,l.goal FROM learners l
+             JOIN principals p ON p.id=l.id JOIN workspaces w ON w.owner_principal_id=l.id
+             WHERE p.revoked_at IS NULL AND w.deleting_at IS NULL
+               AND ($1::uuid IS NULL OR l.id=$1) ORDER BY l.id LIMIT 100`,
+              [ownerId ?? null],
+            )
+          ).rows;
+          if (ownerId && !members.length) return { kind: "not-found" as const };
+          const courses = (
+            await tx.query<AdministratorConsole["courses"][number]>(
+              `SELECT id,version,title FROM content_versions c WHERE state='published'
+             AND kind='lesson' AND NOT requires_qualified_signoff
+             AND version=(SELECT max(version) FROM content_versions WHERE id=c.id AND state='published')
+             ORDER BY id LIMIT 100`,
+            )
+          ).rows;
+          const value: AdministratorConsole = { members, courses };
+          if (ownerId) {
+            const enrollments = (
+              await tx.query<{ id: string; title: string }>(
+                `SELECT e.term_id AS id,t.snapshot->>'title' AS title FROM local_program_enrollments e
+               JOIN local_program_terms t ON t.id=e.term_id WHERE e.workspace_id=$1 ORDER BY e.enrolled_at DESC LIMIT 100`,
+                [ownerId],
+              )
+            ).rows;
+            const plans = (
+              await tx.query<{ id: string; state: string }>(
+                "SELECT id,state FROM simple_invoice_plans WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 100",
+                [ownerId],
+              )
+            ).rows;
+            const invoices = (
+              await tx.query<{
+                id: string;
+                number: string;
+                totalCents: string;
+                delivery: string;
+              }>(
+                `SELECT id,document->>'number' AS number,total_cents::text AS "totalCents",delivery
+               FROM simple_invoices WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 100`,
+                [ownerId],
+              )
+            ).rows;
+            value.selected = {
+              member: members[0]!,
+              enrollments,
+              plans,
+              invoices,
+            };
+          }
+          await tx.observe([staff.expires]);
+          return { kind: "ready" as const, value };
+        });
+      } catch (error) {
+        return {
+          kind:
+            error instanceof PracticeLifetimeFailure && error.kind === "denied"
+              ? "denied"
+              : "unavailable",
+        };
+      }
+    },
     status: (token) => run(token, "status"),
     enter: (token) => run(token, "enter"),
     end: (token) => run(token, "end"),
