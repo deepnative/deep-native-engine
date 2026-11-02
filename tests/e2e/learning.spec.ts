@@ -794,6 +794,7 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
           headers: { Origin: origin },
           form: {
             csrf: await csrfToken(page),
+            display_name: "Sample learner",
             background:
               background === "technical" ? "professional" : "technical",
             goal: goal === "build" ? "work" : "build",
