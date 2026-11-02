@@ -124,9 +124,7 @@ for (const [index, [background, goal]] of [
       const note = `Invented ${background} note about clearer workflow steps <script>`;
       await page.goto(origin + "/workflow-feedback/WF-001");
       await page.getByLabel("Your private feedback on version 2").fill(note);
-      await page
-        .getByLabel("I am saving private feedback using only invented text")
-        .check();
+      await page.getByLabel("I choose to save this note privately.").check();
       await page
         .getByRole("button", { name: "Save private feedback", exact: true })
         .click();
@@ -233,9 +231,7 @@ for (const [index, [background, goal]] of [
       await page
         .getByLabel("Your private feedback on version 2")
         .fill(correctedNote);
-      await page
-        .getByLabel("I am saving private feedback using only invented text")
-        .check();
+      await page.getByLabel("I choose to save this note privately.").check();
       await page
         .getByRole("button", { name: "Save private feedback", exact: true })
         .click();
@@ -270,9 +266,7 @@ for (const [index, [background, goal]] of [
       await page
         .getByLabel("Your private feedback on version 2")
         .fill(correctedNote);
-      await page
-        .getByLabel("I am saving private feedback using only invented text")
-        .check();
+      await page.getByLabel("I choose to save this note privately.").check();
       await page
         .getByRole("button", { name: "Save private feedback", exact: true })
         .click();
@@ -437,9 +431,7 @@ for (const [index, fault] of (["request", "assign"] as const).entries()) {
       const note = "Invented recovery note; no member or customer data";
       await page.goto(origin + "/workflow-feedback/WF-001");
       await page.getByLabel("Your private feedback on version 2").fill(note);
-      await page
-        .getByLabel("I am saving private feedback using only invented text")
-        .check();
+      await page.getByLabel("I choose to save this note privately.").check();
       await page
         .getByRole("button", { name: "Save private feedback", exact: true })
         .click();
