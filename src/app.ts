@@ -26,6 +26,12 @@ import type { SupportAssignmentStore } from "./support-assignment.ts";
 import { mountSampleAssignmentRoutes } from "./sample-assignment-routes.ts";
 import { preparedSamplesEnabled } from "./prepared-samples.ts";
 import type { AssignmentEvidenceStore } from "./assignment-evidence.ts";
+import {
+  holdLease,
+  refusal,
+  underLease,
+  type UploadAdmissionStore,
+} from "./upload-admission.ts";
 import { mountAssignmentEvidenceRoutes } from "./assignment-evidence-routes.ts";
 import { mountPreparedSampleRoutes } from "./prepared-sample-routes.ts";
 import type { PreparedSampleStore } from "./prepared-samples.ts";
@@ -421,6 +427,7 @@ export function app(
     manualObservations?: ManualObservationStore;
     assignmentReadiness?: AssignmentReadinessStore;
     memberEmail?: MemberEmailAccess;
+    uploadAdmission?: UploadAdmissionStore;
   },
 ) {
   const app = express();
@@ -505,6 +512,53 @@ export function app(
     "/assets",
     express.static(fileURLToPath(new URL("../public", import.meta.url))),
   );
+  // Admit evidence creation against the shared budget before reading its body.
+  const uploadAdmission = options.uploadAdmission;
+  if (uploadAdmission) {
+    const parseCookies = cookieParser();
+    app.post("/api/evidence", (req, res, next) =>
+      parseCookies(req, res, async () => {
+        const result = await uploadAdmission.admit(token(req.cookies[COOKIE]));
+        if (result.kind === "admitted") {
+          await holdLease(req, res, result.release, next);
+          return;
+        }
+        const refused = refusal(result);
+        res
+          .status(refused.status)
+          .set("Cache-Control", "no-store")
+          .set("Retry-After", String(refused.retryAfterSeconds))
+          .set("Connection", "close")
+          .json({
+            error: refused.error,
+            retryAfterSeconds: refused.retryAfterSeconds,
+            action: refused.action,
+          });
+      }),
+    );
+  }
+  // Form uploads are admitted after their small body is parsed so a refused
+  // member keeps the title and text they typed.
+  async function admitFormUpload(
+    req: express.Request,
+    res: express.Response,
+    render: (errors: string[]) => Promise<string> | string,
+  ) {
+    if (!uploadAdmission) return true;
+    const result = await uploadAdmission.admit(res.locals.token as string);
+    if (result.kind === "admitted") return holdLease(req, res, result.release);
+    const refused = refusal(result);
+    // The refusal must not depend on the database that may be unavailable.
+    const body = await Promise.resolve()
+      .then(() => render([refused.action]))
+      .catch(() => errorPage("Upload not saved", refused.action));
+    res
+      .status(refused.status)
+      .set("Cache-Control", "no-store")
+      .set("Retry-After", String(refused.retryAfterSeconds))
+      .send(body);
+    return false;
+  }
   app.use(
     "/api/evidence",
     express.raw({ type: "*/*", limit: MAX_EVIDENCE_BYTES }),
@@ -1151,17 +1205,19 @@ export function app(
     const learningCircle = scopes.includes("learning-circle")
       ? (req.get("x-learning-circle-id") ?? "")
       : undefined;
-    const result = await evidence.upload(res.locals.token as string, {
-      name: req.get("x-evidence-name") ?? "",
-      mediaType: (req.get("content-type") ?? "").split(";", 1)[0]!,
-      consent: {
-        rightsConfirmed: req.get("x-evidence-rights") === "confirmed",
-        privateReview: scopes.includes("private-review"),
-        communityPublication: scopes.includes("community-publication"),
-        learningCircleId: learningCircle,
-      },
-      data: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0),
-    });
+    const result = await underLease(res, () =>
+      evidence.upload(res.locals.token as string, {
+        name: req.get("x-evidence-name") ?? "",
+        mediaType: (req.get("content-type") ?? "").split(";", 1)[0]!,
+        consent: {
+          rightsConfirmed: req.get("x-evidence-rights") === "confirmed",
+          privateReview: scopes.includes("private-review"),
+          communityPublication: scopes.includes("community-publication"),
+          learningCircleId: learningCircle,
+        },
+        data: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0),
+      }),
+    );
     if (result.kind === "denied") {
       res.status(403).json({ error: "forbidden" });
       return;
@@ -1711,16 +1767,30 @@ export function app(
         );
       return;
     }
-    const result = await evidence.upload(res.locals.token as string, {
-      name,
-      mediaType: "text/plain",
-      data: Buffer.from(sample),
-      consent: {
-        rightsConfirmed: true,
-        privateReview: true,
-        communityPublication: false,
-      },
-    });
+    if (
+      !(await admitFormUpload(req, res, async (errors) =>
+        evidencePage(
+          await evidence.owned(res.locals.token as string),
+          res.locals.csrf as string,
+          errors,
+          { name, sample },
+          preparedSampleChoice,
+        ),
+      ))
+    )
+      return;
+    const result = await underLease(res, () =>
+      evidence.upload(res.locals.token as string, {
+        name,
+        mediaType: "text/plain",
+        data: Buffer.from(sample),
+        consent: {
+          rightsConfirmed: true,
+          privateReview: true,
+          communityPublication: false,
+        },
+      }),
+    );
     if (result.kind === "denied") {
       res
         .status(403)
@@ -1958,17 +2028,30 @@ export function app(
         );
       return;
     }
-    const result = await evidence.upload(res.locals.token as string, {
-      name,
-      mediaType: "text/plain",
-      data: Buffer.from(sample),
-      revisesId: parent.id,
-      consent: {
-        rightsConfirmed: true,
-        privateReview: true,
-        communityPublication: false,
-      },
-    });
+    if (
+      !(await admitFormUpload(req, res, (errors) =>
+        evidenceRevisionPage(
+          parent,
+          res.locals.csrf as string,
+          errors,
+          attempted,
+        ),
+      ))
+    )
+      return;
+    const result = await underLease(res, () =>
+      evidence.upload(res.locals.token as string, {
+        name,
+        mediaType: "text/plain",
+        data: Buffer.from(sample),
+        revisesId: parent.id,
+        consent: {
+          rightsConfirmed: true,
+          privateReview: true,
+          communityPublication: false,
+        },
+      }),
+    );
     if (result.kind !== "created") {
       res
         .status(result.kind === "invalid" ? 422 : 409)
