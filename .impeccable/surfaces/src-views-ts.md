@@ -36,3 +36,6 @@ The verified-owner `/operator` console shares this identity with compact task te
 ## Shared account navigation — Operate (#594)
 
 Owner priority: persistent text links for Learning, Account, Coaching hours, Administration and Sign out across the shared header. Use a wrapping horizontal nav, visible on narrow screens without a hamburger or JavaScript; retain the warm paper/blue/ink/Nunito Sans world. Sign out opens a dedicated confirmation with a clear recovery warning for browser-only accounts; never mutate from GET. Keep saved work and finite authorization fences. Coaching/admin pages explain actual prerequisites without enabling billing or granting access. NAV-01..04/L281 own acceptance; no hosted completion until exact-source release.
+
+The member Billing recipient surface uses the same Operate reading/form layout and shared blue/Nunito/warm-paper identity. Keep name/email distinct from authentication and money authorization, with clear current/validation/stale/uncertain states and ordinary account/proposal navigation. Native labelled inputs and visible confirmation remain; no card/payment widgets or decorative status claims. BILLPROFILE01–05/L280 cover the profile, same-account proposal return and immutable invoice snapshot.
+

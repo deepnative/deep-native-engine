@@ -2489,6 +2489,15 @@
       "critical": true
     },
     {
+      "id": "L280",
+      "actor": "Returning learner with a supported course proposal",
+      "preconditions": "Private member account with verified recovery email, saved work, and a synthetic monthly proposal",
+      "steps": "BILLPROFILE01–04: save separate billing recipient; sign out; reopen signed exact proposal selection; recover same account through existing email flow; explicitly accept sample exact terms; edit profile; inspect immutable invoice and cancel future billing",
+      "expected": "Only own profile and proposal resume; profile is separate from authentication, payment and learning; accepted recipient snapshot remains unchanged; cancellation preserves invoice and saved work; no live charge or paid entitlement",
+      "issues": [571, 557],
+      "critical": true
+    },
+    {
       "id": "L281",
       "actor": "Member finding account actions including a browser-only learner",
       "preconditions": "Own saved work; email recovery disabled; no staff or payable service enabled",
