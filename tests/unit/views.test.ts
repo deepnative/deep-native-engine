@@ -1453,6 +1453,7 @@ it("renders unsaved profile edits with an actionable field error while keeping t
     weeklyMinutes: 15,
   };
   const edit = profileEdit({
+    display_name: "Sample learner",
     background: "professional",
     goal: "work",
     domain_tags: "finance",
@@ -1483,6 +1484,7 @@ it("renders unsaved profile edits with an actionable field error while keeping t
 });
 it("links multiple profile errors and escapes attempted text without reflecting forged options", () => {
   const edit = profileEdit({
+    display_name: "Sample learner",
     background: "technical",
     goal: "admin",
     domain_tags: ["finance", "finance"],
@@ -1538,6 +1540,7 @@ it("[LAND-01] offers an unsaved native example before compact onboarding", () =>
 });
 it("[LAND-02] expands optional onboarding fields after an error without losing the attempt", () => {
   const edit = profileEdit({
+    display_name: "Sample learner",
     background: "technical",
     goal: "build",
     it_roles: "security",
@@ -1561,6 +1564,7 @@ it("[LAND-02] expands optional onboarding fields after an error without losing t
 });
 it("renders a failed onboarding attempt for correction without a saved member", () => {
   const edit = profileEdit({
+    display_name: "Sample learner",
     background: "technical",
     goal: "build",
     it_roles: "security",
@@ -1930,7 +1934,7 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v30" as const,
+    version: "local-member-records-v31" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),

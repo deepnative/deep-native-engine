@@ -51,6 +51,7 @@ export type Domain = keyof typeof DOMAINS;
 export type ItRole = keyof typeof IT_ROLES;
 export type Experience = keyof typeof EXPERIENCE;
 export interface LearnerProfile {
+  displayName: string;
   background: Background;
   goal: Goal;
   backgroundTags: Background[];

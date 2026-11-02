@@ -30,6 +30,7 @@ test("[F-ROADMAP-08-A] three IT specialties enter common foundation without spec
     await requiredCheck(index + 1, async () => {
       await context.clearCookies();
       await page.goto("/");
+      await page.getByLabel("Display name").fill("Sample learner");
       await page.getByLabel("Your starting point").selectOption("technical");
       await chooseLearningGoal(page, specialty.goal);
       await page

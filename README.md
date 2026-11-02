@@ -88,4 +88,6 @@ The welcome page and learning portal share warm paper, blue actions and self-hos
 
 Account, billing and administration pages use the same warm-paper, blue-action and Nunito Sans identity as the landing page; task layouts and semantic success/warning states remain distinct.
 
-Verified owners can deliberately enter the [administrator console](assets/docs/ADMINISTRATOR-CONSOLE.md), select an exact learner, inspect enrollment/billing summaries and compose existing course proposals without exposing private writing. Disabled invoicing stays disabled.
+Registration and profile updates require a display name. Existing unnamed accounts keep their sessions and saved work and can add a name from **Account**. Names are self-reported and do not grant a role or replace billing details.
+
+Verified owners can deliberately enter the [administrator console](assets/docs/ADMINISTRATOR-CONSOLE.md), find named learners with secondary exact account references, inspect enrollment/billing summaries and compose existing course proposals without exposing private writing. Disabled invoicing stays disabled.

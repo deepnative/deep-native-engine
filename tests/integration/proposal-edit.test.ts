@@ -69,7 +69,7 @@ it("exports only current revision, keeps unsent drafts out of moderation, then s
   expect(exported).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v30",
+      version: "local-member-records-v31",
       records: {
         proposals: [{ id: f.id, ...corrected, revision: 2, state: "draft" }],
       },

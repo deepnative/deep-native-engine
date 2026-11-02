@@ -60,6 +60,7 @@ for (const [index, [background, goal]] of audiences.entries())
       starts = new Date(Date.now() - 60000);
     try {
       await page.goto("/");
+      await page.getByLabel("Display name").fill("Sample learner");
       await page.getByLabel("Your starting point").selectOption(background);
       await chooseLearningGoal(page, goal);
       await page

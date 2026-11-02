@@ -14,6 +14,7 @@ export interface SubmissionError {
   message: string;
 }
 export type ProfileField =
+  | "display_name"
   | "background"
   | "goal"
   | "background_tags"
@@ -28,6 +29,7 @@ export interface ProfileError {
   message: string;
 }
 export interface ProfileFormState {
+  displayName: string;
   background: string;
   goal: string;
   backgroundTags: string[];
@@ -89,7 +91,19 @@ function parseProfile(body: Fields): ProfileEditResult {
           Object.hasOwn(WEEKLY_TIME, body.weekly_minutes)
         ? Number(body.weekly_minutes)
         : undefined;
+  const displayName =
+    typeof body.display_name === "string" ? body.display_name.trim() : "";
   const errors: ProfileError[] = [];
+  if (
+    !displayName ||
+    displayName.length > 80 ||
+    /\p{Cc}/u.test(body.display_name as string)
+  )
+    errors.push({
+      field: "display_name",
+      message:
+        "Display name: enter 1–80 characters without control characters.",
+    });
   if (!safeChoice(body.background, BACKGROUNDS))
     errors.push({
       field: "background",
@@ -141,6 +155,12 @@ function parseProfile(body: Fields): ProfileEditResult {
       message: "Exploratory path: use the listed checkbox only.",
     });
   const attempted: ProfileFormState = {
+    displayName:
+      typeof body.display_name === "string" &&
+      body.display_name.length <= 80 &&
+      !/\p{Cc}/u.test(body.display_name)
+        ? body.display_name
+        : "",
     background: safeChoice(body.background, BACKGROUNDS),
     goal: safeChoice(body.goal, GOALS),
     backgroundTags: safeSelections(body.background_tags, BACKGROUNDS),
@@ -157,6 +177,7 @@ function parseProfile(body: Fields): ProfileEditResult {
   const input: LearnerProfile | null = errors.length
     ? null
     : {
+        displayName,
         background: body.background as LearnerProfile["background"],
         goal: body.goal as LearnerProfile["goal"],
         backgroundTags: backgroundTags as LearnerProfile["backgroundTags"],

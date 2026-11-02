@@ -14,10 +14,20 @@ export type AdministratorResult =
   | { kind: "ready"; credential?: string; expires?: Date }
   | { kind: "denied" | "unavailable" };
 export interface AdministratorConsole {
-  members: Array<{ id: string; background: string; goal: string }>;
+  members: Array<{
+    id: string;
+    displayName?: string | null;
+    background: string;
+    goal: string;
+  }>;
   courses: Array<{ id: string; version: number; title: string }>;
   selected?: {
-    member: { id: string; background: string; goal: string };
+    member: {
+      id: string;
+      displayName?: string | null;
+      background: string;
+      goal: string;
+    };
     enrollments: Array<{ id: string; title: string }>;
     plans: Array<{ id: string; state: string }>;
     invoices: Array<{
@@ -134,7 +144,7 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
           await tx.observe([staff.expires]);
           const members = (
             await tx.query<AdministratorConsole["members"][number]>(
-              `SELECT l.id,l.background,l.goal FROM learners l
+              `SELECT l.id,l.display_name AS "displayName",l.background,l.goal FROM learners l
              JOIN principals p ON p.id=l.id JOIN workspaces w ON w.owner_principal_id=l.id
              WHERE p.revoked_at IS NULL AND w.deleting_at IS NULL
                AND ($1::uuid IS NULL OR l.id=$1) ORDER BY l.id LIMIT 100`,

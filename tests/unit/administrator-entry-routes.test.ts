@@ -245,10 +245,22 @@ it("ADMINCON01/02 renders only bounded account and billing summaries with escape
   f.state.directory = {
     kind: "ready",
     value: {
-      members: [{ id, background: "<professional>", goal: "work" }],
+      members: [
+        {
+          id,
+          displayName: "<Invented member>",
+          background: "<professional>",
+          goal: "<work>",
+        },
+      ],
       courses: [{ id: "FND-001", version: 2, title: "<Invented lesson>" }],
       selected: {
-        member: { id, background: "professional", goal: "work" },
+        member: {
+          id,
+          displayName: "<Invented member>",
+          background: "<professional>",
+          goal: "<work>",
+        },
         enrollments: [{ id: "local-foundation-1", title: "<Foundations>" }],
         plans: [{ id, state: "offered" }],
         invoices: [
@@ -269,6 +281,10 @@ it("ADMINCON01/02 renders only bounded account and billing summaries with escape
     .set("Cookie", `dne_staff=${credential}`);
   expect(r.status).toBe(200);
   expect(r.headers["cache-control"]).toBe("no-store");
+  expect(r.text).toContain("&lt;Invented member&gt;");
+  expect(r.text).toContain("&lt;professional&gt;");
+  expect(r.text).toContain("&lt;work&gt;");
+  expect(r.text).not.toContain("<Invented member>");
   expect(r.text).toContain("&lt;Invented lesson&gt;");
   expect(r.text).toContain("&lt;Foundations&gt;");
   expect(r.text).toContain("&lt;Sample-1&gt;");
@@ -278,11 +294,13 @@ it("ADMINCON01/02 renders only bounded account and billing summaries with escape
   f.state.directory.value.selected!.enrollments = [];
   f.state.directory.value.selected!.plans = [];
   f.state.directory.value.selected!.invoices = [];
+  f.state.directory.value.selected!.member.displayName = null;
   const empty = await (
     await http(f.app)
   )
     .get("/operator")
     .set("Cookie", `dne_staff=${credential}`);
+  expect(empty.text).toContain("Name needed");
   expect(empty.text).toContain("No recorded enrollment");
   expect(empty.text).toContain("No course bundles");
   expect(empty.text).toContain("No issued invoices");
@@ -363,4 +381,41 @@ it("ADMINCON04 denies direct malformed or expired console requests without autho
     ).status,
   ).toBe(503);
   expect(f.fn).not.toHaveBeenCalled();
+});
+it("NAME03/05 names are primary, escaped and distinguishable without exposing private data", async () => {
+  const f = fixture();
+  const first = {
+    id: "11111111-1111-4111-8111-111111111111",
+    displayName: "李明 <Sam>",
+    background: "explorer",
+    goal: "work",
+  };
+  f.state.directory = {
+    kind: "ready",
+    value: {
+      members: [
+        first,
+        { ...first, id: "22222222-2222-4222-8222-222222222222" },
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          background: "professional",
+          goal: "everyday",
+        },
+      ],
+      courses: [],
+    },
+  };
+  const response = await (
+    await http(f.app)
+  )
+    .get("/operator")
+    .set("Cookie", `dne_staff=${credential}`);
+  expect(response.status).toBe(200);
+  expect(response.text).toContain(">李明 &lt;Sam&gt;</a>");
+  expect(response.text).toContain("Exploring AI");
+  expect(response.text).toContain("Make everyday work clearer");
+  expect(response.text).toContain("Name needed");
+  for (const member of f.state.directory.value.members)
+    expect(response.text).toContain(member.id);
+  expect(response.text).not.toContain("<Sam>");
 });

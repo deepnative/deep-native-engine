@@ -36,6 +36,7 @@ for (const [index, [background, goal]] of audiences.entries())
       expires = new Date(Date.now() + 3600000);
     try {
       await page.goto("/");
+      await page.getByLabel("Display name").fill("Sample learner");
       await page.getByLabel("Your starting point").selectOption(background);
       await chooseLearningGoal(page, goal);
       await page

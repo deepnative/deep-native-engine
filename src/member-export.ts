@@ -511,7 +511,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v30";
+  version: "local-member-records-v31";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -628,7 +628,7 @@ export function memberExportStore(
         );
         if (!principal.rows[0]) return { kind: "denied" };
         const owner = await client.query<Record<string, unknown>>(
-          `SELECT l.id,l.background,l.goal,l.background_tags AS "backgroundTags",
+          `SELECT l.id,l.display_name AS "displayName",l.background,l.goal,l.background_tags AS "backgroundTags",
             l.domain_tags AS "domainTags",l.it_roles AS "itRoles",l.experience,
             l.exploratory,l.time_zone AS "timeZone",l.weekly_minutes AS "weeklyMinutes"
             FROM principals p JOIN learners l ON l.id=p.id
@@ -645,7 +645,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v30",
+          version: "local-member-records-v31",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

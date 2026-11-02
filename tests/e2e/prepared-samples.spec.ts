@@ -68,6 +68,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
         await auth.provisionStaff(reviewerCredential, "reviewer", expires),
       );
       await page.goto(origin + "/");
+      await page.getByLabel("Display name").fill("Sample learner");
       await page.getByLabel("Your starting point").selectOption(background);
       await chooseLearningGoal(page, goal);
       await page
@@ -419,6 +420,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
       try {
         const original = await recovering.newPage();
         await original.goto(recovery.origin + "/");
+        await original.getByLabel("Display name").fill("Sample learner");
         await original
           .getByLabel("Your starting point")
           .selectOption(background);

@@ -156,6 +156,7 @@ test("[L87] moderator reaches a newer private proposal beyond 100 quarantined it
 
 async function onboard(page: Page) {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();

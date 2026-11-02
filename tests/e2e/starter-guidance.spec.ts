@@ -31,6 +31,7 @@ async function fixture(page: Page, goal: Goal) {
     origin,
     async onboard() {
       await page.goto(origin);
+      await page.getByLabel("Display name").fill("Sample learner");
       await page.getByLabel("Your starting point").selectOption("explorer");
       await chooseLearningGoal(page, goal);
       await page

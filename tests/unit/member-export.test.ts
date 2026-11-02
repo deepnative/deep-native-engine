@@ -103,7 +103,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v30",
+      version: "local-member-records-v31",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -281,7 +281,7 @@ it.each([
     expect(result).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v30",
+        version: "local-member-records-v31",
         records: { [name]: [{ record: "Invented owned metadata" }] },
       },
     });
@@ -518,7 +518,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v30",
+        version: "local-member-records-v31",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -726,7 +726,7 @@ it("appends owned review accounting at indices 33-35 without moving existing sec
     expect(value).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v30",
+        version: "local-member-records-v31",
         records: { [name]: [{ id: "owned-accounting" }] },
       },
     });
@@ -759,7 +759,7 @@ it("appends safe source-deleted assignment receipts at index36 without moving an
   expect(value).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v30",
+      version: "local-member-records-v31",
       records: { sampleAssignmentOperations: [record] },
     },
   });
@@ -888,7 +888,7 @@ it("CONPUB-04 appends owner-only publication permissions at cursor index46 with 
   expect(result).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v30",
+      version: "local-member-records-v31",
       records: {
         proposalPublications: [{ state: "withdrawn", attribution: null }],
       },

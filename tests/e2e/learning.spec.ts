@@ -104,6 +104,7 @@ test.afterAll(async () => {
 });
 async function begin(page: Page, background = "explorer", goal = "everyday") {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption(background);
   await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -218,6 +219,7 @@ for (const [id, background, goal, extraName, extraValue] of [
     context,
   }) => {
     await page.goto("/");
+    await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption(background);
     await chooseLearningGoal(page, goal);
     await page
@@ -262,6 +264,7 @@ test("[L29] exploratory learner revises a time-fitting plan without rewriting sa
   page,
 }) => {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await chooseLearningGoal(page, "everyday");
   await page
@@ -308,6 +311,7 @@ test("[L101] completed starter plan advances without attributing an earlier goal
   browser,
 }) => {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await chooseLearningGoal(page, "everyday");
   await page
@@ -342,6 +346,7 @@ test("[L101] completed starter plan advances without attributing an earlier goal
   try {
     const other = await otherContext.newPage();
     await other.goto("/");
+    await other.getByLabel("Display name").fill("Sample learner");
     await other.getByLabel("Your starting point").selectOption("explorer");
     await chooseLearningGoal(other, "everyday");
     await other
@@ -370,6 +375,7 @@ test("[L30] professional can correct an invalid time zone and retain a noncoding
   page,
 }) => {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("professional");
   await chooseLearningGoal(page, "work");
   await page
@@ -381,6 +387,7 @@ test("[L30] professional can correct an invalid time zone and retain a noncoding
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page).not.toHaveURL(/\/learn$/);
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("professional");
   await chooseLearningGoal(page, "work");
   await page.getByLabel("Experience with AI").selectOption("some");
@@ -414,6 +421,7 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
       try {
         const page = await context.newPage();
         await page.goto("/");
+        await page.getByLabel("Display name").fill("Sample learner");
         await page.getByLabel("Your starting point").selectOption(background);
         await chooseLearningGoal(page, startingGoal);
         await page
@@ -622,6 +630,7 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
   try {
     const unrelatedPage = await unrelatedContext.newPage();
     await unrelatedPage.goto("/");
+    await unrelatedPage.getByLabel("Display name").fill("Sample learner");
     await unrelatedPage
       .getByLabel("Your starting point")
       .selectOption("technical");
@@ -667,6 +676,7 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         expect(
           (await page.request.get("/learn", { maxRedirects: 0 })).status(),
         ).toBe(303);
+        await page.getByLabel("Display name").fill("Sample learner");
         await page.getByLabel("Your starting point").selectOption(background);
         await chooseLearningGoal(page, goal);
         const optional = page.locator("details.onboarding-options");
@@ -784,6 +794,7 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
           headers: { Origin: origin },
           form: {
             csrf: await csrfToken(page),
+            display_name: "Sample learner",
             background:
               background === "technical" ? "professional" : "technical",
             goal: goal === "build" ? "work" : "build",
@@ -881,6 +892,7 @@ test("[L31] technical learner sees an experienced, private plan without a coding
   browser,
 }) => {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("technical");
   await chooseLearningGoal(page, "build");
   await page
@@ -899,6 +911,7 @@ test("[L31] technical learner sees an experienced, private plan without a coding
   try {
     const anotherPage = await other.newPage();
     await anotherPage.goto("/");
+    await anotherPage.getByLabel("Display name").fill("Sample learner");
     await anotherPage
       .getByLabel("Your starting point")
       .selectOption("explorer");
@@ -1229,6 +1242,7 @@ test("[L11] multiple tabs, keyboard navigation, safe rendering and narrow layout
   await page.goto("/");
   const second = await context.newPage();
   await second.goto(origin);
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).focus();
@@ -1637,6 +1651,7 @@ test("[L54] changing learner direction cannot mint staff or another workspace ac
           headers: { Origin: origin },
           maxRedirects: 0,
           form: {
+            display_name: "Sample learner",
             csrf,
             background: nextBackground,
             goal: nextGoal,
@@ -1665,6 +1680,7 @@ test("[L54] changing learner direction cannot mint staff or another workspace ac
         const invalid = await page.request.post("/profile", {
           headers: { Origin: origin },
           form: {
+            display_name: "Sample learner",
             csrf,
             background: "platform_admin",
             goal: nextGoal,

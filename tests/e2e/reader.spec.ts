@@ -20,6 +20,7 @@ async function onboard(
   goal: "everyday" | "work" | "build",
 ) {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption(background);
   await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -272,6 +273,7 @@ test("[L55] all learner backgrounds can compare a synthetic reflection with its 
     ["technical", "build"],
   ] as const) {
     await page.goto("/learn");
+    await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption(background);
     await chooseLearningGoal(page, goal);
     await page.getByRole("button", { name: "Save my direction" }).click();
@@ -374,6 +376,7 @@ test("[L58] cross-audience private practice persists one exact sample version an
     ["technical", "build", "small build"],
   ] as const) {
     await page.goto("/learn");
+    await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption(background);
     await chooseLearningGoal(page, goal);
     await page.getByRole("button", { name: "Save my direction" }).click();
@@ -519,7 +522,7 @@ test("[L81] three learning backgrounds withdraw an exact private note with keybo
         }[];
       };
     };
-    expect(exported.version).toBe("local-member-records-v30");
+    expect(exported.version).toBe("local-member-records-v31");
     expect(exported.records.privatePractice).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

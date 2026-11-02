@@ -133,6 +133,7 @@ it("HOSTED-02 accepts exact HTTPS member forms with secure cookies and rejects f
   const cookie = setCookie[0]!.split(";")[0]!;
   const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
   const form = {
+    display_name: "Sample learner",
     csrf,
     background: "explorer",
     goal: "everyday",
@@ -1368,7 +1369,12 @@ it("LWORK-02/06 keeps JSON writes outside the form parser and returns JSON denia
     .set("Cookie", cookie)
     .set("Origin", origin)
     .type("form")
-    .send({ csrf: "forged", background: "explorer", goal: "everyday" })
+    .send({
+      display_name: "Sample learner",
+      csrf: "forged",
+      background: "explorer",
+      goal: "everyday",
+    })
     .expect(403);
   expect(ordinary.headers["content-type"]).toMatch(/html/);
   expect(db.create).not.toHaveBeenCalled();
@@ -2182,7 +2188,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v30",
+          version: "local-member-records-v31",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2222,7 +2228,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v30",
+    version: "local-member-records-v31",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -3067,6 +3073,7 @@ it.each([true, false])(
       .set("Origin", origin)
       .type("form")
       .send({
+        display_name: "Sample learner",
         csrf,
         background: "professional",
         goal: "work",
@@ -3094,6 +3101,7 @@ it.each(["linked", "unlinked", "unavailable", "disabled"] as const)(
       expiresAt: new Date(Date.now() + 3600000),
       deadline: performance.now() + 60000,
       learner: {
+        displayName: "Sample learner",
         ...member,
         background: "professional",
         goal: "work",
@@ -3310,6 +3318,7 @@ it("onboards only valid profiles and ignores caller-controlled ownership", async
     .set("Origin", origin)
     .type("form")
     .send({
+      display_name: "Sample learner",
       csrf,
       background: "explorer",
       goal: "everyday",
@@ -3319,7 +3328,11 @@ it("onboards only valid profiles and ignores caller-controlled ownership", async
     .expect(303);
   expect(db.create).toHaveBeenCalledWith(
     expect.stringMatching(/^[a-f0-9]{64}$/),
-    expect.objectContaining({ background: "explorer", goal: "everyday" }),
+    expect.objectContaining({
+      displayName: "Sample learner",
+      background: "explorer",
+      goal: "everyday",
+    }),
   );
   active();
   await agent
@@ -3331,6 +3344,7 @@ it("onboards only valid profiles and ignores caller-controlled ownership", async
 it("retains safe onboarding choices on an unsaved field error", async () => {
   const { agent, csrf } = await client();
   const attempted = {
+    display_name: "Sample learner",
     csrf,
     background: "professional",
     goal: "work",
@@ -3403,6 +3417,7 @@ it("MON-01 rejects forged onboarding inputs while ordinary profiles need no samp
     .set("Origin", origin)
     .type("form")
     .send({
+      display_name: "Sample learner",
       csrf,
       background: ["technical", "technical"],
       goal: "admin",
@@ -3437,7 +3452,12 @@ it("MON-01 rejects forged onboarding inputs while ordinary profiles need no samp
     .set("Host", host)
     .set("Origin", origin)
     .type("form")
-    .send({ csrf, background: "explorer", goal: "everyday" })
+    .send({
+      display_name: "Sample learner",
+      csrf,
+      background: "explorer",
+      goal: "everyday",
+    })
     .expect(303);
   expect(db.create).toHaveBeenCalledOnce();
 });
@@ -3450,6 +3470,7 @@ it("lets an active member revise their direction without selecting another owner
     .set("Origin", origin)
     .type("form")
     .send({
+      display_name: "Sample learner",
       csrf,
       background: "professional",
       goal: "work",
@@ -3481,6 +3502,7 @@ it("lets an active member revise their direction without selecting another owner
     .set("Origin", origin)
     .type("form")
     .send({
+      display_name: "Sample learner",
       csrf,
       background: "professional",
       goal: "work",
@@ -3514,7 +3536,13 @@ it("returns a content-free denial when profile authorization changes after middl
     .set("Host", host)
     .set("Origin", origin)
     .type("form")
-    .send({ csrf, background: "professional", goal: "work", timezone: "UTC" })
+    .send({
+      display_name: "Sample learner",
+      csrf,
+      background: "professional",
+      goal: "work",
+      timezone: "UTC",
+    })
     .expect(403);
   expect(denied.text).toContain("Profile unavailable");
   expect(denied.text).not.toContain("owned");
@@ -5753,7 +5781,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v30" as const,
+    version: "local-member-records-v31" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -6871,6 +6899,7 @@ it("BILLPROFILE01 resumes a selected proposal after ordinary registration and re
     .set("Cookie", cookie)
     .type("form")
     .send({
+      display_name: "Sample learner",
       csrf: anti,
       background: "explorer",
       goal: "everyday",
@@ -6891,4 +6920,28 @@ it("BILLPROFILE01 resumes a selected proposal after ordinary registration and re
     .set("Cookie", cookie)
     .expect(303)
     .expect("Location", `/account/purchases#plan-${id}`);
+});
+
+it("NAME01 enforces Display name on server registration and retains safe choices for correction", async () => {
+  const { agent, csrf } = await client();
+  const post = (fields: Record<string, string>) =>
+    agent
+      .post("/start")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, background: "explorer", goal: "work", ...fields });
+  const invalid = await post({}).expect(422);
+  expect(invalid.text).toContain('href="#display_name"');
+  expect(invalid.text).toContain("Display name: enter 1–80 characters");
+  expect(db.create).not.toHaveBeenCalled();
+  await post({ display_name: "  李明  " }).expect(303);
+  expect(db.create).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({
+      displayName: "李明",
+      background: "explorer",
+      goal: "work",
+    }),
+  );
 });

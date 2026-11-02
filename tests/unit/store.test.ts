@@ -144,6 +144,7 @@ it("passes untrusted answers as bound parameters and scopes versioned reads and 
     false,
     null,
     null,
+    null,
   ]);
   expect(await db.progress("owned")).toBeUndefined();
   await db.remove("owned");
@@ -204,8 +205,10 @@ it("saves profile changes by the session-derived learner and preserves the pract
     true,
     "UTC",
     60,
+    null,
   ]);
   await db.updateProfile("owned", {
+    displayName: "Sample learner",
     background: "professional",
     goal: "work",
     backgroundTags: ["technical"],
@@ -231,8 +234,10 @@ it("saves profile changes by the session-derived learner and preserves the pract
     true,
     "UTC",
     60,
+    "Sample learner",
   ]);
   await db.updateProfile("owned", {
+    displayName: "Sample learner",
     background: "explorer",
     goal: "everyday",
     backgroundTags: [],
@@ -256,6 +261,7 @@ it("saves profile changes by the session-derived learner and preserves the pract
     false,
     null,
     null,
+    "Sample learner",
   ]);
 });
 it("denies profile changes without current ownership and never reports an uncertain commit as success", async () => {
@@ -276,6 +282,7 @@ it("denies profile changes without current ownership and never reports an uncert
     const p = exercisePool(options);
     expect(
       await store(p.value).updateProfile("owned", {
+        displayName: "Sample learner",
         ...input,
         backgroundTags: [],
         domainTags: [],
@@ -288,6 +295,7 @@ it("denies profile changes without current ownership and never reports an uncert
   const p = exercisePool({ failAt: "COMMIT" });
   await expect(
     store(p.value).updateProfile("owned", {
+      displayName: "Sample learner",
       ...input,
       backgroundTags: [],
       domainTags: [],

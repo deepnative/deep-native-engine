@@ -20,6 +20,7 @@ const audiences = [
   ["technical", "build"],
 ] as const;
 async function account(page: Page, background: string, goal: string) {
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption(background);
   await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();

@@ -15,6 +15,7 @@ test("[L279] a member over the upload budget keeps a refused provided copy and r
   const prefix = `copy-admit-${randomBytes(6).toString("hex")}`;
   const example = PREPARED_SAMPLES[0]!;
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();

@@ -964,6 +964,7 @@ it("binds an OS-assigned port beside an occupied listener and validates its actu
     const entry = await agent.get("/").expect(200);
     const formToken = entry.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
     const form = {
+      display_name: "Sample learner",
       csrf: formToken,
       background: "explorer",
       goal: "everyday",

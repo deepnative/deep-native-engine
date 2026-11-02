@@ -23,6 +23,8 @@ it("upgrades populated legacy support requests and note grants twice without bac
       )
       .sort())
       await client.query(await readFile(new URL(name, directory), "utf8"));
+    // Current member projection only; keep the target legacy migration and marker unchanged.
+    await client.query("ALTER TABLE learners ADD COLUMN display_name text");
     const scoped = {
       query: client.query.bind(client),
       async connect() {

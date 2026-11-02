@@ -16,6 +16,7 @@ for (const [index, [background, goal, workflow]] of [
     browser,
   }, info) => {
     await page.goto("/");
+    await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption(background!);
     await chooseLearningGoal(page, goal!);
     await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -115,6 +116,7 @@ for (const [index, [background, goal, workflow]] of [
     try {
       const other = await outsider.newPage();
       await other.goto(new URL("/", page.url()).href);
+      await other.getByLabel("Display name").fill("Sample learner");
       await other.getByLabel("Your starting point").selectOption("explorer");
       await chooseLearningGoal(other, "everyday");
       await other

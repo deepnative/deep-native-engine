@@ -47,6 +47,7 @@ test("[F-BUILD-10-C] pending save and uncertain storage result recover without d
   expect(await catalog.publish(editor, contentId, 1)).toBe(true);
 
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();

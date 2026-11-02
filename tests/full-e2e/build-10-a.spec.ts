@@ -76,6 +76,9 @@ test("[F-BUILD-10-A] narrow layout and keyboard-only core learning journey", asy
   await requiredCheck(1, async () => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto("/");
+    await page
+      .getByLabel("Display name", { exact: true })
+      .fill("Narrow learner");
     const background = page.getByLabel("Your starting point");
     const goal = page.getByRole("radio", {
       name: "Understand AI and try something useful",
@@ -137,6 +140,9 @@ test("[F-BUILD-10-A] narrow layout and keyboard-only core learning journey", asy
   await requiredCheck(2, async () => {
     await context.clearCookies();
     await page.goto("/");
+    const name = page.getByLabel("Display name", { exact: true });
+    await tabTo(page, name);
+    await page.keyboard.type("Keyboard learner");
     const background = page.getByLabel("Your starting point");
     await tabTo(page, background);
     await page.keyboard.press("e");

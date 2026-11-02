@@ -1,3 +1,4 @@
+import { memberExportStore } from "../../src/member-export.ts";
 import { billingProfileStore } from "../../src/billing-profile.ts";
 import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
 import { catalogStore } from "../../src/catalog.ts";
@@ -127,6 +128,7 @@ async function fixture(
       },
       staffEntry: staffEntryStore(pool),
       billingProfiles: billingProfileStore(pool),
+      memberExport: memberExportStore(pool),
       simpleInvoices: simpleInvoiceStore(pool, {
         sample: true,
         issuer: "Invented issuer",
@@ -233,7 +235,7 @@ test("[L269] both verified owner identities explicitly enter finite billing admi
       await page
         .getByRole("link", { name: "Courses and invoices", exact: true })
         .click();
-      await page.getByLabel("Student account reference").selectOption(f.id);
+      await page.getByLabel("Learner", { exact: true }).selectOption(f.id);
       await page
         .getByRole("checkbox", { name: /Invented owner-entry course/ })
         .check();
@@ -454,9 +456,7 @@ test("[L277] ADMINCON01–04 selects an exact learner, composes existing terms a
     await page
       .getByRole("link", { name: "Compose courses for this learner" })
       .click();
-    await expect(page.getByLabel("Student account reference")).toHaveValue(
-      f.id,
-    );
+    await expect(page.getByLabel("Learner", { exact: true })).toHaveValue(f.id);
     await page
       .getByRole("checkbox", { name: /Invented owner-entry course/ })
       .check();
@@ -606,6 +606,87 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
       fullPage: true,
     });
   } finally {
+    await closeLoopback(f.server);
+  }
+});
+
+test("[L282] required names identify learners while legacy work and administrator boundaries stay intact", async ({
+  page,
+  browser,
+}) => {
+  const f = await fixture(page);
+  const other = await browser.newContext();
+  try {
+    await page.goto(f.origin + "/account");
+    await expect(
+      page.getByRole("link", { name: "Add your display name" }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("Display name", { exact: true }),
+    ).toHaveAttribute("required", "");
+    await page.getByLabel("Display name", { exact: true }).fill("李明 <Sam>");
+    await page
+      .getByRole("button", { name: "Save my profile", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/learn$/);
+    await page.goto(f.origin + "/account");
+    await expect(page.getByLabel("Display name", { exact: true })).toHaveValue(
+      "李明 <Sam>",
+    );
+    await expect(
+      page.getByRole("link", { name: "Add your display name" }),
+    ).toHaveCount(0);
+    const retained = await f.members.progress(f.id);
+    expect(retained?.instruction).toBe("Invented retained learning draft");
+    const fresh = await other.newPage();
+    await fresh.goto(f.origin + "/");
+    await fresh.getByLabel("Your starting point").selectOption("professional");
+    await fresh
+      .getByRole("radio", { name: "Make everyday work clearer", exact: true })
+      .check();
+    await fresh.getByRole("button", { name: "Start my learning path" }).click();
+    await expect(fresh).not.toHaveURL(/\/learn$/);
+    await expect(
+      fresh.getByLabel("Display name", { exact: true }),
+    ).toBeFocused();
+    await fresh.getByLabel("Display name", { exact: true }).fill("李明 <Sam>");
+    await fresh.getByRole("button", { name: "Start my learning path" }).click();
+    await expect(fresh).toHaveURL(/\/learn$/);
+    const exported = await fresh.request.get(f.origin + "/api/member/export");
+    expect(exported.status()).toBe(200);
+    expect((await exported.json()).profile.displayName).toBe("李明 <Sam>");
+    expect((await fresh.goto(f.origin + "/operator"))?.status()).toBe(403);
+    const legacy = randomBytes(32).toString("hex");
+    await f.members.create(legacy, { background: "technical", goal: "build" });
+    await f.verify();
+    await page.goto(f.origin + "/admin");
+    await page.getByRole("button", { name: "Enter administration" }).click();
+    const directory = page.locator(".member-directory");
+    await expect(
+      directory.getByRole("link", { name: "李明 <Sam>", exact: true }),
+    ).toHaveCount(2);
+    await expect(
+      directory.getByRole("link", { name: "Name needed", exact: true }),
+    ).toBeVisible();
+    await expect(directory).not.toContainText(
+      "Invented retained learning draft",
+    );
+    await expect(directory).not.toContainText("shi@deepnative.io");
+    await directory.locator("summary").first().click();
+    await expect(directory.locator("details[open] code")).toHaveText(
+      /^[a-f0-9-]{36}$/,
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: test.info().outputPath("named-learner-directory.png"),
+      fullPage: true,
+    });
+  } finally {
+    await other.close();
     await closeLoopback(f.server);
   }
 });

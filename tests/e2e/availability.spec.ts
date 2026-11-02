@@ -90,6 +90,7 @@ test("[L64] private sample availability respects verified coverage, time zone an
     await expect(outsiderPage).toHaveURL(origin + "/");
 
     await page.goto("/");
+    await page.getByLabel("Display name").fill("Sample learner");
     await page
       .getByLabel("Your starting point")
       .selectOption(
@@ -146,6 +147,7 @@ test("[L64] private sample availability respects verified coverage, time zone an
 
     const technicalPage = await technical.newPage();
     await technicalPage.goto("/");
+    await technicalPage.getByLabel("Display name").fill("Sample learner");
     await technicalPage
       .getByLabel("Your starting point")
       .selectOption("technical");
@@ -172,6 +174,7 @@ test("[L64] private sample availability respects verified coverage, time zone an
 
     const otherLearnerPage = await otherLearner.newPage();
     await otherLearnerPage.goto("/");
+    await otherLearnerPage.getByLabel("Display name").fill("Sample learner");
     await otherLearnerPage
       .getByLabel("Your starting point")
       .selectOption(
@@ -202,6 +205,7 @@ test("[L64] private sample availability respects verified coverage, time zone an
 
     const noZonePage = await noZone.newPage();
     await noZonePage.goto("/");
+    await noZonePage.getByLabel("Display name").fill("Sample learner");
     await noZonePage.getByLabel("Your starting point").selectOption("explorer");
     await chooseLearningGoal(noZonePage, "everyday");
     await noZonePage

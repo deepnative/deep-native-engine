@@ -25,6 +25,7 @@ it("preserves exact completed practice for both goals after a direction change",
   await db.save(owner.token, { ...answer, revision: 0 });
   const before = await db.progress(owner.id);
   await db.updateProfile(owner.token, {
+    displayName: "Sample learner",
     background: "professional",
     goal: "work",
     backgroundTags: [],

@@ -263,6 +263,7 @@ it("AUDIT-AUTH-02 lets a mutation owning the lock finish before sign-out, then d
     for (const credential of [owner.token, owner.id]) {
       expect(
         await db.updateProfile(credential, {
+          displayName: "Sample learner",
           background: "professional",
           goal: "work",
           backgroundTags: [],

@@ -14,6 +14,7 @@ test.afterAll(async () => pool.end());
 
 async function onboard(page: Page) {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("explorer");
   await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -82,7 +83,7 @@ test("[F-BUILD-08-A] owner export excludes another member's private records", as
         profile: { id: string };
         records: { milestones: { milestoneTitle: string }[] };
       };
-      expect(payload.version).toBe("local-member-records-v30");
+      expect(payload.version).toBe("local-member-records-v31");
       expect(payload.profile.id).toBe(ownerId);
       expect(payload.records.milestones).toMatchObject([
         { milestoneTitle: ownerTitle },

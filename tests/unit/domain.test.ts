@@ -141,9 +141,16 @@ describe("local-only configuration", () => {
 });
 describe("learner inputs", () => {
   it.each(["explorer", "professional", "technical"])(
-    "MON-01 accepts %s without invented-data, identity, job or payment fields",
+    "MON-01 accepts %s without invented-data, verified-identity, job or payment fields",
     (background) =>
-      expect(profile({ background, goal: "everyday" })).toEqual({
+      expect(
+        profile({
+          display_name: "Sample learner",
+          background,
+          goal: "everyday",
+        }),
+      ).toEqual({
+        displayName: "Sample learner",
         background,
         goal: "everyday",
         backgroundTags: [],
@@ -157,16 +164,41 @@ describe("learner inputs", () => {
   );
   it.each([
     {},
-    { background: [], goal: "work", synthetic: "yes" },
-    { background: "owner", goal: "work", synthetic: "yes" },
-    { background: "explorer", goal: [] },
-    { background: "explorer", goal: "admin", synthetic: "yes" },
-    { background: "explorer", goal: { value: "work" } },
-    { background: "__proto__", goal: "work", synthetic: "yes" },
+    {
+      display_name: "Sample learner",
+      background: [],
+      goal: "work",
+      synthetic: "yes",
+    },
+    {
+      display_name: "Sample learner",
+      background: "owner",
+      goal: "work",
+      synthetic: "yes",
+    },
+    { display_name: "Sample learner", background: "explorer", goal: [] },
+    {
+      display_name: "Sample learner",
+      background: "explorer",
+      goal: "admin",
+      synthetic: "yes",
+    },
+    {
+      display_name: "Sample learner",
+      background: "explorer",
+      goal: { value: "work" },
+    },
+    {
+      display_name: "Sample learner",
+      background: "__proto__",
+      goal: "work",
+      synthetic: "yes",
+    },
   ])("rejects invalid profile %j", (body) => expect(profile(body)).toBeNull());
   it("accepts overlapping interests and an exploratory path without a work identity", () => {
     expect(
       profile({
+        display_name: "Sample learner",
         background: "explorer",
         goal: "work",
         synthetic: "yes",
@@ -179,6 +211,7 @@ describe("learner inputs", () => {
         weekly_minutes: "60",
       }),
     ).toEqual({
+      displayName: "Sample learner",
       background: "explorer",
       goal: "work",
       backgroundTags: ["professional", "technical"],
@@ -209,6 +242,7 @@ describe("learner inputs", () => {
   ])("rejects unsupported optional choices %j", (extra) =>
     expect(
       profile({
+        display_name: "Sample learner",
         background: "explorer",
         goal: "everyday",
         synthetic: "yes",
@@ -219,6 +253,7 @@ describe("learner inputs", () => {
   it("accepts a small weekly budget and UTC without inventing paid access", () => {
     expect(
       profile({
+        display_name: "Sample learner",
         background: "explorer",
         goal: "everyday",
         synthetic: "yes",
@@ -229,6 +264,7 @@ describe("learner inputs", () => {
   });
   it("preserves a member's safe attempted direction while leaving cleared choices empty", () => {
     const edit = profileEdit({
+      display_name: "Sample learner",
       background: "professional",
       goal: "work",
       domain_tags: "finance",
@@ -237,6 +273,7 @@ describe("learner inputs", () => {
     });
     expect(edit.errors).toEqual([]);
     expect(edit.attempted).toEqual({
+      displayName: "Sample learner",
       background: "professional",
       goal: "work",
       backgroundTags: [],
@@ -248,6 +285,7 @@ describe("learner inputs", () => {
       exploratory: false,
     });
     expect(edit.input).toMatchObject({
+      displayName: "Sample learner",
       background: "professional",
       goal: "work",
       domainTags: ["finance"],
@@ -257,6 +295,7 @@ describe("learner inputs", () => {
   });
   it("reports distinct profile edit errors without losing safe attempted choices", () => {
     const edit = profileEdit({
+      display_name: "Sample learner",
       background: "technical",
       goal: "build",
       domain_tags: ["finance", "finance"],
@@ -272,6 +311,7 @@ describe("learner inputs", () => {
       "timezone",
     ]);
     expect(edit.attempted).toMatchObject({
+      displayName: "Sample learner",
       background: "technical",
       goal: "build",
       domainTags: ["finance"],
@@ -283,6 +323,7 @@ describe("learner inputs", () => {
   });
   it("bounds forged, duplicate, oversized and non-string profile edit values", () => {
     const edit = profileEdit({
+      display_name: "Sample learner",
       background: ["explorer", "technical"],
       goal: "admin",
       background_tags: ["explorer", "explorer"],
@@ -306,6 +347,7 @@ describe("learner inputs", () => {
       "exploratory",
     ]);
     expect(edit.attempted).toEqual({
+      displayName: "Sample learner",
       background: "",
       goal: "",
       backgroundTags: ["explorer"],
@@ -317,8 +359,12 @@ describe("learner inputs", () => {
       exploratory: false,
     });
     expect(
-      profileEdit({ background: "explorer", goal: "everyday", timezone: 42 })
-        .errors,
+      profileEdit({
+        display_name: "Sample learner",
+        background: "explorer",
+        goal: "everyday",
+        timezone: 42,
+      }).errors,
     ).toEqual([
       {
         field: "timezone",
@@ -328,6 +374,7 @@ describe("learner inputs", () => {
   });
   it("MON-01 retains invalid profile choices and accepts correction without a global sample pledge", () => {
     const body = {
+      display_name: "Sample learner",
       background: "explorer",
       goal: "everyday",
       domain_tags: "education",
@@ -338,6 +385,7 @@ describe("learner inputs", () => {
     expect(invalid.input).toBeNull();
     expect(invalid.errors.map((error) => error.field)).toEqual(["timezone"]);
     expect(invalid.attempted).toMatchObject({
+      displayName: "Sample learner",
       background: "explorer",
       goal: "everyday",
       domainTags: ["education"],
@@ -347,6 +395,7 @@ describe("learner inputs", () => {
     const corrected = profileStart({ ...body, timezone: "UTC" });
     expect(corrected.errors).toEqual([]);
     expect(corrected.input).toMatchObject({
+      displayName: "Sample learner",
       background: "explorer",
       goal: "everyday",
       domainTags: ["education"],

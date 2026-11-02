@@ -84,7 +84,7 @@ export function mountCoachingRoutes(
     res.send(
       page(
         "Coaching administration",
-        `<section class="invoice-workspace"><h1>Coaching administration</h1><p>Choose a member to set an agreed hourly rate or review a submitted month. Registration and rate assignment create no invoice.</p><h2>Members</h2><ul>${result.value.members.map((m) => `<li><a href="${adminPath}/${m.id}">${m.id}</a></li>`).join("") || "<li>No members available.</li>"}</ul><h2>Pending months</h2><ul>${result.value.coachingPending.map((m) => `<li><a href="${adminPath}/${m.ownerId}?month=${m.month}">${m.ownerId} · ${m.month}</a></li>`).join("") || "<li>No submitted months await review.</li>"}</ul><p><a href="/operator/invoices">Courses and invoices</a> · <a href="/operator">Administration console</a></p></section>`,
+        `<section class="invoice-workspace"><h1>Coaching administration</h1><p>Choose a member to set an agreed hourly rate or review a submitted month. Registration and rate assignment create no invoice.</p><h2>Members</h2><ul>${result.value.members.map((m) => `<li><a href="${adminPath}/${m.id}">${escape(m.displayName ?? "Name needed")}</a><p class="small">Account reference: <code>${escape(m.id)}</code></p></li>`).join("") || "<li>No members available.</li>"}</ul><h2>Pending months</h2><ul>${result.value.coachingPending.map((m) => `<li><a href="${adminPath}/${m.ownerId}?month=${m.month}">${escape(m.displayName ?? "Name needed")} · ${m.month}</a><p class="small">Account reference: <code>${escape(m.ownerId)}</code></p></li>`).join("") || "<li>No submitted months await review.</li>"}</ul><p><a href="/operator/invoices">Courses and invoices</a> · <a href="/operator">Administration console</a></p></section>`,
       ),
     );
   });

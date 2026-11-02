@@ -20,6 +20,7 @@ test.afterAll(async () => {
 
 async function onboard(page: Page) {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("professional");
   await chooseLearningGoal(page, "work");
   await page.getByRole("button", { name: "Start my learning path" }).click();

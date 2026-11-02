@@ -44,6 +44,7 @@ async function member(browser: Browser, background: string, goal: string) {
   const context = await browser.newContext({ baseURL: origin }),
     page = await context.newPage();
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption(background);
   await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();

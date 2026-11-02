@@ -20,6 +20,7 @@ async function onboard(
 ) {
   await page.context().clearCookies();
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption(background);
   await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -402,7 +403,7 @@ test("[L105] all three audiences export ordered session pairs and withdraw all t
     await respond(page, second);
     const csrf = await page.locator('input[name="csrf"]').first().inputValue();
     const before = await exported(page);
-    expect(before.version).toBe("local-member-records-v30");
+    expect(before.version).toBe("local-member-records-v31");
     expect(before.records.practiceSessions).toEqual([
       expect.objectContaining({
         id: sessionId,

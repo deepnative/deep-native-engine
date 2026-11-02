@@ -6,6 +6,7 @@ const origin = browserOrigin;
 
 async function begin(page: Page, background: string, goal: string) {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption(background);
   await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -81,7 +82,7 @@ test("[L86] three learner backgrounds withdraw completed starter text privately"
     const after = await page.request.get("/api/member/export");
     expect(after.status()).toBe(200);
     const exported = await after.json();
-    expect(exported.version).toBe("local-member-records-v30");
+    expect(exported.version).toBe("local-member-records-v31");
     expect(exported.records.exercises).toMatchObject([
       { instruction: null, verification: null, state: "withdrawn" },
     ]);

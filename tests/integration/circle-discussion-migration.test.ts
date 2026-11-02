@@ -59,6 +59,8 @@ it("upgrades populated legacy membership twice without inferring a discussion pe
       )
       .sort())
       await client.query(await readFile(new URL(file, directory), "utf8"));
+    // Current member projection only; keep the target legacy migration and marker unchanged.
+    await client.query("ALTER TABLE learners ADD COLUMN display_name text");
     const scoped = {
       query: client.query.bind(client),
       async connect() {

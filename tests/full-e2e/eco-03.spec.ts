@@ -76,6 +76,7 @@ async function publish(
 
 async function onboard(page: Page, goal: "everyday" | "work" | "build") {
   await page.goto("/");
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("professional");
   await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();

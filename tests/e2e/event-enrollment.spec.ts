@@ -23,6 +23,7 @@ async function onboard(
   goal: string,
 ) {
   await page.goto(origin);
+  await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption(background);
   await chooseLearningGoal(page, goal);
   await page
@@ -155,7 +156,7 @@ for (const [index, [background, goal]] of (
         const exported = await (
           await participant.request.get(`${origin}/api/member/export`)
         ).json();
-        expect(exported.version).toBe("local-member-records-v30");
+        expect(exported.version).toBe("local-member-records-v31");
         expect(exported.records.eventEnrollments).toHaveLength(1);
         expect(exported.records.eventEnrollments[0].id).toBe(
           new URL(participant === page ? receipt : peerReceipt).pathname
