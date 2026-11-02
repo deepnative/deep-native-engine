@@ -432,7 +432,7 @@ it("EMAIL-ACCESS-05D withholds attachment state and dispatch when current owners
   expect(email.requestAttach).not.toHaveBeenCalled();
 });
 
-it("MOUT-01 signs out a linked member only after confirmed invalidation and clears only its cookie", async () => {
+it("MOUT-01 signs out a linked member only after confirmed invalidation and ends the staff cookie", async () => {
   const { application, email } = fixture();
   Object.assign(email, { signOut: vi.fn(async () => "signed_out") });
   const response = await post(application, "/account/sign-out", {});
@@ -440,6 +440,7 @@ it("MOUT-01 signs out a linked member only after confirmed invalidation and clea
   expect(response.text).toContain("Signed out");
   expect(response.headers["set-cookie"]).toEqual([
     expect.stringContaining("dne_preview=;"),
+    expect.stringContaining("dne_staff=signed-out;"),
   ]);
   expect(email.requestSignIn).not.toHaveBeenCalled();
 });
@@ -523,4 +524,62 @@ it("MOUT-01 accepts an explicit empty-body POST with the authenticated CSRF head
     .set("x-csrf-token", csrf(credential, secret));
   expect(response.status).toBe(200);
   expect(email.signOut).toHaveBeenCalledExactlyOnceWith(credential);
+});
+
+it("NAV-03 shows a browser-only recovery warning without signing out on GET", async () => {
+  const { application, email } = fixture();
+  const response = await get(application, "/account/sign-out");
+  expect(response.status).toBe(200);
+  expect(response.text).toContain("You may lose access");
+  expect(response.text).toContain('name="acknowledgeAccessLoss"');
+  expect(response.text).toContain("required");
+  expect(response.text).toContain('href="/email/attach"');
+  expect(email.signOut).not.toHaveBeenCalled();
+});
+it("NAV-03 forwards explicit access-loss acknowledgement without requiring mail", async () => {
+  const { application, email } = fixture();
+  const response = await post(application, "/account/sign-out", {
+    acknowledgeAccessLoss: "yes",
+  });
+  expect(response.status).toBe(200);
+  expect(email.signOut).toHaveBeenCalledExactlyOnceWith(credential, true);
+});
+it("NAV-03 rejects forged access-loss acknowledgement without ending access", async () => {
+  const { application, email } = fixture();
+  const response = await post(application, "/account/sign-out", {
+    acknowledgeAccessLoss: "false",
+  });
+  expect(response.status).toBe(400);
+  expect(email.signOut).not.toHaveBeenCalled();
+});
+
+it("NAV-03 logout remains available independently of email configuration", async () => {
+  const { store } = fixture(true, false);
+  const logout = vi.fn(async () => "signed_out" as const);
+  const application = app(store, { origin, secret, memberSignOut: logout });
+  const confirmation = await get(application, "/account/sign-out");
+  expect(confirmation.status).toBe(200);
+  expect(confirmation.text).toContain("You may lose access");
+  const response = await post(application, "/account/sign-out", {
+    acknowledgeAccessLoss: "yes",
+  });
+  expect(response.status).toBe(200);
+  expect(logout).toHaveBeenCalledExactlyOnceWith(credential, true);
+});
+it("NAV-02 linked confirmation offers recovery without requiring access-loss acknowledgement", async () => {
+  const { application, email } = fixture();
+  email.ownedStatus.mockResolvedValue("linked");
+  const response = await get(application, "/account/sign-out");
+  expect(response.status).toBe(200);
+  expect(response.text).toContain("Your verified email lets you return");
+  expect(response.text).not.toContain('name="acknowledgeAccessLoss"');
+  expect(email.signOut).not.toHaveBeenCalled();
+});
+it("NAV-01 sign-out GET never mutates an expired or malformed request", async () => {
+  const { application, email } = fixture(false);
+  expect((await get(application, "/account/sign-out")).status).toBe(303);
+  expect(
+    (await get(application, "/account/sign-out?memberId=other")).status,
+  ).toBe(400);
+  expect(email.signOut).not.toHaveBeenCalled();
 });

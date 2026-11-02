@@ -2,7 +2,10 @@ import { test, expect, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { app } from "../../src/app.ts";
-import { memberEmailAccess } from "../../src/member-email-access.ts";
+import {
+  memberEmailAccess,
+  signOutMember,
+} from "../../src/member-email-access.ts";
 import { migrate, store } from "../../src/store.ts";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 
@@ -29,6 +32,7 @@ async function fixture(
   page: Page,
   mode: "normal" | "disabled" | "before-commit" | "lost-commit" = "normal",
   linked = true,
+  independentLogout = false,
 ) {
   const token = randomBytes(32).toString("hex"),
     address = `signout-${token.slice(0, 12)}@example.com`;
@@ -81,6 +85,9 @@ async function fixture(
         return origin;
       },
       secret: "synthetic-signout-browser",
+      memberSignOut: independentLogout
+        ? (token, confirmed) => signOutMember(boundary, token, confirmed)
+        : undefined,
       memberEmail:
         mode === "disabled"
           ? undefined
@@ -162,7 +169,7 @@ test("[L239] MOUT-01/02 a linked member signs out and deliberately returns by em
     expect(
       (await page.context().cookies()).find((c) => c.name === "dne_staff")
         ?.value,
-    ).toBe("c".repeat(64));
+    ).toBe("signed-out");
     const stale = await copied.newPage();
     await stale.goto(`${f.origin}/account`);
     await expect(stale).toHaveURL(`${f.origin}/`);
@@ -294,5 +301,99 @@ test("[L241] MOUT-06 failed and lost-commit signout shows uncertainty without re
     } finally {
       await f.close();
     }
+  }
+});
+
+test("[L281] NAV-01/03/04 finds account tools and deliberately signs out without email while preserving records", async ({
+  page,
+}) => {
+  const f = await fixture(page, "disabled", false, true);
+  try {
+    await page.goto(`${f.origin}/account`);
+    const navigation = page.getByRole("navigation", {
+      name: "Main navigation",
+    });
+    for (const label of [
+      "Learning",
+      "Account",
+      "Coaching hours",
+      "Administration",
+      "Sign out",
+    ])
+      await expect(
+        navigation.getByRole("link", { name: label, exact: true }),
+      ).toBeVisible();
+    for (let index = 0; index < 4; index++) await page.keyboard.press("Tab");
+    await expect(
+      navigation.getByRole("link", { name: "Account", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByRole("heading", { name: "My account", exact: true }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: test.info().outputPath("navigation-account.png"),
+      fullPage: true,
+    });
+    await navigation
+      .getByRole("link", { name: "Coaching hours", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "How to enter coaching hours" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Hours entry is unavailable on this preview", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    await page
+      .getByRole("navigation", { name: "Main navigation" })
+      .getByRole("link", { name: "Administration", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Administration unavailable" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Administration is restricted", { exact: false }),
+    ).toBeVisible();
+    await page
+      .getByRole("navigation", { name: "Main navigation" })
+      .getByRole("link", { name: "Sign out", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Sign out", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("You may lose access", { exact: false }),
+    ).toBeVisible();
+    expect((await members.session(f.token)).kind).toBe("active");
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    expect((await members.session(f.token)).kind).toBe("active");
+    await page
+      .getByRole("checkbox", {
+        name: "I understand I may not be able to return to this account.",
+      })
+      .check();
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Signed out", exact: true }),
+    ).toBeVisible();
+    expect((await members.session(f.token)).kind).not.toBe("active");
+    expect(await members.progress(f.id)).toMatchObject({
+      instruction: "My invented sign-out learning plan",
+    });
+    expect(f.messages).toHaveLength(0);
+    expect(f.mutations()).toBe(1);
+    await page.screenshot({
+      path: test.info().outputPath("navigation-signed-out.png"),
+      fullPage: true,
+    });
+  } finally {
+    await f.close();
   }
 });

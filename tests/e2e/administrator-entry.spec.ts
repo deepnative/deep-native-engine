@@ -214,6 +214,7 @@ test("[L269] both verified owner identities explicitly enter finite billing admi
       );
       await page.goto(f.origin + "/account");
       await page
+        .getByRole("navigation", { name: "Main navigation" })
         .getByRole("link", { name: "Administration", exact: true })
         .click();
       await expect(

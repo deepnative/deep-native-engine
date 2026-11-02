@@ -428,6 +428,7 @@ export function app(
     manualObservations?: ManualObservationStore;
     assignmentReadiness?: AssignmentReadinessStore;
     memberEmail?: MemberEmailAccess;
+    memberSignOut?: MemberEmailAccess["signOut"];
     uploadAdmission?: UploadAdmissionStore;
   },
 ) {
@@ -747,6 +748,7 @@ export function app(
     options.memberEmail,
     options.origin,
     resumeProgram,
+    options.memberSignOut,
   );
   mountProgramRoutes(
     app,

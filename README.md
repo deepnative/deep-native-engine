@@ -1,6 +1,6 @@
 # Deep Native Engine
 
-Members with a verified email can sign out through **My account** and deliberately return by email to the same saved learning. Sign-out invalidates the current bearer, including copied cookies; browser-only accounts must verify email first. An uncertain result offers account inspection and email return without automatically repeating the action.
+Use the shared header to open **Account**, **Sign out**, **Coaching hours** or **Administration**. Signing out invalidates the member bearer, including copied cookies, and ends this browser’s staff access without deleting saved records. A verified email lets you return to the same work; browser-only members must explicitly acknowledge that they may lose access. Email delivery is not required to sign out. An uncertain result offers inspection without automatically repeating the action. Coaching hours explains the actual configuration and rate/submission steps; this does not enable payable billing or grant administrator access. These changes require their own verified release before appearing on the hosted site.
 
 Deep Native Engine helps curious learners, IT practitioners and professionals in other fields learn to use AI in practical ways. You can start without coding or a career plan: choose a direction, try a small exercise and decide what to learn next.
 

@@ -31,3 +31,8 @@ Preserve native labels, CSRF, all profile fields, safe attempted values and fiel
 ## Administrator console — Operate
 
 The verified-owner `/operator` console shares this identity with compact task text and existing flat form/list controls. Learners, Courses/services and Invoices are named destinations; an exact learner reference opens minimal enrollment/billing summaries and existing proposal functions. Keep private writing/files/email out of the console, finite authority explicit, and learning identity separate. Disabled billing remains disabled; published lesson candidates do not promise staffed services. Long references/actions wrap on mobile. ADMINCON01–04 and L277 own behavioral evidence; original missing-route failure, captures and final-source results are recorded on #570. This brief does not establish deployment or commercial acceptance.
+
+
+## Shared account navigation — Operate (#594)
+
+Owner priority: persistent text links for Learning, Account, Coaching hours, Administration and Sign out across the shared header. Use a wrapping horizontal nav, visible on narrow screens without a hamburger or JavaScript; retain the warm paper/blue/ink/Nunito Sans world. Sign out opens a dedicated confirmation with a clear recovery warning for browser-only accounts; never mutate from GET. Keep saved work and finite authorization fences. Coaching/admin pages explain actual prerequisites without enabling billing or granting access. NAV-01..04/L281 own acceptance; no hosted completion until exact-source release.
