@@ -7,7 +7,7 @@ related_targets: ["public/style.css"]
 
 ## Scope
 
-Mode: Persuade. The welcome landing at `/` remains Persuade. The learner dashboard, starter lesson and activity view use the same palette/font in Operate mode; their task layouts and behavior stay intact. Staff tools are outside this theme change. This is a code-led implementation of the user's already chosen Duolingo/Quantic/Khan learning-product synthesis. Routine design decisions are delegated; no new concept approval round is needed.
+Mode: Persuade. The welcome landing at `/` remains Persuade. The learner dashboard, starter lesson and activity view use the same palette/font in Operate mode; their task layouts and behavior stay intact. Account, billing, administrator, support and error pages share the same default palette/font in Operate mode; their existing task layouts remain intact. This is a code-led implementation of the user's already chosen Duolingo/Quantic/Khan learning-product synthesis. Routine design decisions are delegated; no new concept approval round is needed.
 
 ## Direction contract
 
@@ -25,4 +25,4 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
 ## Constraints
 
-Preserve native labels, CSRF, all profile fields, safe attempted values and field-linked errors. Open optional fields on an error response. Keep account/profile views unchanged. No fake learners, streaks, completion, accreditation, AI calls, pricing promises or support capacity. Preserve old preview resources; show this source in a fresh owned local preview.
+Preserve native labels, CSRF, all profile fields, safe attempted values and field-linked errors. Open optional fields on an error response. Keep account/profile content, layout and behavior unchanged while applying the shared identity. No fake learners, streaks, completion, accreditation, AI calls, pricing promises or support capacity. Preserve old preview resources; show this source in a fresh owned local preview.
