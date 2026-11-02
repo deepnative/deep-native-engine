@@ -3015,6 +3015,8 @@ it("pins one private assignment attempt, serializes drafts and preserves history
   expect(first).toMatchObject({
     contentId: draft.id,
     contentVersion: 1,
+    // #595: the pinned version's brief is read with the attempt.
+    brief: draft.body,
     goalAtStart: "everyday",
     revision: 1,
     currentEligible: true,
@@ -3050,7 +3052,9 @@ it("pins one private assignment attempt, serializes drafts and preserves history
   await pool.query("UPDATE learners SET goal='work' WHERE id=$1", [
     owner.learner.id,
   ]);
-  expect((await attempts.detail(owner.token, id))?.currentEligible).toBe(false);
+  const ineligible = await attempts.detail(owner.token, id);
+  expect(ineligible?.currentEligible).toBe(false);
+  expect(ineligible?.brief).toBe(draft.body);
   expect(await attempts.start(owner.token)).toBeNull();
   expect(await attempts.remove(outsider.token, id)).toBe(false);
   expect(await attempts.remove(owner.token, id)).toBe(true);
