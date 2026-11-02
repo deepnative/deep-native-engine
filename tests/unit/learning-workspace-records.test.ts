@@ -141,6 +141,13 @@ it("LWORK-05 lists owner notebooks in bounded pages without serving teaching sou
   const first = await request(server).get(base).timeout(1000);
   expect(first.status).toBe(200);
   expect(first.text).toContain('href="/member/export"');
+  for (const path of [
+    "/account",
+    "/account/sign-out",
+    "/account/coaching",
+    "/admin",
+  ])
+    expect(first.text).toContain(`href="${path}"`);
   expect(first.text).toContain(`${base}?after=${id}`);
   expect(first.text).toContain("everyday notebook");
   expect(first.headers["cache-control"]).toBe("no-store");

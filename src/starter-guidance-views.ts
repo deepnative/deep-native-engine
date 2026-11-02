@@ -1,5 +1,5 @@
 import { GOALS, type Goal } from "./content.ts";
-import { escape } from "./views.ts";
+import { escape, accountActionLinks } from "./views.ts";
 import {
   STARTER_GUIDANCE_VERSION,
   STARTER_GUIDES,
@@ -8,7 +8,7 @@ import {
 } from "./starter-guidance.ts";
 
 function frame(title: string, active: "example" | "practise", body: string) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><header class="site-header guidance-header"><a class="brand" href="/learn"><span class="brand-mark" aria-hidden="true">d/n</span>deep native</a><nav aria-label="Learning account"><a href="/learn">Learning</a><a href="/account">My account</a></nav></header><main class="guidance" id="main"><ol class="guidance-steps" aria-label="Lesson steps"><li${active === "example" ? ' aria-current="step"' : ""}><span>1</span> Example</li><li${active === "practise" ? ' aria-current="step"' : ""}><span>2</span> Practise</li><li><span>3</span> Apply</li></ol>${body}<p class="guidance-exit"><a href="/lesson#exercise-title">Go to your writing exercise</a> · <a href="/learn">Return to learning</a></p></main><footer class="guidance-footer"><p>Use these examples to practise. Your writing exercise is saved separately when you choose to save it.</p></footer></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><header class="site-header guidance-header"><a class="brand" href="/learn"><span class="brand-mark" aria-hidden="true">d/n</span>deep native</a><nav aria-label="Learning account"><a href="/learn">Learning</a><a href="/account">My account</a>${accountActionLinks()}</nav></header><main class="guidance" id="main"><ol class="guidance-steps" aria-label="Lesson steps"><li${active === "example" ? ' aria-current="step"' : ""}><span>1</span> Example</li><li${active === "practise" ? ' aria-current="step"' : ""}><span>2</span> Practise</li><li><span>3</span> Apply</li></ol>${body}<p class="guidance-exit"><a href="/lesson#exercise-title">Go to your writing exercise</a> · <a href="/learn">Return to learning</a></p></main><footer class="guidance-footer"><p>Use these examples to practise. Your writing exercise is saved separately when you choose to save it.</p></footer></body></html>`;
 }
 
 export function starterGuidanceExample(goal: Goal) {

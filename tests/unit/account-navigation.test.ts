@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { starterGuidanceExample } from "../../src/starter-guidance-views.ts";
 import { accountPage, page } from "../../src/views.ts";
 
 it("NAV-01 exposes account, logout, coaching and administration in shared navigation", () => {
@@ -15,6 +16,14 @@ it("NAV-01 exposes account, logout, coaching and administration in shared naviga
     "/account/sign-out",
   ])
     expect(navigation).toContain(`href="${path}"`);
+  const guidance = starterGuidanceExample("everyday");
+  for (const path of [
+    "/account",
+    "/account/sign-out",
+    "/account/coaching",
+    "/admin",
+  ])
+    expect(guidance).toContain(`href="${path}"`);
 });
 it.each(["unlinked", "unavailable"] as const)(
   "NAV-03 makes logout available to %s accounts",

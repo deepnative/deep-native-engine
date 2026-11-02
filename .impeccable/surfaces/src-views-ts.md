@@ -39,3 +39,5 @@ Owner priority: persistent text links for Learning, Account, Coaching hours, Adm
 
 The member Billing recipient surface uses the same Operate reading/form layout and shared blue/Nunito/warm-paper identity. Keep name/email distinct from authentication and money authorization, with clear current/validation/stale/uncertain states and ordinary account/proposal navigation. Native labelled inputs and visible confirmation remain; no card/payment widgets or decorative status claims. BILLPROFILE01–05/L280 cover the profile, same-account proposal return and immutable invoice snapshot.
 
+
+The same account actions also remain visible in the notebook reader, saved-records frame and guided starter lesson, using each existing wrapping header and preserving its links. The global footer carries the product line and navigation; deployment/provider disclaimers are removed while task-specific privacy and recovery information stays beside the relevant action.
