@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import type { Server } from "node:http";
 import request from "supertest";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 import { app } from "../../src/app.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, seedDraftPack } from "../../src/catalog.ts";
@@ -26,8 +28,11 @@ const application = app(members, {
 });
 const memberToken = randomBytes(32).toString("hex");
 
+// #105: bind the owned test server to 127.0.0.1 so another lane cannot answer.
+let server: Server;
 beforeAll(async () => {
   await migrate(pool);
+  server = await listenLoopback(application);
   await seedDraftPack(pool);
   await members.create(memberToken, {
     background: "explorer",
@@ -48,10 +53,13 @@ beforeAll(async () => {
     expect(await catalog.publish(editor, item.id, item.version)).toBe(true);
   }
 });
-afterAll(() => pool.end());
+afterAll(async () => {
+  await closeLoopback(server);
+  await pool.end();
+});
 
 it("PROGRAM-01/ENR-01 lets a student explore the exact local foundation term before enrollment", async () => {
-  const response = await request(application)
+  const response = await request(server)
     .get("/programs/foundation/terms/local-foundation-1")
     .set("Host", "127.0.0.1:3000")
     .set("Cookie", `${COOKIE}=${memberToken}`);
@@ -73,7 +81,7 @@ it("PROGRAM-02/03/05/ENR-02/05 admits once only after explicit confirmation and 
     new Date(Date.now() + 3600000),
   );
   const post = (path: string, token: string, fields: Record<string, string>) =>
-    request(application)
+    request(server)
       .post(path)
       .set("Host", "127.0.0.1:3000")
       .set("Origin", origin)
@@ -125,7 +133,7 @@ it("PROGRAM-02/03/05/ENR-02/05 admits once only after explicit confirmation and 
     kind: "ready",
     value: null,
   });
-  const form = await request(application)
+  const form = await request(server)
     .get(chosen.headers.location!)
     .set("Host", "127.0.0.1:3000")
     .set("Cookie", `${COOKIE}=${memberToken}; ${selection}`);
@@ -161,7 +169,7 @@ it("PROGRAM-02/03/05/ENR-02/05 admits once only after explicit confirmation and 
   const other = randomBytes(32).toString("hex");
   await members.create(other, { background: "professional", goal: "work" });
   const get = (path: string, token: string) =>
-    request(application)
+    request(server)
       .get(path)
       .set("Host", "127.0.0.1:3000")
       .set("Cookie", `${COOKIE}=${token}`);

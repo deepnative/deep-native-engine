@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import request from "supertest";
-import { expect, it, vi } from "vitest";
-import { programEnrollmentFixture } from "../support/program-enrollment-recovery-server.ts";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
+import { afterAll, afterEach, expect, it, vi, onTestFinished } from "vitest";
+import {
+  dropDeferredProgramFixtures,
+  programEnrollmentFixture,
+} from "../support/program-enrollment-recovery-server.ts";
 import { PROGRAM_DIGEST, PROGRAM_PATH } from "../../src/program-values.ts";
 import { catalogStore } from "../../src/catalog.ts";
 import { reviewedFoundation } from "../../src/foundation-pack.ts";
@@ -15,6 +19,11 @@ import {
   programEnrollmentObservation,
   type ProgramEnrollmentObservation,
 } from "../support/program-enrollment-observation.ts";
+
+// Each fixture database is dropped after its test, outside the behavior budget.
+// A drop queued after a timed-out test's hook still runs, and fails, at the end.
+afterEach(() => dropDeferredProgramFixtures());
+afterAll(() => dropDeferredProgramFixtures());
 
 const intent = {
   programVersion: 1,
@@ -41,7 +50,7 @@ const formFields = (html: string) =>
 async function ready(observation?: ProgramEnrollmentObservation) {
   const step: ProgramEnrollmentObservation["step"] =
     observation?.step ?? ((_phase, action) => action());
-  const f = await programEnrollmentFixture(observation);
+  const f = await programEnrollmentFixture(observation, { deferDrop: true });
   try {
     const editorial = await step("publication", () => f.publish());
     const admin = await step("admin", () => f.staff("platform_admin"));
@@ -438,12 +447,15 @@ it("PROGRAM-03 treats an actual unavailable fixture database endpoint as an outa
       mode: "test",
       programs,
     });
-    const publicPage = await request(application)
+    // #105: bind the owned test server to 127.0.0.1 so another lane cannot answer.
+    const server = await listenLoopback(application);
+    onTestFinished(() => closeLoopback(server));
+    const publicPage = await request(server)
       .get(PROGRAM_PATH)
       .set("Host", new URL(f.origin).host);
     expect(publicPage.status).toBe(503);
     expect(publicPage.text).toContain("temporarily unavailable");
-    const response = await request(application)
+    const response = await request(server)
       .post(`${PROGRAM_PATH}/enroll`)
       .set("Host", new URL(f.origin).host)
       .set("Origin", f.origin)
