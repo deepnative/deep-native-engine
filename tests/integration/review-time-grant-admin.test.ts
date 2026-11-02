@@ -1015,6 +1015,8 @@ it("REVIEW-GRANT-06 upgrade067 preserves legacy grants, repeats safely, immutabl
     await client.query(
       "CREATE VIEW authorized_staff_profiles AS SELECT * FROM staff_profiles",
     );
+    // Current member projection only; keep the target legacy migration and marker unchanged.
+    await client.query("ALTER TABLE learners ADD COLUMN display_name text");
     const connection = {
         query: client.query.bind(client),
         connect: async () => ({

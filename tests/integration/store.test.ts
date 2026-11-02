@@ -2588,6 +2588,8 @@ it("backfills and safely reruns authorization migration over populated learning 
     );
     await client.query(draftRevision);
     await client.query(draftRevision);
+    // Current member projection only; no newer schema marker is installed here.
+    await client.query("ALTER TABLE learners ADD COLUMN display_name text");
     const migrated = store(client as unknown as Pool);
     await expect(migrated.session(activeToken)).resolves.toMatchObject({
       kind: "active",

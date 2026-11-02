@@ -281,6 +281,7 @@ it("PREVIEW-01/02 PART-01/02/05/06 ASSIGN-PREVIEW-01/02/03 STUDY-PREVIEW-01/02/0
       },
       body: new URLSearchParams({
         csrf,
+        display_name: "Invented preview learner",
         background: "explorer",
         goal: "everyday",
         synthetic: "yes",
@@ -337,6 +338,7 @@ it("PREVIEW-01/02 PART-01/02/05/06 ASSIGN-PREVIEW-01/02/03 STUDY-PREVIEW-01/02/0
       expect(
         (
           await actor.submit(entry.text, "/start", {
+            display_name: "Invented preview learner",
             background,
             goal: "everyday",
             synthetic: "yes",
@@ -665,6 +667,7 @@ it("SUPPREVIEW-01/02/03/04 rehearses member support intake, exact administrator 
     expect(
       (
         await member.submit(welcome.text, "/start", {
+          display_name: "Invented preview learner",
           background: "professional",
           goal: "work",
           synthetic: "yes",
@@ -896,6 +899,7 @@ it("WFPREVIEW-01/02/03 rehearses an exact private workflow-note review request, 
     expect(
       (
         await member.submit(welcome.text, "/start", {
+          display_name: "Invented preview learner",
           background: "technical",
           goal: "build",
           synthetic: "yes",

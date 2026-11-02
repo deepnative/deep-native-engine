@@ -29,6 +29,8 @@ it("REVADM-08 upgrades populated migration059 without inventing receipts or rewr
       )
       .sort())
       await client.query(await readFile(new URL(name, directory), "utf8"));
+    // Current member projection only; keep the target legacy migration and marker unchanged.
+    await client.query("ALTER TABLE learners ADD COLUMN display_name text");
     const connection = {
       query: client.query.bind(client),
       connect: async () => ({ query: client.query.bind(client), release() {} }),
