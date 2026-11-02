@@ -31,4 +31,5 @@ CREATE TABLE IF NOT EXISTS upload_admission_denials (
  denied integer NOT NULL CHECK(denied>0),
  PRIMARY KEY(hour_start,reason)
 );
+INSERT INTO schema_migrations(version) VALUES(85) ON CONFLICT DO NOTHING;
 COMMIT;

@@ -15,6 +15,9 @@ it("LWORK-01/07 gives the account reader its private context and preserves earli
     expect(html).toContain('aria-label="Account and learning services"');
     for (const path of [
       "/account",
+      "/account/sign-out",
+      "/account/coaching",
+      "/admin",
       "/learn/notebooks",
       "/learn/records",
       "/my-courses",

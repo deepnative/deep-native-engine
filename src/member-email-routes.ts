@@ -2,6 +2,7 @@ import type { Express } from "express";
 import type { Store } from "./store.ts";
 import type { MemberEmailAccess } from "./member-email-access.ts";
 import { COOKIE, cookieOptions } from "./session.ts";
+import { STAFF_COOKIE, SIGNED_OUT } from "./staff-entry-selection.ts";
 import { page } from "./views.ts";
 
 function form(action: string, csrf: string, button: string) {
@@ -21,10 +22,39 @@ export function mountMemberEmailRoutes(
   access: MemberEmailAccess | undefined,
   origin: string,
   continuation?: (rawCookie: string | undefined) => string | null,
+  memberSignOut?: MemberEmailAccess["signOut"],
 ) {
+  const signOut = memberSignOut ?? access?.signOut.bind(access);
+  app.get("/account/sign-out", async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (Object.keys(req.query).length)
+      return res
+        .status(400)
+        .send(
+          page(
+            "Sign out",
+            '<h1>Open Sign out again</h1><p><a href="/account/sign-out">Sign out</a></p>',
+          ),
+        );
+    const session = await store.session(res.locals.token as string);
+    if (session.kind !== "active") return res.redirect(303, "/email/sign-in");
+    const linked =
+      access &&
+      (await access.ownedStatus(res.locals.token as string)) === "linked";
+    return res.send(
+      page(
+        "Sign out",
+        `<section class="reading"><h1>Sign out</h1><p>This ends this browser’s account access and invalidates copies of its sign-in cookie. Saved records are not deleted. No email is sent.</p>${linked ? "<p>Your verified email lets you return to the same account through email sign-in.</p>" : '<p role="alert"><strong>You may lose access to your saved work.</strong> Without a verified email, you cannot sign back in to this account. Link and verify an email first if you want to return. If email recovery is unavailable, keep this session until you have saved what you need.</p><p><a href="/email/attach">Link an email</a> · <a href="/member/export">Download my records</a></p>'}<form method="post" action="/account/sign-out"><input type="hidden" name="csrf" value="${res.locals.csrf as string}">${linked ? "" : '<label><input type="checkbox" name="acknowledgeAccessLoss" value="yes" required> I understand I may not be able to return to this account.</label>'}<button type="submit">Sign out</button></form><p><a href="/account">Stay signed in</a></p></section>`,
+      ),
+    );
+  });
   app.post("/account/sign-out", async (req, res) => {
     if (
-      Object.keys(req.body ?? {}).some((key) => key !== "csrf") ||
+      Object.keys(req.body ?? {}).some(
+        (key) => !["csrf", "acknowledgeAccessLoss"].includes(key),
+      ) ||
+      (req.body?.acknowledgeAccessLoss !== undefined &&
+        req.body?.acknowledgeAccessLoss !== "yes") ||
       Object.keys(req.query).length
     )
       return res
@@ -35,7 +65,7 @@ export function mountMemberEmailRoutes(
             '<section class="error-page"><h1>Sign-out unavailable</h1><p>Open My account and use its sign-out form.</p></section>',
           ),
         );
-    if (!access)
+    if (!signOut)
       return res
         .status(503)
         .send(
@@ -46,7 +76,10 @@ export function mountMemberEmailRoutes(
         );
     let result: Awaited<ReturnType<MemberEmailAccess["signOut"]>>;
     try {
-      result = await access.signOut(res.locals.token as string);
+      result =
+        req.body?.acknowledgeAccessLoss === "yes"
+          ? await signOut(res.locals.token as string, true)
+          : await signOut(res.locals.token as string);
     } catch {
       return res
         .status(503)
@@ -63,14 +96,15 @@ export function mountMemberEmailRoutes(
         .send(
           page(
             "Sign-out unavailable",
-            `<section class="error-page"><h1>Sign-out unavailable</h1><p>${result === "recovery_required" ? "Link and verify an email before signing out. Your current access is unchanged." : "Current account access could not be verified. Open My account to check access, or use email sign-in."}</p><p><a href="/account">My account</a> · <a href="/email/attach">Link an email</a> · <a href="/email/sign-in">Email sign-in</a></p></section>`,
+            `<section class="error-page"><h1>Sign-out unavailable</h1><p>${result === "recovery_required" ? "Link and verify an email before signing out. Or open Sign out to deliberately continue without recovery. Your current access is unchanged." : "Current account access could not be verified. Open My account to check access, or use email sign-in."}</p><p><a href="/account">My account</a> · <a href="/email/attach">Link an email</a> · <a href="/email/sign-in">Email sign-in</a></p></section>`,
           ),
         );
     res.clearCookie(COOKIE, cookieOptions(origin));
+    res.cookie(STAFF_COOKIE, SIGNED_OUT, cookieOptions(origin));
     return res.send(
       page(
         "Signed out",
-        '<section class="error-page"><h1>Signed out</h1><p>Your saved work is still in your account. This access token, including any copied browser cookies, no longer opens it. No email was sent.</p><p><a href="/email/sign-in">Sign back in by email</a></p></section>',
+        '<section class="error-page"><h1>Signed out</h1><p>Your saved records were not deleted. This access token, including any copied browser cookies, no longer opens them. Return with a previously verified email, if you linked one. Without it, you cannot recover this account. No email was sent.</p><p><a href="/email/sign-in">Sign back in by email</a></p></section>',
       ),
     );
   });

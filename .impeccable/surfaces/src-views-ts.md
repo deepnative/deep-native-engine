@@ -31,3 +31,13 @@ Preserve native labels, CSRF, all profile fields, safe attempted values and fiel
 ## Administrator console — Operate
 
 The verified-owner `/operator` console shares this identity with compact task text and existing flat form/list controls. Learners, Courses/services and Invoices are named destinations; an exact learner reference opens minimal enrollment/billing summaries and existing proposal functions. Keep private writing/files/email out of the console, finite authority explicit, and learning identity separate. Disabled billing remains disabled; published lesson candidates do not promise staffed services. Long references/actions wrap on mobile. ADMINCON01–04 and L277 own behavioral evidence; original missing-route failure, captures and final-source results are recorded on #570. This brief does not establish deployment or commercial acceptance.
+
+
+## Shared account navigation — Operate (#594)
+
+Owner priority: persistent text links for Learning, Account, Coaching hours, Administration and Sign out across the shared header. Use a wrapping horizontal nav, visible on narrow screens without a hamburger or JavaScript; retain the warm paper/blue/ink/Nunito Sans world. Sign out opens a dedicated confirmation with a clear recovery warning for browser-only accounts; never mutate from GET. Keep saved work and finite authorization fences. Coaching/admin pages explain actual prerequisites without enabling billing or granting access. NAV-01..04/L281 own acceptance; no hosted completion until exact-source release.
+
+The member Billing recipient surface uses the same Operate reading/form layout and shared blue/Nunito/warm-paper identity. Keep name/email distinct from authentication and money authorization, with clear current/validation/stale/uncertain states and ordinary account/proposal navigation. Native labelled inputs and visible confirmation remain; no card/payment widgets or decorative status claims. BILLPROFILE01–05/L280 cover the profile, same-account proposal return and immutable invoice snapshot.
+
+
+The same account actions also remain visible in the notebook reader, saved-records frame and guided starter lesson, using each existing wrapping header and preserving its links. The global footer carries the product line and navigation; deployment/provider disclaimers are removed while task-specific privacy and recovery information stays beside the relevant action.

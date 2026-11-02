@@ -20,6 +20,7 @@ const doubles = vi.hoisted(() => ({
   invoiceStore: vi.fn(),
   generateInvoices: vi.fn(),
   memberEmail: vi.fn(),
+  signOut: vi.fn(),
 }));
 vi.mock("../../src/azure-email-sender.ts", () => ({
   azureEmailSender: doubles.emailSender,
@@ -30,6 +31,7 @@ vi.mock("../../src/simple-invoice-store.ts", () => ({
 }));
 vi.mock("../../src/member-email-access.ts", () => ({
   memberEmailAccess: doubles.memberEmail,
+  signOutMember: doubles.signOut,
 }));
 vi.mock("../../src/azure-object-storage.ts", () => ({
   azureObjectStorage: doubles.azureStorage,
@@ -91,6 +93,12 @@ it("ATTEND-08 runtime attendance creation requires actual local staff entry alon
   });
   try {
     const options = doubles.app.mock.calls[0]![1];
+    await options.memberSignOut("a".repeat(64), true);
+    expect(doubles.signOut).toHaveBeenCalledWith(
+      expect.anything(),
+      "a".repeat(64),
+      true,
+    );
     expect(
       await options.eventAttendance.checkPermission("b".repeat(64), {
         registrationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",

@@ -245,6 +245,27 @@ for (const [background, goal, route, sourceFact, freshFact, correction] of [
         member.getByRole("heading", { name: "Your learning path" }),
       ).toBeVisible();
       await expect(member.locator("#course-path [data-lesson]")).toHaveCount(7);
+      const accountServices = member.getByRole("navigation", {
+        name: "Account and learning services",
+      });
+      for (const [label, path] of [
+        ["My account", "/account"],
+        ["Sign out", "/account/sign-out"],
+        ["Coaching hours", "/account/coaching"],
+        ["Administration", "/admin"],
+      ] as const) {
+        const action = accountServices.getByRole("link", {
+          name: label,
+          exact: true,
+        });
+        await expect(action).toBeVisible();
+        await expect(action).toHaveAttribute("href", path);
+      }
+      expect(
+        await member.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
       await expect(member.locator("body")).toHaveCSS(
         "background-color",
         "rgb(255, 253, 247)",
@@ -481,6 +502,18 @@ for (const [background, goal, route, sourceFact, freshFact, correction] of [
       await expect(
         member.getByRole("heading", { name: "Saved notebooks" }),
       ).toBeVisible();
+      const recordActions = member.getByRole("navigation", {
+        name: "Learning and account",
+      });
+      for (const label of [
+        "My account",
+        "Sign out",
+        "Coaching hours",
+        "Administration",
+      ])
+        await expect(
+          recordActions.getByRole("link", { name: label, exact: true }),
+        ).toBeVisible();
       const saved = member
         .locator("article.notebook")
         .filter({ hasText: `${route.toLowerCase()} notebook` })

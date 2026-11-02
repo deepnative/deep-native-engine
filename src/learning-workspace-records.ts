@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import express, { type Express, type Response } from "express";
 import { csrf, validCsrf } from "./session.ts";
-import { escape } from "./views.ts";
+import { escape, accountActionLinks } from "./views.ts";
 import { LEARNING_WORKSPACE_ASSET_BASE } from "./learning-workspace-assets.ts";
 import {
   learningInteger,
@@ -46,7 +46,7 @@ const failures = {
 } satisfies Record<LearningFailure["kind"], [number, string]>;
 
 function page(title: string, body: string) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native</title><link rel="stylesheet" href="${LEARNING_WORKSPACE_ASSET_BASE}/style.css"></head><body><header class="account-navigation"><span>Private learning records</span><nav aria-label="Learning and account"><a href="/learn">Back to learning</a><a href="${base}">Saved notebooks</a><a href="/member/export">Download all my records</a></nav></header><main class="workspace-records"><div class="page-heading"><h1>${escape(title)}</h1></div>${body}</main></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native</title><link rel="stylesheet" href="${LEARNING_WORKSPACE_ASSET_BASE}/style.css"></head><body><header class="account-navigation"><span>Private learning records</span><nav aria-label="Learning and account"><a href="/learn">Back to learning</a><a href="/account">My account</a>${accountActionLinks()}<a href="${base}">Saved notebooks</a><a href="/member/export">Download all my records</a></nav></header><main class="workspace-records"><div class="page-heading"><h1>${escape(title)}</h1></div>${body}</main></body></html>`;
 }
 
 function failure(res: Response, kind: LearningFailure["kind"]) {
