@@ -16,6 +16,7 @@ it("NAME02/03/04 preserves legacy rows and work, names the same account, exports
     .filter((f) => f.endsWith(".sql") && f < "087-")
     .sort())
     await pool.query(await readFile(`migrations/${file}`, "utf8"));
+  await pool.query("TRUNCATE principals CASCADE");
   const token = randomBytes(32).toString("hex"),
     id = randomUUID();
   await pool.query(
