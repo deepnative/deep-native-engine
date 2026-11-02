@@ -35,6 +35,7 @@ import {
   holdLease,
   refusal,
   underLease,
+  type AdmitCopy,
   type UploadAdmissionStore,
 } from "./upload-admission.ts";
 import { mountAssignmentEvidenceRoutes } from "./assignment-evidence-routes.ts";
@@ -2082,11 +2083,18 @@ export function app(
     options.publications,
     options.memberContributions === true,
   );
-  mountPreparedSampleRoutes(app, options.preparedSamples, options);
+  // Copy routes create evidence too, so they share the same upload budget.
+  const admitCopy: AdmitCopy = (req, res, render) =>
+    admitFormUpload(req, res, ([action]) => render(action!));
+  mountPreparedSampleRoutes(app, options.preparedSamples, {
+    ...options,
+    admit: admitCopy,
+  });
   mountAssignmentEvidenceRoutes(
     app,
     options.assignmentEvidence,
     options.assignmentHandoff === true,
+    admitCopy,
   );
   app.post("/evidence/:evidenceId/download", async (req, res) => {
     const result = await evidence.issueDownload(

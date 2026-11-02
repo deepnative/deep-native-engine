@@ -12,6 +12,7 @@ import {
   PROVIDED_SAMPLE_LABEL,
 } from "../../src/prepared-sample-values.ts";
 import type { Server } from "node:http";
+import type { AdmitCopy } from "../../src/upload-admission.ts";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 const listeners = new Set<Server>();
 afterEach(async () => {
@@ -47,6 +48,7 @@ async function fixture(
   enabled = true,
   present = true,
   mode: "test" | "live" = "test",
+  admit?: AdmitCopy,
 ) {
   const store = {
     open: vi.fn(async () => ({
@@ -75,7 +77,12 @@ async function fixture(
   mountPreparedSampleRoutes(
     app,
     present ? (store as unknown as PreparedSampleStore) : undefined,
-    { preparedReviewSamples: enabled, mode, origin: "http://127.0.0.1" },
+    {
+      preparedReviewSamples: enabled,
+      mode,
+      origin: "http://127.0.0.1",
+      admit,
+    },
   );
   const listener = await listenLoopback(app);
   listeners.add(listener);
@@ -278,4 +285,59 @@ it("PREPARED-05 displays a retained removed receipt without a usable source or i
     .expect(200);
   expect(r.text).toContain("cannot recreate it");
   expect(r.text).not.toContain("data-prepared-evidence=");
+});
+
+const wait = "Wait 5 seconds, then upload again. Saved evidence is unchanged.";
+it("ADMIT-11 renders a refused copy on the recovery page with the original instruction and creates nothing", async () => {
+  const admit = vi.fn<AdmitCopy>(async (_req, res, render) => {
+    res.status(429).send(render(wait));
+    return false;
+  });
+  const f = await fixture(true, true, "test", admit);
+  const attempt = input();
+  const refused = await request(f.app)
+    .post(base)
+    .type("form")
+    .send(attempt)
+    .expect(429);
+  expect(refused.text).toContain(wait);
+  expect(refused.text).toContain(`value="${attempt.operationId}"`);
+  expect(refused.text).toContain(`action="${base}/inspect"`);
+  expect(f.store.create).not.toHaveBeenCalled();
+});
+it("ADMIT-13 holds an admitted copy's lease until the copy finishes", async () => {
+  const lease = { working: false, release: vi.fn(async () => undefined) };
+  const admit = vi.fn<AdmitCopy>(async (_req, res) => {
+    res.locals.uploadLease = lease;
+    return true;
+  });
+  const f = await fixture(true, true, "test", admit);
+  f.store.create.mockImplementationOnce(async () => {
+    expect(lease.working).toBe(true);
+    expect(lease.release).not.toHaveBeenCalled();
+    return { kind: "created", receipt, deadline: performance.now() + 60000 };
+  });
+  await request(f.app).post(base).type("form").send(input()).expect(200);
+  expect(admit).toHaveBeenCalledOnce();
+  expect(lease.release).toHaveBeenCalledOnce();
+});
+it("ADMIT-10 admits neither disabled, invalid nor inspection requests", async () => {
+  const admit = vi.fn<AdmitCopy>(async () => true);
+  await request((await fixture(false, true, "test", admit)).app)
+    .post(base)
+    .type("form")
+    .send(input())
+    .expect(404);
+  const f = await fixture(true, true, "test", admit);
+  await request(f.app)
+    .post(base)
+    .type("form")
+    .send({ ...input(), providedExample: "no" })
+    .expect(422);
+  await request(f.app)
+    .post(base + "/inspect")
+    .type("form")
+    .send({ csrf: "nonce", operationId: randomUUID() })
+    .expect(200);
+  expect(admit).not.toHaveBeenCalled();
 });

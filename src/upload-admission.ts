@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Request, Response } from "express";
 import type { Pool, PoolClient } from "pg";
 import { hash } from "./store.ts";
 
@@ -152,6 +153,14 @@ export async function holdLease(
   proceed?.();
   return true;
 }
+// Admits a copy route's creating request against the shared budget. When it
+// returns false it has already answered with the route's own recovery page,
+// rendered from the refusal action.
+export type AdmitCopy = (
+  req: Request,
+  res: Response,
+  render: (action: string) => string,
+) => Promise<boolean>;
 export async function underLease<T>(
   res: Pick<LeaseResponse, "locals">,
   work: () => Promise<T>,

@@ -14,9 +14,9 @@ Migration086 creates only the member-owned billing_profiles table with cascade e
 
 | Stable scenario | Executable evidence |
 | --- | --- |
-| BILLPROFILE01 selection/ordinary same-account recovery, no implied purchase | invoice-selection units; L279 desktop/mobile; retained public-program registration/confirmation cases |
-| BILLPROFILE02 private validation/revision/isolation/export/deletion | billing-profile and invoice route units; simple-invoices real PostgreSQL tests and member-export/study-unit export cases; L279 |
-| BILLPROFILE03 exact explicit confirmation and immutable snapshots | existing invoice acceptance/idempotency/stale-source tests plus new one-time/monthly native snapshot/profile tests; coaching route units; L279 |
-| BILLPROFILE04 honest sample/pending/cancel/recovery and retained work | existing invoice operation/failure tests and account states; profile uncertainty/validation units; L279 cancellation and retained private work |
+| BILLPROFILE01 selection/ordinary same-account recovery, no implied purchase | invoice-selection units; L280 desktop/mobile; retained public-program registration/confirmation cases |
+| BILLPROFILE02 private validation/revision/isolation/export/deletion | billing-profile and invoice route units; simple-invoices real PostgreSQL tests and member-export/study-unit export cases; L280 |
+| BILLPROFILE03 exact explicit confirmation and immutable snapshots | existing invoice acceptance/idempotency/stale-source tests plus new one-time/monthly native snapshot/profile tests; coaching route units; L280 |
+| BILLPROFILE04 honest sample/pending/cancel/recovery and retained work | existing invoice operation/failure tests and account states; profile uncertainty/validation units; L280 cancellation and retained private work |
 
-Original missing profile route failed expected200/actual404 before implementation. Existing identity/invoice/program behavior is reused with honest passing baselines. L279 appends one critical case: v130,276local scenarios275critical,552primary desktop/mobile executions; all prior IDs, full-MVP/provisional inventories and thresholds remain unchanged. Actual exact-revision proof, review, merge/source readback, dedicated demo and hosted verification are recorded on #571; this document alone does not assert deployment, full-MVP or qualified commercial acceptance.
+Original missing profile route failed expected200/actual404 before implementation. Existing identity/invoice/program behavior is reused with honest passing baselines. L280 appends one critical case: v131,277local scenarios276critical,554primary desktop/mobile executions; all prior IDs, full-MVP/provisional inventories and thresholds remain unchanged. Actual exact-revision proof, review, merge/source readback, dedicated demo and hosted verification are recorded on #571; this document alone does not assert deployment, full-MVP or qualified commercial acceptance.

@@ -492,7 +492,7 @@ test("[L277] ADMINCON01–04 selects an exact learner, composes existing terms a
   }
 });
 
-test("[L279] BILLPROFILE01–04 saves a private billing recipient, resumes the same proposal after email recovery and preserves invoice history", async ({
+test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the same proposal after email recovery and preserves invoice history", async ({
   page,
 }) => {
   const f = await fixture(page, "tom@deepnative.io", "professional");
