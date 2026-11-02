@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import request from "supertest";
-import { expect, it, vi } from "vitest";
-import { programEnrollmentFixture } from "../support/program-enrollment-recovery-server.ts";
+import { afterEach, expect, it, vi } from "vitest";
+import {
+  dropDeferredProgramFixtures,
+  programEnrollmentFixture,
+} from "../support/program-enrollment-recovery-server.ts";
 import { PROGRAM_DIGEST, PROGRAM_PATH } from "../../src/program-values.ts";
 import { catalogStore } from "../../src/catalog.ts";
 import { reviewedFoundation } from "../../src/foundation-pack.ts";
@@ -15,6 +18,9 @@ import {
   programEnrollmentObservation,
   type ProgramEnrollmentObservation,
 } from "../support/program-enrollment-observation.ts";
+
+// Each fixture database is dropped after its test, outside the behavior budget.
+afterEach(() => dropDeferredProgramFixtures());
 
 const intent = {
   programVersion: 1,
@@ -41,7 +47,7 @@ const formFields = (html: string) =>
 async function ready(observation?: ProgramEnrollmentObservation) {
   const step: ProgramEnrollmentObservation["step"] =
     observation?.step ?? ((_phase, action) => action());
-  const f = await programEnrollmentFixture(observation);
+  const f = await programEnrollmentFixture(observation, { deferDrop: true });
   try {
     const editorial = await step("publication", () => f.publish());
     const admin = await step("admin", () => f.staff("platform_admin"));

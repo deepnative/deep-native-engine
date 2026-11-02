@@ -14,10 +14,23 @@ import { listenLoopback, closeLoopback } from "./loopback-server.ts";
 import { dropAttendanceBrowserDatabase } from "./attendance-browser-database.ts";
 import type { ProgramEnrollmentObservation } from "./program-enrollment-observation.ts";
 
+// DROP DATABASE waits for a forced checkpoint, which can take seconds under
+// parallel lanes (#579). A caller may defer the drop out of its test budget;
+// dropDeferredProgramFixtures() must then await it, and any failure still fails.
+const deferredDrops: Array<() => Promise<void>> = [];
+export async function dropDeferredProgramFixtures() {
+  const errors: unknown[] = [];
+  for (const drop of deferredDrops.splice(0))
+    await drop().catch((error: unknown) => errors.push(error));
+  if (errors.length)
+    throw new AggregateError(errors, "Deferred fixture database drop failed");
+}
+
 /** Actual application and PostgreSQL with test-owned email/transport boundaries.
  * There are no fault routes or production switches, and no outbound delivery. */
 export async function programEnrollmentFixture(
   observation?: ProgramEnrollmentObservation,
+  options: { deferDrop?: boolean } = {},
 ) {
   const step: ProgramEnrollmentObservation["step"] =
     observation?.step ?? ((_phase, action) => action());
@@ -181,6 +194,16 @@ export async function programEnrollmentFixture(
     async function close() {
       await step("close-listener", () => closeLoopback(server!));
       await step("close-pool", () => pool.end());
+      if (options.deferDrop) {
+        deferredDrops.push(async () => {
+          try {
+            await dropAttendanceBrowserDatabase(admin, name);
+          } finally {
+            await admin.end();
+          }
+        });
+        return;
+      }
       try {
         await step("close-drain-and-drop", () =>
           dropAttendanceBrowserDatabase(admin, name),
