@@ -4,6 +4,8 @@ import {
   CONCURRENCY_RETRY_SECONDS,
   UPLOAD_ADMISSION_LIMITS,
   decide,
+  holdLease,
+  underLease,
   refusal,
   uploadAdmissionStore,
   type AdmissionCounts,
@@ -203,4 +205,62 @@ it("ADMIT-09 reads the hourly denial signal", async () => {
   expect(await uploadAdmissionStore(pool).denials()).toEqual([
     { hourStart: new Date(0), reason: "member_rate", denied: 2 },
   ]);
+});
+
+function leaseResponse(closed = false) {
+  let onClose: (() => void) | undefined;
+  return {
+    closed,
+    locals: {} as Record<string, unknown>,
+    once: (_event: "close", listener: () => void) => {
+      onClose = listener;
+    },
+    close: () => onClose?.(),
+  };
+}
+
+it("ADMIT-03 releases a lease at once when the caller already left", async () => {
+  for (const [req, res] of [
+    [{ socket: { destroyed: false } }, leaseResponse(true)],
+    [{ socket: { destroyed: true } }, leaseResponse()],
+    [{ socket: null }, leaseResponse()],
+  ] as const) {
+    const release = vi.fn(async () => undefined);
+    const proceed = vi.fn();
+    expect(await holdLease(req, res, release, proceed)).toBe(false);
+    expect(proceed).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
+    expect(res.locals.uploadLease).toBeUndefined();
+  }
+});
+
+it("ADMIT-03 keeps the lease through started work even if the caller leaves", async () => {
+  const release = vi.fn(async () => undefined);
+  const res = leaseResponse();
+  expect(await holdLease({ socket: { destroyed: false } }, res, release)).toBe(
+    true,
+  );
+  let finish!: () => void;
+  const work = underLease(
+    res,
+    () => new Promise<string>((resolve) => (finish = () => resolve("done"))),
+  );
+  res.close();
+  expect(release).not.toHaveBeenCalled();
+  finish();
+  expect(await work).toBe("done");
+  expect(release).toHaveBeenCalledOnce();
+  const early = leaseResponse();
+  const earlyRelease = vi.fn(async () => undefined);
+  const proceed = vi.fn();
+  await holdLease(
+    { socket: { destroyed: false } },
+    early,
+    earlyRelease,
+    proceed,
+  );
+  expect(proceed).toHaveBeenCalledOnce();
+  early.close();
+  expect(earlyRelease).toHaveBeenCalledOnce();
+  expect(await underLease(leaseResponse(), async () => 7)).toBe(7);
 });

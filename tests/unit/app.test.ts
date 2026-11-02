@@ -3955,6 +3955,96 @@ it("ADMIT-01/02/07 admits API uploads before the body is read and refuses with f
   expect(unavailable.body).toMatchObject({ error: "uploads_unavailable" });
   expect(files.upload).toHaveBeenCalledOnce();
 });
+it("ADMIT-03 releases a lease when the caller leaves during admission or after the upload work", async () => {
+  const files = evidenceStorage();
+  const admission = admissionStore();
+  const { agent, csrf } = await admittedClient(files, admission);
+  active();
+  const send = () =>
+    agent
+      .post("/api/evidence")
+      .set("Host", host)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", csrf)
+      .set("Content-Type", "text/plain")
+      .send("Invented bytes")
+      .timeout(100)
+      .catch(() => undefined);
+  let admit!: () => void;
+  admission.admit.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        admit = () => resolve({ kind: "admitted", release: admission.release });
+      }),
+  );
+  // Node notices the disconnect only once it reads again; either way the lease
+  // is released exactly once.
+  await send();
+  admit();
+  await vi.waitFor(() => expect(admission.release).toHaveBeenCalledOnce());
+  files.upload.mockClear();
+  let finish!: () => void;
+  files.upload.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = () => resolve({ kind: "denied" });
+      }),
+  );
+  await send();
+  await vi.waitFor(() => expect(files.upload).toHaveBeenCalledOnce());
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(admission.release).toHaveBeenCalledOnce();
+  finish();
+  await vi.waitFor(() => expect(admission.release).toHaveBeenCalledTimes(2));
+  for (const path of [
+    "/evidence",
+    "/evidence/11111111-1111-4111-8111-111111111111/revise",
+  ]) {
+    admission.admit.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          admit = () =>
+            resolve({ kind: "admitted", release: admission.release });
+        }),
+    );
+    files.owned.mockResolvedValue([
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        name: "original.txt",
+        mediaType: "text/plain",
+        quarantineState: "clean",
+        privateReviewAllowed: true,
+        privateReviewRevokedAt: null,
+        submissionStatus: "queued",
+        createdAt: new Date(),
+        revisionParentId: null,
+        revisionParentStatus: "none",
+        revisionNumber: 1,
+        hasRevision: false,
+      },
+    ] as Awaited<ReturnType<EvidenceStore["owned"]>>);
+    const calls = admission.release.mock.calls.length;
+    await agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf,
+        name: "left.txt",
+        sample: "Invented text",
+        rights_confirmed: "yes",
+        private_review_consent: "yes",
+      })
+      .timeout(100)
+      .catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    admit();
+    await vi.waitFor(() =>
+      expect(admission.release).toHaveBeenCalledTimes(calls + 1),
+    );
+  }
+});
 it("ADMIT-02 keeps typed form and revision text when an upload is refused", async () => {
   const files = evidenceStorage();
   const admission = admissionStore();

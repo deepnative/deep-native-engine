@@ -118,6 +118,54 @@ export function refusal(result: Exclude<Admission, { kind: "admitted" }>) {
   };
 }
 
+interface LeaseRequest {
+  socket?: { destroyed: boolean } | null;
+}
+interface LeaseResponse {
+  closed: boolean;
+  locals: Record<string, unknown>;
+  once(event: "close", listener: () => void): unknown;
+}
+interface Lease {
+  working: boolean;
+  release(): Promise<void>;
+}
+// Keep a concurrency lease until the upload work ends. A response that has
+// already closed releases it at once; a later close releases it unless the
+// work has started, which then releases it when it finishes.
+export async function holdLease(
+  req: LeaseRequest,
+  res: LeaseResponse,
+  release: () => Promise<void>,
+  proceed?: () => void,
+) {
+  // A fully read form body also marks req destroyed; check the connection.
+  if (res.closed || !req.socket || req.socket.destroyed) {
+    await release();
+    return false;
+  }
+  const lease: Lease = { working: false, release };
+  res.locals.uploadLease = lease;
+  res.once("close", () => {
+    if (!lease.working) void release();
+  });
+  proceed?.();
+  return true;
+}
+export async function underLease<T>(
+  res: Pick<LeaseResponse, "locals">,
+  work: () => Promise<T>,
+) {
+  const lease = res.locals.uploadLease as Lease | undefined;
+  if (!lease) return work();
+  lease.working = true;
+  try {
+    return await work();
+  } finally {
+    await lease.release();
+  }
+}
+
 async function rollback(client: PoolClient) {
   try {
     await client.query("ROLLBACK");
@@ -138,7 +186,7 @@ export function uploadAdmissionStore(
         client = await pool.connect();
         await client.query("BEGIN");
         await client.query(
-          "SET LOCAL lock_timeout='2s'; SET LOCAL statement_timeout='3s'",
+          "SET LOCAL lock_timeout='2s'; SET LOCAL statement_timeout='3s'; SET LOCAL idle_in_transaction_session_timeout='3s'",
         );
         await client.query("SELECT pg_advisory_xact_lock($1)", [
           ADMISSION_LOCK,

@@ -9,7 +9,10 @@ import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import request from "supertest";
 import { start } from "../../src/runtime.ts";
 import { store } from "../../src/store.ts";
-import { uploadAdmissionStore } from "../../src/upload-admission.ts";
+import {
+  UPLOAD_ADMISSION_LIMITS,
+  uploadAdmissionStore,
+} from "../../src/upload-admission.ts";
 import { COOKIE } from "../../src/session.ts";
 import { testPool } from "../support/database.ts";
 
@@ -398,4 +401,66 @@ it("ADMIT-09 records only hourly counts by reason and applies retention", async 
       ).rows[0]!.n,
     ),
   ).toBe(Number(memberRows.rows[0]!.n) - 1);
+});
+
+it("ADMIT-03 releases the lease of a caller who leaves while admission waits", async () => {
+  const caller = await member();
+  const blocker = await pool.connect();
+  try {
+    await blocker.query("SELECT pg_advisory_lock(315085)");
+    const leaving = heldUpload(caller, "leaving.txt");
+    leaving.response.catch(() => undefined);
+    await until(
+      async () =>
+        (
+          await pool.query(
+            "SELECT 1 FROM pg_locks l JOIN pg_database d ON d.oid=l.database WHERE d.datname=current_database() AND l.locktype='advisory' AND NOT l.granted",
+          )
+        ).rowCount === 1,
+    );
+    held!.destroy();
+  } finally {
+    await blocker.query("SELECT pg_advisory_unlock(315085)");
+    blocker.release();
+  }
+  await until(
+    async () =>
+      (
+        await pool.query(
+          "SELECT 1 FROM upload_admission_windows WHERE pool='member'",
+        )
+      ).rowCount === 1,
+  );
+  await until(async () => (await leases()) === 0);
+  expect(await savedCount()).toBe(0);
+});
+
+it("ADMIT-05 enforces the whole-service rate and concurrency through the shared tables", async () => {
+  const small = {
+    ...UPLOAD_ADMISSION_LIMITS,
+    globalUploads: 3,
+    globalConcurrent: 2,
+  };
+  const limiter = uploadAdmissionStore(pool, small);
+  const first = await limiter.admit("a".repeat(64));
+  const second = await limiter.admit("b".repeat(64));
+  expect([first.kind, second.kind]).toEqual(["admitted", "admitted"]);
+  expect(await limiter.admit("c".repeat(64))).toEqual({
+    kind: "denied",
+    reason: "global_concurrency",
+    retryAfterSeconds: 5,
+  });
+  if (first.kind === "admitted") await first.release();
+  if (second.kind === "admitted") await second.release();
+  expect((await limiter.admit("d".repeat(64))).kind).toBe("admitted");
+  expect(await limiter.admit("e".repeat(64))).toMatchObject({
+    kind: "denied",
+    reason: "global_rate",
+  });
+  expect(
+    (await limiter.denials()).map((row) => [row.reason, row.denied]),
+  ).toEqual([
+    ["global_concurrency", 1],
+    ["global_rate", 1],
+  ]);
 });

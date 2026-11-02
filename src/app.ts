@@ -26,7 +26,12 @@ import type { SupportAssignmentStore } from "./support-assignment.ts";
 import { mountSampleAssignmentRoutes } from "./sample-assignment-routes.ts";
 import { preparedSamplesEnabled } from "./prepared-samples.ts";
 import type { AssignmentEvidenceStore } from "./assignment-evidence.ts";
-import { refusal, type UploadAdmissionStore } from "./upload-admission.ts";
+import {
+  holdLease,
+  refusal,
+  underLease,
+  type UploadAdmissionStore,
+} from "./upload-admission.ts";
 import { mountAssignmentEvidenceRoutes } from "./assignment-evidence-routes.ts";
 import { mountPreparedSampleRoutes } from "./prepared-sample-routes.ts";
 import type { PreparedSampleStore } from "./prepared-samples.ts";
@@ -515,8 +520,7 @@ export function app(
       parseCookies(req, res, async () => {
         const result = await uploadAdmission.admit(token(req.cookies[COOKIE]));
         if (result.kind === "admitted") {
-          res.once("close", () => void result.release());
-          next();
+          await holdLease(req, res, result.release, next);
           return;
         }
         const refused = refusal(result);
@@ -536,15 +540,13 @@ export function app(
   // Form uploads are admitted after their small body is parsed so a refused
   // member keeps the title and text they typed.
   async function admitFormUpload(
+    req: express.Request,
     res: express.Response,
     render: (errors: string[]) => Promise<string> | string,
   ) {
     if (!uploadAdmission) return true;
     const result = await uploadAdmission.admit(res.locals.token as string);
-    if (result.kind === "admitted") {
-      res.once("close", () => void result.release());
-      return true;
-    }
+    if (result.kind === "admitted") return holdLease(req, res, result.release);
     const refused = refusal(result);
     // The refusal must not depend on the database that may be unavailable.
     const body = await Promise.resolve()
@@ -1203,17 +1205,19 @@ export function app(
     const learningCircle = scopes.includes("learning-circle")
       ? (req.get("x-learning-circle-id") ?? "")
       : undefined;
-    const result = await evidence.upload(res.locals.token as string, {
-      name: req.get("x-evidence-name") ?? "",
-      mediaType: (req.get("content-type") ?? "").split(";", 1)[0]!,
-      consent: {
-        rightsConfirmed: req.get("x-evidence-rights") === "confirmed",
-        privateReview: scopes.includes("private-review"),
-        communityPublication: scopes.includes("community-publication"),
-        learningCircleId: learningCircle,
-      },
-      data: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0),
-    });
+    const result = await underLease(res, () =>
+      evidence.upload(res.locals.token as string, {
+        name: req.get("x-evidence-name") ?? "",
+        mediaType: (req.get("content-type") ?? "").split(";", 1)[0]!,
+        consent: {
+          rightsConfirmed: req.get("x-evidence-rights") === "confirmed",
+          privateReview: scopes.includes("private-review"),
+          communityPublication: scopes.includes("community-publication"),
+          learningCircleId: learningCircle,
+        },
+        data: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0),
+      }),
+    );
     if (result.kind === "denied") {
       res.status(403).json({ error: "forbidden" });
       return;
@@ -1764,7 +1768,7 @@ export function app(
       return;
     }
     if (
-      !(await admitFormUpload(res, async (errors) =>
+      !(await admitFormUpload(req, res, async (errors) =>
         evidencePage(
           await evidence.owned(res.locals.token as string),
           res.locals.csrf as string,
@@ -1775,16 +1779,18 @@ export function app(
       ))
     )
       return;
-    const result = await evidence.upload(res.locals.token as string, {
-      name,
-      mediaType: "text/plain",
-      data: Buffer.from(sample),
-      consent: {
-        rightsConfirmed: true,
-        privateReview: true,
-        communityPublication: false,
-      },
-    });
+    const result = await underLease(res, () =>
+      evidence.upload(res.locals.token as string, {
+        name,
+        mediaType: "text/plain",
+        data: Buffer.from(sample),
+        consent: {
+          rightsConfirmed: true,
+          privateReview: true,
+          communityPublication: false,
+        },
+      }),
+    );
     if (result.kind === "denied") {
       res
         .status(403)
@@ -2023,7 +2029,7 @@ export function app(
       return;
     }
     if (
-      !(await admitFormUpload(res, (errors) =>
+      !(await admitFormUpload(req, res, (errors) =>
         evidenceRevisionPage(
           parent,
           res.locals.csrf as string,
@@ -2033,17 +2039,19 @@ export function app(
       ))
     )
       return;
-    const result = await evidence.upload(res.locals.token as string, {
-      name,
-      mediaType: "text/plain",
-      data: Buffer.from(sample),
-      revisesId: parent.id,
-      consent: {
-        rightsConfirmed: true,
-        privateReview: true,
-        communityPublication: false,
-      },
-    });
+    const result = await underLease(res, () =>
+      evidence.upload(res.locals.token as string, {
+        name,
+        mediaType: "text/plain",
+        data: Buffer.from(sample),
+        revisesId: parent.id,
+        consent: {
+          rightsConfirmed: true,
+          privateReview: true,
+          communityPublication: false,
+        },
+      }),
+    );
     if (result.kind !== "created") {
       res
         .status(result.kind === "invalid" ? 422 : 409)
