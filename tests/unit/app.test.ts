@@ -4047,6 +4047,57 @@ it("ADMIT-03 releases a lease when the caller leaves during admission or after t
     );
   }
 });
+it("ADMIT-11 refuses a copy route through the shared admission with its own recovery page", async () => {
+  const admission = admissionStore();
+  const prepared = {
+    open: vi.fn(),
+    create: vi.fn(),
+    inspect: vi.fn(),
+  } satisfies PreparedSampleStore;
+  const agent = await managedAgent(
+    app(db, {
+      origin,
+      secret: "secret",
+      mode: "test",
+      uploadAdmission: admission,
+      preparedSamples: prepared,
+      preparedReviewSamples: true,
+    }),
+  );
+  const csrf = (await agent.get("/").set("Host", host).expect(200)).text.match(
+    /name="csrf" value="([a-f0-9]+)"/,
+  )![1]!;
+  active();
+  admission.admit.mockResolvedValueOnce({
+    kind: "denied",
+    reason: "member_rate",
+    retryAfterSeconds: 42,
+  });
+  const template = PREPARED_SAMPLES[0]!;
+  const operationId = "33333333-3333-4333-8333-333333333333";
+  const refused = await agent
+    .post("/evidence/prepared")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({
+      csrf,
+      operationId,
+      templateId: template.id,
+      templateVersion: "1",
+      templateDigest: template.digest,
+      providedExample: "yes",
+      privateReview: "yes",
+    })
+    .expect(429);
+  expect(refused.headers["retry-after"]).toBe("42");
+  expect(refused.headers["cache-control"]).toContain("no-store");
+  expect(refused.text).toContain(
+    "Wait 42 seconds, then upload again. Saved evidence is unchanged.",
+  );
+  expect(refused.text).toContain(`value="${operationId}"`);
+  expect(prepared.create).not.toHaveBeenCalled();
+});
 it("ADMIT-02 keeps typed form and revision text when an upload is refused", async () => {
   const files = evidenceStorage();
   const admission = admissionStore();
