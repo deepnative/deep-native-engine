@@ -6648,9 +6648,19 @@ it("HOSTED-12 presents accurate hosted persistence while concurrent local render
   );
   expect(publicHome.text).not.toContain("Your work stays on this computer");
   expect(publicHome.text).not.toContain("LOCAL LEARNING PREVIEW");
-  expect(publicHome.text).toContain(
-    "No AI provider, payment or formal assessment is connected.",
-  );
+  for (const html of [publicHome.text, localHome.text]) {
+    const footer = html.match(/<footer>([\s\S]*?)<\/footer>/)?.[1];
+    expect(footer).toBeDefined();
+    for (const copy of [
+      "Azure-hosted service",
+      "Azure PostgreSQL",
+      "Uploaded private files",
+      "Local preview",
+      "No AI provider, payment or formal assessment",
+    ])
+      expect(footer).not.toContain(copy);
+    expect(footer).toContain("Explore programs");
+  }
   expect(localHome.text).toContain("Your work stays on this computer");
   expect(localHome.text).not.toContain("LOCAL LEARNING PREVIEW");
 });
