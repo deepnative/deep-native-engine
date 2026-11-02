@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
@@ -34,7 +35,7 @@ test("[L89] retained starter versions remain private, exact and text-free after 
   ] as const) {
     await page.goto("/");
     await page.getByLabel("Your starting point").selectOption(background);
-    await page.getByLabel("What would you like to do?").selectOption(goal);
+    await chooseLearningGoal(page, goal);
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await page.goto("/lesson");
     await page
@@ -120,9 +121,7 @@ test("[L89] retained starter versions remain private, exact and text-free after 
       "Version three invented private words",
     );
     await page.goto("/learn");
-    await page
-      .getByLabel("What would you like to do?")
-      .selectOption(goal === "work" ? "build" : "work");
+    await chooseLearningGoal(page, goal === "work" ? "build" : "work");
     await page.getByRole("button", { name: "Save my direction" }).click();
     await page.goto("/progress");
     await expect(rows).toHaveCount(3);
@@ -137,9 +136,7 @@ test("[L89] retained starter versions remain private, exact and text-free after 
       await otherPage
         .getByLabel("Your starting point")
         .selectOption("explorer");
-      await otherPage
-        .getByLabel("What would you like to do?")
-        .selectOption("everyday");
+      await chooseLearningGoal(otherPage, "everyday");
       await otherPage
         .getByRole("button", { name: "Start my learning path" })
         .click();

@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "./choose-learning-goal.ts";
 import { expect, type Page, type BrowserContext } from "@playwright/test";
 
 export async function starterDraftConflicts(
@@ -7,7 +8,7 @@ export async function starterDraftConflicts(
   await context.clearCookies();
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await page.goto("/lesson");
   const stale = await context.newPage();
@@ -67,9 +68,7 @@ export async function starterDraftConflicts(
     await context.clearCookies();
     await page.goto("/");
     await page.getByLabel("Your starting point").selectOption("explorer");
-    await page
-      .getByLabel("What would you like to do?")
-      .selectOption("everyday");
+    await chooseLearningGoal(page, "everyday");
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await page.goto("/lesson");
     const stale = await context.newPage();

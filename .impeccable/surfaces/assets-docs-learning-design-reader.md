@@ -31,3 +31,7 @@ No synthetic engagement metrics or AI assistant. Existing deterministic feedback
 
 ## Portal identity alignment (1 November2026)
 The owner requested consistency with the landing page: use its warm paper, deep blue ink, blue actions and self-hosted Nunito Sans, with the existing compact lesson scale. Preserve route drafts, explicit saving, semantic feedback, named controls and responsive layout. This scope changes no publication or account access rule.
+
+## Icon path chooser
+
+The shared account/local Learn picker retains its existing three buttons, accessible names, aria-pressed values and route callback. Meaningful home/briefcase/code stroke icons, compact descriptions, visible Selected path text and a check identify the chosen route independently of color. Overview tiles become compact inside lessons; reduce motion and preserve visible keyboard focus/mobile fit. Route changes never overwrite writing or imply mastery. Match the existing blue/Nunito/warm-paper identity; semantic path accents do not restore the discarded global green theme. PATHICON01–03 reuse the exact existing native/reader account journeys and private save/reload checks.

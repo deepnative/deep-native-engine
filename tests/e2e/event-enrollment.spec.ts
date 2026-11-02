@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import {
   test,
   expect,
@@ -23,7 +24,7 @@ async function onboard(
 ) {
   await page.goto(origin);
   await page.getByLabel("Your starting point").selectOption(background);
-  await page.getByLabel("What would you like to do?").selectOption(goal);
+  await chooseLearningGoal(page, goal);
   await page
     .getByText("Personalize your path (optional)", { exact: true })
     .click();

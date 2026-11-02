@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect } from "@playwright/test";
 import { store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
@@ -16,7 +17,7 @@ for (const [index, [background, goal, workflow]] of [
   }, info) => {
     await page.goto("/");
     await page.getByLabel("Your starting point").selectOption(background!);
-    await page.getByLabel("What would you like to do?").selectOption(goal!);
+    await chooseLearningGoal(page, goal!);
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await expect(page).toHaveURL(/\/learn$/);
     await page.goto(`/workflows/${workflow}?version=2`);
@@ -117,9 +118,7 @@ for (const [index, [background, goal, workflow]] of [
       const other = await outsider.newPage();
       await other.goto(new URL("/", page.url()).href);
       await other.getByLabel("Your starting point").selectOption("explorer");
-      await other
-        .getByLabel("What would you like to do?")
-        .selectOption("everyday");
+      await chooseLearningGoal(other, "everyday");
       await other
         .getByRole("button", { name: "Start my learning path" })
         .click();

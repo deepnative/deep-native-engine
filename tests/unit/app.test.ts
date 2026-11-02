@@ -3340,7 +3340,9 @@ it("retains safe onboarding choices on an unsaved field error", async () => {
   expect(invalid.text).toContain("Your changes were not saved");
   expect(invalid.text).toContain('href="#timezone"');
   expect(invalid.text).toContain('<option value="professional" selected>');
-  expect(invalid.text).toContain('<option value="work" selected>');
+  expect(invalid.text).toMatch(
+    /type="radio" name="goal" value="work"[^>]* checked/,
+  );
   expect(invalid.text).toContain(
     'name="background_tags" value="technical" checked',
   );

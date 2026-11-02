@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -76,7 +77,7 @@ async function publish(
 async function onboard(page: Page, goal: "everyday" | "work" | "build") {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("professional");
-  await page.getByLabel("What would you like to do?").selectOption(goal);
+  await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }
@@ -116,7 +117,7 @@ async function saveDraft(page: Page, response: string) {
 
 async function changeGoal(page: Page, goal: "everyday" | "work" | "build") {
   await page.goto("/learn");
-  await page.getByLabel("What would you like to do?").selectOption(goal);
+  await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Save my direction" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }

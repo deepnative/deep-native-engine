@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -96,9 +97,7 @@ test("[L64] private sample availability respects verified coverage, time zone an
           ? "professional"
           : "explorer",
       );
-    await page
-      .getByLabel("What would you like to do?")
-      .selectOption("everyday");
+    await chooseLearningGoal(page, "everyday");
     await page
       .getByText("Personalize your path (optional)", { exact: true })
       .click();
@@ -150,9 +149,7 @@ test("[L64] private sample availability respects verified coverage, time zone an
     await technicalPage
       .getByLabel("Your starting point")
       .selectOption("technical");
-    await technicalPage
-      .getByLabel("What would you like to do?")
-      .selectOption("build");
+    await chooseLearningGoal(technicalPage, "build");
     await technicalPage
       .getByText("Personalize your path (optional)", { exact: true })
       .click();
@@ -182,9 +179,7 @@ test("[L64] private sample availability respects verified coverage, time zone an
           ? "explorer"
           : "professional",
       );
-    await otherLearnerPage
-      .getByLabel("What would you like to do?")
-      .selectOption("everyday");
+    await chooseLearningGoal(otherLearnerPage, "everyday");
     await otherLearnerPage
       .getByText("Personalize your path (optional)", { exact: true })
       .click();
@@ -208,9 +203,7 @@ test("[L64] private sample availability respects verified coverage, time zone an
     const noZonePage = await noZone.newPage();
     await noZonePage.goto("/");
     await noZonePage.getByLabel("Your starting point").selectOption("explorer");
-    await noZonePage
-      .getByLabel("What would you like to do?")
-      .selectOption("everyday");
+    await chooseLearningGoal(noZonePage, "everyday");
     await noZonePage
       .getByRole("button", { name: "Start my learning path" })
       .click();

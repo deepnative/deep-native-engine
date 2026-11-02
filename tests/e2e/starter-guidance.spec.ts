@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, type Page } from "@playwright/test";
 import { app } from "../../src/app.ts";
 import { type Goal } from "../../src/content.ts";
@@ -31,7 +32,7 @@ async function fixture(page: Page, goal: Goal) {
     async onboard() {
       await page.goto(origin);
       await page.getByLabel("Your starting point").selectOption("explorer");
-      await page.getByLabel("What would you like to do?").selectOption(goal);
+      await chooseLearningGoal(page, goal);
       await page
         .getByRole("button", { name: "Start my learning path" })
         .click();
@@ -227,14 +228,12 @@ for (const journey of journeys)
       const profile = await page.context().newPage();
       try {
         await profile.goto(`${f.origin}/learn`);
-        await profile
-          .getByLabel("What would you like to do?")
-          .selectOption(journey.nextGoal);
+        await chooseLearningGoal(profile, journey.nextGoal);
         await profile
           .getByRole("button", { name: "Save my direction", exact: true })
           .click();
         await expect(
-          profile.getByLabel("What would you like to do?"),
+          profile.locator('select[name="goal"], input[name="goal"]:checked'),
         ).toHaveValue(journey.nextGoal);
       } finally {
         await profile.close();

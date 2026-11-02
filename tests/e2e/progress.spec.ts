@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
@@ -13,7 +14,7 @@ test.afterAll(async () => pool.end());
 async function onboard(page: Page) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }
@@ -266,7 +267,7 @@ test("[L62] member sees only their exact-version activity with truthful progress
   await expect(page.locator("main ol > li")).toHaveCount(4);
 
   await page.goto("/learn");
-  await page.getByLabel("What would you like to do?").selectOption("work");
+  await chooseLearningGoal(page, "work");
   await page.getByRole("button", { name: "Save my direction" }).click();
   expect(await actors.catalog.retire(actors.editor, lessonId)).toBe(true);
   await page.goto("/progress");

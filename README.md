@@ -10,6 +10,8 @@ Owner administration uses verified selected identities and deliberate finite ent
 
 ## What you can do
 
+- **Choose a path visually.** Everyday, Work and Technical use distinct icon choices on registration and in Learn. Native keyboard choices, existing goal values, private route drafts and explicit saves remain intact; changing a route is not enrollment, payment or a mastery claim.
+
 - **Arrange individual course billing after registration.** Optional native invoicing lets staff consolidate exact course items and prepare one-time or monthly terms for your explicit acceptance. Inspect your own printable invoice, pay offline, and see staff-recorded receipts. Monthly invoices can be cancelled without erasing prior invoices. Invoicing is off by default; the local sample is not payable. See [course invoices and configuration](assets/docs/SIMPLE-COURSE-INVOICES.md).
 - **Submit monthly coaching hours.** A verified administrator sets your agreed effective hourly rate; save whole hours/minutes, review the exact subtotal and submit for manual invoice review. Private printable invoices retain rate/recipient snapshots and linked unpaid corrections. Sample invoices are not payable; invoicing stays off by default. See [monthly coaching](assets/docs/MONTHLY-COACHING-INVOICES.md).
 

@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { expect, test, type Page } from "@playwright/test";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -156,7 +157,7 @@ test("[L87] moderator reaches a newer private proposal beyond 100 quarantined it
 async function onboard(page: Page) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }

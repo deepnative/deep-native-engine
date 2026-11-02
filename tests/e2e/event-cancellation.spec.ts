@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { startEventCancellationRecoveryServer } from "../support/event-cancellation-recovery-server.ts";
 import { EVENT_PREVIEWS } from "../../src/events.ts";
 import {
@@ -27,7 +28,7 @@ async function onboard(
 ) {
   await page.goto(origin);
   await page.getByLabel("Your starting point").selectOption(background);
-  await page.getByLabel("What would you like to do?").selectOption(goal);
+  await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
   return (await page.context().cookies()).find(
     (cookie) => cookie.name === COOKIE,

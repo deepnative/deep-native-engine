@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import {
   test,
   expect,
@@ -102,7 +103,7 @@ async function fixture(browser: Browser, info: TestInfo, enabled = true) {
     const p = await page();
     await p.goto(origin);
     await p.getByLabel("Your starting point").selectOption("explorer");
-    await p.getByLabel("What would you like to do?").selectOption("everyday");
+    await chooseLearningGoal(p, "everyday");
     await p.getByRole("button", { name: "Start my learning path" }).click();
     await p.goto(origin + "/account");
     const id = await p.locator("code").first().innerText();

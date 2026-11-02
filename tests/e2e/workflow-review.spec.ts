@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -109,7 +110,7 @@ for (const [index, [background, goal]] of [
       const origin = running.origin;
       await page.goto(origin);
       await page.getByLabel("Your starting point").selectOption(background!);
-      await page.getByLabel("What would you like to do?").selectOption(goal!);
+      await chooseLearningGoal(page, goal!);
       await page
         .getByRole("button", { name: "Start my learning path" })
         .click();
@@ -422,7 +423,7 @@ for (const [index, fault] of (["request", "assign"] as const).entries()) {
     try {
       await page.goto(origin);
       await page.getByLabel("Your starting point").selectOption("professional");
-      await page.getByLabel("What would you like to do?").selectOption("work");
+      await chooseLearningGoal(page, "work");
       await page
         .getByRole("button", { name: "Start my learning path" })
         .click();

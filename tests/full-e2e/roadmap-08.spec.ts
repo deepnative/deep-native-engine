@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { authorizationStore } from "../support/administrator-fixture.ts";
@@ -30,9 +31,7 @@ test("[F-ROADMAP-08-A] three IT specialties enter common foundation without spec
       await context.clearCookies();
       await page.goto("/");
       await page.getByLabel("Your starting point").selectOption("technical");
-      await page
-        .getByLabel("What would you like to do?")
-        .selectOption(specialty.goal);
+      await chooseLearningGoal(page, specialty.goal);
       await page
         .getByText("Personalize your path (optional)", { exact: true })
         .click();

@@ -132,6 +132,12 @@ describe("LWORK-01 account reader rendering", () => {
       } else {
         expect(ui.root.innerHTML).toContain('href="../prototype/"');
       }
+      for (const name of ["Everyday", "Work", "Technical"]) {
+        expect(ui.root.innerHTML).toContain(`aria-label="${name}"`);
+      }
+      expect(ui.root.innerHTML.match(/class="route-art"/g)).toHaveLength(3);
+      expect(ui.root.innerHTML).toContain("Everyday life");
+      expect(ui.root.innerHTML).toContain("Selected path");
       ui.reader.destroy();
     }
   });

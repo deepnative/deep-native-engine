@@ -526,3 +526,7 @@ The sidecar preserves the reader’s isolated visual specimens and adds landing 
 - Don’t imply automatic saving, account synchronization, public sharing, or a contacted reviewer.
 - Don’t promote these local reader tokens into a claim that the hosted application has been restyled.
 - Don’t treat opening a sample answer or choosing a background as completion, admission, staff access or a paid plan.
+
+### Path choices on registration and Learn
+
+Use the same home, briefcase and code vocabulary for Everyday, Work and Technical. Registration uses native radios with retained goal values and visible selected text; profile editing keeps its native select. Learn retains its existing pressed buttons and route-specific writing/save lifecycle, with compact variants inside lessons. Path accents are green/blue/amber within the current blue-action/Nunito/warm-paper world. No gamification, backend, pricing, publication or provider behavior changes.

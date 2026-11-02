@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash } from "node:crypto";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { testPool } from "../support/database.ts";
@@ -24,7 +25,7 @@ async function memberId(context: BrowserContext) {
 async function startMember(page: Page) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
 }
@@ -38,9 +39,7 @@ test("[F-BUILD-10-B] invalid input recovers and an empty member gets an honest n
   await requiredCheck(1, async () => {
     await page.goto("/");
     await page.getByLabel("Your starting point").selectOption("explorer");
-    await page
-      .getByLabel("What would you like to do?")
-      .selectOption("everyday");
+    await chooseLearningGoal(page, "everyday");
     await page
       .getByText("Personalize your path (optional)", { exact: true })
       .click();
@@ -61,9 +60,7 @@ test("[F-BUILD-10-B] invalid input recovers and an empty member gets an honest n
     expect(uncreated.rowCount).toBe(0);
 
     await page.getByLabel("Your starting point").selectOption("explorer");
-    await page
-      .getByLabel("What would you like to do?")
-      .selectOption("everyday");
+    await chooseLearningGoal(page, "everyday");
     await page.getByLabel("Time zone (optional)").fill("America/Toronto");
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await expect(page).toHaveURL(/\/learn$/);

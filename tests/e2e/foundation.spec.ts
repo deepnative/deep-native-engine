@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, type Page } from "@playwright/test";
 import { reviewedFoundation } from "../../src/foundation-pack.ts";
 import { store } from "../../src/store.ts";
@@ -189,9 +190,7 @@ test("[L231] FOUND-03/04 all three backgrounds read six lessons and retain priva
         "Self-assessed complete · version 2",
       );
       await member.goto(f.origin + "/learn");
-      await member
-        .getByLabel("What would you like to do?")
-        .selectOption(goal === "work" ? "everyday" : "work");
+      await chooseLearningGoal(member, goal === "work" ? "everyday" : "work");
       await member.getByRole("button", { name: "Save my direction" }).click();
       await member.goto(f.origin + "/library");
       const history = member.locator(

@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -10,9 +11,7 @@ test.afterAll(async () => pool.end());
 async function onboard(page: Page, specialty: "security" | "analysis") {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("technical");
-  await page
-    .getByLabel("What would you like to do?")
-    .selectOption(specialty === "security" ? "build" : "work");
+  await chooseLearningGoal(page, specialty === "security" ? "build" : "work");
   await page
     .getByText("Personalize your path (optional)", { exact: true })
     .click();
