@@ -240,6 +240,31 @@ it("ADMIT-12 keeps inspection open over budget and replays the original copy aft
   expect(await count("evidence_objects")).toBe(10);
 });
 
+it("ADMIT-12 keeps assignment-copy inspection open over budget and replays the original copy after the window", async () => {
+  const m = await member();
+  const attempt = await submittedAttempt(m);
+  const created = await m.post(attempt.path, attempt.fields);
+  expect(created.status).toBe(200);
+  const evidenceId = created.text.match(
+    /data-assignment-evidence="([a-f0-9-]+)"/,
+  )![1]!;
+  await useBudget(m, 9);
+  const inspected = await m.post("/assignment-feedback/inspect", {
+    operationId: attempt.fields.operationId!,
+  });
+  expect(inspected.status).toBe(200);
+  expect(inspected.text).toContain(`data-assignment-evidence="${evidenceId}"`);
+  expectRefusal(await m.post(attempt.path, attempt.fields), 429, overBudget);
+  await pool.query(
+    "UPDATE upload_admission_windows SET window_start=window_start-interval '10 minutes'",
+  );
+  const replayed = await m.post(attempt.path, attempt.fields);
+  expect(replayed.status).toBe(200);
+  expect(replayed.text).toContain(`data-assignment-evidence="${evidenceId}"`);
+  expect(await count("evidence_objects")).toBe(10);
+  expect(await count("upload_admission_leases")).toBe(0);
+});
+
 it("ADMIT-13 fails both copy routes closed when the limiter does not answer", async () => {
   const m = await member();
   const attempt = await submittedAttempt(m);

@@ -357,6 +357,42 @@ it("PREPARED-04 concurrent original actions retain exactly one source and change
       )
     ).rows[0].n,
   ).toBe(1);
+  // The admission slots may serialize the HTTP actions above, so race four
+  // identical originals directly against the store as well.
+  const copies = preparedSampleStore(pool, {
+    enabled: true,
+    mode: "test",
+    origin: running.origin,
+  });
+  const original = {
+    operationId: randomUUID(),
+    templateId: "everyday-options",
+    templateVersion: 1,
+    templateDigest: digest,
+    providedExample: true,
+    privateReview: true,
+  };
+  const raced = await Promise.all(
+    Array.from({ length: 4 }, () => copies.create(m.token, original)),
+  );
+  expect(raced.map((r) => r.kind).sort()).toEqual([
+    "created",
+    "replayed",
+    "replayed",
+    "replayed",
+  ]);
+  expect(
+    new Set(
+      raced.map((r) => ("receipt" in r ? r.receipt.evidenceId : undefined)),
+    ).size,
+  ).toBe(1);
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*)::int n FROM provided_evidence_operations",
+      )
+    ).rows[0].n,
+  ).toBe(2);
 });
 it("PREPARED-05 withdrawn and deleted sources never reappear through original replay or inspection", async () => {
   const m = await member(),
