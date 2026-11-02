@@ -55,9 +55,7 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
   const csrf = await page.locator('input[name="csrf"]').first().inputValue();
   const note = "Invented private feedback about clearer setup steps.";
   await page.getByLabel("Your private feedback on version 2").fill(note);
-  await page
-    .getByLabel("I am saving private feedback using only invented text")
-    .check();
+  await page.getByLabel("I choose to save this note privately.").check();
   await page.getByRole("button", { name: "Save private feedback" }).click();
   await expect(page.getByRole("status")).toContainText("saved privately");
   await page.reload();
@@ -67,9 +65,7 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
   await page
     .getByLabel("Your private feedback on version 2")
     .fill("Invented correction for a second reading.");
-  await page
-    .getByLabel("I am saving private feedback using only invented text")
-    .check();
+  await page.getByLabel("I choose to save this note privately.").check();
   await page.getByRole("button", { name: "Save private feedback" }).click();
   const stale = await context.request.post("/workflow-feedback/WF-001/save", {
     headers: { origin },
@@ -147,9 +143,7 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
   const exportAfter = await context.request.get("/api/member/export");
   expect((await exportAfter.json()).records.workflowFeedback).toEqual([]);
   await page.getByLabel("Your private feedback on version 2").fill(note);
-  await page
-    .getByLabel("I am saving private feedback using only invented text")
-    .check();
+  await page.getByLabel("I choose to save this note privately.").check();
   await page.getByRole("button", { name: "Save private feedback" }).click();
   // Model the retained-row phase of deletion before the existing purge flow.
   await pool.query(
@@ -198,9 +192,7 @@ test("[L99] feedback save waiting past session expiry leaves the private note un
   await page
     .getByLabel("Your private feedback on version 2")
     .fill("Original invented private workflow note.");
-  await page
-    .getByLabel("I am saving private feedback using only invented text")
-    .check();
+  await page.getByLabel("I choose to save this note privately.").check();
   await page.getByRole("button", { name: "Save private feedback" }).click();
   await expect(page.getByRole("status")).toContainText("saved privately");
   const cookie = (await context.cookies()).find(
@@ -236,9 +228,7 @@ test("[L99] feedback save waiting past session expiry leaves the private note un
     await page
       .getByLabel("Your private feedback on version 2")
       .fill("Late invented replacement that must not save.");
-    await page
-      .getByLabel("I am saving private feedback using only invented text")
-      .check();
+    await page.getByLabel("I choose to save this note privately.").check();
     saving = Promise.all([
       page.waitForResponse(
         (response) =>

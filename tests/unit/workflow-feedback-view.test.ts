@@ -29,6 +29,13 @@ it("shows private current and historical notes without publishing them on the wo
   expect(privatePage).toContain("Historical version notes");
   expect(privatePage).toContain('name="revision" value="2"');
   expect(privatePage).toContain("not a publication request");
+  // WFB-NORMAL-01/02: saving ordinary words is private, not review consent.
+  expect(privatePage).toContain("Only you can read this private note.");
+  expect(privatePage).toContain("I choose to save this note privately.");
+  expect(privatePage).not.toContain("using only invented text");
+  expect(privatePage).not.toContain(
+    "Request private review of this exact note",
+  );
   const publicPage = workflowDetailPage(bundle!);
   expect(publicPage).toContain("Save private feedback about this version");
   expect(publicPage).not.toContain("Invented &amp; private");
