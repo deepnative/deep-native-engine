@@ -708,3 +708,31 @@ it("MODN-01 excludes decision fields from a no-decision download", async () => {
     expect(response.body.decision).toBeNull();
   });
 });
+
+it("COPY-597-02 shows contribution times in ISO UTC like other pages", async () => {
+  const f = fixture();
+  f.mocks.list.mockResolvedValue({
+    kind: "ready",
+    value: {
+      items: [{ ...post, createdAt: "2026-11-02 17:51:18.224901+00" }],
+      nextCursor: null,
+    },
+  });
+  await withLoopback(f.application, async (server) => {
+    const response = await request(server).get(root).expect(200);
+    expect(response.text).toContain("2026-11-02T17:51:18.224Z");
+    expect(response.text).not.toContain("17:51:18.224901+00");
+  });
+});
+it("COPY-597-03 gives a refused moderator staff guidance, not member guidance", async () => {
+  const f = fixture();
+  await withLoopback(f.application, async (server) => {
+    const response = await request(server)
+      .get(mod + "/reports")
+      .expect(403);
+    expect(response.text).toContain("Circle request unavailable");
+    expect(response.text).toContain("moderation grant");
+    expect(response.text).toContain('href="/staff"');
+    expect(response.text).not.toContain("your retained contributions");
+  });
+});

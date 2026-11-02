@@ -16,6 +16,14 @@ const warning = `<p class="eyebrow">INVENTED LOCAL CIRCLE · UNREVIEWED</p><p>Sh
 const rules = `<details><summary>Rules, privacy and review limits</summary><p>Use invented information only. Keep personal, client, private assignment and evidence text out of shared contributions. Keep discussion respectful and relevant; report the exact shared item for privacy, conduct or off-topic concerns. A current moderator needs a finite grant for this exact circle to hide or restore a contribution.</p><p>Leaving or withdrawing sharing removes your text from peer views; a later choice does not republish old contributions. Withdrawing a contribution removes its body. Content-free decision records remain part of your private retained history until account deletion. Downloading a notice saves a copy on your device that account deletion cannot remove.</p><p>You may request reconsideration of the latest hidden decision while your contribution and its question remain deliberately shared in this circle. A structured request is not a promise of response, independent review or qualified judgment. You may withdraw a pending request. Leaving, withdrawing sharing or withdrawing text removes staff availability; your content-free appeal history remains private until account deletion. A notice download alone is not an appeal or proof of human review.</p></details>`;
 const base = (circle: string) =>
   `/circles/${encodeURIComponent(circle)}/discussion`;
+// Show PostgreSQL text timestamps in the ISO UTC form used on other pages.
+function utc(value: string) {
+  const match =
+    /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(?:\.(\d+))?\+00$/.exec(value);
+  return match
+    ? `${match[1]}T${match[2]}.${(match[3] ?? "").padEnd(3, "0").slice(0, 3)}Z`
+    : value;
+}
 function shell(circle: string, title: string, body: string) {
   const url = base(circle);
   return page(
@@ -48,7 +56,7 @@ function composer(circle: string, csrf: string, root?: string) {
 }
 function item(circle: string, csrf: string, row: CircleItem, owned: boolean) {
   const url = base(circle);
-  return `<li><article><h2>${escape(row.pseudonym)}</h2><p class="small">${escape(row.createdAt)} · ${escape(row.state)} · revision ${row.revision}</p>${row.body === null ? "<p>Text withdrawn.</p>" : `<pre class="content-text">${escape(row.body)}</pre>`}${owned ? `<p><a href="${url}/posts/${encodeURIComponent(row.id)}/moderation-notice">Inspect this contribution's moderation notice</a></p>` : ""}${owned ? (row.state === "withdrawn" ? "" : `<form method="post" action="${url}/posts/${encodeURIComponent(row.id)}/withdraw">${hidden(csrf)}${confirmation("Withdraw this contribution's text; a content-free marker remains until account deletion.")}<button type="submit">Withdraw contribution</button></form>`) : `<p><a href="${url}/threads/${encodeURIComponent(row.rootId ?? row.id)}">Open question and replies</a></p><form method="post" action="${url}/posts/${encodeURIComponent(row.id)}/reports">${hidden(csrf)}${originalKey(circle, "report")}<label for="report-${escape(row.id)}">Report this exact invented contribution</label><select id="report-${escape(row.id)}" name="category">${REPORT_CATEGORIES.map((category) => `<option value="${category}">${escape(category.replace("_", " "))}</option>`).join("")}</select><button type="submit">Save private sample report</button></form>`}</article></li>`;
+  return `<li><article><h2>${escape(row.pseudonym)}</h2><p class="small">${escape(utc(row.createdAt))} · ${escape(row.state)} · revision ${row.revision}</p>${row.body === null ? "<p>Text withdrawn.</p>" : `<pre class="content-text">${escape(row.body)}</pre>`}${owned ? `<p><a href="${url}/posts/${encodeURIComponent(row.id)}/moderation-notice">Inspect this contribution's moderation notice</a></p>` : ""}${owned ? (row.state === "withdrawn" ? "" : `<form method="post" action="${url}/posts/${encodeURIComponent(row.id)}/withdraw">${hidden(csrf)}${confirmation("Withdraw this contribution's text; a content-free marker remains until account deletion.")}<button type="submit">Withdraw contribution</button></form>`) : `<p><a href="${url}/threads/${encodeURIComponent(row.rootId ?? row.id)}">Open question and replies</a></p><form method="post" action="${url}/posts/${encodeURIComponent(row.id)}/reports">${hidden(csrf)}${originalKey(circle, "report")}<label for="report-${escape(row.id)}">Report this exact invented contribution</label><select id="report-${escape(row.id)}" name="category">${REPORT_CATEGORIES.map((category) => `<option value="${category}">${escape(category.replace("_", " "))}</option>`).join("")}</select><button type="submit">Save private sample report</button></form>`}</article></li>`;
 }
 function listing(
   circle: string,
@@ -101,6 +109,7 @@ function result<T>(
   res: Response,
   circle: string,
   value: CircleResult<T>,
+  staff = false,
 ): T | undefined {
   if (value.kind === "ready") return value.value;
   res
@@ -108,13 +117,24 @@ function result<T>(
       value.kind === "denied" ? 403 : value.kind === "invalid" ? 422 : 409,
     )
     .send(
-      shell(
-        circle,
-        "Circle request unavailable",
-        `<p>The request was not accepted (${escape(value.kind)}). Inspect the current sharing choice and your retained contributions before submitting another form.</p>`,
-      ),
+      staff
+        ? page(
+            "Circle request unavailable",
+            `<section class="reading">${warning}<h1>Circle request unavailable</h1><p>The request was not accepted (${escape(value.kind)}). Your moderation grant for this circle may not have started, may have ended or may have been revoked. Ask the administrator to check the exact grant before trying again.</p><p><a href="/staff">Your staff tools</a></p></section>`,
+          )
+        : shell(
+            circle,
+            "Circle request unavailable",
+            `<p>The request was not accepted (${escape(value.kind)}). Inspect the current sharing choice and your retained contributions before submitting another form.</p>`,
+          ),
     );
 }
+// Moderator routes refuse with staff guidance rather than member guidance.
+const staffResult = <T>(
+  res: Response,
+  circle: string,
+  value: CircleResult<T>,
+) => result(res, circle, value, true);
 export function registerCircleDiscussion(
   app: Express,
   store: CircleDiscussionStore,
@@ -560,7 +580,7 @@ export function registerCircleDiscussion(
         rejectFields(res, circle);
         return;
       }
-      const value = result(
+      const value = staffResult(
         res,
         circle,
         await store.appealQueue(
@@ -603,7 +623,7 @@ export function registerCircleDiscussion(
         rejectFields(res, circle);
         return;
       }
-      const value = result(
+      const value = staffResult(
         res,
         circle,
         await store.resolveAppeal(
@@ -736,7 +756,7 @@ export function registerCircleDiscussion(
         rejectFields(res, circle);
         return;
       }
-      const value = result(
+      const value = staffResult(
         res,
         circle,
         await store.moderationQueue(
@@ -778,7 +798,7 @@ export function registerCircleDiscussion(
         return;
       }
       if (
-        result(
+        staffResult(
           res,
           circle,
           await store.moderate(
@@ -842,7 +862,7 @@ export function registerCircleDiscussion(
           shell(
             circle,
             "Your private sample report receipt",
-            `<p>Receipt ${escape(value.id)} · ${escape(value.category)} · ${escape(value.createdAt)}</p><p role="status">${value.status === "unavailable" ? "Target unavailable" : value.status === "hidden" ? "Sample target hidden" : "Sample report retained"}. This content-free record does not promise staffed moderation, a response or formal review.</p><p><a href="${base(circle)}/reports/${encodeURIComponent(value.id)}/moderation-notice">Inspect the latest decision available for this report</a></p><p><a href="${base(circle)}/reports">Your private sample reports</a></p>`,
+            `<p>Receipt ${escape(value.id)} · ${escape(value.category)} · ${escape(utc(value.createdAt))}</p><p role="status">${value.status === "unavailable" ? "Target unavailable" : value.status === "hidden" ? "Sample target hidden" : "Sample report retained"}. This content-free record does not promise staffed moderation, a response or formal review.</p><p><a href="${base(circle)}/reports/${encodeURIComponent(value.id)}/moderation-notice">Inspect the latest decision available for this report</a></p><p><a href="${base(circle)}/reports">Your private sample reports</a></p>`,
           ),
         );
     }),

@@ -157,9 +157,7 @@ it("lets the owner ask one clarification on published feedback", () => {
   );
   expect(html).toContain("Send clarification");
   expect(html).not.toContain("Send answer");
-  expect(html).toContain(
-    "preparation: not supplied minutes; review: 0 minutes",
-  );
+  expect(html).toContain("preparation: not supplied; review: 0 minutes");
   expect(html).toContain("&lt;Explain&gt;");
 });
 it("offers only the original reviewer's answer form after a clarification", () => {
@@ -177,9 +175,7 @@ it("offers only the original reviewer's answer form after a clarification", () =
   expect(html).toContain("Send answer");
   expect(html).not.toContain("Send clarification");
   expect(html).toContain("&lt;Question&gt;");
-  expect(html).toContain(
-    "preparation: 4 minutes; review: not supplied minutes",
-  );
+  expect(html).toContain("preparation: 4 minutes; review: not supplied");
   expect(sampleFeedbackPage(v, "csrf", false)).not.toContain(
     "Send clarification",
   );

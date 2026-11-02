@@ -7,7 +7,7 @@ import type {
 export const reviewMemberBase = "/workflow-feedback/review";
 const field = (name: string, value: string) =>
   `<input type="hidden" name="${name}" value="${escape(value)}">`;
-const notice = `<p class="eyebrow">PRIVATE LOCAL REVIEW REQUEST</p><p>This offers one invented-text note to an individually assigned moderator. It is not qualified assessment or public publication. No moderator availability or response time is promised.</p>`;
+const notice = `<p class="eyebrow">PRIVATE LOCAL REVIEW REQUEST</p><p>This offers one private note to an individually assigned moderator. It is not qualified assessment or public publication. No moderator availability or response time is promised.</p>`;
 export function workflowReviewPreviewPage(
   value: WorkflowReviewPreview,
   csrf: string,
