@@ -189,7 +189,7 @@ async function submit(p: Page) {
   await p
     .getByRole("checkbox", { name: /I confirm this saved duration/ })
     .check();
-  await p.getByRole("button", { name: "Submit monthly hours" }).click();
+  await p.getByRole("button", { name: "Request coaching invoice" }).click();
 }
 async function issue(f: Fixture, p: Page, id: string) {
   await p.goto(`${f.origin}/operator/coaching/${id}`);
@@ -283,6 +283,45 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
         fullPage: true,
       });
     }
+    const previous = new Date(`${f.month}-01T00:00:00Z`);
+    previous.setUTCMonth(previous.getUTCMonth() - 1);
+    const pastMonth = previous.toISOString().slice(0, 7);
+    await admin.goto(
+      `${f.origin}/operator/coaching/${a.id}?month=${pastMonth}`,
+    );
+    await admin.getByLabel("Hourly rate (CAD)").fill("120.00");
+    await admin.getByRole("button", { name: "Save hourly rate" }).click();
+    await recovered.goto(`${f.origin}/account/coaching?month=${pastMonth}`);
+    await expect(recovered.getByLabel("Calendar month (UTC)")).toHaveValue(
+      pastMonth,
+    );
+    await recovered.getByLabel("Whole hours").fill("2");
+    await recovered.getByLabel("Additional minutes").fill("0");
+    await recovered
+      .getByLabel("Invoice recipient name")
+      .fill("Invented learner");
+    await recovered.getByLabel("Invoice email").fill("billing@example.invalid");
+    await recovered
+      .getByRole("button", { name: "Save coaching draft" })
+      .click();
+    await expect(
+      recovered.locator(
+        'form[action="/account/coaching/save"] input[name="revision"]',
+      ),
+    ).toHaveValue("1");
+    await recovered.waitForLoadState("load");
+    await submit(recovered);
+    await expect(
+      recovered.getByText("Status: submitted · revision 2"),
+    ).toBeVisible();
+    await recovered.screenshot({
+      path: info.outputPath("coaching-past-month-request.png"),
+      fullPage: true,
+    });
+    await admin.goto(`${f.origin}/operator/coaching`);
+    await expect(
+      admin.getByRole("link", { name: `${a.id} · ${pastMonth}`, exact: true }),
+    ).toBeVisible();
     completed = true;
   } finally {
     await f.close(completed);
@@ -449,7 +488,7 @@ test("[L276] HOUR09 disabled invoicing keeps monthly entry honest and learning a
       m.page.getByText(/Coaching invoicing is not configured/),
     ).toBeVisible();
     await expect(
-      m.page.getByRole("button", { name: "Submit monthly hours" }),
+      m.page.getByRole("button", { name: "Request coaching invoice" }),
     ).toHaveCount(0);
     await m.page.getByRole("link", { name: "My account", exact: true }).click();
     await expect(m.page.locator("code").first()).toHaveText(m.id);

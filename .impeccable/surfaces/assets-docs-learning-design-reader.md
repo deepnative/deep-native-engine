@@ -38,3 +38,5 @@ The shared account/local Learn picker retains its existing three buttons, access
 
 ## Member navigation chrome
 The account reader and saved-notebook headers use the landing page’s d/n brand, warm paper, blue primary Account action and deep-ink navigation. Keep all existing destinations visible with native anchors, 44px targets, hover and focus treatment; wrap into two columns on small screens. Signed-in/private-record context stays explicit. No hidden menu, runtime JS, authority or account-state change. NAVTHEME01–02 cover rendered headers, keyboard reachability and mobile fit.
+
+The shared member action is labelled **Top up hours** and opens existing monthly coaching: choose the past month, enter duration against the administrator-set rate, and request an invoice for review. It does not mean a prepaid balance. The account/coaching and guided-lesson headers use the same touch-sized, ink/blue native-link treatment as the notebook header. Keep disabled billing explicit.

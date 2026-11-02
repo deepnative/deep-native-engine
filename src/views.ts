@@ -82,7 +82,7 @@ export function escape(value: string) {
   );
 }
 export function accountActionLinks() {
-  return '<a href="/account/coaching">Coaching hours</a><a href="/admin">Administration</a><a href="/account/sign-out">Sign out</a>';
+  return '<a href="/account/coaching">Top up hours</a><a href="/admin">Administration</a><a href="/account/sign-out">Sign out</a>';
 }
 
 export function page(title: string, body: string) {

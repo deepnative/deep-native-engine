@@ -120,7 +120,7 @@ for (const journey of journeys)
       for (const label of [
         "My account",
         "Sign out",
-        "Coaching hours",
+        "Top up hours",
         "Administration",
       ])
         await expect(

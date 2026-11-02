@@ -1455,20 +1455,42 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   padding-top: 18px;
   padding-bottom: 18px;
 }
-.main-navigation {
+.main-navigation,
+.guidance-header nav {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 20px;
+  gap: 4px;
   font-size: 0.9rem;
 }
-.main-navigation a {
+.main-navigation a,
+.guidance-header nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 8px;
   color: var(--ink);
-  text-underline-offset: 0.25em;
+  font-weight: 700;
+  text-decoration: none;
+}
+.main-navigation a:hover,
+.guidance-header nav a:hover {
+  color: var(--accent);
+  background: #eaf0ff;
+}
+.main-navigation a[href="/account"],
+.guidance-header nav a[href="/account"] {
+  color: white;
+  background: var(--accent);
+}
+.main-navigation a[href="/account"]:hover,
+.guidance-header nav a[href="/account"]:hover {
+  background: #173eaa;
 }
 @media (max-width: 760px) {
   .main-navigation {
     width: 100%;
-    gap: 12px 18px;
+    gap: 4px;
   }
 }
