@@ -23,7 +23,12 @@ export async function dropDeferredProgramFixtures() {
   for (const drop of deferredDrops.splice(0))
     await drop().catch((error: unknown) => errors.push(error));
   if (errors.length)
-    throw new AggregateError(errors, "Deferred fixture database drop failed");
+    throw new AggregateError(
+      errors,
+      `Deferred fixture database drop failed: ${errors
+        .map((error) => (error instanceof Error ? error.message : "unknown"))
+        .join("; ")}`,
+    );
 }
 
 /** Actual application and PostgreSQL with test-owned email/transport boundaries.

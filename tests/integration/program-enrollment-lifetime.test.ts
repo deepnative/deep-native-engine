@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import request from "supertest";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, expect, it, vi } from "vitest";
 import {
   dropDeferredProgramFixtures,
   programEnrollmentFixture,
@@ -20,7 +20,9 @@ import {
 } from "../support/program-enrollment-observation.ts";
 
 // Each fixture database is dropped after its test, outside the behavior budget.
+// A drop queued after a timed-out test's hook still runs, and fails, at the end.
 afterEach(() => dropDeferredProgramFixtures());
+afterAll(() => dropDeferredProgramFixtures());
 
 const intent = {
   programVersion: 1,
