@@ -2,9 +2,18 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  it,
+  onTestFinished,
+} from "vitest";
 import { migrate } from "../../src/store.ts";
 import request from "supertest";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 import { app } from "../../src/app.ts";
 import { sampleAssignmentStore } from "../../src/sample-assignment.ts";
 import type {
@@ -649,7 +658,10 @@ it("INTAKE-01 exposes pending exact feedback references to the current administr
     sampleAssignmentAdministration: true,
     localStaffEntry: true,
   });
-  const response = await request(application)
+  // #105: bind the owned test server to 127.0.0.1 so another lane cannot answer.
+  const server = await listenLoopback(application);
+  onTestFinished(() => closeLoopback(server));
+  const response = await request(server)
     .get("/operator/sample-assignments/pending")
     .set("Host", "127.0.0.1:3000")
     .set("Cookie", `dne_staff=${f.administratorToken}`);
