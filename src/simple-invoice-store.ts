@@ -719,11 +719,15 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         return { kind: "ready", value: { plans, invoices } };
       });
     },
-    async adminOverview(token: string) {
+    async adminOverview(token: string, ownerId?: string) {
+      if (ownerId !== undefined && !invoiceUuid(ownerId))
+        return fail("invalid");
       return run(token, true, async (tx) => {
+        if (ownerId) await owner(tx, ownerId);
         const members = (
           await tx.query<{ id: string }>(
-            "SELECT l.id FROM learners l JOIN workspaces w ON w.owner_principal_id=l.id WHERE w.deleting_at IS NULL ORDER BY l.id LIMIT 100",
+            "SELECT l.id FROM learners l JOIN workspaces w ON w.owner_principal_id=l.id WHERE w.deleting_at IS NULL AND ($1::uuid IS NULL OR l.id=$1) ORDER BY l.id LIMIT 100",
+            [ownerId ?? null],
           )
         ).rows;
         const courses = (
@@ -733,12 +737,14 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         ).rows;
         const invoices = (
           await tx.query<{ id: string; revision: number; delivery: string }>(
-            "SELECT id,revision,delivery FROM simple_invoices ORDER BY created_at DESC LIMIT 100",
+            "SELECT id,revision,delivery FROM simple_invoices WHERE ($1::uuid IS NULL OR owner_id=$1) ORDER BY created_at DESC LIMIT 100",
+            [ownerId ?? null],
           )
         ).rows;
         const coachingPending = (
           await tx.query<{ ownerId: string; month: string }>(
-            "SELECT owner_id AS \"ownerId\",month FROM coaching_months WHERE state='submitted' ORDER BY month,owner_id LIMIT 100",
+            "SELECT owner_id AS \"ownerId\",month FROM coaching_months WHERE state='submitted' AND ($1::uuid IS NULL OR owner_id=$1) ORDER BY month,owner_id LIMIT 100",
+            [ownerId ?? null],
           )
         ).rows;
         return {

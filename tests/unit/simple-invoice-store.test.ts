@@ -613,3 +613,16 @@ it("OFFPUR-10 processes only active due agreements with unchanged eligible sourc
     (await fixture({ lease: false }).service.generateScheduled()).kind,
   ).toBe("unavailable");
 });
+
+it("ADMINCON02 restricts the proposal account picker to the exact valid learner", async () => {
+  const f = fixture();
+  expect((await f.service.adminOverview(admin, "wrong")).kind).toBe("invalid");
+  expect((await f.service.adminOverview(admin, ownerId)).kind).toBe("ready");
+  expect(
+    f.query.mock.calls.some(
+      ([sql, values]) =>
+        sql.includes("($1::uuid IS NULL OR l.id=$1)") &&
+        values?.[0] === ownerId,
+    ),
+  ).toBe(true);
+});
