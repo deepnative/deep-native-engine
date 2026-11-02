@@ -1,4 +1,4 @@
-import { it, expect, vi } from "vitest";
+import { afterEach, beforeEach, it, expect, vi } from "vitest";
 import type { Pool } from "pg";
 import {
   availabilityStore,
@@ -10,6 +10,13 @@ import {
 const start = new Date("2026-11-02T15:00:00.000Z");
 const end = new Date("2026-11-02T16:00:00.000Z");
 const now = new Date("2026-11-01T12:00:00.000Z");
+// The store validates against the current clock; pin it to the fixture's now.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"], now });
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 const registryId = "11111111-1111-4111-8111-111111111111";
 const slotId = "22222222-2222-4222-8222-222222222222";
 
