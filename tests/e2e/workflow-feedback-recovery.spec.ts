@@ -74,9 +74,7 @@ for (const [index, background] of (
         [1, "Invented corrected note"],
       ] as const) {
         await page.getByLabel("Your private feedback on version 2").fill(note);
-        await page
-          .getByLabel("I am saving private feedback using only invented text")
-          .check();
+        await page.getByLabel("I choose to save this note privately.").check();
         await pool.query(
           "UPDATE principals SET expires_at=clock_timestamp()+interval '2 seconds' WHERE id=$1",
           [session.learner.id],

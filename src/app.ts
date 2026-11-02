@@ -2743,7 +2743,7 @@ export function app(
         .send(
           errorPage(
             "Feedback not saved",
-            "Enter 1–1,000 characters of invented private feedback and confirm your intent.",
+            "Enter 1–1,000 characters of private feedback and confirm your intent.",
           ),
         );
       return;

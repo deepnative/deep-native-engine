@@ -77,9 +77,7 @@ for (const [index, [background, goal, workflow]] of [
       page.getByLabel("Your private feedback on version 2"),
     ).toHaveValue("");
     await page.getByLabel("Your private feedback on version 2").fill(current);
-    await page
-      .getByLabel("I am saving private feedback using only invented text")
-      .check();
+    await page.getByLabel("I choose to save this note privately.").check();
     await page.getByRole("button", { name: "Save private feedback" }).click();
     await expect(page.getByRole("status")).toContainText("saved privately");
     await page.reload();
