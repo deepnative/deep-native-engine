@@ -8,22 +8,15 @@
 
 :root {
   color-scheme: light;
-  --ink: #19352d;
-  --muted: #50675f;
-  --paper: #f7f8f2;
+  --ink: #182c49;
+  --muted: #506079;
+  --paper: #fffdf7;
   --card: #fff;
-  --line: #dce3d6;
-  --accent: #235d43;
-  --lime: #dceaaf;
-  --radius: 22px;
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  --line: #d6ddeb;
+  --accent: #2454d6;
+  --lime: #ffe18b;
+  --radius: 16px;
+  font-family: "Nunito Sans", sans-serif;
   color: var(--ink);
   background: var(--paper);
   font-synthesis: none;
@@ -74,7 +67,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #e8ece4;
+  background: #edf2f8;
 }
 .guidance-steps [aria-current] {
   color: var(--ink);
@@ -95,7 +88,7 @@
   background: white;
 }
 .guidance-source {
-  background: #edf2e7;
+  background: #eaf5f7;
 }
 .guidance-source h2,
 .guidance-feedback h2 {
@@ -146,7 +139,7 @@
 }
 .guidance-choice:has(input:checked) {
   border-color: var(--accent);
-  background: #edf2e7;
+  background: #eaf0ff;
 }
 .guidance-choice input {
   flex: 0 0 auto;
@@ -225,7 +218,17 @@
   box-sizing: border-box;
 }
 body {
+  min-height: 100vh;
   margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  accent-color: var(--accent);
+  caret-color: var(--accent);
+  scrollbar-color: #7d8eb4 var(--paper);
+}
+::selection {
+  background: var(--lime);
+  color: var(--ink);
 }
 a {
   color: var(--accent);
@@ -248,7 +251,7 @@ textarea {
   touch-action: manipulation;
 }
 :focus-visible {
-  outline: 3px solid #bd6306;
+  outline: 3px solid #a34d08;
   outline-offset: 4px;
 }
 .skip {
@@ -380,7 +383,7 @@ p {
   transform: rotate(1deg);
 }
 .path-card p {
-  color: #d3e3d9;
+  color: #dce8f7;
 }
 .path-card .eyebrow {
   color: var(--lime);
@@ -392,7 +395,7 @@ p {
   display: flex;
   gap: 18px;
   align-items: center;
-  border-top: 1px solid #466253;
+  border-top: 1px solid #6b84a5;
   padding: 15px 0;
   font-size: 14px;
 }
@@ -462,7 +465,7 @@ input[type="time"],
 select,
 textarea {
   width: 100%;
-  border: 1px solid #a8b8aa;
+  border: 1px solid #9caecf;
   border-radius: 9px;
   padding: 12px;
   background: #fff;
@@ -508,7 +511,7 @@ button,
 }
 button:hover,
 .button:hover {
-  background: #163f2c;
+  background: #173eaa;
 }
 .onboard button {
   width: 100%;
@@ -516,15 +519,15 @@ button:hover,
 .secondary {
   background: #fff;
   color: var(--accent);
-  border-color: #a8b8aa;
+  border-color: #9caecf;
 }
 .secondary:hover {
-  background: #edf3e7;
+  background: #eef3ff;
 }
 .progress-card {
-  background: #edf2e1;
+  background: #eef3ff;
   padding: 30px;
-  border: 1px solid #d5dec6;
+  border: 1px solid #d6ddeb;
   border-radius: var(--radius);
 }
 .progress-card strong {
@@ -557,7 +560,7 @@ progress {
 .learning-plan {
   padding: 28px 34px;
   margin-bottom: 24px;
-  background: #f2f5e9;
+  background: #eef3ff;
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
@@ -634,7 +637,7 @@ progress {
   background: var(--card);
 }
 .next-card {
-  background: #f0eee5;
+  background: #edf2f8;
 }
 .next-card ul {
   padding-left: 20px;
@@ -653,7 +656,7 @@ progress {
 .status {
   display: inline-block;
   color: var(--accent);
-  background: #eaf3e0;
+  background: #eaf0ff;
   border-radius: 6px;
   padding: 5px 9px;
   font-size: 12px;
@@ -704,7 +707,7 @@ progress {
   left: 0;
   top: 0;
   color: var(--accent);
-  background: #e5edda;
+  background: #eaf0ff;
   border-radius: 7px;
   padding: 7px;
   font-size: 12px;
@@ -716,7 +719,7 @@ progress {
 .example {
   padding: 22px;
   border-left: 3px solid var(--accent);
-  background: #edf2e1;
+  background: #eef3ff;
 }
 .example .eyebrow {
   margin-bottom: 8px;
@@ -932,31 +935,7 @@ footer span {
   overflow-wrap: anywhere;
 }
 
-/* The public entrance has its own learning identity; saved work keeps its UI. */
-body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal) {
-  min-height: 100vh;
-  --ink: #182c49;
-  --muted: #506079;
-  --paper: #fffdf7;
-  --line: #d6ddeb;
-  --accent: #2454d6;
-  --lime: #ffe18b;
-  --radius: 16px;
-  font-family: "Nunito Sans", sans-serif;
-  background: var(--paper);
-  color: var(--ink);
-  caret-color: var(--accent);
-  scrollbar-color: #7d8eb4 var(--paper);
-}
-body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
-  ::selection {
-  background: var(--lime);
-  color: var(--ink);
-}
-body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
-  :focus-visible {
-  outline-color: #a34d08;
-}
+/* Landing and learning retain their wider layout within the shared identity. */
 body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   .site-header,
 body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
@@ -1348,31 +1327,4 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   margin-top: -12px;
-}
-
-/* The legacy learning flow shares the welcome identity without changing staff tools. */
-body:has(.dashboard-head, .lesson-heading, .learning-portal) {
-  accent-color: var(--accent);
-}
-body:has(.dashboard-head, .lesson-heading, .learning-portal)
-  :is(button, input, textarea, select) {
-  font-family: inherit;
-}
-body:has(.dashboard-head, .lesson-heading, .learning-portal)
-  :is(button, .button):hover {
-  background: #173eaa;
-}
-body:has(.dashboard-head, .lesson-heading, .learning-portal) .secondary {
-  border-color: #9caecf;
-}
-body:has(.dashboard-head, .lesson-heading, .learning-portal) .secondary:hover {
-  background: #eef3ff;
-}
-body:has(.dashboard-head) :is(.progress-card, .learning-plan) {
-  background: #eef3ff;
-  border-color: var(--line);
-}
-
-body:has(.lesson-heading) .guidance-choice:has(input:checked) {
-  background: #eef3ff;
 }

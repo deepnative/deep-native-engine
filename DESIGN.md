@@ -360,11 +360,11 @@ The Working Notebook is calm, explicit and practical. Warm paper surrounds white
 
 The account welcome page adds a separate **First Small Win** identity: warm paper, friendly heavy Nunito Sans headings, confident blue actions and small yellow sequence markers. A native sample exercise lets visitors inspect useful reasoning before choosing their starting point. Its warm-paper, blue-action and Nunito Sans identity continues into the learning portal. The portal keeps its task-focused layout, semantic feedback and explicit saving.
 
-This code-derived record preserves the local reader captured on 28 October 2026 and adds the account landing implementation captured on 30 October 2026. Unprefixed tokens describe `assets/docs/learning-design/reader`; `landing-*` tokens describe the welcome page in `src/views.ts` and `public/style.css`. The shared page-level palette and font are scoped to welcome, legacy learning dashboard, starter lesson and learning activity markers. Staff tools retain their original styling. The notebook stylesheet uses the same identity directly. PRODUCT.md records product constraints; `.impeccable/surfaces/assets-docs-learning-design-reader.md` and `.impeccable/surfaces/src-views-ts.md` own their respective surface directions. This source snapshot does not establish deployment or production acceptance.
+This code-derived record preserves the local reader captured on 28 October 2026 and adds the account landing implementation captured on 30 October 2026. Unprefixed tokens describe `assets/docs/learning-design/reader`; `landing-*` tokens describe the welcome page in `src/views.ts` and `public/style.css`. The shared page-level palette and font are defaults for every server-rendered page, including account, billing, administrator, support and error views. Landing and learning retain their existing wider layouts; task pages keep their compact operational layouts. The notebook stylesheet uses the same identity directly. PRODUCT.md records product constraints; `.impeccable/surfaces/assets-docs-learning-design-reader.md` and `.impeccable/surfaces/src-views-ts.md` own their respective surface directions. This source snapshot does not establish deployment or production acceptance.
 
 **Key Characteristics:**
 
-- One self-hosted Nunito Sans family across welcome and learning, with a compact reading scale in the portal.
+- One self-hosted Nunito Sans family across welcome, learning, account and administrator pages, with a compact scale for task-oriented views.
 - Flat surfaces distinguished by tone, fine borders and open spacing.
 - Named learning, practice and private-work destinations with visible current state.
 - Explicit saving and evidence-based status labels beside the work they describe.

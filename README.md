@@ -79,3 +79,5 @@ Read [AGENTS.md](AGENTS.md) and the [team workflow](assets/docs/workflows/TEAM-W
 The [documentation index](assets/docs/README.md) includes the original context, model recommendations, templates, and workflow. Shared instructions make the process reproducible; model outputs still require review and tests. Delivery includes merging accepted changes to `main` and verifying the resulting merge source.
 
 The welcome page and learning portal share warm paper, blue actions and self-hosted Nunito Sans. Both the published notebook and earlier starter lessons retain their existing explicit saving, privacy and publication rules.
+
+Account, billing and administration pages use the same warm-paper, blue-action and Nunito Sans identity as the landing page; task layouts and semantic success/warning states remain distinct.
