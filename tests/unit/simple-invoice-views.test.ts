@@ -91,3 +91,26 @@ it("OFFPUR-06 keeps the original invoice visible after an unpaid void and requir
   expect(html).toContain("<dt>Balance</dt><dd>CAD 0.00</dd>");
   expect(html).toContain("<dt>Total</dt><dd>CAD 100.01</dd>");
 });
+
+it("HOUR04/08 prints explicit coaching quantity, rate version and preserved replacement reference", () => {
+  for (const replacesInvoiceId of [null, "invented-original"]) {
+    const html = simpleInvoiceDocument({
+      ...invoice,
+      coaching: {
+        month: "2026-10",
+        minutes: 90,
+        rateCents: 12000,
+        rateVersion: 2,
+        rateId: "invented-rate",
+        submissionRevision: 4,
+        replacesInvoiceId,
+      },
+    });
+    expect(html).toContain("1 hour 30 minutes");
+    expect(html).toContain("CAD 120.00 per hour · rate version 2");
+    expect(html).toContain("Coaching charges");
+    expect(html.includes("Replaces void invoice")).toBe(
+      replacesInvoiceId !== null,
+    );
+  }
+});

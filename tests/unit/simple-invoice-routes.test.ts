@@ -447,3 +447,29 @@ it("OFFPUR-02 clearly names actual invoice correspondence when the issuer is con
   expect(r.text).toContain(">Send invoice email</button>");
   expect(r.text).not.toContain(">Simulate invoice email</button>");
 });
+
+it("HOUR08 coaching invoice controls direct an unpaid correction back to the retained month", async () => {
+  const f = fixture();
+  f.service.invoice.mockResolvedValueOnce(
+    ready({
+      ...invoice,
+      document: {
+        ...doc,
+        coaching: {
+          month: "2026-10",
+          minutes: 90,
+          rateCents: 12000,
+          rateVersion: 1,
+          rateId: id,
+          submissionRevision: 2,
+          replacesInvoiceId: null,
+        },
+      },
+    }),
+  );
+  const response = await f.get(`/operator/invoices/${id}`);
+  expect(response.text).toContain("return its coaching month for correction");
+  expect(response.text).toContain(
+    "Paid or partially paid corrections are unavailable",
+  );
+});

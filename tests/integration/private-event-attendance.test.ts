@@ -285,7 +285,7 @@ it("ATTEND-01/03 owning registered member opens deliberate observation permissio
   expect((await get("/events/attendance?after=forged")).status).toBe(422);
   const exported = await get("/api/member/export");
   expect(exported.status).toBe(200);
-  expect(exported.body.version).toBe("local-member-records-v28");
+  expect(exported.body.version).toBe("local-member-records-v29");
   expect(exported.body.records.eventAttendancePermissions).toHaveLength(1);
   expect(exported.body.records.eventAttendancePermissions[0]).toMatchObject({
     registrationId: registration.receiptId,

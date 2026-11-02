@@ -1,3 +1,4 @@
+import { coachingDuration } from "./coaching-values.ts";
 import { escape, page } from "./views.ts";
 
 export interface SimpleInvoiceDocument {
@@ -15,6 +16,15 @@ export interface SimpleInvoiceDocument {
   instructions: string;
   sample: boolean;
   voidReason?: string;
+  coaching?: {
+    month: string;
+    minutes: number;
+    rateCents: number;
+    rateVersion: number;
+    rateId: string;
+    submissionRevision: number;
+    replacesInvoiceId: string | null;
+  };
 }
 
 /** Amounts come from the validated immutable invoice, never query/form values. */
@@ -28,6 +38,6 @@ export function simpleInvoiceDocument(invoice: SimpleInvoiceDocument) {
   const total = subtotal + invoice.taxCents;
   return page(
     `Invoice ${invoice.number}`,
-    `<article class="invoice-document"><p>${invoice.sample ? "SAMPLE · NOT PAYABLE" : "INVOICE"}</p><h1>Invoice</h1><p class="invoice-reference">${escape(invoice.number)}</p><p>Issued ${escape(invoice.issuedOn)}</p>${invoice.voidReason ? `<p role="status"><strong>VOID · No payment due</strong> — ${escape(invoice.voidReason)}</p>` : ""}<h2>From</h2><p class="invoice-instructions">${escape(invoice.issuer)}</p><h2>Bill to</h2><p>${escape(invoice.billedTo)}</p>${invoice.billing.kind === "one_time" ? "<p>One-time billing</p>" : `<p>Recurring billing · Period starts ${escape(invoice.billing.periodStart)} and ends before ${escape(invoice.billing.periodEnd)}. No automatic payment is taken.</p>`}<table><caption>Included courses</caption><thead><tr><th scope="col">Description</th><th scope="col">Amount</th></tr></thead><tbody>${invoice.lines.map((line) => `<tr><td>${escape(line.description)}</td><td>${money(line.amountCents)}</td></tr>`).join("")}</tbody></table><dl><dt>Subtotal</dt><dd>${money(subtotal)}</dd><dt>Tax</dt><dd>${money(invoice.taxCents)}</dd><dt>Total</dt><dd>${money(total)}</dd><dt>Recorded payment</dt><dd>${money(invoice.paidCents)}</dd><dt>Balance</dt><dd>${money(invoice.voidReason ? 0 : total - invoice.paidCents)}</dd></dl><h2>Offline payment</h2><p class="invoice-instructions">${escape(invoice.instructions)}</p>${invoice.sample ? "<p>This sample cannot be paid. Its issuer, amounts and tax are invented preview values.</p>" : "<p>Payment is confirmed after staff records received funds against this invoice.</p>"}</article><aside class="invoice-controls"><p>Use your browser’s Print command to print this invoice or save it as a PDF.</p><p><a href="/account/purchases">Courses and invoices</a> · <a href="/account">My account</a></p></aside>`,
+    `<article class="invoice-document"><p>${invoice.sample ? "SAMPLE · NOT PAYABLE" : "INVOICE"}</p><h1>Invoice</h1><p class="invoice-reference">${escape(invoice.number)}</p><p>Issued ${escape(invoice.issuedOn)}</p>${invoice.voidReason ? `<p role="status"><strong>VOID · No payment due</strong> — ${escape(invoice.voidReason)}</p>` : ""}<h2>From</h2><p class="invoice-instructions">${escape(invoice.issuer)}</p><h2>Bill to</h2><p>${escape(invoice.billedTo)}</p>${invoice.billing.kind === "one_time" ? "<p>One-time billing</p>" : `<p>Recurring billing · Period starts ${escape(invoice.billing.periodStart)} and ends before ${escape(invoice.billing.periodEnd)}. No automatic payment is taken.</p>`}${invoice.coaching ? `<h2>Monthly coaching</h2><p>Month: ${escape(invoice.coaching.month)} · ${coachingDuration(invoice.coaching.minutes)} · ${money(invoice.coaching.rateCents)} per hour · rate version ${invoice.coaching.rateVersion} · submitted revision ${invoice.coaching.submissionRevision}</p>${invoice.coaching.replacesInvoiceId ? `<p>Replaces void invoice DN-${escape(invoice.coaching.replacesInvoiceId)}. The original remains retained.</p>` : ""}` : ""}<table><caption>${invoice.coaching ? "Coaching charges" : "Included courses"}</caption><thead><tr><th scope="col">Description</th><th scope="col">Amount</th></tr></thead><tbody>${invoice.lines.map((line) => `<tr><td>${escape(line.description)}</td><td>${money(line.amountCents)}</td></tr>`).join("")}</tbody></table><dl><dt>Subtotal</dt><dd>${money(subtotal)}</dd><dt>Tax</dt><dd>${money(invoice.taxCents)}</dd><dt>Total</dt><dd>${money(total)}</dd><dt>Recorded payment</dt><dd>${money(invoice.paidCents)}</dd><dt>Balance</dt><dd>${money(invoice.voidReason ? 0 : total - invoice.paidCents)}</dd></dl><h2>Offline payment</h2><p class="invoice-instructions">${escape(invoice.instructions)}</p>${invoice.sample ? "<p>This sample cannot be paid. Its issuer, amounts and tax are invented preview values.</p>" : "<p>Payment is confirmed after staff records received funds against this invoice.</p>"}</article><aside class="invoice-controls"><p>Use your browser’s Print command to print this invoice or save it as a PDF.</p><p><a href="/account/purchases">Courses and invoices</a> · <a href="/account">My account</a></p></aside>`,
   );
 }

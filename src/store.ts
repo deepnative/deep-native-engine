@@ -229,6 +229,7 @@ export async function migrate(pool: Pool) {
       "080-learning-workspace.sql",
       "082-simple-invoices.sql",
       "083-verified-administrator-sessions.sql",
+      "084-monthly-coaching.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

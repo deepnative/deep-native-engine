@@ -2169,7 +2169,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v28",
+          version: "local-member-records-v29",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2209,7 +2209,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v28",
+    version: "local-member-records-v29",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -5444,7 +5444,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v28" as const,
+    version: "local-member-records-v29" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
