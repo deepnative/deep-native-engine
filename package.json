@@ -28,7 +28,7 @@
   "dependencies": {
     "@azure/communication-email": "1.1.0",
     "@azure/core-rest-pipeline": "1.25.0",
-    "@azure/identity": "4.13.0",
+    "@azure/identity": "4.14.1",
     "@azure/storage-blob": "12.33.0",
     "cookie-parser": "1.4.7",
     "express": "5.2.1",
@@ -43,12 +43,12 @@
     "@types/node": "24.13.6",
     "@types/pg": "8.23.1",
     "@types/supertest": "7.2.1",
-    "@vitest/coverage-v8": "5.0.1",
+    "@vitest/coverage-v8": "5.0.5",
     "eslint": "10.11.0",
     "prettier": "3.9.8",
     "supertest": "7.3.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.70.1",
-    "vitest": "5.0.1"
+    "vitest": "5.0.5"
   }
 }
