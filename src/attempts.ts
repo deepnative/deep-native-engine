@@ -18,6 +18,8 @@ export interface AssignmentAttempt {
   contentId: string;
   contentVersion: number;
   title: string;
+  // Brief of the pinned assignment version; read only with attempt detail.
+  brief?: string;
   rubric: string | null;
   rubricVersion: number | null;
   goalAtStart: string;
@@ -51,7 +53,7 @@ export type AssignmentReflectionInput = Pick<
 >;
 export type AssignmentAttemptListItem = Omit<
   AssignmentAttempt,
-  "response" | "submissions" | "rubric" | "rubricVersion"
+  "response" | "submissions" | "brief" | "rubric" | "rubricVersion"
 >;
 export interface AttemptStore {
   list(token: string): Promise<AssignmentAttemptListItem[] | null>;
@@ -203,7 +205,7 @@ export function attemptStore(pool: Pool): AttemptStore {
       return fencedOperation(hash(token), async (client, memberId) => {
         const attempt = (
           await client.query<AssignmentAttempt>(
-            `SELECT ${columns},cv.rubric,
+            `SELECT ${columns},cv.body AS brief,cv.rubric,
               cv.rubric_version AS "rubricVersion",a.response
              FROM assignment_attempts a
              JOIN content_versions cv ON cv.id=a.content_id

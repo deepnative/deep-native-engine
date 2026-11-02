@@ -1574,6 +1574,40 @@ it("renders a failed onboarding attempt for correction without a saved member", 
   expect(html).toContain('aria-describedby="timezone-help timezone-error"');
 });
 
+it("ATTEMPT-BRIEF-01 shows the pinned assignment brief above the response", () => {
+  const item: AssignmentAttempt = {
+    id: "11111111-1111-4111-8111-111111111111",
+    contentId: "SYN-960",
+    contentVersion: 3,
+    title: "Invented assignment",
+    brief: "Check the <invented> plan and name one missing owner.",
+    rubric: null,
+    rubricVersion: null,
+    goalAtStart: "everyday",
+    response: "",
+    revision: 1,
+    startedAt: new Date("2026-09-24T00:00:00Z"),
+    savedAt: null,
+    submittedAt: null,
+    currentPublished: false,
+    currentEligible: true,
+  };
+  const page = assignmentAttemptPage(item, "csrf");
+  expect(page).toContain("<h2>Assignment brief</h2>");
+  expect(page).toContain(
+    "From the exact assignment version this attempt keeps.",
+  );
+  expect(page).toContain(
+    "Check the &lt;invented&gt; plan and name one missing owner.",
+  );
+  expect(page.indexOf("Assignment brief")).toBeLessThan(
+    page.indexOf("Your response"),
+  );
+  expect(
+    assignmentAttemptPage({ ...item, brief: undefined }, "csrf"),
+  ).not.toContain("Assignment brief");
+});
+
 it("renders private attempt states without treating a local submission as reviewed work", () => {
   const item: AssignmentAttempt = {
     id: "11111111-1111-4111-8111-111111111111",
