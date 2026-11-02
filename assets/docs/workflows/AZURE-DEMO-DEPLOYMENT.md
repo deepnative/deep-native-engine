@@ -45,6 +45,10 @@ The workflow runs on a push to current main only when `DNE_DURABLE_RELEASE_ENABL
 An ordinary Container App revision restart reconnects to the same managed PostgreSQL and Blob container; it must not recreate empty data. Existing member cookies remain on their original hostname. Finite staff credentials/grants still expire; do not renew them silently. The explicit support administration command uses the same database identity boundary and writes private credentials only to its guarded private operator directory. Local `make preview` is a separate temporary rehearsal and is never a recovery substitute for hosted data.
 
 
+## Deployment outcome report
+
+After every actual deployment, lead the owner update with the delivered user-visible changes, the runnable hosted journey and what was actually checked. Name remaining limits and disabled capabilities. Then report the performance review below, including full local gate, receipt reuse, scheduling, image build and readiness timings plus first failures. Never report timings alone or describe an intended change as deployed. The owner requested continued bounded invoice/admin delivery until told to stop; a report is a checkpoint, not an automatic stop.
+
 ## Performance review after every deployment
 
 Before release closeout, review original timings for complete local verification and its slowest groups/stages, receipt-aware push reuse or fallback, review/merge and queue delays, Azure image build/push, rollout/readiness and public validation. Compare like-for-like prior evidence and explain regressions or duplicate work; identify a concrete optimization when warranted. Include failed/changed-source campaigns in total lead time, separately from the final successful execution stages. Do not rerun unchanged verification just to measure it, weaken gates or add Actions tests. Preserve the original reports and link the review from the release handoff.

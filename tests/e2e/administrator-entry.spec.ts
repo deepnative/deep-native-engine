@@ -1,3 +1,4 @@
+import { billingProfileStore } from "../../src/billing-profile.ts";
 import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
 import { catalogStore } from "../../src/catalog.ts";
 import { test, expect, type Page } from "@playwright/test";
@@ -124,6 +125,7 @@ async function fixture(
         enter: (token) => administratorEntry(fault).enter(token),
       },
       staffEntry: staffEntryStore(pool),
+      billingProfiles: billingProfileStore(pool),
       simpleInvoices: simpleInvoiceStore(pool, {
         sample: true,
         issuer: "Invented issuer",
@@ -144,6 +146,9 @@ async function fixture(
     members,
     email,
     server,
+    get emailLink() {
+      return link;
+    },
     get commits() {
       return commits;
     },
@@ -214,6 +219,7 @@ test("[L269] both verified owner identities explicitly enter finite billing admi
       );
       await page.goto(f.origin + "/account");
       await page
+        .getByRole("navigation", { name: "Main navigation" })
         .getByRole("link", { name: "Administration", exact: true })
         .click();
       await expect(
@@ -481,6 +487,120 @@ test("[L277] ADMINCON01–04 selects an exact learner, composes existing terms a
     ).toBe(403);
     expect(await f.members.progress(f.id)).toMatchObject({
       instruction: "Invented retained learning draft",
+    });
+  } finally {
+    await closeLoopback(f.server);
+  }
+});
+
+test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the same proposal after email recovery and preserves invoice history", async ({
+  page,
+}) => {
+  const f = await fixture(page, "tom@deepnative.io", "professional");
+  try {
+    await f.verify();
+    await f.publishCourse();
+    await page.goto(f.origin + "/account");
+    await page
+      .getByRole("link", { name: "Billing recipient", exact: true })
+      .click();
+    await page
+      .getByLabel("Invoice recipient name")
+      .fill("Invented original recipient");
+    await page
+      .getByLabel("Invoice email", { exact: true })
+      .fill("billing@example.invalid");
+    await page.getByRole("button", { name: "Save billing recipient" }).click();
+    await page.reload();
+    await expect(page.getByLabel("Invoice email", { exact: true })).toHaveValue(
+      "billing@example.invalid",
+    );
+    await page.goto(f.origin + "/account/coaching");
+    await expect(page.getByLabel("Invoice recipient name")).toHaveValue(
+      "Invented original recipient",
+    );
+    await page.goto(f.origin + "/admin");
+    await page
+      .getByRole("button", { name: "Enter administration", exact: true })
+      .click();
+    const staff = (await page.context().cookies(f.origin)).find(
+      (c) => c.name === "dne_staff",
+    )!.value;
+    const invoices = simpleInvoiceStore(pool, {
+      sample: true,
+      issuer: "Invented issuer",
+      instructions: "Sample not payable",
+    });
+    const p = await invoices.propose(staff, {
+      ownerId: f.id,
+      operationId: crypto.randomUUID(),
+      courses: [{ id: "ADM-565", version: 1, amountCents: 1200 }],
+      cadence: "monthly",
+      startsOn: new Date().toISOString().slice(0, 10),
+      taxCents: 0,
+    });
+    if (p.kind !== "ready") throw Error("Missing proposal");
+    await page.goto(f.origin + "/account");
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await page.goto(f.origin + "/courses/proposals/" + p.value.planId);
+    await expect(
+      page.getByRole("heading", { name: "Return to your course proposal" }),
+    ).toBeVisible();
+    const priorLink = f.emailLink;
+    await page
+      .getByRole("link", { name: "Email sign-in", exact: true })
+      .click();
+    await page.getByLabel("Email address").fill("tom@deepnative.io");
+    await page.getByRole("button", { name: "Send sign-in link" }).click();
+    await expect.poll(() => f.emailLink).not.toBe(priorLink);
+    await page.goto(f.emailLink.replace("http://127.0.0.1:0", f.origin));
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(page).toHaveURL(
+      f.origin + "/account/purchases#plan-" + p.value.planId,
+    );
+    await expect(page.getByLabel("Invoice recipient name")).toHaveValue(
+      "Invented original recipient",
+    );
+    await page
+      .getByRole("checkbox", { name: /I accept these exact courses/ })
+      .check();
+    await page
+      .getByRole("button", { name: "Accept courses and create invoice" })
+      .click();
+    await expect(
+      page.getByText("SAMPLE · NOT PAYABLE", { exact: true }),
+    ).toBeVisible();
+    const invoiceUrl = page.url();
+    await page.goto(f.origin + "/account/billing");
+    await page
+      .getByLabel("Invoice recipient name")
+      .fill("Invented changed recipient");
+    await page.getByRole("button", { name: "Save billing recipient" }).click();
+    await page.goto(invoiceUrl);
+    await expect(
+      page.getByText("Invented original recipient", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Invented changed recipient", { exact: true }),
+    ).toHaveCount(0);
+    await page.goto(f.origin + "/account/purchases");
+    await page.getByRole("checkbox", { name: /Stop future invoices/ }).check();
+    await page.getByRole("button", { name: "Cancel future billing" }).click();
+    await expect(
+      page.getByText("SAMPLE · NOT PAYABLE · cancelled", { exact: true }),
+    ).toBeVisible();
+    expect(await f.members.progress(f.id)).toMatchObject({
+      instruction: "Invented retained learning draft",
+    });
+    await page.goto(f.origin + "/account/billing");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      ),
+    ).toBe(false);
+    await page.screenshot({
+      path: test.info().outputPath("billing-profile.png"),
+      fullPage: true,
     });
   } finally {
     await closeLoopback(f.server);

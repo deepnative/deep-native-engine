@@ -177,7 +177,7 @@ it("MOUT-05 deletion owning the principal lock wins without signout restoring th
   ).toBe(0);
 });
 
-it("MOUT-01/04 a copied member bearer loses HTTP reads and writes while staff cookie survives", async () => {
+it("MOUT-01/04 a copied member bearer loses HTTP reads and writes and ends the browser staff cookie", async () => {
   const owner = await linked();
   const staffCookie = "dne_staff=" + "c".repeat(64);
   await withLoopback(
@@ -194,6 +194,7 @@ it("MOUT-01/04 a copied member bearer loses HTTP reads and writes while staff co
       expect(signedOut.status).toBe(200);
       expect(signedOut.headers["set-cookie"]).toEqual([
         expect.stringContaining("dne_preview=;"),
+        expect.stringContaining("dne_staff=signed-out;"),
       ]);
       const copied = await http
         .get("/account")

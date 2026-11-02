@@ -1,3 +1,8 @@
+import {
+  invoiceResumeTarget,
+  mountInvoiceSelection,
+} from "./invoice-selection.ts";
+import type { BillingProfileStore } from "./billing-profile.ts";
 import { mountCoachingRoutes } from "./coaching-routes.ts";
 import { mountAdministratorEntry } from "./administrator-entry-routes.ts";
 import type { AdministratorEntry } from "./administrator-entry.ts";
@@ -374,6 +379,7 @@ export function app(
     learningWorkspacePublication?: LearningWorkspacePublicationStore;
     programs?: ProgramStore;
     simpleInvoices?: SimpleInvoiceStore;
+    billingProfiles?: BillingProfileStore;
     invoiceSender?: InvoiceSender;
     foundationImport?: FoundationImportStore;
     assignmentImport?: FoundationImportStore;
@@ -428,6 +434,7 @@ export function app(
     manualObservations?: ManualObservationStore;
     assignmentReadiness?: AssignmentReadinessStore;
     memberEmail?: MemberEmailAccess;
+    memberSignOut?: MemberEmailAccess["signOut"];
     uploadAdmission?: UploadAdmissionStore;
   },
 ) {
@@ -739,14 +746,17 @@ export function app(
     next();
   });
   app.get("/readiness", (_req, res) => res.send(readinessPage(mode, adapters)));
-  const resumeProgram = (raw: string | undefined) =>
+  const resumeSelection = (raw: string | undefined) =>
+    invoiceResumeTarget(raw, options.secret) ??
     programResumeTarget(raw, options.secret);
+  mountInvoiceSelection(app, store, options);
   mountMemberEmailRoutes(
     app,
     store,
     options.memberEmail,
     options.origin,
-    resumeProgram,
+    resumeSelection,
+    options.memberSignOut,
   );
   mountProgramRoutes(
     app,
@@ -1319,7 +1329,7 @@ export function app(
           res.locals.token as string,
           cookieOptions(options.origin, session.expiresAt),
         );
-      res.redirect(303, resumeProgram(req.headers.cookie) ?? "/learn");
+      res.redirect(303, resumeSelection(req.headers.cookie) ?? "/learn");
       return;
     }
     const fresh =
@@ -1352,7 +1362,7 @@ export function app(
       return;
     }
     await store.create(res.locals.token as string, start.input);
-    res.redirect(303, resumeProgram(req.headers.cookie) ?? "/learn");
+    res.redirect(303, resumeSelection(req.headers.cookie) ?? "/learn");
   });
   app.use(
     [

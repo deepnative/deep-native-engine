@@ -1,12 +1,30 @@
 import express from "express";
 import request from "supertest";
-import { expect, it, vi } from "vitest";
+import type { Server } from "node:http";
+import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
+import { afterEach, expect, it, vi } from "vitest";
 import { mountAdministratorEntry } from "../../src/administrator-entry-routes.ts";
 import type {
   AdministratorResult,
   AdministratorConsoleResult,
 } from "../../src/administrator-entry.ts";
 import { csrf, COOKIE } from "../../src/session.ts";
+const listeners = new WeakMap<express.Express, Promise<Server>>();
+const ownedServers: Promise<Server>[] = [];
+async function http(application: express.Express) {
+  let server = listeners.get(application);
+  if (!server) {
+    server = listenLoopback(application);
+    listeners.set(application, server);
+    ownedServers.push(server);
+  }
+  return request(await server);
+}
+afterEach(async () => {
+  await Promise.all(
+    ownedServers.splice(0).map(async (server) => closeLoopback(await server)),
+  );
+});
 const origin = "http://127.0.0.1:3000",
   secret = "invented-admin-route-secret",
   token = "a".repeat(64),
@@ -67,14 +85,14 @@ function fixture(
   );
   return { app, state, fn };
 }
-function post(
+async function post(
   app: express.Express,
   path = "enter",
   body: Record<string, string> = { csrf: csrf(token, secret) },
   cookie = `${COOKIE}=${token}`,
   source = origin,
 ) {
-  return request(app)
+  return (await http(app))
     .post(`/admin/${path}`)
     .set("Origin", source)
     .set("Cookie", cookie)
@@ -83,7 +101,9 @@ function post(
 }
 it("ADMINONLY01/04 shows deliberate entry and keeps learner cookie unchanged", async () => {
   const f = fixture();
-  const page = await request(f.app)
+  const page = await (
+    await http(f.app)
+  )
     .get("/admin")
     .set("Cookie", `${COOKIE}=${token}`);
   expect(page.status).toBe(200);
@@ -117,7 +137,7 @@ it("ADMINONLY02 denies missing/duplicate cookies, forged body, origin, CSRF and 
   ]) {
     const f = fixture();
     expect(
-      (await request(f.app).get("/admin").set("Cookie", cookie)).status,
+      (await (await http(f.app)).get("/admin").set("Cookie", cookie)).status,
     ).toBe(403);
     expect(
       (await post(f.app, "enter", { csrf: csrf(token, secret) }, cookie))
@@ -148,7 +168,9 @@ it("ADMINONLY02 denies missing/duplicate cookies, forged body, origin, CSRF and 
   ).toBe(403);
   expect(
     (
-      await request(f.app)
+      await (
+        await http(f.app)
+      )
         .get("/admin?owner=forged")
         .set("Cookie", `${COOKIE}=${token}`)
     ).status,
@@ -159,14 +181,16 @@ it("ADMINONLY02 denies missing/duplicate cookies, forged body, origin, CSRF and 
 it("ADMINONLY03/05 refuses disabled/live or missing stores and denies unknown results without credentials", async () => {
   for (const o of [{ disabled: true }, { live: true }]) {
     const f = fixture(o);
-    expect((await request(f.app).get("/admin")).status).toBe(404);
+    expect((await (await http(f.app)).get("/admin")).status).toBe(404);
     expect((await post(f.app)).status).toBe(404);
     expect(f.fn).not.toHaveBeenCalled();
   }
   const missing = fixture({ missing: true });
   expect(
     (
-      await request(missing.app)
+      await (
+        await http(missing.app)
+      )
         .get("/admin")
         .set("Cookie", `${COOKIE}=${token}`)
     ).status,
@@ -176,8 +200,13 @@ it("ADMINONLY03/05 refuses disabled/live or missing stores and denies unknown re
     const f = fixture();
     f.state.result = { kind };
     expect(
-      (await request(f.app).get("/admin").set("Cookie", `${COOKIE}=${token}`))
-        .status,
+      (
+        await (
+          await http(f.app)
+        )
+          .get("/admin")
+          .set("Cookie", `${COOKIE}=${token}`)
+      ).status,
     ).toBe(kind === "denied" ? 403 : 503);
     expect((await post(f.app)).status).toBe(kind === "denied" ? 403 : 503);
   }
@@ -199,7 +228,9 @@ it("ADMINONLY03/05 refuses disabled/live or missing stores and denies unknown re
 
 it("ADMINCON01 offers one administration workspace instead of a missing route", async () => {
   const f = fixture();
-  const response = await request(f.app)
+  const response = await (
+    await http(f.app)
+  )
     .get("/operator")
     .set("Cookie", `dne_staff=${credential}`);
   expect(response.status).toBe(200);
@@ -231,7 +262,9 @@ it("ADMINCON01/02 renders only bounded account and billing summaries with escape
       },
     },
   };
-  const r = await request(f.app)
+  const r = await (
+    await http(f.app)
+  )
     .get("/operator?ownerId=" + id)
     .set("Cookie", `dne_staff=${credential}`);
   expect(r.status).toBe(200);
@@ -245,7 +278,9 @@ it("ADMINCON01/02 renders only bounded account and billing summaries with escape
   f.state.directory.value.selected!.enrollments = [];
   f.state.directory.value.selected!.plans = [];
   f.state.directory.value.selected!.invoices = [];
-  const empty = await request(f.app)
+  const empty = await (
+    await http(f.app)
+  )
     .get("/operator")
     .set("Cookie", `dne_staff=${credential}`);
   expect(empty.text).toContain("No recorded enrollment");
@@ -255,7 +290,9 @@ it("ADMINCON01/02 renders only bounded account and billing summaries with escape
   off.state.directory = f.state.directory;
   expect(
     (
-      await request(off.app)
+      await (
+        await http(off.app)
+      )
         .get("/operator")
         .set("Cookie", `dne_staff=${credential}`)
     ).text,
@@ -269,7 +306,7 @@ it("ADMINCON04 denies direct malformed or expired console requests without autho
     `dne_staff=${credential}; dne_staff=${credential}`,
   ])
     expect(
-      (await request(f.app).get("/operator").set("Cookie", cookie)).status,
+      (await (await http(f.app)).get("/operator").set("Cookie", cookie)).status,
     ).toBe(403);
   for (const query of [
     "?ownerId=wrong",
@@ -278,19 +315,23 @@ it("ADMINCON04 denies direct malformed or expired console requests without autho
   ])
     expect(
       (
-        await request(f.app)
+        await (
+          await http(f.app)
+        )
           .get("/operator" + query)
           .set("Cookie", `dne_staff=${credential}`)
       ).status,
     ).toBe(403);
   for (const opts of [{ disabled: true }, { live: true }])
-    expect((await request(fixture(opts).app).get("/operator")).status).toBe(
-      404,
-    );
+    expect(
+      (await (await http(fixture(opts).app)).get("/operator")).status,
+    ).toBe(404);
   for (const opts of [{ missing: true }, { missingConsole: true }])
     expect(
       (
-        await request(fixture(opts).app)
+        await (
+          await http(fixture(opts).app)
+        )
           .get("/operator")
           .set("Cookie", `dne_staff=${credential}`)
       ).status,
@@ -303,7 +344,9 @@ it("ADMINCON04 denies direct malformed or expired console requests without autho
     f.state.directory = { kind };
     expect(
       (
-        await request(f.app)
+        await (
+          await http(f.app)
+        )
           .get("/operator")
           .set("Cookie", `dne_staff=${credential}`)
       ).status,
@@ -312,7 +355,9 @@ it("ADMINCON04 denies direct malformed or expired console requests without autho
   f.state.throws = true;
   expect(
     (
-      await request(f.app)
+      await (
+        await http(f.app)
+      )
         .get("/operator")
         .set("Cookie", `dne_staff=${credential}`)
     ).status,

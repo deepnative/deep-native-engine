@@ -557,3 +557,23 @@ it.each(["write", "commit"])(
     });
   },
 );
+
+it("NAV-03 deliberately signs out without an email provider and preserves saved records", async () => {
+  const owner = await member(),
+    other = await member();
+  await members.save(owner.token, {
+    revision: 0,
+    instruction: "Keep my private plan",
+    verification: "Invented evidence",
+    complete: false,
+  });
+  expect(await access.signOut(owner.token)).toBe("recovery_required");
+  expect((await members.session(owner.token)).kind).toBe("active");
+  expect(await access.signOut(owner.token, true)).toBe("signed_out");
+  expect((await members.session(owner.token)).kind).not.toBe("active");
+  expect(await members.progress(owner.id)).toMatchObject({
+    instruction: "Keep my private plan",
+  });
+  expect((await members.session(other.token)).kind).toBe("active");
+  expect(sent).toHaveLength(0);
+});

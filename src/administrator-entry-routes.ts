@@ -34,7 +34,7 @@ export function mountAdministratorEntry(
       .send(
         page(
           "Administration unavailable",
-          '<section class="reading"><h1>Administration unavailable</h1><p>Use your current verified owner account. No authority was renewed or operation replayed. If a previous entry could not be confirmed, end administration before deliberately entering again.</p><p><a href="/admin">Administration</a> · <a href="/email/sign-in">Email sign-in</a> · <a href="/learn">Learning</a></p></section>',
+          '<section class="reading"><h1>Administration unavailable</h1><p>Use your current verified owner account. Administration is restricted to the existing approved owners. Open Email sign-in with your already verified owner email, return to Administration, then choose Enter administration. A learning profile or billing email does not grant administrator access. No authority was renewed or operation replayed. If a previous entry could not be confirmed, end administration before deliberately entering again.</p><p><a href="/admin">Administration</a> · <a href="/email/sign-in">Email sign-in</a> · <a href="/learn">Learning</a></p></section>',
         ),
       );
   async function attempt(action: "status" | "enter" | "end", token: string) {

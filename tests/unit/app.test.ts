@@ -1,3 +1,7 @@
+import {
+  invoiceSelection,
+  INVOICE_SELECTION_COOKIE,
+} from "../../src/invoice-selection.ts";
 import { eventAttendanceStore } from "../../src/event-attendance.ts";
 import type { PreparedSampleStore } from "../../src/prepared-samples.ts";
 import {
@@ -2178,7 +2182,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v29",
+          version: "local-member-records-v30",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2218,7 +2222,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v29",
+    version: "local-member-records-v30",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -5749,7 +5753,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v29" as const,
+    version: "local-member-records-v30" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -6646,9 +6650,19 @@ it("HOSTED-12 presents accurate hosted persistence while concurrent local render
   );
   expect(publicHome.text).not.toContain("Your work stays on this computer");
   expect(publicHome.text).not.toContain("LOCAL LEARNING PREVIEW");
-  expect(publicHome.text).toContain(
-    "No AI provider, payment or formal assessment is connected.",
-  );
+  for (const html of [publicHome.text, localHome.text]) {
+    const footer = html.match(/<footer>([\s\S]*?)<\/footer>/)?.[1];
+    expect(footer).toBeDefined();
+    for (const copy of [
+      "Azure-hosted service",
+      "Azure PostgreSQL",
+      "Uploaded private files",
+      "Local preview",
+      "No AI provider, payment or formal assessment",
+    ])
+      expect(footer).not.toContain(copy);
+    expect(footer).toContain("Explore programs");
+  }
   expect(localHome.text).toContain("Your work stays on this computer");
   expect(localHome.text).not.toContain("LOCAL LEARNING PREVIEW");
 });
@@ -6838,4 +6852,43 @@ it("ASN103-01 denies invalid imports and provides honest recovery for uncertain 
     .type("form")
     .send({ confirm: "yes", csrf: disabledCsrf })
     .expect(503);
+});
+
+it("BILLPROFILE01 resumes a selected proposal after ordinary registration and return without any purchase authorization", async () => {
+  const db = storage(),
+    agent = await managedAgent(app(db, { origin, secret: "secret" }));
+  const home = await agent.get("/").set("Host", host).expect(200),
+    session = (home.headers["set-cookie"] as unknown as string[])[0]!.split(
+      ";",
+    )[0]!,
+    anti = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!,
+    id = "11111111-1111-4111-8111-111111111111";
+  const cookie = `${session}; ${INVOICE_SELECTION_COOKIE}=${invoiceSelection(id, "secret")}`;
+  await agent
+    .post("/start")
+    .set("Host", host)
+    .set("Origin", origin)
+    .set("Cookie", cookie)
+    .type("form")
+    .send({
+      csrf: anti,
+      background: "explorer",
+      goal: "everyday",
+      synthetic: "yes",
+    })
+    .expect(303)
+    .expect("Location", `/account/purchases#plan-${id}`);
+  expect(db.create).toHaveBeenCalledOnce();
+  expect(db.save).not.toHaveBeenCalled();
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
+  await agent
+    .get("/")
+    .set("Host", host)
+    .set("Cookie", cookie)
+    .expect(303)
+    .expect("Location", `/account/purchases#plan-${id}`);
 });

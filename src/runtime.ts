@@ -1,3 +1,4 @@
+import { billingProfileStore } from "./billing-profile.ts";
 import { administratorEntry } from "./administrator-entry.ts";
 import { simpleInvoiceSettings } from "./simple-invoice-config.ts";
 import { simpleInvoiceStore } from "./simple-invoice-store.ts";
@@ -26,7 +27,7 @@ import type { Server } from "node:http";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.ts";
-import { memberEmailAccess } from "./member-email-access.ts";
+import { memberEmailAccess, signOutMember } from "./member-email-access.ts";
 import { azureEmailSender, azureInvoiceSender } from "./azure-email-sender.ts";
 import { azureObjectStorage } from "./azure-object-storage.ts";
 import { migrate, store } from "./store.ts";
@@ -128,6 +129,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       : undefined;
     const options = {
       simpleInvoices: invoices,
+      billingProfiles: billingProfileStore(pool),
       invoiceSender: !invoiceSettings
         ? undefined
         : invoiceSettings.sample
@@ -144,6 +146,8 @@ export async function start(env: NodeJS.ProcessEnv) {
         enabled: settings.assignmentHandoff,
       }),
       hostedOrigin: settings.hosted?.origin,
+      memberSignOut: (token: string, acknowledgeAccessLoss?: boolean) =>
+        signOutMember(pool, token, acknowledgeAccessLoss),
       memberEmail:
         settings.emailEndpoint && settings.emailSender && settings.hosted
           ? memberEmailAccess(

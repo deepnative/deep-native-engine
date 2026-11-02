@@ -114,6 +114,18 @@ for (const journey of journeys)
           name: "Turn a vague request into a useful one",
         }),
       ).toBeVisible();
+      const accountActions = page.getByRole("navigation", {
+        name: "Learning account",
+      });
+      for (const label of [
+        "My account",
+        "Sign out",
+        "Coaching hours",
+        "Administration",
+      ])
+        await expect(
+          accountActions.getByRole("link", { name: label, exact: true }),
+        ).toBeVisible();
       await expect(page.locator(".guidance-source")).toContainText(
         journey.source,
       );
