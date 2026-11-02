@@ -8,15 +8,15 @@ The **Reopen this proposal after sign-in** link remembers only a proposal UUID i
 
 Recipient edits use a revision and the existing member→workspace lifetime/erasure fences. Two concurrent edits cannot silently overwrite one another. Validation or stale forms retain attempted text with a recovery message. An uncertain storage response is not proof of a save: inspect the current profile before another action. Current member token, origin and CSRF protect writes; unknown fields/owner IDs are rejected. No administrator recipient editor was needed for this bounded member outcome.
 
-Migration085 creates only the member-owned billing_profiles table with cascade erasure. Private export v30 appends section55 after all existing sections; previous cursor section identities remain stable. Learning-account removal erases the reusable profile. Existing issued financial history follows its separate sample/configured retention policy; profile edits/deletion do not silently change financial history.
+Migration086 creates only the member-owned billing_profiles table with cascade erasure. Private export v30 appends section55 after all existing sections; previous cursor section identities remain stable. Learning-account removal erases the reusable profile. Existing issued financial history follows its separate sample/configured retention policy; profile edits/deletion do not silently change financial history.
 
 ## Acceptance mapping
 
 | Stable scenario | Executable evidence |
 | --- | --- |
-| BILLPROFILE01 selection/ordinary same-account recovery, no implied purchase | invoice-selection units; L278 desktop/mobile; retained public-program registration/confirmation cases |
-| BILLPROFILE02 private validation/revision/isolation/export/deletion | billing-profile and invoice route units; simple-invoices real PostgreSQL tests and member-export/study-unit export cases; L278 |
-| BILLPROFILE03 exact explicit confirmation and immutable snapshots | existing invoice acceptance/idempotency/stale-source tests plus new one-time/monthly native snapshot/profile tests; coaching route units; L278 |
-| BILLPROFILE04 honest sample/pending/cancel/recovery and retained work | existing invoice operation/failure tests and account states; profile uncertainty/validation units; L278 cancellation and retained private work |
+| BILLPROFILE01 selection/ordinary same-account recovery, no implied purchase | invoice-selection units; L279 desktop/mobile; retained public-program registration/confirmation cases |
+| BILLPROFILE02 private validation/revision/isolation/export/deletion | billing-profile and invoice route units; simple-invoices real PostgreSQL tests and member-export/study-unit export cases; L279 |
+| BILLPROFILE03 exact explicit confirmation and immutable snapshots | existing invoice acceptance/idempotency/stale-source tests plus new one-time/monthly native snapshot/profile tests; coaching route units; L279 |
+| BILLPROFILE04 honest sample/pending/cancel/recovery and retained work | existing invoice operation/failure tests and account states; profile uncertainty/validation units; L279 cancellation and retained private work |
 
-Original missing profile route failed expected200/actual404 before implementation. Existing identity/invoice/program behavior is reused with honest passing baselines. L278 appends one critical case: v129,275local scenarios274critical,550primary desktop/mobile executions; all prior IDs, full-MVP/provisional inventories and thresholds remain unchanged. Actual exact-revision proof, review, merge/source readback, dedicated demo and hosted verification are recorded on #571; this document alone does not assert deployment, full-MVP or qualified commercial acceptance.
+Original missing profile route failed expected200/actual404 before implementation. Existing identity/invoice/program behavior is reused with honest passing baselines. L279 appends one critical case: v130,276local scenarios275critical,552primary desktop/mobile executions; all prior IDs, full-MVP/provisional inventories and thresholds remain unchanged. Actual exact-revision proof, review, merge/source readback, dedicated demo and hosted verification are recorded on #571; this document alone does not assert deployment, full-MVP or qualified commercial acceptance.

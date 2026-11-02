@@ -15,6 +15,7 @@ import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import request from "supertest";
 import { createServer, type Server } from "node:http";
 import { app } from "../../src/app.ts";
+import type { UploadAdmissionStore } from "../../src/upload-admission.ts";
 import {
   LessonActivityUnavailable,
   type Store,
@@ -3893,6 +3894,249 @@ it("requires acknowledgement and current owner eligibility before queuing local 
     expect.stringMatching(/^[a-f0-9]{64}$/),
     id,
   );
+});
+function admissionStore() {
+  const release = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+  return {
+    release,
+    admit: vi
+      .fn<UploadAdmissionStore["admit"]>()
+      .mockResolvedValue({ kind: "admitted", release }),
+    denials: vi.fn<UploadAdmissionStore["denials"]>().mockResolvedValue([]),
+  };
+}
+async function admittedClient(
+  evidence: EvidenceStore,
+  uploadAdmission: UploadAdmissionStore,
+) {
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", evidence, uploadAdmission }),
+  );
+  const response = await agent.get("/").set("Host", host).expect(200);
+  const csrf = response.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  return { agent, csrf };
+}
+it("ADMIT-01/02/07 admits API uploads before the body is read and refuses with fixed guidance", async () => {
+  const files = evidenceStorage();
+  files.upload.mockResolvedValue({
+    kind: "created",
+    id: "11111111-1111-4111-8111-111111111111",
+    state: "pending",
+  });
+  const admission = admissionStore();
+  const { agent, csrf } = await admittedClient(files, admission);
+  active();
+  const post = () =>
+    agent
+      .post("/api/evidence")
+      .set("Host", host)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", csrf)
+      .set("Content-Type", "text/plain")
+      .set("X-Evidence-Name", "sample.txt")
+      .set("X-Evidence-Rights", "confirmed")
+      .send("Invented bytes");
+  await post().expect(201);
+  expect(admission.admit).toHaveBeenCalledWith(
+    expect.stringMatching(/^[a-f0-9]{64}$/),
+  );
+  await vi.waitFor(() => expect(admission.release).toHaveBeenCalledOnce());
+  admission.admit.mockResolvedValueOnce({
+    kind: "denied",
+    reason: "member_rate",
+    retryAfterSeconds: 1,
+  });
+  const refused = await post().expect(429);
+  expect(refused.headers["retry-after"]).toBe("1");
+  expect(refused.headers["cache-control"]).toBe("no-store");
+  expect(refused.body).toEqual({
+    error: "too_many_uploads",
+    retryAfterSeconds: 1,
+    action: "Wait 1 second, then upload again. Saved evidence is unchanged.",
+  });
+  admission.admit.mockResolvedValueOnce({ kind: "unavailable" });
+  const unavailable = await post().expect(503);
+  expect(unavailable.body).toMatchObject({ error: "uploads_unavailable" });
+  expect(files.upload).toHaveBeenCalledOnce();
+});
+it("ADMIT-03 releases a lease when the caller leaves during admission or after the upload work", async () => {
+  const files = evidenceStorage();
+  const admission = admissionStore();
+  const { agent, csrf } = await admittedClient(files, admission);
+  active();
+  const send = () =>
+    agent
+      .post("/api/evidence")
+      .set("Host", host)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", csrf)
+      .set("Content-Type", "text/plain")
+      .send("Invented bytes")
+      .timeout(100)
+      .catch(() => undefined);
+  let admit!: () => void;
+  admission.admit.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        admit = () => resolve({ kind: "admitted", release: admission.release });
+      }),
+  );
+  // Node notices the disconnect only once it reads again; either way the lease
+  // is released exactly once.
+  await send();
+  admit();
+  await vi.waitFor(() => expect(admission.release).toHaveBeenCalledOnce());
+  files.upload.mockClear();
+  let finish!: () => void;
+  files.upload.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = () => resolve({ kind: "denied" });
+      }),
+  );
+  await send();
+  await vi.waitFor(() => expect(files.upload).toHaveBeenCalledOnce());
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(admission.release).toHaveBeenCalledOnce();
+  finish();
+  await vi.waitFor(() => expect(admission.release).toHaveBeenCalledTimes(2));
+  for (const path of [
+    "/evidence",
+    "/evidence/11111111-1111-4111-8111-111111111111/revise",
+  ]) {
+    admission.admit.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          admit = () =>
+            resolve({ kind: "admitted", release: admission.release });
+        }),
+    );
+    files.owned.mockResolvedValue([
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        name: "original.txt",
+        mediaType: "text/plain",
+        quarantineState: "clean",
+        privateReviewAllowed: true,
+        privateReviewRevokedAt: null,
+        submissionStatus: "queued",
+        createdAt: new Date(),
+        revisionParentId: null,
+        revisionParentStatus: "none",
+        revisionNumber: 1,
+        hasRevision: false,
+      },
+    ] as Awaited<ReturnType<EvidenceStore["owned"]>>);
+    const calls = admission.release.mock.calls.length;
+    await agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf,
+        name: "left.txt",
+        sample: "Invented text",
+        rights_confirmed: "yes",
+        private_review_consent: "yes",
+      })
+      .timeout(100)
+      .catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    admit();
+    await vi.waitFor(() =>
+      expect(admission.release).toHaveBeenCalledTimes(calls + 1),
+    );
+  }
+});
+it("ADMIT-02 keeps typed form and revision text when an upload is refused", async () => {
+  const files = evidenceStorage();
+  const admission = admissionStore();
+  const { agent, csrf } = await admittedClient(files, admission);
+  active();
+  const fields = {
+    csrf,
+    name: "kept.txt",
+    sample: "Invented typed text",
+    rights_confirmed: "yes",
+    private_review_consent: "yes",
+  };
+  admission.admit.mockResolvedValueOnce({
+    kind: "denied",
+    reason: "global_concurrency",
+    retryAfterSeconds: 5,
+  });
+  const form = await agent
+    .post("/evidence")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send(fields)
+    .expect(429);
+  expect(form.headers["retry-after"]).toBe("5");
+  expect(form.text).toContain(
+    "Uploads are busy. Wait 5 seconds, then upload again.",
+  );
+  expect(form.text).toContain("Invented typed text");
+  admission.admit.mockResolvedValueOnce({ kind: "unavailable" });
+  files.owned.mockRejectedValueOnce(new Error("private database detail"));
+  const unavailable = await agent
+    .post("/evidence")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send(fields)
+    .expect(503);
+  expect(unavailable.headers["retry-after"]).toBe("60");
+  expect(unavailable.text).toContain("Uploads are temporarily unavailable.");
+  expect(unavailable.text).not.toContain("private database detail");
+  files.upload.mockResolvedValueOnce({
+    kind: "created",
+    id: "22222222-2222-4222-8222-222222222222",
+    state: "pending",
+  });
+  await agent
+    .post("/evidence")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send(fields)
+    .expect(303);
+  await vi.waitFor(() => expect(admission.release).toHaveBeenCalledOnce());
+  const id = "11111111-1111-4111-8111-111111111111";
+  files.owned.mockResolvedValue([
+    {
+      id,
+      name: "original.txt",
+      mediaType: "text/plain",
+      quarantineState: "clean",
+      privateReviewAllowed: true,
+      privateReviewRevokedAt: null,
+      submissionStatus: "queued",
+      createdAt: new Date(),
+      revisionParentId: null,
+      revisionParentStatus: "none",
+      revisionNumber: 1,
+      hasRevision: false,
+    },
+  ] as Awaited<ReturnType<EvidenceStore["owned"]>>);
+  admission.admit.mockResolvedValueOnce({
+    kind: "denied",
+    reason: "member_concurrency",
+    retryAfterSeconds: 5,
+  });
+  const revision = await agent
+    .post(`/evidence/${id}/revise`)
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ ...fields, sample: "Invented revision text" })
+    .expect(429);
+  expect(revision.text).toContain(
+    "Wait for your other upload to finish, then try again.",
+  );
+  expect(revision.text).toContain("Invented revision text");
+  expect(files.upload).toHaveBeenCalledOnce();
 });
 it("keeps a failed private evidence revision editable and never copies consent or reviewer access", async () => {
   const files = evidenceStorage();

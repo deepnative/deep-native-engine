@@ -34,6 +34,7 @@ import { migrate, store } from "./store.ts";
 import { app } from "./app.ts";
 import { authorizationStore } from "./authorization.ts";
 import { evidenceStore, fileObjectStorage } from "./evidence.ts";
+import { uploadAdmissionStore } from "./upload-admission.ts";
 import { preparedObjectStorage } from "./prepared-sample-storage.ts";
 import { preparedSampleStore } from "./prepared-samples.ts";
 import { assignmentEvidenceStore } from "./assignment-evidence.ts";
@@ -298,6 +299,7 @@ export async function start(env: NodeJS.ProcessEnv) {
         deterministicRegistry(env, settings.mode as "demo" | "test"),
       ),
       localAiControl: localAiControlStore(pool),
+      uploadAdmission: uploadAdmissionStore(pool),
       evidence: evidenceStore(
         pool,
         objects,
