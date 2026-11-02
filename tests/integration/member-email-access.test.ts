@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { randomBytes } from "node:crypto";
+import type { Server } from "node:http";
 import request from "supertest";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 import { app } from "../../src/app.ts";
 import { memberEmailAccess } from "../../src/member-email-access.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
@@ -25,13 +27,21 @@ const access = memberEmailAccess(
 );
 const application = app(members, { origin, secret, memberEmail: access });
 
-beforeAll(() => migrate(pool));
+// #105: bind the owned test server to 127.0.0.1 so another lane cannot answer.
+let server: Server;
+beforeAll(async () => {
+  await migrate(pool);
+  server = await listenLoopback(application);
+});
 beforeEach(async () => {
   delivered.length = 0;
   failDelivery = false;
   await pool.query("TRUNCATE principals CASCADE");
 });
-afterAll(() => pool.end());
+afterAll(async () => {
+  await closeLoopback(server);
+  await pool.end();
+});
 
 async function member() {
   const token = randomBytes(32).toString("hex");
@@ -45,7 +55,7 @@ function code() {
   return new URL(delivered.at(-1)!.link).searchParams.get("code")!;
 }
 function post(path: string, value: Record<string, string>, cookie?: string) {
-  const call = request(application)
+  const call = request(server)
     .post(path)
     .set("Host", "127.0.0.1:3000")
     .set("Origin", origin);
@@ -53,7 +63,7 @@ function post(path: string, value: Record<string, string>, cookie?: string) {
   return call.type("form").send({ ...value, csrf: csrf(cookie ?? "", secret) });
 }
 async function anonymousPost(path: string, value: Record<string, string>) {
-  const landing = await request(application)
+  const landing = await request(server)
     .get("/email/sign-in")
     .set("Host", "127.0.0.1:3000");
   const cookie = landing.headers["set-cookie"]?.[0]?.match(
@@ -87,7 +97,7 @@ it("EMAIL-ACCESS-01/02 links only the current verified member and reopens the sa
   await vi.waitFor(() => expect(delivered).toHaveLength(1), { timeout: 3000 });
   expect(delivered[0]?.address).toBe("member@example.com");
   const attachCode = code();
-  const preview = await request(application)
+  const preview = await request(server)
     .get(`/email/confirm?code=${attachCode}`)
     .set("Host", "127.0.0.1:3000");
   expect(preview.status).toBe(200);
@@ -268,7 +278,7 @@ it("EMAIL-ACCESS-05A shows the current member's linked status after native verif
   expect(await access.consume(code(), owner.token)).toEqual({
     kind: "attached",
   });
-  const response = await request(application)
+  const response = await request(server)
     .get("/email/attach")
     .set("Host", "127.0.0.1:3000")
     .set("Cookie", `${COOKIE}=${owner.token}`);
@@ -281,7 +291,7 @@ it("EMAIL-ACCESS-05A shows the current member's linked status after native verif
 
 it("EMAIL-ACCESS-05B rechecks an old attachment form after verification without dispatching another message", async () => {
   const owner = await member();
-  const before = await request(application)
+  const before = await request(server)
     .get("/email/attach")
     .set("Host", "127.0.0.1:3000")
     .set("Cookie", `${COOKIE}=${owner.token}`);
@@ -358,7 +368,7 @@ it.each(["expired", "revoked", "deleting"] as const)(
         [owner.id],
       );
     expect(await access.ownedStatus(owner.token)).toBe("unavailable");
-    const get = await request(application)
+    const get = await request(server)
       .get("/email/attach")
       .set("Host", "127.0.0.1:3000")
       .set("Cookie", `${COOKIE}=${owner.token}`);
