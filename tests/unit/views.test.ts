@@ -1594,7 +1594,9 @@ it("ATTEMPT-BRIEF-01 shows the pinned assignment brief above the response", () =
   };
   const page = assignmentAttemptPage(item, "csrf");
   expect(page).toContain("<h2>Assignment brief</h2>");
-  expect(page).toContain("Assignment version 3 brief");
+  expect(page).toContain(
+    "From the exact assignment version this attempt keeps.",
+  );
   expect(page).toContain(
     "Check the &lt;invented&gt; plan and name one missing owner.",
   );
