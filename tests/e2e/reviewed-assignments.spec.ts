@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, type Page } from "@playwright/test";
 import {
   reviewedAssignments,
@@ -253,9 +254,7 @@ test("[L235] ASN103-03 changed goals and retired preparation preserve exact prio
       "Invented signup checks: verify one missing-field case and one valid-email case against the brief, without writing code.";
     const url = await save(member, text);
     await member.goto(f.origin + "/learn");
-    await member
-      .getByLabel("What would you like to do?")
-      .selectOption("everyday");
+    await chooseLearningGoal(member, "everyday");
     await member.getByRole("button", { name: "Save my direction" }).click();
     await expect(
       member.getByRole("button", { name: `Choose ${assignments[0]!.title}` }),

@@ -38,10 +38,10 @@ test("[L53] three learner paths retain visible keyboard focus, actionable errors
   page,
   context,
 }) => {
-  for (const [background, goal, circle, backgroundKeys, goalKey] of [
-    ["explorer", "everyday", "Everyday AI practice", ["e"], "u"],
-    ["professional", "work", "Clearer professional work", ["w"], "m"],
-    ["technical", "build", "Technical AI practice", ["w", "w"], "i"],
+  for (const [background, goal, circle, backgroundKeys, goalSteps] of [
+    ["explorer", "everyday", "Everyday AI practice", ["e"], 0],
+    ["professional", "work", "Clearer professional work", ["w"], 1],
+    ["technical", "build", "Technical AI practice", ["w", "w"], 2],
   ] as const) {
     await context.clearCookies();
     await page.goto("/");
@@ -54,10 +54,12 @@ test("[L53] three learner paths retain visible keyboard focus, actionable errors
     await tabTo(page, startingPoint);
     for (const key of backgroundKeys) await page.keyboard.press(key);
     await expect(startingPoint).toHaveValue(background);
-    const direction = page.getByLabel("What would you like to do?");
+    const direction = page.locator('input[name="goal"]').first();
     await tabTo(page, direction);
-    await page.keyboard.press(goalKey);
-    await expect(direction).toHaveValue(goal);
+    await page.keyboard.press("Space");
+    for (let step = 0; step < goalSteps; step++)
+      await page.keyboard.press("ArrowRight");
+    await expect(page.locator('input[name="goal"]:checked')).toHaveValue(goal);
     // MON-01: keyboard onboarding uses ordinary profile choices, with no
     // global invented-data pledge; feature-specific sharing stays separate.
     await expect(page.locator('input[name="synthetic"]')).toHaveCount(0);

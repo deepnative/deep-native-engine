@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -12,7 +13,7 @@ test.afterAll(async () => pool.end());
 async function start(page: Page, context: BrowserContext, background: string) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page
     .getByText("Personalize your path (optional)", { exact: true })
     .click();

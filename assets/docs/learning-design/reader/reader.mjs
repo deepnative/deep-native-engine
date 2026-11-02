@@ -63,6 +63,8 @@ export function icon(name) {
     back: '<path d="M19 12H5m6-6-6 6 6 6"/>',
     check: '<path d="m5 12 4 4L19 6"/>',
     case: '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V4h8v3M3 12h18M10 12v3h4v-3"/>',
+    home: '<path d="m3 11 9-8 9 8M5 10v11h14V10M9 21v-7h6v7"/>',
+    code: '<rect x="2" y="4" width="20" height="16" rx="3"/><path d="m9 9-3 3 3 3m6-6 3 3-3 3"/>',
     source: '<path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"/>',
   };
   return `<svg class="ui-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]}</svg>`;
@@ -665,12 +667,17 @@ export async function mountReader({
   }
 
   function routePicker() {
-    return `<div class="route-picker" role="group" aria-label="Choose your example route"><span>Your examples</span>${Object.entries(
+    const examples = {
+      everyday: ["home", "Everyday life and personal projects"],
+      work: ["case", "Planning, research and communication"],
+      technical: ["code", "Code, data and technical workflows"],
+    };
+    return `<div class="route-picker" role="group" aria-label="Choose your example route"><span>Choose your path</span>${Object.entries(
       routes,
     )
       .map(
         ([id, title]) =>
-          `<button data-route="${id}" aria-pressed="${id === route}">${title}</button>`,
+          `<button data-route="${id}" aria-label="${title}" aria-pressed="${id === route}"><span class="route-art">${icon(examples[id][0])}</span><span class="route-copy"><strong>${title}</strong><small>${examples[id][1]}</small><span class="route-state">${id === route ? "Selected path" : "Explore path"}</span></span><span class="route-check" aria-hidden="true">${icon("check")}</span></button>`,
       )
       .join("")}</div>`;
   }

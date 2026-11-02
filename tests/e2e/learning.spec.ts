@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import { starterDraftConflicts } from "../support/starter-draft-conflicts.ts";
@@ -104,7 +105,7 @@ test.afterAll(async () => {
 async function begin(page: Page, background = "explorer", goal = "everyday") {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
-  await page.getByLabel("What would you like to do?").selectOption(goal);
+  await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
   await page.getByRole("link", { name: "Open lesson" }).click();
@@ -218,7 +219,7 @@ for (const [id, background, goal, extraName, extraValue] of [
   }) => {
     await page.goto("/");
     await page.getByLabel("Your starting point").selectOption(background);
-    await page.getByLabel("What would you like to do?").selectOption(goal);
+    await chooseLearningGoal(page, goal);
     await page
       .getByText("Personalize your path (optional)", { exact: true })
       .click();
@@ -243,9 +244,7 @@ for (const [id, background, goal, extraName, extraValue] of [
       .fill("A sample draft that must retain its original context");
     await page.getByRole("button", { name: "Save draft" }).click();
     await page.getByRole("link", { name: "Your learning path" }).click();
-    await page
-      .getByLabel("What would you like to do?")
-      .selectOption(goal === "everyday" ? "work" : "everyday");
+    await chooseLearningGoal(page, goal === "everyday" ? "work" : "everyday");
     await page.getByRole("button", { name: "Save my direction" }).click();
     await expect(page).toHaveURL(/\/learn$/);
     await page.reload();
@@ -264,7 +263,7 @@ test("[L29] exploratory learner revises a time-fitting plan without rewriting sa
 }) => {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page
     .getByText("Personalize your path (optional)", { exact: true })
     .click();
@@ -286,7 +285,7 @@ test("[L29] exploratory learner revises a time-fitting plan without rewriting sa
     .fill("A sample draft for the community event");
   await page.getByRole("button", { name: "Save draft" }).click();
   await page.getByRole("link", { name: "Your learning path" }).click();
-  await page.getByLabel("What would you like to do?").selectOption("work");
+  await chooseLearningGoal(page, "work");
   await page.getByLabel("Experience with AI").selectOption("some");
   await page.getByLabel("Time zone (optional)").fill("America/Toronto");
   await page.getByLabel("Weekly time available").selectOption("60");
@@ -310,7 +309,7 @@ test("[L101] completed starter plan advances without attributing an earlier goal
 }) => {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page
     .getByText("Personalize your path (optional)", { exact: true })
     .click();
@@ -344,9 +343,7 @@ test("[L101] completed starter plan advances without attributing an earlier goal
     const other = await otherContext.newPage();
     await other.goto("/");
     await other.getByLabel("Your starting point").selectOption("explorer");
-    await other
-      .getByLabel("What would you like to do?")
-      .selectOption("everyday");
+    await chooseLearningGoal(other, "everyday");
     await other
       .getByText("Personalize your path (optional)", { exact: true })
       .click();
@@ -358,7 +355,7 @@ test("[L101] completed starter plan advances without attributing an earlier goal
   } finally {
     await otherContext.close();
   }
-  await page.getByLabel("What would you like to do?").selectOption("work");
+  await chooseLearningGoal(page, "work");
   await page.getByRole("button", { name: "Save my direction" }).click();
   await expect(page).toHaveURL(/\/learn$/);
   await expect(plan).toContainText("Turn meeting notes into next steps");
@@ -374,7 +371,7 @@ test("[L30] professional can correct an invalid time zone and retain a noncoding
 }) => {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("professional");
-  await page.getByLabel("What would you like to do?").selectOption("work");
+  await chooseLearningGoal(page, "work");
   await page
     .getByText("Personalize your path (optional)", { exact: true })
     .click();
@@ -385,7 +382,7 @@ test("[L30] professional can correct an invalid time zone and retain a noncoding
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page).not.toHaveURL(/\/learn$/);
   await page.getByLabel("Your starting point").selectOption("professional");
-  await page.getByLabel("What would you like to do?").selectOption("work");
+  await chooseLearningGoal(page, "work");
   await page.getByLabel("Experience with AI").selectOption("some");
   await page.getByLabel("Time zone (optional)").fill("America/Toronto");
   await page.getByLabel("Weekly time available").selectOption("30");
@@ -418,9 +415,7 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
         const page = await context.newPage();
         await page.goto("/");
         await page.getByLabel("Your starting point").selectOption(background);
-        await page
-          .getByLabel("What would you like to do?")
-          .selectOption(startingGoal);
+        await chooseLearningGoal(page, startingGoal);
         await page
           .getByText("Personalize your path (optional)", { exact: true })
           .click();
@@ -452,9 +447,7 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
         const before = await saved();
         const plan = page.getByRole("region", { name: "Your starter plan" });
         const originalPlan = await plan.innerText();
-        await page
-          .getByLabel("What would you like to do?")
-          .selectOption(nextGoal);
+        await chooseLearningGoal(page, nextGoal);
         await page
           .locator('input[name="domain_tags"][value="education"]')
           .uncheck();
@@ -472,9 +465,9 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
         );
         await page.getByRole("button", { name: "Save my direction" }).click();
         expect((await invalidResponse).status()).toBe(422);
-        await expect(page.getByLabel("What would you like to do?")).toHaveValue(
-          nextGoal,
-        );
+        await expect(
+          page.locator('select[name="goal"], input[name="goal"]:checked'),
+        ).toHaveValue(nextGoal);
         await expect(page).toHaveTitle(/error/i);
         await expect(page.getByRole("alert")).toContainText(/not saved/i);
         await expect(
@@ -510,7 +503,9 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
         expect(await plan.innerText()).toBe(originalPlan);
         await unrelatedPage.reload();
         await expect(
-          unrelatedPage.getByLabel("What would you like to do?"),
+          unrelatedPage.locator(
+            'select[name="goal"], input[name="goal"]:checked',
+          ),
         ).toHaveValue("everyday");
         await expect(
           unrelatedPage.getByLabel("Time zone (optional)"),
@@ -524,9 +519,9 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
         await page.getByRole("button", { name: "Save my direction" }).click();
         await expect(page).toHaveURL(/\/learn$/);
         await page.reload();
-        await expect(page.getByLabel("What would you like to do?")).toHaveValue(
-          nextGoal,
-        );
+        await expect(
+          page.locator('select[name="goal"], input[name="goal"]:checked'),
+        ).toHaveValue(nextGoal);
         await expect(
           page.locator('input[name="domain_tags"][value="finance"]'),
         ).toBeChecked();
@@ -576,9 +571,7 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
             [member.id],
           )
         ).rows;
-        await page
-          .getByLabel("What would you like to do?")
-          .selectOption(startingGoal);
+        await chooseLearningGoal(page, startingGoal);
         await pool.query(
           "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE id=$1",
           [member.id],
@@ -610,7 +603,9 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
         ).toEqual(retainedHistory);
         await unrelatedPage.reload();
         await expect(
-          unrelatedPage.getByLabel("What would you like to do?"),
+          unrelatedPage.locator(
+            'select[name="goal"], input[name="goal"]:checked',
+          ),
         ).toHaveValue("everyday");
       } finally {
         await context.close();
@@ -630,9 +625,7 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
     await unrelatedPage
       .getByLabel("Your starting point")
       .selectOption("technical");
-    await unrelatedPage
-      .getByLabel("What would you like to do?")
-      .selectOption("build");
+    await chooseLearningGoal(unrelatedPage, "build");
     await unrelatedPage
       .getByText("Personalize your path (optional)", { exact: true })
       .click();
@@ -675,7 +668,7 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
           (await page.request.get("/learn", { maxRedirects: 0 })).status(),
         ).toBe(303);
         await page.getByLabel("Your starting point").selectOption(background);
-        await page.getByLabel("What would you like to do?").selectOption(goal);
+        await chooseLearningGoal(page, goal);
         const optional = page.locator("details.onboarding-options");
         await expect(optional).not.toHaveAttribute("open", "");
         await optional.locator("summary").focus();
@@ -707,9 +700,9 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         await expect(page.getByLabel("Your starting point")).toHaveValue(
           background,
         );
-        await expect(page.getByLabel("What would you like to do?")).toHaveValue(
-          goal,
-        );
+        await expect(
+          page.locator('select[name="goal"], input[name="goal"]:checked'),
+        ).toHaveValue(goal);
         await expect(page).toHaveTitle(/error/i);
         await expect(page.getByRole("alert")).toContainText(/not saved/i);
         await expect(optional).toHaveAttribute("open", "");
@@ -834,9 +827,9 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         await expect(page.getByLabel("Your starting point")).toHaveValue(
           background,
         );
-        await expect(page.getByLabel("What would you like to do?")).toHaveValue(
-          goal,
-        );
+        await expect(
+          page.locator('select[name="goal"], input[name="goal"]:checked'),
+        ).toHaveValue(goal);
         await expect(page.getByLabel("Time zone (optional)")).toHaveValue(
           "America/Toronto",
         );
@@ -866,9 +859,9 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         await expect(page.getByLabel("Your starting point")).toHaveValue(
           background,
         );
-        await expect(page.getByLabel("What would you like to do?")).toHaveValue(
-          goal,
-        );
+        await expect(
+          page.locator('select[name="goal"], input[name="goal"]:checked'),
+        ).toHaveValue(goal);
         await expect(
           page.locator('input[name="domain_tags"][value="finance"]'),
         ).toBeChecked();
@@ -889,7 +882,7 @@ test("[L31] technical learner sees an experienced, private plan without a coding
 }) => {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("technical");
-  await page.getByLabel("What would you like to do?").selectOption("build");
+  await chooseLearningGoal(page, "build");
   await page
     .getByText("Personalize your path (optional)", { exact: true })
     .click();
@@ -909,9 +902,7 @@ test("[L31] technical learner sees an experienced, private plan without a coding
     await anotherPage
       .getByLabel("Your starting point")
       .selectOption("explorer");
-    await anotherPage
-      .getByLabel("What would you like to do?")
-      .selectOption("everyday");
+    await chooseLearningGoal(anotherPage, "everyday");
     await anotherPage
       .getByRole("button", { name: "Start my learning path" })
       .click();
@@ -1239,7 +1230,7 @@ test("[L11] multiple tabs, keyboard navigation, safe rendering and narrow layout
   const second = await context.newPage();
   await second.goto(origin);
   await page.getByLabel("Your starting point").selectOption("explorer");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/learn$/);

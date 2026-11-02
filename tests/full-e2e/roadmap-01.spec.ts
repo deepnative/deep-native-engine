@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type BrowserContext } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -116,9 +117,7 @@ test("[F-ROADMAP-01-B] publishing content does not assess a learner", async ({
   await requiredCheck(1, async () => {
     await page.goto("/");
     await page.getByLabel("Your starting point").selectOption("explorer");
-    await page
-      .getByLabel("What would you like to do?")
-      .selectOption("everyday");
+    await chooseLearningGoal(page, "everyday");
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await expect(page).toHaveURL(/\/learn$/);
     ownerId = await memberId(context);

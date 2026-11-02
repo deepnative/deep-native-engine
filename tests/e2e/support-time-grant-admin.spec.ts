@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { testPool } from "../support/database.ts";
@@ -89,7 +90,7 @@ for (const [index, [background, goal]] of audiences.entries())
       const at = server.origin;
       await page.goto(at + "/");
       await page.getByLabel("Your starting point").selectOption(background);
-      await page.getByLabel("What would you like to do?").selectOption(goal);
+      await chooseLearningGoal(page, goal);
       await page
         .getByRole("button", { name: "Start my learning path" })
         .click();

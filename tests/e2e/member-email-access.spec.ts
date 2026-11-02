@@ -181,9 +181,9 @@ test("[L213] email verification restores the exact saved member in another brows
     await expect(fresh.getByLabel("Your starting point")).toHaveValue(
       "explorer",
     );
-    await expect(fresh.getByLabel("What would you like to do?")).toHaveValue(
-      "everyday",
-    );
+    await expect(
+      fresh.locator('select[name="goal"], input[name="goal"]:checked'),
+    ).toHaveValue("everyday");
     await expect(fresh.getByText(emailAddress)).toHaveCount(0);
     await fresh.screenshot({
       path: `artifacts/member-account-${test.info().project.name}.png`,

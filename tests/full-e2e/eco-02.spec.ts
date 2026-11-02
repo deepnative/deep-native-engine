@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -84,7 +85,7 @@ async function onboard(
 ) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
-  await page.getByLabel("What would you like to do?").selectOption(goal);
+  await chooseLearningGoal(page, goal);
   await page
     .getByText("Personalize your path (optional)", { exact: true })
     .click();

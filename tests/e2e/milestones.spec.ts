@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
 
@@ -17,7 +18,7 @@ async function onboard(
 ) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
-  await page.getByLabel("What would you like to do?").selectOption(goal);
+  await chooseLearningGoal(page, goal);
   if (timezone) {
     await page
       .getByText("Personalize your path (optional)", { exact: true })
@@ -105,7 +106,7 @@ test("[L35] general learner saves a private noncoding milestone and revises dire
     await other.close();
   }
   await page.getByRole("link", { name: "Return to learning" }).click();
-  await page.getByLabel("What would you like to do?").selectOption("work");
+  await chooseLearningGoal(page, "work");
   await page.getByRole("button", { name: "Save my direction" }).click();
   await page.getByRole("link", { name: "Plan goals and milestones" }).click();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();

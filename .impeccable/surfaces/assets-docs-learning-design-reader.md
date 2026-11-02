@@ -31,3 +31,12 @@ No synthetic engagement metrics or AI assistant. Existing deterministic feedback
 
 ## Portal identity alignment (1 November2026)
 The owner requested consistency with the landing page: use its warm paper, deep blue ink, blue actions and self-hosted Nunito Sans, with the existing compact lesson scale. Preserve route drafts, explicit saving, semantic feedback, named controls and responsive layout. This scope changes no publication or account access rule.
+
+## Icon path chooser
+
+The shared account/local Learn picker retains its existing three buttons, accessible names, aria-pressed values and route callback. Meaningful home/briefcase/code stroke icons, compact descriptions, visible Selected path text and a check identify the chosen route independently of color. Overview tiles become compact inside lessons; reduce motion and preserve visible keyboard focus/mobile fit. Route changes never overwrite writing or imply mastery. Match the existing blue/Nunito/warm-paper identity; semantic path accents do not restore the discarded global green theme. PATHICON01–03 reuse the exact existing native/reader account journeys and private save/reload checks.
+
+## Member navigation chrome
+The account reader and saved-notebook headers use the landing page’s d/n brand, warm paper, blue primary Account action and deep-ink navigation. Keep all existing destinations visible with native anchors, 44px targets, hover and focus treatment; wrap into two columns on small screens. Signed-in/private-record context stays explicit. No hidden menu, runtime JS, authority or account-state change. NAVTHEME01–02 cover rendered headers, keyboard reachability and mobile fit.
+
+The shared member action is labelled **Top up hours** and opens existing monthly coaching: choose the past month, enter duration against the administrator-set rate, and request an invoice for review. It does not mean a prepaid balance. The account/coaching and guided-lesson headers use the same touch-sized, ink/blue native-link treatment as the notebook header. Keep disabled billing explicit.

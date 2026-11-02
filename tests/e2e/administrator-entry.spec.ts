@@ -58,7 +58,8 @@ test.afterEach(async () => {
       )
     ).rows[0];
     expect(actual).toEqual({ oid: resource.oid, marker: resource.marker });
-    await dropAttendanceBrowserDatabase(control, resource.name);
+    if (test.info().status === test.info().expectedStatus)
+      await dropAttendanceBrowserDatabase(control, resource.name);
     resource = undefined;
   }
   // The shared browser lane's identities and seeded curriculum are never ours to clear.
@@ -511,6 +512,8 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
       .getByLabel("Invoice email", { exact: true })
       .fill("billing@example.invalid");
     await page.getByRole("button", { name: "Save billing recipient" }).click();
+    await expect(page.locator('input[name="revision"]')).toHaveValue("1");
+    await page.waitForLoadState("load");
     await page.reload();
     await expect(page.getByLabel("Invoice email", { exact: true })).toHaveValue(
       "billing@example.invalid",

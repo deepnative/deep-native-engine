@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { expect, test, type BrowserContext } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
@@ -32,7 +33,7 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
   const privateBytes = Buffer.from(privateText);
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption("explorer");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
   const ownerId = await memberId(context);
@@ -90,9 +91,7 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
     await outsiderPage
       .getByLabel("Your starting point")
       .selectOption("explorer");
-    await outsiderPage
-      .getByLabel("What would you like to do?")
-      .selectOption("everyday");
+    await chooseLearningGoal(outsiderPage, "everyday");
     await outsiderPage
       .getByRole("button", { name: "Start my learning path" })
       .click();

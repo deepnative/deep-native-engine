@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { test, expect } from "@playwright/test";
@@ -35,9 +36,7 @@ test("[L47] operator sees labelled preview aggregates while a learner cannot rea
     ).json();
     await page.goto("/");
     await page.getByLabel("Your starting point").selectOption("explorer");
-    await page
-      .getByLabel("What would you like to do?")
-      .selectOption("everyday");
+    await chooseLearningGoal(page, "everyday");
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await page
       .getByRole("link", { name: "Local circles", exact: true })

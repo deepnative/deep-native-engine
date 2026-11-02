@@ -1510,6 +1510,12 @@ it("links multiple profile errors and escapes attempted text without reflecting 
 });
 it("[LAND-01] offers an unsaved native example before compact onboarding", () => {
   const html = welcome("token");
+  expect(html).toContain('class="path-choices"');
+  for (const goal of ["everyday", "work", "build"]) {
+    expect(html).toContain(`type="radio" name="goal" value="${goal}"`);
+  }
+  expect(html.match(/class="path-art"/g)).toHaveLength(3);
+
   expect(html).toMatch(/class="[^"]*\bwelcome-page\b[^"]*"/);
   const examples = [
     ...html.matchAll(
@@ -1545,7 +1551,7 @@ it("[LAND-02] expands optional onboarding fields after an error without losing t
   expect(optional).not.toBeNull();
   expect(optional?.[0]).toMatch(/\sopen(?:\s|=|>)/);
   expect(html).toContain('<option value="technical" selected>');
-  expect(html).toContain('<option value="build" selected>');
+  expect(html).toMatch(/type="radio" name="goal" value="build"[^>]* checked/);
   expect(html).toContain('name="it_roles" value="security" checked');
   expect(html).toContain('<option value="30" selected>');
   expect(html).toContain('value="Mars/Olympus"');
@@ -1566,7 +1572,7 @@ it("renders a failed onboarding attempt for correction without a saved member", 
   expect(html).toContain("Your changes were not saved");
   expect(html).toContain('href="#timezone"');
   expect(html).toContain('<option value="technical" selected>');
-  expect(html).toContain('<option value="build" selected>');
+  expect(html).toMatch(/type="radio" name="goal" value="build"[^>]* checked/);
   expect(html).toContain('name="it_roles" value="security" checked');
   expect(html).toContain('<option value="30" selected>');
   expect(html).not.toContain('name="synthetic"');

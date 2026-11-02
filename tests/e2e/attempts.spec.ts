@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
@@ -70,7 +71,7 @@ async function publish(
 async function onboard(page: Page, background: string, goal: string) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
-  await page.getByLabel("What would you like to do?").selectOption(goal);
+  await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
 }
 async function chooseAndStart(page: Page, title: string) {
@@ -185,7 +186,7 @@ test("[L49] professional keeps an old private draft when goal and published vers
   await page.getByLabel("I used only invented or sample information").check();
   await page.getByRole("button", { name: "Save private draft" }).click();
   await page.goto("/learn");
-  await page.getByLabel("What would you like to do?").selectOption("everyday");
+  await chooseLearningGoal(page, "everyday");
   await page.getByRole("button", { name: "Save my direction" }).click();
   await page.goto(`/assignments/attempts/${oldAttempt}`);
   await expect(page.getByText("cannot be edited")).toBeVisible();
@@ -193,7 +194,7 @@ test("[L49] professional keeps an old private draft when goal and published vers
     page.getByText("An invented draft remains private"),
   ).toBeVisible();
   await page.goto("/learn");
-  await page.getByLabel("What would you like to do?").selectOption("work");
+  await chooseLearningGoal(page, "work");
   await page.getByRole("button", { name: "Save my direction" }).click();
   await publish(actors, {
     ...sample(id, 2, title),

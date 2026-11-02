@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "./choose-learning-goal.ts";
 import {
   expect,
   devices,
@@ -118,7 +119,7 @@ export async function reviewedContentFixture(
       await actor.goto(origin);
 
       await actor.getByLabel("Your starting point").selectOption(background);
-      await actor.getByLabel("What would you like to do?").selectOption(goal);
+      await chooseLearningGoal(actor, goal);
       await actor
         .getByRole("button", { name: "Start my learning path" })
         .click();

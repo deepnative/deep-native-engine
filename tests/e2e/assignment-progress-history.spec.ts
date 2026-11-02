@@ -1,3 +1,4 @@
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
@@ -69,7 +70,7 @@ async function publish(
 async function onboard(page: Page, background: string, goal: string) {
   await page.goto("/");
   await page.getByLabel("Your starting point").selectOption(background);
-  await page.getByLabel("What would you like to do?").selectOption(goal);
+  await chooseLearningGoal(page, goal);
   await page.getByRole("button", { name: "Start my learning path" }).click();
 }
 async function chooseAndStart(page: Page, title: string) {
@@ -161,9 +162,7 @@ test("[L91] retained assignment submissions stay separate, exact and private on 
         learner.getByRole("heading", { name: "Attempt unavailable" }),
       ).toBeVisible();
       await learner.goto("/learn");
-      await learner
-        .getByLabel("What would you like to do?")
-        .selectOption(goal === "work" ? "everyday" : "work");
+      await chooseLearningGoal(learner, goal === "work" ? "everyday" : "work");
       await learner.getByRole("button", { name: "Save my direction" }).click();
       await publish(actors, sample(id, 2, `${title} replacement`));
       await learner.goto("/progress");
