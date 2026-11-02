@@ -1,3 +1,4 @@
+import type { BillingProfileStore } from "./billing-profile.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { csrf, validCsrf } from "./session.ts";
@@ -44,7 +45,11 @@ function failure(
 export function mountCoachingRoutes(
   app: Express,
   store: SimpleInvoiceStore | undefined,
-  options: { origin: string; secret: string },
+  options: {
+    origin: string;
+    secret: string;
+    billingProfiles?: BillingProfileStore;
+  },
 ) {
   const token = (res: Response) => res.locals.token as string;
   function valid(req: Request, res: Response, fields: string[] = []) {
@@ -93,7 +98,7 @@ export function mountCoachingRoutes(
           .send(
             page(
               "Monthly coaching hours",
-              '<h1>Monthly coaching hours</h1><p>Coaching invoicing is not configured. No rate or payable amount is assumed. Your learning and saved work remain available.</p><p><a href="/account">My account</a></p>',
+              '<h1>Monthly coaching hours</h1><p>Coaching invoicing is not configured. No rate or payable amount is assumed. Your learning and saved work remain available.</p><h2>How to enter coaching hours</h2><p>Hours entry is unavailable on this preview while coaching invoicing is disabled. Ask your administrator to arrange coaching and enable the agreed workflow; there is no hours form to complete here yet.</p><ol><li>When coaching is configured, choose the calendar month and save hours and minutes as a draft.</li><li>Your administrator records the agreed hourly rate before you submit.</li><li>Review and submit your month. Submission does not take payment; an administrator reviews it before an invoice is issued.</li></ol><p><a href="/admin">Administration</a> · <a href="/account">My account</a></p>',
             ),
           );
       const r = await store.coachingOverview(
@@ -106,6 +111,12 @@ export function mountCoachingRoutes(
         e = v.entry,
         base = admin ? `${adminPath}/${v.ownerId}` : memberPath,
         anti = csrf(token(res), options.secret);
+      const recipient =
+        !admin && !e && options.billingProfiles
+          ? await options.billingProfiles.read(token(res))
+          : { kind: "ready" as const, value: null };
+      if (recipient.kind !== "ready")
+        return failure(res, recipient.kind, admin);
       const form = (action: string, revision: number) =>
         `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", revision)}${hidden("month", v.month)}<input type="hidden" name="action" value="${action}">`;
       const snapshot = e?.snapshot,
@@ -120,7 +131,7 @@ export function mountCoachingRoutes(
       if (snapshot)
         body += `<h2>Submitted snapshot</h2><p>${snapshot.month} · ${coachingDuration(snapshot.minutes)} · ${money(snapshot.rate.cents)} per hour · rate version ${snapshot.rate.version} · subtotal ${money(snapshot.subtotalCents)}</p><p>Recipient: ${escape(snapshot.name)} · ${escape(snapshot.email)} · ${snapshot.sample ? "Sample, not payable" : "Configured offline invoice"}</p><p>Submitted revision ${e!.submittedRevision}. This snapshot stays retained after correction.</p>`;
       if (!admin && (!e || e.state === "draft")) {
-        body += `<h2>Save your draft</h2><form method="post" action="${base}/save">${form("save", e?.revision ?? 0)}<label>Whole hours<input name="hours" type="number" min="0" max="744" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label><label>Invoice recipient name<input name="name" maxlength="200" value="${escape(e?.name ?? "")}" required></label><label>Invoice email<input name="email" type="email" maxlength="254" value="${escape(e?.email ?? "")}" required></label><p>This email is only the billing recipient; it does not change your sign-in identity.</p><button>Save coaching draft</button></form>`;
+        body += `<h2>Save your draft</h2><form method="post" action="${base}/save">${form("save", e?.revision ?? 0)}<label>Whole hours<input name="hours" type="number" min="0" max="744" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label><label>Invoice recipient name<input name="name" maxlength="200" value="${escape(e?.name ?? recipient.value?.name ?? "")}" required></label><label>Invoice email<input name="email" type="email" maxlength="254" value="${escape(e?.email ?? recipient.value?.email ?? "")}" required></label><p><a href="/account/billing">Edit reusable billing recipient</a>. This email is only the billing recipient; it does not change your sign-in identity.</p><button>Save coaching draft</button></form>`;
         if (e && v.rate && amount !== null)
           body += `<h2>Confirm this saved draft</h2><p>Subtotal before separately supplied tax: <strong>${money(amount)}</strong>. ${amount === 0 ? "A zero-total submission creates no invoice." : "The administrator supplies tax when reviewing the invoice."}</p><form method="post" action="${base}/submit">${form("submit", e.revision)}${hidden("rateId", v.rate.id)}${hidden("sample", String(v.sample))}<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm this saved duration, recipient and exact rate version for ${v.month}. ${v.sample ? "This is a sample, not payable." : "I submit for configured offline invoicing; issued financial records may be retained after account deletion."}</span></label><button>Submit monthly hours</button></form>`;
         if (e && v.rate && amount === null)

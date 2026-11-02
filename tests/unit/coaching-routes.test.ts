@@ -66,10 +66,14 @@ function fixture(disabled = false) {
     res.locals.token = token;
     next();
   });
+  const profiles = {
+    read: vi.fn().mockResolvedValue(ready(null)),
+    save: vi.fn(),
+  };
   mountCoachingRoutes(
     app,
     disabled ? undefined : (service as unknown as SimpleInvoiceStore),
-    { origin, secret },
+    { origin, secret, billingProfiles: profiles },
   );
   const get = (path: string) => withLoopback(app, (s) => request(s).get(path));
   const post = (
@@ -89,7 +93,7 @@ function fixture(disabled = false) {
           ...fields,
         }),
     );
-  return { app, service, get, post };
+  return { app, service, profiles, get, post };
 }
 it("HOUR01/02/09 keeps empty, disabled, sample and configured states honest and escapes private recipient text", async () => {
   const f = fixture();
@@ -403,4 +407,27 @@ it("HOUR05 stale draft saves and correction decisions recover from the current s
       })
     ).status,
   ).toBe(409);
+});
+
+it("BILLPROFILE03 suggests the saved recipient only on a new member coaching month, never overwriting a retained draft", async () => {
+  const f = fixture();
+  f.profiles.read.mockResolvedValue(
+    ready({
+      name: "Reusable <recipient>",
+      email: "billing@example.invalid",
+      revision: 1,
+    }),
+  );
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, entry: null }),
+  );
+  expect((await f.get("/account/coaching")).text).toContain(
+    'value="Reusable &lt;recipient&gt;"',
+  );
+  f.profiles.read.mockResolvedValueOnce({ kind: "unavailable" });
+  expect((await f.get("/account/coaching")).status).toBe(503);
+  f.service.coachingOverview.mockResolvedValue(ready(value));
+  expect((await f.get("/account/coaching")).text).not.toContain(
+    'value="Reusable &lt;recipient&gt;"',
+  );
 });

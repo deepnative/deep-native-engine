@@ -141,7 +141,7 @@ async function fixture(browser: Browser, info: TestInfo, enabled = true) {
     page,
     member,
     admin,
-    async close() {
+    async close(completed: boolean) {
       await Promise.all(contexts.map((c) => c.close()));
       await closeLoopback(server);
       await pool.end();
@@ -153,8 +153,8 @@ async function fixture(browser: Browser, info: TestInfo, enabled = true) {
           )
         ).rows[0];
         expect(actual).toEqual({ oid, marker });
-        if (info.status === info.expectedStatus)
-          await dropAttendanceBrowserDatabase(control, name);
+        // A thrown test is recorded after finally; only explicit completion permits cleanup.
+        if (completed) await dropAttendanceBrowserDatabase(control, name);
       } finally {
         await control.end();
       }
@@ -173,7 +173,16 @@ async function save(f: Fixture, p: Page, hours = "1", minutes = "30") {
   await p.getByLabel("Additional minutes").fill(minutes);
   await p.getByLabel("Invoice recipient name").fill("陳 · Invented learner");
   await p.getByLabel("Invoice email").fill("billing@example.invalid");
-  await p.getByRole("button", { name: "Save coaching draft" }).click();
+  // Confirm the redirected document before callers reload or submit it.
+  await Promise.all([
+    p.waitForURL(`${f.origin}/account/coaching?month=${f.month}`, {
+      waitUntil: "load",
+    }),
+    p.getByRole("button", { name: "Save coaching draft" }).click(),
+  ]);
+  await expect(
+    p.getByRole("heading", { name: "Monthly coaching hours", exact: true }),
+  ).toBeVisible();
 }
 async function submit(p: Page) {
   await p
@@ -199,6 +208,7 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
   browser,
 }, info) => {
   const f = await fixture(browser, info);
+  let completed = false;
   try {
     const a = await f.member(),
       b = await f.member(),
@@ -272,14 +282,16 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
         fullPage: true,
       });
     }
+    completed = true;
   } finally {
-    await f.close();
+    await f.close(completed);
   }
 });
 test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains a linked original invoice", async ({
   browser,
 }, info) => {
   const f = await fixture(browser, info);
+  let completed = false;
   try {
     const m = await f.member(),
       other = await f.member(),
@@ -356,14 +368,16 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
     await expect(admin.getByRole("alert")).toContainText(
       "does not allow this action",
     );
+    completed = true;
   } finally {
-    await f.close();
+    await f.close(completed);
   }
 });
 test("[L275] HOUR03/06/09 committed submission recovery preserves zero totals without another submission or invoice", async ({
   browser,
 }, info) => {
   const f = await fixture(browser, info);
+  let completed = false;
   try {
     const m = await f.member(),
       admin = await f.admin();
@@ -415,14 +429,16 @@ test("[L275] HOUR03/06/09 committed submission recovery preserves zero totals wi
         ])
       ).rowCount,
     ).toBe(0);
+    completed = true;
   } finally {
-    await f.close();
+    await f.close(completed);
   }
 });
 test("[L276] HOUR09 disabled invoicing keeps monthly entry honest and learning accessible", async ({
   browser,
 }, info) => {
   const f = await fixture(browser, info, false);
+  let completed = false;
   try {
     const m = await f.member();
     await m.page
@@ -436,7 +452,8 @@ test("[L276] HOUR09 disabled invoicing keeps monthly entry honest and learning a
     ).toHaveCount(0);
     await m.page.getByRole("link", { name: "My account", exact: true }).click();
     await expect(m.page.locator("code").first()).toHaveText(m.id);
+    completed = true;
   } finally {
-    await f.close();
+    await f.close(completed);
   }
 });
