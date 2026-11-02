@@ -26,6 +26,7 @@ import type { SupportAssignmentStore } from "./support-assignment.ts";
 import { mountSampleAssignmentRoutes } from "./sample-assignment-routes.ts";
 import { preparedSamplesEnabled } from "./prepared-samples.ts";
 import type { AssignmentEvidenceStore } from "./assignment-evidence.ts";
+import { refusal, type UploadAdmissionStore } from "./upload-admission.ts";
 import { mountAssignmentEvidenceRoutes } from "./assignment-evidence-routes.ts";
 import { mountPreparedSampleRoutes } from "./prepared-sample-routes.ts";
 import type { PreparedSampleStore } from "./prepared-samples.ts";
@@ -421,6 +422,7 @@ export function app(
     manualObservations?: ManualObservationStore;
     assignmentReadiness?: AssignmentReadinessStore;
     memberEmail?: MemberEmailAccess;
+    uploadAdmission?: UploadAdmissionStore;
   },
 ) {
   const app = express();
@@ -505,6 +507,56 @@ export function app(
     "/assets",
     express.static(fileURLToPath(new URL("../public", import.meta.url))),
   );
+  // Admit evidence creation against the shared budget before reading its body.
+  const uploadAdmission = options.uploadAdmission;
+  if (uploadAdmission) {
+    const parseCookies = cookieParser();
+    app.post("/api/evidence", (req, res, next) =>
+      parseCookies(req, res, async () => {
+        const result = await uploadAdmission.admit(token(req.cookies[COOKIE]));
+        if (result.kind === "admitted") {
+          res.once("close", () => void result.release());
+          next();
+          return;
+        }
+        const refused = refusal(result);
+        res
+          .status(refused.status)
+          .set("Cache-Control", "no-store")
+          .set("Retry-After", String(refused.retryAfterSeconds))
+          .set("Connection", "close")
+          .json({
+            error: refused.error,
+            retryAfterSeconds: refused.retryAfterSeconds,
+            action: refused.action,
+          });
+      }),
+    );
+  }
+  // Form uploads are admitted after their small body is parsed so a refused
+  // member keeps the title and text they typed.
+  async function admitFormUpload(
+    res: express.Response,
+    render: (errors: string[]) => Promise<string> | string,
+  ) {
+    if (!uploadAdmission) return true;
+    const result = await uploadAdmission.admit(res.locals.token as string);
+    if (result.kind === "admitted") {
+      res.once("close", () => void result.release());
+      return true;
+    }
+    const refused = refusal(result);
+    // The refusal must not depend on the database that may be unavailable.
+    const body = await Promise.resolve()
+      .then(() => render([refused.action]))
+      .catch(() => errorPage("Upload not saved", refused.action));
+    res
+      .status(refused.status)
+      .set("Cache-Control", "no-store")
+      .set("Retry-After", String(refused.retryAfterSeconds))
+      .send(body);
+    return false;
+  }
   app.use(
     "/api/evidence",
     express.raw({ type: "*/*", limit: MAX_EVIDENCE_BYTES }),
@@ -1711,6 +1763,18 @@ export function app(
         );
       return;
     }
+    if (
+      !(await admitFormUpload(res, async (errors) =>
+        evidencePage(
+          await evidence.owned(res.locals.token as string),
+          res.locals.csrf as string,
+          errors,
+          { name, sample },
+          preparedSampleChoice,
+        ),
+      ))
+    )
+      return;
     const result = await evidence.upload(res.locals.token as string, {
       name,
       mediaType: "text/plain",
@@ -1958,6 +2022,17 @@ export function app(
         );
       return;
     }
+    if (
+      !(await admitFormUpload(res, (errors) =>
+        evidenceRevisionPage(
+          parent,
+          res.locals.csrf as string,
+          errors,
+          attempted,
+        ),
+      ))
+    )
+      return;
     const result = await evidence.upload(res.locals.token as string, {
       name,
       mediaType: "text/plain",
