@@ -391,7 +391,7 @@ it("keeps workflow feedback owner-only and never claims a failed or stale write"
   const save = {
     workflow_version: "1",
     revision: "0",
-    note: "Invented private workflow note",
+    note: "My workflow needs a clearer source-check step.",
     confirm: "yes",
   };
   await post("/workflow-feedback/WF-001/save", save, "forged").expect(403);
@@ -399,6 +399,14 @@ it("keeps workflow feedback owner-only and never claims a failed or stale write"
     ...save,
     note: " ",
   }).expect(422);
+  const missingConfirmation = await post("/workflow-feedback/WF-001/save", {
+    ...save,
+    confirm: "",
+  }).expect(422);
+  expect(missingConfirmation.text).toContain(
+    "Enter 1–1,000 characters of private feedback and confirm your intent.",
+  );
+  expect(feedback.save).not.toHaveBeenCalled();
   await post("/workflow-feedback/WF-001/save", save).expect(409);
   feedback.save.mockResolvedValueOnce(true);
   await post("/workflow-feedback/WF-001/save", save).expect(303);
