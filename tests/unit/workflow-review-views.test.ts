@@ -84,3 +84,9 @@ it.each([
     }
   },
 );
+
+it("COPY-597-05 describes the offered note without an invented-text claim", () => {
+  const html = workflowReviewReceiptPage(value, "csrf", "original-operation");
+  expect(html).toContain("This offers one private note");
+  expect(html).not.toContain("invented-text note");
+});

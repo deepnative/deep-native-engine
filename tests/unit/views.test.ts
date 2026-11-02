@@ -2269,3 +2269,22 @@ it("LWORK-05 describes the versioned catalog entry as an overview and directs co
   );
   expect(staffReading).toContain('action="/editor/library/LRN-001/1/publish"');
 });
+
+it("COPY-597-01 pluralises the elapsed minutes in proposal moderation", () => {
+  const one = moderationPage(
+    [
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        title: "Invented proposal",
+        body: "Invented body",
+        sources: "Invented sources",
+        state: "submitted",
+        submittedAt: new Date("2026-09-25T11:59:00Z"),
+      } as Parameters<typeof moderationPage>[0][number],
+    ],
+    "csrf",
+    new Date("2026-09-25T12:00:00Z"),
+  );
+  expect(one).toContain("Elapsed: 1 minute");
+  expect(one).not.toContain("1 minutes");
+});

@@ -178,7 +178,7 @@ test("[L57] private moderation worklist orders by submission and loses revoked a
     for (const title of [olderTitle, laterTitle]) {
       const item = worklist.locator("main li").filter({ hasText: title });
       await expect(item.locator("time")).toHaveCount(1);
-      await expect(item.getByText(/Elapsed: [0-9]+ minutes/)).toBeVisible();
+      await expect(item.getByText(/Elapsed: [0-9]+ minutes?/)).toBeVisible();
     }
     await expect(worklist.getByText("no response-time promise")).toBeVisible();
     const audited = async () =>
