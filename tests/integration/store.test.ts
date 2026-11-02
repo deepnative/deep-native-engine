@@ -3129,7 +3129,7 @@ it("keeps synthetic assignment submissions immutable across private revisions an
   expect(ownedExport).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v28",
+      version: "local-member-records-v29",
       records: {
         assignmentSubmissions: [
           { attemptId: id, sequence: 1, response: firstText },
@@ -6013,7 +6013,7 @@ it("attributes deterministic adapter jobs only to an active member and keeps ide
   expect(await memberExportStore(pool).exportOwned(owner.token)).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v28",
+      version: "local-member-records-v29",
       records: { adapterJobs: [{ id: first.id, mode: "test" }] },
     },
   });

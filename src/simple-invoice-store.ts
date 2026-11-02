@@ -20,6 +20,15 @@ import {
 import { normalizedEmail } from "./member-email-access.ts";
 import type { SimpleInvoiceDocument } from "./simple-invoice-views.ts";
 
+import {
+  coachingMonth,
+  coachingMinutes,
+  coachingSubtotal,
+  type CoachingRate,
+  type CoachingMonth,
+  type CoachingSnapshot,
+} from "./coaching-values.ts";
+
 export type InvoiceFailure = {
   kind: "denied" | "invalid" | "conflict" | "unavailable" | "not-found";
 };
@@ -262,7 +271,435 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
     }
     return { kind: "ready", value: { created } };
   }
+  const rateColumns = 'id,effective_month AS "effectiveMonth",cents,version';
+  async function coachingToday(tx: PracticeTransaction) {
+    return (
+      await tx.query<{ month: string }>(
+        "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM') AS month",
+      )
+    ).rows[0]!.month;
+  }
+  async function coachingEntry(
+    tx: PracticeTransaction,
+    memberId: string,
+    month: string,
+  ): Promise<CoachingMonth | null> {
+    const row = (
+      await tx.query<CoachingMonth>(
+        `SELECT month,minutes,name,email,state,revision,submitted_revision AS "submittedRevision",invoice_id AS "invoiceId",previous_invoice_id AS "previousInvoiceId",return_reason AS "returnReason" FROM coaching_months WHERE owner_id=$1 AND month=$2 FOR UPDATE`,
+        [memberId, month],
+      )
+    ).rows[0];
+    if (!row) return null;
+    const snapshot =
+      row.submittedRevision === null
+        ? null
+        : ((
+            await tx.query<{ snapshot: CoachingSnapshot }>(
+              "SELECT snapshot FROM coaching_submissions WHERE owner_id=$1 AND month=$2 AND revision=$3",
+              [memberId, month, row.submittedRevision],
+            )
+          ).rows[0]?.snapshot ?? null);
+    return { ...row, snapshot };
+  }
   return {
+    async coachingOverview(token: string, month?: string, ownerId?: string) {
+      if (
+        (month !== undefined && !coachingMonth(month)) ||
+        (ownerId !== undefined && !invoiceUuid(ownerId))
+      )
+        return fail("invalid");
+      return run(token, ownerId !== undefined, async (tx, actor) => {
+        const memberId = ownerId ?? actor;
+        await owner(tx, memberId, ownerId !== undefined);
+        const today = await coachingToday(tx),
+          selected = month ?? today;
+        if (selected > today) return fail("invalid");
+        const rates = (
+          await tx.query<CoachingRate>(
+            `SELECT ${rateColumns} FROM coaching_rates WHERE owner_id=$1 ORDER BY version DESC`,
+            [memberId],
+          )
+        ).rows;
+        const entry = await coachingEntry(tx, memberId, selected);
+        const months = (
+          await tx.query<{ month: string; state: string }>(
+            "SELECT month,state FROM coaching_months WHERE owner_id=$1 ORDER BY month DESC LIMIT 100",
+            [memberId],
+          )
+        ).rows;
+        const rate =
+          rates
+            .filter((r) => r.effectiveMonth <= selected)
+            .sort(
+              (a, b) =>
+                b.effectiveMonth.localeCompare(a.effectiveMonth) ||
+                b.version - a.version,
+            )[0] ?? null;
+        return {
+          kind: "ready",
+          value: {
+            ownerId: memberId,
+            month: selected,
+            today,
+            rates,
+            rate,
+            rateVersion: rates[0]?.version ?? 0,
+            entry,
+            months,
+            sample: settings.sample,
+          },
+        };
+      });
+    },
+    async setCoachingRate(
+      token: string,
+      input: {
+        ownerId: string;
+        effectiveMonth: string;
+        cents: number;
+        expectedVersion: number;
+        operationId: string;
+      },
+    ): Promise<InvoiceResult<{ rateId: string; version: number }>> {
+      if (
+        !input ||
+        !invoiceUuid(input.ownerId) ||
+        !invoiceUuid(input.operationId) ||
+        !coachingMonth(input.effectiveMonth) ||
+        !invoiceCents(input.cents) ||
+        input.cents === 0 ||
+        !invoiceCents(input.expectedVersion)
+      )
+        return fail("invalid");
+      return run(token, true, async (tx, actor) => {
+        await owner(tx, input.ownerId, true);
+        const digest = invoiceDigest({ action: "coaching-rate", input }),
+          previous = await replay<{ rateId: string; version: number }>(
+            tx,
+            actor,
+            input.operationId,
+            digest,
+          );
+        if (previous) return previous;
+        const current =
+          (
+            await tx.query<{ version: number }>(
+              "SELECT version FROM coaching_rates WHERE owner_id=$1 ORDER BY version DESC LIMIT 1",
+              [input.ownerId],
+            )
+          ).rows[0]?.version ?? 0;
+        if (current !== input.expectedVersion) return fail("conflict");
+        const rateId = randomUUID(),
+          version = current + 1;
+        await tx.query(
+          "INSERT INTO coaching_rates(id,owner_id,effective_month,cents,version) VALUES($1,$2,$3,$4,$5)",
+          [rateId, input.ownerId, input.effectiveMonth, input.cents, version],
+        );
+        return remember(tx, actor, input.operationId, digest, {
+          rateId,
+          version,
+        });
+      });
+    },
+    async saveCoaching(
+      token: string,
+      input: {
+        month: string;
+        minutes: number;
+        name: string;
+        email: string;
+        expectedRevision: number;
+        operationId: string;
+      },
+    ): Promise<InvoiceResult<{ month: string; revision: number }>> {
+      if (
+        !input ||
+        !invoiceUuid(input.operationId) ||
+        !coachingMinutes(input.month, input.minutes) ||
+        !invoiceCents(input.expectedRevision) ||
+        !invoiceText(input.name, 200) ||
+        typeof input.email !== "string" ||
+        !normalizedEmail(input.email)
+      )
+        return fail("invalid");
+      return run(token, false, async (tx, actor) => {
+        await owner(tx, actor);
+        const digest = invoiceDigest({ action: "coaching-save", input }),
+          previous = await replay<{ month: string; revision: number }>(
+            tx,
+            actor,
+            input.operationId,
+            digest,
+          );
+        if (previous) return previous;
+        if (input.month > (await coachingToday(tx))) return fail("invalid");
+        const entry = await coachingEntry(tx, actor, input.month);
+        if (
+          (entry?.revision ?? 0) !== input.expectedRevision ||
+          (entry && entry.state !== "draft")
+        )
+          return fail("conflict");
+        const revision = input.expectedRevision + 1;
+        await tx.query(
+          "INSERT INTO coaching_months(owner_id,month,minutes,name,email,state,revision) VALUES($1,$2,$3,$4,$5,'draft',$6) ON CONFLICT(owner_id,month) DO UPDATE SET minutes=EXCLUDED.minutes,name=EXCLUDED.name,email=EXCLUDED.email,revision=EXCLUDED.revision",
+          [
+            actor,
+            input.month,
+            input.minutes,
+            input.name,
+            normalizedEmail(input.email),
+            revision,
+          ],
+        );
+        return remember(tx, actor, input.operationId, digest, {
+          month: input.month,
+          revision,
+        });
+      });
+    },
+    async submitCoaching(
+      token: string,
+      input: {
+        month: string;
+        rateId: string;
+        sample: boolean;
+        expectedRevision: number;
+        operationId: string;
+      },
+    ): Promise<InvoiceResult<{ month: string; revision: number }>> {
+      if (
+        !input ||
+        !coachingMonth(input.month) ||
+        !invoiceUuid(input.rateId) ||
+        typeof input.sample !== "boolean" ||
+        !invoiceCents(input.expectedRevision) ||
+        !invoiceUuid(input.operationId)
+      )
+        return fail("invalid");
+      return run(token, false, async (tx, actor) => {
+        await owner(tx, actor);
+        const digest = invoiceDigest({ action: "coaching-submit", input }),
+          previous = await replay<{ month: string; revision: number }>(
+            tx,
+            actor,
+            input.operationId,
+            digest,
+          );
+        if (previous) return previous;
+        if (input.month > (await coachingToday(tx))) return fail("invalid");
+        const entry = await coachingEntry(tx, actor, input.month),
+          rate = (
+            await tx.query<CoachingRate>(
+              `SELECT ${rateColumns} FROM coaching_rates WHERE owner_id=$1 AND effective_month<=$2 ORDER BY effective_month DESC,version DESC LIMIT 1`,
+              [actor, input.month],
+            )
+          ).rows[0];
+        if (!entry) return fail("not-found");
+        if (!rate) return fail("unavailable");
+        if (
+          entry.state !== "draft" ||
+          entry.revision !== input.expectedRevision ||
+          rate.id !== input.rateId ||
+          input.sample !== settings.sample
+        )
+          return fail("conflict");
+        const subtotalCents = coachingSubtotal(entry.minutes, rate.cents);
+        if (subtotalCents === null) return fail("invalid");
+        const revision = entry.revision + 1,
+          snapshot: CoachingSnapshot = {
+            month: input.month,
+            minutes: entry.minutes,
+            rate,
+            subtotalCents,
+            name: entry.name,
+            email: entry.email,
+            sample: settings.sample,
+          };
+        await tx.query(
+          "INSERT INTO coaching_submissions(owner_id,month,revision,snapshot) VALUES($1,$2,$3,$4)",
+          [actor, input.month, revision, JSON.stringify(snapshot)],
+        );
+        await tx.query(
+          "UPDATE coaching_months SET state='submitted',revision=$3,submitted_revision=$3,return_reason=NULL WHERE owner_id=$1 AND month=$2",
+          [actor, input.month, revision],
+        );
+        return remember(tx, actor, input.operationId, digest, {
+          month: input.month,
+          revision,
+        });
+      });
+    },
+    async returnCoaching(
+      token: string,
+      input: {
+        ownerId: string;
+        month: string;
+        expectedRevision: number;
+        operationId: string;
+        reason: string;
+      },
+    ): Promise<InvoiceResult<{ month: string; revision: number }>> {
+      if (
+        !input ||
+        !invoiceUuid(input.ownerId) ||
+        !coachingMonth(input.month) ||
+        !invoiceCents(input.expectedRevision) ||
+        !invoiceUuid(input.operationId) ||
+        !invoiceText(input.reason, 500)
+      )
+        return fail("invalid");
+      return run(token, true, async (tx, actor) => {
+        await owner(tx, input.ownerId, true);
+        const digest = invoiceDigest({ action: "coaching-return", input }),
+          previous = await replay<{ month: string; revision: number }>(
+            tx,
+            actor,
+            input.operationId,
+            digest,
+          );
+        if (previous) return previous;
+        const entry = await coachingEntry(tx, input.ownerId, input.month);
+        if (!entry) return fail("not-found");
+        if (
+          entry.state === "draft" ||
+          entry.revision !== input.expectedRevision
+        )
+          return fail("conflict");
+        if (entry.state === "invoiced") {
+          const invoice = (
+            await tx.query<StoredInvoice>(
+              `SELECT ${invoiceColumns} FROM simple_invoices WHERE id=$1 AND owner_id=$2 FOR UPDATE`,
+              [entry.invoiceId, input.ownerId],
+            )
+          ).rows[0];
+          if (
+            !invoice ||
+            !invoice.voidReason ||
+            Number(invoice.paidCents) !== 0 ||
+            invoice.delivery === "sending" ||
+            invoice.delivery === "unconfirmed"
+          )
+            return fail("conflict");
+        }
+        const revision = entry.revision + 1;
+        await tx.query(
+          "UPDATE coaching_months SET state='draft',revision=$3,return_reason=$4,previous_invoice_id=COALESCE(invoice_id,previous_invoice_id),invoice_id=NULL WHERE owner_id=$1 AND month=$2",
+          [input.ownerId, input.month, revision, input.reason],
+        );
+        return remember(tx, actor, input.operationId, digest, {
+          month: input.month,
+          revision,
+        });
+      });
+    },
+    async issueCoaching(
+      token: string,
+      input: {
+        ownerId: string;
+        month: string;
+        expectedRevision: number;
+        taxCents: number;
+        operationId: string;
+      },
+    ): Promise<InvoiceResult<{ invoiceId: string }>> {
+      if (
+        !input ||
+        !invoiceUuid(input.ownerId) ||
+        !coachingMonth(input.month) ||
+        !invoiceCents(input.expectedRevision) ||
+        !invoiceCents(input.taxCents) ||
+        !invoiceUuid(input.operationId)
+      )
+        return fail("invalid");
+      return run(token, true, async (tx, actor) => {
+        await owner(tx, input.ownerId, true);
+        const digest = invoiceDigest({ action: "coaching-issue", input }),
+          previous = await replay<{ invoiceId: string }>(
+            tx,
+            actor,
+            input.operationId,
+            digest,
+          );
+        if (previous) return previous;
+        const entry = await coachingEntry(tx, input.ownerId, input.month);
+        if (!entry) return fail("not-found");
+        if (
+          entry.state !== "submitted" ||
+          entry.revision !== input.expectedRevision ||
+          !entry.snapshot ||
+          entry.snapshot.sample !== settings.sample
+        )
+          return fail("conflict");
+        const snapshot = entry.snapshot,
+          total = snapshot.subtotalCents + input.taxCents;
+        if (
+          snapshot.subtotalCents <= 0 ||
+          !invoiceCents(total) ||
+          !invoiceText(settings.issuer, 500) ||
+          !invoiceText(settings.instructions, 2000)
+        )
+          return fail("invalid");
+        if (
+          (
+            await tx.query(
+              "SELECT id FROM simple_invoices WHERE owner_id=$1 AND coaching_month=$2 AND void_reason IS NULL FOR UPDATE",
+              [input.ownerId, input.month],
+            )
+          ).rowCount
+        )
+          return fail("conflict");
+        const invoiceId = randomUUID();
+        const document: SimpleInvoiceDocument & { recipientEmail: string } = {
+          number: `DN-${invoiceId}`,
+          issuedOn: (
+            await tx.query<{ today: string }>(
+              "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD') AS today",
+            )
+          ).rows[0]!.today,
+          issuer: settings.issuer,
+          billedTo: snapshot.name,
+          recipientEmail: snapshot.email,
+          lines: [
+            {
+              description: `Coaching · ${snapshot.month}`,
+              amountCents: snapshot.subtotalCents,
+            },
+          ],
+          billing: { kind: "one_time" },
+          currency: "CAD",
+          taxCents: input.taxCents,
+          paidCents: 0,
+          instructions: settings.instructions,
+          sample: snapshot.sample,
+          coaching: {
+            month: snapshot.month,
+            minutes: snapshot.minutes,
+            rateCents: snapshot.rate.cents,
+            rateVersion: snapshot.rate.version,
+            rateId: snapshot.rate.id,
+            submissionRevision: entry.submittedRevision!,
+            replacesInvoiceId: entry.previousInvoiceId,
+          },
+        };
+        await tx.query(
+          "INSERT INTO simple_invoices(id,owner_id,cycle,document,sample,total_cents,coaching_month) VALUES($1,$2,0,$3,$4,$5,$6)",
+          [
+            invoiceId,
+            input.ownerId,
+            JSON.stringify(document),
+            snapshot.sample,
+            total,
+            input.month,
+          ],
+        );
+        await tx.query(
+          "UPDATE coaching_months SET state='invoiced',revision=revision+1,invoice_id=$3 WHERE owner_id=$1 AND month=$2",
+          [input.ownerId, input.month, invoiceId],
+        );
+        return remember(tx, actor, input.operationId, digest, { invoiceId });
+      });
+    },
     // shortcut: Lists show 100 records; add pagination before account volume exceeds this bound.
     async overview(token: string): Promise<InvoiceResult<InvoiceOverview>> {
       return run(token, false, async (tx, actor) => {
@@ -299,7 +736,15 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             "SELECT id,revision,delivery FROM simple_invoices ORDER BY created_at DESC LIMIT 100",
           )
         ).rows;
-        return { kind: "ready", value: { members, courses, invoices } };
+        const coachingPending = (
+          await tx.query<{ ownerId: string; month: string }>(
+            "SELECT owner_id AS \"ownerId\",month FROM coaching_months WHERE state='submitted' ORDER BY month,owner_id LIMIT 100",
+          )
+        ).rows;
+        return {
+          kind: "ready",
+          value: { members, courses, invoices, coachingPending },
+        };
       });
     },
     async propose(

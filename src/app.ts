@@ -1,3 +1,4 @@
+import { mountCoachingRoutes } from "./coaching-routes.ts";
 import { mountAdministratorEntry } from "./administrator-entry-routes.ts";
 import type { AdministratorEntry } from "./administrator-entry.ts";
 import {
@@ -1415,6 +1416,7 @@ export function app(
     }
   }
   mountSimpleInvoiceRoutes(app, options.simpleInvoices, options);
+  mountCoachingRoutes(app, options.simpleInvoices, options);
   mountStarterGuidanceRoutes(app);
   if (options.sampleFeedback && options.reviewTime)
     mountReviewTimeRoutes(

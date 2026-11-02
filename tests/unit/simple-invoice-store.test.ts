@@ -190,6 +190,7 @@ function fixture(
       return result([{ id: ownerId }]);
     if (sql.includes("FROM simple_invoices ORDER"))
       return result([{ id: invoiceId, revision: 1, delivery: "not_sent" }]);
+    if (sql.includes("FROM coaching_months WHERE state")) return result([]);
     if (sql.includes("interval '10 seconds'"))
       return result(options.lease === false ? [] : [{ expires: expiry }]);
     if (sql.startsWith("INSERT") || sql.startsWith("UPDATE"))

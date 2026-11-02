@@ -468,6 +468,30 @@ const sections = {
      WHERE n.member_id=$1 AND n.deleted_at IS NULL AND n.id=ANY($4::uuid[])`,
     "f.notebook_id,f.sequence,f.field_key",
   ),
+  coachingRates: section(
+    'id,effective_month AS "effectiveMonth",cents,version',
+    "coaching_rates WHERE owner_id=$1",
+    "version",
+    true,
+  ),
+  coachingMonths: section(
+    'month,minutes,name,email,state,revision,submitted_revision AS "submittedRevision",invoice_id AS "invoiceId",previous_invoice_id AS "previousInvoiceId",return_reason AS "returnReason"',
+    "coaching_months WHERE owner_id=$1",
+    "month",
+    true,
+  ),
+  coachingSubmissions: section(
+    'month,revision,snapshot,submitted_at AS "submittedAt"',
+    "coaching_submissions WHERE owner_id=$1",
+    "month,revision",
+    true,
+  ),
+  invoices: section(
+    'id,document,total_cents AS "totalCents",paid_cents AS "paidCents",void_reason AS "voidReason"',
+    "simple_invoices WHERE owner_id=$1",
+    "id",
+    true,
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -481,7 +505,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v28";
+  version: "local-member-records-v29";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -615,7 +639,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v28",
+          version: "local-member-records-v29",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

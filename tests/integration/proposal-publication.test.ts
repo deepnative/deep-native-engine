@@ -227,7 +227,7 @@ it("keeps the private original and export while withdrawing only display; no fea
   const exported = await memberExportStore(pool).exportOwned(f.owner);
   expect(exported.kind).toBe("ready");
   if (exported.kind !== "ready") throw Error("Export failed");
-  expect(exported.payload.version).toBe("local-member-records-v28");
+  expect(exported.payload.version).toBe("local-member-records-v29");
   expect(exported.payload.records.proposalPublications).toEqual([
     expect.objectContaining({
       id: shared.id,
