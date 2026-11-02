@@ -93,3 +93,27 @@ it("withholds unexpected errors without leaking their content", async () => {
   expect(r.status).toBe(503);
   expect(r.text).not.toContain("private failure text");
 });
+
+it("COPY-597-01 pluralises minutes since submission", async () => {
+  const f = fixture();
+  f.list.mockResolvedValue({
+    kind: "ready",
+    view: "active",
+    items: [
+      {
+        evidenceId: "11111111-1111-4111-8111-111111111111",
+        title: "Invented sample",
+        version: 1,
+        submittedAt: "2026-10-04T12:00:00.000000Z",
+        ageMinutes: 1,
+        state: "not-started",
+      },
+    ],
+    next: null,
+  });
+  const r = await withLoopback(f.app, (s) =>
+    request(s).get("/review/worklist"),
+  );
+  expect(r.text).toContain("1 minute since submission");
+  expect(r.text).not.toContain("1 minutes");
+});

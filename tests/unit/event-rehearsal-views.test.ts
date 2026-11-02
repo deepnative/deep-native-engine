@@ -86,3 +86,21 @@ it("STAFF-WINDOW-02 shows a current start example instead of a past date", () =>
   expect(html).toContain('placeholder="2026-11-03T18:00:00.000Z"');
   expect(html).not.toContain("2026-10-07T15:30:00.000Z");
 });
+
+it("COPY-597-04 labels the checked rehearsal fields in words", () => {
+  const html = eventRehearsalConfirm("csrf", attempt, true);
+  for (const label of [
+    "Template",
+    "Template version",
+    "Start (UTC)",
+    "Title",
+    "End (UTC)",
+    "Sample capacity",
+    "Template digest",
+  ])
+    expect(html).toContain(`<label>${label}<input`);
+  expect(html).not.toMatch(
+    /<label>(templateId|templateVersion|startsAt|endsAt|capacity|templateDigest|title)<input/,
+  );
+  expect(html).toContain('name="startsAt" readonly');
+});

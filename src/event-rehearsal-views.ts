@@ -15,11 +15,20 @@ const notice = `<p class="eyebrow">INVENTED PRIVATE REHEARSAL</p><p>Schedule a l
 const nav = `<p><a href="${base}">Rehearsal scheduling</a> · <a href="/operator/event-cancellations">Event cancellation</a> · <a href="/staff">Your staff tools</a></p>`;
 const instruction = (startsAt = "", example = upcomingExample()) =>
   `<label>Trusted template<input name="templateId" readonly required value="${escape(REHEARSAL_TEMPLATE.id)}"></label><label>Template version<input name="templateVersion" readonly required value="${REHEARSAL_TEMPLATE.version}"></label><label>Start in UTC<input name="startsAt" required maxlength="24" placeholder="${escape(example)}" value="${escape(startsAt)}"></label><p>Use the full UTC format shown. Starts must be two minutes to thirty days ahead of the database clock. The template sets duration and sample capacity.</p>`;
+const checkedLabels: Record<keyof RehearsalSnapshot, string> = {
+  templateId: "Template",
+  templateVersion: "Template version",
+  startsAt: "Start (UTC)",
+  title: "Title",
+  endsAt: "End (UTC)",
+  capacity: "Sample capacity",
+  templateDigest: "Template digest",
+};
 function checkedFields(attempt: RehearsalAttempt) {
   return `${Object.entries(attempt.snapshot)
     .map(
       ([name, value]) =>
-        `<label>${escape(name)}<input name="${escape(name)}" readonly required value="${escape(String(value))}"></label>`,
+        `<label>${escape(checkedLabels[name as keyof RehearsalSnapshot])}<input name="${escape(name)}" readonly required value="${escape(String(value))}"></label>`,
     )
     .join(
       "",

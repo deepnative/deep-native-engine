@@ -114,10 +114,10 @@ for (const [index, [background, goal]] of (
         .click();
       const confirmation = admin.locator(`form[action="${base}/schedule"]`);
       await expect(
-        confirmation.getByLabel("startsAt", { exact: true }),
+        confirmation.getByLabel("Start (UTC)", { exact: true }),
       ).toHaveValue(startsAt);
       await expect(
-        confirmation.getByLabel("title", { exact: true }),
+        confirmation.getByLabel("Title", { exact: true }),
       ).toHaveAttribute("readonly", "");
       const key = await confirmation
         .getByLabel("Original submission key", { exact: true })
