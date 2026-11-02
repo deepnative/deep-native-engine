@@ -5,5 +5,5 @@ CREATE TABLE IF NOT EXISTS billing_profiles (
  email text NOT NULL CHECK(length(email) BETWEEN 3 AND 254),
  revision integer NOT NULL CHECK(revision>0)
 );
-INSERT INTO schema_migrations(version) VALUES(85) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(86) ON CONFLICT DO NOTHING;
 COMMIT;

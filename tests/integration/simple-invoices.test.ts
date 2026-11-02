@@ -705,3 +705,25 @@ it("BILLPROFILE02/04 an acknowledged profile commit with a lost response stays i
     invoices: [],
   });
 });
+
+it("BILLPROFILE05 records applied migration versions and preserves the profile when migration runs again", async () => {
+  const versions = async () =>
+    (
+      await pool.query<{ version: number }>(
+        "SELECT version FROM schema_migrations WHERE version >= 84 ORDER BY version",
+      )
+    ).rows.map((row) => row.version);
+  expect(await versions()).toEqual([84, 85, 86]);
+  const owner = await member();
+  const profile = ready(
+    await profiles.save(owner.token, {
+      name: "Invented migration recipient",
+      email: "migration-recipient@example.invalid",
+      revision: 0,
+    }),
+  );
+  await migrate(pool);
+  expect(await versions()).toEqual([84, 85, 86]);
+  expect(ready(await profiles.read(owner.token))).toEqual(profile);
+  expect((await members.session(owner.token, "account")).kind).toBe("active");
+});
