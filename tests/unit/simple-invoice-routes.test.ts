@@ -5,6 +5,7 @@ import { expect, it, vi } from "vitest";
 import { mountSimpleInvoiceRoutes } from "../../src/simple-invoice-routes.ts";
 import type { SimpleInvoiceStore } from "../../src/simple-invoice-store.ts";
 import { csrf } from "../../src/session.ts";
+import { expectPortalActions, mainHtml } from "../support/portal-layout.ts";
 import { withLoopback } from "../support/loopback-server.ts";
 const token = "a".repeat(64),
   secret = "invoice-test",
@@ -630,4 +631,26 @@ it("BILLPROFILE02 preserves empty invalid attempted recipient fields with a safe
   expect(r.status).toBe(422);
   expect(r.text).toContain("Recipient not saved");
   expect(r.text).toContain('value=""');
+});
+it("ADMIN-LAYOUT-02 course billing administration titles each task card and offers navigation as buttons", async () => {
+  const f = fixture();
+  const html = (await f.get("/operator/invoices")).text;
+  expectPortalActions(html, [
+    ["/operator", "Administration console"],
+    ["/operator/coaching", "Monthly coaching"],
+  ]);
+  const main = mainHtml(html);
+  expect(main).toContain(
+    '<section class="invoice-workspace portal-workspace">',
+  );
+  for (const title of [
+    "Prepare course billing",
+    "Recurring invoices",
+    "Issued invoice references",
+  ])
+    expect(main).toMatch(
+      new RegExp(`<section class="portal-card"><h2>${title}</h2>`),
+    );
+  expect(main).toContain('action="/operator/invoices/plans"');
+  expect(main).toContain('action="/operator/invoices/due"');
 });

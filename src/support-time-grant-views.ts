@@ -1,4 +1,5 @@
 import { escape, hidden, page } from "./views.ts";
+import { portalActions } from "./backend-portal-presentation.ts";
 import {
   SUPPORT_GRANT_PATH as base,
   SUPPORT_GRANT_PAGE_SIZE,
@@ -11,7 +12,11 @@ import {
 export type SupportMinuteAttempt =
   | { kind: "grant"; input: SupportMinuteInput }
   | { kind: "revoke"; input: SupportMinuteRevokeInput };
-const navigation = `<p><a href="${base}">Private support-minute permissions</a> · <a href="${base}/history">Your permission history</a> · <a href="/staff">Your staff tools</a></p>`;
+const navigation = portalActions([
+  [base, "Private support-minute permissions"],
+  [`${base}/history`, "Your permission history"],
+  ["/staff", "Your staff tools"],
+]);
 const notice =
   '<p class="eyebrow">PRIVATE LOCAL SUPPORT MINUTES</p><p>One exact allocation-specific permission for invented local support. This creates no units, request-text assignment, staff identity or qualification. Request-text permission is independent: time permission alone reveals no request text or internal notes. Begin and settlement are separate explicit actions.</p>';
 const field = (name: string, value: string) =>

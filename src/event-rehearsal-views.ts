@@ -1,4 +1,5 @@
 import { escape, hidden, page } from "./views.ts";
+import { portalActions } from "./backend-portal-presentation.ts";
 import { upcomingExample } from "./staff-window.ts";
 import {
   REHEARSAL_TEMPLATE,
@@ -12,7 +13,11 @@ export interface RehearsalAttempt {
 const base = "/operator/event-rehearsals";
 const integrity = (csrf: string) => hidden(escape(csrf));
 const notice = `<p class="eyebrow">INVENTED PRIVATE REHEARSAL</p><p>Schedule a local learning rehearsal using the trusted sample template. This is not a real clinic, expert service, recording, attendance record or paid booking. No member directory is shown.</p>`;
-const nav = `<p><a href="${base}">Rehearsal scheduling</a> · <a href="/operator/event-cancellations">Event cancellation</a> · <a href="/staff">Your staff tools</a></p>`;
+const nav = portalActions([
+  [base, "Rehearsal scheduling"],
+  ["/operator/event-cancellations", "Event cancellation"],
+  ["/staff", "Your staff tools"],
+]);
 const instruction = (startsAt = "", example = upcomingExample()) =>
   `<label>Trusted template<input name="templateId" readonly required value="${escape(REHEARSAL_TEMPLATE.id)}"></label><label>Template version<input name="templateVersion" readonly required value="${REHEARSAL_TEMPLATE.version}"></label><label>Start in UTC<input name="startsAt" required maxlength="24" placeholder="${escape(example)}" value="${escape(startsAt)}"></label><p>Use the full UTC format shown. Starts must be two minutes to thirty days ahead of the database clock. The template sets duration and sample capacity.</p>`;
 const checkedLabels: Record<keyof RehearsalSnapshot, string> = {

@@ -4,6 +4,7 @@ import { isReviewedFoundation } from "./foundation-pack.ts";
 import { hostingText } from "./hosting-presentation.ts";
 import { administrationLink } from "./administration-presentation.ts";
 import { navigationLink } from "./navigation-presentation.ts";
+import { signedIn, signInAvailable } from "./membership-presentation.ts";
 import { randomUUID } from "node:crypto";
 import type { MemberExportPayload } from "./member-export.ts";
 import {
@@ -84,11 +85,13 @@ export function escape(value: string) {
   );
 }
 export function accountActionLinks() {
-  return `${navigationLink("/account/coaching", "Top up hours")}${administrationLink(navigationLink("/admin", "Administration"))}${navigationLink("/account/sign-out", "Sign out")}`;
+  if (!signedIn())
+    return signInAvailable() ? navigationLink("/email/sign-in", "Sign in") : "";
+  return `${navigationLink("/account/coaching", "Monthly coaching hours")}${administrationLink(navigationLink("/admin", "Administration"))}${navigationLink("/account/sign-out", "Sign out")}`;
 }
 
 export function page(title: string, body: string) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a><header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a><nav class="main-navigation" aria-label="Main navigation">${navigationLink("/learn", "Learning")}${navigationLink("/account", "Account")}${accountActionLinks()}</nav></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><span><a href="/programs">Explore programs</a> · <a href="/my-courses">My courses</a> · <a href="/circles">Local circles</a> · <a href="/workflows">Workflow demonstrations</a> · <a href="/readiness">Integration readiness</a>.</span></footer></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a><header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a><nav class="main-navigation" aria-label="Main navigation">${navigationLink("/learn", "Learning")}${signedIn() ? navigationLink("/account", "Account") : ""}${accountActionLinks()}</nav></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><span><a href="/programs">Explore programs</a> · <a href="/my-courses">My courses</a> · <a href="/circles">Local circles</a> · <a href="/workflows">Workflow demonstrations</a> · <a href="/readiness">Integration readiness</a>.</span></footer></body></html>`;
 }
 export function memberExportPage(
   payload: MemberExportPayload,
@@ -889,7 +892,7 @@ export function accountPage(
 ) {
   const recovery =
     emailStatus === "linked"
-      ? '<section class="account-recovery"><h2>Verified email linked</h2><p>You can return to this same saved work on another device using the email you verified.</p><p><a class="button secondary" href="/email/sign-in">Email sign-in</a></p></section>'
+      ? '<section class="account-recovery"><h2>Verified email linked</h2><p>You can return to this same saved work on another device using the email you verified, with an email link or a password.</p><p class="account-links"><a class="button secondary" href="/account/password">Password sign-in</a> <a class="button secondary" href="/email/sign-in">Email sign-in</a></p></section>'
       : emailStatus === "unlinked"
         ? '<section class="account-recovery"><h2>This browser only</h2><p>Link and verify an email before clearing cookies or changing devices to keep access to this same saved work.</p><p><a class="button secondary" href="/email/attach">Link an email</a></p></section>'
         : '<section class="account-recovery"><h2>Email recovery is unavailable</h2><p>Keep this browser’s signed-in session to access your saved learning. Email recovery cannot be checked right now.</p></section>';

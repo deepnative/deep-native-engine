@@ -173,6 +173,19 @@ test("[L239] MOUT-01/02 a linked member signs out and deliberately returns by em
       (await page.context().cookies()).find((c) => c.name === "dne_staff")
         ?.value,
     ).toBe("signed-out");
+    // NAV-08: the header stops offering member tools once signed out,
+    // including on the email sign-in page that sets a fresh visitor cookie.
+    for (const path of ["/readiness", "/email/sign-in"]) {
+      await page.goto(`${f.origin}${path}`);
+      const header = page.getByRole("navigation", { name: "Main navigation" });
+      await expect(
+        header.getByRole("link", { name: "Sign in", exact: true }),
+      ).toBeVisible();
+      for (const label of ["Account", "Monthly coaching hours", "Sign out"])
+        await expect(
+          header.getByRole("link", { name: label, exact: true }),
+        ).toHaveCount(0);
+    }
     const stale = await copied.newPage();
     await stale.goto(`${f.origin}/account`);
     await expect(stale).toHaveURL(`${f.origin}/`);
@@ -319,7 +332,7 @@ test("[L281] NAV-01/03/04 finds account tools and deliberately signs out without
     for (const label of [
       "Learning",
       "Account",
-      "Top up hours",
+      "Monthly coaching hours",
       "Administration",
       "Sign out",
     ])
@@ -344,7 +357,7 @@ test("[L281] NAV-01/03/04 finds account tools and deliberately signs out without
       fullPage: true,
     });
     await navigation
-      .getByRole("link", { name: "Top up hours", exact: true })
+      .getByRole("link", { name: "Monthly coaching hours", exact: true })
       .click();
     await expect(
       page.getByRole("heading", { name: "How to enter coaching hours" }),

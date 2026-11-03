@@ -1,4 +1,5 @@
 import { escape, hidden, page } from "./views.ts";
+import { portalActions } from "./backend-portal-presentation.ts";
 import type {
   EventCancellationAttempt,
   EventCancellationPreview,
@@ -7,7 +8,10 @@ import type {
 } from "./event-cancellation-values.ts";
 const base = "/operator/event-cancellations";
 const notice = `<p class="eyebrow">PRIVATE LOCAL EVENT REHEARSAL</p><p>Cancel one exact invented event version. This does not cancel a real appointment, notify attendees, issue refunds or record attendance. No attendee directory or private member work is shown.</p>`;
-const navigation = `<p><a href="${base}">Event cancellation</a> · <a href="/staff">Your staff tools</a></p>`;
+const navigation = portalActions([
+  [base, "Event cancellation"],
+  ["/staff", "Your staff tools"],
+]);
 const scopeFields = (scope: EventCancellationScope) =>
   `<label>Exact event ID<input name="eventId" value="${escape(scope.eventId)}" readonly required></label><label>Exact version<input name="eventVersion" value="${scope.eventVersion}" readonly required></label>`;
 const referenceInputs = `<label for="eventId">Exact event ID</label><input id="eventId" name="eventId" maxlength="80" required><label for="eventVersion">Exact version</label><input id="eventVersion" name="eventVersion" inputmode="numeric" maxlength="7" required>`;

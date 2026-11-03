@@ -116,7 +116,9 @@ test("[L213] email verification restores the exact saved member in another brows
     // MON-07: a returning visitor can find sign-in before starting another account.
     await fresh.goto(origin);
     await expect(
-      fresh.getByRole("link", { name: "Sign in", exact: true }),
+      fresh
+        .locator("#main")
+        .getByRole("link", { name: "Sign in", exact: true }),
     ).toBeVisible();
     await fresh.goto(`${origin}/account`);
     await expect(fresh).toHaveURL(`${origin}/`);

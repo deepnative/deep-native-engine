@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { csrf, validCsrf } from "./session.ts";
 import { page, escape } from "./views.ts";
+import { portalActions } from "./backend-portal-presentation.ts";
 import {
   parseInvoiceMoney,
   invoiceUuid,
@@ -186,7 +187,12 @@ export function mountSimpleInvoiceRoutes(
     return res.send(
       page(
         "Course billing administration",
-        `<section class="invoice-workspace"><h1>Course billing administration</h1><p><a href="/operator">Administration console</a></p><p><a href="/operator/coaching">Monthly coaching</a></p><p>Prepare courses for a registered student. No invoice is issued until the student accepts the exact terms.</p><form method="post" action="${adminPath}/plans">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}<label for="invoice-owner">Learner</label><select id="invoice-owner" name="ownerId" required>${r.value.members.map((m) => `<option value="${m.id}">${escape(m.displayName ?? "Name needed")} · ${escape(m.id)}</option>`).join("")}</select><fieldset><legend>Consolidate courses</legend>${r.value.courses.map((c) => `<label class="check"><input type="checkbox" name="courses" value="${escape(JSON.stringify([c.id, c.version]))}"><span>${escape(c.title)} · ${escape(c.id)} version ${c.version}</span></label><label>Amount for ${escape(c.title)} (CAD)<input name="amount_${escape(c.id)}_${c.version}" inputmode="decimal" value="0.00"></label>`).join("")}</fieldset><label for="invoice-cadence">Billing</label><select id="invoice-cadence" name="cadence"><option value="one_time">One-time</option><option value="monthly">Recurring monthly</option></select><label>Starts on (UTC date)<input type="date" name="startsOn" required></label><label>Configured tax amount per invoice (CAD)<input name="tax" inputmode="decimal" value="0.00" required></label><button>Prepare course billing proposal</button></form><form method="post" action="${adminPath}/due">${hidden("csrf", anti)}<button>Generate due recurring invoices</button></form><h2>Issued invoice references</h2><ul>${r.value.invoices.map((i) => `<li><a href="${adminPath}/${i.id}">${i.id}</a> · ${escape(i.delivery)}</li>`).join("")}</ul></section>`,
+        `<section class="invoice-workspace portal-workspace"><h1>Course billing administration</h1><p>Prepare courses for a registered student. No invoice is issued until the student accepts the exact terms.</p>${portalActions(
+          [
+            ["/operator", "Administration console"],
+            ["/operator/coaching", "Monthly coaching"],
+          ],
+        )}<section class="portal-card"><h2>Prepare course billing</h2><form method="post" action="${adminPath}/plans">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}<label for="invoice-owner">Learner</label><select id="invoice-owner" name="ownerId" required>${r.value.members.map((m) => `<option value="${m.id}">${escape(m.displayName ?? "Name needed")} · ${escape(m.id)}</option>`).join("")}</select><fieldset><legend>Consolidate courses</legend>${r.value.courses.map((c) => `<label class="check"><input type="checkbox" name="courses" value="${escape(JSON.stringify([c.id, c.version]))}"><span>${escape(c.title)} · ${escape(c.id)} version ${c.version}</span></label><label>Amount for ${escape(c.title)} (CAD)<input name="amount_${escape(c.id)}_${c.version}" inputmode="decimal" value="0.00"></label>`).join("")}</fieldset><label for="invoice-cadence">Billing</label><select id="invoice-cadence" name="cadence"><option value="one_time">One-time</option><option value="monthly">Recurring monthly</option></select><label>Starts on (UTC date)<input type="date" name="startsOn" required></label><label>Configured tax amount per invoice (CAD)<input name="tax" inputmode="decimal" value="0.00" required></label><button>Prepare course billing proposal</button></form></section><section class="portal-card"><h2>Recurring invoices</h2><form method="post" action="${adminPath}/due">${hidden("csrf", anti)}<button>Generate due recurring invoices</button></form></section><section class="portal-card"><h2>Issued invoice references</h2><ul class="portal-list">${r.value.invoices.map((i) => `<li><a href="${adminPath}/${i.id}">${i.id}</a> · ${escape(i.delivery)}</li>`).join("")}</ul></section></section>`,
       ),
     );
   });

@@ -452,9 +452,9 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await friendly(o, "owner-set-rate");
     await o.getByRole("button", { name: "Save hourly rate" }).click();
 
-    // 4. The student reports last month's hours from Top up hours.
+    // 4. The student reports last month's hours from Monthly coaching hours.
     await menu(s)
-      .getByRole("link", { name: "Top up hours", exact: true })
+      .getByRole("link", { name: "Monthly coaching hours", exact: true })
       .click();
     await expect(s).toHaveURL(f.origin + "/account/coaching");
     await s.getByLabel("Calendar month (UTC)").fill(month);
@@ -680,6 +680,7 @@ test("[L275] HOUR03/06/09 committed submission recovery preserves zero totals wi
     const m = await f.member(),
       admin = await f.admin();
     await m.page
+      .locator("#main")
       .getByRole("link", { name: "Monthly coaching hours", exact: true })
       .click();
     await expect(m.page.getByText(/No rate is set/)).toBeVisible();
@@ -740,6 +741,7 @@ test("[L276] HOUR09 disabled invoicing keeps monthly entry honest and learning a
   try {
     const m = await f.member();
     await m.page
+      .locator("#main")
       .getByRole("link", { name: "Monthly coaching hours", exact: true })
       .click();
     await expect(
