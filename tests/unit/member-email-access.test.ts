@@ -325,6 +325,7 @@ it("EMAIL-DIAG-01 logs one content-free outcome for each request and hides provi
         { errorName: "Error" },
       ],
       ["a private string failure", {}],
+      [Object.assign(new Error("private"), { name: "not one word" }), {}],
     ] as const) {
       const quiet = memberEmailAccess(
         pool,

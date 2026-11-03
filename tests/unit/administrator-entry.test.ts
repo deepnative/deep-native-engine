@@ -167,6 +167,33 @@ it("ADMINCON01/02 reads a bounded minimal directory and exact member summaries w
     value: { members: [] },
   });
 });
+it("ADMINTABLE-02/03 passes a literal search and an exact reference, and clamps the page", async () => {
+  const f = fixture(),
+    id = "11111111-1111-4111-8111-111111111111";
+  const filterOf = () =>
+    (
+      f.query.mock.calls.findLast(([sql]) =>
+        String(sql).startsWith("SELECT count(*)"),
+      ) as unknown as [string, unknown[]]
+    )[1];
+  expect(
+    await f.store.console!(token, undefined, { page: 9, search: " 5%_\\\\ " }),
+  ).toMatchObject({
+    kind: "ready",
+    value: { page: 1, pageSize: 25, total: 1, search: "5%_\\\\" },
+  });
+  expect(filterOf()).toEqual(["%5\\%\\_\\\\\\\\%", null]);
+  await f.store.console!(token, undefined, {
+    page: 0,
+    search: id.toUpperCase(),
+  });
+  expect(filterOf()).toEqual([`%${id.toUpperCase()}%`, id]);
+  f.state.listed = false;
+  expect(await f.store.console!(token, undefined, { page: 3 })).toMatchObject({
+    kind: "ready",
+    value: { page: 1, total: 0, members: [], search: "" },
+  });
+});
 it("ADMINCON04 fences console reads by exact finite admin authority and fails closed on unknown outcomes", async () => {
   const f = fixture();
   expect(await f.store.console!("wrong")).toEqual({ kind: "denied" });

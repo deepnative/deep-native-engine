@@ -148,7 +148,7 @@ function logRequest(
 ) {
   const line = { event: "member_email_request", purpose, outcome };
   if (outcome !== "send_failed") return console.info(JSON.stringify(line));
-  const { name, code } = (error ?? {}) as { name?: unknown; code?: unknown };
+  const { name, code } = Object(error) as { name?: unknown; code?: unknown };
   console.error(
     JSON.stringify({
       ...line,
