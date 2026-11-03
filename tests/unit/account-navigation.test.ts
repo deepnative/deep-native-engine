@@ -38,3 +38,21 @@ it.each(["unlinked", "unavailable"] as const)(
     expect(html).not.toContain("Sign-out requires a verified email");
   },
 );
+it.each(["linked", "unlinked", "unavailable"] as const)(
+  "ACCT-LAYOUT-02 renders the %s account page in its own single-column layout",
+  (status) => {
+    const html = accountPage(
+      { id: "invented", background: "explorer", goal: "everyday" },
+      "a".repeat(64),
+      status,
+    );
+    const main = html.match(/<main id="main">([\s\S]*)<\/main>/)?.[1] ?? "";
+    expect(main).toMatch(/^<div class="account-page">/);
+    expect(main).not.toContain('class="reading"');
+    expect(main).toMatch(
+      /<section class="account-recovery"[^>]*><h2>(Verified email linked|This browser only|Email recovery is unavailable)<\/h2>/,
+    );
+    const links = html.match(/<p class="account-links">([\s\S]*?)<\/p>/)?.[1];
+    expect(links?.match(/<a class="button secondary" href=/g)).toHaveLength(5);
+  },
+);

@@ -185,6 +185,26 @@ test("[L213] email verification restores the exact saved member in another brows
       fresh.locator('select[name="goal"], input[name="goal"]:checked'),
     ).toHaveValue("everyday");
     await expect(fresh.getByText(emailAddress)).toHaveCount(0);
+    // ACCT-LAYOUT-01: one left edge and a readable column.
+    const accountEdges = await Promise.all(
+      [
+        "My account",
+        "Verified email linked",
+        "Sign out of your account",
+        "Your learning profile",
+      ].map(
+        async (name) =>
+          (
+            await fresh
+              .getByRole("heading", { name, exact: true })
+              .boundingBox()
+          )?.x,
+      ),
+    );
+    expect(new Set(accountEdges).size).toBe(1);
+    const accountWidth = (await fresh.locator(".account-page").boundingBox())
+      ?.width;
+    expect(accountWidth).toBeLessThanOrEqual(760);
     await fresh.screenshot({
       path: `artifacts/member-account-${test.info().project.name}.png`,
       fullPage: true,
