@@ -44,7 +44,8 @@ export async function runBrowsers(root = process.cwd()) {
   };
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
-  const launch = (args, env) => {
+  const launch = (args, env, index) => {
+    const started = new Date().toISOString();
     const child = spawn(
       process.execPath,
       [path.join(root, "node_modules/playwright/cli.js"), ...args],
@@ -59,6 +60,9 @@ export async function runBrowsers(root = process.cwd()) {
       child.once("close", (code, signal) => {
         children.delete(child);
         resolve({
+          ...(index ? { index } : {}),
+          started,
+          finished: new Date().toISOString(),
           exitStatus: failed || signal ? 1 : code,
           signal: signal ? "interrupted" : "none",
         });
@@ -126,6 +130,7 @@ export async function runBrowsers(root = process.cwd()) {
               `blobs/shard-${resource.index}.zip`,
             ),
           },
+          resource.index,
         ),
       );
     }
@@ -148,6 +153,7 @@ export async function runBrowsers(root = process.cwd()) {
     );
     pending.push(merging);
     const merged = await merging;
+    evidence.merge = merged;
     requireGate(
       merged.exitStatus === 0 && !interrupted,
       "Browser report merge failed",

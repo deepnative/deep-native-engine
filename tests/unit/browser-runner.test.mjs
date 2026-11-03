@@ -135,3 +135,23 @@ it("SPEED06 runs two isolated browser groups and packages the complete selected 
   ]);
   expect(dropLaneDatabase).toHaveBeenCalledTimes(2);
 });
+
+it("TIME-01 records when each browser shard and the report merge start and finish", async () => {
+  const { root, children } = fixture(2);
+  const run = runBrowsers(root);
+  await vi.waitFor(() => expect(children).toHaveLength(2));
+  children.slice().forEach((child) => child.emit("close", 0, null));
+  await vi.waitFor(() => expect(children).toHaveLength(3));
+  children[2].emit("close", 0, null);
+  expect(await run).toBe(0);
+  const evidence = JSON.parse(
+    readFileSync(path.join(root, "artifacts/browser-shards.json")),
+  );
+  for (const step of [...evidence.lanes, evidence.merge]) {
+    expect(Date.parse(step.started)).not.toBeNaN();
+    expect(Date.parse(step.finished)).toBeGreaterThanOrEqual(
+      Date.parse(step.started),
+    );
+  }
+  expect(evidence.lanes.map((lane) => lane.index)).toEqual([1, 2]);
+});
