@@ -1136,6 +1136,55 @@ class AzureReleasePreservation(unittest.TestCase):
         app['properties']['template']['containers'][0]['env'].append({'name':'DNE_DATABASE_URL', 'value':'unexpected-duplicate'})
         with self.assertRaises(ValueError): r.prepare(app, 'b'*40)
 
+    def durable(self):
+        r = self.release()
+        app = self.app()
+        app['properties']['template'] = r.prepare(app, 'a'*40, self.receipt())['properties']['template']
+        return app
+
+    def test_azinv01_release_sets_owner_approved_configured_cad_invoicing(self):
+        r = self.release()
+        self.assertEqual(r.INVOICE, {
+            'DNE_INVOICE_MODE': 'configured',
+            'DNE_INVOICE_ISSUER': 'Deep Native Inc.',
+            'DNE_INVOICE_PAYMENT_INSTRUCTIONS': 'Pay by Interac e-Transfer (EMT) to info@deepnative.io. Include your invoice number in the message.',
+            'DNE_INVOICE_CURRENCY': 'CAD',
+        })
+        cutover = r.env_values(r.prepare(self.app(), 'a'*40, self.receipt())['properties']['template']['containers'][0])
+        self.assertEqual({k: cutover[k] for k in r.INVOICE}, r.INVOICE)
+        app = self.durable()
+        app['properties']['template']['containers'][0]['env'] = [v for v in app['properties']['template']['containers'][0]['env'] if not v['name'].startswith('DNE_INVOICE_')]
+        before = r.env_values(app['properties']['template']['containers'][0])
+        after = r.env_values(r.prepare(app, 'b'*40)['properties']['template']['containers'][0])
+        self.assertEqual({k: after[k] for k in r.INVOICE}, r.INVOICE)
+        for key in ('DNE_RELEASE_REVISION', *r.INVOICE): before.pop(key, None); after.pop(key)
+        self.assertEqual(before, after, 'Invoice settings must not change any other app setting.')
+        self.assertEqual(after['DNE_APP_MODE'], 'demo')
+
+    def test_azinv02_release_replaces_stale_invoice_values_exactly_once(self):
+        r = self.release()
+        app = self.durable()
+        env = [v for v in app['properties']['template']['containers'][0]['env'] if not v['name'].startswith('DNE_INVOICE_')]
+        env += [{'name': 'DNE_INVOICE_MODE', 'value': 'disabled'}, {'name': 'DNE_INVOICE_ISSUER', 'value': 'stale'}]
+        app['properties']['template']['containers'][0]['env'] = env
+        container = r.prepare(app, 'b'*40)['properties']['template']['containers'][0]
+        names = [v['name'] for v in container['env']]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertEqual({k: r.env_values(container)[k] for k in r.INVOICE}, r.INVOICE)
+        proxy = r.prepare(app, 'b'*40)['properties']['template']['containers'][1]
+        self.assertFalse(any(v['name'].startswith('DNE_INVOICE_') for v in proxy.get('env', [])))
+
+    def test_azinv03_hosted_runtime_accepts_the_released_invoice_settings(self):
+        r = self.release()
+        node = shutil.which('node')
+        self.assertIsNotNone(node, 'Node is required by the application gate.')
+        script = ("import { simpleInvoiceSettings } from './src/simple-invoice-config.ts';"
+                  "process.stdout.write(JSON.stringify(simpleInvoiceSettings(process.env, true)));")
+        env = {'PATH': os.environ['PATH'], **r.INVOICE}
+        result = subprocess.run([node, '--input-type=module', '-e', script], cwd=SOURCE, env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr[-500:])
+        self.assertEqual(json.loads(result.stdout), {'sample': False, 'issuer': r.INVOICE['DNE_INVOICE_ISSUER'], 'instructions': r.INVOICE['DNE_INVOICE_PAYMENT_INSTRUCTIONS']})
+
     def test_hosted14_refuses_foreign_target_lost_certificate_and_concurrent_changes(self):
         r = self.release()
         for path, value in [('id','foreign'), ('identity', {}), ('properties', {})]:

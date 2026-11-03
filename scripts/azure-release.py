@@ -48,6 +48,15 @@ CONFIG = {
     "DNE_WORKFLOW_REVIEW_REQUESTS": "enabled",
     "DNE_LOCAL_SUPPORT_ASSIGNMENT": "enabled",
 }
+# Owner-authorized real invoicing (issue #624, 3 Nov 2026). Configured mode
+# issues payable CAD invoices with offline e-Transfer instructions; nothing
+# debits a card or bank account. Every release sets exactly these values.
+INVOICE = {
+    "DNE_INVOICE_MODE": "configured",
+    "DNE_INVOICE_ISSUER": "Deep Native Inc.",
+    "DNE_INVOICE_PAYMENT_INSTRUCTIONS": "Pay by Interac e-Transfer (EMT) to info@deepnative.io. Include your invoice number in the message.",
+    "DNE_INVOICE_CURRENCY": "CAD",
+}
 
 
 def require(condition):
@@ -134,7 +143,7 @@ def prepare(app, revision, receipt=None, now=None):
         template = {
             "scale": {"minReplicas": 1, "maxReplicas": 1},
             "containers": [
-                {"name": "app", "image": f"{REGISTRY}/deepnative/app:{revision}", "resources": {"cpu": 0.5, "memory": "1Gi"}, "env": [{"name": key, "value": value} for key, value in {**CONFIG, "DNE_PRESERVATION_RECEIPT_SHA256": preservation, "DNE_RELEASE_REVISION": revision}.items()]},
+                {"name": "app", "image": f"{REGISTRY}/deepnative/app:{revision}", "resources": {"cpu": 0.5, "memory": "1Gi"}, "env": [{"name": key, "value": value} for key, value in {**CONFIG, **INVOICE, "DNE_PRESERVATION_RECEIPT_SHA256": preservation, "DNE_RELEASE_REVISION": revision}.items()]},
                 {"name": "proxy", "image": f"{REGISTRY}/deepnative/proxy:{revision}", "resources": {"cpu": 0.25, "memory": "0.5Gi"}, "env": [{"name": "PUBLIC_HOST", "value": HOST}, {"name": "LEGACY_HOST", "value": LEGACY}], "probes": [
                     {"type": "Readiness", "httpGet": {"path": "/", "port": 8080, "httpHeaders": [{"name": "Host", "value": HOST}]}, "initialDelaySeconds": 5, "periodSeconds": 5, "timeoutSeconds": 3, "failureThreshold": 3},
                     {"type": "Startup", "httpGet": {"path": "/", "port": 8080, "httpHeaders": [{"name": "Host", "value": HOST}]}, "initialDelaySeconds": 5, "periodSeconds": 5, "timeoutSeconds": 3, "failureThreshold": 60},
@@ -154,7 +163,8 @@ def prepare(app, revision, receipt=None, now=None):
         for container in template["containers"]:
             container["image"] = f"{REGISTRY}/deepnative/{container['name']}:{revision}"
             if container["name"] == "app":
-                container["env"] = [v for v in container["env"] if v["name"] != "DNE_RELEASE_REVISION"] + [{"name": "DNE_RELEASE_REVISION", "value": revision}]
+                released = {**INVOICE, "DNE_RELEASE_REVISION": revision}
+                container["env"] = [v for v in container["env"] if v["name"] not in released] + [{"name": key, "value": value} for key, value in released.items()]
     template["revisionSuffix"] = f"rel-{revision[:12]}"
     return {"properties": {"template": template}}
 
