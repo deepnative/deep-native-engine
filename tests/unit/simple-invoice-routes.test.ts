@@ -654,3 +654,45 @@ it("ADMIN-LAYOUT-02 course billing administration titles each task card and offe
   expect(main).toContain('action="/operator/invoices/plans"');
   expect(main).toContain('action="/operator/invoices/due"');
 });
+
+it("AUDIT-01/02/03 shows readable delivery states, month names and button navigation", async () => {
+  const f = fixture();
+  for (const [delivery, text] of [
+    ["not_sent", "Email status: Not sent"],
+    ["sending", "Email status: Sending"],
+    ["unconfirmed", "Email status: Unconfirmed: check the recipient"],
+  ] as const) {
+    f.service.invoice.mockResolvedValueOnce(
+      ready({ ...invoice, delivery, document: { ...doc, sample: false } }),
+    );
+    const page = (await f.get(`/operator/invoices/${id}`)).text;
+    expect(page).toContain(text);
+    expect(page).not.toContain(`Email status: ${delivery}`);
+  }
+  f.service.invoice.mockResolvedValueOnce(
+    ready({
+      ...invoice,
+      document: {
+        ...doc,
+        coaching: {
+          month: "2026-10",
+          minutes: 90,
+          rateCents: 12000,
+          rateVersion: 1,
+          rateId: id,
+          submissionRevision: 2,
+          replacesInvoiceId: null,
+        },
+      },
+    }),
+  );
+  const document = (await f.get(`/account/purchases/invoices/${id}`)).text;
+  expect(document).toContain("Month: October 2026");
+  expect(document).toContain(
+    '<a class="button secondary" href="/account/purchases">Courses and invoices</a>',
+  );
+  const purchases = (await f.get("/account/purchases")).text;
+  expect(purchases).toContain(
+    '<a class="button secondary" href="/account/billing">Billing recipient</a>',
+  );
+});

@@ -15,6 +15,7 @@ import {
   coachingSubtotal,
   coachingDuration,
   parseCoachingDuration,
+  monthLabel,
 } from "./coaching-values.ts";
 import type {
   InvoiceFailure,
@@ -110,7 +111,7 @@ export function mountCoachingRoutes(
             ["/operator/invoices", "Courses and invoices"],
             ["/operator", "Administration console"],
           ],
-        )}${coachingDashboardSection(dashboard.value, adminPath, sort)}<section class="portal-card"><h2>Members</h2><ul class="portal-list">${result.value.members.map((m) => `<li><a href="${adminPath}/${m.id}">${escape(m.displayName ?? "Name needed")}</a><p class="small">Account reference: <code>${escape(m.id)}</code></p></li>`).join("") || "<li>No members available.</li>"}</ul></section><section class="portal-card"><h2>Pending months</h2><ul class="portal-list">${result.value.coachingPending.map((m) => `<li><a href="${adminPath}/${m.ownerId}?month=${m.month}">${escape(m.displayName ?? "Name needed")} · ${m.month}</a><p class="small">Account reference: <code>${escape(m.ownerId)}</code></p></li>`).join("") || "<li>No submitted months await review.</li>"}</ul></section></section>`,
+        )}${coachingDashboardSection(dashboard.value, adminPath, sort)}<section class="portal-card"><h2>Members</h2><ul class="portal-list">${result.value.members.map((m) => `<li><a href="${adminPath}/${m.id}">${escape(m.displayName ?? "Name needed")}</a><p class="small">Account reference: <code>${escape(m.id)}</code></p></li>`).join("") || "<li>No members available.</li>"}</ul></section><section class="portal-card"><h2>Pending months</h2><ul class="portal-list">${result.value.coachingPending.map((m) => `<li><a href="${adminPath}/${m.ownerId}?month=${m.month}">${escape(m.displayName ?? "Name needed")} · ${monthLabel(m.month)}</a><p class="small">Account reference: <code>${escape(m.ownerId)}</code></p></li>`).join("") || "<li>No submitted months await review.</li>"}</ul></section></section>`,
       ),
     );
   });
@@ -151,13 +152,13 @@ export function mountCoachingRoutes(
         amount = v.rate
           ? coachingSubtotal(e?.minutes ?? 0, v.rate.cents)
           : null;
-      let body = `<section class="invoice-workspace${admin ? " portal-workspace" : ""}"><h1>${admin ? "Review monthly coaching" : "Monthly coaching hours"}</h1><p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p><p>${admin ? `Member: <strong>${escape(v.displayName ?? "Name needed")}</strong> · account reference <code>${escape(v.ownerId)}</code>` : "Choose the past month you want to invoice, enter your coaching hours and minutes, then review the rate set by your administrator. Requesting an invoice submits the saved month for administrator review; it does not take payment. Coaching is optional; your learning access does not depend on a rate or invoice."}</p><form method="get" action="${base}"><label>Calendar month (UTC)<input type="month" name="month" value="${v.month}" max="${v.today}" required></label><button class="secondary">Open month</button></form><h2>${v.month}</h2><p>Status: ${e ? escape(e.state) : "No saved draft or submission"}${e ? ` · revision ${e.revision}` : ""}</p>${e?.returnReason ? `<p role="status">Returned for correction: ${escape(e.returnReason)}</p>` : ""}<p>${v.rate ? `Applicable rate: ${money(v.rate.cents)} per hour · version ${v.rate.version} · effective ${v.rate.effectiveMonth}` : "No rate is set for this month. Ask the administrator to enter your agreed rate before submitting; you can save a draft now."}</p>`;
+      let body = `<section class="invoice-workspace${admin ? " portal-workspace" : ""}"><h1>${admin ? "Review monthly coaching" : "Monthly coaching hours"}</h1><p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p><p>${admin ? `Member: <strong>${escape(v.displayName ?? "Name needed")}</strong> · account reference <code>${escape(v.ownerId)}</code>` : "Choose the past month you want to invoice, enter your coaching hours and minutes, then review the rate set by your administrator. Requesting an invoice submits the saved month for administrator review; it does not take payment. Coaching is optional; your learning access does not depend on a rate or invoice."}</p><form method="get" action="${base}"><label>Calendar month (UTC)<input type="month" name="month" value="${v.month}" max="${v.today}" required></label><button class="secondary">Open month</button></form><h2>${monthLabel(v.month)}</h2><p>Status: ${e ? escape(e.state) : "No saved draft or submission"}${e ? ` · revision ${e.revision}` : ""}</p>${e?.returnReason ? `<p role="status">Returned for correction: ${escape(e.returnReason)}</p>` : ""}<p>${v.rate ? `Applicable rate: ${money(v.rate.cents)} per hour · version ${v.rate.version} · effective ${monthLabel(v.rate.effectiveMonth)}` : "No rate is set for this month. Ask the administrator to enter your agreed rate before submitting; you can save a draft now."}</p>`;
       if (admin)
         body += `<h2>Set member rate</h2><form method="post" action="${base}/rate">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", v.rateVersion)}<label>Effective month<input type="month" name="effectiveMonth" value="${v.month}" required></label><label>Hourly rate (CAD)<input name="rate" inputmode="decimal" required></label><button>Save hourly rate</button></form>`;
       if (e)
         body += `<p>Saved duration: ${coachingDuration(e.minutes)}</p><p>Invoice recipient: ${escape(e.name)} · ${escape(e.email)}</p>`;
       if (snapshot)
-        body += `<h2>Submitted snapshot</h2><p>${snapshot.month} · ${coachingDuration(snapshot.minutes)} · ${money(snapshot.rate.cents)} per hour · rate version ${snapshot.rate.version} · subtotal ${money(snapshot.subtotalCents)}</p><p>Recipient: ${escape(snapshot.name)} · ${escape(snapshot.email)} · ${snapshot.sample ? "Sample, not payable" : "Configured offline invoice"}</p><p>Submitted revision ${e!.submittedRevision}. This snapshot stays retained after correction.</p>`;
+        body += `<h2>Submitted snapshot</h2><p>${monthLabel(snapshot.month)} · ${coachingDuration(snapshot.minutes)} · ${money(snapshot.rate.cents)} per hour · rate version ${snapshot.rate.version} · subtotal ${money(snapshot.subtotalCents)}</p><p>Recipient: ${escape(snapshot.name)} · ${escape(snapshot.email)} · ${snapshot.sample ? "Sample, not payable" : "Configured offline invoice"}</p><p>Submitted revision ${e!.submittedRevision}. This snapshot stays retained after correction.</p>`;
       if (!admin && (!e || e.state === "draft")) {
         body += `<h2>Save your draft</h2><form method="post" action="${base}/save">${form("save", e?.revision ?? 0)}<label>Whole hours<input name="hours" type="number" min="0" max="744" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label><label>Invoice recipient name<input name="name" maxlength="200" value="${escape(e?.name ?? recipient.value?.name ?? "")}" required></label><label>Invoice email<input name="email" type="email" maxlength="254" value="${escape(e?.email ?? recipient.value?.email ?? "")}" required></label><p><a href="/account/billing">Edit reusable billing recipient</a>. This email is only the billing recipient; it does not change your sign-in identity.</p><button>Save coaching draft</button></form>`;
         if (e && v.rate && amount !== null)
@@ -182,13 +183,13 @@ export function mountCoachingRoutes(
           body += `<p role="status">${snapshot?.sample !== v.sample ? "The submitted billing mode differs from current configuration. Return it and ask the member to explicitly confirm the current mode." : "This zero-total submission is retained. No invoice can be issued."}</p>`;
         body += `<h2>Return for correction</h2><p>An issued month can only be returned after its invoice is void and unpaid, with no delivery in progress or unconfirmed. Other financial corrections require administrator review outside this action.</p><form method="post" action="${base}/return">${form("return", e.revision)}<label>Correction reason<input name="reason" maxlength="500" required></label><button class="secondary">Return month for correction</button></form>`;
       }
-      body += `<h2>Saved months</h2><ul>${v.months.map((m) => `<li><a href="${base}?month=${m.month}">${m.month}</a> · ${escape(m.state)}</li>`).join("") || "<li>No saved months.</li>"}</ul>${
+      body += `<h2>Saved months</h2><ul>${v.months.map((m) => `<li><a href="${base}?month=${m.month}">${monthLabel(m.month)}</a> · ${escape(m.state)}</li>`).join("") || "<li>No saved months.</li>"}</ul>${
         admin
           ? portalActions([
               [adminPath, "Choose another member"],
               ["/operator/invoices", "Courses and invoices"],
             ])
-          : '<p><a href="/account">My account</a> · <a href="/account/purchases">Courses and invoices</a></p>'
+          : '<p class="account-links"><a class="button secondary" href="/account">My account</a> <a class="button secondary" href="/account/purchases">Courses and invoices</a></p>'
       }</section>`;
       res.send(
         page(

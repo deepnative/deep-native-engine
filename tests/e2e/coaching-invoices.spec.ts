@@ -10,6 +10,7 @@ import {
 import { Pool, type PoolClient } from "pg";
 import { randomBytes } from "node:crypto";
 import { app } from "../../src/app.ts";
+import { monthLabel } from "../../src/coaching-values.ts";
 import { migrate, store } from "../../src/store.ts";
 import { simpleInvoiceStore } from "../../src/simple-invoice-store.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
@@ -352,7 +353,9 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
       `h2:text-is("Pending months") + ul a[href="/operator/coaching/${a.id}?month=${pastMonth}"]`,
     );
     await expect(pending).toBeVisible();
-    await expect(pending).toHaveText(`Sample learner · ${pastMonth}`);
+    await expect(pending).toHaveText(
+      `Sample learner · ${monthLabel(pastMonth)}`,
+    );
     completed = true;
   } finally {
     await f.close(completed);
@@ -500,7 +503,10 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await expect(row()).toContainText("Awaiting review");
     await friendly(o, "owner-pending");
     await o
-      .getByRole("link", { name: `Coaching member · ${month}`, exact: true })
+      .getByRole("link", {
+        name: `Coaching member · ${monthLabel(month)}`,
+        exact: true,
+      })
       .click();
     await expect(o.getByText("CAD 213.75").first()).toBeVisible();
     await o.getByLabel("Invented sample tax (CAD)").fill("0.00");
