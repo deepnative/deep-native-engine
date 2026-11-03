@@ -3415,7 +3415,12 @@ export function app(
       !item ||
       item.kind !== "lesson" ||
       item.state !== "published" ||
-      item.requiresQualifiedSignoff
+      item.requiresQualifiedSignoff ||
+      !(await store.openLesson(
+        res.locals.token as string,
+        item.id,
+        item.version,
+      ))
     ) {
       res
         .status(404)
@@ -3450,7 +3455,8 @@ export function app(
       item.kind !== "lesson" ||
       item.state !== "published" ||
       item.requiresQualifiedSignoff ||
-      item.version !== version
+      item.version !== version ||
+      !(await store.openLesson(res.locals.token as string, item.id, version))
     ) {
       res
         .status(409)

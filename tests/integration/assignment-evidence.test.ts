@@ -559,9 +559,7 @@ it("AHO-11 a coach workspace grant cannot download an assignment copy before or 
       )
     ).rows[0].n,
   ).toBe(0);
-  expect((await evidence.issueDownload(f.owner.token, id)).kind).toBe(
-    "issued",
-  );
+  expect((await evidence.issueDownload(f.owner.token, id)).kind).toBe("issued");
 });
 it("AHO-06 source deletion removes every copy atomically, rollback restores them and a waiting copy cannot revive deletion", async () => {
   const f = await fixture(),

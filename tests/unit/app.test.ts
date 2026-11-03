@@ -2825,6 +2825,25 @@ it("offers ephemeral source-grounded study reflection only for the current publi
     reflection: "Sample note",
     synthetic: "yes",
   }).expect(409);
+  // STUDY-ELIG-01: the study page applies the same member eligibility as the reader.
+  db.openLesson.mockResolvedValueOnce(false);
+  const refused = await agent
+    .get("/library/SYN-106/study")
+    .set("Host", host)
+    .expect(404);
+  expect(refused.text).not.toContain(item.body);
+  db.openLesson.mockResolvedValueOnce(false);
+  const refusedPost = await post({
+    content_version: "2",
+    reflection: "Sample note",
+    synthetic: "yes",
+  }).expect(409);
+  expect(refusedPost.text).not.toContain(item.body);
+  expect(db.openLesson).toHaveBeenLastCalledWith(
+    expect.any(String),
+    "SYN-106",
+    2,
+  );
 });
 it("supports the local editor/reviewer workflow without bypassing rejected transitions", async () => {
   const catalog = catalogMock();
