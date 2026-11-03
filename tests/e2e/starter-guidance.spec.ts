@@ -20,6 +20,8 @@ async function fixture(page: Page, goal: Goal) {
         return origin;
       },
       secret: "synthetic-guidance-browser",
+      // NAV-06: the guidance header offers Administration where entry exists.
+      localStaffEntry: true,
     }),
   );
   const binding = server.address();

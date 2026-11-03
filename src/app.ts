@@ -65,6 +65,7 @@ import express, { type ErrorRequestHandler } from "express";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { withHosting, hostingText } from "./hosting-presentation.ts";
+import { withAdministration } from "./administration-presentation.ts";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { COOKIE, cookieOptions, token, csrf, validCsrf } from "./session.ts";
@@ -479,6 +480,12 @@ export function app(
   const assignmentReadiness =
     options.assignmentReadiness ?? disabledAssignmentReadinessStore();
   app.disable("x-powered-by");
+  app.use((_req, _res, next) =>
+    withAdministration(
+      options.localStaffEntry === true && mode !== "live",
+      next,
+    ),
+  );
   app.use((_req, _res, next) =>
     withHosting(
       options.hostedOrigin === options.origin &&
