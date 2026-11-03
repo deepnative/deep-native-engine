@@ -31,9 +31,6 @@ test("[L47] operator sees labelled preview aggregates while a learner cannot rea
     },
   ]);
   try {
-    const baseline = await (
-      await operator.request.get("/operator/metrics")
-    ).json();
     await page.goto("/");
     await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption("explorer");
@@ -51,8 +48,10 @@ test("[L47] operator sees labelled preview aggregates while a learner cannot rea
     expect(response.status()).toBe(200);
     const report = await response.json();
     expect(report.scope).toBe("synthetic-local-preview");
-    expect(report.counts.members).toBe(baseline.counts.members + 1);
-    expect(report.counts.participated).toBe(baseline.counts.participated + 1);
+    // MET-SUPP-01: no exact count leaves the store. Exact totals are checked in
+    // the database tests; this shared browser database has no fixed size.
+    expect(report.counts).toBeUndefined();
+    expect(["suppressed", "coarse-band"]).toContain(report.learning.disclosure);
     expect(report.definitions.participated).toContain(
       "Leaving does not remove",
     );
@@ -83,9 +82,6 @@ test("[L68] operator sees retained observed submissions and bounded cross-conten
     },
   ]);
   try {
-    const before = await (
-      await operator.request.get("/operator/metrics")
-    ).json();
     const learnerToken = randomBytes(32).toString("hex");
     const learning = store(pool);
     await learning.create(learnerToken, {
@@ -154,14 +150,8 @@ test("[L68] operator sees retained observed submissions and bounded cross-conten
     expect(response.status()).toBe(200);
     const report = await response.json();
     expect(report.scope).toBe("synthetic-local-preview");
-    expect(report.counts.members).toBe(before.counts.members + 1);
-    expect(report.counts.submittedAssignment).toBe(
-      before.counts.submittedAssignment + 1,
-    );
-    expect(report.counts.returnEligible).toBe(before.counts.returnEligible + 1);
-    expect(report.counts.crossContentReturned).toBe(
-      before.counts.crossContentReturned + 1,
-    );
+    expect(report.counts).toBeUndefined();
+    expect(["suppressed", "coarse-band"]).toContain(report.learning.disclosure);
     expect(report.definitions.crossContentReturned).toContain("observed");
     expect(JSON.stringify(report)).not.toContain(session.learner.id);
     expect(JSON.stringify(report)).not.toContain("invented private response");

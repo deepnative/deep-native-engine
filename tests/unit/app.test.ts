@@ -1,4 +1,8 @@
 import {
+  learningDisclosure,
+  learningSegments,
+} from "../../src/learning-metrics.ts";
+import {
   invoiceSelection,
   INVOICE_SELECTION_COOKIE,
 } from "../../src/invoice-selection.ts";
@@ -558,17 +562,25 @@ it("denies an unconfigured operator metrics route and returns only a configured 
         returnEligible: "matured first-open cohort",
         crossContentReturned: "bounded observed return",
         usefulness: "coarse self-reported usefulness",
+        segments: "Segments.",
+        cohorts: "Cohorts.",
+        cohortActivated: "Cohort opened.",
+        cohortSelfAssessed: "Cohort self-reported.",
+        cohortSubmittedAssignment: "Cohort submitted.",
+        cohortContinued: "Cohort continued.",
       },
-      counts: {
-        members: 3,
-        activated: 2,
-        selfAssessed: 1,
-        participated: 1,
+      learning: learningDisclosure({
+        members: 30,
+        activated: 12,
+        selfAssessed: 6,
+        participated: 3,
         activeCircle: 0,
-        submittedAssignment: 1,
-        returnEligible: 2,
-        crossContentReturned: 1,
-      },
+        submittedAssignment: 7,
+        returnEligible: 20,
+        crossContentReturned: 8,
+      }),
+      segments: learningSegments(null, 30),
+      cohorts: [],
       usefulness: { disclosure: "suppressed", helpfulShareBand: null },
       contributions: contributionMetrics(null, null),
     }),
@@ -580,15 +592,19 @@ it("denies an unconfigured operator metrics route and returns only a configured 
     .get("/operator/metrics")
     .set("Host", host)
     .expect(200);
-  expect(response.body.counts).toEqual({
-    members: 3,
-    activated: 2,
-    selfAssessed: 1,
-    participated: 1,
-    activeCircle: 0,
-    submittedAssignment: 1,
-    returnEligible: 2,
-    crossContentReturned: 1,
+  expect(response.body.counts).toBeUndefined();
+  expect(response.body.learning).toEqual({
+    disclosure: "coarse-band",
+    members: "20-49",
+    values: {
+      activated: "5-19",
+      selfAssessed: "5-19",
+      participated: null,
+      activeCircle: null,
+      submittedAssignment: "5-19",
+      returnEligible: "20-49",
+      crossContentReturned: "5-19",
+    },
   });
   expect(response.body.scope).toBe("synthetic-local-preview");
   expect(response.body.usefulness).toEqual({

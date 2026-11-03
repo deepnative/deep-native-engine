@@ -125,7 +125,8 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
         expect(metrics.status()).toBe(200);
         const report = await metrics.json();
         expect(report.scope).toBe("synthetic-local-preview");
-        expect(report.counts.members).toBeGreaterThanOrEqual(2);
+        expect(report.counts).toBeUndefined();
+        expect(report.learning.disclosure).toBeDefined();
         const serialized = JSON.stringify(report);
         for (const secret of [
           ownerId,

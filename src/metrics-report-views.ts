@@ -3,6 +3,13 @@ import {
   VOLUME_KEYS,
   type ContributionMetrics,
 } from "./contribution-metrics.ts";
+import {
+  COHORT_KEYS,
+  type LearningBand,
+  type LearningCohort,
+  type LearningSegment,
+} from "./learning-metrics.ts";
+import { BACKGROUNDS, GOALS } from "./content.ts";
 import { escape, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 
@@ -52,8 +59,53 @@ function contributionSection(value: ContributionMetrics) {
   return `<section aria-labelledby="metrics-contributions"><h2 id="metrics-contributions">Reviewed contributions</h2><p>Measured since ${since}. Volumes are broad bands of distinct revisions, not exact counts. A group needs at least 20 contributing owners, and each value needs at least five owners; a share also needs five owners on each side. Suppressed values may be zero or not.</p><p>${escape(value.definitions.scope)}</p>${groups}<dl>${VOLUME_KEYS.map((key) => `<dt>${volumeLabels[key]}</dt><dd>${escape(value.definitions[key])}</dd>`).join("")}<dt>First-decision acceptance share</dt><dd>${escape(value.definitions.firstDecisionAcceptance)}</dd></dl></section>`;
 }
 
+const shown = (value: LearningBand | null) => value ?? hidden;
+const SEGMENT_MEASURES = [
+  ["activated", "Opened a lesson"],
+  ["selfAssessed", "Self-assessed"],
+  ["submittedAssignment", "Submitted"],
+  ["crossContentReturned", "Returned"],
+] as const;
+const COHORT_LABELS = {
+  activated: "Opened a lesson (14 days)",
+  selfAssessed: "Self-reported completion (14 days)",
+  submittedAssignment: "Submitted (30 days)",
+  continued: "Continued (day 7–30)",
+} as const;
+const table = (label: string, head: string[], rows: string) =>
+  `<div class="table-scroll" tabindex="0" role="region" aria-label="${label}"><table class="metrics-table"><thead><tr>${head.map((h) => `<th scope="col">${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`;
+
+function segmentTable(
+  title: string,
+  group: string,
+  labels: Record<string, string>,
+  segments: LearningSegment[],
+) {
+  return `<h3>${title}</h3>${table(
+    title,
+    ["Segment", "Members", ...SEGMENT_MEASURES.map(([, label]) => label)],
+    segments
+      .map(
+        (s) =>
+          `<tr data-segment="${group}-${s.key}"><th scope="row">${escape(labels[s.key]!)}</th><td>${shown(s.members)}</td>${SEGMENT_MEASURES.map(([key]) => `<td>${shown(s.values[key])}</td>`).join("")}</tr>`,
+      )
+      .join(""),
+  )}`;
+}
+
+function cohortRows(cohorts: LearningCohort[]) {
+  return cohorts
+    .map((c) =>
+      c.disclosure === "window-open"
+        ? `<tr data-cohort="${escape(c.month)}"><th scope="row">${escape(c.month)}</th><td colspan="${COHORT_KEYS.length + 1}">Window still open; no values yet</td></tr>`
+        : `<tr data-cohort="${escape(c.month)}"><th scope="row">${escape(c.month)}</th><td>${shown(c.members)}</td>${COHORT_KEYS.map((key) => `<td>${shown(c.values[key])}</td>`).join("")}</tr>`,
+    )
+    .join("");
+}
+
 export function metricsReportPage(snapshot: PreviewMetrics): string {
-  const { counts, definitions, usefulness } = snapshot;
+  const { learning, segments, cohorts, definitions, usefulness } = snapshot;
+  const { values } = learning;
   const measures = [
     ["activated", "Opened a versioned lesson"],
     ["selfAssessed", "Self-assessed lesson completion"],
@@ -63,7 +115,19 @@ export function metricsReportPage(snapshot: PreviewMetrics): string {
   ] as const;
   return page(
     "Learning and participation snapshot",
-    `<section class="reading"><p class="eyebrow">PRIVATE STAFF SNAPSHOT · SYNTHETIC LOCAL PREVIEW</p><h1>Learning and participation snapshot</h1><p>Current retained records in this database. This is not a live business report, an enrollment cohort or a measure of verified skill.</p><p>Snapshot time: <time datetime="${escape(snapshot.asOf.toISOString())}">${escape(snapshot.asOf.toISOString())}</time>. All counts describe the same instant. Reload to view a fresh snapshot.</p>${navigation}<section aria-labelledby="metrics-members"><h2 id="metrics-members">Retained accounts</h2><p><strong data-metric="members">${counts.members}</strong> member records</p><p>${definition(definitions.denominator)}</p>${counts.members === 0 ? "<p>No retained members yet; a member-based rate is undefined.</p>" : ""}</section><section aria-labelledby="metrics-activity"><h2 id="metrics-activity">Learning and participation</h2><p>Each measure counts distinct retained members. Measures overlap and must not be added together.</p><dl>${measures.map(([key, label]) => `<dt>${label}</dt><dd><strong data-metric="${key}">${counts[key]}</strong> of ${counts.members} retained members<p>${definition(definitions[key])}</p></dd>`).join("")}</dl><p>The completion count covers versioned library lessons. The separate starter exercise is not counted here.</p></section><section aria-labelledby="metrics-return"><h2 id="metrics-return">Observed cross-content return</h2><p><strong data-metric="crossContentReturned">${counts.crossContentReturned}</strong> of <strong data-metric="returnEligible">${counts.returnEligible}</strong> eligible members returned to different content.</p>${counts.returnEligible === 0 ? "<p>No eligible members yet; a return rate is undefined.</p>" : ""}<p>${definition(definitions.returnEligible)}</p><p>${definition(definitions.crossContentReturned)}</p></section><section aria-labelledby="metrics-usefulness"><h2 id="metrics-usefulness">Member-reported usefulness</h2><p data-usefulness="${usefulness.disclosure}">${usefulness.disclosure === "suppressed" ? "Suppressed to protect small groups. No respondent count or answer count is shown." : `Helpful-share band: <strong>${escape(usefulness.helpfulShareBand!)}</strong>. This is a broad band, not an exact percentage.`}</p><p>${definition(definitions.usefulness)}</p></section>${contributionSection(snapshot.contributions)}<section aria-labelledby="metrics-limits"><h2 id="metrics-limits">What this snapshot cannot tell you</h2><p>Deleted accounts and their activity are excluded. Retained expired or revoked member sessions remain in the denominator; circle departure does not erase earlier participation. No member, background, goal, lesson or date filters are available.</p><p>Calendar cohorts, the instructional quality of contributions, paid conversion, revenue, service capacity and career outcomes are not included. A submission or self-report does not establish a qualified review. Demo records are not evidence of live outcomes.</p></section>${navigation}</section>`,
+    `<section class="reading"><p class="eyebrow">PRIVATE STAFF SNAPSHOT · SYNTHETIC LOCAL PREVIEW</p><h1>Learning and participation snapshot</h1><p>Current retained records in this database. This is not a live business report, an enrollment cohort or a measure of verified skill.</p><p>Snapshot time: <time datetime="${escape(snapshot.asOf.toISOString())}">${escape(snapshot.asOf.toISOString())}</time>. All values describe the same instant. Reload to view a fresh snapshot.</p>${navigation}<section aria-labelledby="metrics-members"><h2 id="metrics-members">Retained accounts</h2><p><strong data-metric="members">${shown(learning.members)}</strong> member records</p><p>${definition(definitions.denominator)}</p><p>Values are broad bands, not exact counts. Nothing is shown below 20 members, and a value below five, or within five of its denominator, is suppressed. Suppressed values may be zero or not.</p></section><section aria-labelledby="metrics-activity"><h2 id="metrics-activity">Learning and participation</h2><p>Each measure counts distinct retained members. Measures overlap and must not be added together.</p><dl>${measures.map(([key, label]) => `<dt>${label}</dt><dd><strong data-metric="${key}">${shown(values[key])}</strong> retained members<p>${definition(definitions[key])}</p></dd>`).join("")}</dl><p>The completion count covers versioned library lessons. The separate starter exercise is not counted here.</p></section><section aria-labelledby="metrics-return"><h2 id="metrics-return">Observed cross-content return</h2><p><strong data-metric="crossContentReturned">${shown(values.crossContentReturned)}</strong> of <strong data-metric="returnEligible">${shown(values.returnEligible)}</strong> eligible members returned to different content.</p><p>${definition(definitions.returnEligible)}</p><p>${definition(definitions.crossContentReturned)}</p></section><section aria-labelledby="metrics-usefulness"><h2 id="metrics-usefulness">Member-reported usefulness</h2><p data-usefulness="${usefulness.disclosure}">${usefulness.disclosure === "suppressed" ? "Suppressed to protect small groups. No respondent count or answer count is shown." : `Helpful-share band: <strong>${escape(usefulness.helpfulShareBand!)}</strong>. This is a broad band, not an exact percentage.`}</p><p>${definition(definitions.usefulness)}</p></section><section aria-labelledby="metrics-segments"><h2 id="metrics-segments">By starting point, goal and interest</h2><p>${escape(definitions.segments)}</p>${segmentTable("Current starting point", "background", BACKGROUNDS, segments.background)}${segmentTable("Current goal", "goal", GOALS, segments.goal)}${segmentTable("Interest tags (overlap)", "interests", BACKGROUNDS, segments.interests)}</section><section aria-labelledby="metrics-cohorts"><h2 id="metrics-cohorts">Join-month cohorts</h2><p>${escape(definitions.cohorts)}</p>${
+      cohorts.length
+        ? table(
+            "Join-month cohorts",
+            [
+              "Joined (UTC)",
+              "Members",
+              ...COHORT_KEYS.map((key) => COHORT_LABELS[key]),
+            ],
+            cohortRows(cohorts),
+          )
+        : "<p>No cohorts yet.</p>"
+    }<dl><dt>${COHORT_LABELS.activated}</dt><dd>${escape(definitions.cohortActivated)}</dd><dt>${COHORT_LABELS.selfAssessed}</dt><dd>${escape(definitions.cohortSelfAssessed)}</dd><dt>${COHORT_LABELS.submittedAssignment}</dt><dd>${escape(definitions.cohortSubmittedAssignment)}</dd><dt>${COHORT_LABELS.continued}</dt><dd>${escape(definitions.cohortContinued)}</dd></dl></section>${contributionSection(snapshot.contributions)}<section aria-labelledby="metrics-limits"><h2 id="metrics-limits">What this snapshot cannot tell you</h2><p>Deleted accounts and their activity are excluded. Retained expired or revoked member sessions remain in the denominator; circle departure does not erase earlier participation. No member, lesson or date filters are available, and segments use current choices, not the values at the time of each event. Demo records are not yet separated from other members.</p><p>The instructional quality of contributions, paid conversion, revenue, service capacity and career outcomes are not included. A submission or self-report does not establish a qualified review. Demo records are not evidence of live outcomes.</p></section>${navigation}</section>`,
   );
 }
 

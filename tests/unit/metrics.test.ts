@@ -16,14 +16,29 @@ it("returns only defined synthetic aggregates to an authorized operator", async 
     rows: [
       {
         asOf: new Date("2026-09-24T00:00:00Z"),
-        members: 4,
-        activated: 3,
+        members: 40,
+        activated: 30,
         selfAssessed: 1,
-        participated: 2,
-        activeCircle: 1,
-        submittedAssignment: 2,
-        returnEligible: 3,
-        crossContentReturned: 1,
+        participated: 20,
+        activeCircle: 10,
+        submittedAssignment: 20,
+        returnEligible: 30,
+        crossContentReturned: 10,
+        segments: {
+          background: {
+            explorer: {
+              members: 20,
+              activated: 10,
+              selfAssessed: 5,
+              participated: 5,
+              activeCircle: 5,
+              submittedAssignment: 5,
+              returnEligible: 5,
+              crossContentReturned: 0,
+            },
+          },
+        },
+        cohorts: [{ month: "2026-08", closed: false, members: 40 }],
         usefulnessRespondents: 20,
         usefulnessHelpful: 10,
         usefulnessNotYet: 10,
@@ -38,17 +53,25 @@ it("returns only defined synthetic aggregates to an authorized operator", async 
   );
   expect(snapshot).toMatchObject({
     scope: "synthetic-local-preview",
-    counts: {
-      members: 4,
-      activated: 3,
-      selfAssessed: 1,
-      participated: 2,
-      activeCircle: 1,
-      submittedAssignment: 2,
-      returnEligible: 3,
-      crossContentReturned: 1,
+    learning: {
+      disclosure: "coarse-band",
+      members: "20-49",
+      values: {
+        activated: "20-49",
+        selfAssessed: null,
+        participated: "20-49",
+        activeCircle: "5-19",
+        submittedAssignment: "20-49",
+        returnEligible: "20-49",
+        crossContentReturned: "5-19",
+      },
     },
+    cohorts: [{ month: "2026-08", disclosure: "window-open", members: null }],
   });
+  expect(snapshot).not.toHaveProperty("counts");
+  expect(snapshot?.segments.background[0]!.members).toBe("20-49");
+  expect(snapshot?.definitions.segments).toContain("add up to more");
+  expect(snapshot?.definitions.cohortSelfAssessed).toContain("Self-reported");
   expect(snapshot?.definitions.selfAssessed).toContain("not observed skill");
   expect(snapshot?.definitions.submittedAssignment).toContain("not reviewed");
   expect(snapshot?.definitions.crossContentReturned).toContain("7 full days");
