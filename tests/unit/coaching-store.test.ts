@@ -1,6 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { Pool } from "pg";
-import { simpleInvoiceStore } from "../../src/simple-invoice-store.ts";
+import {
+  shiftMonth,
+  simpleInvoiceStore,
+} from "../../src/simple-invoice-store.ts";
 import {
   practiceTransaction,
   type PracticeTransaction,
@@ -95,9 +98,10 @@ function fixture(
       delivery: string;
     } | null;
     settings?: { sample: boolean; issuer: string; instructions: string };
+    dashboard?: { summary: unknown; rows: unknown[] };
   } = {},
 ) {
-  const query = vi.fn(async (sql: string) => {
+  const query = vi.fn(async (sql: string, _args?: unknown[]) => {
     let rows: unknown[] = [];
     if (sql.includes("FROM principals WHERE token_hash"))
       rows = [
@@ -114,6 +118,9 @@ function fixture(
     else if (sql.includes("FROM workspaces WHERE")) rows = [{ id }];
     else if (sql.includes("FROM simple_invoice_operations"))
       rows = o.receipt ? [o.receipt] : [];
+    else if (sql.includes('AS "submittedMinutes"'))
+      rows = [o.dashboard?.summary];
+    else if (sql.includes('AS "yearMinutes"')) rows = o.dashboard?.rows ?? [];
     else if (sql.includes("AS month")) rows = [{ month }];
     else if (sql.includes("AS today")) rows = [{ today: month + "-31" }];
     else if (sql.includes("FROM coaching_rates")) rows = o.rates ?? [rate];
@@ -511,4 +518,98 @@ it("HOUR04/06/09 exact issuance requires positive subtotal, explicit bounded tax
         )
       ).kind,
     ).toBe("invalid");
+});
+
+it("DASH-01/02 maps one month's records to manager figures and contractor statuses", async () => {
+  const row = (over: Record<string, unknown>) => ({
+    id,
+    displayName: "Invented",
+    rateCents: 9500,
+    minutes: 60,
+    previousMinutes: null,
+    yearMinutes: 60,
+    state: null,
+    returned: false,
+    invoiceId: null,
+    delivery: null,
+    balanceCents: null,
+    ...over,
+  });
+  const f = fixture({
+    admin: true,
+    dashboard: {
+      summary: {
+        submittedMinutes: 285,
+        contractorsSubmitted: 3,
+        invoicedCents: "16000",
+        invoicesNotSent: 1,
+        outstandingCents: "11000",
+        awaitingReview: 2,
+        oldestWaitingDays: null,
+      },
+      rows: [
+        row({}),
+        row({ state: "draft" }),
+        row({ state: "draft", returned: true }),
+        row({ state: "submitted" }),
+        row({ state: "invoiced", invoiceId: id }),
+        row({
+          state: "invoiced",
+          invoiceId: id,
+          delivery: "sent",
+          balanceCents: "0",
+        }),
+        row({
+          state: "invoiced",
+          invoiceId: id,
+          delivery: "not_sent",
+          balanceCents: "11000",
+        }),
+      ],
+    },
+  });
+  const result = await f.service.coachingDashboard(token, "2026-09");
+  expect(result.kind).toBe("ready");
+  if (result.kind !== "ready") return;
+  expect(result.value.month).toBe("2026-09");
+  expect(result.value.summary).toEqual({
+    submittedMinutes: 285,
+    contractorsSubmitted: 3,
+    invoicedCents: 16000,
+    invoicesNotSent: 1,
+    outstandingCents: 11000,
+    awaitingReview: 2,
+    oldestWaitingDays: null,
+  });
+  expect(
+    result.value.contractors.map((c) => [c.status, c.sent, c.balanceCents]),
+  ).toEqual([
+    ["not_started", null, null],
+    ["draft", null, null],
+    ["returned", null, null],
+    ["submitted", null, null],
+    ["voided", null, null],
+    ["invoiced", true, 0],
+    ["invoiced", false, 11000],
+  ]);
+  // The previous, current and year-start months reach the contractor query.
+  expect(
+    f.query.mock.calls.find(([sql]) => sql.includes('AS "yearMinutes"'))?.[1],
+  ).toEqual(["2026-09", "2026-08", "2026-01"]);
+  // No month means the previous calendar month; January wraps the year.
+  const defaulted = await f.service.coachingDashboard(token);
+  if (defaulted.kind === "ready")
+    expect(defaulted.value.month).toBe(shiftMonth(month, -1));
+  expect(shiftMonth("2026-01", -1)).toBe("2025-12");
+  expect((await f.service.coachingDashboard(token, "2999-01")).kind).toBe(
+    "invalid",
+  );
+  f.query.mockClear();
+  expect((await f.service.coachingDashboard(token, "2026-13")).kind).toBe(
+    "invalid",
+  );
+  expect(f.query).not.toHaveBeenCalled();
+  expect(
+    (await fixture().service.coachingDashboard(token, "2026-09")).kind,
+  ).toBe("denied");
 });

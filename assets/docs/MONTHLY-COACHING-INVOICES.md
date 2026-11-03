@@ -12,6 +12,12 @@ Drafts have optimistic revisions. Submission freezes its duration, exact rate/ve
 
 Zero hours remains distinguishable from no submission. Zero hours and a positive duration that rounds to zero are retained as submitted records with no invoice, even if tax is supplied. Minutes must fit the selected calendar month, including leap February. Amounts use whole cents, `floor((minutes × hourlyRateCents + 30) / 60)` once at the subtotal, safe integer checks and the existing CAD1,000,000,000-cent bound. One minute at CAD100/hour rounds to CAD1.67. No tax engine or assumed real zero tax is provided; only the explicitly labelled sample form starts with invented zero tax.
 
+## Manager hours dashboard
+
+**Administration → Monthly coaching** opens on a read-only dashboard for one calendar month (default: the previous UTC month; future months are refused). Summary figures: hours submitted (submitted and invoiced months only, drafts excluded) and the number of contractors; months awaiting review across all months with the oldest wait in days; amount invoiced and invoices not yet sent for the month; outstanding balance on the month’s invoices. Voided invoices are left out.
+
+The contractor table lists up to 100 members who have a rate in effect for the month or hours that year: name and short reference, applicable rate, hours for the month, the previous month and year to date, status (awaiting review, returned for correction, draft, invoice voided, invoiced, not started), invoice email and balance. Sort by name, hours, year to date or status; each name opens that member’s month. Only a current verified administrator can open it; it shows no private learning content. Scenarios DASH-01..04 (#614): PostgreSQL aggregates, route rendering/sorting/refusals, and L284 browser checks before review and after payment.
+
 ## Corrections, concurrency and privacy
 
 Return an unissued month with a reason, then ask the member to save and resubmit its correction against the displayed current rate/mode. For an issued month, first use the existing **Void unpaid invoice** action, then return the month for correction. Reissue only after the member resubmits. The new document links its preserved original, while all prior submitted snapshots remain traceable. Paid or partially paid invoices and sending/unconfirmed delivery cannot use this correction path; financial adjustments remain outside this slice.
