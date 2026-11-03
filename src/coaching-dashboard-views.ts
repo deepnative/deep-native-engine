@@ -44,7 +44,7 @@ const cad = new Intl.NumberFormat("en-CA", {
   maximumFractionDigits: 2,
 });
 const money = (cents: number) => `CAD ${cad.format(cents / 100)}`;
-const hours = (minutes: number | null) =>
+export const hours = (minutes: number | null) =>
   minutes === null
     ? "—"
     : `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}m` : ""}`;

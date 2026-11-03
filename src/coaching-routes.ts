@@ -9,6 +9,7 @@ import {
   coachingDashboardSection,
   DASHBOARD_SORTS,
   type DashboardSort,
+  hours,
 } from "./coaching-dashboard-views.ts";
 import { parseInvoiceMoney } from "./simple-invoice-values.ts";
 import {
@@ -16,9 +17,11 @@ import {
   coachingDuration,
   parseCoachingDuration,
   monthLabel,
+  type CoachingRate,
 } from "./coaching-values.ts";
 import type {
   InvoiceFailure,
+  SavedCoachingMonth,
   SimpleInvoiceStore,
 } from "./simple-invoice-store.ts";
 
@@ -50,6 +53,56 @@ function failure(
       ),
     );
 }
+/** HOURTABLE-01/02: saved months with hours, amount, readable status and invoice. */
+function savedMonthsTable(
+  months: SavedCoachingMonth[],
+  rates: CoachingRate[],
+  base: string,
+  invoicePath: string,
+) {
+  if (!months.length) return "<p>No saved months.</p>";
+  const rateFor = (month: string) =>
+    rates
+      .filter((r) => r.effectiveMonth <= month)
+      .sort(
+        (a, b) =>
+          b.effectiveMonth.localeCompare(a.effectiveMonth) ||
+          b.version - a.version,
+      )[0];
+  const rows = months.map((m) => {
+    const total = m.totalCents == null ? null : Number(m.totalCents);
+    const paid = Number(m.paidCents ?? 0);
+    const draftRate = rateFor(m.month);
+    const amount =
+      total !== null
+        ? money(total)
+        : m.submittedCents != null
+          ? money(Number(m.submittedCents))
+          : draftRate
+            ? money(coachingSubtotal(m.minutes, draftRate.cents) ?? 0)
+            : "No rate";
+    const status =
+      m.state === "invoiced"
+        ? m.voided
+          ? "Void"
+          : total === null
+            ? "Invoiced"
+            : paid >= total
+              ? "Invoiced · Paid"
+              : `Invoiced · ${money(total - paid)} due`
+        : m.state === "submitted"
+          ? "Awaiting review"
+          : m.returned
+            ? "Returned for correction"
+            : "Draft";
+    const invoice = m.invoiceId
+      ? `<a href="${invoicePath}${escape(m.invoiceId)}">View invoice</a>`
+      : "—";
+    return `<tr><th scope="row"><a href="${base}?month=${m.month}">${monthLabel(m.month)}</a></th><td>${hours(m.minutes)}</td><td>${amount}</td><td>${status}</td><td>${invoice}</td></tr>`;
+  });
+  return `<div class="table-scroll" role="region" aria-labelledby="saved-months" tabindex="0"><table class="coaching-months"><thead><tr><th scope="col">Month</th><th scope="col">Hours</th><th scope="col">Amount</th><th scope="col">Status</th><th scope="col">Invoice</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
+}
+
 export function mountCoachingRoutes(
   app: Express,
   store: SimpleInvoiceStore | undefined,
@@ -183,7 +236,7 @@ export function mountCoachingRoutes(
           body += `<p role="status">${snapshot?.sample !== v.sample ? "The submitted billing mode differs from current configuration. Return it and ask the member to explicitly confirm the current mode." : "This zero-total submission is retained. No invoice can be issued."}</p>`;
         body += `<h2>Return for correction</h2><p>An issued month can only be returned after its invoice is void and unpaid, with no delivery in progress or unconfirmed. Other financial corrections require administrator review outside this action.</p><form method="post" action="${base}/return">${form("return", e.revision)}<label>Correction reason<input name="reason" maxlength="500" required></label><button class="secondary">Return month for correction</button></form>`;
       }
-      body += `<h2>Saved months</h2><ul>${v.months.map((m) => `<li><a href="${base}?month=${m.month}">${monthLabel(m.month)}</a> · ${escape(m.state)}</li>`).join("") || "<li>No saved months.</li>"}</ul>${
+      body += `<h2 id="saved-months">Saved months</h2>${savedMonthsTable(v.months, v.rates, base, admin ? "/operator/invoices/" : "/account/purchases/invoices/")}${
         admin
           ? portalActions([
               [adminPath, "Choose another member"],

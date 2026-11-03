@@ -77,6 +77,19 @@ const decodeInvoice = (row: StoredInvoice): StoredInvoice => ({
 export type CoachingStatus =
   "not_started" | "draft" | "returned" | "submitted" | "invoiced" | "voided";
 /** Calendar arithmetic on YYYY-MM strings. */
+/** A saved coaching month as listed in the Saved months table. */
+export interface SavedCoachingMonth {
+  month: string;
+  state: string;
+  minutes: number;
+  returned?: boolean;
+  submittedCents?: number | string | null;
+  invoiceId?: string | null;
+  totalCents?: string | null;
+  paidCents?: string | null;
+  voided?: boolean;
+}
+
 export function shiftMonth(month: string, by: number) {
   const d = new Date(`${month}-01T00:00:00Z`);
   d.setUTCMonth(d.getUTCMonth() + by);
@@ -330,9 +343,16 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           )
         ).rows;
         const entry = await coachingEntry(tx, memberId, selected);
+        // HOURTABLE-01: each saved month with its amount and invoice state.
         const months = (
-          await tx.query<{ month: string; state: string }>(
-            "SELECT month,state FROM coaching_months WHERE owner_id=$1 ORDER BY month DESC LIMIT 100",
+          await tx.query<SavedCoachingMonth>(
+            `SELECT m.month,m.state,m.minutes,m.return_reason IS NOT NULL AS returned,
+                    (SELECT (s.snapshot->>'subtotalCents')::bigint FROM coaching_submissions s
+                     WHERE s.owner_id=m.owner_id AND s.month=m.month AND s.revision=m.submitted_revision) AS "submittedCents",
+                    m.invoice_id AS "invoiceId",i.total_cents::text AS "totalCents",
+                    i.paid_cents::text AS "paidCents",i.voided_at IS NOT NULL AS voided
+             FROM coaching_months m LEFT JOIN simple_invoices i ON i.id=m.invoice_id
+             WHERE m.owner_id=$1 ORDER BY m.month DESC LIMIT 100`,
             [memberId],
           )
         ).rows;
