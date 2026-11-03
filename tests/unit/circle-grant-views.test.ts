@@ -14,6 +14,7 @@ import type {
   RetainedCircleGrant,
   AbsentCircleGrant,
 } from "../../src/circle-grant-values.ts";
+import { CIRCLES } from "../../src/circles.ts";
 const at = new Date("2026-10-06T12:00:00.000Z");
 const attempt: CircleGrantAttempt = {
   staffId: 'staff/<"',
@@ -255,4 +256,24 @@ it("STAFF-WINDOW-01 pre-fills an editable grant expiry no later than the moderat
   expect(html).toContain(
     'name="expiresAt" type="text" maxlength="24" value="2026-11-02T21:43:19.758Z" required',
   );
+});
+
+it("UX-605-01 offers the exact circle as a select on inspection and history", () => {
+  for (const creationEnabled of [true, false]) {
+    const html = circleGrantHomePage("csrf", {
+      reference: check,
+      creationEnabled,
+    });
+    for (const prefix of ["inspect", "history"]) {
+      expect(html).toContain(
+        `<label for="${prefix}CircleId">Exact circle ID</label><select id="${prefix}CircleId" name="circleId" required>`,
+      );
+      expect(html).not.toContain(`<input id="${prefix}CircleId"`);
+    }
+    for (const circle of CIRCLES)
+      expect(html).toContain(`<option value="${circle.id}">`);
+    expect(html).toContain(
+      '<input id="historyStaffId" name="staffId" type="text" maxlength="36" required>',
+    );
+  }
 });

@@ -128,7 +128,9 @@ async function history(
   await page.goto(origin + base);
   const form = page.locator(`form[action="${base}/history"]`);
   await form.getByLabel("Exact staff reference", { exact: true }).fill(target);
-  await form.getByLabel("Exact circle ID", { exact: true }).fill(circle);
+  await form
+    .getByLabel("Exact circle ID", { exact: true })
+    .selectOption(circle);
   await form
     .getByRole("button", { name: "Inspect grant history", exact: true })
     .click();
@@ -509,7 +511,7 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
         .fill(modId);
       await erasedInspection
         .getByLabel("Exact circle ID", { exact: true })
-        .fill(circle);
+        .selectOption(circle);
       await erasedInspection.getByLabel("Reference type").selectOption("key");
       await erasedInspection
         .getByLabel("Exact reference to inspect")

@@ -23,11 +23,11 @@ const time = (date: Date) => {
   const value = escape(date.toISOString());
   return `<time datetime="${value}">${value}</time>`;
 };
-function circles(id = "circleId") {
-  return `<label for="${id}">Exact circle</label><select id="${id}" name="circleId" required>${CIRCLES.map((circle) => `<option value="${escape(circle.id)}">${escape(circle.title)} (${escape(circle.id)})</option>`).join("")}</select>`;
+function circles(id = "circleId", label = "Exact circle") {
+  return `<label for="${id}">${label}</label><select id="${id}" name="circleId" required>${CIRCLES.map((circle) => `<option value="${escape(circle.id)}">${escape(circle.title)} (${escape(circle.id)})</option>`).join("")}</select>`;
 }
 function scopeInputs(prefix: string) {
-  return `<label for="${prefix}StaffId">Exact staff reference</label><input id="${prefix}StaffId" name="staffId" type="text" maxlength="36" required><label for="${prefix}CircleId">Exact circle ID</label><input id="${prefix}CircleId" name="circleId" type="text" maxlength="80" required>`;
+  return `<label for="${prefix}StaffId">Exact staff reference</label><input id="${prefix}StaffId" name="staffId" type="text" maxlength="36" required>${circles(`${prefix}CircleId`, "Exact circle ID")}`;
 }
 function inspectForm(
   csrf: string,
