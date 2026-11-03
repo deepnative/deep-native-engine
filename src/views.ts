@@ -819,11 +819,18 @@ export function careerPage(
     `<section class="error-page career-page">${intro}<p>Everything here stays private and unsent. Approval marks one saved draft version for your own planning; editing resets it. Outcomes are your own reports, not verified employment or income.</p><h2>Career, opportunity and contract plans</h2>${entries ? `<ul class="career-list">${entries}</ul>` : "<p>No optional planning records yet.</p>"}<h3>Add a planning record</h3><form method="post" action="/career/entries">${hidden(csrf)}${careerEntryFields("new-entry", draft.editEntryId ? undefined : draft.entry)}<button type="submit">Save planning record</button></form><h2>Private professional drafts</h2>${drafts ? `<ul class="career-list">${drafts}</ul>` : "<p>No private professional drafts yet.</p>"}<h3>Add an unsent draft</h3><form method="post" action="/career/drafts">${hidden(csrf)}${careerDraftFields("new-draft", draft.editDraftId ? undefined : draft.professional)}<button type="submit">Save unsent draft</button></form><h2>Leave this optional path</h2><form method="post" action="/career/disable">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Delete all optional career records and drafts; keep my learning milestones</span></label><button class="secondary" type="submit">Turn off and delete career planning</button></form><p><a href="/learn">Return to learning</a></p></section>`,
   );
 }
+/** SIGNUP-01: the email and password that sign this new account in. */
+function signupFields(email: string, errors: { field: string }[]) {
+  const invalid = (field: string) =>
+    errors.some((error) => error.field === field) ? ' aria-invalid="true"' : "";
+  return `<fieldset class="signup-fields"><legend>Your sign-in</legend><p class="small">Your email is your username. You can sign in with your password straight away; we send a link to verify the email in the background.</p><label for="signup_email">Email address</label><input id="signup_email" name="signup_email" type="email" autocomplete="username" maxlength="254" required value="${escape(email)}"${invalid("signup_email")}><label for="signup_password">Password</label><input id="signup_password" name="signup_password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required aria-describedby="signup_password_rule"${invalid("signup_password")}><p id="signup_password_rule" class="small">12 to 128 characters. A short phrase is easiest to remember.</p></fieldset>`;
+}
 export function welcome(
   csrf: string,
   error: string[] = [],
   onboardingState?: ProfileStartResult,
   emailRecovery = false,
+  signup?: { email: string },
 ) {
   return page(
     onboardingState?.errors.length
@@ -838,7 +845,7 @@ export function welcome(
         </div><p class="example-caption">Choose an answer to see why. Sample exercise. Nothing is saved.</p></section>
       </section>
       <ol class="landing-path" aria-label="How your learning path works"><li><span class="path-number" aria-hidden="true">1</span><div><h2>Learn one idea</h2><p>Start with a clear, useful example.</p></div></li><li><span class="path-number" aria-hidden="true">2</span><div><h2>Try a decision</h2><p>Make a choice. See the reasoning.</p></div></li><li><span class="path-number" aria-hidden="true">3</span><div><h2>Apply it yourself</h2><p>Build an answer and keep your work.</p></div></li></ol>
-      <section id="your-path" class="onboard" aria-labelledby="onboard-title"><div><h2 id="onboard-title">A starting point<br>that feels like you.</h2><p>Exploring AI, applying it at work or building something new? Choose where you are and where you'd like to go.</p><p>Your profile and learning work stay private unless you choose to share. Features labelled as simulations still require invented inputs.</p><p class="small">${hostingText("Your work stays on this computer.", "Your learning work is stored on this Azure-hosted service.")} This browser stays signed in for up to 30 days. ${emailRecovery ? "After starting, use Email access to link and verify an email before you clear cookies or change devices. If you already verified a linked email, choose Sign in to return to your saved learning." : "Email recovery is unavailable here. Clearing this browser’s cookie loses access to saved work."} Use Delete this preview to remove your saved work.</p></div><form method="post" action="/start">${hidden(csrf)}${onboardingState ? profileErrorSummary(onboardingState, "Fix your starting choices") : notice(error)}${profileFields(undefined, onboardingState?.attempted, onboardingState?.errors, true)}<button type="submit">Start my learning path</button></form></section>
+      <section id="your-path" class="onboard" aria-labelledby="onboard-title"><div><h2 id="onboard-title">A starting point<br>that feels like you.</h2><p>Exploring AI, applying it at work or building something new? Choose where you are and where you'd like to go.</p><p>Your profile and learning work stay private unless you choose to share. Features labelled as simulations still require invented inputs.</p><p class="small">${hostingText("Your work stays on this computer.", "Your learning work is stored on this Azure-hosted service.")} This browser stays signed in for up to 30 days. ${emailRecovery ? "After starting, use Email access to link and verify an email before you clear cookies or change devices. If you already verified a linked email, choose Sign in to return to your saved learning." : "Email recovery is unavailable here. Clearing this browser’s cookie loses access to saved work."} Use Delete this preview to remove your saved work.</p></div><form method="post" action="/start">${hidden(csrf)}${onboardingState ? profileErrorSummary(onboardingState, "Fix your starting choices") : notice(error)}${profileFields(undefined, onboardingState?.attempted, onboardingState?.errors, true)}${signup ? signupFields(signup.email, onboardingState?.errors ?? []) : ""}<button type="submit">Start my learning path</button></form></section>
     </div>`,
   );
 }
@@ -889,16 +896,19 @@ export function accountPage(
   learner: Learner,
   csrf: string,
   emailStatus: "linked" | "unlinked" | "unavailable",
+  passwordSet = false,
 ) {
   const recovery =
-    emailStatus === "linked"
-      ? '<section class="account-recovery"><h2>Verified email linked</h2><p>You can return to this same saved work on another device using the email you verified, with an email link or a password.</p><p class="account-links"><a class="button secondary" href="/account/password">Password sign-in</a> <a class="button secondary" href="/email/sign-in">Email sign-in</a></p></section>'
-      : emailStatus === "unlinked"
-        ? '<section class="account-recovery"><h2>This browser only</h2><p>Link and verify an email before clearing cookies or changing devices to keep access to this same saved work.</p><p><a class="button secondary" href="/email/attach">Link an email</a></p></section>'
-        : '<section class="account-recovery"><h2>Email recovery is unavailable</h2><p>Keep this browser’s signed-in session to access your saved learning. Email recovery cannot be checked right now.</p></section>';
+    emailStatus === "unlinked" && passwordSet
+      ? '<section class="account-recovery"><h2>Email not yet verified</h2><p>You can sign in on any device with your email and password. Open the link we emailed you to verify the address; until then, administrator features that need a verified email stay unavailable.</p><p class="account-links"><a class="button secondary" href="/email/attach">Send a new verification link</a> <a class="button secondary" href="/account/password">Password sign-in</a></p></section>'
+      : emailStatus === "linked"
+        ? '<section class="account-recovery"><h2>Verified email linked</h2><p>You can return to this same saved work on another device using the email you verified, with an email link or a password.</p><p class="account-links"><a class="button secondary" href="/account/password">Password sign-in</a> <a class="button secondary" href="/email/sign-in">Email sign-in</a></p></section>'
+        : emailStatus === "unlinked"
+          ? '<section class="account-recovery"><h2>This browser only</h2><p>Link and verify an email before clearing cookies or changing devices to keep access to this same saved work.</p><p><a class="button secondary" href="/email/attach">Link an email</a></p></section>'
+          : '<section class="account-recovery"><h2>Email recovery is unavailable</h2><p>Keep this browser’s signed-in session to access your saved learning. Email recovery cannot be checked right now.</p></section>';
   const signOut =
-    emailStatus === "linked"
-      ? `<section><h2>Sign out of your account</h2><p>This ends access for the current token, including any copied browser cookies. Your saved work stays in this account. Use your verified email to return; no email is sent automatically.</p><form method="post" action="/account/sign-out">${hidden(csrf)}<button type="submit">Sign out</button></form></section>`
+    emailStatus === "linked" || passwordSet
+      ? `<section><h2>Sign out of your account</h2><p>This ends access for the current token, including any copied browser cookies. Your saved work stays in this account. ${emailStatus === "linked" ? "Use your verified email to return" : "Use your email and password to return"}; no email is sent automatically.</p><form method="post" action="/account/sign-out">${hidden(csrf)}<button type="submit">Sign out</button></form></section>`
       : '<section><h2>Sign out of your account</h2><p>Signing out does not delete your saved records. Review how you can return before ending access.</p><p><a class="button secondary" href="/account/sign-out">Sign out</a></p></section>';
   return page(
     "My account",

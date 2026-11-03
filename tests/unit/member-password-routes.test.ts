@@ -10,6 +10,7 @@ import {
   type MemberPasswordAccess,
 } from "../../src/member-password-access.ts";
 import { passwordSignInForm } from "../../src/member-password-routes.ts";
+import type { MemberEmailAccess } from "../../src/member-email-access.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
 import { withLoopback } from "../support/loopback-server.ts";
 
@@ -28,6 +29,12 @@ function fixture(active = true) {
     signIn: vi
       .fn<MemberPasswordAccess["signIn"]>()
       .mockResolvedValue({ kind: "refused" }),
+    register: vi
+      .fn<MemberPasswordAccess["register"]>()
+      .mockResolvedValue("saved"),
+    emailAvailable: vi
+      .fn<MemberPasswordAccess["emailAvailable"]>()
+      .mockResolvedValue(true),
   };
   const session = vi.fn().mockResolvedValue(
     active
@@ -77,11 +84,13 @@ it("PWD-01 renders each password state and refuses signed-out or malformed reque
   expect(set.text).toContain("Password set");
   expect(set.text).toContain('name="current"');
   f.access.status.mockResolvedValueOnce("email_required");
+  // SIGNUP-01 (#637): without an email, the page offers email and password.
   const blocked = await f.get("/account/password");
-  expect([blocked.status, blocked.text.includes("Link and verify")]).toEqual([
-    200,
-    true,
-  ]);
+  expect([
+    blocked.status,
+    blocked.text.includes("Add a sign-in email and password"),
+    blocked.text.includes('name="email"'),
+  ]).toEqual([200, true, true]);
   f.access.status.mockResolvedValueOnce("unavailable");
   expect((await f.get("/account/password")).status).toBe(503);
   expect(
@@ -128,7 +137,7 @@ it("PWD-01/05 explains every password change outcome without echoing passwords",
     "old phrase",
   );
   const outcomes = [
-    ["email_required", 409, "Link and verify"],
+    ["email_required", 409, "Add a sign-in email"],
     ["current_required", 403, "Enter your current password"],
     ["current_incorrect", 403, "current password is not correct"],
     ["invalid", 422, "Use 12 to 128"],
@@ -288,4 +297,158 @@ it("PWD-03 reads a body-less sign-in as empty fields", async () => {
   );
   expect(change.status).toBe(422);
   expect(f.access.setPassword).not.toHaveBeenCalled();
+});
+
+it("SIGNUP-01/03 adds an email and password from the password page with every outcome", async () => {
+  const f = fixture();
+  f.access.status.mockResolvedValue("email_required");
+  const add = (body: Record<string, string>) =>
+    f.post("/account/password", { password: good, confirm: good, ...body });
+  expect((await add({ email: "new@example.com" })).status).toBe(200);
+  expect(f.access.register).toHaveBeenLastCalledWith(
+    token,
+    "new@example.com",
+    good,
+  );
+  f.access.register.mockResolvedValueOnce("taken");
+  const taken = await add({ email: "taken@example.com" });
+  expect([taken.status, taken.text.includes("already used")]).toEqual([
+    409,
+    true,
+  ]);
+  expect(taken.text).toContain('value="taken@example.com"');
+  f.access.register.mockResolvedValueOnce("invalid");
+  const long = await add({ email: `${"x".repeat(250)}@example.com` });
+  expect([long.status, long.text.includes("valid email")]).toEqual([422, true]);
+  expect(long.text).not.toContain("x".repeat(250));
+  f.access.register.mockRejectedValueOnce(new Error("private failure"));
+  f.access.status.mockResolvedValueOnce("unavailable");
+  expect((await add({ email: "down@example.com" })).status).toBe(503);
+  f.access.register.mockResolvedValueOnce("unavailable");
+  f.access.status.mockResolvedValueOnce("unavailable");
+  expect((await add({ email: "gone@example.com" })).status).toBe(503);
+});
+
+function signupApp(
+  access: MemberPasswordAccess,
+  requestAttach?: () => Promise<"sent">,
+) {
+  const db = {
+    session: vi.fn().mockResolvedValue({ kind: "new" }),
+    create: vi.fn().mockResolvedValue(undefined),
+  };
+  const application = app(db as unknown as Store, {
+    origin,
+    secret,
+    memberPassword: access,
+    ...(requestAttach
+      ? {
+          memberEmail: {
+            requestAttach: vi.fn(requestAttach),
+            signOut: vi.fn(),
+          } as unknown as MemberEmailAccess,
+        }
+      : {}),
+  });
+  const start = (body: Record<string, string>) =>
+    withLoopback(application, (s) =>
+      request(s)
+        .post("/start")
+        .set("Host", host)
+        .set("Origin", origin)
+        .set("Cookie", `${COOKIE}=${token}`)
+        .type("form")
+        .send({
+          display_name: "Fake Learner",
+          background: "explorer",
+          goal: "everyday",
+          csrf: csrf(token, secret),
+          ...body,
+        }),
+    );
+  return { db, application, start };
+}
+
+it("SIGNUP-01/05 starts the account even when saving the sign-in or sending the email fails", async () => {
+  const f = fixture();
+  const fields = { signup_email: "a@example.com", signup_password: good };
+  const failingEmail = signupApp(f.access, () =>
+    Promise.reject(new Error("provider down")),
+  );
+  expect((await failingEmail.start(fields)).status).toBe(303);
+  expect(failingEmail.db.create).toHaveBeenCalled();
+  f.access.register.mockRejectedValueOnce(new Error("database down"));
+  const failingSave = signupApp(f.access, () => Promise.resolve("sent"));
+  expect((await failingSave.start(fields)).status).toBe(303);
+  const noEmail = signupApp(f.access);
+  expect((await noEmail.start(fields)).status).toBe(303);
+  const tooLong = await noEmail.start({
+    ...fields,
+    signup_email: `${"y".repeat(250)}@example.com`,
+  });
+  expect(tooLong.status).toBe(422);
+  expect(tooLong.text).not.toContain("y".repeat(250));
+  // The password page's verification hand-off also tolerates a failed send.
+  const page = await withLoopback(
+    app(
+      {
+        session: vi.fn().mockResolvedValue({
+          kind: "active",
+          expiresAt: new Date(Date.now() + 3600000),
+          learner: { id: "member-id" },
+        }),
+      } as unknown as Store,
+      {
+        origin,
+        secret,
+        memberPassword: f.access,
+        memberEmail: {
+          requestAttach: vi.fn().mockRejectedValue(new Error("down")),
+          signOut: vi.fn(),
+        } as unknown as MemberEmailAccess,
+      },
+    ),
+    (s) =>
+      request(s)
+        .post("/account/password")
+        .set("Host", host)
+        .set("Origin", origin)
+        .set("Cookie", `${COOKIE}=${token}`)
+        .type("form")
+        .send({
+          email: "a@example.com",
+          password: good,
+          confirm: good,
+          csrf: csrf(token, secret),
+        }),
+  );
+  expect(page.status).toBe(200);
+});
+
+it("SIGNUP-02 asks for access-loss acknowledgement only when no way back exists", async () => {
+  const f = fixture();
+  const active = vi.fn().mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: { id: "member-id" },
+  });
+  const signOutPage = (access: MemberPasswordAccess) =>
+    withLoopback(
+      app({ session: active } as unknown as Store, {
+        origin,
+        secret,
+        memberPassword: access,
+      }),
+      (s) =>
+        request(s)
+          .get("/account/sign-out")
+          .set("Host", host)
+          .set("Cookie", `${COOKIE}=${token}`),
+    );
+  f.access.status.mockResolvedValueOnce("set");
+  expect((await signOutPage(f.access)).text).not.toContain(
+    "acknowledgeAccessLoss",
+  );
+  f.access.status.mockResolvedValueOnce("unset");
+  expect((await signOutPage(f.access)).text).toContain("acknowledgeAccessLoss");
 });

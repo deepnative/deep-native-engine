@@ -7,7 +7,7 @@ import {
   type MemberPasswordAccess,
 } from "./member-password-access.ts";
 import { COOKIE, cookieOptions } from "./session.ts";
-import { page } from "./views.ts";
+import { escape, page } from "./views.ts";
 
 /** The email + password form shown on the shared sign-in page. */
 export function passwordSignInForm(csrf: string, error?: string) {
@@ -25,6 +25,11 @@ function passwordForm(csrf: string, hasPassword: boolean, error?: string) {
   return `<form method="post" action="/account/password"><input type="hidden" name="csrf" value="${csrf}">${error ? `<p role="alert" class="form-error">${error}</p>` : ""}${hasPassword ? '<label for="password-old">Current password</label><input id="password-old" name="current" type="password" autocomplete="current-password" maxlength="512"><p class="small">Not needed within 30 minutes of signing in with an email link.</p>' : ""}<label for="password-new">New password</label><input id="password-new" name="password" type="password" autocomplete="new-password" minlength="${PASSWORD_MIN}" maxlength="${PASSWORD_MAX}" required aria-describedby="password-rule"><p id="password-rule" class="small">${PASSWORD_MIN} to ${PASSWORD_MAX} characters. A short phrase is easiest to remember.</p><label for="password-confirm">Confirm new password</label><input id="password-confirm" name="confirm" type="password" autocomplete="new-password" minlength="${PASSWORD_MIN}" maxlength="${PASSWORD_MAX}" required><button type="submit">${hasPassword ? "Change password" : "Set password"}</button></form>`;
 }
 
+/** SIGNUP-01: email and password for an account that has no email yet. */
+function registerForm(csrf: string, error?: string, email = "") {
+  return `<form method="post" action="/account/password"><input type="hidden" name="csrf" value="${csrf}">${error ? `<p role="alert" class="form-error">${error}</p>` : ""}<label for="register-email">Email address</label><input id="register-email" name="email" type="email" autocomplete="username" maxlength="254" required value="${escape(email)}"><label for="password-new">Password</label><input id="password-new" name="password" type="password" autocomplete="new-password" minlength="${PASSWORD_MIN}" maxlength="${PASSWORD_MAX}" required aria-describedby="password-rule"><p id="password-rule" class="small">${PASSWORD_MIN} to ${PASSWORD_MAX} characters. A short phrase is easiest to remember.</p><label for="password-confirm">Confirm password</label><input id="password-confirm" name="confirm" type="password" autocomplete="new-password" minlength="${PASSWORD_MIN}" maxlength="${PASSWORD_MAX}" required><button type="submit">Save email and password</button></form>`;
+}
+
 function passwordPage(body: string) {
   return page(
     "Password sign-in",
@@ -38,11 +43,17 @@ export function mountMemberPasswordRoutes(
   access: MemberPasswordAccess,
   origin: string,
   continuation?: (rawCookie: string | undefined) => string | null,
+  verify?: (memberToken: string, email: string) => void,
 ) {
   const token = (res: Response) => res.locals.token as string;
   const csrf = (res: Response) => res.locals.csrf as string;
 
-  async function show(res: Response, status = 200, error?: string) {
+  async function show(
+    res: Response,
+    status = 200,
+    error?: string,
+    email?: string,
+  ) {
     const state = await access.status(token(res));
     if (state === "unavailable")
       return res
@@ -54,10 +65,10 @@ export function mountMemberPasswordRoutes(
         );
     if (state === "email_required")
       return res
-        .status(status === 200 ? 200 : 409)
+        .status(status)
         .send(
           passwordPage(
-            '<h2>Link and verify an email first</h2><p>Your verified email is your username, and it lets you reset a forgotten password.</p><p class="account-links"><a class="button" href="/email/attach">Link an email</a></p>',
+            `<h2>Add a sign-in email and password</h2><p>Your email is your username. You can sign in with the password straight away; we also send a link to verify the email.</p>${registerForm(csrf(res), error, email)}`,
           ),
         );
     return res
@@ -80,7 +91,7 @@ export function mountMemberPasswordRoutes(
 
   app.post("/account/password", async (req, res) => {
     res.set("Cache-Control", "no-store");
-    if (!onlyFields(req, ["csrf", "current", "password", "confirm"]))
+    if (!onlyFields(req, ["csrf", "email", "current", "password", "confirm"]))
       return res
         .status(400)
         .send(passwordPage("<h2>Open the password form again</h2>"));
@@ -96,13 +107,35 @@ export function mountMemberPasswordRoutes(
           ? "The two passwords do not match."
           : `Use ${PASSWORD_MIN} to ${PASSWORD_MAX} characters.`,
       );
+    if (fields.email !== undefined) {
+      const address = String(fields.email);
+      const kept = address.length <= 254 ? address : "";
+      const registered = await access
+        .register(token(res), address, password)
+        .catch(() => "unavailable" as const);
+      if (registered === "saved") {
+        verify?.(token(res), address);
+        return show(res);
+      }
+      if (registered === "taken")
+        return show(
+          res,
+          409,
+          "This email is already used for sign-in. Use another email, or sign in to that account.",
+          kept,
+        );
+      if (registered === "invalid")
+        return show(res, 422, "Enter a valid email address.", kept);
+      return show(res, 503);
+    }
     const current =
       typeof fields.current === "string" ? fields.current : undefined;
     const result = await access
       .setPassword(token(res), password, current)
       .catch(() => "unavailable" as const);
     if (result === "saved") return show(res);
-    if (result === "email_required") return show(res, 409);
+    if (result === "email_required")
+      return show(res, 409, "Add a sign-in email with your password.");
     if (result === "current_required" || result === "current_incorrect")
       return show(
         res,
