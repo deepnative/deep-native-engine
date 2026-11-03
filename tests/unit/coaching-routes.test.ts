@@ -707,3 +707,111 @@ it("ADMIN-LAYOUT-02 coaching administration groups its lists in cards and naviga
   );
   expect(member).not.toContain("</a> · <a");
 });
+
+it("HOURTABLE-01/02/03 lists saved months as a table with hours, amount, status and invoice", async () => {
+  const f = fixture();
+  const invoiceId = "22222222-2222-4222-8222-222222222222";
+  const months = [
+    { month: "2026-10", state: "draft", minutes: 90, returned: false },
+    { month: "2026-09", state: "draft", minutes: 30, returned: true },
+    {
+      month: "2026-08",
+      state: "submitted",
+      minutes: 120,
+      submittedCents: 24000,
+    },
+    {
+      month: "2026-07",
+      state: "invoiced",
+      minutes: 60,
+      invoiceId,
+      totalCents: "12000",
+      paidCents: "12000",
+    },
+    {
+      month: "2026-06",
+      state: "invoiced",
+      minutes: 60,
+      invoiceId,
+      totalCents: "12000",
+      paidCents: "2000",
+    },
+    {
+      month: "2026-05",
+      state: "invoiced",
+      minutes: 60,
+      invoiceId,
+      totalCents: "12000",
+      paidCents: "0",
+      voided: true,
+    },
+    { month: "2025-01", state: "draft", minutes: 45, returned: false },
+  ];
+  f.service.coachingOverview.mockResolvedValue(ready({ ...value, months }));
+  const page = mainHtml((await f.get(`/account/coaching?month=${month}`)).text);
+  const table = page.match(
+    /<table class="coaching-months"[\s\S]*?<\/table>/,
+  )?.[0];
+  expect(table).toBeDefined();
+  expect(page).toContain('<div class="table-scroll" role="region"');
+  for (const header of ["Month", "Hours", "Amount", "Status", "Invoice"])
+    expect(table).toContain(`<th scope="col">${header}</th>`);
+  const row = (label: string) =>
+    table!.match(
+      new RegExp(
+        `<tr><th scope="row"><a[^>]*>${label}</a></th>[\\s\\S]*?</tr>`,
+      ),
+    )?.[0] ?? "";
+  expect(row("October 2026")).toContain(
+    'href="/account/coaching?month=2026-10"',
+  );
+  expect(row("October 2026")).toContain("1h 30m");
+  expect(row("October 2026")).toContain("CAD 180.00");
+  expect(row("October 2026")).toContain("Draft");
+  expect(row("September 2026")).toContain("Returned for correction");
+  expect(row("August 2026")).toContain("CAD 240.00");
+  expect(row("August 2026")).toContain("Awaiting review");
+  expect(row("July 2026")).toContain("Invoiced · Paid");
+  expect(row("July 2026")).toContain(
+    `href="/account/purchases/invoices/${invoiceId}"`,
+  );
+  expect(row("June 2026")).toContain("Invoiced · CAD 100.00 due");
+  expect(row("May 2026")).toContain("Void");
+  // No rate applies to a month before the first effective rate.
+  expect(row("January 2025")).toContain("No rate");
+  expect(page).not.toContain("<h2>Saved months</h2><ul>");
+
+  // HOURTABLE-03: the administrator's member view links admin invoices.
+  const admin = mainHtml(
+    (await f.get(`/operator/coaching/${id}?month=${month}`)).text,
+  );
+  expect(admin).toContain(`href="/operator/invoices/${invoiceId}"`);
+  expect(admin).toContain(`href="/operator/coaching/${id}?month=2026-08"`);
+});
+
+it("HOURTABLE-01 prices drafts at the newest applicable rate and labels an invoice without details", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...value,
+      rates: [
+        { id, effectiveMonth: "2026-01", cents: 6000, version: 1 },
+        { id, effectiveMonth: "2026-06", cents: 9000, version: 2 },
+        { id, effectiveMonth: "2026-06", cents: 10000, version: 3 },
+      ],
+      months: [
+        { month: "2026-08", state: "draft", minutes: 60 },
+        { month: "2026-03", state: "draft", minutes: 60 },
+        { month: "2026-02", state: "invoiced", minutes: 60, invoiceId: id },
+      ],
+    }),
+  );
+  const page = mainHtml((await f.get(`/account/coaching?month=${month}`)).text);
+  expect(page).toMatch(/August 2026<\/a><\/th><td>1h<\/td><td>CAD 100\.00/);
+  expect(page).toMatch(/March 2026<\/a><\/th><td>1h<\/td><td>CAD 60\.00/);
+  expect(page).toMatch(/February 2026[\s\S]*?<td>Invoiced<\/td>/);
+  f.service.coachingOverview.mockResolvedValue(ready({ ...value, months: [] }));
+  expect(
+    mainHtml((await f.get(`/account/coaching?month=${month}`)).text),
+  ).toContain("<p>No saved months.</p>");
+});
