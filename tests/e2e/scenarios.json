@@ -2150,7 +2150,7 @@
       "id": "L239",
       "actor": "Linked member with saved private learning and a copied bearer",
       "preconditions": "Dedicated synthetic PostgreSQL database, deterministic email outbox and port0 server; desktop/mobile Chromium",
-      "steps": "MOUT-01/02: open My account, explicitly sign out, verify copied browser cannot open account, deliberately request and consume email sign-in, reopen saved profile/progress",
+      "steps": "MOUT-01/02: open My account, explicitly sign out, verify copied browser cannot open account, deliberately request and consume email sign-in, reopen saved profile/progress; NAV-08 header offers Sign in, not member tools, after sign-out",
       "expected": "Both old member bearer hashes invalidated, member cookie cleared and browser staff cookie ended, no automatic email, same member/workspace/work restored by explicit email return; bound administrator authority remains invalid after bearer rotation",
       "critical": true,
       "issues": [547, 28, 24]
