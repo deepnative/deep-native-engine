@@ -90,7 +90,7 @@ async function fixture(
       staffEntry: staffEntryStore(pool),
       memberEmail: email,
       simpleInvoices: enabled ? invoices : undefined,
-      // L283 only: verified owners enter administration through the menu.
+      // L284 only: verified owners enter administration through the menu.
       ...(ownerEntry ? { administratorEntry: administratorEntry(pool) } : {}),
     }),
   );
@@ -355,7 +355,7 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
     await f.close(completed);
   }
 });
-test("[L283] HOUR01/04/07 a verified owner bills monthly coaching from Administration and the member reports through Top up hours", async ({
+test("[L284] HOUR01/04/07 a verified owner bills monthly coaching from Administration and the member reports through Top up hours", async ({
   browser,
 }, info) => {
   const f = await fixture(browser, info, true, true);

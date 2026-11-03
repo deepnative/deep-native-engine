@@ -235,6 +235,7 @@ export async function migrate(pool: Pool) {
       "085-upload-admission.sql",
       "086-billing-profiles.sql",
       "087-member-display-names.sql",
+      "088-contribution-events.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
