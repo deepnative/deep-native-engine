@@ -25,6 +25,7 @@ If saving cannot be confirmed, the page retains the original request. **Inspect 
 | --- | --- |
 | Exact owned submission and separate consent | AHO-01/02; assignment-evidence HTTP, store, route and view tests; L214–L216 |
 | No automatic grant; exact authorized feedback | AHO-02/05; assignment-evidence integration tests and L214–L216 |
+| Coach workspace grants cannot read assignment copies | AHO-11; assignment-evidence integration and evidence unit tests |
 | Canonical replay, uncertain commit and safe inspection | AHO-03; assignment-evidence unit/integration tests and L217–L218 |
 | Withdrawal, source deletion and copy-only deletion | AHO-06/07/08; assignment-evidence integration tests and L214–L216 |
 | Ownership, expiry and cross-member denial | AHO-04; assignment-evidence route, HTTP and native PostgreSQL lifetime tests |
