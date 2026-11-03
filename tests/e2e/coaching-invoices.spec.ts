@@ -14,12 +14,18 @@ import { migrate, store } from "../../src/store.ts";
 import { simpleInvoiceStore } from "../../src/simple-invoice-store.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
+import { administratorEntry } from "../../src/administrator-entry.ts";
 import { memberEmailAccess } from "../../src/member-email-access.ts";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
 // Verified synthetic staff credentials stay out of traces; screenshots and resource reports contain only invented display data.
 test.use({ trace: "off" });
-async function fixture(browser: Browser, info: TestInfo, enabled = true) {
+async function fixture(
+  browser: Browser,
+  info: TestInfo,
+  enabled = true,
+  ownerEntry = false,
+) {
   const base = process.env.DNE_TEST_DATABASE_URL;
   if (!base || !/^\/dne_test_[a-f0-9]{32}$/.test(new URL(base).pathname))
     throw Error("Generated browser database required");
@@ -84,6 +90,8 @@ async function fixture(browser: Browser, info: TestInfo, enabled = true) {
       staffEntry: staffEntryStore(pool),
       memberEmail: email,
       simpleInvoices: enabled ? invoices : undefined,
+      // L283 only: verified owners enter administration through the menu.
+      ...(ownerEntry ? { administratorEntry: administratorEntry(pool) } : {}),
     }),
   );
   const address = server.address();
@@ -99,10 +107,10 @@ async function fixture(browser: Browser, info: TestInfo, enabled = true) {
     contexts.push(c);
     return c.newPage();
   }
-  async function member() {
+  async function member(displayName = "Sample learner") {
     const p = await page();
     await p.goto(origin);
-    await p.getByLabel("Display name").fill("Sample learner");
+    await p.getByLabel("Display name").fill(displayName);
     await p.getByLabel("Your starting point").selectOption("explorer");
     await chooseLearningGoal(p, "everyday");
     await p.getByRole("button", { name: "Start my learning path" }).click();
@@ -125,6 +133,22 @@ async function fixture(browser: Browser, info: TestInfo, enabled = true) {
       .click();
     return p;
   }
+  // An approved owner identity, verified through the ordinary email link.
+  async function owner() {
+    const o = await member("Invented owner");
+    const sent = messages.length;
+    await o.page
+      .getByRole("link", { name: "Link an email", exact: true })
+      .click();
+    await o.page.getByLabel("Email address").fill("tom@deepnative.io");
+    await o.page
+      .getByRole("button", { name: "Send verification link" })
+      .click();
+    await expect.poll(() => messages.length).toBe(sent + 1);
+    await o.page.goto(messages.at(-1)!);
+    await o.page.getByRole("button", { name: "Continue", exact: true }).click();
+    return o;
+  }
   const month = (
     await pool.query<{ month: string }>(
       "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM') AS month",
@@ -143,6 +167,7 @@ async function fixture(browser: Browser, info: TestInfo, enabled = true) {
     page,
     member,
     admin,
+    owner,
     async close(completed: boolean) {
       await Promise.all(contexts.map((c) => c.close()));
       await closeLoopback(server);
@@ -325,6 +350,118 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
     );
     await expect(pending).toBeVisible();
     await expect(pending).toHaveText(`Sample learner · ${pastMonth}`);
+    completed = true;
+  } finally {
+    await f.close(completed);
+  }
+});
+test("[L283] HOUR01/04/07 a verified owner bills monthly coaching from Administration and the member reports through Top up hours", async ({
+  browser,
+}, info) => {
+  const f = await fixture(browser, info, true, true);
+  let completed = false;
+  try {
+    const learner = await f.member("Coaching member"),
+      owner = await f.owner();
+    const menu = (p: Page) =>
+      p.getByRole("navigation", { name: "Main navigation" });
+    await menu(owner.page)
+      .getByRole("link", { name: "Administration", exact: true })
+      .click();
+    await owner.page
+      .getByRole("button", { name: "Enter administration" })
+      .click();
+    await expect(
+      owner.page.getByRole("heading", { name: "Administration console" }),
+    ).toBeVisible();
+    await owner.page
+      .getByRole("link", { name: "Coaching member", exact: true })
+      .click();
+    await expect(
+      owner.page.getByRole("heading", { name: "Selected learner" }),
+    ).toBeVisible();
+    await owner.page
+      .getByRole("link", { name: "Monthly coaching and rates", exact: true })
+      .click();
+    await owner.page.getByLabel("Hourly rate (CAD)").fill("95.00");
+    await owner.page.getByRole("button", { name: "Save hourly rate" }).click();
+
+    await learner.page.goto(f.origin + "/learn");
+    await menu(learner.page)
+      .getByRole("link", { name: "Top up hours", exact: true })
+      .click();
+    await expect(learner.page).toHaveURL(f.origin + "/account/coaching");
+    await learner.page.getByLabel("Whole hours").fill("2");
+    await learner.page.getByLabel("Additional minutes").fill("15");
+    await learner.page
+      .getByLabel("Invoice recipient name")
+      .fill("Invented coaching member");
+    await learner.page
+      .getByLabel("Invoice email")
+      .fill("billing@example.invalid");
+    await Promise.all([
+      learner.page.waitForURL(`${f.origin}/account/coaching?month=${f.month}`, {
+        waitUntil: "load",
+      }),
+      learner.page.getByRole("button", { name: "Save coaching draft" }).click(),
+    ]);
+    await expect(
+      learner.page.getByText("CAD 213.75", { exact: true }),
+    ).toBeVisible();
+    await submit(learner.page);
+    await expect(
+      learner.page.getByRole("heading", { name: "Submitted snapshot" }),
+    ).toBeVisible();
+
+    await menu(owner.page)
+      .getByRole("link", { name: "Administration", exact: true })
+      .click();
+    await owner.page
+      .getByRole("link", { name: "Monthly coaching", exact: true })
+      .click();
+    await owner.page
+      .getByRole("link", { name: `Coaching member · ${f.month}`, exact: true })
+      .click();
+    await owner.page.getByLabel("Invented sample tax (CAD)").fill("0.00");
+    await owner.page
+      .getByRole("checkbox", { name: /I reviewed this exact/ })
+      .check();
+    await owner.page
+      .getByRole("button", { name: "Issue coaching invoice" })
+      .click();
+    await expect(
+      owner.page.getByRole("heading", { name: "Invoice", exact: true }),
+    ).toBeVisible();
+    const invoiceId = owner.page.url().split("/").at(-1)!;
+
+    await menu(learner.page)
+      .getByRole("link", { name: "Account", exact: true })
+      .click();
+    await learner.page
+      .getByRole("link", { name: "Courses and invoices", exact: true })
+      .click();
+    await learner.page
+      .getByRole("link", { name: `DN-${invoiceId}`, exact: true })
+      .click();
+    await expect(
+      learner.page.getByRole("table", { name: "Coaching charges" }),
+    ).toContainText(f.month);
+    await expect(
+      learner.page.getByText(/2 hours 15 minutes.*CAD 95\.00 per hour/),
+    ).toBeVisible();
+    await expect(
+      learner.page.getByText("SAMPLE · NOT PAYABLE", { exact: true }),
+    ).toBeVisible();
+    for (const p of [owner.page, learner.page])
+      expect(
+        await p.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    await learner.page.screenshot({
+      path: info.outputPath("coaching-owner-menu-invoice.png"),
+      fullPage: true,
+    });
     completed = true;
   } finally {
     await f.close(completed);
