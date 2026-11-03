@@ -924,9 +924,15 @@ it("rejects a well-formed capability with a changed signature", async () => {
 });
 
 it("issues an exactly granted reviewer link for an assignment copy", async () => {
-  const rows = staffAccess("reviewer");
-  rows[2] = { ...accessMetadata, assignment_bound: true };
-  const db = database(...rows, undefined, { valid: true });
+  const [identity, workspace, , ...grants] = staffAccess("reviewer");
+  const db = database(
+    identity,
+    workspace,
+    { ...accessMetadata, assignment_bound: true },
+    ...grants,
+    undefined,
+    { valid: true },
+  );
   const issued = await evidenceStore(
     db.pool,
     objectStorage(),
