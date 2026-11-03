@@ -1828,6 +1828,10 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 .portal-card p + form {
   margin-top: 16px;
 }
+/* Forms side by side in an action row are aligned, not stacked. */
+.portal-card .portal-actions > form + form {
+  margin-top: 0;
+}
 .portal-workspace {
   overflow-wrap: anywhere;
   padding-block: 12px 56px;
