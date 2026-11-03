@@ -2,7 +2,11 @@ import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { randomBytes } from "node:crypto";
 import type { Server } from "node:http";
 import request from "supertest";
-import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
+import {
+  closeLoopback,
+  listenLoopback,
+  withLoopback,
+} from "../support/loopback-server.ts";
 import { app } from "../../src/app.ts";
 import { memberEmailAccess } from "../../src/member-email-access.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
@@ -416,11 +420,12 @@ it.each(["rotation", "deletion", "email-unavailable"] as const)(
         },
       },
     });
-    const response = request(guarded)
-      .get("/account")
-      .set("Host", "127.0.0.1:3000")
-      .set("Cookie", `${COOKIE}=${owner.token}`)
-      .then((value) => value);
+    const response = withLoopback(guarded, (s) =>
+      request(s)
+        .get("/account")
+        .set("Host", "127.0.0.1:3000")
+        .set("Cookie", `${COOKIE}=${owner.token}`),
+    );
     await Promise.race([
       started,
       response.then((value) => {
