@@ -498,6 +498,16 @@ const sections = {
     "owner_id",
     true,
   ),
+  // v32 appends own content-free contribution events (#122); staff identities
+  // are never stored there, only the acting authority.
+  contributionEvents: section(
+    `id,proposal_id AS "proposalId",revision,kind,outcome,cause,actor_authority AS "actorAuthority",
+     origin,workflow_id AS "workflowId",workflow_version AS "workflowVersion",
+     permission_version AS "permissionVersion",metrics_version AS "metricsVersion",occurred_at AS "occurredAt"`,
+    "contribution_events WHERE member_id=$1",
+    "id",
+    true,
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -511,7 +521,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v31";
+  version: "local-member-records-v32";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -645,7 +655,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v31",
+          version: "local-member-records-v32",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

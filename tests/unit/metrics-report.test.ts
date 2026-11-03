@@ -2,6 +2,7 @@ import express from "express";
 import request from "supertest";
 import { expect, it, vi } from "vitest";
 import type { PreviewMetrics } from "../../src/metrics.ts";
+import { contributionMetrics } from "../../src/contribution-metrics.ts";
 import { metricsReportPage } from "../../src/metrics-report-views.ts";
 import { registerMetricsReportRoutes } from "../../src/metrics-report-routes.ts";
 import { withLoopback } from "../support/loopback-server.ts";
@@ -33,6 +34,7 @@ const snapshot: PreviewMetrics = {
     crossContentReturned: 3,
   },
   usefulness: { disclosure: "coarse-band", helpfulShareBand: "50-74%" },
+  contributions: contributionMetrics(null, null),
 };
 it("MR-01 renders every count with its meaning, denominator, timestamp and separate self-report band", () => {
   const html = metricsReportPage(snapshot);

@@ -1,5 +1,9 @@
 import type { Pool } from "pg";
 import { hash } from "./store.ts";
+import {
+  contributionMetrics,
+  type ContributionMetrics,
+} from "./contribution-metrics.ts";
 
 export interface PreviewMetrics {
   scope: "synthetic-local-preview";
@@ -26,6 +30,7 @@ export interface PreviewMetrics {
     crossContentReturned: number;
   };
   usefulness: UsefulnessDisclosure;
+  contributions: ContributionMetrics;
 }
 
 export interface UsefulnessDisclosure {
@@ -70,6 +75,24 @@ export function disabledMetricsStore(): MetricsStore {
   return { snapshot: async () => null };
 }
 
+// One distinct-revision and distinct-owner cell for the events matching a filter.
+const cell = (filter: string) =>
+  `jsonb_build_object('revisions',COUNT(DISTINCT e.proposal_id::text||':'||e.revision) FILTER(WHERE ${filter}),'owners',COUNT(DISTINCT e.member_id) FILTER(WHERE ${filter}))`;
+const contributionVolumes = {
+  submitted: "e.kind='submitted'",
+  reviewed: "e.kind='reviewed'",
+  accepted: "e.kind='accepted'",
+  published: "e.kind='published'",
+  sourceWithdrawn: "e.kind='source_withdrawn'",
+  sharingWithdrawnByOwner: "e.kind='sharing_withdrawn' AND e.cause='owner'",
+  sharingWithdrawnBySourceChange:
+    "e.kind='sharing_withdrawn' AND e.cause='source_change'",
+};
+// A first decision counts toward the share only when its submission was also
+// recorded after the cutoff, so incomplete chains stay out of the rate.
+const firstDecision = `e.kind='reviewed' AND EXISTS(SELECT 1 FROM contribution_retained s
+  WHERE s.kind='submitted' AND s.proposal_id=e.proposal_id AND s.revision=e.revision)`;
+
 export function metricsStore(pool: Pool): MetricsStore {
   return {
     async snapshot(token) {
@@ -86,6 +109,8 @@ export function metricsStore(pool: Pool): MetricsStore {
         usefulnessRespondents: number;
         usefulnessHelpful: number;
         usefulnessNotYet: number;
+        contributionsSince: Date | null;
+        contributions: unknown;
       }>(
         `WITH authorized AS (
            SELECT 1 FROM principals p JOIN authorized_staff_profiles s ON s.principal_id=p.id
@@ -138,6 +163,21 @@ export function metricsStore(pool: Pool): MetricsStore {
              COUNT(*) FILTER(WHERE choice='helpful')::integer AS helpful,
              COUNT(*) FILTER(WHERE choice='not_yet')::integer AS not_yet
            FROM latest_usefulness
+         ), contribution_retained AS (
+           SELECT e.* FROM contribution_events e JOIN learners l ON l.id=e.member_id
+           WHERE EXISTS(SELECT 1 FROM authorized)
+         ), contribution_groups AS (
+           SELECT o.origin,jsonb_build_object(
+             'contributors',COUNT(DISTINCT e.member_id) FILTER(WHERE e.kind='submitted'),
+             'volumes',jsonb_build_object(${Object.entries(contributionVolumes)
+               .map(([key, filter]) => `'${key}',${cell(filter)}`)
+               .join(",")}),
+             'firstAccepted',${cell(`${firstDecision} AND e.outcome='accepted'`)},
+             'firstNotAccepted',${cell(`${firstDecision} AND e.outcome<>'accepted'`)}
+           ) AS summary
+           FROM (VALUES ('member'),('sample')) o(origin)
+           LEFT JOIN contribution_retained e ON e.origin=o.origin
+           GROUP BY o.origin
          )
          SELECT CURRENT_TIMESTAMP AS "asOf",COUNT(*)::integer AS members,
            COUNT(*) FILTER(WHERE activated)::integer AS activated,
@@ -149,7 +189,9 @@ export function metricsStore(pool: Pool): MetricsStore {
            COUNT(*) FILTER(WHERE cross_content_returned)::integer AS "crossContentReturned",
            COALESCE(MAX(uc.respondents),0)::integer AS "usefulnessRespondents",
            COALESCE(MAX(uc.helpful),0)::integer AS "usefulnessHelpful",
-           COALESCE(MAX(uc.not_yet),0)::integer AS "usefulnessNotYet"
+           COALESCE(MAX(uc.not_yet),0)::integer AS "usefulnessNotYet",
+           (SELECT started_at FROM contribution_metrics_cutoff) AS "contributionsSince",
+           (SELECT jsonb_object_agg(origin,summary) FROM contribution_groups) AS contributions
          FROM return_events CROSS JOIN usefulness_counts uc
          HAVING EXISTS(SELECT 1 FROM authorized)`,
         [hash(token)],
@@ -193,6 +235,10 @@ export function metricsStore(pool: Pool): MetricsStore {
           row.usefulnessRespondents,
           row.usefulnessHelpful,
           row.usefulnessNotYet,
+        ),
+        contributions: contributionMetrics(
+          row.contributionsSince,
+          row.contributions,
         ),
       };
     },
