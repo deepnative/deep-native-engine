@@ -31,6 +31,14 @@ export interface MemberPasswordAccess {
     current?: string,
   ): Promise<PasswordChange>;
   signIn(email: string, password: string): Promise<PasswordSignIn>;
+  /** SIGNUP-01: give an account without any email a sign-in email (verified later) and password. */
+  register(
+    memberToken: string,
+    email: string,
+    password: string,
+  ): Promise<"saved" | "taken" | "invalid" | "unavailable">;
+  /** Whether no account already signs in with this email. */
+  emailAvailable(email: string): Promise<boolean>;
 }
 
 export const PASSWORD_MIN = 12;
@@ -103,7 +111,8 @@ export function memberPasswordAccess(pool: Pool): MemberPasswordAccess {
         stored: string | null;
       }>(
         `SELECT p.id,
-                EXISTS(SELECT 1 FROM member_email_identities i WHERE i.principal_id=p.id) AS verified,
+                EXISTS(SELECT 1 FROM member_email_identities i WHERE i.principal_id=p.id)
+                  OR EXISTS(SELECT 1 FROM member_login_emails e WHERE e.principal_id=p.id) AS verified,
                 (SELECT password_hash FROM member_passwords m WHERE m.principal_id=p.id) AS stored
          FROM principals p JOIN workspaces w ON w.owner_principal_id=p.id
          WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
@@ -143,12 +152,13 @@ export function memberPasswordAccess(pool: Pool): MemberPasswordAccess {
       }
       const stored = await hashPassword(password);
       return transaction(pool, async (client) => {
-        // Recheck the same live owner and verified email inside the write.
+        // Recheck the same live owner and sign-in email inside the write.
         const live = await client.query(
           `SELECT p.id FROM principals p JOIN workspaces w ON w.owner_principal_id=p.id
            WHERE p.id=$1 AND p.token_hash=$2 AND p.revoked_at IS NULL
              AND p.expires_at>clock_timestamp() AND w.deleting_at IS NULL
-             AND EXISTS(SELECT 1 FROM member_email_identities i WHERE i.principal_id=p.id)
+             AND (EXISTS(SELECT 1 FROM member_email_identities i WHERE i.principal_id=p.id)
+               OR EXISTS(SELECT 1 FROM member_login_emails e WHERE e.principal_id=p.id))
            FOR UPDATE OF p`,
           [found.id, hash(memberToken)],
         );
@@ -179,7 +189,9 @@ export function memberPasswordAccess(pool: Pool): MemberPasswordAccess {
         ? (
             await pool.query<{ principal_id: string; stored: string }>(
               `SELECT i.principal_id,m.password_hash AS stored
-               FROM member_email_identities i
+               FROM (SELECT email_hash,principal_id FROM member_email_identities
+                     UNION ALL
+                     SELECT email_hash,principal_id FROM member_login_emails) i
                JOIN member_passwords m ON m.principal_id=i.principal_id
                WHERE i.email_hash=$1`,
               [digest],
@@ -230,6 +242,57 @@ export function memberPasswordAccess(pool: Pool): MemberPasswordAccess {
         return true;
       });
       return signedIn ? { kind: "signed_in", token } : { kind: "refused" };
+    },
+    async emailAvailable(address) {
+      const normalized = normalizedEmail(address);
+      if (!normalized) return false;
+      const taken = await pool.query(
+        `SELECT 1 FROM member_email_identities WHERE email_hash=$1
+         UNION ALL SELECT 1 FROM member_login_emails WHERE email_hash=$1`,
+        [emailHash(normalized)],
+      );
+      return !taken.rowCount;
+    },
+    async register(memberToken, address, password) {
+      const normalized = normalizedEmail(address);
+      if (!normalized || !acceptablePassword(password)) return "invalid";
+      const digest = emailHash(normalized);
+      const stored = await hashPassword(password);
+      return transaction(pool, async (client) => {
+        const principal = (
+          await client.query<{ id: string }>(
+            `SELECT p.id FROM principals p JOIN workspaces w ON w.owner_principal_id=p.id
+             WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
+               AND p.expires_at>clock_timestamp() AND w.deleting_at IS NULL
+               AND NOT EXISTS(SELECT 1 FROM member_email_identities i WHERE i.principal_id=p.id)
+               AND NOT EXISTS(SELECT 1 FROM member_login_emails e WHERE e.principal_id=p.id)
+             FOR UPDATE OF p`,
+            [hash(memberToken)],
+          )
+        ).rows[0];
+        if (!principal) return "unavailable" as const;
+        // Serialize with other sign-ups and verifications of this address.
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+          [digest],
+        );
+        const taken = await client.query(
+          `SELECT 1 FROM member_email_identities WHERE email_hash=$1
+           UNION ALL SELECT 1 FROM member_login_emails WHERE email_hash=$1`,
+          [digest],
+        );
+        if (taken.rowCount) return "taken" as const;
+        await client.query(
+          "INSERT INTO member_login_emails(email_hash,principal_id) VALUES($1,$2)",
+          [digest, principal.id],
+        );
+        await client.query(
+          `INSERT INTO member_passwords(principal_id,password_hash) VALUES($1,$2)
+           ON CONFLICT(principal_id) DO UPDATE SET password_hash=EXCLUDED.password_hash,updated_at=clock_timestamp()`,
+          [principal.id, stored],
+        );
+        return "saved" as const;
+      });
     },
   };
 }

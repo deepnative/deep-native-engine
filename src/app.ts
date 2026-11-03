@@ -74,10 +74,16 @@ import {
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { COOKIE, cookieOptions, token, csrf, validCsrf } from "./session.ts";
-import type { MemberEmailAccess } from "./member-email-access.ts";
+import {
+  normalizedEmail,
+  type MemberEmailAccess,
+} from "./member-email-access.ts";
 import { mountMemberEmailRoutes } from "./member-email-routes.ts";
 import { mountMemberPasswordRoutes } from "./member-password-routes.ts";
-import type { MemberPasswordAccess } from "./member-password-access.ts";
+import {
+  acceptablePassword,
+  type MemberPasswordAccess,
+} from "./member-password-access.ts";
 import { mountStarterGuidanceRoutes } from "./starter-guidance-routes.ts";
 import {
   disabledSupportRequestStore,
@@ -800,7 +806,7 @@ export function app(
     options.origin,
     resumeSelection,
     options.memberSignOut,
-    Boolean(options.memberPassword),
+    options.memberPassword,
   );
   if (options.memberPassword)
     mountMemberPasswordRoutes(
@@ -809,6 +815,10 @@ export function app(
       options.memberPassword,
       options.origin,
       resumeSelection,
+      (memberToken, address) =>
+        void options.memberEmail
+          ?.requestAttach(memberToken, address)
+          .catch(() => undefined),
     );
   mountProgramRoutes(
     app,
@@ -1395,12 +1405,42 @@ export function app(
         [],
         undefined,
         Boolean(options.memberEmail),
+        options.memberPassword ? { email: "" } : undefined,
       ),
     );
   });
   app.post("/start", async (req, res) => {
-    const start = profileStart(req.body as Fields);
-    if (!start.input) {
+    const body = req.body as Fields;
+    const start = profileStart(body);
+    // SIGNUP-01/03/05: where passwords are offered, a new account signs in
+    // with an email and password at once; the email is verified later.
+    const signup = options.memberPassword;
+    const signupEmail =
+      typeof body.signup_email === "string" && body.signup_email.length <= 254
+        ? body.signup_email
+        : "";
+    const signupPassword = body.signup_password;
+    if (signup) {
+      const problems: { field: string; message: string }[] = [];
+      if (!normalizedEmail(signupEmail))
+        problems.push({
+          field: "signup_email",
+          message: "Email address: Enter a valid email address.",
+        });
+      if (!acceptablePassword(signupPassword))
+        problems.push({
+          field: "signup_password",
+          message: "Password: use 12 to 128 characters.",
+        });
+      if (!problems.length && !(await signup.emailAvailable(signupEmail)))
+        problems.push({
+          field: "signup_email",
+          message:
+            "Email address: this email is already used for sign-in. Sign in instead, or use another email.",
+        });
+      start.errors.push(...(problems as typeof start.errors));
+    }
+    if (!start.input || start.errors.length) {
       res
         .status(422)
         .send(
@@ -1409,11 +1449,23 @@ export function app(
             [],
             start,
             Boolean(options.memberEmail),
+            signup ? { email: signupEmail } : undefined,
           ),
         );
       return;
     }
-    await store.create(res.locals.token as string, start.input);
+    const memberToken = res.locals.token as string;
+    await store.create(memberToken, start.input);
+    if (
+      signup &&
+      (await signup
+        .register(memberToken, signupEmail, signupPassword as string)
+        .catch(() => "unavailable")) === "saved"
+    )
+      // Delivery can take minutes; the new member does not wait for it.
+      void options.memberEmail
+        ?.requestAttach(memberToken, signupEmail)
+        .catch(() => undefined);
     res.redirect(303, resumeSelection(req.headers.cookie) ?? "/learn");
   });
   app.use(
@@ -3845,10 +3897,15 @@ export function app(
     deadline = Math.min(deadline, current.deadline as number);
     if (!Number.isFinite(deadline) || performance.now() >= deadline)
       return res.redirect(303, "/");
+    const passwordSet =
+      status === "unlinked" && options.memberPassword
+        ? (await options.memberPassword.status(memberToken)) === "set"
+        : false;
     const html = accountPage(
       current.learner,
       res.locals.csrf as string,
       status,
+      passwordSet,
     );
     if (performance.now() >= deadline) return res.redirect(303, "/");
     return res.send(html);

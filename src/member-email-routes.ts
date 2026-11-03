@@ -5,6 +5,7 @@ import { COOKIE, cookieOptions } from "./session.ts";
 import { STAFF_COOKIE, SIGNED_OUT } from "./staff-entry-selection.ts";
 import { page } from "./views.ts";
 import { passwordSignInForm } from "./member-password-routes.ts";
+import type { MemberPasswordAccess } from "./member-password-access.ts";
 
 function form(action: string, csrf: string, button: string) {
   return `<form method="post" action="${action}"><input type="hidden" name="csrf" value="${csrf}"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" required><button type="submit">${button}</button></form>`;
@@ -24,8 +25,9 @@ export function mountMemberEmailRoutes(
   origin: string,
   continuation?: (rawCookie: string | undefined) => string | null,
   memberSignOut?: MemberEmailAccess["signOut"],
-  passwordSignIn = false,
+  password?: MemberPasswordAccess,
 ) {
+  const passwordSignIn = Boolean(password);
   const signOut = memberSignOut ?? access?.signOut.bind(access);
   app.get("/account/sign-out", async (req, res) => {
     res.set("Cache-Control", "no-store");
@@ -40,9 +42,12 @@ export function mountMemberEmailRoutes(
         );
     const session = await store.session(res.locals.token as string);
     if (session.kind !== "active") return res.redirect(303, "/email/sign-in");
+    // A verified email, or a password with a sign-in email, is a way back.
     const linked =
-      access &&
-      (await access.ownedStatus(res.locals.token as string)) === "linked";
+      (access &&
+        (await access.ownedStatus(res.locals.token as string)) === "linked") ||
+      (password !== undefined &&
+        (await password.status(res.locals.token as string)) === "set");
     return res.send(
       page(
         "Sign out",

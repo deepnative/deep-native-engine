@@ -6,6 +6,7 @@ import { app } from "../../src/app.ts";
 import { memberEmailAccess } from "../../src/member-email-access.ts";
 import { memberPasswordAccess } from "../../src/member-password-access.ts";
 import { migrate, store } from "../../src/store.ts";
+import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 
 const pool = testPool();
 const members = store(pool);
@@ -21,7 +22,7 @@ async function friendly(p: Page, step: string) {
   const cramped = await p.evaluate(() =>
     [
       ...document.querySelectorAll(
-        "main button, main a.button, main input:not([type=hidden]):not([type=checkbox])",
+        "main button, main a.button, main input:not([type=hidden]):not([type=checkbox]):not([type=radio])",
       ),
     ]
       .filter((e) => {
@@ -151,5 +152,107 @@ test("[L285] PWD-01/02/06 a verified member sets a password, signs out and signs
     await pool.query("DELETE FROM principals WHERE id=$1", [
       session.learner.id,
     ]);
+  }
+});
+
+test("[L286] SIGNUP-01/02/04/06 a visitor signs up with email and password, signs back in at once and verifies later", async ({
+  page,
+}) => {
+  const address = `signup-${randomBytes(6).toString("hex")}@example.com`;
+  const password = "invented signup passphrase 2026";
+  let origin = "http://127.0.0.1:0";
+  const links: string[] = [];
+  let deliver: (() => void) | undefined;
+  const email = memberEmailAccess(
+    pool,
+    {
+      async send(_to, link) {
+        // A slow provider: the visitor never waits for this.
+        await new Promise<void>((resolve) => (deliver = resolve));
+        links.push(link.replace("http://127.0.0.1:0", origin));
+      },
+    },
+    origin,
+  );
+  const server = await listenLoopback(
+    app(members, {
+      get origin() {
+        return origin;
+      },
+      secret: "synthetic-browser-signup-secret",
+      memberEmail: email,
+      memberPassword: memberPasswordAccess(pool),
+    }),
+  );
+  const binding = server.address();
+  if (!binding || typeof binding === "string") throw Error("No loopback");
+  origin = `http://127.0.0.1:${binding.port}`;
+  let id: string | undefined;
+  try {
+    await page.goto(origin);
+    await page.getByLabel("Display name").fill("Invented Signup");
+    await page.getByLabel("Your starting point").selectOption("explorer");
+    await chooseLearningGoal(page, "everyday");
+    await page.getByLabel("Email address").fill(address);
+    await page.getByLabel("Password", { exact: true }).fill("short");
+    await page.getByRole("button", { name: "Start my learning path" }).click();
+    // The browser itself holds a too-short password on the form.
+    await expect(page).toHaveURL(`${origin}/`);
+    expect(
+      await page
+        .getByLabel("Password", { exact: true })
+        .evaluate((input: HTMLInputElement) => input.validity.valid),
+    ).toBe(false);
+    await expect(page.getByLabel("Display name")).toHaveValue(
+      "Invented Signup",
+    );
+    await friendly(page, "signup-correction");
+    await page.getByLabel("Password", { exact: true }).fill(password);
+    await page.getByRole("button", { name: "Start my learning path" }).click();
+    await expect(page).toHaveURL(`${origin}/learn`);
+    const token = (await page.context().cookies()).find(
+      (c) => c.name === "dne_preview",
+    )!.value;
+    const session = await members.session(token);
+    if (session.kind !== "active") throw Error("Signup did not sign in");
+    id = session.learner.id;
+
+    await page.goto(`${origin}/account`);
+    await expect(
+      page.getByRole("heading", { name: "Email not yet verified" }),
+    ).toBeVisible();
+    await friendly(page, "signup-account-unverified");
+    await page
+      .locator("form[action='/account/sign-out']")
+      .getByRole("button", { name: "Sign out" })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Signed out", exact: true }),
+    ).toBeVisible();
+
+    const form = page.locator("form[action='/password/sign-in']");
+    await page.goto(`${origin}/email/sign-in`);
+    await form.getByLabel("Email address").fill(address);
+    await form.getByLabel("Password", { exact: true }).fill(password);
+    await form.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(`${origin}/learn`);
+
+    // The verification email arrives later and still verifies this account.
+    await expect.poll(() => deliver !== undefined).toBe(true);
+    deliver!();
+    await expect.poll(() => links.length).toBe(1);
+    await page.goto(links[0]!);
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Email linked" }),
+    ).toBeVisible();
+    await page.goto(`${origin}/account`);
+    await expect(
+      page.getByRole("heading", { name: "Verified email linked" }),
+    ).toBeVisible();
+  } finally {
+    deliver?.();
+    await closeLoopback(server);
+    if (id) await pool.query("DELETE FROM principals WHERE id=$1", [id]);
   }
 });
