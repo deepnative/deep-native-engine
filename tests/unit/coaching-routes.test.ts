@@ -701,7 +701,9 @@ it("ADMIN-LAYOUT-02 coaching administration groups its lists in cards and naviga
   );
   const member = mainHtml((await f.get("/account/coaching")).text);
   expect(member).toContain('<section class="invoice-workspace">');
+  // AUDIT-03 (#643): student navigation is a button row too.
   expect(member).toContain(
-    '<a href="/account">My account</a> · <a href="/account/purchases">Courses and invoices</a>',
+    '<p class="account-links"><a class="button secondary" href="/account">My account</a> <a class="button secondary" href="/account/purchases">Courses and invoices</a></p>',
   );
+  expect(member).not.toContain("</a> · <a");
 });

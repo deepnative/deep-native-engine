@@ -1897,3 +1897,42 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
     padding: 20px 18px;
   }
 }
+
+/* Audit #643: task pages start below the header, targets meet 24px, and the
+   invoice reads as one document. */
+.invoice-workspace,
+.invoice-document {
+  margin-top: 42px;
+}
+.invoice-workspace .account-links,
+.invoice-document .account-links {
+  margin: 20px 0;
+}
+.invoice-document h2 {
+  font-size: 20px;
+  margin: 28px 0 6px;
+}
+.invoice-document h2 + p {
+  margin-top: 0;
+}
+.footer-links {
+  row-gap: 8px;
+}
+.footer-links a,
+.breadcrumb a,
+.contractor-hours a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+.check input {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+}
+@media (max-width: 760px) {
+  .invoice-workspace,
+  .invoice-document {
+    margin-top: 28px;
+  }
+}

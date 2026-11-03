@@ -1,3 +1,4 @@
+import { monthLabel } from "./coaching-values.ts";
 import { escape } from "./views.ts";
 import type { CoachingStatus } from "./simple-invoice-store.ts";
 
@@ -48,12 +49,7 @@ const hours = (minutes: number | null) =>
     ? "—"
     : `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}m` : ""}`;
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-const monthName = (month: string) =>
-  new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-CA", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+const monthName = monthLabel;
 
 type Row = CoachingDashboard["contractors"][number];
 const byName = (a: Row, b: Row) =>

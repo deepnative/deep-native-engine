@@ -86,3 +86,12 @@ export function coachingDuration(minutes: number) {
     rest = minutes % 60;
   return `${hours} hour${hours === 1 ? "" : "s"} ${rest} minute${rest === 1 ? "" : "s"}`;
 }
+
+/** "2026-10" as "October 2026" (UTC), for reading; values stay YYYY-MM. */
+export function monthLabel(month: string): string {
+  return new Date(`${month}-01T00:00:00Z`).toLocaleString("en-CA", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
