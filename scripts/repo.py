@@ -2,6 +2,7 @@
 """Shared repository and initial learning application verification gate."""
 
 import hashlib
+import importlib.util
 import json
 import os
 import platform
@@ -42,6 +43,7 @@ SETUP_FILES = {
     ".githooks/pre-push", ".github/pull_request_template.md",
     ".github/ISSUE_TEMPLATE/delivery.md",
     "docs/planning/README.md", "scripts/repo.py", "tests/repository/test_repo.py",
+    "scripts/pipeline_timings.py", "tests/repository/test_pipeline_timings.py",
 }
 PRODUCT_SITE_FILES = {
     "site/index.html", "site/styles.css", "site/favicon.svg",
@@ -846,16 +848,26 @@ def verify(root):
               "application_unit_coverage": None, "application_e2e_journey_coverage": None,
               "timestamp_utc": datetime.now(timezone.utc).isoformat(),
               "python": platform.python_version(), "platform": platform.platform(),
-              "command": "python scripts/repo.py verify", "exit_status": 1}
+              "command": "python scripts/repo.py verify", "exit_status": 1, "stage_timings": []}
+    timings = report["stage_timings"]
+
+    def begin(name):
+        # Each stage ends when the next begins; the last ends with the report.
+        now = datetime.now(timezone.utc).isoformat()
+        if timings:
+            timings[-1]["finished"] = now
+        timings.append({"stage": name, "started": now})
+        return name
+
     stage = "revision identification"
     try:
         verification_receipt_path(root).unlink(missing_ok=True)
         report.update(state(root))
         selection = os.environ.get("DNE_TEST_GROUPS", "auto")
         require(selection == "auto" or re.fullmatch(r"[1-8]", selection), "Invalid test group count")
-        stage = "repository assets"
+        stage = begin("repository assets")
         report["secret_scan"] = validate(root)
-        stage = "repository tests"
+        stage = begin("repository tests")
         with private_test_output() as sink:
             suite = unittest.defaultTestLoader.discover(str(root / "tests/repository"), pattern="test_*.py")
             require(suite.countTestCases() > 0, "No repository tests collected")
@@ -867,11 +879,11 @@ def verify(root):
               f"{len(result.expectedFailures)} expected failures.")
         require(result.wasSuccessful() and not result.skipped and not result.expectedFailures,
                 "Repository tests failed, were skipped, or had expected failures")
-        stage = "application verification"
+        stage = begin("application verification")
         app = verify_application(root)
-        stage = "local learning verification"
+        stage = begin("local learning verification")
         report["local_learning"] = verify_local_learning(root)
-        stage = "artifact scan"
+        stage = begin("artifact scan")
         report["artifact_scan"] = scan_artifacts(root)
         report.update(application_status="verified-local-slice", application_unit_coverage=app["unitCoverage"],
                       application_e2e_journey_coverage=app["journeys"])
@@ -880,6 +892,8 @@ def verify(root):
         report["error"] = failure_message(exc, f"Repository verification failed during {stage}.")
         print(f"FAIL: {report['error']}", file=sys.stderr)
     finally:
+        if timings:
+            timings[-1]["finished"] = datetime.now(timezone.utc).isoformat()
         try:
             output = root / "artifacts/repository-verification.json"
             output.parent.mkdir(exist_ok=True)
@@ -894,8 +908,20 @@ def verify(root):
             report["exit_status"] = 1
             output.write_text(json.dumps(report, indent=2) + "\n")
             print("Verification receipt could not be established.", file=sys.stderr)
+    record_timings(root)
     print(f"Repository verification {'PASS' if report['exit_status'] == 0 else 'FAIL'}; application status: {report['application_status']}.")
     return report["exit_status"]
+
+
+def record_timings(root):
+    """Print and keep per-stage timings outside artifacts/; never changes the gate result."""
+    try:
+        spec = importlib.util.spec_from_file_location("pipeline_timings", root / "scripts/pipeline_timings.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.record_after_gate(root)
+    except Exception:
+        print("Timing summary unavailable; the gate result is unchanged.")
 
 
 def bootstrap(root):

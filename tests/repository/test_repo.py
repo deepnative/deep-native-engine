@@ -906,6 +906,34 @@ class RepositoryFixture(unittest.TestCase):
                         gate.unittest.defaultTestLoader, "discover", return_value=suite):
                     self.assertEqual(gate.verify(self.root), 1)
 
+    def test_time01_time04_verify_records_stage_timings_and_history_on_pass_and_failure(self):
+        for failure, expected in ((None, ["repository assets", "repository tests", "application verification",
+                                          "local learning verification", "artifact scan"]),
+                                  (gate.GateError("synthetic"), ["repository assets", "repository tests",
+                                                                 "application verification"])):
+            with self.subTest(failed=failure is not None):
+                suite = unittest.TestSuite([unittest.FunctionTestCase(lambda: None)])
+                stdout = io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(io.StringIO()), patch.object(
+                        gate.unittest.defaultTestLoader, "discover", return_value=suite), patch.object(
+                        gate, "verify_application", side_effect=failure,
+                        return_value={"unitCoverage": {}, "journeys": {}}), patch.object(
+                        gate, "verify_local_learning", return_value={"cases": {}}), patch.object(
+                        gate, "scan_artifacts", return_value={"status": "passed"}), patch.object(
+                        gate, "write_verification_receipt"):
+                    self.assertEqual(gate.verify(self.root), 1 if failure else 0)
+                report = json.loads((self.root / "artifacts/repository-verification.json").read_text())
+                rows = report["stage_timings"]
+                self.assertEqual([row["stage"] for row in rows], expected)
+                self.assertTrue(all(row["started"] <= row["finished"] for row in rows))
+                self.assertTrue(all(a["finished"] == b["started"] for a, b in zip(rows, rows[1:])))
+                self.assertIn("Slowest:", stdout.getvalue())
+        history = Path(gate.git(self.root, "rev-parse", "--git-common-dir"))
+        history = (history if history.is_absolute() else self.root / history) / "dne-timings.jsonl"
+        self.assertEqual([json.loads(line)["status"] for line in history.read_text().splitlines()],
+                         ["passed", "failed"])
+        self.assertFalse(list((self.root / "artifacts").glob("*timings*")))
+
     def test_repository_test_output_stays_private_on_pass_and_failure(self):
         marker = "synthetic-private-repository-test-output"
 

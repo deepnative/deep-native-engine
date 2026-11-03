@@ -478,3 +478,13 @@ it("still passes a successful run and cleans its isolated resources", async () =
   expect(doubles.end).toHaveBeenCalledOnce();
   expect(output).not.toHaveBeenCalled();
 });
+it("TIME-01 records when every application command starts and finishes", async () => {
+  const report = await run();
+  expect(report.commands.length).toBeGreaterThan(5);
+  for (const command of report.commands) {
+    expect(Date.parse(command.start)).not.toBeNaN();
+    expect(Date.parse(command.finished)).toBeGreaterThanOrEqual(
+      Date.parse(command.start),
+    );
+  }
+});
