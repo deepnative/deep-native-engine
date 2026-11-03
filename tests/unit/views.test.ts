@@ -205,7 +205,7 @@ it("PARTNAV-01 exposes existing private participation without promising live ser
       "Joining does not share your private evidence or grant staff access.",
     );
     expect(html).toContain(
-      'Optional courses and monthly coaching are arranged separately through My account.',
+      "Optional courses and monthly coaching are arranged separately through My account.",
     );
     expect(html).toContain(
       "Live community services and reviewed publication remain pending.",
