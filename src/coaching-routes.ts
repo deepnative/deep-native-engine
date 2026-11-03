@@ -4,6 +4,11 @@ import type { Express, Request, Response } from "express";
 import { csrf, validCsrf } from "./session.ts";
 import { page, escape } from "./views.ts";
 import { administrationLink } from "./administration-presentation.ts";
+import {
+  coachingDashboardSection,
+  DASHBOARD_SORTS,
+  type DashboardSort,
+} from "./coaching-dashboard-views.ts";
 import { parseInvoiceMoney } from "./simple-invoice-values.ts";
 import {
   coachingSubtotal,
@@ -53,12 +58,19 @@ export function mountCoachingRoutes(
   },
 ) {
   const token = (res: Response) => res.locals.token as string;
-  function valid(req: Request, res: Response, fields: string[] = []) {
+  function valid(
+    req: Request,
+    res: Response,
+    fields: string[] = [],
+    query = ["month"],
+  ) {
     res.set("Cache-Control", "no-store");
     if (
       Object.entries(req.query).some(
         ([key, value]) =>
-          req.method !== "GET" || key !== "month" || typeof value !== "string",
+          req.method !== "GET" ||
+          !query.includes(key) ||
+          typeof value !== "string",
       ) ||
       (req.method === "POST" &&
         (!req.body ||
@@ -78,14 +90,21 @@ export function mountCoachingRoutes(
     return true;
   }
   app.get(adminPath, async (req, res) => {
-    if (!valid(req, res)) return;
+    if (!valid(req, res, [], ["month", "sort"])) return;
+    const sort = (req.query.sort ?? "name") as DashboardSort;
+    if (!DASHBOARD_SORTS.includes(sort)) return failure(res, "denied", true);
     if (!store) return failure(res, "unavailable", true);
+    const dashboard = await store.coachingDashboard(
+      token(res),
+      req.query.month as string | undefined,
+    );
+    if (dashboard.kind !== "ready") return failure(res, dashboard.kind, true);
     const result = await store.adminOverview(token(res));
     if (result.kind !== "ready") return failure(res, result.kind, true);
     res.send(
       page(
         "Coaching administration",
-        `<section class="invoice-workspace"><h1>Coaching administration</h1><p>Choose a member to set an agreed hourly rate or review a submitted month. Registration and rate assignment create no invoice.</p><h2>Members</h2><ul>${result.value.members.map((m) => `<li><a href="${adminPath}/${m.id}">${escape(m.displayName ?? "Name needed")}</a><p class="small">Account reference: <code>${escape(m.id)}</code></p></li>`).join("") || "<li>No members available.</li>"}</ul><h2>Pending months</h2><ul>${result.value.coachingPending.map((m) => `<li><a href="${adminPath}/${m.ownerId}?month=${m.month}">${escape(m.displayName ?? "Name needed")} · ${m.month}</a><p class="small">Account reference: <code>${escape(m.ownerId)}</code></p></li>`).join("") || "<li>No submitted months await review.</li>"}</ul><p><a href="/operator/invoices">Courses and invoices</a> · <a href="/operator">Administration console</a></p></section>`,
+        `<section class="invoice-workspace"><h1>Coaching administration</h1><p>Choose a member to set an agreed hourly rate or review a submitted month. Registration and rate assignment create no invoice.</p>${coachingDashboardSection(dashboard.value, adminPath, sort)}<h2>Members</h2><ul>${result.value.members.map((m) => `<li><a href="${adminPath}/${m.id}">${escape(m.displayName ?? "Name needed")}</a><p class="small">Account reference: <code>${escape(m.id)}</code></p></li>`).join("") || "<li>No members available.</li>"}</ul><h2>Pending months</h2><ul>${result.value.coachingPending.map((m) => `<li><a href="${adminPath}/${m.ownerId}?month=${m.month}">${escape(m.displayName ?? "Name needed")} · ${m.month}</a><p class="small">Account reference: <code>${escape(m.ownerId)}</code></p></li>`).join("") || "<li>No submitted months await review.</li>"}</ul><p><a href="/operator/invoices">Courses and invoices</a> · <a href="/operator">Administration console</a></p></section>`,
       ),
     );
   });

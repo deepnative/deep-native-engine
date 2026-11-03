@@ -44,6 +44,66 @@ const value = {
   months: [{ month, state: "draft" }],
   sample: true,
 };
+const contractor = (over: Record<string, unknown>) => ({
+  id,
+  displayName: "Invented contractor",
+  rateCents: 9500,
+  minutes: null,
+  previousMinutes: null,
+  yearMinutes: 0,
+  status: "not_started",
+  sent: null,
+  balanceCents: null,
+  ...over,
+});
+const dashboard = {
+  month: "2026-09",
+  today: month,
+  summary: {
+    submittedMinutes: 285,
+    contractorsSubmitted: 3,
+    invoicedCents: 123456,
+    invoicesNotSent: 1,
+    outstandingCents: 11000,
+    awaitingReview: 2,
+    oldestWaitingDays: 3,
+  },
+  contractors: [
+    contractor({
+      id: "22222222-2222-4222-8222-222222222222",
+      displayName: "Ben <Invented>",
+      minutes: 120,
+      yearMinutes: 120,
+      status: "invoiced",
+      sent: false,
+      balanceCents: 11000,
+    }),
+    contractor({
+      id: "33333333-3333-4333-8333-333333333333",
+      displayName: "Ada Invented",
+      minutes: 135,
+      previousMinutes: 60,
+      yearMinutes: 195,
+      status: "submitted",
+    }),
+    contractor({
+      id: "44444444-4444-4444-8444-444444444444",
+      displayName: null,
+      rateCents: null,
+      yearMinutes: 30,
+      status: "draft",
+    }),
+    contractor({
+      id: "55555555-5555-4555-8555-555555555555",
+      displayName: "Cy Invented",
+      minutes: 0,
+      yearMinutes: 0,
+      status: "invoiced",
+      sent: true,
+      balanceCents: 0,
+    }),
+  ],
+};
 const ready = (v: unknown) => ({ kind: "ready", value: v });
 function fixture(disabled = false) {
   const service = {
@@ -53,6 +113,7 @@ function fixture(disabled = false) {
         ready({ members: [{ id }], coachingPending: [{ ownerId: id, month }] }),
       ),
     coachingOverview: vi.fn().mockResolvedValue(ready(value)),
+    coachingDashboard: vi.fn().mockResolvedValue(ready(dashboard)),
     setCoachingRate: vi.fn().mockResolvedValue(ready({ rateId: id })),
     saveCoaching: vi.fn().mockResolvedValue(ready({ month, revision: 1 })),
     submitCoaching: vi.fn().mockResolvedValue(ready({ month, revision: 2 })),
@@ -224,6 +285,170 @@ it("HOUR07 admin review names the member before the secondary account reference"
   expect((await f.get(`/operator/coaching/${id}`)).text).toContain(
     "Member: <strong>Name needed</strong>",
   );
+});
+it("DASH-01/02 shows the month's summary and a contractor table above the existing lists", async () => {
+  const f = fixture();
+  const r = await f.get("/operator/coaching?month=2026-09");
+  expect(r.status).toBe(200);
+  expect(f.service.coachingDashboard).toHaveBeenCalledWith(token, "2026-09");
+  const html = r.text;
+  expect(html).toContain('<h2 id="hours-title">Hours for September 2026</h2>');
+  expect(html).toContain(
+    '<input type="month" name="month" value="2026-09" max="2026-10" required>',
+  );
+  for (const [label, figure, note] of [
+    ["Hours submitted", "4h 45m", "3 contractors"],
+    ["Awaiting review", "2", "all months · oldest waiting 3 days"],
+    ["Invoiced", "CAD 1,234.56", "1 not yet sent"],
+    ["Outstanding", "CAD 110.00", "on this month’s invoices"],
+  ])
+    expect(html).toContain(
+      `<div><dt>${label}</dt><dd>${figure}</dd><p>${note}</p></div>`,
+    );
+  expect(html).toContain(
+    '<a href="/operator/coaching/33333333-3333-4333-8333-333333333333?month=2026-09">Ada Invented</a>',
+  );
+  expect(html).toContain("Ben &lt;Invented&gt;");
+  expect(html).not.toContain("Ben <Invented>");
+  expect(html).toContain(
+    "<td>CAD 95.00</td><td>2h 15m</td><td>1h</td><td>3h 15m</td><td>Awaiting review</td><td>—</td><td>—</td>",
+  );
+  expect(html).toContain("<td>Not sent</td><td>CAD 110.00</td>");
+  expect(html).toContain(
+    "<td>0h</td><td>—</td><td>0h</td><td>Invoiced</td><td>Sent</td><td>Paid</td>",
+  );
+  expect(html).toContain("Name needed");
+  expect(html).toContain("<td>No rate</td>");
+  // Default order is by name, missing names last; the existing lists remain.
+  const order = (text: string) =>
+    [...text.matchAll(/<th scope="row"><a [^>]*>([^<]+)</g)].map((m) => m[1]);
+  expect(order(html)).toEqual([
+    "Ada Invented",
+    "Ben &lt;Invented&gt;",
+    "Cy Invented",
+    "Name needed",
+  ]);
+  expect(html).toContain(
+    'aria-sort="ascending"><a href="/operator/coaching?month=2026-09&amp;sort=name">Name</a>',
+  );
+  expect(html.indexOf("Hours for September 2026")).toBeLessThan(
+    html.indexOf("<h2>Members</h2>"),
+  );
+  expect(html).toContain("<h2>Pending months</h2>");
+  const sorted = async (sort: string) =>
+    order((await f.get(`/operator/coaching?month=2026-09&sort=${sort}`)).text);
+  expect(await sorted("hours")).toEqual([
+    "Ada Invented",
+    "Ben &lt;Invented&gt;",
+    "Cy Invented",
+    "Name needed",
+  ]);
+  expect(await sorted("year")).toEqual([
+    "Ada Invented",
+    "Ben &lt;Invented&gt;",
+    "Name needed",
+    "Cy Invented",
+  ]);
+  expect(await sorted("status")).toEqual([
+    "Ada Invented",
+    "Name needed",
+    "Ben &lt;Invented&gt;",
+    "Cy Invented",
+  ]);
+  expect((await f.get("/operator/coaching?sort=hours")).text).toContain(
+    'aria-sort="descending"><a href="/operator/coaching?month=2026-09&amp;sort=hours">Hours</a>',
+  );
+});
+it("DASH-01 words an empty month and a same-day wait plainly", async () => {
+  const f = fixture();
+  f.service.coachingDashboard.mockResolvedValueOnce(
+    ready({
+      ...dashboard,
+      summary: {
+        ...dashboard.summary,
+        submittedMinutes: 0,
+        contractorsSubmitted: 1,
+        awaitingReview: 1,
+        oldestWaitingDays: 0,
+        invoicesNotSent: 0,
+      },
+      contractors: [],
+    }),
+  );
+  const html = (await f.get("/operator/coaching")).text;
+  expect(html).toContain("<dd>0h</dd><p>1 contractor</p>");
+  expect(html).toContain("all months · oldest submitted today");
+  expect(html).toContain("<dd>CAD 1,234.56</dd><p>All sent</p>");
+  expect(html).toContain(
+    "No contractor has a rate or submitted hours for this period.",
+  );
+  f.service.coachingDashboard.mockResolvedValueOnce(
+    ready({
+      ...dashboard,
+      summary: {
+        ...dashboard.summary,
+        awaitingReview: 0,
+        oldestWaitingDays: null,
+      },
+      contractors: Array.from({ length: 100 }, () => contractor({})),
+    }),
+  );
+  const full = (await f.get("/operator/coaching")).text;
+  expect(full).toContain("<p>all months · none waiting</p>");
+  f.service.coachingDashboard.mockResolvedValueOnce(
+    ready({
+      ...dashboard,
+      summary: { ...dashboard.summary, invoicedCents: 0, invoicesNotSent: 0 },
+    }),
+  );
+  expect((await f.get("/operator/coaching")).text).toContain(
+    "<dd>CAD 0.00</dd><p>No invoices yet</p>",
+  );
+  expect(full).toContain("Showing the first 100 contractors.");
+});
+it("DASH-02 breaks sorting ties by name and keeps unnamed contractors last", async () => {
+  const f = fixture();
+  const tied = (name: string | null, n: number) =>
+    contractor({
+      id: `${n}${id.slice(1)}`,
+      displayName: name,
+      minutes: 60,
+      yearMinutes: 60,
+      status: "submitted",
+    });
+  for (const sort of ["name", "hours", "year", "status"]) {
+    f.service.coachingDashboard.mockResolvedValueOnce(
+      ready({
+        ...dashboard,
+        contractors: [
+          tied(null, 2),
+          tied("Zed", 3),
+          tied(null, 4),
+          tied("Amy", 5),
+        ],
+      }),
+    );
+    const html = (await f.get(`/operator/coaching?sort=${sort}`)).text;
+    expect(
+      [...html.matchAll(/<th scope="row"><a [^>]*>([^<]+)</g)].map((m) => m[1]),
+    ).toEqual(["Amy", "Zed", "Name needed", "Name needed"]);
+  }
+});
+it("DASH-03 refuses unknown sorting and extra query values, and reports store refusals", async () => {
+  const f = fixture();
+  for (const query of [
+    "sort=amount",
+    "sort=hours&sort=name",
+    "month=2026-09&extra=1",
+  ])
+    expect((await f.get(`/operator/coaching?${query}`)).status).toBe(403);
+  expect(f.service.coachingDashboard).not.toHaveBeenCalled();
+  // Sorting belongs to the dashboard only.
+  expect((await f.get(`/operator/coaching/${id}?sort=name`)).status).toBe(403);
+  f.service.coachingDashboard.mockResolvedValueOnce({ kind: "invalid" });
+  expect((await f.get("/operator/coaching?month=2999-01")).status).toBe(422);
+  f.service.coachingDashboard.mockResolvedValueOnce({ kind: "denied" });
+  expect((await f.get("/operator/coaching")).status).toBe(403);
 });
 it("HOUR07 rejects query pollution, unknown/body types, absent body, origin and CSRF before mutation", async () => {
   const f = fixture();

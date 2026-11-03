@@ -1563,3 +1563,119 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 .account-page > .profile-form form {
   margin-top: 20px;
 }
+
+/* Coaching administration: manager hours dashboard. */
+.invoice-workspace:has(.hours-dashboard) {
+  max-width: 1100px;
+}
+.hours-dashboard {
+  margin-block: 32px 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.month-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  max-width: 420px;
+}
+.month-picker label {
+  flex: 1 1 200px;
+  margin: 0;
+}
+.month-picker input[type="month"] {
+  margin: 6px 0 0;
+}
+.month-picker button {
+  min-height: 46px;
+}
+.hours-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 12px;
+  margin: 24px 0;
+}
+.hours-summary div {
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+}
+.hours-summary dt {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+.hours-summary dd {
+  margin: 6px 0 4px;
+  font-size: 28px;
+  font-weight: 750;
+  line-height: 1.15;
+  overflow-wrap: normal;
+}
+.hours-summary p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+}
+.contractor-hours {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.contractor-hours caption {
+  padding: 14px 16px 6px;
+  text-align: left;
+  font-weight: 700;
+}
+.contractor-hours th,
+.contractor-hours td {
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+.contractor-hours thead th {
+  color: var(--muted);
+  font-size: 13px;
+}
+.contractor-hours thead a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  color: inherit;
+}
+.contractor-hours th[aria-sort] a {
+  color: var(--accent);
+}
+.contractor-hours th[aria-sort="ascending"] a::after {
+  content: " ↑";
+}
+.contractor-hours th[aria-sort="descending"] a::after {
+  content: " ↓";
+}
+.contractor-hours tbody th span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.hours-dashboard > .small {
+  margin-top: 12px;
+}
+@media (max-width: 760px) {
+  .hours-summary div {
+    padding: 14px 16px;
+  }
+  .hours-summary dd {
+    font-size: 22px;
+  }
+}

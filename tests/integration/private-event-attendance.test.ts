@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import request from "supertest";
+import { withLoopback } from "../support/loopback-server.ts";
 import type { Pool, PoolClient } from "pg";
 import { app } from "../../src/app.ts";
 import { eventAttendanceStore } from "../../src/event-attendance.ts";
@@ -232,18 +233,22 @@ it("ATTEND-01/03 owning registered member opens deliberate observation permissio
     }),
   });
   const recoveryGet = () =>
-    request(uncertainApp)
-      .get(`${receiptPath}/attendance`)
-      .set("Host", "127.0.0.1:3000")
-      .set("Cookie", `${COOKIE}=${member}`);
+    withLoopback(uncertainApp, (s) =>
+      request(s)
+        .get(`${receiptPath}/attendance`)
+        .set("Host", "127.0.0.1:3000")
+        .set("Cookie", `${COOKIE}=${member}`),
+    );
   const recoveryPost = (path: string, body: Record<string, string>) =>
-    request(uncertainApp)
-      .post(path)
-      .set("Host", "127.0.0.1:3000")
-      .set("Origin", recoveryOrigin)
-      .set("Cookie", `${COOKIE}=${member}`)
-      .type("form")
-      .send(body);
+    withLoopback(uncertainApp, (s) =>
+      request(s)
+        .post(path)
+        .set("Host", "127.0.0.1:3000")
+        .set("Origin", recoveryOrigin)
+        .set("Cookie", `${COOKIE}=${member}`)
+        .type("form")
+        .send(body),
+    );
   // The first connection is a read; simulate loss only for the deliberate write below.
   const current = await recoveryGet();
   expect(current.status).toBe(200);

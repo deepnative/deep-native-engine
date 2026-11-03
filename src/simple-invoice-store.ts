@@ -74,6 +74,14 @@ const decodeInvoice = (row: StoredInvoice): StoredInvoice => ({
     ...(row.voidReason ? { voidReason: row.voidReason } : {}),
   },
 });
+export type CoachingStatus =
+  "not_started" | "draft" | "returned" | "submitted" | "invoiced" | "voided";
+/** Calendar arithmetic on YYYY-MM strings. */
+export function shiftMonth(month: string, by: number) {
+  const d = new Date(`${month}-01T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + by);
+  return d.toISOString().slice(0, 7);
+}
 export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
   async function run<T>(
     token: string,
@@ -762,6 +770,108 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         return {
           kind: "ready",
           value: { members, courses, invoices, coachingPending },
+        };
+      });
+    },
+    /** Manager view of one month's contractor hours and coaching invoices. */
+    async coachingDashboard(token: string, month?: string) {
+      if (month !== undefined && !coachingMonth(month)) return fail("invalid");
+      return run(token, true, async (tx) => {
+        const today = await coachingToday(tx);
+        const selected = month ?? shiftMonth(today, -1);
+        if (selected > today) return fail("invalid");
+        const previous = shiftMonth(selected, -1),
+          yearStart = `${selected.slice(0, 4)}-01`;
+        // Hours count once submitted; drafts and returned months do not.
+        const summary = (
+          await tx.query<{
+            submittedMinutes: number;
+            contractorsSubmitted: number;
+            invoicedCents: string;
+            invoicesNotSent: number;
+            outstandingCents: string;
+            awaitingReview: number;
+            oldestWaitingDays: number | null;
+          }>(
+            `SELECT
+              (SELECT COALESCE(sum(minutes),0)::integer FROM coaching_months WHERE month=$1 AND state IN ('submitted','invoiced')) AS "submittedMinutes",
+              (SELECT count(*)::integer FROM coaching_months WHERE month=$1 AND state IN ('submitted','invoiced')) AS "contractorsSubmitted",
+              COALESCE(sum(i.total_cents),0)::text AS "invoicedCents",
+              count(i.id) FILTER (WHERE i.delivery<>'sent')::integer AS "invoicesNotSent",
+              COALESCE(sum(i.total_cents-i.paid_cents),0)::text AS "outstandingCents",
+              (SELECT count(*)::integer FROM coaching_months WHERE state='submitted') AS "awaitingReview",
+              (SELECT floor(extract(epoch FROM clock_timestamp()-min(s.submitted_at))/86400)::integer FROM coaching_months c JOIN coaching_submissions s ON s.owner_id=c.owner_id AND s.month=c.month AND s.revision=c.submitted_revision WHERE c.state='submitted') AS "oldestWaitingDays"
+            FROM coaching_months m JOIN simple_invoices i ON i.id=m.invoice_id AND i.voided_at IS NULL
+            WHERE m.month=$1`,
+            [selected],
+          )
+        ).rows[0]!;
+        // Contractors: a rate in effect for the month, or hours this year.
+        const rows = (
+          await tx.query<{
+            id: string;
+            displayName: string | null;
+            rateCents: number | null;
+            minutes: number | null;
+            previousMinutes: number | null;
+            yearMinutes: number;
+            state: string | null;
+            returned: boolean;
+            invoiceId: string | null;
+            delivery: string | null;
+            balanceCents: string | null;
+          }>(
+            `SELECT l.id,l.display_name AS "displayName",
+              (SELECT r.cents FROM coaching_rates r WHERE r.owner_id=l.id AND r.effective_month<=$1 ORDER BY r.effective_month DESC,r.version DESC LIMIT 1) AS "rateCents",
+              (SELECT x.minutes FROM coaching_months x WHERE x.owner_id=l.id AND x.month=$1 AND x.state IN ('submitted','invoiced')) AS minutes,
+              (SELECT x.minutes FROM coaching_months x WHERE x.owner_id=l.id AND x.month=$2 AND x.state IN ('submitted','invoiced')) AS "previousMinutes",
+              (SELECT COALESCE(sum(x.minutes),0)::integer FROM coaching_months x WHERE x.owner_id=l.id AND x.month BETWEEN $3 AND $1 AND x.state IN ('submitted','invoiced')) AS "yearMinutes",
+              m.state,m.return_reason IS NOT NULL AS returned,m.invoice_id AS "invoiceId",
+              i.delivery,(i.total_cents-i.paid_cents)::text AS "balanceCents"
+            FROM learners l JOIN workspaces w ON w.owner_principal_id=l.id AND w.deleting_at IS NULL
+            LEFT JOIN coaching_months m ON m.owner_id=l.id AND m.month=$1
+            LEFT JOIN simple_invoices i ON i.id=m.invoice_id AND i.voided_at IS NULL
+            WHERE EXISTS (SELECT 1 FROM coaching_rates r WHERE r.owner_id=l.id AND r.effective_month<=$1)
+              OR EXISTS (SELECT 1 FROM coaching_months x WHERE x.owner_id=l.id AND x.month BETWEEN $3 AND $1)
+            ORDER BY l.display_name NULLS LAST,l.id LIMIT 100`,
+            [selected, previous, yearStart],
+          )
+        ).rows;
+        const contractors = rows.map((r) => ({
+          id: r.id,
+          displayName: r.displayName,
+          rateCents: r.rateCents,
+          minutes: r.minutes,
+          previousMinutes: r.previousMinutes,
+          yearMinutes: r.yearMinutes,
+          status: (!r.state
+            ? "not_started"
+            : r.state === "draft"
+              ? r.returned
+                ? "returned"
+                : "draft"
+              : r.state === "invoiced" && r.delivery === null
+                ? "voided"
+                : r.state) as CoachingStatus,
+          sent: r.delivery === null ? null : r.delivery === "sent",
+          balanceCents: r.balanceCents === null ? null : Number(r.balanceCents),
+        }));
+        return {
+          kind: "ready",
+          value: {
+            month: selected,
+            today,
+            summary: {
+              submittedMinutes: summary.submittedMinutes,
+              contractorsSubmitted: summary.contractorsSubmitted,
+              invoicedCents: Number(summary.invoicedCents),
+              invoicesNotSent: summary.invoicesNotSent,
+              outstandingCents: Number(summary.outstandingCents),
+              awaitingReview: summary.awaitingReview,
+              oldestWaitingDays: summary.oldestWaitingDays,
+            },
+            contractors,
+          },
         };
       });
     },

@@ -968,3 +968,201 @@ it("HOUR09 appended coaching-rate export continues beyond one page exactly once 
   expect(seen).toEqual(ids);
   expect(new Set(seen).size).toBe(101);
 });
+
+// DASH-01/02 use February 2003 so no other test's current-month rows count.
+it("DASH-01/02 summarizes one month's contractor hours and invoices exactly", async () => {
+  const feb = "2003-02",
+    jan = "2003-01";
+  const named = async (name: string) => {
+    const m = await member();
+    await pool.query("UPDATE learners SET display_name=$2 WHERE id=$1", [
+      m.id,
+      name,
+    ]);
+    return m;
+  };
+  const rate = async (id: string, cents: number, effectiveMonth: string) =>
+    ready(
+      await invoices.setCoachingRate(admin, {
+        ownerId: id,
+        effectiveMonth,
+        cents,
+        expectedVersion: (
+          await pool.query("SELECT 1 FROM coaching_rates WHERE owner_id=$1", [
+            id,
+          ])
+        ).rowCount!,
+        operationId: randomUUID(),
+      }),
+    ).rateId;
+  const report = async (
+    m: { token: string },
+    when: string,
+    minutes: number,
+    rateId: string | null,
+  ) => {
+    const saved = ready(
+      await invoices.saveCoaching(m.token, {
+        month: when,
+        minutes,
+        expectedRevision: 0,
+        operationId: randomUUID(),
+        name: "Invented contractor",
+        email: "contractor@example.invalid",
+      }),
+    );
+    if (!rateId) return saved.revision;
+    return ready(
+      await invoices.submitCoaching(m.token, {
+        month: when,
+        rateId,
+        sample: true,
+        expectedRevision: saved.revision,
+        operationId: randomUUID(),
+      }),
+    ).revision;
+  };
+  const issue = async (id: string, when: string, revision: number) =>
+    ready(
+      await invoices.issueCoaching(admin, {
+        ownerId: id,
+        month: when,
+        expectedRevision: revision,
+        taxCents: 0,
+        operationId: randomUUID(),
+      }),
+    ).invoiceId;
+  const before = ready(await invoices.coachingDashboard(admin, feb));
+
+  // Ada: January invoiced, February submitted and awaiting review.
+  const ada = await named("Ada Invented"),
+    adaRate = await rate(ada.id, 9500, jan);
+  await issue(ada.id, jan, await report(ada, jan, 60, adaRate));
+  await report(ada, feb, 135, adaRate);
+  // Ben: February invoiced, not emailed, partly paid.
+  const ben = await named("Ben Invented"),
+    benRate = await rate(ben.id, 8000, feb);
+  const benInvoice = await issue(
+    ben.id,
+    feb,
+    await report(ben, feb, 120, benRate),
+  );
+  ready(
+    await invoices.pay(admin, {
+      invoiceId: benInvoice,
+      expectedRevision: 1,
+      operationId: randomUUID(),
+      amountCents: 5000,
+      receivedOn: "2003-03-05",
+    }),
+  );
+  // Cy: only a February draft, which is not submitted hours.
+  const cy = await named("Cy Invented");
+  await rate(cy.id, 12000, jan);
+  await report(cy, feb, 300, null);
+  // Dee: February invoice voided and not yet returned.
+  const dee = await named("Dee Invented"),
+    deeRate = await rate(dee.id, 10000, feb);
+  const deeInvoice = await issue(
+    dee.id,
+    feb,
+    await report(dee, feb, 30, deeRate),
+  );
+  ready(
+    await invoices.voidInvoice(admin, {
+      invoiceId: deeInvoice,
+      expectedRevision: 1,
+      operationId: randomUUID(),
+      reason: "Invented wrong month",
+    }),
+  );
+  // Eve's rate starts later; Flo has nothing. Neither is a February contractor.
+  const eve = await named("Eve Invented");
+  await rate(eve.id, 7000, "2003-03");
+  await named("Flo Invented");
+
+  const after = ready(await invoices.coachingDashboard(admin, feb));
+  expect(after.month).toBe(feb);
+  expect(after.summary).toMatchObject({
+    submittedMinutes: 135 + 120 + 30,
+    contractorsSubmitted: 3,
+    invoicedCents: 16000,
+    invoicesNotSent: 1,
+    outstandingCents: 11000,
+  });
+  expect(after.summary.awaitingReview).toBe(before.summary.awaitingReview + 1);
+  // Every submission in this database is fresh; history cannot be backdated.
+  expect(after.summary.oldestWaitingDays).toBe(0);
+  expect(
+    after.contractors.map((c) => ({
+      name: c.displayName,
+      rate: c.rateCents,
+      minutes: c.minutes,
+      previous: c.previousMinutes,
+      year: c.yearMinutes,
+      status: c.status,
+      sent: c.sent,
+      balance: c.balanceCents,
+    })),
+  ).toEqual([
+    {
+      name: "Ada Invented",
+      rate: 9500,
+      minutes: 135,
+      previous: 60,
+      year: 195,
+      status: "submitted",
+      sent: null,
+      balance: null,
+    },
+    {
+      name: "Ben Invented",
+      rate: 8000,
+      minutes: 120,
+      previous: null,
+      year: 120,
+      status: "invoiced",
+      sent: false,
+      balance: 11000,
+    },
+    {
+      name: "Cy Invented",
+      rate: 12000,
+      minutes: null,
+      previous: null,
+      year: 0,
+      status: "draft",
+      sent: null,
+      balance: null,
+    },
+    {
+      name: "Dee Invented",
+      rate: 10000,
+      minutes: 30,
+      previous: null,
+      year: 30,
+      status: "voided",
+      sent: null,
+      balance: null,
+    },
+  ]);
+  // Learners and non-administrators cannot read it; future months are refused.
+  expect((await invoices.coachingDashboard(ada.token, feb)).kind).toBe(
+    "denied",
+  );
+  expect(
+    (await invoices.coachingDashboard(await staff("reviewer"), feb)).kind,
+  ).toBe("denied");
+  expect((await invoices.coachingDashboard(admin, "2999-01")).kind).toBe(
+    "invalid",
+  );
+  expect((await invoices.coachingDashboard(admin, "2003-13")).kind).toBe(
+    "invalid",
+  );
+  // Without a month it shows the previous calendar month.
+  const previous = new Date(`${month}-01T00:00:00Z`);
+  previous.setUTCMonth(previous.getUTCMonth() - 1);
+  expect(ready(await invoices.coachingDashboard(admin)).month).toBe(
+    previous.toISOString().slice(0, 7),
+  );
+});
