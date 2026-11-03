@@ -1,4 +1,5 @@
 import { escape, hidden, page } from "./views.ts";
+import { portalActions } from "./backend-portal-presentation.ts";
 import {
   studyFixtureState,
   type StudyFixtureReceipt,
@@ -86,7 +87,14 @@ export function studyFixtureReceiptPage(
 ) {
   return page(
     "Saved local test fixture",
-    `<article class="reading">${explanation}<h1>Saved local test fixture</h1>${receiptText(receipt, observed)}<p>Reload before taking another action. Current balances and request-source permission are separate.</p>${staff ? `<p><a href="${STUDY_STAFF_PATH}">Local issuance work</a> · <a href="/staff">Staff work</a></p>` : `${back}<p><a href="/member/export">Export your retained records</a></p>`}</article>`,
+    `<article class="reading">${explanation}<h1>Saved local test fixture</h1>${receiptText(receipt, observed)}<p>Reload before taking another action. Current balances and request-source permission are separate.</p>${
+      staff
+        ? `${portalActions([
+            [STUDY_STAFF_PATH, "Local issuance work"],
+            ["/staff", "Staff work"],
+          ])}`
+        : `${back}<p><a href="/member/export">Export your retained records</a></p>`
+    }</article>`,
   );
 }
 export function studyFixtureNotice(

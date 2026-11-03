@@ -2,6 +2,7 @@ import { CIRCLES } from "./circles.ts";
 import { defaultWindow } from "./staff-window.ts";
 import { CIRCLE_DISCUSSION_POLICY } from "./circle-discussion.ts";
 import { escape, hidden, page } from "./views.ts";
+import { portalActions } from "./backend-portal-presentation.ts";
 import type {
   CircleGrantAdmin,
   CircleGrantAttempt,
@@ -13,7 +14,11 @@ import type {
 } from "./circle-grant-values.ts";
 
 const base = "/operator/circle-grants";
-const navigation = `<p><a href="${base}">Circle moderation grants</a> · <a href="/moderate/circle-reference">My moderation reference</a> · <a href="/staff">Your staff tools</a></p>`;
+const navigation = portalActions([
+  [base, "Circle moderation grants"],
+  ["/moderate/circle-reference", "My moderation reference"],
+  ["/staff", "Your staff tools"],
+]);
 const notice = `<p class="eyebrow">PRIVATE LOCAL CIRCLES</p><p>Grant finite moderation access to one exact circle. This does not confer paid benefits, qualified coverage or access to other circles. Use invented information only.</p>`;
 const field = (name: string, value: string) =>
   `<input type="hidden" name="${name}" value="${escape(value)}">`;

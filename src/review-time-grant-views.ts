@@ -1,4 +1,5 @@
 import { escape, hidden, page } from "./views.ts";
+import { portalActions } from "./backend-portal-presentation.ts";
 import {
   REVIEW_GRANT_PATH as base,
   REVIEW_GRANT_PAGE_SIZE,
@@ -11,7 +12,11 @@ import {
 export type ReviewGrantAttempt =
   | { kind: "grant"; input: ReviewGrantInput }
   | { kind: "revoke"; input: ReviewGrantRevokeInput };
-const navigation = `<p><a href="${base}">Private review-minute permissions</a> · <a href="${base}/history">Your permission history</a> · <a href="/staff">Your staff tools</a></p>`;
+const navigation = portalActions([
+  [base, "Private review-minute permissions"],
+  [`${base}/history`, "Your permission history"],
+  ["/staff", "Your staff tools"],
+]);
 const notice =
   '<p class="eyebrow">PRIVATE LOCAL REVIEW MINUTES</p><p>One exact allocation-specific permission for invented local review. This creates no units, sample assignment, staff identity or qualification. Separate current workspace and sample permissions are still required to begin or publish review.</p>';
 const field = (name: string, value: string) =>

@@ -4,6 +4,7 @@ import {
   type ContributionMetrics,
 } from "./contribution-metrics.ts";
 import { escape, page } from "./views.ts";
+import { portalActions } from "./backend-portal-presentation.ts";
 
 const path = "/operator/metrics/report";
 const definition = (value: string) =>
@@ -13,7 +14,11 @@ const definition = (value: string) =>
       .replaceAll("returnEligible", "the eligible member group")
       .replaceAll("whose left_at is empty", "with no recorded departure"),
   );
-const navigation = `<p><a href="${path}">Reload snapshot</a> · <a href="/operator/metrics">View aggregate JSON</a> · <a href="/staff">Your staff tools</a></p>`;
+const navigation = portalActions([
+  [path, "Reload snapshot"],
+  ["/operator/metrics", "View aggregate JSON"],
+  ["/staff", "Your staff tools"],
+]);
 
 const volumeLabels = {
   submitted: "Submitted revisions",

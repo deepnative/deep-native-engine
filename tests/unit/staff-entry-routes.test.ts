@@ -6,6 +6,7 @@ import type { Store } from "../../src/store.ts";
 import { disabledCatalogStore } from "../../src/catalog.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
+import { expectPortalActions, mainHtml } from "../support/portal-layout.ts";
 const origin = "http://127.0.0.1:3000",
   host = "127.0.0.1:3000",
   secret = "invented-staff-test";
@@ -118,4 +119,38 @@ it("OFFPUR-05 exposes configured billing tools only to the current platform admi
     expiresAt: new Date(Date.now() + 60000),
   });
   expect((await get()).text).toContain('href="/operator/invoices"');
+});
+it("ADMIN-LAYOUT-01 staff tools render as a titled button list with grouped session actions", async () => {
+  const f = fixture(true);
+  f.admit.mockResolvedValue({
+    kind: "ready",
+    role: "platform_admin",
+    deadline: performance.now() + 60000,
+    expiresAt: new Date(Date.now() + 60000),
+  });
+  server = await listenLoopback(f.application);
+  const html = (
+    await request(server)
+      .get("/staff")
+      .set("Host", host)
+      .set("Cookie", `dne_staff=${staff}`)
+  ).text;
+  const main = mainHtml(html);
+  expect(main).toContain('<div class="portal-page">');
+  expect(main).toContain(
+    '<li><a href="/operator/invoices" class="button secondary">Course billing and invoices</a></li>',
+  );
+  expect(main).toMatch(/<ul class="portal-tools">/);
+  expect(main).toMatch(
+    /<section class="portal-card"><h2>Staff session<\/h2>[\s\S]*action="\/staff\/sign-out"/,
+  );
+  expectPortalActions(html, [
+    ["/learn", "Your learning space"],
+    ["/staff/sign-in", "Use another staff credential"],
+  ]);
+  const denied = (await request(server).get("/staff").set("Host", host)).text;
+  expectPortalActions(denied, [
+    ["/staff/sign-in", "Open staff sign-in"],
+    ["/learn", "Your learning space"],
+  ]);
 });

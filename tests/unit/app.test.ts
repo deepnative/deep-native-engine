@@ -6771,7 +6771,12 @@ it("NAV-08 shows signed-out visitors Sign in instead of member account links", a
   );
   expect(navigation(withoutEmail.text)).toBe('<a href="/learn">Learning</a>');
   const links = navigation(signedIn.text);
-  for (const label of ["Account", "Top up hours", "Administration", "Sign out"])
+  for (const label of [
+    "Account",
+    "Monthly coaching hours",
+    "Administration",
+    "Sign out",
+  ])
     expect(links).toContain(`>${label}</a>`);
   expect(links).not.toContain("/email/sign-in");
 });

@@ -87,7 +87,7 @@ export function escape(value: string) {
 export function accountActionLinks() {
   if (!signedIn())
     return signInAvailable() ? navigationLink("/email/sign-in", "Sign in") : "";
-  return `${navigationLink("/account/coaching", "Top up hours")}${administrationLink(navigationLink("/admin", "Administration"))}${navigationLink("/account/sign-out", "Sign out")}`;
+  return `${navigationLink("/account/coaching", "Monthly coaching hours")}${administrationLink(navigationLink("/admin", "Administration"))}${navigationLink("/account/sign-out", "Sign out")}`;
 }
 
 export function page(title: string, body: string) {
@@ -892,7 +892,7 @@ export function accountPage(
 ) {
   const recovery =
     emailStatus === "linked"
-      ? '<section class="account-recovery"><h2>Verified email linked</h2><p>You can return to this same saved work on another device using the email you verified.</p><p><a class="button secondary" href="/email/sign-in">Email sign-in</a></p></section>'
+      ? '<section class="account-recovery"><h2>Verified email linked</h2><p>You can return to this same saved work on another device using the email you verified, with an email link or a password.</p><p class="account-links"><a class="button secondary" href="/account/password">Password sign-in</a> <a class="button secondary" href="/email/sign-in">Email sign-in</a></p></section>'
       : emailStatus === "unlinked"
         ? '<section class="account-recovery"><h2>This browser only</h2><p>Link and verify an email before clearing cookies or changing devices to keep access to this same saved work.</p><p><a class="button secondary" href="/email/attach">Link an email</a></p></section>'
         : '<section class="account-recovery"><h2>Email recovery is unavailable</h2><p>Keep this browser’s signed-in session to access your saved learning. Email recovery cannot be checked right now.</p></section>';
