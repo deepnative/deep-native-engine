@@ -28,6 +28,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.ts";
 import { memberEmailAccess, signOutMember } from "./member-email-access.ts";
+import { memberPasswordAccess } from "./member-password-access.ts";
 import { azureEmailSender, azureInvoiceSender } from "./azure-email-sender.ts";
 import { azureObjectStorage } from "./azure-object-storage.ts";
 import { migrate, store } from "./store.ts";
@@ -148,6 +149,11 @@ export async function start(env: NodeJS.ProcessEnv) {
       hostedOrigin: settings.hosted?.origin,
       memberSignOut: (token: string, acknowledgeAccessLoss?: boolean) =>
         signOutMember(pool, token, acknowledgeAccessLoss),
+      // Passwords need a verified email; offer them wherever email sign-in is.
+      memberPassword:
+        settings.emailEndpoint && settings.emailSender && settings.hosted
+          ? memberPasswordAccess(pool)
+          : undefined,
       memberEmail:
         settings.emailEndpoint && settings.emailSender && settings.hosted
           ? memberEmailAccess(

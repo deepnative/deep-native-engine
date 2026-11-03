@@ -251,7 +251,7 @@ for (const [background, goal, route, sourceFact, freshFact, correction] of [
       for (const [label, path] of [
         ["My account", "/account"],
         ["Sign out", "/account/sign-out"],
-        ["Top up hours", "/account/coaching"],
+        ["Monthly coaching hours", "/account/coaching"],
         ["Administration", "/admin"],
       ] as const) {
         const action = accountServices.getByRole("link", {
@@ -508,7 +508,7 @@ for (const [background, goal, route, sourceFact, freshFact, correction] of [
       for (const label of [
         "My account",
         "Sign out",
-        "Top up hours",
+        "Monthly coaching hours",
         "Administration",
       ])
         await expect(

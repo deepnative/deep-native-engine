@@ -72,6 +72,8 @@ import { randomUUID } from "node:crypto";
 import { COOKIE, cookieOptions, token, csrf, validCsrf } from "./session.ts";
 import type { MemberEmailAccess } from "./member-email-access.ts";
 import { mountMemberEmailRoutes } from "./member-email-routes.ts";
+import { mountMemberPasswordRoutes } from "./member-password-routes.ts";
+import type { MemberPasswordAccess } from "./member-password-access.ts";
 import { mountStarterGuidanceRoutes } from "./starter-guidance-routes.ts";
 import {
   disabledSupportRequestStore,
@@ -436,6 +438,7 @@ export function app(
     manualObservations?: ManualObservationStore;
     assignmentReadiness?: AssignmentReadinessStore;
     memberEmail?: MemberEmailAccess;
+    memberPassword?: MemberPasswordAccess;
     memberSignOut?: MemberEmailAccess["signOut"];
     uploadAdmission?: UploadAdmissionStore;
   },
@@ -766,7 +769,16 @@ export function app(
     options.origin,
     resumeSelection,
     options.memberSignOut,
+    Boolean(options.memberPassword),
   );
+  if (options.memberPassword)
+    mountMemberPasswordRoutes(
+      app,
+      store,
+      options.memberPassword,
+      options.origin,
+      resumeSelection,
+    );
   mountProgramRoutes(
     app,
     store,
