@@ -1508,33 +1508,50 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   }
 }
 
-.member-directory {
-  list-style: none;
-  padding: 0;
-  display: grid;
-  gap: 1rem;
-}
 .member-display-name {
   overflow-wrap: anywhere;
 }
-.member-directory li {
-  border-bottom: 1px solid var(--line);
-  padding: 1rem 0;
-  overflow-wrap: anywhere;
+/* The learner table needs the page width, so references stay readable. */
+.portal-page.administrator-console {
+  max-width: none;
 }
-.member-directory li > a {
+.member-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.member-table th,
+.member-table td {
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+.member-table thead th {
+  border-top: 0;
+  color: var(--muted);
+}
+.member-table td:first-child {
+  min-width: 12rem;
+  max-width: 20rem;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.member-table td a {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
+  min-height: 40px;
   font-weight: 700;
-  font-size: 1.15rem;
 }
-.member-directory p {
-  margin: 0.25rem 0 0.5rem;
+.member-table tr[aria-current] {
+  background: var(--paper);
 }
-.member-directory summary {
-  cursor: pointer;
-  min-height: 44px;
+.member-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 14px;
 }
 
 /* My account: one readable column with a single left edge. */
@@ -1740,7 +1757,7 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 .portal-columns > div > :last-child {
   margin-bottom: 0;
 }
-.portal-card ul:not(.member-directory, .portal-tools, .portal-list) {
+.portal-card ul:not(.portal-tools, .portal-list) {
   padding-left: 20px;
 }
 .portal-card li {
@@ -1751,10 +1768,6 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-}
-.portal-card .member-directory li:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
 }
 .portal-summary {
   color: var(--ink);

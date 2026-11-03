@@ -288,6 +288,29 @@ it("makes attachment available only to an active member without revealing whethe
   expect(active.email.requestAttach).toHaveBeenLastCalledWith(credential, "");
 });
 
+it("EMAIL-DIAG-02/03 both acknowledgements explain what to do when nothing arrives", async () => {
+  const signedOut = fixture(false);
+  const signedIn = fixture();
+  const pages = [
+    await post(signedOut.application, "/email/sign-in", {
+      email: "x@example.com",
+    }),
+    await post(signedIn.application, "/email/attach", {
+      email: "x@example.com",
+    }),
+  ];
+  for (const response of pages) {
+    expect(response.status).toBe(200);
+    expect(response.text).toContain("If nothing arrives within a few minutes");
+    expect(response.text).toContain("Junk folder");
+    expect(response.text).toContain("organization may quarantine");
+    expect(response.text).toContain(
+      "An address links to only one learning record",
+    );
+    expect(response.text).toContain('href="/email/sign-in"');
+  }
+});
+
 it("fails closed when no sender is configured", async () => {
   const { application } = fixture(true, false);
   expect((await get(application, "/email/sign-in")).text).toContain(

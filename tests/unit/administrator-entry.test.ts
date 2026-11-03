@@ -19,6 +19,8 @@ function fixture() {
       throw Error("private database failure");
     if (sql.startsWith("SELECT p.expires_at"))
       return { rows: state.admin ? [{ expires: state.expires }] : [] };
+    if (sql.startsWith("SELECT count(*)::int AS total"))
+      return { rows: [{ total: state.listed ? 1 : 0 }] };
     if (sql.startsWith("SELECT l.id"))
       return {
         rows: state.listed

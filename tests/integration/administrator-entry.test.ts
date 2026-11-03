@@ -339,11 +339,12 @@ it("ADMINCON01/02 selects only minimal exact-account enrollment and billing summ
   expect(selected).toMatchObject({
     kind: "ready",
     value: {
-      members: [
-        { id: other.learner.id, background: "professional", goal: "work" },
-      ],
       selected: {
-        member: { id: other.learner.id },
+        member: {
+          id: other.learner.id,
+          background: "professional",
+          goal: "work",
+        },
         plans: [],
         invoices: [],
         enrollments: [],
@@ -366,6 +367,115 @@ it("ADMINCON01/02 selects only minimal exact-account enrollment and billing summ
   expect((await invoices.adminOverview(entered.credential, "wrong")).kind).toBe(
     "invalid",
   );
+});
+async function learners(count: number, name = "Invented learner") {
+  const ids: string[] = [];
+  for (let index = 1; index <= count; index++) {
+    const token = randomBytes(32).toString("hex");
+    await members.create(token, { background: "professional", goal: "work" });
+    const session = await members.session(token);
+    if (session.kind !== "active") throw Error("No invented learner");
+    await pool.query("UPDATE learners SET display_name=$2 WHERE id=$1", [
+      session.learner.id,
+      `${name} ${String(index).padStart(2, "0")}`,
+    ]);
+    ids.push(session.learner.id);
+  }
+  return ids;
+}
+async function consoleAdmin() {
+  const f = await fixture();
+  await pool.query("UPDATE learners SET display_name='Zed Owner' WHERE id=$1", [
+    f.id,
+  ]);
+  const entered = await entry.enter(f.token);
+  if (entered.kind !== "ready" || !entered.credential)
+    throw Error("No current admin");
+  return { ...f, credential: entered.credential };
+}
+async function view(
+  credential: string,
+  ownerId?: string,
+  options?: { page?: number; search?: string },
+) {
+  const result = await entry.console!(credential, ownerId, options);
+  if (result.kind !== "ready") throw Error(result.kind);
+  return result.value;
+}
+it("ADMINTABLE-01/02 pages learners by name with a total, clamping out-of-range pages", async () => {
+  const admin = await consoleAdmin();
+  await learners(59);
+  const unnamed = randomBytes(32).toString("hex");
+  await members.create(unnamed, { background: "explorer", goal: "everyday" });
+  const first = await view(admin.credential);
+  expect(first.total).toBe(61);
+  expect(first.page).toBe(1);
+  expect(first.pageSize).toBe(25);
+  expect(first.members).toHaveLength(25);
+  expect(first.members[0]!.displayName).toBe("Invented learner 01");
+  expect(first.members[24]!.displayName).toBe("Invented learner 25");
+  expect(first.members[0]!.joined).toBeInstanceOf(Date);
+  const last = await view(admin.credential, undefined, { page: 3 });
+  expect(last.page).toBe(3);
+  expect(last.members.map((m) => m.displayName)).toEqual([
+    ...Array.from(
+      { length: 9 },
+      (_, index) => `Invented learner ${51 + index}`,
+    ),
+    "Zed Owner",
+    null,
+  ]);
+  const beyond = await view(admin.credential, undefined, { page: 900 });
+  expect(beyond.page).toBe(3);
+  expect(beyond.members).toEqual(last.members);
+});
+it("ADMINTABLE-03 searches part of a name case-insensitively or an exact reference, literally", async () => {
+  const admin = await consoleAdmin();
+  const [firstAda] = await learners(30, "Ada Lovelace");
+  await learners(2, "Grace_Hopper");
+  await learners(1, "Graceful");
+  const named = await view(admin.credential, undefined, {
+    search: "  lovelace  ",
+  });
+  expect(named.total).toBe(30);
+  expect(named.search).toBe("lovelace");
+  expect(named.members).toHaveLength(25);
+  const paged = await view(admin.credential, undefined, {
+    search: "lovelace",
+    page: 2,
+  });
+  expect(paged.members).toHaveLength(5);
+  const reference = await view(admin.credential, undefined, {
+    search: firstAda!.toUpperCase(),
+  });
+  expect(reference.members.map((m) => m.id)).toEqual([firstAda]);
+  // A wildcard typed by an administrator is ordinary text.
+  const literal = await view(admin.credential, undefined, { search: "Grace_" });
+  expect(literal.total).toBe(2);
+  for (const search of ["%", "\\", "nobody"]) {
+    const none = await view(admin.credential, undefined, { search });
+    expect(none.total).toBe(0);
+    expect(none.page).toBe(1);
+    expect(none.members).toEqual([]);
+  }
+});
+it("ADMINTABLE-04 keeps the page and search when selecting a learner from another page", async () => {
+  const admin = await consoleAdmin();
+  const ids = await learners(30);
+  const chosen = ids[27]!;
+  const selected = await view(admin.credential, chosen, { page: 2 });
+  expect(selected.selected?.member.id).toBe(chosen);
+  expect(selected.page).toBe(2);
+  expect(selected.total).toBe(31);
+  expect(selected.members).toHaveLength(6);
+  const outside = await view(admin.credential, ids[0]!, {
+    search: "Zed",
+  });
+  expect(outside.selected?.member.id).toBe(ids[0]);
+  expect(outside.members.map((m) => m.displayName)).toEqual(["Zed Owner"]);
+  expect(await entry.console!(admin.credential, randomUUID())).toEqual({
+    kind: "not-found",
+  });
 });
 it("ADMINCON04 denies learner, unbound, revoked, malformed and expired console authority", async () => {
   const f = await fixture(),

@@ -34,6 +34,8 @@ const origin = "http://127.0.0.1:3000",
   secret = "invented-admin-route-secret",
   token = "a".repeat(64),
   credential = "b".repeat(64);
+const joined = new Date("2026-11-02T12:00:00Z");
+const listing = { total: 1, page: 1, pageSize: 25, search: "" };
 function fixture(
   options: {
     disabled?: boolean;
@@ -56,7 +58,7 @@ function fixture(
     throws: false,
     directory: {
       kind: "ready",
-      value: { members: [], courses: [] },
+      value: { members: [], courses: [], ...listing },
     } as AdministratorConsoleResult,
   };
   const fn = vi.fn(async () => {
@@ -256,15 +258,18 @@ it("ADMINCON01/02 renders only bounded account and billing summaries with escape
           displayName: "<Invented member>",
           background: "<professional>",
           goal: "<work>",
+          joined,
         },
       ],
       courses: [{ id: "FND-001", version: 2, title: "<Invented lesson>" }],
+      ...listing,
       selected: {
         member: {
           id,
           displayName: "<Invented member>",
           background: "<professional>",
           goal: "<work>",
+          joined,
         },
         enrollments: [{ id: "local-foundation-1", title: "<Foundations>" }],
         plans: [{ id, state: "offered" }],
@@ -387,6 +392,155 @@ it("ADMINCON04 denies direct malformed or expired console requests without autho
   ).toBe(503);
   expect(f.fn).not.toHaveBeenCalled();
 });
+it("ADMINTABLE-01/02/03/04 renders a paged table that keeps the search and selection", async () => {
+  const f = fixture();
+  const calls: unknown[][] = [];
+  const member = (index: number) => ({
+    id: `${String(index).padStart(8, "0")}-1111-4111-8111-111111111111`,
+    displayName: index === 2 ? null : `Learner <${index}>`,
+    background: "professional",
+    goal: "work",
+    joined: new Date("2026-11-02T12:00:00Z"),
+  });
+  const members = [member(1), member(2)];
+  const app = express();
+  mountAdministratorEntry(
+    app,
+    {
+      status: f.fn,
+      enter: f.fn,
+      end: f.fn,
+      console: async (...args: unknown[]) => {
+        calls.push(args);
+        return f.state.directory;
+      },
+    },
+    { origin, secret, localStaffEntry: true, mode: "local" },
+  );
+  const get = async (query = "") =>
+    (await http(app))
+      .get("/operator" + query)
+      .set("Cookie", `dne_staff=${credential}`);
+  const ready = (page: number, total: number, search = "") => {
+    f.state.directory = {
+      kind: "ready",
+      value: { members, courses: [], total, page, pageSize: 25, search },
+    };
+  };
+  ready(1, 60);
+  const first = await get();
+  expect(first.status).toBe(200);
+  expect(first.text).toContain("Showing 1–2 of 60");
+  expect(first.text).toContain('<table class="member-table">');
+  for (const heading of [
+    "Name",
+    "Starting point",
+    "Goal",
+    "Joined",
+    "Account reference",
+  ])
+    expect(first.text).toContain(`<th scope="col">${heading}</th>`);
+  expect(first.text).toContain("Learner &lt;1&gt;");
+  expect(first.text).toContain("Name needed");
+  expect(first.text).toContain("2026-11-02");
+  expect(first.text).toContain(`<code>${members[0]!.id}</code>`);
+  expect(first.text).toContain('href="/operator?page=2">Next');
+  expect(first.text).not.toContain(">Previous<");
+  expect(first.text).not.toContain("Clear search");
+
+  ready(3, 60);
+  const last = await get("?page=3");
+  expect(calls.at(-1)).toEqual([
+    credential,
+    undefined,
+    { page: 3, search: "" },
+  ]);
+  expect(last.text).toContain("Showing 51–52 of 60");
+  expect(last.text).toContain('href="/operator?page=2">Previous');
+  expect(last.text).not.toContain(">Next<");
+
+  for (const malformed of ["0", "-1", "two", "1.5", "99999999999"]) {
+    ready(1, 60);
+    expect((await get(`?page=${malformed}`)).status).toBe(200);
+    expect(calls.at(-1)).toEqual([
+      credential,
+      undefined,
+      { page: 1, search: "" },
+    ]);
+  }
+
+  ready(2, 1000, "a&b <c>");
+  const searched = await get("?page=2&q=a%26b%20%3Cc%3E");
+  expect(calls.at(-1)).toEqual([
+    credential,
+    undefined,
+    { page: 2, search: "a&b <c>" },
+  ]);
+  expect(searched.text).toContain("Showing 26–27 of 1,000");
+  expect(searched.text).toContain('value="a&amp;b &lt;c&gt;"');
+  expect(searched.text).toContain(
+    'href="/operator?page=1&amp;q=a%26b+%3Cc%3E">Previous',
+  );
+  expect(searched.text).toContain(
+    'href="/operator?page=3&amp;q=a%26b+%3Cc%3E">Next',
+  );
+  expect(searched.text).toContain(
+    `href="/operator?ownerId=${members[0]!.id}&amp;page=2&amp;q=a%26b+%3Cc%3E"`,
+  );
+  expect(searched.text).toContain('href="/operator">Clear search</a>');
+
+  f.state.directory = {
+    kind: "ready",
+    value: {
+      members,
+      courses: [],
+      total: 60,
+      page: 2,
+      pageSize: 25,
+      search: "",
+      selected: {
+        member: members[0]!,
+        enrollments: [],
+        plans: [],
+        invoices: [],
+      },
+    },
+  };
+  const selected = await get(`?ownerId=${members[0]!.id}&page=2`);
+  expect(selected.text).toContain("Selected learner");
+  expect(selected.text).toContain(
+    `<input type="hidden" name="ownerId" value="${members[0]!.id}">`,
+  );
+  expect(selected.text).toContain(
+    `href="/operator?ownerId=${members[0]!.id}&amp;page=3">Next`,
+  );
+  expect(selected.text).toContain('aria-current="true"');
+
+  f.state.directory = {
+    kind: "ready",
+    value: {
+      members: [],
+      courses: [],
+      total: 0,
+      page: 1,
+      pageSize: 25,
+      search: "nobody",
+    },
+  };
+  const none = await get("?q=nobody");
+  expect(none.text).toContain("No learner accounts match this search.");
+  expect(none.text).not.toContain("<table");
+  expect(none.text).not.toContain("Showing");
+  f.state.directory = {
+    kind: "ready",
+    value: { members: [], courses: [], ...listing, total: 0 },
+  };
+  expect((await get()).text).toContain("No learner accounts available.");
+
+  for (const query of ["?q=a&q=b", "?page=1&page=2", "?q=" + "x".repeat(121)])
+    expect((await get(query)).status).toBe(403);
+});
+
 it("NAME03/05 names are primary, escaped and distinguishable without exposing private data", async () => {
   const f = fixture();
   const first = {
@@ -394,6 +548,7 @@ it("NAME03/05 names are primary, escaped and distinguishable without exposing pr
     displayName: "李明 <Sam>",
     background: "explorer",
     goal: "work",
+    joined,
   };
   f.state.directory = {
     kind: "ready",
@@ -405,9 +560,11 @@ it("NAME03/05 names are primary, escaped and distinguishable without exposing pr
           id: "33333333-3333-4333-8333-333333333333",
           background: "professional",
           goal: "everyday",
+          joined,
         },
       ],
       courses: [],
+      ...listing,
     },
   };
   const response = await (
@@ -462,12 +619,14 @@ it("ADMIN-LAYOUT-02 separates console areas into cards with button actions and w
       displayName: "Invented",
       background: "explorer",
       goal: "everyday",
+      joined,
     };
   f.state.directory = {
     kind: "ready",
     value: {
       members: [member],
       courses: [],
+      ...listing,
       selected: { member, enrollments: [], plans: [], invoices: [] },
     },
   };
@@ -508,7 +667,10 @@ it("ADMIN-LAYOUT-02 separates console areas into cards with button actions and w
   expect(main).toContain(
     `<a href="/operator/invoices?ownerId=${id}" class="button">Compose courses`,
   );
-  f.state.directory = { kind: "ready", value: { members: [], courses: [] } };
+  f.state.directory = {
+    kind: "ready",
+    value: { members: [], courses: [], ...listing },
+  };
   const plain = mainHtml(await get());
   expect(plain).not.toContain("selected-member");
   expect(plain.match(/<section class="portal-card"/g)).toHaveLength(3);

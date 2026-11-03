@@ -446,8 +446,13 @@ test("[L277] ADMINCON01–04 selects an exact learner, composes existing terms a
     await expect(
       page.getByRole("heading", { name: "Administration console" }),
     ).toBeVisible();
-    await page.getByLabel("Exact learner account reference").fill(f.id);
-    await page.getByRole("button", { name: "Find learner" }).click();
+    await page.getByLabel("Search by name or account reference").fill(f.id);
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await page
+      .locator(".member-table tbody tr")
+      .getByRole("link")
+      .first()
+      .click();
     await expect(
       page.getByRole("heading", { name: "Selected learner", exact: true }),
     ).toBeVisible();
@@ -620,6 +625,96 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
   }
 });
 
+test("[L287] ADMINTABLE-01..05 an administrator pages and searches 60 learners and keeps the selection", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  try {
+    const members = store(pool);
+    await pool.query(
+      "UPDATE learners SET display_name='Zed Owner' WHERE id=$1",
+      [f.id],
+    );
+    for (let index = 1; index <= 59; index++) {
+      const token = randomBytes(32).toString("hex");
+      await members.create(token, { background: "technical", goal: "build" });
+      const session = await members.session(token);
+      if (session.kind !== "active") throw Error("No invented learner");
+      await pool.query("UPDATE learners SET display_name=$2 WHERE id=$1", [
+        session.learner.id,
+        `Invented learner ${String(index).padStart(2, "0")}`,
+      ]);
+    }
+    await f.verify();
+    await page.goto(f.origin + "/admin");
+    await page.getByRole("button", { name: "Enter administration" }).click();
+    const table = page.locator(".member-table");
+    const rows = table.locator("tbody tr");
+    const pager = page.getByRole("navigation", { name: "Learner pages" });
+    await expect(rows).toHaveCount(25);
+    await expect(page.getByText("Showing 1–25 of 60")).toBeVisible();
+    await expect(rows.first()).toContainText("Invented learner 01");
+    await expect(pager.getByRole("link", { name: "Next" })).toBeVisible();
+    await expect(pager.getByRole("link", { name: "Previous" })).toHaveCount(0);
+    const fits = async () => {
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      for (const control of await page
+        .locator(
+          ".member-table a, .member-pager a, .portal-search input:not([type=hidden]), .portal-search button",
+        )
+        .all())
+        expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(
+          40,
+        );
+    };
+    await fits();
+    await page.screenshot({
+      path: test.info().outputPath("learner-table.png"),
+      fullPage: true,
+    });
+
+    await pager.getByRole("link", { name: "Next" }).click();
+    await expect(page.getByText("Showing 26–50 of 60")).toBeVisible();
+    await page.getByRole("link", { name: "Invented learner 30" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Selected learner", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator(".portal-summary")).toContainText(
+      "Invented learner 30",
+    );
+    await expect(page.getByText("Showing 26–50 of 60")).toBeVisible();
+    await expect(
+      rows.filter({ hasText: "Invented learner 30" }),
+    ).toHaveAttribute("aria-current", "true");
+
+    await pager.getByRole("link", { name: "Next" }).click();
+    await expect(page.getByText("Showing 51–60 of 60")).toBeVisible();
+    await expect(page.locator(".portal-summary")).toContainText(
+      "Invented learner 30",
+    );
+    await expect(pager.getByRole("link", { name: "Next" })).toHaveCount(0);
+    await expect(rows.last()).toContainText("Zed Owner");
+
+    await page
+      .getByLabel("Search by name or account reference")
+      .fill("LEARNER 1");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await expect(page.getByText("Showing 1–10 of 10")).toBeVisible();
+    await expect(rows).toHaveCount(10);
+    await expect(table).not.toContainText("Invented learner 20");
+    await fits();
+    await page.getByRole("link", { name: "Clear search" }).click();
+    await expect(page.getByText("Showing 1–25 of 60")).toBeVisible();
+    await expect(table).not.toContainText("Invented retained learning draft");
+    await expect(table).not.toContainText("shi@deepnative.io");
+  } finally {
+    await closeLoopback(f.server);
+  }
+});
 test("[L282] required names identify learners while legacy work and administrator boundaries stay intact", async ({
   page,
   browser,
@@ -671,7 +766,7 @@ test("[L282] required names identify learners while legacy work and administrato
     await f.verify();
     await page.goto(f.origin + "/admin");
     await page.getByRole("button", { name: "Enter administration" }).click();
-    const directory = page.locator(".member-directory");
+    const directory = page.locator(".member-table");
     await expect(
       directory.getByRole("link", { name: "李明 <Sam>", exact: true }),
     ).toHaveCount(2);
@@ -682,8 +777,7 @@ test("[L282] required names identify learners while legacy work and administrato
       "Invented retained learning draft",
     );
     await expect(directory).not.toContainText("shi@deepnative.io");
-    await directory.locator("summary").first().click();
-    await expect(directory.locator("details[open] code")).toHaveText(
+    await expect(directory.locator("code").first()).toHaveText(
       /^[a-f0-9-]{36}$/,
     );
     expect(

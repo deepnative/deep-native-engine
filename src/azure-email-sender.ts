@@ -30,7 +30,9 @@ export function azureEmailSender(
         abortSignal: AbortSignal.timeout(30_000),
       });
       if (result.status !== "Succeeded")
-        throw new Error("Email send was not confirmed");
+        throw Object.assign(new Error("Email send was not confirmed"), {
+          code: result.error?.code,
+        });
     },
   };
 }

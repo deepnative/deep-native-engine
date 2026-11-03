@@ -250,6 +250,120 @@ it("limits outgoing links and invalidates failed sends and expired links", async
   expect(await access.consume("f".repeat(64))).toEqual({ kind: "unavailable" });
 });
 
+it("EMAIL-DIAG-01 logs one content-free outcome for each request and hides provider detail", async () => {
+  const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    const owner = await member();
+    const other = await member();
+    const address = "diagnosed@example.com";
+    await access.requestSignIn(address);
+    expect(await access.requestAttach(owner.token, "not an address")).toBe(
+      "unavailable",
+    );
+    expect(await access.requestAttach("0".repeat(64), address)).toBe(
+      "unavailable",
+    );
+    expect(await access.requestAttach(owner.token, address)).toBe("sent");
+    expect(await access.requestAttach(owner.token, address)).toBe(
+      "unavailable",
+    );
+    await access.consume(
+      new URL(sent.at(-1)!.link).searchParams.get("code")!,
+      owner.token,
+    );
+    expect(await access.requestAttach(other.token, address)).toBe(
+      "unavailable",
+    );
+    const outcomes = () =>
+      info.mock.calls.map((call) => JSON.parse(String(call[0])));
+    expect(outcomes()).toEqual(
+      [
+        ["sign_in", "not_bound"],
+        ["attach", "invalid_address"],
+        ["attach", "member_unavailable"],
+        ["attach", "sent"],
+        ["attach", "pending"],
+        ["attach", "already_bound"],
+      ].map(([purpose, outcome]) => ({
+        event: "member_email_request",
+        purpose,
+        outcome,
+      })),
+    );
+
+    const limited = await member();
+    for (let index = 0; index < 5; index++) {
+      expect(
+        await access.requestAttach(limited.token, `l${index}@example.com`),
+      ).toBe("sent");
+    }
+    expect(await access.requestAttach(limited.token, "l5@example.com")).toBe(
+      "unavailable",
+    );
+    expect(outcomes().at(-1)).toEqual({
+      event: "member_email_request",
+      purpose: "attach",
+      outcome: "rate_limited",
+    });
+
+    const failing = await member();
+    for (const [thrown, expected] of [
+      [
+        Object.assign(new TypeError("private failed@example.com detail"), {
+          code: "EmailDroppedAllRecipientsSuppressed",
+        }),
+        {
+          errorName: "TypeError",
+          errorCode: "EmailDroppedAllRecipientsSuppressed",
+        },
+      ],
+      [
+        Object.assign(new Error("private"), {
+          code: "has spaces and failed@example.com",
+        }),
+        { errorName: "Error" },
+      ],
+      ["a private string failure", {}],
+    ] as const) {
+      const quiet = memberEmailAccess(
+        pool,
+        {
+          async send() {
+            throw thrown;
+          },
+        },
+        "https://engine.deepnative.io",
+      );
+      expect(
+        await quiet.requestAttach(failing.token, "failed@example.com"),
+      ).toBe("unavailable");
+      expect(JSON.parse(String(error.mock.calls.at(-1)![0]))).toEqual({
+        event: "member_email_request",
+        purpose: "attach",
+        outcome: "send_failed",
+        ...expected,
+      });
+      await pool.query("DELETE FROM member_email_links WHERE principal_id=$1", [
+        failing.id,
+      ]);
+    }
+    const written = JSON.stringify([info.mock.calls, error.mock.calls]);
+    for (const secret of [
+      "@example.com",
+      "private",
+      owner.id,
+      failing.id,
+      owner.token,
+    ])
+      expect(written).not.toContain(secret);
+    expect(written).not.toMatch(/[a-f0-9]{64}/);
+  } finally {
+    info.mockRestore();
+    error.mockRestore();
+  }
+});
+
 it("rejects a sign-in link after its identity or principal is removed", async () => {
   const owner = await member();
   await access.requestAttach(owner.token, "member@example.com");

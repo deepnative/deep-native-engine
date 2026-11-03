@@ -66,6 +66,24 @@ it("sends one private sign-in link using only the selected hosted managed identi
   });
 });
 
+it("EMAIL-DIAG-01 keeps the provider's error code when a send is not confirmed", async () => {
+  sdk.pollUntilDone.mockResolvedValue({
+    status: "Failed",
+    error: { code: "EmailDroppedAllRecipientsSuppressed", message: "private" },
+  });
+  const sender = azureEmailSender(
+    "https://synthetic.communication.azure.com",
+    "noreply@example.com",
+    "invented-identity",
+  );
+  await expect(
+    sender.send("member@example.com", "https://example.com/link"),
+  ).rejects.toMatchObject({
+    code: "EmailDroppedAllRecipientsSuppressed",
+    message: "Email send was not confirmed",
+  });
+});
+
 it("does not report delivery when the provider does not confirm it", async () => {
   sdk.pollUntilDone.mockResolvedValue({ status: "Failed" });
   await expect(
