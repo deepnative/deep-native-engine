@@ -211,6 +211,8 @@ it("keeps drafts private, publishes exact saved content, exchanges one clarifica
       clarification: "Which source comes first?",
       answer: "Use the original source.",
       consentActive: true,
+      // Account attribution does not verify human authorship.
+      label: "reviewer-attributed-private-sample-not-formal",
     }),
   ]);
   for (const key of [

@@ -31,7 +31,7 @@ Only a current operator or platform administrator receives the aggregate. The HT
 
 ## Lifetime and export
 
-Withdrawal keeps the minimal event history for the retained owner. Deleting the account or workspace cascades its events, so deleted accounts leave the counts. The member export is now `local-member-records-v32`, with an appended `contributionEvents` section listing the owner's own events. That section has the acting authority, never a staff identifier.
+Withdrawal keeps the minimal event history for the retained owner. Deleting the account or workspace cascades its events, so deleted accounts leave the counts. Member export `local-member-records-v32` appended `contributionEvents` section listing the owner's own events. That section has the acting authority, never a staff identifier.
 
 ## Evidence
 
