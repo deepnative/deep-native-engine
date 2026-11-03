@@ -296,6 +296,75 @@ it("CM122-03 separates owner sharing revocation, source-change revocation and so
   expect((await events()).map((e) => e.kind)).toEqual(["submitted"]);
 });
 
+it("CM122-08 counts only submitted revisions as withdrawn and never a private draft", async () => {
+  const moderator = await staff("moderator");
+  const owner = await member("professional");
+  const draft = (await proposals.createDraft(owner.token, value(1), false))!;
+  expect(await proposals.withdraw(owner.token, draft)).toBe(true);
+  expect(await events(draft)).toEqual([]);
+
+  const edited = await submitted(owner.token, 2),
+    reviewed = await submitted(owner.token, 3);
+  for (const id of [edited, reviewed])
+    expect(
+      await proposals.requestChanges(moderator.token, id, {
+        expectedRevision: 1,
+        feedback: "Please revise this invented example.",
+      }),
+    ).toBe("requested");
+  expect(await proposals.editDraft(owner.token, edited, value(4), 1)).toBe(
+    "saved",
+  );
+  expect(await proposals.withdraw(owner.token, edited)).toBe(true);
+  expect(await proposals.withdraw(owner.token, reviewed)).toBe(true);
+  const kinds = async (id: string) =>
+    (await events(id)).map((e) => `${e.kind}@${e.revision}`);
+  expect(await kinds(edited)).toEqual(["submitted@1", "reviewed@1"]);
+  expect(await kinds(reviewed)).toEqual([
+    "submitted@1",
+    "reviewed@1",
+    "source_withdrawn@1",
+  ]);
+});
+
+it("CM122-09 credits an owner's withdrawal of a shared proposal to the owner and a moderator rejection to the source change", async () => {
+  const moderator = await staff("moderator");
+  const owner = await member("technical");
+  const withdrawn = await submitted(owner.token, 1),
+    rejected = await submitted(owner.token, 2);
+  for (const id of [withdrawn, rejected]) {
+    ready(await publications.accept(moderator.token, id, 1, true));
+    ready(await publish(owner.token, id));
+  }
+  expect(await proposals.withdraw(owner.token, withdrawn)).toBe(true);
+  expect(await proposals.moderate(moderator.token, rejected, "reject")).toBe(
+    true,
+  );
+  const ended = async (id: string) =>
+    (await events(id)).filter((e) =>
+      ["sharing_withdrawn", "source_withdrawn"].includes(e.kind),
+    );
+  const owned = await ended(withdrawn);
+  expect(owned).toHaveLength(2);
+  expect(owned).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        kind: "sharing_withdrawn",
+        cause: "owner",
+        actor: "member",
+      }),
+      expect.objectContaining({ kind: "source_withdrawn", actor: "member" }),
+    ]),
+  );
+  expect(await ended(rejected)).toEqual([
+    expect.objectContaining({
+      kind: "sharing_withdrawn",
+      cause: "source_change",
+      actor: "system",
+    }),
+  ]);
+});
+
 it("CM122-04 discloses only coarse bands at 20 contributors with five owners per cell and complement, and suppresses below", async () => {
   const moderator = await staff("moderator"),
     operator = await staff("operator");
