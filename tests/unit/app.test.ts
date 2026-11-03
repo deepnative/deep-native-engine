@@ -6661,6 +6661,34 @@ it("ATTEND-08 configured private attendance cannot expose member receipt routes 
   expect(query).not.toHaveBeenCalled();
 });
 
+it("NAV-05 and NAV-06 offer Administration only where administrator entry exists", async () => {
+  const off = app(storage(), { origin, secret: "navigation-test" });
+  const on = app(storage(), {
+    origin,
+    secret: "navigation-test",
+    localStaffEntry: true,
+  });
+  const live = app(storage(), {
+    origin,
+    secret: "navigation-test",
+    localStaffEntry: true,
+    mode: "live",
+  });
+  const [hidden, shown, liveHidden] = await Promise.all(
+    [off, on, live].map((application) =>
+      request(application).get("/readiness").set("Host", host),
+    ),
+  );
+  const navigation = (html: string) =>
+    html.match(
+      /<nav[^>]*aria-label="Main navigation"[^>]*>([\s\S]*?)<\/nav>/,
+    )?.[1];
+  for (const result of [hidden, liveHidden]) {
+    expect(navigation(result!.text)).toContain('href="/account/sign-out"');
+    expect(result!.text).not.toContain('href="/admin"');
+  }
+  expect(navigation(shown!.text)).toContain('href="/admin">Administration</a>');
+});
 it("HOSTED-12 presents accurate hosted persistence while concurrent local rendering stays local", async () => {
   const hosted = app(storage(), {
     origin: "https://engine.deepnative.io",

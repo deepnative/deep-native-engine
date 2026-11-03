@@ -33,6 +33,7 @@ async function fixture(
   mode: "normal" | "disabled" | "before-commit" | "lost-commit" = "normal",
   linked = true,
   independentLogout = false,
+  administration = false,
 ) {
   const token = randomBytes(32).toString("hex"),
     address = `signout-${token.slice(0, 12)}@example.com`;
@@ -85,6 +86,8 @@ async function fixture(
         return origin;
       },
       secret: "synthetic-signout-browser",
+      // NAV-06: Administration is offered only where entry is configured.
+      localStaffEntry: administration,
       memberSignOut: independentLogout
         ? (token, confirmed) => signOutMember(boundary, token, confirmed)
         : undefined,
@@ -307,7 +310,7 @@ test("[L241] MOUT-06 failed and lost-commit signout shows uncertainty without re
 test("[L281] NAV-01/03/04 finds account tools and deliberately signs out without email while preserving records", async ({
   page,
 }) => {
-  const f = await fixture(page, "disabled", false, true);
+  const f = await fixture(page, "disabled", false, true, true);
   try {
     await page.goto(`${f.origin}/account`);
     const navigation = page.getByRole("navigation", {

@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { starterGuidanceExample } from "../../src/starter-guidance-views.ts";
+import { withAdministration } from "../../src/administration-presentation.ts";
 import { accountPage, page } from "../../src/views.ts";
 
 it("NAV-01 exposes account, logout, coaching and administration in shared navigation", () => {
@@ -54,5 +55,21 @@ it.each(["linked", "unlinked", "unavailable"] as const)(
     );
     const links = html.match(/<p class="account-links">([\s\S]*?)<\/p>/)?.[1];
     expect(links?.match(/<a class="button secondary" href=/g)).toHaveLength(5);
+  },
+);
+it.each(["linked", "unlinked", "unavailable"] as const)(
+  "NAV-05 hides Administration from the %s account page when entry is off",
+  (status) => {
+    const render = () =>
+      accountPage(
+        { id: "invented", background: "explorer", goal: "everyday" },
+        "a".repeat(64),
+        status,
+      );
+    expect(withAdministration(false, render)).not.toContain('href="/admin"');
+    expect(withAdministration(false, render)).toContain(
+      'href="/account/coaching">Monthly coaching hours</a>',
+    );
+    expect(withAdministration(true, render)).toContain('href="/admin"');
   },
 );
