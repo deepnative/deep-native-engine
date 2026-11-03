@@ -2,6 +2,7 @@ import { LEARNING_WORKSPACE_CONTENT } from "./learning-workspace-pack.ts";
 import { isReviewedAssignment } from "./reviewed-assignments.ts";
 import { isReviewedFoundation } from "./foundation-pack.ts";
 import { hostingText } from "./hosting-presentation.ts";
+import { administrationLink } from "./administration-presentation.ts";
 import { randomUUID } from "node:crypto";
 import type { MemberExportPayload } from "./member-export.ts";
 import {
@@ -82,7 +83,7 @@ export function escape(value: string) {
   );
 }
 export function accountActionLinks() {
-  return '<a href="/account/coaching">Top up hours</a><a href="/admin">Administration</a><a href="/account/sign-out">Sign out</a>';
+  return `<a href="/account/coaching">Top up hours</a>${administrationLink('<a href="/admin">Administration</a>')}<a href="/account/sign-out">Sign out</a>`;
 }
 
 export function page(title: string, body: string) {
@@ -897,7 +898,7 @@ export function accountPage(
       : '<section><h2>Sign out of your account</h2><p>Signing out does not delete your saved records. Review how you can return before ending access.</p><p><a class="button secondary" href="/account/sign-out">Sign out</a></p></section>';
   return page(
     "My account",
-    `<div class="account-page"><div class="account-intro"><p class="eyebrow">Signed in</p><h1>My account</h1>${learner.displayName ? `<p class="member-display-name">${escape(learner.displayName)}</p>` : '<p role="status"><a href="#display_name">Add your display name</a> so administrators can recognize your account. Your saved work and access stay available.</p>'}<p>Student reference: <code>${escape(learner.id)}</code>. Share this reference with course support when arranging your courses.</p><p>Your learning profile and saved work belong to this account. Changing these preferences does not create another account or grant staff or paid-service access.</p><p class="account-links"><a class="button secondary" href="/learn">Return to learning</a> <a class="button secondary" href="/account/purchases">Courses and invoices</a> <a class="button secondary" href="/account/billing">Billing recipient</a> <a class="button secondary" href="/account/coaching">Monthly coaching hours</a> <a class="button secondary" href="/admin">Administration</a></p></div>${recovery}${signOut}<section class="profile-form"><h2>Your learning profile</h2><p>Update your goals and preferences. Experience is self-reported; no job title or payment is required.</p><form method="post" action="/profile">${hidden(csrf)}${profileFields(learner)}<button type="submit">Save my profile</button></form></section></div>`,
+    `<div class="account-page"><div class="account-intro"><p class="eyebrow">Signed in</p><h1>My account</h1>${learner.displayName ? `<p class="member-display-name">${escape(learner.displayName)}</p>` : '<p role="status"><a href="#display_name">Add your display name</a> so administrators can recognize your account. Your saved work and access stay available.</p>'}<p>Student reference: <code>${escape(learner.id)}</code>. Share this reference with course support when arranging your courses.</p><p>Your learning profile and saved work belong to this account. Changing these preferences does not create another account or grant staff or paid-service access.</p><p class="account-links"><a class="button secondary" href="/learn">Return to learning</a> <a class="button secondary" href="/account/purchases">Courses and invoices</a> <a class="button secondary" href="/account/billing">Billing recipient</a> <a class="button secondary" href="/account/coaching">Monthly coaching hours</a>${administrationLink(' <a class="button secondary" href="/admin">Administration</a>')}</p></div>${recovery}${signOut}<section class="profile-form"><h2>Your learning profile</h2><p>Update your goals and preferences. Experience is self-reported; no job title or payment is required.</p><form method="post" action="/profile">${hidden(csrf)}${profileFields(learner)}<button type="submit">Save my profile</button></form></section></div>`,
   );
 }
 export function dashboard(
