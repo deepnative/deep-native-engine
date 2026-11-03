@@ -818,8 +818,17 @@ footer {
   line-height: 1.7;
 }
 footer strong {
-  max-width: 280px;
   font-weight: 550;
+}
+/* FOOTER-01: whole links in a wrapping row, no dot separators. */
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 18px;
+}
+.footer-links a {
+  white-space: nowrap;
 }
 footer span {
   max-width: 380px;
@@ -895,6 +904,9 @@ footer span {
   footer {
     flex-direction: column;
     gap: 14px;
+  }
+  .footer-links {
+    justify-content: flex-start;
   }
   .actions button {
     flex: 1;

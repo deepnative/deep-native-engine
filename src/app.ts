@@ -685,10 +685,12 @@ export function app(
   // NAV-08: the shared header offers member links only to signed-in members.
   // Staff pages keep their own access and never load member state for it.
   app.use((req, _res, next) => {
-    const signInAvailable = Boolean(options.memberEmail);
+    const signInAvailable = Boolean(
+      options.memberEmail || options.memberPassword,
+    );
     const member: unknown = req.cookies[COOKIE];
     if (
-      !["GET", "HEAD"].includes(req.method) ||
+      !["GET", "HEAD", "POST"].includes(req.method) ||
       req.path.startsWith("/api/") ||
       /^\/admin(?:\/|$)/i.test(req.path) ||
       staffFamily(req.path)

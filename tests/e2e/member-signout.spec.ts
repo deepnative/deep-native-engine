@@ -173,6 +173,18 @@ test("[L239] MOUT-01/02 a linked member signs out and deliberately returns by em
       (await page.context().cookies()).find((c) => c.name === "dne_staff")
         ?.value,
     ).toBe("signed-out");
+    // NAV-09/10: the Signed out page itself already shows the signed-out
+    // header and offers sign-in as a button.
+    const outHeader = page.getByRole("navigation", { name: "Main navigation" });
+    await expect(
+      outHeader.getByRole("link", { name: "Sign in", exact: true }),
+    ).toBeVisible();
+    await expect(
+      outHeader.getByRole("link", { name: "Sign out", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.locator("#main").getByRole("link", { name: "Sign in", exact: true }),
+    ).toHaveClass(/button/);
     // NAV-08: the header stops offering member tools once signed out,
     // including on the email sign-in page that sets a fresh visitor cookie.
     for (const path of ["/readiness", "/email/sign-in"]) {
