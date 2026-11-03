@@ -91,7 +91,9 @@ it.each(["demo", "test"] as const)(
     expect(response.text.match(/data-test-unit-category=/g)).toHaveLength(5);
     expect(response.text).toContain('href="/member/test-units/download"');
     expect(response.text).not.toContain("<form");
-    expect(f.session).not.toHaveBeenCalled();
+    // NAV-08: only the shared header checks whether the member is signed in;
+    // the page itself reads no second session.
+    expect(f.session).toHaveBeenCalledExactlyOnceWith("a".repeat(64));
   },
 );
 it.each(["/member/test-units/download", "/member/test-units/download/"])(

@@ -73,7 +73,8 @@ import {
   listenLoopback,
   withLoopback,
 } from "../support/loopback-server.ts";
-import { csrf } from "../../src/session.ts";
+import { COOKIE, csrf } from "../../src/session.ts";
+import type { MemberEmailAccess } from "../../src/member-email-access.ts";
 import type { LearningWorkspaceStore } from "../../src/learning-workspace-store.ts";
 import { contributionMetrics } from "../../src/contribution-metrics.ts";
 import type { LearningWorkspacePublicationStore } from "../../src/learning-workspace-publication.ts";
@@ -6685,13 +6686,20 @@ it("ATTEND-08 configured private attendance cannot expose member receipt routes 
 });
 
 it("NAV-05 and NAV-06 offer Administration only where administrator entry exists", async () => {
-  const off = app(storage(), { origin, secret: "navigation-test" });
-  const on = app(storage(), {
+  // NAV-08: account links are for signed-in members.
+  const db = storage();
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
+  const off = app(db, { origin, secret: "navigation-test" });
+  const on = app(db, {
     origin,
     secret: "navigation-test",
     localStaffEntry: true,
   });
-  const live = app(storage(), {
+  const live = app(db, {
     origin,
     secret: "navigation-test",
     localStaffEntry: true,
@@ -6700,7 +6708,10 @@ it("NAV-05 and NAV-06 offer Administration only where administrator entry exists
   const [hidden, shown, liveHidden] = await Promise.all(
     [off, on, live].map((application) =>
       withLoopback(application, (s) =>
-        request(s).get("/readiness").set("Host", host),
+        request(s)
+          .get("/readiness")
+          .set("Host", host)
+          .set("Cookie", `${COOKIE}=${"d".repeat(64)}`),
       ),
     ),
   );
@@ -6713,6 +6724,56 @@ it("NAV-05 and NAV-06 offer Administration only where administrator entry exists
     expect(result!.text).not.toContain('href="/admin"');
   }
   expect(navigation(shown!.text)).toContain('href="/admin">Administration</a>');
+});
+it("NAV-08 shows signed-out visitors Sign in instead of member account links", async () => {
+  const db = storage();
+  const options = { origin, secret: "navigation-test", localStaffEntry: true };
+  const application = app(db, {
+    ...options,
+    memberEmail: {
+      signOut: async () => "signed_out",
+    } as unknown as MemberEmailAccess,
+  });
+  const navigation = (html: string) =>
+    html.match(
+      /<nav[^>]*aria-label="Main navigation"[^>]*>([\s\S]*?)<\/nav>/,
+    )?.[1] ?? "";
+  const signedOutCookie = `${COOKIE}=${"c".repeat(64)}`;
+  for (const cookie of [undefined, signedOutCookie]) {
+    const visitor = await withLoopback(application, (s) => {
+      const visit = request(s).get("/readiness").set("Host", host);
+      return cookie ? visit.set("Cookie", cookie) : visit;
+    });
+    const links = navigation(visitor.text);
+    expect(links).toContain('href="/email/sign-in">Sign in</a>');
+    expect(links).toContain('href="/learn">Learning</a>');
+    for (const href of [
+      "/account",
+      "/account/coaching",
+      "/admin",
+      "/account/sign-out",
+    ])
+      expect(links).not.toContain(`href="${href}"`);
+  }
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
+  const signedIn = await withLoopback(application, (s) =>
+    request(s)
+      .get("/readiness")
+      .set("Host", host)
+      .set("Cookie", signedOutCookie),
+  );
+  const withoutEmail = await withLoopback(app(storage(), options), (s) =>
+    request(s).get("/readiness").set("Host", host),
+  );
+  expect(navigation(withoutEmail.text)).toBe('<a href="/learn">Learning</a>');
+  const links = navigation(signedIn.text);
+  for (const label of ["Account", "Top up hours", "Administration", "Sign out"])
+    expect(links).toContain(`>${label}</a>`);
+  expect(links).not.toContain("/email/sign-in");
 });
 it("HOSTED-12 presents accurate hosted persistence while concurrent local rendering stays local", async () => {
   const hosted = app(storage(), {
