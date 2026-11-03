@@ -9,6 +9,12 @@ BEGIN
   IF EXISTS (SELECT 1 FROM schema_migrations WHERE version=90) THEN
     RETURN;
   END IF;
+  -- Only the hosted database ('deepnative') held those test accounts. Local,
+  -- preview and test databases are never renamed unless a test opts in.
+  IF current_database() <> 'deepnative'
+     AND coalesce(current_setting('dne.backfill_test_names', true), '') <> 'on' THEN
+    RETURN;
+  END IF;
   WITH names(n, name) AS (
     SELECT ordinality, value FROM unnest(ARRAY[
       'Maya Chen','Liam Patel','Sofia Rossi','Noah Kim','Ava Martin',

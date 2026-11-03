@@ -1,12 +1,32 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { createHash, randomBytes } from "node:crypto";
+import { Pool } from "pg";
 import { migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
 
-const pool = testPool();
+// This test re-runs a one-time migration, so it owns a private database:
+// a shared one would let migration 090 rename other files' accounts.
+const control = testPool();
+const name = `dne_test_${randomBytes(16).toString("hex")}`;
+const url = new URL(process.env.DNE_TEST_DATABASE_URL!);
+url.pathname = `/${name}`;
+// Opt in: outside the hosted database the backfill is otherwise skipped.
+const pool = new Pool({
+  connectionString: url.href,
+  options: "-c dne.backfill_test_names=on",
+});
 const members = store(pool);
-beforeAll(() => migrate(pool));
-afterAll(() => pool.end());
+// Creating and fully migrating a fresh database can take well over the
+// default hook time while the other integration lanes run.
+beforeAll(async () => {
+  await control.query(`CREATE DATABASE "${name}"`);
+  await migrate(pool);
+}, 120_000);
+afterAll(async () => {
+  await pool.end();
+  await control.query(`DROP DATABASE "${name}" WITH (FORCE)`);
+  await control.end();
+}, 60_000);
 
 async function member(displayName?: string) {
   const token = randomBytes(32).toString("hex");
@@ -35,7 +55,6 @@ const rates = (id: string) =>
     .then((r) => r.rows.map((row) => row.cents));
 
 it("TESTNAME-01/02/03 names existing unnamed test accounts once, with CAD 30-50 rates, and never the owner", async () => {
-  await pool.query("TRUNCATE principals CASCADE");
   // Accounts that existed before the one-time release step.
   await pool.query("DELETE FROM schema_migrations WHERE version=90");
   const unnamed = [await member(), await member(), await member()];
@@ -76,4 +95,17 @@ it("TESTNAME-01/02/03 names existing unnamed test accounts once, with CAD 30-50 
   expect(await named(later)).toBeNull();
   expect(await rates(later)).toEqual([]);
   expect(await Promise.all(unnamed.map(named))).toEqual(names);
+});
+
+it("TESTNAME-04 leaves local, preview and test databases' accounts unnamed", async () => {
+  const plain = new Pool({ connectionString: url.href });
+  try {
+    await plain.query("DELETE FROM schema_migrations WHERE version=90");
+    const id = await member();
+    await migrate(plain);
+    expect(await named(id)).toBeNull();
+    expect(await rates(id)).toEqual([]);
+  } finally {
+    await plain.end();
+  }
 });

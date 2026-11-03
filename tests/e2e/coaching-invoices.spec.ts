@@ -276,7 +276,11 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
     ] as const) {
       await save(f, p);
       await p.reload();
-      await expect(p.getByText(`CAD ${total}`, { exact: true })).toBeVisible();
+      // The month's detail shows the total; HOURTABLE-01 repeats it in the table.
+      await expect(
+        p.getByText(`CAD ${total}`, { exact: true }).first(),
+      ).toBeVisible();
+      await expect(p.locator(".coaching-months")).toContainText(`CAD ${total}`);
       await p.screenshot({
         path: info.outputPath(`coaching-draft-${rate}.png`),
         fullPage: true,
@@ -476,7 +480,10 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
       }),
       s.getByRole("button", { name: "Save coaching draft" }).click(),
     ]);
-    await expect(s.getByText("CAD 213.75", { exact: true })).toBeVisible();
+    await expect(
+      s.getByText("CAD 213.75", { exact: true }).first(),
+    ).toBeVisible();
+    await expect(s.locator(".coaching-months")).toContainText("CAD 213.75");
     await submit(s);
     await expect(
       s.getByRole("heading", { name: "Submitted snapshot" }),

@@ -49,3 +49,15 @@ Before implementation, the authenticated member HTTP test for `/account/coaching
 L284 (#611) runs the whole journey through visible navigation: browser registration and email sign-in, owner entry from Administration, rate, Monthly coaching hours for a chosen past month, review/issue from Pending months, simulated invoice email, full offline payment and the student’s Paid view, with sideways-scroll and control-size checks on every page. It found and fixed unstyled email/number/month/untyped fields, an invoice-email action offered when no sender is configured, a member named only by account reference on the review page, and a header that always highlighted Account.
 
 Tests live in `tests/unit/coaching-*.test.ts`, affected `simple-invoice-*`/export units, `tests/integration/coaching-invoices.test.ts`, existing invoice integration, and `tests/e2e/coaching-invoices.spec.ts`. New browser mappings L273–L276 append after L272; the slice grows from269 to273 registered scenarios (546 desktop/mobile executions); all existing IDs, required projects and full-MVP denominators remain. Focused results are development evidence; exact clean-commit full verification, independent final review, main source verification and the dedicated milestone demo are recorded on the issue/PR by the delivery owner.
+
+## Saved months table
+
+Monthly coaching hours lists saved months as a table ([#646](https://github.com/deepnative/deep-native-engine/issues/646)), newest first:
+
+- **Month:** opens that month.
+- **Hours:** the saved hours.
+- **Amount:** the issued invoice total, the submitted snapshot subtotal, or, for a draft, the hours at the applicable rate. "No rate" shows when none applies.
+- **Status:** Draft, Returned for correction, Awaiting review, Invoiced · Paid, Invoiced · CAD x due, or Void.
+- **Invoice:** a link to the issued invoice.
+
+The administrator's member view shows the same table, with links to the admin invoice pages. HOURTABLE-01–03 are unit tests; L273 and L284 check the table in the browser.
