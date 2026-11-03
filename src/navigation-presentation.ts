@@ -10,6 +10,7 @@ const owns: Record<string, (path: string) => boolean> = {
   "/account/coaching": (p) =>
     p === "/account/coaching" || p.startsWith("/account/coaching/"),
   "/account/sign-out": (p) => p === "/account/sign-out",
+  "/email/sign-in": (p) => p === "/email/sign-in",
   "/admin": (p) =>
     p === "/admin" || p.startsWith("/admin/") || p.startsWith("/operator"),
   "/account": (p) =>

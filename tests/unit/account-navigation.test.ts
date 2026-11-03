@@ -10,7 +10,9 @@ it("NAV-01 exposes account, logout, coaching and administration in shared naviga
     /<nav[^>]*aria-label="Main navigation"[^>]*>([\s\S]*?)<\/nav>/,
   )?.[1];
   expect(navigation).toBeDefined();
-  expect(navigation).toContain('href="/account/coaching">Top up hours</a>');
+  expect(navigation).toContain(
+    'href="/account/coaching">Monthly coaching hours</a>',
+  );
   for (const path of [
     "/learn",
     "/account",
@@ -79,8 +81,8 @@ it.each([
   ["/learn/notebooks", "Learning"],
   ["/account", "Account"],
   ["/account/purchases", "Account"],
-  ["/account/coaching", "Top up hours"],
-  ["/account/coaching/save", "Top up hours"],
+  ["/account/coaching", "Monthly coaching hours"],
+  ["/account/coaching/save", "Monthly coaching hours"],
   ["/admin", "Administration"],
   ["/operator/coaching", "Administration"],
   ["/account/sign-out", "Sign out"],

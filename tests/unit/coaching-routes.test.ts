@@ -5,6 +5,7 @@ import { mountCoachingRoutes } from "../../src/coaching-routes.ts";
 import { csrf } from "../../src/session.ts";
 import type { SimpleInvoiceStore } from "../../src/simple-invoice-store.ts";
 import { withLoopback } from "../support/loopback-server.ts";
+import { expectPortalActions, mainHtml } from "../support/portal-layout.ts";
 const id = "11111111-1111-4111-8111-111111111111",
   token = "a".repeat(64),
   origin = "http://127.0.0.1:3000",
@@ -673,5 +674,34 @@ it("BILLPROFILE03 suggests the saved recipient only on a new member coaching mon
   f.service.coachingOverview.mockResolvedValue(ready(value));
   expect((await f.get("/account/coaching")).text).not.toContain(
     'value="Reusable &lt;recipient&gt;"',
+  );
+});
+it("ADMIN-LAYOUT-02 coaching administration groups its lists in cards and navigation as buttons", async () => {
+  const f = fixture();
+  const overview = (await f.get("/operator/coaching")).text;
+  expectPortalActions(overview, [
+    ["/operator/invoices", "Courses and invoices"],
+    ["/operator", "Administration console"],
+  ]);
+  const main = mainHtml(overview);
+  expect(main).toContain(
+    '<section class="invoice-workspace portal-workspace">',
+  );
+  expect(main).toContain('<section class="portal-card"><h2>Members</h2>');
+  expect(main).toContain(
+    '<section class="portal-card"><h2>Pending months</h2>',
+  );
+  const review = (await f.get(`/operator/coaching/${id}`)).text;
+  expectPortalActions(review, [
+    ["/operator/coaching", "Choose another member"],
+    ["/operator/invoices", "Courses and invoices"],
+  ]);
+  expect(mainHtml(review)).toContain(
+    '<section class="invoice-workspace portal-workspace">',
+  );
+  const member = mainHtml((await f.get("/account/coaching")).text);
+  expect(member).toContain('<section class="invoice-workspace">');
+  expect(member).toContain(
+    '<a href="/account">My account</a> · <a href="/account/purchases">Courses and invoices</a>',
   );
 });

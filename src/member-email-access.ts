@@ -35,11 +35,11 @@ export function normalizedEmail(value: string): string | null {
     : null;
 }
 
-function emailHash(address: string) {
+export function emailHash(address: string) {
   return createHash("sha256").update(address).digest("hex");
 }
 
-async function transaction<T>(
+export async function transaction<T>(
   pool: Pool,
   use: (client: PoolClient) => Promise<T>,
 ) {
@@ -318,6 +318,13 @@ export function memberEmailAccess(
         await client.query(
           "UPDATE member_email_links SET consumed_at=clock_timestamp() WHERE principal_id=$1 AND consumed_at IS NULL",
           [principal.id],
+        );
+        // PWD-05: this fresh email session may replace a forgotten password.
+        await client.query(
+          `INSERT INTO member_password_reset_windows(principal_id,token_hash,expires_at)
+           VALUES($1,$2,clock_timestamp()+INTERVAL '30 minutes')
+           ON CONFLICT(principal_id) DO UPDATE SET token_hash=EXCLUDED.token_hash,expires_at=EXCLUDED.expires_at`,
+          [principal.id, newHash],
         );
         return { kind: "signed_in" as const, token: newToken };
       });

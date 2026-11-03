@@ -1,4 +1,5 @@
 import { escape, hidden, page } from "./views.ts";
+import { portalActions } from "./backend-portal-presentation.ts";
 import { defaultWindow } from "./staff-window.ts";
 import {
   SAMPLE_ASSIGNMENT_PATH as base,
@@ -14,7 +15,11 @@ import {
 } from "./sample-assignment-values.ts";
 
 const notice = `<p class="eyebrow">PRIVATE FEEDBACK</p><p>This assigns access to one exact consented source version. It is not qualified review or funded service. It does not provide staff credentials, review minutes or access to other samples.</p>`;
-const navigation = `<p><a href="${base}">Private sample assignments</a> · <a href="/staff">Your staff tools</a> · <a href="/learn">Your learning space</a></p>`;
+const navigation = portalActions([
+  [base, "Private sample assignments"],
+  ["/staff", "Your staff tools"],
+  ["/learn", "Your learning space"],
+]);
 const alert = (message: string) => `<p role="alert">${escape(message)}</p>`;
 const time = (value: string) =>
   `<time datetime="${escape(value)}">${escape(value)}</time>`;
@@ -125,7 +130,12 @@ export function reviewerSampleReference(
 ): string {
   return page(
     "Your reviewer reference",
-    `<section class="reading"><h1>Your reviewer reference</h1><p>Share this exact reference with your trusted local administrator for one private sample version. It is not a sign-in credential and does not itself grant access or establish qualification.</p><dl><dt>Your reviewer reference</dt><dd data-reviewer-reference>${escape(reference.reviewerId)}</dd><dt>Credential expires at (UTC)</dt><dd>${time(reference.expiresAt)}</dd></dl><p>An administrator must explicitly confirm a finite exact assignment. Current role, source permission and exact grants still govern later access.</p><p><a href="/staff">Your staff tools</a> · <a href="/learn">Your learning space</a></p></section>`,
+    `<section class="reading"><h1>Your reviewer reference</h1><p>Share this exact reference with your trusted local administrator for one private sample version. It is not a sign-in credential and does not itself grant access or establish qualification.</p><dl><dt>Your reviewer reference</dt><dd data-reviewer-reference>${escape(reference.reviewerId)}</dd><dt>Credential expires at (UTC)</dt><dd>${time(reference.expiresAt)}</dd></dl><p>An administrator must explicitly confirm a finite exact assignment. Current role, source permission and exact grants still govern later access.</p>${portalActions(
+      [
+        ["/staff", "Your staff tools"],
+        ["/learn", "Your learning space"],
+      ],
+    )}</section>`,
   );
 }
 

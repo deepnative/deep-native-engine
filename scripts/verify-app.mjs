@@ -168,6 +168,7 @@ function run(command, args, env = process.env) {
   report.commands.push({
     command: [command, ...args].join(" "),
     start,
+    finished: new Date().toISOString(),
     exitStatus: result.status,
     child,
   });

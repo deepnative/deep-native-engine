@@ -36,5 +36,5 @@ BEGIN
  END IF;
  RETURN NEW;
 END $$;
-INSERT INTO schema_migrations(version) VALUES(89) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(91) ON CONFLICT DO NOTHING;
 COMMIT;

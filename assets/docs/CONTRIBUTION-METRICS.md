@@ -15,7 +15,7 @@ Migration 088 adds `contribution_events`. Database triggers on `member_proposals
 | `source_withdrawn`  | The owner withdraws the proposal itself                                                                          | member                                  |
 | `sharing_withdrawn` | Member display of a published revision ends, with cause `owner` or `source_change`                               | member, or `system` for a source change |
 
-Reads, quarantine, drafts and automated output are not events. Migration 089 (#623) records `source_withdrawn` only for a submitted revision: withdrawing a private draft, or a revision edited after a change request and not resubmitted, records nothing. When an owner withdraws a shared proposal, its display ends with cause `owner`; `source_change` is kept for moderator rejection and owner edits. An event stores the proposal, revision, owner, workspace, kind, outcome or cause, acting authority, origin (`member` or `sample`), workflow version, display permission version, source table and source row, and time. It never stores proposal text, feedback, attribution, staff identifiers or credentials.
+Reads, quarantine, drafts and automated output are not events. Migration 091 (#623) records `source_withdrawn` only for a submitted revision: withdrawing a private draft, or a revision edited after a change request and not resubmitted, records nothing. When an owner withdraws a shared proposal, its display ends with cause `owner`; `source_change` is kept for moderator rejection and owner edits. An event stores the proposal, revision, owner, workspace, kind, outcome or cause, acting authority, origin (`member` or `sample`), workflow version, display permission version, source table and source row, and time. It never stores proposal text, feedback, attribution, staff identifiers or credentials.
 
 Measurement starts at the time recorded in `contribution_metrics_cutoff` when migration 088 runs. Earlier history is incomplete, not zero, and is not reconstructed.
 
@@ -36,7 +36,7 @@ Withdrawal keeps the minimal event history for the retained owner. Deleting the 
 ## Evidence
 
 - Unit: `tests/unit/contribution-metrics.test.ts` covers the 19/20 contributor and 4/5 owner boundaries, band edges, the share complement, malformed aggregates and the report's rendering.
-- Real PostgreSQL: `tests/integration/contribution-metrics.test.ts` covers CM122-01 to CM122-09. Six of the first seven failed on `main` `2fd30a8` first; CM122-06 guards existing denial. CM122-08/09 failed on `main` `784d937` before migration 089.
+- Real PostgreSQL: `tests/integration/contribution-metrics.test.ts` covers CM122-01 to CM122-09. Six of the first seven failed on `main` `2fd30a8` first; CM122-06 guards existing denial. CM122-08/09 failed on `main` `784d937` before migration 091.
 - Browser: journey L283 in `tests/e2e/contribution-metrics.spec.ts`.
 
 Rollback: revert the application change and keep migration 088. The tables, triggers and the revocation marker in `revoke_changed_proposal_publications` do not change existing proposal behaviour.

@@ -9,6 +9,11 @@ import type {
   AdministratorConsoleResult,
 } from "../../src/administrator-entry.ts";
 import { csrf, COOKIE } from "../../src/session.ts";
+import {
+  expectPortalActions,
+  mainHtml,
+  portalActionRows,
+} from "../support/portal-layout.ts";
 const listeners = new WeakMap<express.Express, Promise<Server>>();
 const ownedServers: Promise<Server>[] = [];
 async function http(application: express.Express) {
@@ -418,4 +423,93 @@ it("NAME03/05 names are primary, escaped and distinguishable without exposing pr
   for (const member of f.state.directory.value.members)
     expect(response.text).toContain(member.id);
   expect(response.text).not.toContain("<Sam>");
+});
+it("ADMIN-LAYOUT-01 groups session controls and tool links as spaced button rows", async () => {
+  const page = await (
+    await http(fixture().app)
+  )
+    .get("/admin")
+    .set("Cookie", `${COOKIE}=${token}`);
+  expect(page.status).toBe(200);
+  const main = mainHtml(page.text);
+  expect(main).toContain('<div class="portal-page">');
+  expectPortalActions(page.text, [
+    ["/operator", "Administration console"],
+    ["/operator/invoices", "Courses and invoices"],
+    ["/operator/coaching", "Monthly coaching"],
+    ["/staff", "Staff tools"],
+    ["/account", "My learning account"],
+  ]);
+  const session = portalActionRows(page.text).find((row) =>
+    row.includes('action="/admin/enter"'),
+  );
+  expect(session).toContain('action="/admin/end"');
+  expect(session).toContain(
+    '<button class="secondary" type="submit">End administration for this sign-in</button>',
+  );
+  expect(main.match(/<section class="portal-card"/g)).toHaveLength(3);
+  expect(
+    portalActionRows(
+      (await (await http(fixture().app)).get("/admin")).text,
+    ).join(""),
+  ).toContain('href="/email/sign-in" class="button secondary">Email sign-in');
+});
+it("ADMIN-LAYOUT-02 separates console areas into cards with button actions and wrapping references", async () => {
+  const f = fixture({ billing: true }),
+    id = "11111111-1111-4111-8111-111111111111",
+    member = {
+      id,
+      displayName: "Invented",
+      background: "explorer",
+      goal: "everyday",
+    };
+  f.state.directory = {
+    kind: "ready",
+    value: {
+      members: [member],
+      courses: [],
+      selected: { member, enrollments: [], plans: [], invoices: [] },
+    },
+  };
+  const get = async (app = f.app) =>
+    (
+      await (
+        await http(app)
+      )
+        .get("/operator")
+        .set("Cookie", `dne_staff=${credential}`)
+    ).text;
+  const selected = await get();
+  const main = mainHtml(selected);
+  expect(main).toContain('<div class="portal-page administrator-console">');
+  for (const area of ["learners", "courses", "invoices"])
+    expect(main).toContain(`<section class="portal-card" id="${area}"`);
+  expect(main).toContain(
+    '<section class="portal-card" aria-labelledby="selected-member">',
+  );
+  expect(main).toContain(
+    '<nav class="portal-actions" aria-label="Administration sections">',
+  );
+  expect(main).toContain(
+    `<p class="portal-reference">Account reference: <code>${id}</code></p>`,
+  );
+  expect(main).toContain(
+    '<form class="portal-search" method="get" action="/operator">',
+  );
+  expectPortalActions(selected, [
+    ["#learners", "Learners"],
+    [`/operator/invoices?ownerId=${id}`, "Compose courses for this learner"],
+    [`/operator/coaching/${id}`, "Monthly coaching and rates"],
+    ["/operator/invoices", "Courses and invoices"],
+    ["/operator/coaching", "Monthly coaching"],
+    ["/admin", "Administrator session"],
+    ["/account", "My learning account"],
+  ]);
+  expect(main).toContain(
+    `<a href="/operator/invoices?ownerId=${id}" class="button">Compose courses`,
+  );
+  f.state.directory = { kind: "ready", value: { members: [], courses: [] } };
+  const plain = mainHtml(await get());
+  expect(plain).not.toContain("selected-member");
+  expect(plain.match(/<section class="portal-card"/g)).toHaveLength(3);
 });

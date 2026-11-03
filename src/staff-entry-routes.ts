@@ -20,6 +20,7 @@ import {
 } from "./staff-entry-integrity.ts";
 import { CIRCLES } from "./circles.ts";
 import { escape, page, hidden } from "./views.ts";
+import { portalActions } from "./backend-portal-presentation.ts";
 export interface StaffTools {
   library: boolean;
   worklist: boolean;
@@ -203,7 +204,7 @@ function links(role: StaffRole, tools: StaffTools) {
     ]);
   const available = choices.filter(([enabled]) => enabled);
   return available.length
-    ? `<ul>${available.map(([, url, label]) => `<li><a href="${escape(url)}">${escape(label)}</a></li>`).join("")}</ul>`
+    ? `<ul class="portal-tools">${available.map(([, url, label]) => `<li><a href="${escape(url)}" class="button secondary">${escape(label)}</a></li>`).join("")}</ul>`
     : hostingText(
         "<p>No browser tools are available for your current role in this local preview.</p>",
         "<p>No browser tools are available for your current role in this hosted service.</p>",
@@ -229,14 +230,17 @@ export function mountStaffEntryRoutes(
   tools: StaffTools,
 ) {
   const fail = (res: Response, status: number) =>
-    res
-      .status(status)
-      .send(
-        page(
-          "Staff access unavailable",
-          `<section class="reading"><h1>Staff access unavailable</h1><p>This request could not establish current local staff access. Open a fresh sign-in form. Nothing was renewed or replayed.</p><p><a href="/staff/sign-in">Open staff sign-in</a> · <a href="/learn">Your learning space</a></p></section>`,
-        ),
-      );
+    res.status(status).send(
+      page(
+        "Staff access unavailable",
+        `<section class="reading"><h1>Staff access unavailable</h1><p>This request could not establish current local staff access. Open a fresh sign-in form. Nothing was renewed or replayed.</p>${portalActions(
+          [
+            ["/staff/sign-in", "Open staff sign-in"],
+            ["/learn", "Your learning space"],
+          ],
+        )}</section>`,
+      ),
+    );
   const cookies = (req: Request) => ({
     staff: staffCookie(req.headers.cookie),
     nonce: uniqueCookie(req.headers.cookie, ENTRY_COOKIE),
@@ -331,7 +335,12 @@ export function mountStaffEntryRoutes(
         return fail(res, result?.kind === "denied" ? 403 : 503);
       const body = page(
         "Your local staff tools",
-        `<section class="reading"><p class="eyebrow">PRIVATE LOCAL STAFF</p><h1>Your local staff tools</h1><p>Current role: ${labels[result.role]}.</p><p>Each destination checks your current role and exact existing grants. Opening these tools grants no private work, starts no effort and allocates no test minutes. Sample activity is not qualified service.</p>${links(result.role, tools)}${signout(issueNonce(res))}<p>Staff signout affects this browser only. Your learner access and saved progress remain.</p><p><a href="/learn">Your learning space</a> · <a href="/staff/sign-in">Use another staff credential</a></p></section>`,
+        `<div class="portal-page"><div class="portal-intro"><p class="eyebrow">PRIVATE LOCAL STAFF</p><h1>Your local staff tools</h1><p>Current role: ${labels[result.role]}.</p><p>Each destination checks your current role and exact existing grants. Opening these tools grants no private work, starts no effort and allocates no test minutes. Sample activity is not qualified service.</p></div><section class="portal-card"><h2>Available tools</h2>${links(result.role, tools)}</section><section class="portal-card"><h2>Staff session</h2>${signout(issueNonce(res))}<p>Staff signout affects this browser only. Your learner access and saved progress remain.</p>${portalActions(
+          [
+            ["/learn", "Your learning space"],
+            ["/staff/sign-in", "Use another staff credential"],
+          ],
+        )}</section></div>`,
       );
       if (
         !Number.isFinite(result.deadline) ||
