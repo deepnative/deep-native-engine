@@ -48,7 +48,7 @@ import type { EventAttendanceRuntimeStore } from "./event-attendance.ts";
 import type { EventCancellationStore } from "./event-cancellation-values.ts";
 import { mountCircleGrantRoutes } from "./circle-grant-routes.ts";
 import type { CircleGrantAdminStore } from "./circle-grant-values.ts";
-import { selectedStaffToken } from "./staff-entry-selection.ts";
+import { selectedStaffToken, staffFamily } from "./staff-entry-selection.ts";
 import { mountReviewerWorklistRoutes } from "./reviewer-worklist-routes.ts";
 import type { ReviewerWorklistStore } from "./reviewer-worklist.ts";
 import { mountReviewTimeGrantRoutes } from "./review-time-grant-routes.ts";
@@ -67,6 +67,10 @@ import cookieParser from "cookie-parser";
 import { withHosting, hostingText } from "./hosting-presentation.ts";
 import { withAdministration } from "./administration-presentation.ts";
 import { withCurrentPath } from "./navigation-presentation.ts";
+import {
+  sharingHeaderSession,
+  withMembership,
+} from "./membership-presentation.ts";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { COOKIE, cookieOptions, token, csrf, validCsrf } from "./session.ts";
@@ -358,7 +362,7 @@ function currentStarter(
 }
 
 export function app(
-  store: Store,
+  memberStore: Store,
   options: {
     administratorEntry?: AdministratorEntry;
     localStaffEntry?: boolean;
@@ -443,6 +447,7 @@ export function app(
     uploadAdmission?: UploadAdmissionStore;
   },
 ) {
+  const store = sharingHeaderSession(memberStore);
   const app = express();
   const assignmentAttemptPage = (
     ...args: Parameters<typeof assignmentAttemptView>
@@ -670,6 +675,32 @@ export function app(
     res.locals.token = session;
     res.locals.csrf = csrf(session, options.secret);
     next();
+  });
+  // NAV-08: the shared header offers member links only to signed-in members.
+  // Staff pages keep their own access and never load member state for it.
+  app.use((req, _res, next) => {
+    const signInAvailable = Boolean(options.memberEmail);
+    const member: unknown = req.cookies[COOKIE];
+    if (
+      !["GET", "HEAD"].includes(req.method) ||
+      req.path.startsWith("/api/") ||
+      /^\/admin(?:\/|$)/i.test(req.path) ||
+      staffFamily(req.path)
+    )
+      return withMembership({ signedIn: undefined, signInAvailable }, next);
+    if (typeof member !== "string" || !/^[a-f0-9]{64}$/.test(member))
+      return withMembership({ signedIn: false, signInAvailable }, next);
+    const result = Promise.resolve().then(() => memberStore.session(member));
+    const lookup = { token: member, result, used: false };
+    result.then(
+      (current) =>
+        withMembership(
+          { signedIn: current?.kind === "active", signInAvailable, lookup },
+          next,
+        ),
+      () =>
+        withMembership({ signedIn: undefined, signInAvailable, lookup }, next),
+    );
   });
   if (options.learningWorkspace)
     mountLearningWorkspaceRoutes(app, options.learningWorkspace, options);
