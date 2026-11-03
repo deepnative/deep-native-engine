@@ -95,14 +95,15 @@ function issuedToken(response: request.Response) {
   return cookies.join(";").match(new RegExp(`${COOKIE}=([a-f0-9]{64})`))?.[1];
 }
 
-it("PWD-01 lets only a verified member set a hashed password from My account", async () => {
+it("PWD-01 sets a hashed password only for a member with a sign-in email", async () => {
+  // SIGNUP-01 (#637): a member without any email is offered email + password.
   const unverified = await member();
   const blocked = await request(server)
     .get("/account/password")
     .set("Host", "127.0.0.1:3000")
     .set("Cookie", `${COOKIE}=${unverified.token}`);
-  expect(blocked.text).toContain("Link and verify an email first");
-  expect(blocked.text).not.toContain('name="password"');
+  expect(blocked.text).toContain("Add a sign-in email and password");
+  expect(blocked.text).toContain('name="email"');
   expect(
     (
       await post(

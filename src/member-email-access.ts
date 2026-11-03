@@ -101,7 +101,17 @@ export async function signOutMember(
       "SELECT 1 FROM member_email_identities WHERE principal_id=$1 FOR UPDATE",
       [principal.id],
     );
-    if (!linked.rowCount && !acknowledgeAccessLoss) return "recovery_required";
+    // A password with an unverified sign-in email is also a way back.
+    const returnable =
+      linked.rowCount ||
+      (
+        await client.query(
+          `SELECT 1 FROM member_login_emails e JOIN member_passwords m ON m.principal_id=e.principal_id
+           WHERE e.principal_id=$1 FOR UPDATE OF e, m`,
+          [principal.id],
+        )
+      ).rowCount;
+    if (!returnable && !acknowledgeAccessLoss) return "recovery_required";
     // No usable replacement bearer leaves this transaction. Keep durable
     // identity, expiry and existing email challenges for deliberate recovery.
     const discardedHash = hash(randomBytes(32).toString("hex"));
@@ -158,7 +168,9 @@ export function memberEmailAccess(
       } else {
         const identity = (
           await client.query<{ principal_id: string }>(
-            "SELECT principal_id FROM member_email_identities WHERE email_hash=$1",
+            `SELECT principal_id FROM member_email_identities WHERE email_hash=$1
+             UNION ALL
+             SELECT principal_id FROM member_login_emails WHERE email_hash=$1`,
             [digest],
           )
         ).rows[0];
@@ -294,6 +306,13 @@ export function memberEmailAccess(
             "UPDATE member_email_links SET consumed_at=clock_timestamp() WHERE token_hash=$1",
             [hash(code)],
           );
+          // SIGNUP-04: the verified owner of an address wins over any
+          // unverified claim to it, and this account's claim is now verified.
+          if (inserted.rowCount)
+            await client.query(
+              "DELETE FROM member_login_emails WHERE email_hash=$1 OR principal_id=$2",
+              [link.email_hash, principal.id],
+            );
           return inserted.rowCount
             ? { kind: "attached" as const }
             : { kind: "unavailable" as const };
@@ -302,7 +321,17 @@ export function memberEmailAccess(
           "SELECT 1 FROM member_email_identities WHERE email_hash=$1 AND principal_id=$2",
           [link.email_hash, principal.id],
         );
-        if (!bound.rowCount) return { kind: "unavailable" as const };
+        if (!bound.rowCount) {
+          const claimed = await client.query(
+            "DELETE FROM member_login_emails WHERE email_hash=$1 AND principal_id=$2 RETURNING 1",
+            [link.email_hash, principal.id],
+          );
+          if (!claimed.rowCount) return { kind: "unavailable" as const };
+          await client.query(
+            "INSERT INTO member_email_identities(email_hash,principal_id) VALUES($1,$2)",
+            [link.email_hash, principal.id],
+          );
+        }
         const newToken = randomBytes(32).toString("hex");
         const newHash = hash(newToken);
         await client.query(
