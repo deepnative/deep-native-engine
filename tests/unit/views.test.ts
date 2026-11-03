@@ -2288,3 +2288,12 @@ it("COPY-597-01 pluralises the elapsed minutes in proposal moderation", () => {
   expect(one).toContain("Elapsed: 1 minute");
   expect(one).not.toContain("1 minutes");
 });
+
+it("UX-605-02 says the progress card counts the starter exercise and points to sample lesson activity", () => {
+  const html = dashboard(learner, undefined, "token");
+  expect(html).toContain("<p>starter exercise completed</p>");
+  expect(html).toContain(
+    'Sample lessons are saved in your <a href="/progress">private learning activity</a>.',
+  );
+  expect(html).toContain('aria-label="Exercises completed" value="0" max="1"');
+});
