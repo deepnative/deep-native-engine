@@ -328,6 +328,13 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             [memberId],
           )
         ).rows;
+        const displayName =
+          (
+            await tx.query<{ displayName: string | null }>(
+              'SELECT display_name AS "displayName" FROM learners WHERE id=$1',
+              [memberId],
+            )
+          ).rows[0]?.displayName ?? null;
         const rate =
           rates
             .filter((r) => r.effectiveMonth <= selected)
@@ -340,6 +347,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           kind: "ready",
           value: {
             ownerId: memberId,
+            displayName,
             month: selected,
             today,
             rates,

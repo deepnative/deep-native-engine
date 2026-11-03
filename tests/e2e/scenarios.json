@@ -2526,10 +2526,10 @@
     },
     {
       "id": "L284",
-      "actor": "Member and verified owner administrator",
-      "preconditions": "Invented member account; approved owner identity verified by the ordinary email link; sample-mode invoicing",
-      "steps": "HOUR01/04/07 through menus only: owner opens Administration, enters administration, selects the learner by name, opens Monthly coaching and rates and sets a rate; member opens Top up hours, saves and submits a month; owner opens the pending month from Monthly coaching and issues it; member opens Account, Courses and invoices",
-      "expected": "Each step is reachable from visible navigation, the rate and duration produce the exact subtotal, the member sees their own sample invoice, nothing is payable and no page scrolls horizontally",
+      "actor": "Student and verified owner administrator",
+      "preconditions": "Invented student registered in the browser; approved owner identity verified by the ordinary email link; sample-mode invoicing with simulated email",
+      "steps": "HOUR01/03/04/07/09 through menus: student registers, verifies email, signs out and signs back in; owner enters administration, selects the learner by name and sets a rate for last month; student opens Top up hours, chooses last month, saves and requests the invoice; owner opens it from Pending months, reviews and issues it, simulates the invoice email; student sees the amount due and payment instructions; owner records the full offline payment; student sees it paid",
+      "expected": "Every step is reachable from visible navigation with exact amounts, the owner sees the member by name, email status is honest, the student sees balance CAD 0.00 and Paid, and every page avoids sideways scrolling and controls under 40px on desktop and mobile",
       "issues": [611],
       "critical": true
     }
