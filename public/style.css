@@ -1342,15 +1342,6 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   margin-top: -12px;
 }
 
-.administrator-console {
-  overflow-wrap: anywhere;
-}
-
-.administrator-console > section {
-  padding-left: 0;
-  margin-block: 32px;
-}
-
 /* Path choices share the reader's home, briefcase and code vocabulary. */
 .welcome-page .path-choices {
   border: 0;
@@ -1677,5 +1668,216 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   }
   .hours-summary dd {
     font-size: 22px;
+  }
+}
+
+/* Backend portal: administration entry, console, billing, coaching and staff
+   tools share the account-page pattern. A readable intro, navigation as a
+   wrapped row of buttons, each area in its own titled card, wrapping
+   references and touch-sized controls. Member pages are not affected. */
+.portal-page {
+  max-width: 880px;
+  margin: 42px 0 70px;
+  overflow-wrap: anywhere;
+}
+.portal-intro h1 {
+  font-size: clamp(34px, 5vw, 52px);
+}
+.portal-intro p {
+  max-width: 68ch;
+}
+.portal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+  margin: 20px 0 0;
+}
+.portal-actions form {
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+/* Form buttons in an action row line up with link buttons beside them. */
+.portal-actions form button {
+  margin: 0;
+}
+.portal-actions .button,
+.portal-actions button {
+  text-align: center;
+  white-space: normal;
+}
+.portal-card {
+  margin-top: 24px;
+  padding: 24px 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  overflow-wrap: anywhere;
+}
+.portal-card h2 {
+  font-size: 22px;
+  margin-bottom: 12px;
+}
+.portal-card h3 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+.portal-card > :last-child,
+.portal-card > ul > li:last-child,
+.portal-columns > div > :last-child {
+  margin-bottom: 0;
+}
+.portal-card ul:not(.member-directory, .portal-tools, .portal-list) {
+  padding-left: 20px;
+}
+.portal-card li {
+  margin-bottom: 6px;
+  line-height: 1.6;
+}
+.portal-card li > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.portal-card .member-directory li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.portal-summary {
+  color: var(--ink);
+  font-weight: 650;
+}
+.portal-reference code,
+.portal-page code,
+.portal-workspace code {
+  overflow-wrap: anywhere;
+}
+.portal-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 20px;
+  margin: 20px 0;
+}
+.portal-search {
+  max-width: 560px;
+}
+.portal-search > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.portal-search input {
+  flex: 1 1 240px;
+  min-height: 46px;
+  margin: 0;
+}
+.portal-search + p {
+  margin-top: 14px;
+}
+.portal-tools,
+.portal-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.portal-tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+  gap: 10px;
+}
+.portal-tools li {
+  margin: 0;
+}
+.portal-tools .button {
+  width: 100%;
+  height: 100%;
+  justify-content: flex-start;
+  text-align: left;
+}
+.portal-list li {
+  padding: 10px 0;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+.portal-list li:last-child {
+  border-bottom: 0;
+}
+.portal-list p {
+  margin: 0;
+}
+.portal-footer {
+  margin-top: 32px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.portal-card form + form,
+.portal-card form + p,
+.portal-card p + form {
+  margin-top: 16px;
+}
+.portal-workspace {
+  overflow-wrap: anywhere;
+  padding-block: 12px 56px;
+}
+.portal-workspace > .portal-actions {
+  margin-bottom: 8px;
+}
+.portal-workspace .portal-card form {
+  max-width: none;
+}
+.portal-workspace > .hours-dashboard {
+  margin-top: 32px;
+}
+@media (max-width: 760px) {
+  .portal-page {
+    margin: 28px 0 48px;
+  }
+  .portal-card {
+    padding: 20px 18px;
+  }
+}
+@media (max-width: 520px) {
+  .portal-actions > *,
+  .portal-actions form button {
+    flex: 1 1 100%;
+  }
+}
+
+/* Sign-in page: password and email-link choices as two narrow cards. */
+.sign-in-page {
+  max-width: 560px;
+  margin: 42px 0 70px;
+}
+.sign-in-page h1 {
+  font-size: clamp(34px, 5vw, 52px);
+}
+.sign-in-option {
+  margin-top: 24px;
+  padding: 24px 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.sign-in-option h2 {
+  font-size: 22px;
+  margin-bottom: 12px;
+}
+.sign-in-option form button {
+  margin-top: 8px;
+}
+.sign-in-option > :last-child {
+  margin-bottom: 0;
+}
+.sign-in-page .form-error {
+  color: var(--danger, #a3261b);
+  font-weight: 650;
+}
+@media (max-width: 760px) {
+  .sign-in-page {
+    margin: 28px 0 48px;
+  }
+  .sign-in-option {
+    padding: 20px 18px;
   }
 }

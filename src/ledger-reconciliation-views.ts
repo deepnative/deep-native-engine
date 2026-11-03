@@ -1,4 +1,5 @@
 import { escape, page } from "./views.ts";
+import { portalActions } from "./backend-portal-presentation.ts";
 import type { LedgerReconciliationSnapshot } from "./ledger-reconciliation.ts";
 
 const categoryNames = {
@@ -155,6 +156,11 @@ export function ledgerReconciliationUnavailablePage(
   }[kind];
   return page(
     "Ledger report unavailable",
-    `<section class="error-page"><h1>Ledger report unavailable</h1><p role="alert">${message}</p><p><a href="/operator/ledger-reconciliation">Open the report</a> · <a href="/operator/experts">Expert coverage registry</a></p></section>`,
+    `<section class="error-page"><h1>Ledger report unavailable</h1><p role="alert">${message}</p>${portalActions(
+      [
+        ["/operator/ledger-reconciliation", "Open the report"],
+        ["/operator/experts", "Expert coverage registry"],
+      ],
+    )}</section>`,
   );
 }

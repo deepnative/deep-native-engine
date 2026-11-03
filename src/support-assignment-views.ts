@@ -1,4 +1,5 @@
 import { escape, hidden, page } from "./views.ts";
+import { portalActions } from "./backend-portal-presentation.ts";
 import { defaultWindow } from "./staff-window.ts";
 import type {
   AssignmentReference,
@@ -19,7 +20,11 @@ export interface AssignmentRecovery {
 }
 const base = "/operator/support-assignment";
 const notice = `<p class="eyebrow">PRIVATE SUPPORT</p><p>This assigns access to one private support request. It does not promise staffed hours, response time, qualified review, paid service or effort minutes.</p>`;
-const navigation = `<p><a href="${base}">Support request assignments</a> · <a href="/staff">Your staff tools</a> · <a href="/learn">Your learning space</a></p>`;
+const navigation = portalActions([
+  [base, "Support request assignments"],
+  ["/staff", "Your staff tools"],
+  ["/learn", "Your learning space"],
+]);
 function historyPath(requestId: string, key?: string, after?: string) {
   let path = `${base}/history?requestId=${encodeURIComponent(requestId)}`;
   if (key !== undefined) path += `&key=${encodeURIComponent(key)}`;
@@ -57,7 +62,12 @@ export function assignmentReferencePage(
 ): string {
   return page(
     "My local assignment ID",
-    `<section class="reading"><h1>My local assignment ID</h1><p>Share this exact reference with your trusted local administrator for a specific support request. It is not a sign-in credential and does not itself grant access.</p><dl><dt>My assignment ID</dt><dd data-assignment-id>${escape(reference.staffId)}</dd><dt>Credential expires at (UTC)</dt><dd>${time(reference.expiresAt)}</dd></dl><p>An administrator must confirm an exact finite assignment. Your current role, credential and that grant still govern access.</p><p><a href="/staff">Your staff tools</a> · <a href="/learn">Your learning space</a></p></section>`,
+    `<section class="reading"><h1>My local assignment ID</h1><p>Share this exact reference with your trusted local administrator for a specific support request. It is not a sign-in credential and does not itself grant access.</p><dl><dt>My assignment ID</dt><dd data-assignment-id>${escape(reference.staffId)}</dd><dt>Credential expires at (UTC)</dt><dd>${time(reference.expiresAt)}</dd></dl><p>An administrator must confirm an exact finite assignment. Your current role, credential and that grant still govern access.</p>${portalActions(
+      [
+        ["/staff", "Your staff tools"],
+        ["/learn", "Your learning space"],
+      ],
+    )}</section>`,
   );
 }
 export function assignmentConfirmPage(

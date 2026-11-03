@@ -109,7 +109,7 @@ it("MR-03 uses the selected actor and handles query, denial, failure and deliber
     expect(failed.text).toContain("No partial counts are shown");
     expect(failed.text).not.toContain("private database diagnostic");
     expect(failed.text).toContain(
-      'href="/operator/metrics/report">Reload snapshot',
+      'href="/operator/metrics/report" class="button secondary">Reload snapshot',
     );
     expect(failed.text).not.toContain('data-metric="members"');
     await request(server).get("/operator/metrics/report").expect(200);
