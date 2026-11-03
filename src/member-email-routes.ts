@@ -4,6 +4,7 @@ import type { MemberEmailAccess } from "./member-email-access.ts";
 import { COOKIE, cookieOptions } from "./session.ts";
 import { STAFF_COOKIE, SIGNED_OUT } from "./staff-entry-selection.ts";
 import { page } from "./views.ts";
+import { withMembership } from "./membership-presentation.ts";
 import { passwordSignInForm } from "./member-password-routes.ts";
 import type { MemberPasswordAccess } from "./member-password-access.ts";
 
@@ -108,10 +109,15 @@ export function mountMemberEmailRoutes(
         );
     res.clearCookie(COOKIE, cookieOptions(origin));
     res.cookie(STAFF_COOKIE, SIGNED_OUT, cookieOptions(origin));
+    // NAV-09/10: this response is already signed out, header included.
     return res.send(
-      page(
-        "Signed out",
-        '<section class="error-page"><h1>Signed out</h1><p>Your saved records were not deleted. This access token, including any copied browser cookies, no longer opens them. Return with a previously verified email, if you linked one. Without it, you cannot recover this account. No email was sent.</p><p><a href="/email/sign-in">Sign back in by email</a></p></section>',
+      withMembership(
+        { signedIn: false, signInAvailable: Boolean(access || password) },
+        () =>
+          page(
+            "Signed out",
+            `<section class="error-page"><h1>Signed out</h1><p>Your saved records were not deleted. This access token, including any copied browser cookies, no longer opens them. ${password ? "Sign in again with your email and password, or with an email link." : "Return with a previously verified email, if you linked one. Without it, you cannot recover this account."} No email was sent.</p><p class="account-links"><a class="button" href="/email/sign-in">Sign in</a> <a class="button secondary" href="/">Start a new learning path</a></p></section>`,
+          ),
       ),
     );
   });

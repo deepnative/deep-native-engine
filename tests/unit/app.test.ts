@@ -6749,6 +6749,74 @@ it("NAV-05 and NAV-06 offer Administration only where administrator entry exists
   }
   expect(navigation(shown!.text)).toContain('href="/admin">Administration</a>');
 });
+it("NAV-09/10 keeps the signed-out header on form responses and offers sign-in buttons after sign-out", async () => {
+  const db = storage();
+  const options = { origin, secret: "navigation-test", localStaffEntry: true };
+  const signOut = vi.fn().mockResolvedValue("signed_out");
+  const application = app(db, {
+    ...options,
+    memberEmail: { signOut } as unknown as MemberEmailAccess,
+    memberSignOut: signOut,
+  });
+  const navigation = (html: string) =>
+    html.match(
+      /<nav[^>]*aria-label="Main navigation"[^>]*>([\s\S]*?)<\/nav>/,
+    )?.[1] ?? "";
+  const visitor = "c".repeat(64);
+  const post = (path: string, body: Record<string, string>) =>
+    withLoopback(application, (s) =>
+      request(s)
+        .post(path)
+        .set("Host", host)
+        .set("Origin", origin)
+        .set("Cookie", `${COOKIE}=${visitor}`)
+        .type("form")
+        .send({ ...body, csrf: csrf(visitor, "navigation-test") }),
+    );
+  // A signed-out visitor's invalid start form keeps the signed-out header.
+  const invalid = await post("/start", { display_name: "" });
+  expect(invalid.status).toBe(422);
+  expect(navigation(invalid.text)).toBe(
+    '<a href="/learn">Learning</a><a href="/email/sign-in">Sign in</a>',
+  );
+  // An active member signs out: the response is already a signed-out page.
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
+  const out = await post("/account/sign-out", {});
+  expect(out.text).toContain("Signed out");
+  expect(navigation(out.text)).toBe(
+    '<a href="/learn">Learning</a><a href="/email/sign-in">Sign in</a>',
+  );
+  const main = out.text.match(/<main[^>]*>([\s\S]*?)<\/main>/)?.[1] ?? "";
+  expect(main).toContain('class="button" href="/email/sign-in">Sign in</a>');
+  expect(main).toContain(
+    'class="button secondary" href="/">Start a new learning path</a>',
+  );
+});
+it("FOOTER-01 lists footer links as whole items without dot separators", async () => {
+  const response = await withLoopback(
+    app(storage(), { origin, secret: "footer-test" }),
+    (s) => request(s).get("/readiness").set("Host", host),
+  );
+  const footer =
+    response.text.match(/<footer[^>]*>([\s\S]*?)<\/footer>/)?.[1] ?? "";
+  expect(footer).toContain(
+    '<nav class="footer-links" aria-label="Site links">',
+  );
+  expect(footer).not.toContain(" · ");
+  expect(footer).not.toMatch(/<\/a>\.<\/span>/);
+  for (const label of [
+    "Explore programs",
+    "My courses",
+    "Local circles",
+    "Workflow demonstrations",
+    "Integration readiness",
+  ])
+    expect(footer).toContain(`>${label}</a>`);
+});
 it("NAV-08 shows signed-out visitors Sign in instead of member account links", async () => {
   const db = storage();
   const options = { origin, secret: "navigation-test", localStaffEntry: true };

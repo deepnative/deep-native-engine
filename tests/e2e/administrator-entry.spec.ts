@@ -228,6 +228,16 @@ test("[L269] both verified owner identities explicitly enter finite billing admi
       await expect(
         page.getByRole("button", { name: "Enter administration" }),
       ).toBeVisible();
+      // ADMIN-LAYOUT-01: Enter and End share one row and line up (#639).
+      const [enter, end] = await Promise.all(
+        ["Enter administration", "End administration for this sign-in"].map(
+          (name) => page.getByRole("button", { name }).boundingBox(),
+        ),
+      );
+      // Same row (desktop) or a clean stack (narrow), never half offset.
+      expect(
+        Math.abs(enter!.y - end!.y) <= 1 || end!.y >= enter!.y + enter!.height,
+      ).toBe(true);
       await page.getByRole("button", { name: "Enter administration" }).click();
       await expect(
         page.getByRole("heading", { name: "Administration console" }),
