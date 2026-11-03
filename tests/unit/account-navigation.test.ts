@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { starterGuidanceExample } from "../../src/starter-guidance-views.ts";
 import { withAdministration } from "../../src/administration-presentation.ts";
+import { withCurrentPath } from "../../src/navigation-presentation.ts";
 import { accountPage, page } from "../../src/views.ts";
 
 it("NAV-01 exposes account, logout, coaching and administration in shared navigation", () => {
@@ -73,3 +74,24 @@ it.each(["linked", "unlinked", "unavailable"] as const)(
     expect(withAdministration(true, render)).toContain('href="/admin"');
   },
 );
+it.each([
+  ["/learn", "Learning"],
+  ["/learn/notebooks", "Learning"],
+  ["/account", "Account"],
+  ["/account/purchases", "Account"],
+  ["/account/coaching", "Top up hours"],
+  ["/account/coaching/save", "Top up hours"],
+  ["/admin", "Administration"],
+  ["/operator/coaching", "Administration"],
+  ["/account/sign-out", "Sign out"],
+  ["/readiness", null],
+])("NAV-07 marks only the header destination that owns %s", (path, label) => {
+  const html = withCurrentPath(path, () => page("Page", "<h1>Page</h1>"));
+  const current = [...html.matchAll(/aria-current="page">([^<]+)</g)].map(
+    (m) => m[1],
+  );
+  expect(current).toEqual(label ? [label] : []);
+});
+it("NAV-07 marks nothing when rendered outside a request", () => {
+  expect(page("Page", "<h1>Page</h1>")).not.toContain("aria-current");
+});

@@ -209,6 +209,22 @@ it("HOUR04/08/09 admin review shows immutable submitted detail, correction links
     `/account/purchases/invoices/${id}`,
   );
 });
+it("HOUR07 admin review names the member before the secondary account reference", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValueOnce(
+    ready({ ...value, displayName: "Invented <Coaching> member" }),
+  );
+  const named = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(named).toContain(
+    `Member: <strong>Invented &lt;Coaching&gt; member</strong> · account reference <code>${id}</code>`,
+  );
+  f.service.coachingOverview.mockResolvedValueOnce(
+    ready({ ...value, displayName: null }),
+  );
+  expect((await f.get(`/operator/coaching/${id}`)).text).toContain(
+    "Member: <strong>Name needed</strong>",
+  );
+});
 it("HOUR07 rejects query pollution, unknown/body types, absent body, origin and CSRF before mutation", async () => {
   const f = fixture();
   for (const path of [

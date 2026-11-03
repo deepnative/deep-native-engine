@@ -14,12 +14,18 @@ import { migrate, store } from "../../src/store.ts";
 import { simpleInvoiceStore } from "../../src/simple-invoice-store.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
+import { administratorEntry } from "../../src/administrator-entry.ts";
 import { memberEmailAccess } from "../../src/member-email-access.ts";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
 // Verified synthetic staff credentials stay out of traces; screenshots and resource reports contain only invented display data.
 test.use({ trace: "off" });
-async function fixture(browser: Browser, info: TestInfo, enabled = true) {
+async function fixture(
+  browser: Browser,
+  info: TestInfo,
+  enabled = true,
+  ownerEntry = false,
+) {
   const base = process.env.DNE_TEST_DATABASE_URL;
   if (!base || !/^\/dne_test_[a-f0-9]{32}$/.test(new URL(base).pathname))
     throw Error("Generated browser database required");
@@ -84,6 +90,10 @@ async function fixture(browser: Browser, info: TestInfo, enabled = true) {
       staffEntry: staffEntryStore(pool),
       memberEmail: email,
       simpleInvoices: enabled ? invoices : undefined,
+      // Matches runtime sample mode: delivery is simulated, nothing is sent.
+      invoiceSender: enabled ? { send: async () => {} } : undefined,
+      // L284 only: verified owners enter administration through the menu.
+      ...(ownerEntry ? { administratorEntry: administratorEntry(pool) } : {}),
     }),
   );
   const address = server.address();
@@ -99,10 +109,10 @@ async function fixture(browser: Browser, info: TestInfo, enabled = true) {
     contexts.push(c);
     return c.newPage();
   }
-  async function member() {
+  async function member(displayName = "Sample learner") {
     const p = await page();
     await p.goto(origin);
-    await p.getByLabel("Display name").fill("Sample learner");
+    await p.getByLabel("Display name").fill(displayName);
     await p.getByLabel("Your starting point").selectOption("explorer");
     await chooseLearningGoal(p, "everyday");
     await p.getByRole("button", { name: "Start my learning path" }).click();
@@ -125,6 +135,22 @@ async function fixture(browser: Browser, info: TestInfo, enabled = true) {
       .click();
     return p;
   }
+  // An approved owner identity, verified through the ordinary email link.
+  async function owner() {
+    const o = await member("Invented owner");
+    const sent = messages.length;
+    await o.page
+      .getByRole("link", { name: "Link an email", exact: true })
+      .click();
+    await o.page.getByLabel("Email address").fill("tom@deepnative.io");
+    await o.page
+      .getByRole("button", { name: "Send verification link" })
+      .click();
+    await expect.poll(() => messages.length).toBe(sent + 1);
+    await o.page.goto(messages.at(-1)!);
+    await o.page.getByRole("button", { name: "Continue", exact: true }).click();
+    return o;
+  }
   const month = (
     await pool.query<{ month: string }>(
       "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM') AS month",
@@ -143,6 +169,7 @@ async function fixture(browser: Browser, info: TestInfo, enabled = true) {
     page,
     member,
     admin,
+    owner,
     async close(completed: boolean) {
       await Promise.all(contexts.map((c) => c.close()));
       await closeLoopback(server);
@@ -325,6 +352,208 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
     );
     await expect(pending).toBeVisible();
     await expect(pending).toHaveText(`Sample learner · ${pastMonth}`);
+    completed = true;
+  } finally {
+    await f.close(completed);
+  }
+});
+// Layout checks shared by every L284 page: no sideways scrolling, and form
+// controls tall enough to tap comfortably on the current device.
+async function friendly(p: Page, step: string) {
+  await p.waitForLoadState("load");
+  expect(
+    await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    `${step} scrolls sideways`,
+  ).toBe(true);
+  const cramped = await p.evaluate(() =>
+    [
+      ...document.querySelectorAll(
+        "main button, main a.button, main input:not([type=hidden]):not([type=checkbox]), main select",
+      ),
+    ]
+      .filter((e) => {
+        const r = e.getBoundingClientRect();
+        return r.width > 0 && r.height < 40;
+      })
+      .map((e) => e.outerHTML.slice(0, 90)),
+  );
+  expect(cramped, `${step} has controls under 40px`).toEqual([]);
+  await p.screenshot({
+    path: test.info().outputPath(`L284-${step}.png`),
+    fullPage: true,
+  });
+}
+test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a month; a verified owner approves, sends and records payment through menus", async ({
+  browser,
+}, info) => {
+  const f = await fixture(browser, info, true, true);
+  let completed = false;
+  try {
+    const previous = new Date(`${f.month}-01T00:00:00Z`);
+    previous.setUTCMonth(previous.getUTCMonth() - 1);
+    const month = previous.toISOString().slice(0, 7);
+    const menu = (p: Page) =>
+      p.getByRole("navigation", { name: "Main navigation" });
+
+    // 1. Register and verify an email so the student can sign in again.
+    const student = await f.member("Coaching member"),
+      s = student.page;
+    await friendly(s, "student-account");
+    await s.getByRole("link", { name: "Link an email", exact: true }).click();
+    await s
+      .getByLabel("Email address")
+      .fill("coaching-student@example.invalid");
+    await s.getByRole("button", { name: "Send verification link" }).click();
+    await expect.poll(() => f.messages.length).toBe(1);
+    await s.goto(f.messages[0]!);
+    await s.getByRole("button", { name: "Continue", exact: true }).click();
+
+    // 2. Sign out, then sign back in to the same account by email.
+    await menu(s).getByRole("link", { name: "Account", exact: true }).click();
+    await s.getByRole("button", { name: "Sign out", exact: true }).click();
+    await expect(
+      s.getByRole("heading", { name: "Signed out", exact: true }),
+    ).toBeVisible();
+    await friendly(s, "student-signed-out");
+    await s.goto(f.origin + "/email/sign-in");
+    await friendly(s, "student-sign-in");
+    await s
+      .getByLabel("Email address")
+      .fill("coaching-student@example.invalid");
+    await s.getByRole("button", { name: "Send sign-in link" }).click();
+    await expect.poll(() => f.messages.length).toBe(2);
+    await s.goto(f.messages[1]!);
+    await s.getByRole("button", { name: "Continue", exact: true }).click();
+    await menu(s).getByRole("link", { name: "Account", exact: true }).click();
+    await expect(s.locator("code").first()).toHaveText(student.id);
+
+    // 3. The owner enters administration and sets the rate for that month.
+    const owner = await f.owner(),
+      o = owner.page;
+    await menu(o)
+      .getByRole("link", { name: "Administration", exact: true })
+      .click();
+    await friendly(o, "owner-administration");
+    await o.getByRole("button", { name: "Enter administration" }).click();
+    await expect(
+      o.getByRole("heading", { name: "Administration console" }),
+    ).toBeVisible();
+    await friendly(o, "owner-console");
+    await o.getByRole("link", { name: "Coaching member", exact: true }).click();
+    await expect(
+      o.getByRole("heading", { name: "Selected learner" }),
+    ).toBeVisible();
+    await o
+      .getByRole("link", { name: "Monthly coaching and rates", exact: true })
+      .click();
+    await o.getByLabel("Hourly rate (CAD)").fill("95.00");
+    await o.getByLabel("Effective month").fill(month);
+    await friendly(o, "owner-set-rate");
+    await o.getByRole("button", { name: "Save hourly rate" }).click();
+
+    // 4. The student reports last month's hours from Top up hours.
+    await menu(s)
+      .getByRole("link", { name: "Top up hours", exact: true })
+      .click();
+    await expect(s).toHaveURL(f.origin + "/account/coaching");
+    await s.getByLabel("Calendar month (UTC)").fill(month);
+    await s.getByRole("button", { name: "Open month" }).click();
+    await expect(s.getByLabel("Calendar month (UTC)")).toHaveValue(month);
+    await s.getByLabel("Whole hours").fill("2");
+    await s.getByLabel("Additional minutes").fill("15");
+    await s
+      .getByLabel("Invoice recipient name")
+      .fill("Invented coaching member");
+    await s.getByLabel("Invoice email").fill("billing@example.invalid");
+    await friendly(s, "student-hours-form");
+    await Promise.all([
+      s.waitForURL(`${f.origin}/account/coaching?month=${month}`, {
+        waitUntil: "load",
+      }),
+      s.getByRole("button", { name: "Save coaching draft" }).click(),
+    ]);
+    await expect(s.getByText("CAD 213.75", { exact: true })).toBeVisible();
+    await submit(s);
+    await expect(
+      s.getByRole("heading", { name: "Submitted snapshot" }),
+    ).toBeVisible();
+    await friendly(s, "student-submitted");
+
+    // 5. The owner finds the pending month, reviews it and issues the invoice.
+    await menu(o)
+      .getByRole("link", { name: "Administration", exact: true })
+      .click();
+    await o
+      .getByRole("link", { name: "Monthly coaching", exact: true })
+      .click();
+    await expect(
+      o.getByRole("heading", { name: "Pending months" }),
+    ).toBeVisible();
+    await friendly(o, "owner-pending");
+    await o
+      .getByRole("link", { name: `Coaching member · ${month}`, exact: true })
+      .click();
+    await expect(o.getByText("CAD 213.75").first()).toBeVisible();
+    await o.getByLabel("Invented sample tax (CAD)").fill("0.00");
+    await o.getByRole("checkbox", { name: /I reviewed this exact/ }).check();
+    await friendly(o, "owner-review");
+    await o.getByRole("button", { name: "Issue coaching invoice" }).click();
+    await expect(
+      o.getByRole("heading", { name: "Invoice", exact: true }),
+    ).toBeVisible();
+    const invoiceId = o.url().split("/").at(-1)!;
+
+    // 6. The owner sends it (simulated in sample mode).
+    await o
+      .getByRole("checkbox", {
+        name: "Simulate delivery only; no email will be sent.",
+      })
+      .check();
+    await o.getByRole("button", { name: "Simulate invoice email" }).click();
+    await expect(
+      o.getByText("Email status: Simulated; no email sent"),
+    ).toBeVisible();
+    await friendly(o, "owner-invoice");
+
+    // 7. The student opens the invoice and sees what is due and how to pay.
+    await menu(s).getByRole("link", { name: "Account", exact: true }).click();
+    await s
+      .getByRole("link", { name: "Courses and invoices", exact: true })
+      .click();
+    await friendly(s, "student-invoices");
+    await s.getByRole("link", { name: `DN-${invoiceId}`, exact: true }).click();
+    await expect(
+      s.getByRole("table", { name: "Coaching charges" }),
+    ).toContainText(month);
+    await expect(
+      s.getByText(/2 hours 15 minutes.*CAD 95\.00 per hour/),
+    ).toBeVisible();
+    await expect(s.getByText("Sample only; do not pay.")).toBeVisible();
+    await expect(
+      s.getByText("SAMPLE · NOT PAYABLE", { exact: true }),
+    ).toBeVisible();
+    await friendly(s, "student-invoice-due");
+
+    // 8. The owner records the offline payment; the student sees it paid.
+    await o.getByLabel("Amount received (CAD)").fill("213.75");
+    await o
+      .getByLabel("Received on", { exact: true })
+      .fill(new Date().toISOString().slice(0, 10));
+    await o
+      .getByRole("checkbox", {
+        name: "I verified these funds were received for this exact invoice.",
+      })
+      .check();
+    await o.getByRole("button", { name: "Record offline payment" }).click();
+    await s.reload();
+    await expect(
+      s.locator("dt").filter({ hasText: "Recorded payment" }).locator("+ dd"),
+    ).toHaveText("CAD 213.75");
+    await friendly(s, "student-invoice-paid");
+    await s
+      .getByRole("link", { name: "Courses and invoices", exact: true })
+      .click();
+    await expect(s.getByText(/CAD 213\.75 · Paid/)).toBeVisible();
     completed = true;
   } finally {
     await f.close(completed);

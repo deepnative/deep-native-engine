@@ -440,6 +440,21 @@ it("OFFPUR-05 applies the same no-query and original-form boundary to every invo
   );
 });
 
+it("OFFPUR-02 offers no email action when invoice email is not configured", async () => {
+  const f = fixture(false, true);
+  f.service.invoice.mockResolvedValueOnce(
+    ready({ ...invoice, document: { ...doc, sample: false } }),
+  );
+  const r = await f.get(`${admin}/${id}`);
+  expect(r.status).toBe(200);
+  expect(r.text).not.toContain(`action="${admin}/${id}/email"`);
+  expect(r.text).not.toContain(">Send invoice email</button>");
+  expect(r.text).toContain(
+    "Invoice email is not configured on this service, so nothing can be sent from here.",
+  );
+  expect(r.text).toContain(">Record offline payment</button>");
+});
+
 it("OFFPUR-02 clearly names actual invoice correspondence when the issuer is configured", async () => {
   const f = fixture();
   f.service.invoice.mockResolvedValueOnce(

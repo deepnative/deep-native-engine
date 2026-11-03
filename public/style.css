@@ -459,7 +459,15 @@ label {
   font-weight: 650;
   margin: 0 0 9px;
 }
+input:not([type]),
 input[type="text"],
+input[type="email"],
+input[type="number"],
+input[type="month"],
+input[type="password"],
+input[type="search"],
+input[type="tel"],
+input[type="url"],
 input[type="date"],
 input[type="time"],
 select,
@@ -1243,6 +1251,11 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 .invoice-controls form {
   max-width: 620px;
 }
+.invoice-controls h2:not(:first-child) {
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+}
 .invoice-workspace input:not([type="checkbox"]):not([type="hidden"]),
 .invoice-controls input:not([type="checkbox"]):not([type="hidden"]) {
   width: 100%;
@@ -1479,14 +1492,11 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   color: var(--accent);
   background: #eaf0ff;
 }
-.main-navigation a[href="/account"],
-.guidance-header nav a[href="/account"] {
-  color: white;
-  background: var(--accent);
-}
-.main-navigation a[href="/account"]:hover,
-.guidance-header nav a[href="/account"]:hover {
-  background: #173eaa;
+.main-navigation a[aria-current="page"],
+.guidance-header nav a[aria-current="page"] {
+  color: var(--accent);
+  background: #eaf0ff;
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 @media (max-width: 760px) {
   .main-navigation {
