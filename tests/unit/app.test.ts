@@ -1194,6 +1194,30 @@ it("FAC-01/03 shows no-charge foundation access consistently while coaching stay
   }
   await agent.get("/checkout/pilot").set("Host", host).expect(404);
 });
+it("COACH-TEXT-01 describes separately arranged courses and monthly coaching without selling them", async () => {
+  const agent = await managedAgent(
+    app(storage(), { origin, secret: "secret" }),
+  );
+  const planning = await agent
+    .get("/readiness/offers")
+    .set("Host", host)
+    .expect(200);
+  expect(planning.text).toContain(
+    "Optional courses and monthly coaching are arranged separately with course support.",
+  );
+  expect(planning.text).toContain(
+    'href="/account/purchases">Courses and invoices</a>',
+  );
+  expect(planning.text).toContain(
+    'href="/account/coaching">Monthly coaching hours</a>',
+  );
+  expect(planning.text).toContain(
+    "View historical coaching plans (unavailable)",
+  );
+  expect(planning.text).not.toContain("Optional coaching is unavailable");
+  expect(planning.text).not.toContain("No coach, formal assessment");
+  expect(planning.text).not.toContain("Buy now");
+});
 function storage() {
   const progress = vi.fn<Store["progress"]>().mockResolvedValue(undefined);
   return {
