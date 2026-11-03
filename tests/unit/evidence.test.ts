@@ -923,6 +923,24 @@ it("rejects a well-formed capability with a changed signature", async () => {
   });
 });
 
+it("issues an exactly granted reviewer link for an assignment copy", async () => {
+  const [identity, workspace, , ...grants] = staffAccess("reviewer");
+  const db = database(
+    identity,
+    workspace,
+    { ...accessMetadata, assignment_bound: true },
+    ...grants,
+    undefined,
+    { valid: true },
+  );
+  const issued = await evidenceStore(
+    db.pool,
+    objectStorage(),
+    "secret",
+  ).issueDownload(token, evidenceId);
+  expect(issued.kind).toBe("issued");
+});
+
 it.each(["coach", "reviewer"] as const)(
   "commits the %s audit before returning a staff link",
   async (role) => {
@@ -953,6 +971,12 @@ it.each(
     staffAccess("reviewer").slice(0, 3),
     staffAccess("coach").slice(0, 3),
     staffAccess("reviewer").slice(0, 5),
+    [
+      { ...accessIdentity, kind: "staff", role: "coach" },
+      { id: evidenceId },
+      { ...accessMetadata, assignment_bound: true },
+      { id: "assignment", expires_at: new Date("2030-01-01") },
+    ],
   ].map((rows) => ({ rows })),
 )(
   "withholds access when a required authorization record is absent (%j)",

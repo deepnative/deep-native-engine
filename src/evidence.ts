@@ -412,10 +412,11 @@ export function evidenceStore(
           owner_principal_id: string;
           private_review_allowed: boolean;
           learning_circle_id: string | null;
+          assignment_bound: boolean;
         }
       >(
         `SELECT e.id,e.workspace_id,e.original_name,e.media_type,e.storage_key,
-              e.owner_principal_id,e.private_review_allowed,e.learning_circle_id,${PROVIDED_ORIGIN_SQL},${ASSIGNMENT_ORIGIN_SQL}
+              e.owner_principal_id,e.private_review_allowed,e.learning_circle_id,e.assignment_bound,${PROVIDED_ORIGIN_SQL},${ASSIGNMENT_ORIGIN_SQL}
        FROM evidence_objects e ${PROVIDED_ORIGIN_JOIN} ${ASSIGNMENT_ORIGIN_JOIN} WHERE e.id=$1 AND e.workspace_id=$2
          AND e.quarantine_state='clean' FOR SHARE OF e`,
         [evidenceId, workspace.id],
@@ -445,6 +446,8 @@ export function evidenceStore(
       return { row, validUntil };
     }
     if (!row.private_review_allowed) return;
+    // Assignment copies are read only through an exact reviewer grant.
+    if (row.assignment_bound && identity.role !== "reviewer") return;
     let submissionId: string | null = null;
     if (identity.role === "reviewer") {
       const submission = (

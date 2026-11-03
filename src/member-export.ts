@@ -285,7 +285,7 @@ const sections = {
      f.source_sha256 AS "sourceSha256",f.source_revision AS "sourceRevision",f.criteria,
      f.preparation_minutes AS "selfReportedPreparationMinutes",f.review_minutes AS "selfReportedReviewMinutes",
      f.published_at AS "publishedAt",f.clarification,f.clarified_at AS "clarifiedAt",f.answer,f.answered_at AS "answeredAt",
-     e.private_review_allowed AS "consentActive",'human-authored-private-sample-not-formal' AS label`,
+     e.private_review_allowed AS "consentActive",'reviewer-attributed-private-sample-not-formal' AS label`,
     `private_sample_feedback f JOIN evidence_review_submissions s ON s.id=f.submission_id
      JOIN evidence_objects e ON e.id=s.evidence_id
      WHERE e.owner_principal_id=$1 AND e.quarantine_state<>'deleting'
@@ -521,7 +521,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v32";
+  version: "local-member-records-v33";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -655,7 +655,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v32",
+          version: "local-member-records-v33",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

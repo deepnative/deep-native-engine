@@ -530,6 +530,37 @@ it("AHO-05/08 uses separate exact reviewer permission and retains published owne
       (await pool.query(`SELECT count(*)::int n FROM ${table}`)).rows[0].n,
     ).toBe(0);
 });
+it("AHO-11 a coach workspace grant cannot download an assignment copy before or after review is requested", async () => {
+  const f = await fixture(),
+    id = (await copied(f)).evidenceId!;
+  const admin = await auth.provisionStaff(
+    randomBytes(32).toString("hex"),
+    "platform_admin",
+    f.end,
+  );
+  const coach = randomBytes(32).toString("hex"),
+    coachId = await auth.provisionStaff(coach, "coach", f.end);
+  await auth.grantAssignment(
+    admin,
+    coachId,
+    f.owner.id,
+    "coach",
+    "Invented coaching",
+    f.end,
+  );
+  expect(await evidence.issueDownload(coach, id)).toEqual({ kind: "denied" });
+  expect(await evidence.submitForReview(f.owner.token, id)).toBe(true);
+  expect(await evidence.issueDownload(coach, id)).toEqual({ kind: "denied" });
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*)::int n FROM authorization_audit WHERE staff_id=$1 AND evidence_id IS NOT NULL",
+        [coachId],
+      )
+    ).rows[0].n,
+  ).toBe(0);
+  expect((await evidence.issueDownload(f.owner.token, id)).kind).toBe("issued");
+});
 it("AHO-06 source deletion removes every copy atomically, rollback restores them and a waiting copy cannot revive deletion", async () => {
   const f = await fixture(),
     first = await copied(f);
