@@ -1,5 +1,8 @@
 import type { Express, Request, Response } from "express";
-import type { AdministratorEntry } from "./administrator-entry.ts";
+import type {
+  AdministratorConsole,
+  AdministratorEntry,
+} from "./administrator-entry.ts";
 import { COOKIE, cookieOptions, csrf, validCsrf } from "./session.ts";
 import {
   STAFF_COOKIE,
@@ -12,6 +15,32 @@ import { invoiceUuid } from "./simple-invoice-values.ts";
 import { BACKGROUNDS, GOALS, type Background, type Goal } from "./content.ts";
 import { page, escape } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
+
+const CONSOLE_SEARCH_MAX = 120;
+
+function learnersCard(v: AdministratorConsole, ownerId?: string) {
+  const href = (page: number, selected = ownerId) => {
+    const query = new URLSearchParams();
+    if (selected) query.set("ownerId", selected);
+    query.set("page", String(page));
+    if (v.search) query.set("q", v.search);
+    return escape(`/operator?${query}`);
+  };
+  const first = (v.page - 1) * v.pageSize + 1,
+    last = first + v.members.length - 1,
+    pages = Math.max(Math.ceil(v.total / v.pageSize), 1);
+  const count = (n: number) => n.toLocaleString("en-CA");
+  const rows = v.members
+    .map(
+      (m) =>
+        `<tr${m.id === ownerId ? ' aria-current="true"' : ""}><td><a href="${href(v.page, m.id)}">${escape(m.displayName ?? "Name needed")}</a></td><td>${escape(BACKGROUNDS[m.background as Background] ?? m.background)}</td><td>${escape(GOALS[m.goal as Goal] ?? m.goal)}</td><td>${m.joined.toISOString().slice(0, 10)}</td><td><code>${escape(m.id)}</code></td></tr>`,
+    )
+    .join("");
+  const list = v.members.length
+    ? `<p role="status">Showing ${count(first)}–${count(last)} of ${count(v.total)}</p><div class="table-scroll" tabindex="0" role="region" aria-label="Learner accounts"><table class="member-table"><thead><tr><th scope="col">Name</th><th scope="col">Starting point</th><th scope="col">Goal</th><th scope="col">Joined</th><th scope="col">Account reference</th></tr></thead><tbody>${rows}</tbody></table></div><nav class="member-pager" aria-label="Learner pages">${v.page > 1 ? `<a class="button secondary" href="${href(v.page - 1)}">Previous</a>` : ""}<span>Page ${count(v.page)} of ${count(pages)}</span>${v.page < pages ? `<a class="button secondary" href="${href(v.page + 1)}">Next</a>` : ""}</nav>`
+    : `<p role="status">${v.search ? "No learner accounts match this search." : "No learner accounts available."}</p>`;
+  return `<section class="portal-card" id="learners"><h2>Learners</h2><form class="portal-search" method="get" action="/operator">${ownerId ? `<input type="hidden" name="ownerId" value="${escape(ownerId)}">` : ""}<label for="console-search">Search by name or account reference</label><div><input id="console-search" type="text" name="q" maxlength="${CONSOLE_SEARCH_MAX}" value="${escape(v.search)}"><button>Search</button></div></form>${v.search ? '<p><a href="/operator">Clear search</a></p>' : ""}${list}</section>`;
+}
 
 export function mountAdministratorEntry(
   app: Express,
@@ -55,17 +84,31 @@ export function mountAdministratorEntry(
     if (!options.localStaffEntry || options.mode === "live")
       return fail(res, 404);
     const cookie = staffCookie(req.headers.cookie),
-      target = req.query.ownerId;
+      target = req.query.ownerId,
+      pageQuery = req.query.page,
+      search = req.query.q;
     if (
       cookie.kind !== "value" ||
       !staffCredential(cookie.value) ||
-      Object.keys(req.query).some((key) => key !== "ownerId") ||
-      (target !== undefined && !invoiceUuid(target))
+      Object.keys(req.query).some(
+        (key) => !["ownerId", "page", "q"].includes(key),
+      ) ||
+      (target !== undefined && !invoiceUuid(target)) ||
+      (pageQuery !== undefined && typeof pageQuery !== "string") ||
+      (search !== undefined &&
+        (typeof search !== "string" || search.length > CONSOLE_SEARCH_MAX))
     )
       return fail(res, 403);
+    // ADMINTABLE-02: a malformed page falls back to the first; the store clamps.
+    const pageNumber = /^[1-9]\d{0,8}$/.test(pageQuery ?? "")
+      ? Number(pageQuery)
+      : 1;
     let result;
     try {
-      result = await store?.console?.(cookie.value, target);
+      result = await store?.console?.(cookie.value, target, {
+        page: pageNumber,
+        search: search ?? "",
+      });
     } catch {
       return fail(res, 503);
     }
@@ -102,7 +145,7 @@ export function mountAdministratorEntry(
     return res.send(
       page(
         "Administration console",
-        `<div class="portal-page administrator-console"><div class="portal-intro"><h1>Administration console</h1><p>Manage the selected learner’s courses and billing. Registration and a proposal do not create enrollment or a charge; the learner must accept exact billing terms.</p><nav class="portal-actions" aria-label="Administration sections"><a href="#learners" class="button secondary">Learners</a><a href="#courses" class="button secondary">Courses/services</a><a href="#invoices" class="button secondary">Invoices</a></nav></div><section class="portal-card" id="learners"><h2>Learners</h2><form class="portal-search" method="get" action="/operator"><label for="console-owner">Exact learner account reference</label><div><input id="console-owner" type="text" name="ownerId" required maxlength="36"><button>Find learner</button></div></form><p>Up to 100 accounts are listed. Use an exact reference to find another account.</p><ul class="member-directory">${v.members.map((m) => `<li><a href="/operator?ownerId=${escape(m.id)}">${escape(m.displayName ?? "Name needed")}</a><p>${escape(BACKGROUNDS[m.background as Background] ?? m.background)} · ${escape(GOALS[m.goal as Goal] ?? m.goal)}</p><details><summary>Account reference · ${escape(m.id.slice(0, 8))}</summary><code>${escape(m.id)}</code></details></li>`).join("") || "<li>No learner accounts available.</li>"}</ul></section>${summaries}<section class="portal-card" id="courses"><h2>Courses/services</h2><p>Published lesson versions only. Planned services, prices and support capacity are not published offers. These are course candidates; final eligibility is checked for the exact learner.</p><ul>${v.courses.map((c) => `<li>${escape(c.title)} · ${escape(c.id)} version ${c.version}</li>`).join("") || "<li>No published course candidates.</li>"}</ul></section><section class="portal-card" id="invoices"><h2>Invoices</h2>${
+        `<div class="portal-page administrator-console"><div class="portal-intro"><h1>Administration console</h1><p>Manage the selected learner’s courses and billing. Registration and a proposal do not create enrollment or a charge; the learner must accept exact billing terms.</p><nav class="portal-actions" aria-label="Administration sections"><a href="#learners" class="button secondary">Learners</a><a href="#courses" class="button secondary">Courses/services</a><a href="#invoices" class="button secondary">Invoices</a></nav></div>${learnersCard(v, target)}${summaries}<section class="portal-card" id="courses"><h2>Courses/services</h2><p>Published lesson versions only. Planned services, prices and support capacity are not published offers. These are course candidates; final eligibility is checked for the exact learner.</p><ul>${v.courses.map((c) => `<li>${escape(c.title)} · ${escape(c.id)} version ${c.version}</li>`).join("") || "<li>No published course candidates.</li>"}</ul></section><section class="portal-card" id="invoices"><h2>Invoices</h2>${
           options.simpleInvoices
             ? `<p>Select a learner above to inspect their retained invoices or compose a proposal for that exact account.</p>${portalActions(
                 [

@@ -12,6 +12,9 @@ function form(action: string, csrf: string, button: string) {
   return `<form method="post" action="${action}"><input type="hidden" name="csrf" value="${csrf}"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" required><button type="submit">${button}</button></form>`;
 }
 
+const NOTHING_ARRIVED =
+  '<p>If nothing arrives within a few minutes, check your Junk folder; a work or school organization may quarantine messages, so ask its administrator too. Then wait 15 minutes before asking again. An address links to only one learning record, so if this one may already be linked, <a href="/email/sign-in">sign in</a> instead.</p>';
+
 function linkedPage() {
   return page(
     "Email already linked",
@@ -164,7 +167,9 @@ export function mountMemberEmailRoutes(
     return res.send(
       page(
         "Check your email",
-        '<section class="error-page"><h1>Check your email</h1><p>If this address is linked to a learning record, a private sign-in link will arrive shortly. Check your inbox and spam folder. Repeating this request will not send another message while a link is pending. Use that link within 15 minutes; if it has not arrived, wait 15 minutes before requesting again.</p></section>',
+        '<section class="error-page"><h1>Check your email</h1><p>If this address is linked to a learning record, a private sign-in link will arrive shortly. Check your inbox and spam folder. Repeating this request will not send another message while a link is pending. Use that link within 15 minutes; if it has not arrived, wait 15 minutes before requesting again.</p>' +
+          NOTHING_ARRIVED +
+          "</section>",
       ),
     );
   });
@@ -221,7 +226,9 @@ export function mountMemberEmailRoutes(
     return res.send(
       page(
         "Check your email",
-        '<section class="error-page"><h1>Check your email</h1><p>If this address can be linked, a private verification link will arrive shortly. Check your inbox and spam folder. Repeating this request will not send another message while a link is pending. Use that link within 15 minutes; if it has not arrived, wait 15 minutes before requesting again. Your saved work is unchanged until you confirm the link.</p></section>',
+        '<section class="error-page"><h1>Check your email</h1><p>If this address can be linked, a private verification link will arrive shortly. Check your inbox and spam folder. Repeating this request will not send another message while a link is pending. Use that link within 15 minutes; if it has not arrived, wait 15 minutes before requesting again. Your saved work is unchanged until you confirm the link.</p>' +
+          NOTHING_ARRIVED +
+          "</section>",
       ),
     );
   });

@@ -13,13 +13,20 @@ const selected = ["shi@deepnative.io", "tom@deepnative.io"].map((address) =>
 export type AdministratorResult =
   | { kind: "ready"; credential?: string; expires?: Date }
   | { kind: "denied" | "unavailable" };
+export const LEARNERS_PER_PAGE = 25;
 export interface AdministratorConsole {
   members: Array<{
     id: string;
     displayName?: string | null;
     background: string;
     goal: string;
+    joined: Date;
   }>;
+  /** Learners matching the search; `members` holds only the current page. */
+  total: number;
+  page: number;
+  pageSize: number;
+  search: string;
   courses: Array<{ id: string; version: number; title: string }>;
   selected?: {
     member: {
@@ -27,6 +34,7 @@ export interface AdministratorConsole {
       displayName?: string | null;
       background: string;
       goal: string;
+      joined: Date;
     };
     enrollments: Array<{ id: string; title: string }>;
     plans: Array<{ id: string; state: string }>;
@@ -45,6 +53,7 @@ export interface AdministratorEntry {
   console?(
     credential: string,
     ownerId?: string,
+    view?: { page?: number; search?: string },
   ): Promise<AdministratorConsoleResult>;
   status(memberToken: string): Promise<AdministratorResult>;
   enter(memberToken: string): Promise<AdministratorResult>;
@@ -122,7 +131,7 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
     }
   }
   return {
-    async console(credential, ownerId) {
+    async console(credential, ownerId, view = {}) {
       if (
         !/^[a-f0-9]{64}$/.test(credential) ||
         (ownerId !== undefined && !invoiceUuid(ownerId))
@@ -142,16 +151,45 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
           ).rows[0];
           if (!staff) throw new PracticeLifetimeFailure("denied");
           await tx.observe([staff.expires]);
+          const search = (view.search ?? "").trim();
+          // The search is literal text, or one exact account reference.
+          const filter = [
+            search ? `%${search.replace(/[\\%_]/g, "\\$&")}%` : null,
+            invoiceUuid(search) ? search.toLowerCase() : null,
+          ];
+          const learners = `FROM learners l JOIN principals p ON p.id=l.id
+             JOIN workspaces w ON w.owner_principal_id=l.id
+             WHERE p.revoked_at IS NULL AND w.deleting_at IS NULL`;
+          const matching = `${learners} AND ($1::text IS NULL
+               OR l.display_name ILIKE $1 OR l.id=$2::uuid)`;
+          const total = (
+            await tx.query<{ total: number }>(
+              `SELECT count(*)::int AS total ${matching}`,
+              filter,
+            )
+          ).rows[0]!.total;
+          const page = Math.min(
+            Math.max(view.page ?? 1, 1),
+            Math.max(Math.ceil(total / LEARNERS_PER_PAGE), 1),
+          );
+          const columns = `l.id,l.display_name AS "displayName",l.background,l.goal,p.created_at AS joined`;
           const members = (
             await tx.query<AdministratorConsole["members"][number]>(
-              `SELECT l.id,l.display_name AS "displayName",l.background,l.goal FROM learners l
-             JOIN principals p ON p.id=l.id JOIN workspaces w ON w.owner_principal_id=l.id
-             WHERE p.revoked_at IS NULL AND w.deleting_at IS NULL
-               AND ($1::uuid IS NULL OR l.id=$1) ORDER BY l.id LIMIT 100`,
-              [ownerId ?? null],
+              `SELECT ${columns} ${matching}
+               ORDER BY lower(l.display_name) NULLS LAST,l.display_name,l.id
+               LIMIT $3 OFFSET $4`,
+              [...filter, LEARNERS_PER_PAGE, (page - 1) * LEARNERS_PER_PAGE],
             )
           ).rows;
-          if (ownerId && !members.length) return { kind: "not-found" as const };
+          const chosen = ownerId
+            ? (
+                await tx.query<AdministratorConsole["members"][number]>(
+                  `SELECT ${columns} ${learners} AND l.id=$1`,
+                  [ownerId],
+                )
+              ).rows[0]
+            : undefined;
+          if (ownerId && !chosen) return { kind: "not-found" as const };
           const courses = (
             await tx.query<AdministratorConsole["courses"][number]>(
               `SELECT id,version,title FROM content_versions c WHERE state='published'
@@ -160,7 +198,14 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
              ORDER BY id LIMIT 100`,
             )
           ).rows;
-          const value: AdministratorConsole = { members, courses };
+          const value: AdministratorConsole = {
+            members,
+            total,
+            page,
+            pageSize: LEARNERS_PER_PAGE,
+            search,
+            courses,
+          };
           if (ownerId) {
             const enrollments = (
               await tx.query<{ id: string; title: string }>(
@@ -188,7 +233,7 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
               )
             ).rows;
             value.selected = {
-              member: members[0]!,
+              member: chosen!,
               enrollments,
               plans,
               invoices,

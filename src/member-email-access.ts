@@ -128,6 +128,40 @@ export async function signOutMember(
   });
 }
 
+type RequestOutcome =
+  | "sent"
+  | "send_failed"
+  | "invalid_address"
+  | "already_bound"
+  | "not_bound"
+  | "member_unavailable"
+  | "pending"
+  | "rate_limited";
+/**
+ * EMAIL-DIAG-01: one line an operator can read for each request. It carries no
+ * address, hash, link, member identifier or provider message text.
+ */
+function logRequest(
+  purpose: EmailPurpose,
+  outcome: RequestOutcome,
+  error?: unknown,
+) {
+  const line = { event: "member_email_request", purpose, outcome };
+  if (outcome !== "send_failed") return console.info(JSON.stringify(line));
+  const { name, code } = Object(error) as { name?: unknown; code?: unknown };
+  console.error(
+    JSON.stringify({
+      ...line,
+      ...(typeof name === "string" && /^\w{1,64}$/.test(name)
+        ? { errorName: name }
+        : {}),
+      ...(typeof code === "string" && /^\w{1,64}$/.test(code)
+        ? { errorCode: code }
+        : {}),
+    }),
+  );
+}
+
 export function memberEmailAccess(
   pool: Pool,
   sender: MemberEmailSender,
@@ -139,89 +173,100 @@ export function memberEmailAccess(
     memberToken?: string,
   ): Promise<"sent" | "unavailable"> {
     const normalized = normalizedEmail(address);
-    if (!normalized) return "unavailable";
+    if (!normalized) {
+      logRequest(purpose, "invalid_address");
+      return "unavailable";
+    }
     const digest = emailHash(normalized);
     const code = randomBytes(32).toString("hex");
-    const queued = await transaction(pool, async (client) => {
-      let principalId: string | undefined;
-      if (purpose === "attach") {
-        const principal = (
-          await client.query<{ id: string }>(
-            `SELECT p.id FROM principals p JOIN workspaces w ON w.owner_principal_id=p.id
+    const queued = await transaction<RequestOutcome | "queued">(
+      pool,
+      async (client) => {
+        let principalId: string | undefined;
+        if (purpose === "attach") {
+          const principal = (
+            await client.query<{ id: string }>(
+              `SELECT p.id FROM principals p JOIN workspaces w ON w.owner_principal_id=p.id
              WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
                AND p.expires_at>clock_timestamp() AND w.deleting_at IS NULL
              FOR UPDATE OF p`,
-            [hash(memberToken!)],
-          )
-        ).rows[0];
-        if (!principal) return false;
-        principalId = principal.id;
-        await client.query(
-          "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
-          [digest],
-        );
-        const bound = await client.query(
-          "SELECT 1 FROM member_email_identities WHERE principal_id=$1 OR email_hash=$2",
-          [principalId, digest],
-        );
-        if (bound.rowCount) return false;
-      } else {
-        const identity = (
-          await client.query<{ principal_id: string }>(
-            `SELECT principal_id FROM member_email_identities WHERE email_hash=$1
+              [hash(memberToken!)],
+            )
+          ).rows[0];
+          if (!principal) return "member_unavailable";
+          principalId = principal.id;
+          await client.query(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+            [digest],
+          );
+          const bound = await client.query(
+            "SELECT 1 FROM member_email_identities WHERE principal_id=$1 OR email_hash=$2",
+            [principalId, digest],
+          );
+          if (bound.rowCount) return "already_bound";
+        } else {
+          const identity = (
+            await client.query<{ principal_id: string }>(
+              `SELECT principal_id FROM member_email_identities WHERE email_hash=$1
              UNION ALL
              SELECT principal_id FROM member_login_emails WHERE email_hash=$1`,
-            [digest],
-          )
-        ).rows[0];
-        if (!identity) return false;
-        const principal = (
-          await client.query<{ id: string }>(
-            `SELECT p.id FROM principals p JOIN workspaces w ON w.owner_principal_id=p.id
+              [digest],
+            )
+          ).rows[0];
+          if (!identity) return "not_bound";
+          const principal = (
+            await client.query<{ id: string }>(
+              `SELECT p.id FROM principals p JOIN workspaces w ON w.owner_principal_id=p.id
              WHERE p.id=$1 AND p.kind='member' AND p.revoked_at IS NULL
                AND w.deleting_at IS NULL FOR UPDATE OF p`,
-            [identity.principal_id],
-          )
-        ).rows[0];
-        if (!principal) return false;
-        principalId = principal.id;
-      }
-      // The principal lock also serializes duplicate requests while delivery is
-      // in flight. Preserve the usable link instead of replacing inbox messages.
-      const pending = await client.query(
-        `SELECT 1 FROM member_email_links
+              [identity.principal_id],
+            )
+          ).rows[0];
+          if (!principal) return "member_unavailable";
+          principalId = principal.id;
+        }
+        // The principal lock also serializes duplicate requests while delivery is
+        // in flight. Preserve the usable link instead of replacing inbox messages.
+        const pending = await client.query(
+          `SELECT 1 FROM member_email_links
          WHERE principal_id=$1 AND email_hash=$2 AND purpose=$3
            AND consumed_at IS NULL AND expires_at>clock_timestamp()`,
-        [principalId, digest, purpose],
-      );
-      if (pending.rowCount) return false;
-      const limited = await client.query(
-        `SELECT 1 FROM member_email_links
+          [principalId, digest, purpose],
+        );
+        if (pending.rowCount) return "pending";
+        const limited = await client.query(
+          `SELECT 1 FROM member_email_links
          WHERE (email_hash=$1 OR principal_id=$2)
            AND created_at>clock_timestamp()-INTERVAL '1 hour'
          OFFSET 4 LIMIT 1`,
-        [digest, principalId],
-      );
-      if (limited.rowCount) return false;
-      await client.query(
-        "UPDATE member_email_links SET consumed_at=clock_timestamp() WHERE principal_id=$1 AND consumed_at IS NULL",
-        [principalId],
-      );
-      await client.query(
-        `INSERT INTO member_email_links(token_hash,email_hash,principal_id,purpose,expires_at)
+          [digest, principalId],
+        );
+        if (limited.rowCount) return "rate_limited";
+        await client.query(
+          "UPDATE member_email_links SET consumed_at=clock_timestamp() WHERE principal_id=$1 AND consumed_at IS NULL",
+          [principalId],
+        );
+        await client.query(
+          `INSERT INTO member_email_links(token_hash,email_hash,principal_id,purpose,expires_at)
          VALUES($1,$2,$3,$4,clock_timestamp()+INTERVAL '15 minutes')`,
-        [hash(code), digest, principalId, purpose],
-      );
-      return true;
-    });
-    if (!queued) return "unavailable";
+          [hash(code), digest, principalId, purpose],
+        );
+        return "queued";
+      },
+    );
+    if (queued !== "queued") {
+      logRequest(purpose, queued);
+      return "unavailable";
+    }
     try {
       await sender.send(
         normalized,
         `${origin}/email/confirm?code=${encodeURIComponent(code)}`,
       );
+      logRequest(purpose, "sent");
       return "sent";
-    } catch {
+    } catch (error) {
+      logRequest(purpose, "send_failed", error);
       await pool.query(
         "UPDATE member_email_links SET consumed_at=clock_timestamp() WHERE token_hash=$1 AND consumed_at IS NULL",
         [hash(code)],
