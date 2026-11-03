@@ -68,7 +68,11 @@ import {
 import type { ManualObservationStore } from "../../src/manual-observations.ts";
 import type { AssignmentReadinessStore } from "../../src/assignment-readiness.ts";
 import { SlotHoldFailure, type MemberSlotHolds } from "../../src/slot-holds.ts";
-import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
+import {
+  closeLoopback,
+  listenLoopback,
+  withLoopback,
+} from "../support/loopback-server.ts";
 import { csrf } from "../../src/session.ts";
 import type { LearningWorkspaceStore } from "../../src/learning-workspace-store.ts";
 import { contributionMetrics } from "../../src/contribution-metrics.ts";
@@ -6676,7 +6680,9 @@ it("NAV-05 and NAV-06 offer Administration only where administrator entry exists
   });
   const [hidden, shown, liveHidden] = await Promise.all(
     [off, on, live].map((application) =>
-      request(application).get("/readiness").set("Host", host),
+      withLoopback(application, (s) =>
+        request(s).get("/readiness").set("Host", host),
+      ),
     ),
   );
   const navigation = (html: string) =>
@@ -6697,8 +6703,10 @@ it("HOSTED-12 presents accurate hosted persistence while concurrent local render
   });
   const local = app(storage(), { origin, secret: "hosting-copy-test" });
   const [publicHome, localHome] = await Promise.all([
-    request(hosted).get("/").set("Host", "engine.deepnative.io"),
-    request(local).get("/").set("Host", host),
+    withLoopback(hosted, (s) =>
+      request(s).get("/").set("Host", "engine.deepnative.io"),
+    ),
+    withLoopback(local, (s) => request(s).get("/").set("Host", host)),
   ]);
   expect(publicHome.status).toBe(200);
   expect(publicHome.text).not.toContain("AZURE HOSTED LEARNING");

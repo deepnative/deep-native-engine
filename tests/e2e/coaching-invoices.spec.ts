@@ -347,8 +347,9 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
       fullPage: true,
     });
     await admin.goto(`${f.origin}/operator/coaching`);
+    // The dashboard row links to the same month; check the Pending months list.
     const pending = admin.locator(
-      `a[href="/operator/coaching/${a.id}?month=${pastMonth}"]`,
+      `h2:text-is("Pending months") + ul a[href="/operator/coaching/${a.id}?month=${pastMonth}"]`,
     );
     await expect(pending).toBeVisible();
     await expect(pending).toHaveText(`Sample learner · ${pastMonth}`);
@@ -489,6 +490,14 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await expect(
       o.getByRole("heading", { name: "Pending months" }),
     ).toBeVisible();
+    // DASH-04: the manager dashboard opens on last month by default.
+    const figure = (label: string) =>
+      o.locator(".hours-summary div").filter({ hasText: label }).locator("dd");
+    const row = () => o.getByRole("row").filter({ hasText: "Coaching member" });
+    await expect(o.getByLabel("Month", { exact: true })).toHaveValue(month);
+    await expect(figure("Hours submitted")).toHaveText("2h 15m");
+    await expect(figure("Awaiting review")).toHaveText("1");
+    await expect(row()).toContainText("Awaiting review");
     await friendly(o, "owner-pending");
     await o
       .getByRole("link", { name: `Coaching member · ${month}`, exact: true })
@@ -554,6 +563,23 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
       .getByRole("link", { name: "Courses and invoices", exact: true })
       .click();
     await expect(s.getByText(/CAD 213\.75 · Paid/)).toBeVisible();
+    // DASH-04: invoiced, sent and fully paid on the manager dashboard.
+    await menu(o)
+      .getByRole("link", { name: "Administration", exact: true })
+      .click();
+    await o
+      .getByRole("link", { name: "Monthly coaching", exact: true })
+      .click();
+    await expect(figure("Invoiced")).toHaveText("CAD 213.75");
+    await expect(
+      o.locator(".hours-summary div").filter({ hasText: "Invoiced" }),
+    ).toContainText("All sent");
+    await expect(figure("Outstanding")).toHaveText("CAD 0.00");
+    await expect(figure("Awaiting review")).toHaveText("0");
+    await expect(row()).toContainText("Invoiced");
+    await expect(row()).toContainText("Sent");
+    await expect(row()).toContainText("Paid");
+    await friendly(o, "owner-dashboard-paid");
     completed = true;
   } finally {
     await f.close(completed);
