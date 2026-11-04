@@ -1,6 +1,6 @@
 # Verified owner administration
 
-Only the verified member identities for **shi@deepnative.io** and **tom@deepnative.io** may enter administration. Addresses use the existing email verifier's lowercase/outer-whitespace normalization; aliases, lookalikes, a matching domain or an address typed into a form grant nothing. This is a synthetic-preview capability, not payment activation or commercial readiness.
+Only verified member identities holding the stored **admin** role may enter administration; migration094 seeds it for **shi@deepnative.io** and **tom@deepnative.io** only, and both entry and the shared `authorized_staff_profiles` fence read it ([account types](ACCOUNT-TYPES.md)). Addresses use the existing email verifier's lowercase/outer-whitespace normalization; aliases, lookalikes, a matching domain or an address typed into a form grant nothing. This is a synthetic-preview capability, not payment activation or commercial readiness.
 
 ## Owner journey
 
