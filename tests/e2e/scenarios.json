@@ -2564,18 +2564,18 @@
       "id": "L288",
       "actor": "Platform administrator troubleshooting sign-in",
       "preconditions": "Dedicated synthetic PostgreSQL database, verified owner identity, port0 server; desktop/mobile Chromium",
-      "steps": "DIAG-01..03: enter administration, open Diagnostics from the console, read the site counts, look up a verified email and an unused one",
+      "steps": "READABLE-04 and DIAG-01..03: read the Administration intro, enter administration, open Diagnostics from the console, read the site counts, look up a verified email and an unused one",
       "expected": "Diagnostics shows the account, link history and no-account notices for each address without putting it in a URL, changes nothing, and fits desktop and mobile without sideways scrolling",
-      "issues": [669],
+      "issues": [669, 678],
       "critical": true
     },
     {
       "id": "L289",
       "actor": "Member saving, leaving and deleting their account",
       "preconditions": "Dedicated synthetic PostgreSQL database, port0 server; desktop/mobile Chromium",
-      "steps": "FRICTION-01/02/05/06/12: open Learning signed out, read the explanation once, open Administration signed out, save a lesson draft, open workflow feedback, delete the account from My account",
-      "expected": "The explanation shows once; staff pages offer no member tools; the draft confirmation is on screen after saving; the checkbox is at least 18px wide; My account confirms deletion on the home page, with no sideways scrolling",
-      "issues": [658],
+      "steps": "FRICTION-01/02/05/06/12 and READABLE-01..03: open Learning signed out, read the explanation once, open Administration signed out, save a lesson draft, read the starter plan and grouped links on Learning, open workflow feedback, delete the account from My account",
+      "expected": "The explanation shows once; staff pages offer no member tools; the draft confirmation is on screen after saving; the plan uses one text style and its links have clear space; the checkbox is at least 18px wide; My account confirms deletion on the home page, with no sideways scrolling",
+      "issues": [658, 678],
       "critical": true
     },
     {
