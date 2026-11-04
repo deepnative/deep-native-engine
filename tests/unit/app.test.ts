@@ -6737,7 +6737,7 @@ it("NAV-05 and NAV-06 offer Administration only where administrator entry exists
   });
   const off = app(db, { origin, secret: "navigation-test" });
   const owner = {
-    verifiedOwner: vi.fn().mockResolvedValue(true),
+    accountRoles: vi.fn().mockResolvedValue(["student", "coach", "admin"]),
     status: vi.fn(),
     enter: vi.fn(),
     end: vi.fn(),
@@ -6862,7 +6862,7 @@ it("NAV-08 shows signed-out visitors Sign in instead of member account links", a
   const application = app(db, {
     ...options,
     administratorEntry: {
-      verifiedOwner: async () => true,
+      accountRoles: async () => ["student", "coach", "admin"],
       status: vi.fn(),
       enter: vi.fn(),
       end: vi.fn(),
@@ -6908,13 +6908,10 @@ it("NAV-08 shows signed-out visitors Sign in instead of member account links", a
   );
   expect(navigation(withoutEmail.text)).toBe('<a href="/learn">Learning</a>');
   const links = navigation(signedIn.text);
-  for (const label of [
-    "Account",
-    "Monthly coaching hours",
-    "Administration",
-    "Sign out",
-  ])
+  // ROLES-02: an owner's default admin view, with the switch to the others.
+  for (const label of ["Account", "Administration", "Sign out"])
     expect(links).toContain(`>${label}</a>`);
+  expect(links).toContain(">Switch to student view</button>");
   expect(links).not.toContain("/email/sign-in");
 });
 it("ADMINLINK-01/02/03 shows Administration only to verified owners and grants nothing by showing it", async () => {
@@ -6925,14 +6922,15 @@ it("ADMINLINK-01/02/03 shows Administration only to verified owners and grants n
     deadline: performance.now() + 60000,
     learner: member,
   });
-  const verifiedOwner = vi.fn<(token: string) => Promise<boolean>>();
+  const accountRoles =
+    vi.fn<(token: string) => Promise<("student" | "coach" | "admin")[]>>();
   const status = vi.fn().mockResolvedValue({ kind: "denied" });
   const application = app(db, {
     origin,
     secret: "navigation-test",
     localStaffEntry: true,
     administratorEntry: {
-      verifiedOwner,
+      accountRoles,
       status,
       enter: vi.fn(),
       end: vi.fn(),
@@ -6950,7 +6948,7 @@ it("ADMINLINK-01/02/03 shows Administration only to verified owners and grants n
     )?.[1];
 
   // ADMINLINK-01: an ordinary member sees no link, and /admin still refuses.
-  verifiedOwner.mockResolvedValue(false);
+  accountRoles.mockResolvedValue(["student"]);
   const ordinary = await read("/readiness");
   expect(navigation(ordinary!.text)).toContain('href="/account/sign-out"');
   expect(ordinary!.text).not.toContain('href="/admin"');
@@ -6958,7 +6956,7 @@ it("ADMINLINK-01/02/03 shows Administration only to verified owners and grants n
   expect((await read("/admin"))!.status).toBe(403);
 
   // ADMINLINK-02: a verified owner sees it, whatever their session state.
-  verifiedOwner.mockResolvedValue(true);
+  accountRoles.mockResolvedValue(["student", "coach", "admin"]);
   const owner = await read("/readiness");
   expect(navigation(owner!.text)).toContain('href="/admin">Administration</a>');
   expect((await read("/account"))!.text).toContain(
@@ -6967,22 +6965,22 @@ it("ADMINLINK-01/02/03 shows Administration only to verified owners and grants n
   // ADMINLINK-03: seeing the link gives no authority; the route still decides.
   expect((await read("/admin"))!.status).toBe(403);
   expect(status).toHaveBeenCalled();
-  expect(verifiedOwner).toHaveBeenCalledWith(bearer);
+  expect(accountRoles).toHaveBeenCalledWith(bearer);
 
   // ADMINLINK-03: a failing check hides the link and the page still renders.
-  verifiedOwner.mockRejectedValue(new Error("database unavailable"));
+  accountRoles.mockRejectedValue(new Error("database unavailable"));
   const failed = await read("/readiness");
   expect(failed!.status).toBe(200);
   expect(failed!.text).not.toContain('href="/admin"');
 
   // ADMINLINK-03: signed-out visitors and assets cost no owner check.
-  verifiedOwner.mockClear();
-  verifiedOwner.mockResolvedValue(true);
+  accountRoles.mockClear();
+  accountRoles.mockResolvedValue(["student", "coach", "admin"]);
   const visitor = await read("/readiness", "");
   expect(visitor!.text).not.toContain('href="/admin"');
   await read("/assets/style.css");
   await read("/readiness", `${COOKIE}=not-a-member-token`);
-  expect(verifiedOwner).not.toHaveBeenCalled();
+  expect(accountRoles).not.toHaveBeenCalled();
 });
 it("HOSTEDCOPY-01/02 hosted member pages describe a real account while the local preview keeps its wording", async () => {
   const hostedOrigin = "https://engine.deepnative.io";

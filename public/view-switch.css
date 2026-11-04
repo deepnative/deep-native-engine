@@ -1,0 +1,23 @@
+/* ROLES-02: the view switch sits with the header links, outlined so it reads
+   as a choice rather than a page. Shared by the site and notebook headers. */
+.view-switch {
+  display: contents;
+}
+.view-switch button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid #2454d6;
+  border-radius: 8px;
+  color: #2454d6;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.view-switch button:hover,
+.view-switch button:focus-visible {
+  background: #eaf0ff;
+}

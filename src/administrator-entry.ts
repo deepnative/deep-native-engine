@@ -1,15 +1,13 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { invoiceUuid } from "./simple-invoice-values.ts";
 import { hash } from "./store.ts";
+import { ACCOUNT_ROLES, type AccountRole } from "./account-view.ts";
 import {
   practiceTransaction,
   PracticeLifetimeFailure,
 } from "./practice-session-lifetime.ts";
 
-const selected = ["shi@deepnative.io", "tom@deepnative.io"].map((address) =>
-  createHash("sha256").update(address).digest("hex"),
-);
 export type AdministratorResult =
   | { kind: "ready"; credential?: string; expires?: Date }
   | { kind: "denied" | "unavailable" };
@@ -66,8 +64,8 @@ export interface AdministratorEntry {
     ownerId?: string,
     view?: { page?: number; search?: string },
   ): Promise<AdministratorConsoleResult>;
-  /** Read-only: selects the Administration link and grants nothing. */
-  verifiedOwner?(memberToken: string): Promise<boolean>;
+  /** Read-only: the account's roles choose its views and grant nothing. */
+  accountRoles?(memberToken: string): Promise<AccountRole[]>;
   status(memberToken: string): Promise<AdministratorResult>;
   enter(memberToken: string): Promise<AdministratorResult>;
   end(memberToken: string): Promise<AdministratorResult>;
@@ -96,8 +94,11 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
           [owner.id],
         );
         const identity = await tx.query(
-          "SELECT 1 FROM member_email_identities WHERE principal_id=$1 AND email_hash=ANY($2::text[]) FOR SHARE",
-          [owner.id, selected],
+          // ROLES-06: entry follows the stored admin role.
+          `SELECT 1 FROM member_email_identities i
+            JOIN account_roles r ON r.email_hash=i.email_hash AND r.role='admin'
+           WHERE i.principal_id=$1 FOR SHARE OF i,r`,
+          [owner.id],
         );
         if (!workspace.rowCount || !identity.rowCount)
           throw new PracticeLifetimeFailure("denied");
@@ -144,17 +145,20 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
     }
   }
   return {
-    async verifiedOwner(memberToken) {
-      if (!/^[a-f0-9]{64}$/.test(memberToken)) return false;
-      const owner = await pool.query(
-        `SELECT 1 FROM principals p
+    async accountRoles(memberToken) {
+      if (!/^[a-f0-9]{64}$/.test(memberToken)) return [];
+      const held = await pool.query<{ role: string | null }>(
+        `SELECT r.role FROM principals p
          JOIN workspaces w ON w.owner_principal_id=p.id AND w.deleting_at IS NULL
-         JOIN member_email_identities i ON i.principal_id=p.id AND i.email_hash=ANY($2::text[])
+         LEFT JOIN member_email_identities i ON i.principal_id=p.id
+         LEFT JOIN account_roles r ON r.email_hash=i.email_hash
          WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
-           AND p.expires_at>clock_timestamp() LIMIT 1`,
-        [hash(memberToken), selected],
+           AND p.expires_at>clock_timestamp()`,
+        [hash(memberToken)],
       );
-      return Boolean(owner.rowCount);
+      if (!held.rowCount) return [];
+      const roles = new Set(held.rows.map((r) => r.role));
+      return ACCOUNT_ROLES.filter((r) => r === "student" || roles.has(r));
     },
     async console(credential, ownerId, view = {}) {
       if (
