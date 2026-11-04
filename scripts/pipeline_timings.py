@@ -146,11 +146,21 @@ def record_after_gate(root):
 def write_durations(root, artifacts):
     """Refresh the committed integration duration register from one run."""
     results = load(artifacts, "integration-results.json").get("testResults") or []
-    files = {}
+    times = {}
     for result in results:
         name = result["name"]
-        relative = name[name.rindex("/tests/integration/") + 1:]
-        files[relative] = round((result["endTime"] - result["startTime"]) / 1000, 1)
+        times[name[name.rindex("/tests/integration/") + 1:]] = (result["startTime"], result["endTime"])
+    files = {name: round((end - start) / 1000, 1) for name, (start, end) in times.items()}
+    # Vitest file times exclude beforeAll and collection. Where the run recorded
+    # its lane plan, charge each file from the previous file's end (or the lane
+    # start) to its own end, so setup and waits count against the file causing them.
+    shards = load(artifacts, "integration-shards.json")
+    for lane, run in zip(shards.get("plan") or [], shards.get("lanes") or []):
+        previous = datetime.fromisoformat(run["started"]).timestamp() * 1000
+        for name in sorted((f for f in lane["files"] if f in times), key=lambda f: times[f][0]):
+            start, end = times[name]
+            files[name] = round((end - min(start, max(previous, 0))) / 1000, 1)
+            previous = max(previous, end)
     if not files:
         print("No integration results found; durations unchanged.")
         return 1

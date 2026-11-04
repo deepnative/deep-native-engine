@@ -93,7 +93,7 @@ Options 1, 2 and 3 together should take the gate from about 24m to about 17–18
 
 ## Integration lane balancing
 
-The integration runner no longer uses Vitest's count-based `--shard`. It plans each lane's files itself, longest first, from the committed per-file seconds in `tests/integration/durations.json`, plus about 2s per file for Vitest startup. A file that isn't in the register gets the median duration, so a new test file still runs. The plan is deterministic: the same commit and group count always give the same lanes. `artifacts/integration-shards.json` records each lane's files and estimated seconds under `plan`, so a failing lane can be rerun with exactly its files.
+The integration runner no longer uses Vitest's count-based `--shard`. It plans each lane's files itself, longest first, from the committed per-file seconds in `tests/integration/durations.json`. The refresh charges each file from the end of the previous file in its lane, so setup counts. This matters: Vitest's own file times leave out `beforeAll`, and two `event-attendance-*` files deliberately wait about 2 minutes there for a real scheduled start. The first balanced run missed that and left two lanes at 6m22s. A file that isn't in the register gets the median duration, so a new test file still runs. The plan is deterministic: the same commit and group count always give the same lanes. `artifacts/integration-shards.json` records each lane's files and estimated seconds under `plan`, so a failing lane can be rerun with exactly its files.
 
 Every file still runs exactly once in its own lane database. The complete-union, duplicate-file and foreign-file checks are unchanged and still fail closed.
 

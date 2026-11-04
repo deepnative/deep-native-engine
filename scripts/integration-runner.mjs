@@ -98,12 +98,10 @@ export function integrationFiles(root) {
   return files;
 }
 
-// Committed per-file seconds from a measured run; refresh with
+// Committed per-file seconds (including setup) from a measured run; refresh with
 // `python3 scripts/pipeline_timings.py durations`. Only lane grouping uses it:
 // every inventory file still runs once and the union check is unchanged.
 const DURATIONS = "tests/integration/durations.json";
-// Per-file Vitest startup and collection, measured at about 2s per file.
-const FILE_OVERHEAD_SECONDS = 2;
 
 export function readDurations(root) {
   let text;
@@ -137,13 +135,7 @@ export function readDurations(root) {
 
 // Longest file first onto the least-loaded lane (fewest files on a tie, then
 // lowest index), so the same inventory and durations always give the same lanes.
-export function planLanes(
-  files,
-  root,
-  durations,
-  count,
-  overhead = FILE_OVERHEAD_SECONDS,
-) {
+export function planLanes(files, root, durations, count) {
   requireGate(files.length >= count, "Fewer integration files than lanes");
   const known = Object.values(durations).sort((a, b) => a - b);
   const median = known.length ? known[Math.floor((known.length - 1) / 2)] : 10;
@@ -152,7 +144,7 @@ export function planLanes(
       const recorded = durations[path.relative(root, file)];
       return {
         file,
-        seconds: (recorded === undefined ? median : recorded) + overhead,
+        seconds: recorded === undefined ? median : recorded,
       };
     })
     .sort((a, b) => b.seconds - a.seconds || a.file.localeCompare(b.file));

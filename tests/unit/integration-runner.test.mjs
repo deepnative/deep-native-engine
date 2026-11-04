@@ -672,7 +672,6 @@ const plan = (durations, count, files = Object.keys(durations)) =>
       ]),
     ),
     count,
-    0,
   ).map((lane) => ({
     index: lane.index,
     files: lane.files.map((file) => path.basename(file, ".test.ts")),
@@ -781,7 +780,7 @@ it("LANE-BAL-01 launches each lane with its planned files instead of a count-bas
   );
   expect(evidence.assignment).toBe("measured-durations");
   expect(evidence.plan.map((lane) => lane.estimatedSeconds)).toEqual([
-    42, 32, 22, 12,
+    40, 30, 20, 10,
   ]);
   expect(evidence.plan[0].files).toEqual(["tests/integration/first.test.ts"]);
 });
