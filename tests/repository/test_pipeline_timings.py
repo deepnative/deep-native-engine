@@ -188,6 +188,33 @@ class History(Fixture):
         self.assertIn("Timing summary unavailable", out.getvalue())
 
 
+class IntegrationDurations(Fixture):
+    def results(self, run_root):
+        write(self.artifacts, "repository-verification.json", {"commit": "c" * 40})
+        write(self.artifacts, "integration-results.json", {"testResults": [
+            {"name": f"{run_root}/tests/integration/slow.test.ts", "startTime": 1000, "endTime": 240450},
+            {"name": f"{run_root}/tests/integration/fast.test.ts", "startTime": 5000, "endTime": 5040},
+        ]})
+
+    def test_lane_bal05_refresh_writes_every_file_with_its_seconds(self):
+        # The run may come from another worktree; only the repository-relative path is kept.
+        self.results("/elsewhere/tests/integration/../worktree")
+        with redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(timings.main(["durations", str(self.artifacts)], root=self.root), 0)
+        register = json.loads((self.root / "tests/integration/durations.json").read_text())
+        self.assertEqual(register, {
+            "schema": "integration-durations-v1", "source": "c" * 40,
+            "files": {"tests/integration/fast.test.ts": 0.0, "tests/integration/slow.test.ts": 239.4},
+        })
+        self.assertIn("2 integration files", out.getvalue())
+
+    def test_lane_bal05_refresh_refuses_missing_or_empty_results(self):
+        self.artifacts.mkdir()
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(timings.main(["durations", str(self.artifacts)], root=self.root), 1)
+        self.assertFalse((self.root / "tests/integration/durations.json").exists())
+
+
 class Formatting(unittest.TestCase):
     def test_durations(self):
         self.assertEqual(timings.duration(5), "0m05s")

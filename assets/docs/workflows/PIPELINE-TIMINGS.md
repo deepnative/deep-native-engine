@@ -11,6 +11,7 @@ python3 scripts/pipeline_timings.py gate                          # table for th
 python3 scripts/pipeline_timings.py gate path/to/artifacts        # another run's artifacts
 python3 scripts/pipeline_timings.py deploy 41674463237 --record   # deploy steps via gh, saved to history
 python3 scripts/pipeline_timings.py history 20                    # last 20 recorded gate/deploy runs
+python3 scripts/pipeline_timings.py durations                     # refresh integration lane durations from artifacts/
 ```
 
 The timestamps come from receipts the gate already wrote, plus these additions:
@@ -71,7 +72,7 @@ Savings are estimates from the measured run above. Re-measure with the timing to
 
 | # | Option | Expected saving | Coverage impact | Effort / risk |
 | --- | --- | ---: | --- | --- |
-| 1 | **Balance integration lanes by measured file duration.** Assign files greedily, longest first, using the previous run's `integration-results.json`, and fall back to Vitest's `--shard` when there is no history. Keep one database per lane and the complete-inventory union check. | **~3m** (8m14s → ~5m, limited by the 239s file) | None: same files, same lanes | Medium; touches `integration-runner.mjs` |
+| 1 | **Balance integration lanes by measured file duration.** Delivered in [#674](https://github.com/deepnative/deep-native-engine/issues/674); see [below](#integration-lane-balancing). | **~3m** (8m14s → ~5m, limited by the 239s file) | None: same files, one database per lane, same union check | Done |
 | 2 | **Balance browser shards by measured file × project duration**, passing explicit file lists per shard instead of `--shard`. Keep each file's ordered tests together. | **~2m** (7m02s → ~5m) | None | Medium; touches `browser-runner.mjs`; the blob merge is unchanged |
 | 3 | **Make repository tests cheaper.** `RepositoryFixture` copies the whole repository and creates a Git commit for each of ~92 tests (126s). Build the fixture once per class and clone it per test, or run test classes in parallel processes. | ~1.5m | None | Low–medium |
 | 4 | **Split the two longest integration files** (`attempt-lifetime` 239s, `owner-preview` 159s) into smaller files along their existing scenario groups. This lowers the floor for option 1. | ~1m on top of #1 | None if every case is kept | Medium |
@@ -89,3 +90,12 @@ Savings are estimates from the measured run above. Re-measure with the timing to
 - Run the provisional and cross-browser journeys (~2m) only before a release instead of on every push.
 
 Options 1, 2 and 3 together should take the gate from about 24m to about 17–18m with no change in what is checked. Option 5 is the cheapest deploy win.
+
+## Integration lane balancing
+
+The integration runner no longer uses Vitest's count-based `--shard`. It plans each lane's files itself, longest first, from the committed per-file seconds in `tests/integration/durations.json`, plus about 2s per file for Vitest startup. A file that isn't in the register gets the median duration, so a new test file still runs. The plan is deterministic: the same commit and group count always give the same lanes. `artifacts/integration-shards.json` records each lane's files and estimated seconds under `plan`, so a failing lane can be rerun with exactly its files.
+
+Every file still runs exactly once in its own lane database. The complete-union, duplicate-file and foreign-file checks are unchanged and still fail closed.
+
+Refresh the register when lanes drift apart, for example after a large new test file: run a full gate, then `python3 scripts/pipeline_timings.py durations`, and commit the updated `tests/integration/durations.json`. A stale register only affects speed, never what is tested.
+

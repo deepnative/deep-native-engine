@@ -21,6 +21,8 @@ import {
   integrationFiles,
   mergeIntegrationReports,
   mergeUnhandled,
+  planLanes,
+  readDurations,
   testLaneCount,
   runIntegration,
 } from "../../scripts/integration-runner.mjs";
@@ -446,13 +448,8 @@ it("fails a malformed administrative target without exposing it or claiming test
 function controlledNativeRun(count = 4) {
   const root = directory();
   mkdirSync(path.join(root, "tests/integration"), { recursive: true });
-  const files = ["first", "second", "third", "fourth"]
-    .slice(0, count)
-    .map((name) => {
-      const file = path.join(root, `tests/integration/${name}.test.ts`);
-      writeFileSync(file, "");
-      return file;
-    });
+  for (const name of ["first", "second", "third", "fourth"].slice(0, count))
+    writeFileSync(path.join(root, `tests/integration/${name}.test.ts`), "");
   vi.stubEnv(
     "DNE_TEST_DATABASE_URL",
     `postgresql://invented:private@127.0.0.1/dne_test_${"a".repeat(32)}`,
@@ -484,16 +481,20 @@ function controlledNativeRun(count = 4) {
     },
   );
   const launched = [];
-  vi.mocked(spawn).mockImplementation((_command, args) => {
+  vi.mocked(spawn).mockImplementation((_command, args, options) => {
     const child = new EventEmitter();
     child.stdout = new EventEmitter();
     child.stderr = new EventEmitter();
     child.kill = vi.fn();
-    const index = Number(
-      args.find((arg) => arg.startsWith("--shard=")).match(/=(\d)/)[1],
-    );
-    const report = fixture().lanes[index - 1].report;
-    report.testResults[0].name = files[index - 1];
+    const index = Number(options.env.DNE_INTEGRATION_SHARD);
+    const report = fixture().lanes[0].report;
+    const given = args.filter((arg) => arg.startsWith("tests/integration/"));
+    report.testResults = given.map((file) => ({
+      ...report.testResults[0],
+      name: path.join(root, file),
+    }));
+    report.numTotalTests = report.numPassedTests = given.length;
+    report.numTotalTestSuites = report.numPassedTestSuites = given.length;
     child.finish = (exitStatus = 0) => {
       const destination = path.join(
         root,
@@ -658,4 +659,129 @@ it("SPEED06 runs and aggregates a complete two-group native campaign", async () 
       ),
     ).laneCount,
   ).toBe(2);
+});
+
+const plan = (durations, count, files = Object.keys(durations)) =>
+  planLanes(
+    files.map((name) => path.resolve(`tests/integration/${name}.test.ts`)),
+    path.resolve("."),
+    Object.fromEntries(
+      Object.entries(durations).map(([name, seconds]) => [
+        `tests/integration/${name}.test.ts`,
+        seconds,
+      ]),
+    ),
+    count,
+    0,
+  ).map((lane) => ({
+    index: lane.index,
+    files: lane.files.map((file) => path.basename(file, ".test.ts")),
+    estimatedSeconds: lane.estimatedSeconds,
+  }));
+it("LANE-BAL-01 spreads the longest files across lanes by recorded duration", () => {
+  expect(plan({ a: 100, b: 60, c: 50, d: 40 }, 2)).toEqual([
+    { index: 1, files: ["a", "d"], estimatedSeconds: 140 },
+    { index: 2, files: ["b", "c"], estimatedSeconds: 110 },
+  ]);
+  const lanes = plan(
+    { a: 239, b: 159, c: 66, d: 65, e: 64, f: 56, g: 56, h: 53, i: 52, j: 45 },
+    4,
+  );
+  const slowest = Math.max(...lanes.map((lane) => lane.estimatedSeconds));
+  expect(slowest).toBe(239);
+  expect(lanes.flatMap((lane) => lane.files).sort()).toEqual(
+    "abcdefghij".split(""),
+  );
+});
+it("LANE-BAL-02 gives a file without a recorded duration the median estimate", () => {
+  const lanes = plan({ a: 30, b: 10, c: 20 }, 2, ["a", "b", "c", "new"]);
+  expect(lanes).toEqual([
+    // new gets the median (20): a→1, c→2, new→2, b→1.
+    { index: 1, files: ["a", "b"], estimatedSeconds: 40 },
+    { index: 2, files: ["c", "new"], estimatedSeconds: 40 },
+  ]);
+});
+it("LANE-BAL-03 plans identical lanes for the same inputs in any order", () => {
+  const durations = { a: 5, b: 5, c: 5, d: 9, e: 1 };
+  const first = plan(durations, 3, ["a", "b", "c", "d", "e"]);
+  expect(plan(durations, 3, ["e", "d", "c", "b", "a"])).toEqual(first);
+});
+it("LANE-BAL-03 never leaves a lane empty when durations are zero", () => {
+  const lanes = plan({ a: 0, b: 0, c: 0 }, 3);
+  expect(lanes.map((lane) => lane.files.length)).toEqual([1, 1, 1]);
+});
+it("LANE-BAL-04 refuses more lanes than integration files", () => {
+  expect(() => plan({ a: 1, b: 1 }, 3)).toThrow(
+    "Fewer integration files than lanes",
+  );
+});
+it("LANE-BAL-02 reads an absent register as no durations and refuses a malformed one", () => {
+  const root = directory();
+  expect(readDurations(root)).toEqual({});
+  mkdirSync(path.join(root, "tests/integration"), { recursive: true });
+  const file = path.join(root, "tests/integration/durations.json");
+  writeFileSync(
+    file,
+    JSON.stringify({
+      schema: "integration-durations-v1",
+      files: { "tests/integration/a.test.ts": 4.5 },
+    }),
+  );
+  expect(readDurations(root)).toEqual({ "tests/integration/a.test.ts": 4.5 });
+  for (const value of [
+    "{",
+    JSON.stringify({ schema: "other", files: {} }),
+    JSON.stringify({
+      schema: "integration-durations-v1",
+      files: { "tests/integration/a.test.ts": -1 },
+    }),
+    JSON.stringify({
+      schema: "integration-durations-v1",
+      files: { "../outside.test.ts": 1 },
+    }),
+  ]) {
+    writeFileSync(file, value);
+    expect(() => readDurations(root)).toThrow(
+      "Integration duration register invalid",
+    );
+  }
+});
+it("LANE-BAL-01 launches each lane with its planned files instead of a count-based shard", async () => {
+  const { root, launched } = controlledNativeRun();
+  writeFileSync(
+    path.join(root, "tests/integration/durations.json"),
+    JSON.stringify({
+      schema: "integration-durations-v1",
+      files: {
+        "tests/integration/first.test.ts": 40,
+        "tests/integration/second.test.ts": 30,
+        "tests/integration/third.test.ts": 20,
+        "tests/integration/fourth.test.ts": 10,
+      },
+    }),
+  );
+  const run = runIntegration(root);
+  await vi.waitFor(() => expect(launched).toHaveLength(4));
+  const calls = vi.mocked(spawn).mock.calls;
+  expect(
+    calls.flatMap((call) => call[1]).some((arg) => arg.startsWith("--shard")),
+  ).toBe(false);
+  expect(
+    calls.map((call) => call[1].filter((arg) => arg.startsWith("tests/"))),
+  ).toEqual([
+    ["tests/integration/first.test.ts"],
+    ["tests/integration/second.test.ts"],
+    ["tests/integration/third.test.ts"],
+    ["tests/integration/fourth.test.ts"],
+  ]);
+  for (const child of launched) child.finish();
+  expect(await run).toBe(0);
+  const evidence = JSON.parse(
+    readFileSync(path.join(root, "artifacts/integration-shards.json"), "utf8"),
+  );
+  expect(evidence.assignment).toBe("measured-durations");
+  expect(evidence.plan.map((lane) => lane.estimatedSeconds)).toEqual([
+    42, 32, 22, 12,
+  ]);
+  expect(evidence.plan[0].files).toEqual(["tests/integration/first.test.ts"]);
 });
