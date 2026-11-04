@@ -67,7 +67,7 @@ it("MR-01 an administrator can read the retained-learning snapshot as HTML while
   const html = await get("/operator/metrics/report").expect(200);
   expect(html.type).toBe("text/html");
   expect(html.text).toContain("Learning and participation snapshot");
-  expect(html.text).toContain("No eligible members yet");
+  expect(html.text).toContain("Values are broad bands");
   expect(html.text).toContain("Suppressed to protect small groups");
   expect(html.text).toContain('href="/operator/metrics"');
 });

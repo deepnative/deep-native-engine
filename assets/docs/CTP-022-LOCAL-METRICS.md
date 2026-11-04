@@ -1,5 +1,23 @@
 # CTP-022 local preview metrics slice
 
+## Bands, segments and cohorts — #649, #619
+
+No exact learning count leaves the store. `src/learning-metrics.ts` turns the aggregate into coarse bands (`5-19`, `20-49`, `50-99`, `100-199`, `200+`) before anything reaches the JSON or the report:
+
+- **Small groups.** Nothing is shown below 20 retained members. A value below five, or within five of its denominator, is suppressed. A suppressed value may be zero or not. On a small preview the learning section is therefore fully suppressed until 20 members exist.
+- **Segments.** The same measures for each current starting point, current goal and interest tag. Interest tags overlap, so rows can add up to more than the total. A segment is suppressed below 20 members or with fewer than five members outside it, and every known segment is always listed. A segment never implies a paid tier, career path or staff right.
+- **Join-month cohorts.** Retained members by UTC join month, latest 12 months, measured over fixed windows from each member's own join time: lesson opened and self-assessed (self-reported) within 14 days, assignment submitted within 30 days, continued from day 7 up to day 30. Later events never count. A cohort shows no values until 30 days after its month ends.
+
+**Retention.** The owner direction of 27 October on #121 applies: retained-account metrics only, with deleted accounts excluded. Deleting an account removes it from its cohort and segments, so denominators shrink and earlier months can change. Historical deleted accounts cannot be reconstructed, and `created_at` for accounts older than migration 003 is a backfill rather than a true join date.
+
+**No new tracking.** This uses existing records only, with no new table, event or provider. Exact counts remain in `exactMetrics`, which no route may serve; database tests use it to check the SQL.
+
+**Limits.** Repeated snapshots near a band boundary can still allow inference, so this is an interim safeguard, not an anonymity claim. Segments use current choices, not values at the time of each event, and demo records are not yet excluded. Both stay on #121.
+
+**Evidence.** MET-SUPP-01, MET-SEG-01/02 and MET-COH-01/02/03 are in `tests/unit/learning-metrics.test.ts` and `tests/integration/learning-cohorts.test.ts`, which failed before implementation. Journeys L222 and L223 read the bands in the browser on desktop and mobile; L47 and L68 confirm no exact count is served.
+
+Exact-count wording below describes the earlier contract and is superseded by this section.
+
 ## Readable staff report
 
 Sign in through the existing staff entry form as a current operator or platform administrator, then open **Learning and participation snapshot** from staff tools. `/operator/metrics/report` renders the existing aggregate as readable HTML with its snapshot time, counts, denominators, plain definitions, return window and usefulness suppression. **Reload snapshot** makes a deliberate new read; **View aggregate JSON** opens the unchanged `/operator/metrics` API. No new tracking, calculation, record, export or staff authority is introduced.

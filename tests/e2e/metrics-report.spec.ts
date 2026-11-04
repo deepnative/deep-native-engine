@@ -117,11 +117,11 @@ test("[L222] MR-01-02-04 staff reads three-audience retained learning, return an
   await expect(
     page.getByRole("heading", { name: heading, exact: true }),
   ).toBeVisible();
-  await expect(page.locator('[data-metric="members"]')).toHaveText("0");
+  await expect(page.locator('[data-metric="members"]')).toHaveText(
+    "Suppressed",
+  );
   await expect(
-    page.getByText("No eligible members yet; a return rate is undefined.", {
-      exact: true,
-    }),
+    page.getByText("No cohorts yet.", { exact: true }),
   ).toBeVisible();
   await expect(page.locator('[data-usefulness="suppressed"]')).toContainText(
     "Suppressed to protect small groups",
@@ -134,9 +134,15 @@ test("[L222] MR-01-02-04 staff reads three-audience retained learning, return an
           ('MRP-122',1,'lesson','curated','Private later lesson','PRIVATE_LATER_BODY','Test','Test','Owned'),
           ('MRP-123',1,'assignment','curated','Private fixture assignment','PRIVATE_ASSIGNMENT_BODY','Test','Test','Owned')`);
   const people: Awaited<ReturnType<typeof member>>[] = [];
-  for (let index = 0; index < 20; index += 1) {
+  for (let index = 0; index < 66; index += 1) {
     const person = await member(index);
     people.push(person);
+    // A third of the members have no activity, and everyone joined in a closed month.
+    await pool.query(
+      `UPDATE principals SET created_at=date_trunc('month',CURRENT_TIMESTAMP)-interval '3 months' WHERE id=$1`,
+      [person.id],
+    );
+    if (index >= 44) continue;
     await pool.query(
       `INSERT INTO lesson_activity(member_id,content_id,content_version,opened_at,started_at,self_assessed_at)
       VALUES($1,'MRP-121',1,CURRENT_TIMESTAMP-interval '20 days',CURRENT_TIMESTAMP-interval '19 days',CURRENT_TIMESTAMP-interval '18 days')`,
@@ -144,14 +150,14 @@ test("[L222] MR-01-02-04 staff reads three-audience retained learning, return an
     );
     await pool.query(
       `INSERT INTO lesson_usefulness(member_id,content_id,content_version,choice) VALUES($1,'MRP-121',1,$2)`,
-      [person.id, index < 10 ? "helpful" : "not_yet"],
+      [person.id, index < 22 ? "helpful" : "not_yet"],
     );
-    if (index < 5)
+    if (index < 12)
       await pool.query(
         `INSERT INTO lesson_activity(member_id,content_id,content_version,opened_at) VALUES($1,'MRP-122',1,CURRENT_TIMESTAMP-interval '12 days')`,
         [person.id],
       );
-    if (index < 3) {
+    if (index < 8) {
       const attemptId = randomUUID();
       await pool.query(
         `INSERT INTO assignment_attempts(id,member_id,content_id,content_version,goal_at_start,response,saved_at,submitted_at,submission_count)
@@ -173,18 +179,41 @@ test("[L222] MR-01-02-04 staff reads three-audience retained learning, return an
     .first()
     .click();
   for (const [name, value] of Object.entries({
-    members: 20,
-    activated: 20,
-    selfAssessed: 20,
-    submittedAssignment: 3,
-    participated: 3,
-    activeCircle: 2,
-    returnEligible: 20,
-    crossContentReturned: 5,
+    members: "50-99",
+    activated: "20-49",
+    selfAssessed: "20-49",
+    submittedAssignment: "5-19",
+    participated: "5-19",
+    activeCircle: "5-19",
+    returnEligible: "20-49",
+    crossContentReturned: "5-19",
   }))
-    await expect(page.locator(`[data-metric="${name}"]`)).toHaveText(
-      String(value),
-    );
+    await expect(page.locator(`[data-metric="${name}"]`)).toHaveText(value);
+  // MET-SEG-01: 22 members in each starting point and goal; no interest tags.
+  await expect(
+    page.locator('[data-segment="background-explorer"] td').first(),
+  ).toHaveText("20-49");
+  await expect(
+    page.locator('[data-segment="goal-build"] td').first(),
+  ).toHaveText("20-49");
+  await expect(
+    page.locator('[data-segment="interests-technical"] td').first(),
+  ).toHaveText("Suppressed");
+  // MET-COH-01/02: a closed month with bands; lesson opens were later than day 14.
+  const month = (
+    await pool.query<{ month: string }>(
+      `SELECT to_char(date_trunc('month',CURRENT_TIMESTAMP)-interval '3 months','YYYY-MM') AS month`,
+    )
+  ).rows[0]!.month;
+  await expect(page.locator(`[data-cohort="${month}"] td`).first()).toHaveText(
+    "50-99",
+  );
+  await expect(page.locator("body")).toContainText("Self-reported completion");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
   await expect(page.locator('[data-usefulness="coarse-band"]')).toContainText(
     "50-74%",
   );
@@ -221,17 +250,19 @@ test("[L222] MR-01-02-04 staff reads three-audience retained learning, return an
     .first()
     .click();
   const json = JSON.parse(await page.locator("body").innerText());
-  expect(json.counts.members).toBe(20);
+  expect(json.counts).toBeUndefined();
+  expect(json.learning.members).toBe("50-99");
   expect(json.scope).toBe("synthetic-local-preview");
   await store(pool).remove(people[0]!.id);
   await page.goto(running.origin + reportPath);
-  await expect(page.locator('[data-metric="members"]')).toHaveText("19");
-  await expect(page.locator('[data-metric="submittedAssignment"]')).toHaveText(
-    "2",
+  // Deleting one of 44 respondents leaves both choices at five or more; deleting
+  // everyone else with a recorded answer suppresses the block entirely.
+  await pool.query(
+    "DELETE FROM lesson_usefulness WHERE member_id = ANY($1::uuid[])",
+    [people.slice(0, 40).map((person) => person.id)],
   );
-  await expect(page.locator('[data-metric="crossContentReturned"]')).toHaveText(
-    "4",
-  );
+  await page.goto(running.origin + reportPath);
+  await expect(page.locator('[data-metric="members"]')).toHaveText("50-99");
   await expect(page.locator('[data-usefulness="suppressed"]')).toBeVisible();
   expect(await page.content()).not.toContain("Helpful-share band:");
   await expect(page.locator("body")).not.toContainText("left_at");
@@ -272,7 +303,9 @@ test("[L223] MR-03 current staff role and session protect the report, and an act
   await page
     .getByRole("link", { name: "Reload snapshot", exact: true })
     .click();
-  await expect(page.locator('[data-metric="members"]')).toHaveText("1");
+  await expect(page.locator('[data-metric="members"]')).toHaveText(
+    "Suppressed",
+  );
   await pool.query(
     "UPDATE principals SET revoked_at=CURRENT_TIMESTAMP WHERE id=$1",
     [operator.id],

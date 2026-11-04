@@ -1,3 +1,7 @@
+import {
+  learningDisclosure,
+  learningSegments,
+} from "../../src/learning-metrics.ts";
 import { expect, it } from "vitest";
 import {
   VOLUME_KEYS,
@@ -111,17 +115,16 @@ const base: PreviewMetrics = {
     returnEligible: "Eligible.",
     crossContentReturned: "Returned.",
     usefulness: "Useful.",
+    segments: "Segments.",
+    cohorts: "Cohorts.",
+    cohortActivated: "Cohort opened.",
+    cohortSelfAssessed: "Cohort self-reported.",
+    cohortSubmittedAssignment: "Cohort submitted.",
+    cohortContinued: "Cohort continued.",
   },
-  counts: {
-    members: 30,
-    activated: 1,
-    selfAssessed: 1,
-    participated: 1,
-    activeCircle: 1,
-    submittedAssignment: 1,
-    returnEligible: 1,
-    crossContentReturned: 1,
-  },
+  learning: learningDisclosure(null),
+  segments: learningSegments(null, 0),
+  cohorts: [],
   usefulness: { disclosure: "suppressed", helpfulShareBand: null },
   contributions: contributionMetrics(new Date("2026-11-01T00:00:00Z"), {
     member: raw(20, {

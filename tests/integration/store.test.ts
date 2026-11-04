@@ -36,7 +36,7 @@ import { testPool } from "../support/database.ts";
 import { trackStore } from "../../src/track-readiness.ts";
 import { proposalStore } from "../../src/proposals.ts";
 import { circleStore } from "../../src/circles.ts";
-import { metricsStore } from "../../src/metrics.ts";
+import { exactMetrics, metricsStore } from "../../src/metrics.ts";
 import { attemptStore } from "../../src/attempts.ts";
 import { practiceStore } from "../../src/practice.ts";
 import {
@@ -3369,10 +3369,25 @@ it("keeps failed PostgreSQL attempt writes unconfirmed until a checked retry", a
   }
 });
 
+async function exactCounts(token: string) {
+  const row = await exactMetrics(pool, token);
+  return (
+    row && {
+      members: row.members,
+      activated: row.activated,
+      selfAssessed: row.selfAssessed,
+      participated: row.participated,
+      activeCircle: row.activeCircle,
+      submittedAssignment: row.submittedAssignment,
+      returnEligible: row.returnEligible,
+      crossContentReturned: row.crossContentReturned,
+    }
+  );
+}
 it("reports an undefined return rate with no retained members and no private rows", async () => {
   const operator = await staff("operator");
   const snapshot = await metricsStore(pool).snapshot(operator.token);
-  expect(snapshot?.counts).toEqual({
+  expect(await exactCounts(operator.token)).toEqual({
     members: 0,
     activated: 0,
     selfAssessed: 0,
@@ -3424,7 +3439,7 @@ it("counts retained preview learning and circle events once without granting met
     "UPDATE principals SET expires_at=CURRENT_TIMESTAMP WHERE id=$1",
     [third.learner.id],
   );
-  expect((await metrics.snapshot(operator.token))?.counts).toEqual({
+  expect(await exactCounts(operator.token)).toEqual({
     members: 3,
     activated: 2,
     selfAssessed: 1,
@@ -3537,7 +3552,7 @@ it("counts only retained, matured cross-content returns and observed submissions
     [technical.learner.id],
   );
   const first = await metrics.snapshot(operator.token);
-  expect(first?.counts).toMatchObject({
+  expect(await exactCounts(operator.token)).toMatchObject({
     members: 5,
     submittedAssignment: 3,
     returnEligible: 4,
@@ -3549,7 +3564,7 @@ it("counts only retained, matured cross-content returns and observed submissions
   await pool.query("DELETE FROM assignment_attempts WHERE id=$1", [
     generalAttempt,
   ]);
-  expect((await metrics.snapshot(operator.token))?.counts).toMatchObject({
+  expect(await exactCounts(operator.token)).toMatchObject({
     submittedAssignment: 2,
     returnEligible: 4,
     crossContentReturned: 2,
@@ -3557,7 +3572,7 @@ it("counts only retained, matured cross-content returns and observed submissions
   await pool.query("DELETE FROM principals WHERE id=$1", [
     technical.learner.id,
   ]);
-  expect((await metrics.snapshot(operator.token))?.counts).toMatchObject({
+  expect(await exactCounts(operator.token)).toMatchObject({
     members: 4,
     submittedAssignment: 1,
     returnEligible: 3,

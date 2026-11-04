@@ -1515,19 +1515,23 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 .portal-page.administrator-console {
   max-width: none;
 }
-.member-table {
+.member-table,
+.metrics-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 15px;
 }
 .member-table th,
-.member-table td {
+.member-table td,
+.metrics-table th,
+.metrics-table td {
   padding: 8px 16px;
   border-top: 1px solid var(--line);
   text-align: left;
   white-space: nowrap;
 }
-.member-table thead th {
+.member-table thead th,
+.metrics-table thead th {
   border-top: 0;
   color: var(--muted);
 }

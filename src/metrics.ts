@@ -4,6 +4,16 @@ import {
   contributionMetrics,
   type ContributionMetrics,
 } from "./contribution-metrics.ts";
+import {
+  learningCohorts,
+  learningDisclosure,
+  learningSegments,
+  LEARNING_KEYS,
+  type LearningCohort,
+  type LearningDisclosure,
+  type LearningSegments,
+  type RawLearningCell,
+} from "./learning-metrics.ts";
 
 export interface PreviewMetrics {
   scope: "synthetic-local-preview";
@@ -18,17 +28,16 @@ export interface PreviewMetrics {
     returnEligible: string;
     crossContentReturned: string;
     usefulness: string;
+    segments: string;
+    cohorts: string;
+    cohortActivated: string;
+    cohortSelfAssessed: string;
+    cohortSubmittedAssignment: string;
+    cohortContinued: string;
   };
-  counts: {
-    members: number;
-    activated: number;
-    selfAssessed: number;
-    participated: number;
-    activeCircle: number;
-    submittedAssignment: number;
-    returnEligible: number;
-    crossContentReturned: number;
-  };
+  learning: LearningDisclosure;
+  segments: LearningSegments;
+  cohorts: LearningCohort[];
   usefulness: UsefulnessDisclosure;
   contributions: ContributionMetrics;
 }
@@ -93,26 +102,33 @@ const contributionVolumes = {
 const firstDecision = `e.kind='reviewed' AND EXISTS(SELECT 1 FROM contribution_retained s
   WHERE s.kind='submitted' AND s.proposal_id=e.proposal_id AND s.revision=e.revision)`;
 
-export function metricsStore(pool: Pool): MetricsStore {
-  return {
-    async snapshot(token) {
-      const result = await pool.query<{
-        asOf: Date;
-        members: number;
-        activated: number;
-        selfAssessed: number;
-        participated: number;
-        activeCircle: number;
-        submittedAssignment: number;
-        returnEligible: number;
-        crossContentReturned: number;
-        usefulnessRespondents: number;
-        usefulnessHelpful: number;
-        usefulnessNotYet: number;
-        contributionsSince: Date | null;
-        contributions: unknown;
-      }>(
-        `WITH authorized AS (
+// One group's exact counts. They stay in this module; see learning-metrics.ts.
+const learningCell = `jsonb_build_object('members',COUNT(*),${LEARNING_KEYS.map(
+  (key) => `'${key}',COUNT(*) FILTER(WHERE ${snake(key)})`,
+).join(",")})`;
+function snake(key: string) {
+  return key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
+const COHORT_MONTHS = 12;
+
+/**
+ * The exact aggregate, for this module and its database tests only. No route
+ * may serve it: `snapshot` is the disclosed form.
+ */
+export async function exactMetrics(pool: Pool, token: string) {
+  const result = await pool.query<
+    RawLearningCell & {
+      asOf: Date;
+      segments: unknown;
+      cohorts: unknown;
+      usefulnessRespondents: number;
+      usefulnessHelpful: number;
+      usefulnessNotYet: number;
+      contributionsSince: Date | null;
+      contributions: unknown;
+    }
+  >(
+    `WITH authorized AS (
            SELECT 1 FROM principals p JOIN authorized_staff_profiles s ON s.principal_id=p.id
            WHERE p.token_hash=$1 AND p.kind='staff'
              AND s.role IN ('operator','platform_admin')
@@ -130,9 +146,33 @@ export function metricsStore(pool: Pool): MetricsStore {
                JOIN assignment_submission_snapshots s ON s.attempt_id=a.id
                WHERE a.member_id=l.id AND s.submitted_at<=CURRENT_TIMESTAMP)
                AS submitted_assignment,
+             EXISTS(SELECT 1 FROM lesson_activity a WHERE a.member_id=l.id
+               AND a.opened_at>=j.joined AND a.opened_at<j.joined+interval '14 days')
+               AS cohort_activated,
+             EXISTS(SELECT 1 FROM lesson_activity a WHERE a.member_id=l.id
+               AND a.self_assessed_at>=j.joined
+               AND a.self_assessed_at<j.joined+interval '14 days')
+               AS cohort_self_assessed,
+             EXISTS(SELECT 1 FROM assignment_attempts a
+               JOIN assignment_submission_snapshots s ON s.attempt_id=a.id
+               WHERE a.member_id=l.id AND s.submitted_at>=j.joined
+                 AND s.submitted_at<j.joined+interval '30 days')
+               AS cohort_submitted_assignment,
+             (EXISTS(SELECT 1 FROM lesson_activity a WHERE a.member_id=l.id
+                AND a.opened_at>=j.joined+interval '7 days'
+                AND a.opened_at<j.joined+interval '30 days')
+              OR EXISTS(SELECT 1 FROM assignment_attempts a
+                JOIN assignment_submission_snapshots s ON s.attempt_id=a.id
+                WHERE a.member_id=l.id
+                  AND s.submitted_at>=j.joined+interval '7 days'
+                  AND s.submitted_at<j.joined+interval '30 days'))
+               AS cohort_continued,
+             l.background,l.goal,l.background_tags,j.joined,
              anchor.opened_at AS first_open,
              anchor.content_id AS first_lesson_id
-           FROM learners l LEFT JOIN LATERAL (
+           FROM learners l JOIN LATERAL (
+             SELECT p.created_at AS joined FROM principals p WHERE p.id=l.id
+           ) j ON TRUE LEFT JOIN LATERAL (
              SELECT a.opened_at,a.content_id FROM lesson_activity a
              WHERE a.member_id=l.id AND a.opened_at<=CURRENT_TIMESTAMP
              ORDER BY a.opened_at,a.content_id,a.content_version LIMIT 1
@@ -152,6 +192,26 @@ export function metricsStore(pool: Pool): MetricsStore {
                    AND s.submitted_at<m.first_open+interval '14 days')
              )) AS cross_content_returned
            FROM member_events m
+         ), background_cells AS (
+           SELECT background AS key,${learningCell} AS cell
+           FROM return_events GROUP BY background
+         ), goal_cells AS (
+           SELECT goal AS key,${learningCell} AS cell
+           FROM return_events GROUP BY goal
+         ), interest_cells AS (
+           SELECT t.key,${learningCell} AS cell
+           FROM return_events r CROSS JOIN LATERAL unnest(r.background_tags) t(key)
+           GROUP BY t.key
+         ), cohort_cells AS (
+           SELECT to_char(joined AT TIME ZONE 'UTC','YYYY-MM') AS month,
+             (date_trunc('month',joined AT TIME ZONE 'UTC')+interval '1 month'+interval '30 days')
+               <=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC') AS closed,
+             COUNT(*)::integer AS members,
+             COUNT(*) FILTER(WHERE cohort_activated)::integer AS activated,
+             COUNT(*) FILTER(WHERE cohort_self_assessed)::integer AS "selfAssessed",
+             COUNT(*) FILTER(WHERE cohort_submitted_assignment)::integer AS "submittedAssignment",
+             COUNT(*) FILTER(WHERE cohort_continued)::integer AS continued
+           FROM return_events GROUP BY 1,2 ORDER BY 1 DESC LIMIT ${COHORT_MONTHS}
          ), latest_usefulness AS (
            SELECT DISTINCT ON (u.member_id) u.member_id,u.choice
            FROM lesson_usefulness u JOIN learners l ON l.id=u.member_id
@@ -190,13 +250,25 @@ export function metricsStore(pool: Pool): MetricsStore {
            COALESCE(MAX(uc.respondents),0)::integer AS "usefulnessRespondents",
            COALESCE(MAX(uc.helpful),0)::integer AS "usefulnessHelpful",
            COALESCE(MAX(uc.not_yet),0)::integer AS "usefulnessNotYet",
+           jsonb_build_object(
+             'background',(SELECT jsonb_object_agg(key,cell) FROM background_cells),
+             'goal',(SELECT jsonb_object_agg(key,cell) FROM goal_cells),
+             'interests',(SELECT jsonb_object_agg(key,cell) FROM interest_cells)
+           ) AS segments,
+           (SELECT jsonb_agg(c ORDER BY c.month DESC) FROM cohort_cells c) AS cohorts,
            (SELECT started_at FROM contribution_metrics_cutoff) AS "contributionsSince",
            (SELECT jsonb_object_agg(origin,summary) FROM contribution_groups) AS contributions
          FROM return_events CROSS JOIN usefulness_counts uc
          HAVING EXISTS(SELECT 1 FROM authorized)`,
-        [hash(token)],
-      );
-      const row = result.rows[0];
+    [hash(token)],
+  );
+  return result.rows[0] ?? null;
+}
+
+export function metricsStore(pool: Pool): MetricsStore {
+  return {
+    async snapshot(token) {
+      const row = await exactMetrics(pool, token);
       if (!row) return null;
       return {
         scope: "synthetic-local-preview",
@@ -220,17 +292,22 @@ export function metricsStore(pool: Pool): MetricsStore {
             "Of returnEligible, distinct members with a different lesson content ID first opened or an assignment submitted at or after 7 full days and before 14 full days from their first lesson open. This is an observed cross-content return proxy, not general learning retention; the same lesson or a newer version alone is not a return. Zero eligible means the rate is undefined.",
           usefulness:
             "Member self-reported usefulness in this synthetic local preview, not observed skill, qualified review or current curriculum quality. Each retained member contributes only their latest corrected exact-version answer; historical versions remain historical. The denominator is respondents, not all members or an enrollment cohort. No exact respondent or choice counts are exposed. The whole block is suppressed below 20 respondents or when either choice has fewer than five; otherwise only a coarse helpful-share band is shown. Repeated snapshots can still permit inference, so this is not approved live analytics.",
+          segments:
+            "The same measures for each current starting point, current goal and interest tag. Interest tags overlap, so segment rows can add up to more than the total. A segment is suppressed below 20 members or when fewer than five members lie outside it; every segment is always listed, so a suppressed row may be zero or not. A segment is a member's own current choice; it never implies a paid tier, career path or staff right.",
+          cohorts:
+            "Retained members grouped by the UTC calendar month they joined, latest 12 months, each measured over fixed windows from their own join time. Later events do not count. A cohort shows no values until 30 days after its month ends. Deleting an account removes it from its cohort, so denominators shrink and earlier months can change; historical deleted accounts cannot be reconstructed.",
+          cohortActivated:
+            "Observed: opened a versioned lesson within 14 days of joining.",
+          cohortSelfAssessed:
+            "Self-reported: completed a lesson self-assessment within 14 days of joining. This is not observed skill.",
+          cohortSubmittedAssignment:
+            "Observed: submitted an assignment within 30 days of joining. This is not reviewed project quality.",
+          cohortContinued:
+            "Observed: opened a lesson or submitted an assignment from day 7 up to day 30 after joining.",
         },
-        counts: {
-          members: row.members,
-          activated: row.activated,
-          selfAssessed: row.selfAssessed,
-          participated: row.participated,
-          activeCircle: row.activeCircle,
-          submittedAssignment: row.submittedAssignment,
-          returnEligible: row.returnEligible,
-          crossContentReturned: row.crossContentReturned,
-        },
+        learning: learningDisclosure(row),
+        segments: learningSegments(row.segments, row.members),
+        cohorts: learningCohorts(row.cohorts),
         usefulness: usefulnessDisclosure(
           row.usefulnessRespondents,
           row.usefulnessHelpful,

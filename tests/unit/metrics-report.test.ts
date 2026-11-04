@@ -1,3 +1,8 @@
+import {
+  learningCohorts,
+  learningDisclosure,
+  learningSegments,
+} from "../../src/learning-metrics.ts";
 import express from "express";
 import request from "supertest";
 import { expect, it, vi } from "vitest";
@@ -22,24 +27,76 @@ const snapshot: PreviewMetrics = {
     crossContentReturned:
       "Of returnEligible, different content during days 7 to 14.",
     usefulness: "Self-report, with small groups suppressed.",
+    segments: "Segments can overlap.",
+    cohorts: "Cohort windows are fixed.",
+    cohortActivated: "Cohort opened.",
+    cohortSelfAssessed: "Cohort self-reported.",
+    cohortSubmittedAssignment: "Cohort submitted.",
+    cohortContinued: "Cohort continued.",
   },
-  counts: {
-    members: 20,
-    activated: 18,
+  learning: learningDisclosure({
+    members: 40,
+    activated: 25,
     selfAssessed: 9,
     participated: 7,
     activeCircle: 5,
     submittedAssignment: 4,
-    returnEligible: 10,
-    crossContentReturned: 3,
-  },
+    returnEligible: 20,
+    crossContentReturned: 6,
+  }),
+  segments: learningSegments(
+    {
+      background: {
+        explorer: {
+          members: 20,
+          activated: 10,
+          selfAssessed: 5,
+          participated: 5,
+          activeCircle: 5,
+          submittedAssignment: 1,
+          returnEligible: 5,
+          crossContentReturned: 0,
+        },
+      },
+    },
+    40,
+  ),
+  cohorts: learningCohorts([
+    { month: "2026-10", closed: false, members: 40 },
+    {
+      month: "2026-08",
+      closed: true,
+      members: 40,
+      activated: 25,
+      selfAssessed: 6,
+      submittedAssignment: 1,
+      continued: 7,
+    },
+  ]),
   usefulness: { disclosure: "coarse-band", helpfulShareBand: "50-74%" },
   contributions: contributionMetrics(null, null),
 };
 it("MR-01 renders every count with its meaning, denominator, timestamp and separate self-report band", () => {
   const html = metricsReportPage(snapshot);
-  for (const [name, value] of Object.entries(snapshot.counts))
+  for (const [name, value] of Object.entries({
+    members: "20-49",
+    activated: "20-49",
+    selfAssessed: "5-19",
+    participated: "5-19",
+    activeCircle: "5-19",
+    submittedAssignment: "Suppressed",
+    returnEligible: "20-49",
+    crossContentReturned: "5-19",
+  }))
     expect(html).toContain(`data-metric="${name}">${value}</strong>`);
+  expect(html).toContain("Values are broad bands, not exact counts");
+  expect(html).toContain('data-segment="background-explorer"');
+  expect(html).toContain('data-segment="goal-build"');
+  expect(html).toContain('data-segment="interests-technical"');
+  expect(html).toContain("Segments can overlap.");
+  expect(html).toContain("Window still open; no values yet");
+  expect(html).toContain('data-cohort="2026-08"');
+  expect(html).toContain("Self-reported completion (14 days)");
   expect(html).toContain("2026-10-27T12:00:00.000Z");
   expect(html).toContain("50-74%");
   expect(html).toContain("Measures overlap and must not be added together");
@@ -50,25 +107,19 @@ it("MR-01 renders every count with its meaning, denominator, timestamp and separ
   expect(html).toContain("Membership with no recorded departure");
   expect(html).toContain("Of the eligible member group");
   expect(html).not.toContain("<private>");
-  expect(html).not.toContain("a return rate is undefined");
-  expect(html).not.toContain("No retained members yet");
   expect(html).toContain('href="/operator/metrics"');
 });
-it("MR-02 preserves suppressed usefulness and undefined zero-denominator rates without inventing successful outcomes", () => {
+it("MR-02/MET-SUPP-01 shows nothing for a small group and no invented outcomes", () => {
   const html = metricsReportPage({
     ...snapshot,
-    counts: {
-      ...snapshot.counts,
-      members: 0,
-      returnEligible: 0,
-      crossContentReturned: 0,
-    },
+    learning: learningDisclosure(null),
+    segments: learningSegments(null, 0),
+    cohorts: [],
     usefulness: { disclosure: "suppressed", helpfulShareBand: null },
   });
-  expect(html).toContain(
-    "No retained members yet; a member-based rate is undefined",
-  );
-  expect(html).toContain("No eligible members yet; a return rate is undefined");
+  expect(html).toContain('data-metric="members">Suppressed</strong>');
+  expect(html).toContain('data-metric="activated">Suppressed</strong>');
+  expect(html).toContain("No cohorts yet.");
   expect(html).toContain("Suppressed to protect small groups");
   expect(html).not.toContain("Helpful-share band:");
   expect(html).not.toContain("100% success");
