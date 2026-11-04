@@ -1,13 +1,28 @@
 import { randomBytes } from "node:crypto";
+import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { administratorDiagnostics } from "../../src/administrator-diagnostics.ts";
 import { administratorEntry } from "../../src/administrator-entry.ts";
-import { memberEmailAccess } from "../../src/member-email-access.ts";
+import { emailHash, memberEmailAccess } from "../../src/member-email-access.ts";
 import { migrate, store } from "../../src/store.ts";
-import { testPool } from "../support/database.ts";
 
-const pool = testPool(),
-  members = store(pool),
+// A private database per file, like member-email-access.test.ts.
+const root = new URL(
+  process.env.DNE_DATABASE_URL ??
+    "postgresql://dne:local-preview-only@127.0.0.1:54329/dne_dev",
+);
+const name = `dne_test_${randomBytes(16).toString("hex")}`;
+const admin = new Pool({
+  connectionString: root.toString(),
+  connectionTimeoutMillis: 3000,
+});
+const scoped = new URL(root);
+scoped.pathname = `/${name}`;
+const pool = new Pool({
+  connectionString: scoped.toString(),
+  connectionTimeoutMillis: 3000,
+});
+const members = store(pool),
   entry = administratorEntry(pool),
   diagnostics = administratorDiagnostics(pool);
 let link = "";
@@ -21,12 +36,19 @@ const email = memberEmailAccess(
   },
   "http://127.0.0.1:3000",
 );
-beforeAll(() => migrate(pool));
+beforeAll(async () => {
+  await admin.query(`CREATE DATABASE "${name}"`);
+  await migrate(pool);
+});
 beforeEach(async () => {
   await pool.query("TRUNCATE principals CASCADE");
   await pool.query("TRUNCATE member_email_notices");
 });
-afterAll(() => pool.end());
+afterAll(async () => {
+  await pool.end();
+  await admin.query(`DROP DATABASE "${name}"`);
+  await admin.end();
+});
 
 async function member(address?: string, verify = true) {
   const token = randomBytes(32).toString("hex");
@@ -43,7 +65,7 @@ async function member(address?: string, verify = true) {
   }
   return { token, id: session.learner.id };
 }
-async function admin() {
+async function admin2() {
   const owner = await member("tom@deepnative.io");
   const entered = await entry.enter(owner.token);
   if (entered.kind !== "ready" || !entered.credential)
@@ -52,7 +74,7 @@ async function admin() {
 }
 
 it("DIAG-01 shows an administrator whether an email is linked, verified and recently sent", async () => {
-  const credential = await admin();
+  const credential = await admin2();
   const linked = await member("learner@example.test");
   const pending = await member("pending@example.test", false);
   await email.requestSignIn("nobody@example.test");
@@ -81,7 +103,15 @@ it("DIAG-01 shows an administrator whether an email is linked, verified and rece
   expect(open.value.links.map((l) => [l.purpose, l.state])).toEqual([
     ["attach", "open"],
   ]);
-  expect(pending.id).toBeTruthy();
+  // A password sign-up keeps its email unverified until a link is used.
+  await pool.query(
+    "INSERT INTO member_login_emails(email_hash,principal_id) VALUES($1,$2)",
+    [emailHash("signup@example.test"), pending.id],
+  );
+  const signup = await diagnostics.email(credential, "signup@example.test");
+  if (signup.kind !== "ready") throw Error("Lookup unavailable");
+  expect(signup.value.unverified).toMatchObject({ accountId: pending.id });
+  expect(signup.value.verified).toBeNull();
 
   const none = await diagnostics.email(credential, "nobody@example.test");
   if (none.kind !== "ready") throw Error("Lookup unavailable");
@@ -98,7 +128,7 @@ it("DIAG-01 shows an administrator whether an email is linked, verified and rece
 });
 
 it("DIAG-02 counts accounts, emails and the last day's email activity", async () => {
-  const credential = await admin();
+  const credential = await admin2();
   await member("a@example.test");
   await member("b@example.test", false);
   await email.requestSignIn("nobody@example.test");
@@ -115,7 +145,7 @@ it("DIAG-02 counts accounts, emails and the last day's email activity", async ()
 
 it("DIAG-03 refuses anyone without a current administrator session and writes nothing", async () => {
   const learner = await member("learner@example.test");
-  const credential = await admin();
+  const credential = await admin2();
   for (const bad of [learner.token, "f".repeat(64), "short"]) {
     expect(await diagnostics.site(bad)).toEqual({ kind: "denied" });
     expect(await diagnostics.email(bad, "learner@example.test")).toEqual({
@@ -130,4 +160,30 @@ it("DIAG-03 refuses anyone without a current administrator session and writes no
     "SELECT count(*)::int AS n FROM member_email_links",
   );
   expect(before.rows[0].n).toBe(2);
+});
+
+it("DIAG-03 reports unavailable when the database cannot be reached or read", async () => {
+  const credential = await admin2();
+  const unreachable = administratorDiagnostics({
+    connect: () => Promise.reject(Error("private connection failure")),
+  } as unknown as Pool);
+  expect(await unreachable.site(credential)).toEqual({ kind: "unavailable" });
+  let released = 0;
+  const failing = administratorDiagnostics({
+    connect: async () => ({
+      query: async (sql: string) => {
+        if (sql === "ROLLBACK") throw Error("private rollback failure");
+        throw Error("private read failure");
+      },
+      release: () => released++,
+    }),
+  } as unknown as Pool);
+  expect(await failing.site(credential)).toEqual({ kind: "unavailable" });
+  expect(released).toBe(1);
+  expect(await diagnostics.email("short", "learner@example.test")).toEqual({
+    kind: "denied",
+  });
+  expect(await diagnostics.email("short", "not an email")).toEqual({
+    kind: "denied",
+  });
 });
