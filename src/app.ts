@@ -64,7 +64,11 @@ import type { SampleFeedbackStore } from "./sample-feedback.ts";
 import express, { type ErrorRequestHandler } from "express";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
-import { withHosting, hostingText } from "./hosting-presentation.ts";
+import {
+  withHosting,
+  hostingText,
+  inventedInputOnly,
+} from "./hosting-presentation.ts";
 import { withAdministration } from "./administration-presentation.ts";
 import { withCurrentPath } from "./navigation-presentation.ts";
 import {
@@ -3156,14 +3160,20 @@ export function app(
       typeof fields.prompt_version !== "string" ||
       fields.prompt_version.length === 0 ||
       fields.prompt_version.length > 80 ||
-      fields.synthetic !== "yes"
+      (inventedInputOnly() && fields.synthetic !== "yes")
     ) {
       res
         .status(422)
         .send(
           practiceSessionRecoveryPage(
-            "Confirm sample practice",
-            "Open an eligible source and confirm invented or sample-only practice using its exact version, goal and prompt.",
+            hostingText(
+              "Confirm sample practice",
+              "Check your practice request",
+            ),
+            hostingText(
+              "Open an eligible source and confirm invented or sample-only practice using its exact version, goal and prompt.",
+              "Open an eligible source and start practice using its exact version, goal and prompt.",
+            ),
           ),
         );
       return;
@@ -3256,14 +3266,17 @@ export function app(
       typeof fields.response !== "string" ||
       !fields.response.trim() ||
       fields.response.length > 1000 ||
-      fields.synthetic !== "yes"
+      (inventedInputOnly() && fields.synthetic !== "yes")
     ) {
       res
         .status(422)
         .send(
           practiceSessionRecoveryPage(
             "Response not accepted",
-            "Write 1 to 1,000 characters using only invented or sample information, confirm saving, and use the next sequence from the saved session.",
+            hostingText(
+              "Write 1 to 1,000 characters using only invented or sample information, confirm saving, and use the next sequence from the saved session.",
+              "Write 1 to 1,000 characters and use the next sequence from the saved session.",
+            ),
           ),
         );
       return;
@@ -3451,7 +3464,7 @@ export function app(
       typeof response !== "string" ||
       response.trim().length === 0 ||
       response.length > 1000 ||
-      fields.synthetic !== "yes"
+      (inventedInputOnly() && fields.synthetic !== "yes")
     ) {
       res
         .status(422)
@@ -3459,7 +3472,10 @@ export function app(
           privatePracticePage(
             source,
             res.locals.csrf as string,
-            "Write 1 to 1,000 characters using only invented or sample information, then confirm the saving checkbox.",
+            hostingText(
+              "Write 1 to 1,000 characters using only invented or sample information, then confirm the saving checkbox.",
+              "Write 1 to 1,000 characters.",
+            ),
             typeof response === "string" ? response.slice(0, 1000) : "",
           ),
         );
@@ -3571,7 +3587,7 @@ export function app(
       typeof reflection !== "string" ||
       reflection.trim().length === 0 ||
       reflection.length > 1000 ||
-      fields.synthetic !== "yes"
+      (inventedInputOnly() && fields.synthetic !== "yes")
     ) {
       res
         .status(422)
@@ -3581,7 +3597,10 @@ export function app(
             member.goal,
             res.locals.csrf as string,
             null,
-            "Write a reflection of at most 1,000 characters using only invented or sample information, then confirm the sample-information checkbox.",
+            hostingText(
+              "Write a reflection of at most 1,000 characters using only invented or sample information, then confirm the sample-information checkbox.",
+              "Write a reflection of at most 1,000 characters.",
+            ),
           ),
         );
       return;
@@ -4053,7 +4072,10 @@ export function app(
         .send(
           errorPage(
             "Usefulness response not saved",
-            "Choose a response and confirm it uses only sample information, or reopen your private activity to withdraw a saved answer.",
+            hostingText(
+              "Choose a response and confirm it uses only sample information, or reopen your private activity to withdraw a saved answer.",
+              "Choose a response and confirm it, or reopen your private activity to withdraw a saved answer.",
+            ),
           ),
         );
       return;
@@ -4256,7 +4278,7 @@ export function app(
       if (
         revision === null ||
         !validText ||
-        fields.sample_confirmed !== "yes"
+        (inventedInputOnly() && fields.sample_confirmed !== "yes")
       ) {
         res
           .status(422)
@@ -4264,7 +4286,10 @@ export function app(
             assignmentAttemptPage(
               item,
               res.locals.csrf as string,
-              "Enter at least one self-reflection field, keep each field within 1,000 characters and confirm sample information. Nothing was saved.",
+              hostingText(
+                "Enter at least one self-reflection field, keep each field within 1,000 characters and confirm sample information. Nothing was saved.",
+                "Enter at least one self-reflection field and keep each field within 1,000 characters. Nothing was saved.",
+              ),
               undefined,
               false,
               { sequence, ...values },
@@ -4478,7 +4503,7 @@ export function app(
     if (
       revision === null ||
       response.length > 4000 ||
-      fields.sample_confirmed !== "yes"
+      (inventedInputOnly() && fields.sample_confirmed !== "yes")
     ) {
       res
         .status(422)
@@ -4486,7 +4511,10 @@ export function app(
           assignmentAttemptPage(
             item,
             res.locals.csrf as string,
-            "Use a valid revision, at most 4,000 characters, and confirm sample information. Nothing was saved.",
+            hostingText(
+              "Use a valid revision, at most 4,000 characters, and confirm sample information. Nothing was saved.",
+              "Use a valid revision and at most 4,000 characters. Nothing was saved.",
+            ),
             response,
           ),
         );

@@ -1,3 +1,4 @@
+import { inventedInputOnly } from "./hosting-presentation.ts";
 import type { Fields } from "./validation.ts";
 
 export interface MilestoneInput {
@@ -46,7 +47,7 @@ export function parseMilestone(
     errors.push("Keep the evidence note within 1,000 characters.");
   if (nextAction.length < 3 || nextAction.length > 500)
     errors.push("Write a next action between 3 and 500 characters.");
-  if (fields.sample_only !== "yes")
+  if (inventedInputOnly() && fields.sample_only !== "yes")
     errors.push("Confirm that you used only invented or sample information.");
   if (fields.complete !== undefined && fields.complete !== "yes")
     errors.push("Choose a valid completion state.");

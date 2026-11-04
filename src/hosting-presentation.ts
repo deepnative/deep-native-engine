@@ -9,3 +9,11 @@ export function withHosting<T>(hosted: boolean, render: () => T): T {
 export function hostingText(local: string, hosted: string): string {
   return hosting.getStore() === true ? hosted : local;
 }
+/**
+ * #653 Members may use real information on hosted private learning forms. The
+ * local preview still takes invented data only, and this request's validated
+ * runtime is the only thing that selects between them.
+ */
+export function inventedInputOnly(): boolean {
+  return hosting.getStore() !== true;
+}
