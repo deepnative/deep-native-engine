@@ -643,7 +643,9 @@ export function app(
   app.use((req, _res, next) => {
     if (
       !["GET", "HEAD"].includes(req.method) ||
-      !(/^\/admin(?:\/|$)/i.test(req.path) || staffFamily(req.path)) ||
+      !(
+        /^\/(?:admin|staff)(?:\/|$)/i.test(req.path) || staffFamily(req.path)
+      ) ||
       staffCookie(req.headers.cookie).kind !== "absent"
     )
       return next();
