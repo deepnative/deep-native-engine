@@ -556,12 +556,12 @@ export function app(
     "/assets",
     express.static(fileURLToPath(new URL("../public", import.meta.url))),
   );
-  const accountViews = Boolean(
-    options.localStaffEntry &&
-    mode !== "live" &&
-    options.administratorEntry?.accountRoles,
+  const accountViews = mountAccountViews(
+    app,
+    options.administratorEntry,
+    options,
+    mode,
   );
-  mountAccountViews(app, options.administratorEntry, options, mode);
   // Admit evidence creation against the shared budget before reading its body.
   const uploadAdmission = options.uploadAdmission;
   if (uploadAdmission) {
