@@ -22,6 +22,15 @@ test.use({ trace: "off" });
 const pool = testPool(),
   members = store(pool),
   auth = authorizationStore(pool);
+// #633: hooks run before afterAll closes the pool, even after a test times out,
+// so a hung journey cannot leave its question for later circle journeys.
+const ownerIds: string[] = [],
+  staffIds: string[] = [];
+test.afterEach(async () => {
+  for (const id of ownerIds.splice(0)) await members.remove(id);
+  for (const id of staffIds.splice(0))
+    await pool.query("DELETE FROM principals WHERE id=$1", [id]);
+});
 test.afterAll(() => pool.end());
 const base = "/operator/circle-grants";
 const audiences = [
@@ -171,9 +180,7 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
     let running: Awaited<ReturnType<typeof start>> | undefined;
     let recovery:
       Awaited<ReturnType<typeof startCircleGrantRecoveryServer>> | undefined;
-    const contexts: BrowserContext[] = [],
-      ownerIds: string[] = [],
-      staffIds: string[] = [];
+    const contexts: BrowserContext[] = [];
     try {
       running = await start({
         ...process.env,
@@ -547,9 +554,6 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
           await recovery?.close();
           if (running) await running.close();
         } finally {
-          for (const id of ownerIds) await members.remove(id);
-          for (const id of staffIds)
-            await pool.query("DELETE FROM principals WHERE id=$1", [id]);
           await rm(storage, { recursive: true, force: true });
         }
       }
