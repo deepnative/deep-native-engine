@@ -43,6 +43,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await pool.query("TRUNCATE principals CASCADE");
   await pool.query("TRUNCATE member_email_notices");
+  await pool.query("TRUNCATE administrator_email_lookups");
 });
 afterAll(async () => {
   await pool.end();
@@ -141,6 +142,54 @@ it("DIAG-02 counts accounts, emails and the last day's email activity", async ()
     day: { attach: 3, signIn: 0, used: 2, notices: 1 },
   });
   expect(site.value.latestMigration).toBeGreaterThanOrEqual(93);
+});
+
+it("DIAG-AUDIT-01/02 records each email lookup by hash and counts the last day's lookups", async () => {
+  const credential = await admin2();
+  const staff = await pool.query<{ id: string }>(
+    "SELECT id FROM principals WHERE kind='staff'",
+  );
+  await diagnostics.email(credential, " Learner@Example.test ");
+  await diagnostics.email(credential, "nobody@example.test");
+  await diagnostics.email(credential, "not an email");
+  await diagnostics.email("f".repeat(64), "learner@example.test");
+  const records = await pool.query(
+    "SELECT staff_id, email_hash FROM administrator_email_lookups ORDER BY id",
+  );
+  expect(records.rows).toEqual(
+    ["learner@example.test", "nobody@example.test"].map((address) => ({
+      staff_id: staff.rows[0]!.id,
+      email_hash: emailHash(address),
+    })),
+  );
+  expect(JSON.stringify(records.rows)).not.toContain("example.test");
+  await pool.query(
+    "UPDATE administrator_email_lookups SET occurred_at=clock_timestamp()-INTERVAL '25 hours' WHERE email_hash=$1",
+    [emailHash("nobody@example.test")],
+  );
+  const site = await diagnostics.site(credential);
+  if (site.kind !== "ready") throw Error("Site checks unavailable");
+  expect(site.value.day.lookups).toBe(1);
+  // Viewing site counts is not an email lookup.
+  expect(
+    (await pool.query("SELECT 1 FROM administrator_email_lookups")).rowCount,
+  ).toBe(2);
+});
+
+it("DIAG-AUDIT-01 shows nothing when the lookup cannot be recorded", async () => {
+  const credential = await admin2();
+  await pool.query(
+    "ALTER TABLE administrator_email_lookups RENAME TO lookups_hidden",
+  );
+  try {
+    expect(await diagnostics.email(credential, "learner@example.test")).toEqual(
+      { kind: "unavailable" },
+    );
+  } finally {
+    await pool.query(
+      "ALTER TABLE lookups_hidden RENAME TO administrator_email_lookups",
+    );
+  }
 });
 
 it("DIAG-03 refuses anyone without a current administrator session and writes nothing", async () => {

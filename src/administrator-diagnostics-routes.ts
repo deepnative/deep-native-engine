@@ -28,6 +28,7 @@ function siteTable(s: SiteDiagnosis) {
     ["Sign-in links, last 24 hours", s.day.signIn],
     ["Links used, last 24 hours", s.day.used],
     ["No-account notices, last 24 hours", s.day.notices],
+    ["Email lookups here, last 24 hours", s.day.lookups],
     ["Latest database migration", s.latestMigration],
   ];
   return `<table class="diagnostics-table"><tbody>${rows.map(([label, n]) => `<tr><th scope="row">${label}</th><td>${count(n)}</td></tr>`).join("")}</tbody></table>`;
@@ -85,7 +86,7 @@ export function mountAdministratorDiagnostics(
       .send(
         page(
           "Diagnostics",
-          `<div class="portal-page"><div class="portal-intro"><h1>Diagnostics</h1><p>Read-only checks of this engine’s data. Counts are live; nothing here changes an account or sends email.</p></div>${extra}${lookupForm(token, options.secret, message)}<section class="portal-card"><h2>Site</h2>${siteTable(site)}</section><div class="portal-footer">${portalActions([["/operator", "Administration console"]])}</div></div>`,
+          `<div class="portal-page"><div class="portal-intro"><h1>Diagnostics</h1><p>Read-only checks of this engine’s data. Counts are live; nothing here changes an account or sends email. Each email lookup is recorded.</p></div>${extra}${lookupForm(token, options.secret, message)}<section class="portal-card"><h2>Site</h2>${siteTable(site)}</section><div class="portal-footer">${portalActions([["/operator", "Administration console"]])}</div></div>`,
         ),
       );
   // Resolves the administrator credential, or answers the request itself.
@@ -125,10 +126,9 @@ export function mountAdministratorDiagnostics(
       !validCsrf(body.csrf, token, options.secret)
     )
       return fail(res, 403);
-    const [site, found] = await Promise.all([
-      store!.site(staff),
-      store!.email(staff, body.email),
-    ]);
+    // The lookup is recorded first, so the count below includes it.
+    const found = await store!.email(staff, body.email);
+    const site = await store!.site(staff);
     if (site.kind !== "ready")
       return fail(res, site.kind === "denied" ? 403 : 503);
     if (found.kind === "invalid")

@@ -35,7 +35,7 @@ The header and `/account` show **Administration** only to a verified owner: the 
 
 ## Diagnostics
 
-`/operator/diagnostics` (linked from the console footer) holds fixed, read-only checks for troubleshooting the hosted engine without opening its database (DIAG-01..03, [#669](https://github.com/deepnative/deep-native-engine/issues/669), journey L288). It needs a current administrator session, and every read runs in a read-only transaction.
+`/operator/diagnostics` (linked from the console footer) holds fixed, read-only checks for troubleshooting the hosted engine without opening its database (DIAG-01..03, [#669](https://github.com/deepnative/deep-native-engine/issues/669), journey L288). It needs a current administrator session, and every read runs in a read-only transaction. Each email lookup first records the administrator session and the address hash, never the address, and shows nothing if that record can't be saved ([#687](https://github.com/deepnative/deep-native-engine/issues/687)). No-account notices are deleted after 30 days.
 
 - **Look up an email.** The address is posted, never put in a URL. The result shows the verified or unverified account it belongs to, its latest emailed links (used, open or expired) and any no-account notices. A listed link was handed to the email service; if it never arrived, check spam or quarantine.
 - **Site.** Accounts, verified and unverified emails, accounts with a password, the last 24 hours of email links and no-account notices, and the latest database migration.
