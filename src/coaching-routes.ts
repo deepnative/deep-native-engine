@@ -93,7 +93,6 @@ function savedMonthsTable(
       )[0];
   const rows = months.map((m) => {
     const total = m.totalCents == null ? null : Number(m.totalCents);
-    const paid = Number(m.paidCents ?? 0);
     const draftRate = rateFor(m.month);
     const amount =
       total !== null
