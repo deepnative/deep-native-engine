@@ -377,3 +377,18 @@ it.each(["https://127.0.0.1:3000", "https://engine.deepnative.io"])(
       expect(cookie).toMatch(/HttpOnly; Secure; SameSite=Strict/);
   },
 );
+it("FRICTION-06 staff sign-in shows member tools only to an active member", async () => {
+  const f = await fixture();
+  const navigation = async (cookie = "") =>
+    (await get("/staff/sign-in", cookie).expect(200)).text.match(
+      /<nav[^>]*aria-label="Main navigation"[^>]*>([\s\S]*?)<\/nav>/,
+    )?.[1];
+  expect(await navigation()).not.toContain("/account/sign-out");
+  expect(await navigation(`dne_preview=${legacy}`)).not.toContain(
+    "/account/sign-out",
+  );
+  f.session.mockResolvedValue({ kind: "active", learner: {} });
+  expect(await navigation(`dne_preview=${legacy}`)).toContain(
+    "/account/sign-out",
+  );
+});
