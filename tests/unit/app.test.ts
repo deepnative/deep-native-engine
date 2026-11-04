@@ -6842,6 +6842,19 @@ it("FOOTER-01 lists footer links as whole items without dot separators", async (
   ])
     expect(footer).toContain(`>${label}</a>`);
 });
+it("DEMOSITE-01 marks every page of a demo site before its header, and nothing otherwise", async () => {
+  const visit = (demoSite?: boolean) =>
+    withLoopback(
+      app(storage(), { origin, secret: "demo-test", demoSite }),
+      (s) => request(s).get("/readiness").set("Host", host),
+    );
+  const demo = (await visit(true)).text;
+  expect(demo).toContain(
+    '<p class="demo-banner" role="note"><strong>Demo site</strong> · Test data only. Invoices are samples and nothing is payable.</p><header class="site-header">',
+  );
+  expect((await visit()).text).not.toContain("demo-banner");
+  expect((await visit(false)).text).not.toContain("demo-banner");
+});
 it("NAV-08 shows signed-out visitors Sign in instead of member account links", async () => {
   const db = storage();
   const options = { origin, secret: "navigation-test", localStaffEntry: true };

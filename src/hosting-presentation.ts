@@ -9,6 +9,16 @@ export function withHosting<T>(hosted: boolean, render: () => T): T {
 export function hostingText(local: string, hosted: string): string {
   return hosting.getStore() === true ? hosted : local;
 }
+// DEMOSITE-01: a visible demo site marks every page as test data.
+const demo = new AsyncLocalStorage<boolean>();
+export function withDemoSite<T>(enabled: boolean, render: () => T): T {
+  return demo.run(enabled, render);
+}
+export function demoBanner(): string {
+  return demo.getStore() === true
+    ? '<p class="demo-banner" role="note"><strong>Demo site</strong> · Test data only. Invoices are samples and nothing is payable.</p>'
+    : "";
+}
 export function privateRecordsLabel(): string {
   return hostingText(
     "Download private preview records",

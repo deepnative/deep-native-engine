@@ -209,3 +209,12 @@ it("HOSTED-11 accepts only explicit passwordless managed-identity database authe
   ])
     expect(() => config({ ...passwordless, ...overrides })).toThrow();
 });
+
+it("DEMOSITE-01 reads the demo-site switch and refuses anything but enabled or disabled", () => {
+  expect(config(hosted).demoSite).toBe(false);
+  expect(config({ ...hosted, DNE_DEMO_SITE: "disabled" }).demoSite).toBe(false);
+  expect(config({ ...hosted, DNE_DEMO_SITE: "enabled" }).demoSite).toBe(true);
+  expect(() => config({ ...hosted, DNE_DEMO_SITE: "yes" })).toThrow(
+    "DNE_DEMO_SITE must be enabled or disabled.",
+  );
+});

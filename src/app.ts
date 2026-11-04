@@ -69,6 +69,7 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import {
   withHosting,
+  withDemoSite,
   hostingText,
   inventedInputOnly,
 } from "./hosting-presentation.ts";
@@ -384,6 +385,8 @@ export function app(
     reviewerWorklistReads?: boolean;
     origin: string;
     hostedOrigin?: string;
+    /** DEMOSITE-01: mark every page as a demo with test data only. */
+    demoSite?: boolean;
     secret: string;
     mode?: ApplicationMode;
     adapters?: AdapterReadiness[];
@@ -507,6 +510,7 @@ export function app(
     // Hidden until mountAdministrationLink confirms a verified owner.
     withAdministration(false, next),
   );
+  app.use((_req, _res, next) => withDemoSite(options.demoSite === true, next));
   app.use((_req, _res, next) =>
     withHosting(
       options.hostedOrigin === options.origin &&
