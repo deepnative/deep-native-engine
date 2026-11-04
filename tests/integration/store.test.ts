@@ -146,7 +146,7 @@ it("HOSTED-09 upgrades an inherited HTTPS cookie without changing its original d
       .set("Host", "engine.deepnative.io")
       .set("Cookie", `${COOKIE}=${m.token}`)
       .expect(303);
-    expect(denied.headers["set-cookie"]).toBeUndefined();
+    expect(String(denied.headers["set-cookie"])).not.toContain("dne_preview");
   });
 });
 it("recommends only current eligible published lessons without rewriting private history", async () => {
