@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { app } from "../../src/app.ts";
+import { memberEmailAccess } from "../../src/member-email-access.ts";
 import { migrate, store } from "../../src/store.ts";
 import { COOKIE } from "../../src/session.ts";
 import { workflowFeedbackStore } from "../../src/workflow-feedback.ts";
@@ -140,6 +141,76 @@ test("[L289] FRICTION-01/02/05/06/12 READABLE-01..03 a member sees what happened
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
+  } finally {
+    await closeLoopback(server);
+  }
+});
+
+test("[L291] READWIDTH-01..03 reading pages use the page width and forms stay comfortable", async ({
+  page,
+}) => {
+  let origin = "http://127.0.0.1:0";
+  const server = await listenLoopback(
+    app(members, {
+      get origin() {
+        return origin;
+      },
+      secret: "synthetic-reading-width-browser",
+      memberEmail: memberEmailAccess(pool, { async send() {} }, origin),
+    }),
+  );
+  const address = server.address();
+  if (!address || typeof address === "string") throw Error("No test listener");
+  origin = `http://127.0.0.1:${address.port}`;
+  try {
+    const token = randomBytes(32).toString("hex");
+    await members.create(token, { background: "explorer", goal: "everyday" });
+    await page
+      .context()
+      .addCookies([{ name: COOKIE, value: token, url: origin }]);
+    const wide = page.viewportSize()!.width >= 1000;
+    for (const [path, selector] of [
+      ["/readiness", ".error-page p:not(.eyebrow)"],
+      ["/lesson/guide", ".guidance .lead"],
+      ["/lesson", ".lesson-heading .lead"],
+      ["/milestones", ".milestone-page .lead"],
+      ["/career", ".career-page .lead"],
+    ] as const) {
+      await page.goto(`${origin}${path}`);
+      await page.screenshot({
+        path: `artifacts/reading-width${path.replace(/\//g, "-")}-${test.info().project.name}.png`,
+        fullPage: true,
+      });
+      // READWIDTH-03: no page scrolls sideways at any width.
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+        path,
+      ).toBe(true);
+      if (!wide) continue;
+      // READWIDTH-01: text boxes reach the same right edge as the page.
+      const [text, main] = await Promise.all([
+        page.locator(selector).first().boundingBox(),
+        page.locator("main").evaluate((element) => {
+          const style = getComputedStyle(element);
+          return (
+            element.getBoundingClientRect().width -
+            parseFloat(style.paddingLeft) -
+            parseFloat(style.paddingRight)
+          );
+        }),
+      ]);
+      expect(text!.width, path).toBeGreaterThanOrEqual(main - 1);
+    }
+    // READWIDTH-02: a short form does not stretch across the page.
+    await page.goto(`${origin}/email/attach`);
+    const form = await page.locator(".error-page form").first().boundingBox();
+    expect(form!.width).toBeLessThanOrEqual(620);
+    await page.screenshot({
+      path: `artifacts/reading-width-email-${test.info().project.name}.png`,
+      fullPage: true,
+    });
   } finally {
     await closeLoopback(server);
   }
