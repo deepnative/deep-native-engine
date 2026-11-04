@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { escape, page } from "./views.ts";
+import { privateRecordsLabel } from "./hosting-presentation.ts";
 import {
   PROGRAM_CONFIRM_PATH,
   PROGRAM_PATH,
@@ -60,7 +61,7 @@ export function myCoursesPage(
               "",
             )}</ol><p><a href="/my-courses/${receipt.id}">Inspect your receipt</a> · <a href="/my-courses/${receipt.id}/download">Download private enrollment JSON</a></p>`
         : "<p>No local enrollment is recorded for this account. Choosing a program or signing in does not enroll you.</p>"
-    }<p><a href="${PROGRAM_PATH}">Explore local foundation program</a> · <a href="/progress">Existing saved work and activity</a> · <a href="/account">Account and existing exports</a> · <a href="/learn">Continue learning</a></p></section>`,
+    }<p><a href="${PROGRAM_PATH}">Explore local foundation program</a> · <a href="/progress">Existing saved work and activity</a> · <a href="/account">My account</a> · <a href="/member/export">${privateRecordsLabel()}</a> · <a href="/learn">Continue learning</a></p></section>`,
   );
 }
 export function programAdminPage(item: ProgramOverview, csrf: string) {

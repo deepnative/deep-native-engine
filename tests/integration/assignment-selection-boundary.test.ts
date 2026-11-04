@@ -204,7 +204,7 @@ it.each(["technical", "professional", "explorer"] as const)(
       member_id: other.id,
     });
     expect(response.status).toBe(303);
-    expect(response.headers.location).toBe("/learn");
+    expect(response.headers.location).toBe("/learn#assignment-options");
     expect(await db.assignmentChoice(owner.id)).toEqual({
       contentId: "SYN-956",
       contentVersion: 2,

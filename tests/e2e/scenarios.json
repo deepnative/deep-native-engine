@@ -2568,6 +2568,15 @@
       "expected": "Diagnostics shows the account, link history and no-account notices for each address without putting it in a URL, changes nothing, and fits desktop and mobile without sideways scrolling",
       "issues": [669],
       "critical": true
+    },
+    {
+      "id": "L289",
+      "actor": "Member saving, leaving and deleting their account",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server; desktop/mobile Chromium",
+      "steps": "FRICTION-01/02/05/06/12: open Learning signed out, read the explanation once, open Administration signed out, save a lesson draft, open workflow feedback, delete the account from My account",
+      "expected": "The explanation shows once; staff pages offer no member tools; the draft confirmation is on screen after saving; the checkbox is at least 18px wide; My account confirms deletion on the home page, with no sideways scrolling",
+      "issues": [658],
+      "critical": true
     }
   ],
   "fullMvp": [
