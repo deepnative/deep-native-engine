@@ -1,3 +1,5 @@
+import { mountAdministratorDiagnostics } from "./administrator-diagnostics-routes.ts";
+import type { AdministratorDiagnostics } from "./administrator-diagnostics.ts";
 import {
   invoiceResumeTarget,
   mountInvoiceSelection,
@@ -379,6 +381,7 @@ export function app(
   memberStore: Store,
   options: {
     administratorEntry?: AdministratorEntry;
+    administratorDiagnostics?: AdministratorDiagnostics;
     localStaffEntry?: boolean;
     staffEntry?: StaffEntryStore;
     localHoldInspectionReads?: boolean;
@@ -627,6 +630,7 @@ export function app(
   });
   app.use(cookieParser());
   mountAdministratorEntry(app, options.administratorEntry, options);
+  mountAdministratorDiagnostics(app, options.administratorDiagnostics, options);
   mountStaffEntryRoutes(app, options.staffEntry, options, {
     library: Boolean(options.catalog),
     worklist:

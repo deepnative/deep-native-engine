@@ -2559,6 +2559,15 @@
       "expected": "The table is sorted by name with an exact count and Previous/Next, the selection stays through paging, search filters and counts only matches, private work is not shown, and the page avoids sideways scrolling and controls under 40px on desktop and mobile",
       "issues": [641, 654],
       "critical": true
+    },
+    {
+      "id": "L288",
+      "actor": "Platform administrator troubleshooting sign-in",
+      "preconditions": "Dedicated synthetic PostgreSQL database, verified owner identity, port0 server; desktop/mobile Chromium",
+      "steps": "DIAG-01..03: enter administration, open Diagnostics from the console, read the site counts, look up a verified email and an unused one",
+      "expected": "Diagnostics shows the account, link history and no-account notices for each address without putting it in a URL, changes nothing, and fits desktop and mobile without sideways scrolling",
+      "issues": [669],
+      "critical": true
     }
   ],
   "fullMvp": [

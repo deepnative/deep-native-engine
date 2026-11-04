@@ -11,6 +11,7 @@ import { app } from "../../src/app.ts";
 import { migrate, store } from "../../src/store.ts";
 import { memberEmailAccess } from "../../src/member-email-access.ts";
 import { administratorEntry } from "../../src/administrator-entry.ts";
+import { administratorDiagnostics } from "../../src/administrator-diagnostics.ts";
 import { authorizationStore } from "../../src/authorization.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
 import { simpleInvoiceStore } from "../../src/simple-invoice-store.ts";
@@ -126,6 +127,7 @@ async function fixture(
         ...actual,
         enter: (token) => administratorEntry(fault).enter(token),
       },
+      administratorDiagnostics: administratorDiagnostics(pool),
       staffEntry: staffEntryStore(pool),
       billingProfiles: billingProfileStore(pool),
       memberExport: memberExportStore(pool),
@@ -723,6 +725,66 @@ test("[L287] ADMINTABLE-01..05 an administrator pages and searches 60 learners a
     await expect(page.getByText("Showing 1–25 of 60")).toBeVisible();
     await expect(table).not.toContainText("Invented retained learning draft");
     await expect(table).not.toContainText("shi@deepnative.io");
+  } finally {
+    await closeLoopback(f.server);
+  }
+});
+test("[L288] DIAG-01..03 an administrator checks an email's account and link history from Diagnostics", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  try {
+    await f.verify();
+    await page.goto(f.origin + "/admin");
+    await page.getByRole("button", { name: "Enter administration" }).click();
+    await page.getByRole("link", { name: "Diagnostics", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Diagnostics", level: 1 }),
+    ).toBeVisible();
+    const site = page.locator(".diagnostics-table").last();
+    await expect(
+      site.getByRole("row", { name: "Accounts 1", exact: true }),
+    ).toContainText("1");
+    await expect(
+      site.getByRole("row", { name: "Verified emails 1", exact: true }),
+    ).toContainText("1");
+    const lookup = async (address: string) => {
+      await page.getByLabel("Email address").fill(address);
+      await page.getByRole("button", { name: "Look up" }).click();
+      await expect(
+        page.getByRole("heading", { name: address, level: 2 }),
+      ).toBeVisible();
+      // The address is posted, never placed in the page URL.
+      expect(page.url()).toBe(f.origin + "/operator/diagnostics/email");
+    };
+    await lookup("shi@deepnative.io");
+    await expect(
+      page.getByRole("row", { name: /^Verified email (?!s)/ }),
+    ).toContainText(f.id);
+    await expect(
+      page.getByText(/Link-an-email link · .* UTC · used/),
+    ).toBeVisible();
+    await lookup("nobody@example.test");
+    await expect(
+      page.getByRole("row", { name: /^Verified email (?!s)/ }),
+    ).toContainText("Not verified");
+    await expect(
+      page.getByText("No links were created for this address."),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: test.info().outputPath("diagnostics.png"),
+      fullPage: true,
+    });
+    // DIAG-03: the lookup wrote nothing.
+    expect(
+      (await pool.query("SELECT count(*)::int AS n FROM member_email_links"))
+        .rows[0].n,
+    ).toBe(1);
   } finally {
     await closeLoopback(f.server);
   }

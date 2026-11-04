@@ -183,6 +183,7 @@ export function mountAdministratorEntry(
               )}`
             : "<p>Invoicing is disabled. Learning accounts and saved work remain available.</p>"
         }</section><div class="portal-footer">${portalActions([
+          ["/operator/diagnostics", "Diagnostics"],
           ["/admin", "Administrator session"],
           ["/account", "My learning account"],
         ])}</div></div>`,
