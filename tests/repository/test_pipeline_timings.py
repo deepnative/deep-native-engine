@@ -182,6 +182,16 @@ class History(Fixture):
         self.assertIn("deploy", lines[-1])
         self.assertIn("2m54s", lines[-1])
 
+    def test_time05_history_follows_the_given_checkout_even_inside_a_git_hook(self):
+        # Git hooks export GIT_DIR; a fixture checkout must never write the real history.
+        self.init_git()
+        other = self.root / "other"
+        subprocess.run(["git", "init", "-q", str(other)], check=True)
+        with patch.dict(os.environ, {"GIT_DIR": str(other / ".git")}):
+            timings.append_history(self.root, timings.deploy_record(DEPLOY_RUN))
+        self.assertTrue((self.root / ".git" / timings.HISTORY_NAME).exists())
+        self.assertFalse((other / ".git" / timings.HISTORY_NAME).exists())
+
     def test_record_after_gate_never_raises(self):
         with redirect_stdout(io.StringIO()) as out:
             timings.record_after_gate(self.root / "missing")

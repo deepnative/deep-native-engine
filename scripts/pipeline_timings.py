@@ -16,6 +16,7 @@ seconds that scripts/integration-runner.mjs uses to balance its lanes.
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -122,8 +123,12 @@ def format_record(record):
 
 
 def history_path(root):
+    # Resolve from the given checkout only: Git hooks export GIT_DIR and friends,
+    # which would otherwise point a test fixture at the real repository.
+    env = {key: value for key, value in os.environ.items()
+           if key not in ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
     common = subprocess.run(["git", "-C", str(root), "rev-parse", "--git-common-dir"],
-                            check=True, capture_output=True, text=True).stdout.strip()
+                            check=True, capture_output=True, text=True, env=env).stdout.strip()
     common = Path(common)
     return (common if common.is_absolute() else Path(root) / common) / HISTORY_NAME
 
