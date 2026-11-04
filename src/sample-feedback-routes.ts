@@ -23,6 +23,8 @@ const number = (value: string | undefined) =>
 export function mountSampleFeedbackRoutes(
   app: Express,
   store: SampleFeedbackStore,
+  // FRICTION-04: offer review minutes only while they can be reserved.
+  reviewAllocation = true,
 ) {
   function failure(
     res: Response,
@@ -125,7 +127,12 @@ export function mountSampleFeedbackRoutes(
           : await store.owner(res.locals.token as string, id, req.query.after);
         if (result.kind !== "ready") return failure(res, result.kind, path);
         res.send(
-          sampleFeedbackPage(result, res.locals.csrf as string, reviewer),
+          sampleFeedbackPage(
+            result,
+            res.locals.csrf as string,
+            reviewer,
+            reviewAllocation,
+          ),
         );
       }),
     );

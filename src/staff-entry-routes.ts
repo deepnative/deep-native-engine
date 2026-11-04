@@ -36,6 +36,8 @@ export interface StaffTools {
   ledger: boolean;
   holds: boolean;
   proposals: boolean;
+  /** FRICTION-11: the administration console is available here. */
+  console?: boolean;
   circles: boolean;
   circleGrants: boolean;
   eventCancellations?: boolean;
@@ -73,6 +75,12 @@ function links(role: StaffRole, tools: StaffTools) {
       "My reviewer reference",
     ]);
   }
+  if (role === "platform_admin")
+    choices.push([
+      tools.console === true,
+      "/operator",
+      "Administration console",
+    ]);
   if (role === "operator" || role === "platform_admin")
     choices.push(
       [tools.support, "/operator/support", "Your granted support requests"],

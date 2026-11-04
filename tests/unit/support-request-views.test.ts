@@ -401,3 +401,18 @@ it("presents resolved permission context without advertising further request act
   expect(html).toContain("None; request resolved");
   expect(html).not.toContain("Save internal note");
 });
+it("FRICTION-03 offers no hold to a member without support minutes", () => {
+  const without = supportMemberDetailPage(
+    { ...member, supportMinutesAvailable: false },
+    "csrf",
+    null,
+  );
+  expect(without).not.toContain("Hold support test minutes");
+  expect(
+    supportMemberDetailPage(
+      { ...member, supportMinutesAvailable: true },
+      "csrf",
+      null,
+    ),
+  ).toContain("Hold support test minutes");
+});

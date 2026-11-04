@@ -160,7 +160,7 @@ export function mountMemberEmailRoutes(
         .send(
           page(
             "Email unavailable",
-            '<section class="error-page"><h1>Email unavailable</h1><p>Try again later. Your saved work is unchanged.</p></section>',
+            '<section class="error-page"><h1>Email unavailable</h1><p>Try again later. Your saved work is unchanged.</p><p><a href="/">Return to the home page</a></p></section>',
           ),
         );
     const address = String(req.body.email ?? "");
@@ -186,7 +186,7 @@ export function mountMemberEmailRoutes(
         .send(
           page(
             "Email unavailable",
-            '<section class="error-page"><h1>Email unavailable</h1><p>Try again later. Your saved work is unchanged.</p></section>',
+            '<section class="error-page"><h1>Email unavailable</h1><p>Try again later. Your saved work is unchanged.</p><p><a href="/account">Return to My account</a></p></section>',
           ),
         );
     if (status === "linked") return res.send(linkedPage());
@@ -217,7 +217,7 @@ export function mountMemberEmailRoutes(
         .send(
           page(
             "Email unavailable",
-            '<section class="error-page"><h1>Email unavailable</h1><p>Try again later. Your saved work is unchanged.</p></section>',
+            '<section class="error-page"><h1>Email unavailable</h1><p>Try again later. Your saved work is unchanged.</p><p><a href="/account">Return to My account</a></p></section>',
           ),
         );
     if (status === "linked") return res.send(linkedPage());

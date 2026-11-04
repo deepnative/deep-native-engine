@@ -54,6 +54,8 @@ export interface SupportMemberReply {
 }
 export interface SupportMemberDetail extends SupportRequestSummary {
   supportTime?: SupportTimeReceipt;
+  /** FRICTION-03: whether this member holds any current support minutes. */
+  supportMinutesAvailable?: boolean;
   body: string | null;
   replies: SupportPage<SupportMemberReply>;
 }
@@ -1496,6 +1498,13 @@ export function supportRequestStore(
         const supportTime = allocation
           ? await supportTimeReceipt(ctx.client, allocation.id)
           : undefined;
+        const minutes = await ctx.client.query(
+          `SELECT 1 FROM synthetic_entitlement_grants
+           WHERE member_id=$1 AND category='support_minutes' AND available>0
+             AND expired_at IS NULL AND starts_at<=clock_timestamp() AND expires_at>clock_timestamp()
+           LIMIT 1`,
+          [ctx.actor.id],
+        );
         const replies = row.withdrawnAt
           ? { items: [], nextCursor: null }
           : await messages(ctx, id, false, token, scope, previous);
@@ -1505,6 +1514,7 @@ export function supportRequestStore(
           value: {
             ...detail,
             ...(supportTime ? { supportTime } : {}),
+            supportMinutesAvailable: Boolean(minutes.rowCount),
             replies: {
               ...replies,
               items: replies.items.map(({ kind: _kind, ...reply }) => reply),

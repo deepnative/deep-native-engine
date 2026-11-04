@@ -252,6 +252,10 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
         reply,
       ]);
       await page.goto(`${base}/owned`);
+      // FRICTION-07: the retained list links back to the discussion.
+      await expect(
+        page.getByRole("link", { name: "Back to the circle questions" }),
+      ).toHaveAttribute("href", base.replace(/^https?:\/\/[^/]+/, ""));
       await page
         .getByLabel(
           "Withdraw this contribution's text; a content-free marker remains until account deletion.",
