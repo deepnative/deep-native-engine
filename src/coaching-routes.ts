@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { csrf, validCsrf } from "./session.ts";
 import { page, escape } from "./views.ts";
+import { hostingText } from "./hosting-presentation.ts";
 import { administrationLink } from "./administration-presentation.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import {
@@ -186,7 +187,9 @@ export function mountCoachingRoutes(
           .send(
             page(
               "Monthly coaching hours",
-              "<h1>Monthly coaching hours</h1><p>Coaching invoicing is not configured. No rate or payable amount is assumed. Your learning and saved work remain available.</p><h2>How to enter coaching hours</h2><p>Hours entry is unavailable on this preview while coaching invoicing is disabled. Ask your administrator to arrange coaching and enable the agreed workflow; there is no hours form to complete here yet.</p><ol><li>When coaching is configured, choose the calendar month and save hours and minutes as a draft.</li><li>Your administrator records the agreed hourly rate before you submit.</li><li>Review and submit your month. Submission does not take payment; an administrator reviews it before an invoice is issued.</li></ol><p>" +
+              "<h1>Monthly coaching hours</h1><p>Coaching invoicing is not configured. No rate or payable amount is assumed. Your learning and saved work remain available.</p><h2>How to enter coaching hours</h2><p>Hours entry is unavailable " +
+                hostingText("on this preview", "here") +
+                " while coaching invoicing is disabled. Ask your administrator to arrange coaching and enable the agreed workflow; there is no hours form to complete here yet.</p><ol><li>When coaching is configured, choose the calendar month and save hours and minutes as a draft.</li><li>Your administrator records the agreed hourly rate before you submit.</li><li>Review and submit your month. Submission does not take payment; an administrator reviews it before an invoice is issued.</li></ol><p>" +
                 administrationLink('<a href="/admin">Administration</a> · ') +
                 '<a href="/account">My account</a></p>',
             ),

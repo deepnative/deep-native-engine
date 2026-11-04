@@ -3,6 +3,7 @@ import type {
   AdministratorConsole,
   AdministratorEntry,
 } from "./administrator-entry.ts";
+import { withAdministration } from "./administration-presentation.ts";
 import { COOKIE, cookieOptions, csrf, validCsrf } from "./session.ts";
 import {
   STAFF_COOKIE,
@@ -50,6 +51,30 @@ function learnersCard(v: AdministratorConsole, ownerId?: string) {
   return `<section class="portal-card" id="learners"><h2>Learners</h2><form class="portal-search" method="get" action="/operator">${ownerId ? `<input type="hidden" name="ownerId" value="${escape(ownerId)}">` : ""}<label for="console-search">Search by name or account reference</label><div><input id="console-search" type="text" name="q" maxlength="${CONSOLE_SEARCH_MAX}" value="${escape(v.search)}"><button>Search</button></div></form>${v.search ? '<p><a href="/operator">Clear search</a></p>' : ""}${list}</section>`;
 }
 
+function memberToken(req: Request) {
+  const cookie = uniqueCookie(req.headers.cookie, COOKIE);
+  return cookie.kind === "value" && /^[a-f0-9]{64}$/.test(cookie.value)
+    ? cookie.value
+    : "";
+}
+
+/** ADMINLINK: mount after static assets, so signed-out pages and assets cost no query. */
+export function mountAdministrationLink(
+  app: Express,
+  store: AdministratorEntry | undefined,
+  options: { localStaffEntry?: boolean; mode?: string },
+) {
+  if (!options.localStaffEntry || options.mode === "live" || !store) return;
+  app.use((req, _res, next) => {
+    const token = memberToken(req);
+    if (!token) return next();
+    Promise.resolve(store.verifiedOwner?.(token))
+      .catch(() => false)
+      .then((owner) => (owner ? withAdministration(true, next) : next()))
+      .catch(next);
+  });
+}
+
 export function mountAdministratorEntry(
   app: Express,
   store: AdministratorEntry | undefined,
@@ -61,12 +86,7 @@ export function mountAdministratorEntry(
     simpleInvoices?: unknown;
   },
 ) {
-  const member = (req: Request) => {
-    const cookie = uniqueCookie(req.headers.cookie, COOKIE);
-    return cookie.kind === "value" && /^[a-f0-9]{64}$/.test(cookie.value)
-      ? cookie.value
-      : "";
-  };
+  const member = memberToken;
   const fail = (res: Response, status: number) =>
     res.status(status).send(
       page(

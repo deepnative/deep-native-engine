@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { SupportTimeReceipt } from "./support-time.ts";
 import { escape, hidden, page } from "./views.ts";
+import { privateRecordsLabel } from "./hosting-presentation.ts";
 import { supportTimeLink } from "./support-time-views.ts";
 import type {
   SupportRequestSummary,
@@ -85,7 +86,7 @@ export function supportOwnerHistoryPage(value: {
 }) {
   return page(
     "Your private support requests",
-    `<section class="reading"><h1>Your private support requests</h1><p>${disclosure}</p><p><a href="/support/new">New private request</a> · <a href="/member/export">Download private preview records</a></p><p>Newest receipts first; at most 20 requests per page.</p>${value.items.length ? `<ul aria-label="Private support requests">${value.items.map((item) => `<li><a href="/support/${encodeURIComponent(item.requestId)}">${item.withdrawnAt ? "Withdrawn request" : escape(item.subject!)} · ${escape(item.requestId)}</a>${lifecycle(item)}</li>`).join("")}</ul>` : "<p>No private support requests on this page.</p>"}${pages("/support", value.nextCursor)}<p><a href="/learn">Return to your learning path</a></p></section>`,
+    `<section class="reading"><h1>Your private support requests</h1><p>${disclosure}</p><p><a href="/support/new">New private request</a> · <a href="/member/export">${privateRecordsLabel()}</a></p><p>Newest receipts first; at most 20 requests per page.</p>${value.items.length ? `<ul aria-label="Private support requests">${value.items.map((item) => `<li><a href="/support/${encodeURIComponent(item.requestId)}">${item.withdrawnAt ? "Withdrawn request" : escape(item.subject!)} · ${escape(item.requestId)}</a>${lifecycle(item)}</li>`).join("")}</ul>` : "<p>No private support requests on this page.</p>"}${pages("/support", value.nextCursor)}<p><a href="/learn">Return to your learning path</a></p></section>`,
   );
 }
 export function supportMemberDetailPage(
@@ -122,7 +123,7 @@ export function supportMemberDetailPage(
 
   return page(
     "Private support receipt",
-    `<section class="reading"><p><a href="/support">Your private support requests</a></p><h1>Private support receipt</h1><p>${disclosure}</p>${lifecycle(value)}${minutes}${value.withdrawnAt ? '<p role="status">Request withdrawn. Request text and all associated messages were removed. The content-free receipt remains.</p>' : `<h2>${escape(value.subject!)}</h2><pre class="content-text" data-support-body>${escape(value.body!)}</pre><h2>Replies visible to you</h2><p>Newest replies first; at most 20 replies per page.</p>${value.replies.items.length ? `<ul aria-label="Replies visible to you">${value.replies.items.map((reply) => `<li id="reply-${escape(reply.id)}"><p>${escape(reply.attribution)} · ${time(reply.createdAt)}</p><pre class="content-text" data-support-reply>${escape(reply.body)}</pre></li>`).join("")}</ul>` : "<p>No member-visible reply on this page.</p>"}${pages(base, value.replies.nextCursor)}<form method="post" action="${base}/withdraw">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Withdraw this request and remove its subject, body and all associated messages. Keep a content-free receipt.</span></label><button class="secondary" type="submit">Withdraw request text</button></form>`}<p><a href="/member/export">Download private preview records</a></p><p>Withdrawal cannot recall downloaded copies or establish erasure from hosted backups.</p></section>`,
+    `<section class="reading"><p><a href="/support">Your private support requests</a></p><h1>Private support receipt</h1><p>${disclosure}</p>${lifecycle(value)}${minutes}${value.withdrawnAt ? '<p role="status">Request withdrawn. Request text and all associated messages were removed. The content-free receipt remains.</p>' : `<h2>${escape(value.subject!)}</h2><pre class="content-text" data-support-body>${escape(value.body!)}</pre><h2>Replies visible to you</h2><p>Newest replies first; at most 20 replies per page.</p>${value.replies.items.length ? `<ul aria-label="Replies visible to you">${value.replies.items.map((reply) => `<li id="reply-${escape(reply.id)}"><p>${escape(reply.attribution)} · ${time(reply.createdAt)}</p><pre class="content-text" data-support-reply>${escape(reply.body)}</pre></li>`).join("")}</ul>` : "<p>No member-visible reply on this page.</p>"}${pages(base, value.replies.nextCursor)}<form method="post" action="${base}/withdraw">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Withdraw this request and remove its subject, body and all associated messages. Keep a content-free receipt.</span></label><button class="secondary" type="submit">Withdraw request text</button></form>`}<p><a href="/member/export">${privateRecordsLabel()}</a></p><p>Withdrawal cannot recall downloaded copies or establish erasure from hosted backups.</p></section>`,
   );
 }
 function operatorContext(value: SupportOperatorSummary) {

@@ -4,6 +4,7 @@ import type { MemberEmailAccess } from "./member-email-access.ts";
 import { COOKIE, cookieOptions } from "./session.ts";
 import { STAFF_COOKIE, SIGNED_OUT } from "./staff-entry-selection.ts";
 import { page } from "./views.ts";
+import { hostingText } from "./hosting-presentation.ts";
 import { withMembership } from "./membership-presentation.ts";
 import { passwordSignInForm } from "./member-password-routes.ts";
 import type { MemberPasswordAccess } from "./member-password-access.ts";
@@ -148,7 +149,7 @@ export function mountMemberEmailRoutes(
     res.send(
       page(
         "Return to your learning",
-        `<section class="sign-in-page"><h1>Return to your learning</h1>${passwordSignIn ? passwordSignInForm(res.locals.csrf as string) : ""}<section class="sign-in-option" aria-labelledby="email-sign-in"><h2 id="email-sign-in">${passwordSignIn ? "Or get an email link" : "Get an email link"}</h2><p>Enter the email you previously linked to this learning record. A private sign-in link expires after 15 minutes.</p>${access ? form("/email/sign-in", res.locals.csrf as string, "Send sign-in link") : "<p>Email sign-in is unavailable on this preview.</p>"}</section><p class="account-links"><a class="button secondary" href="/">Start a new learning path</a></p></section>`,
+        `<section class="sign-in-page"><h1>Return to your learning</h1>${passwordSignIn ? passwordSignInForm(res.locals.csrf as string) : ""}<section class="sign-in-option" aria-labelledby="email-sign-in"><h2 id="email-sign-in">${passwordSignIn ? "Or get an email link" : "Get an email link"}</h2><p>Enter the email you previously linked to this learning record. A private sign-in link expires after 15 minutes.</p>${access ? form("/email/sign-in", res.locals.csrf as string, "Send sign-in link") : `<p>Email sign-in is unavailable ${hostingText("on this preview", "here")}.</p>`}</section><p class="account-links"><a class="button secondary" href="/">Start a new learning path</a></p></section>`,
       ),
     );
   });

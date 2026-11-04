@@ -5,7 +5,9 @@ import { withCurrentPath } from "../../src/navigation-presentation.ts";
 import { accountPage, page } from "../../src/views.ts";
 
 it("NAV-01 exposes account, logout, coaching and administration in shared navigation", () => {
-  const html = page("Learning", "<h1>Learning</h1>");
+  const html = withAdministration(true, () =>
+    page("Learning", "<h1>Learning</h1>"),
+  );
   const navigation = html.match(
     /<nav[^>]*aria-label="Main navigation"[^>]*>([\s\S]*?)<\/nav>/,
   )?.[1];
@@ -21,7 +23,9 @@ it("NAV-01 exposes account, logout, coaching and administration in shared naviga
     "/account/sign-out",
   ])
     expect(navigation).toContain(`href="${path}"`);
-  const guidance = starterGuidanceExample("everyday");
+  const guidance = withAdministration(true, () =>
+    starterGuidanceExample("everyday"),
+  );
   for (const path of [
     "/account",
     "/account/sign-out",
@@ -45,10 +49,12 @@ it.each(["unlinked", "unavailable"] as const)(
 it.each(["linked", "unlinked", "unavailable"] as const)(
   "ACCT-LAYOUT-02 renders the %s account page in its own account layout",
   (status) => {
-    const html = accountPage(
-      { id: "invented", background: "explorer", goal: "everyday" },
-      "a".repeat(64),
-      status,
+    const html = withAdministration(true, () =>
+      accountPage(
+        { id: "invented", background: "explorer", goal: "everyday" },
+        "a".repeat(64),
+        status,
+      ),
     );
     const main = html.match(/<main id="main">([\s\S]*)<\/main>/)?.[1] ?? "";
     expect(main).toMatch(/^<div class="account-page">/);
@@ -88,7 +94,9 @@ it.each([
   ["/account/sign-out", "Sign out"],
   ["/readiness", null],
 ])("NAV-07 marks only the header destination that owns %s", (path, label) => {
-  const html = withCurrentPath(path, () => page("Page", "<h1>Page</h1>"));
+  const html = withAdministration(true, () =>
+    withCurrentPath(path, () => page("Page", "<h1>Page</h1>")),
+  );
   const current = [...html.matchAll(/aria-current="page">([^<]+)</g)].map(
     (m) => m[1],
   );

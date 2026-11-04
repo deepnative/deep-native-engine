@@ -1,5 +1,6 @@
 import { LESSON, exercise, type Experience, type Goal } from "./content.ts";
 import type { Exercise } from "./store.ts";
+import { hostingText } from "./hosting-presentation.ts";
 
 export interface PlanStep {
   minutes: number;
@@ -24,8 +25,14 @@ export function learningPlan(
     profile.experience === "experienced"
       ? "Experienced with AI? Use this sample to test assumptions and improve your checks. No coding is required."
       : profile.experience === "some"
-        ? "Use a familiar task, then compare each AI suggestion with the sample details."
-        : "New or just starting? Follow the plain-language example and use only sample details.";
+        ? hostingText(
+            "Use a familiar task, then compare each AI suggestion with the sample details.",
+            "Use a familiar task, then compare each AI suggestion with what you know.",
+          )
+        : hostingText(
+            "New or just starting? Follow the plain-language example and use only sample details.",
+            "New or just starting? Follow the plain-language example.",
+          );
   const steps: PlanStep[] = [
     { minutes: LESSON.minutes, action: `Read ${LESSON.title}.` },
   ];

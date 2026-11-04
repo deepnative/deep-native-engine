@@ -150,6 +150,11 @@ async function fixture(
     await expect.poll(() => messages.length).toBe(sent + 1);
     await o.page.goto(messages.at(-1)!);
     await o.page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(
+      o.page.getByRole("heading", { name: "Email linked" }),
+    ).toBeVisible();
+    // ADMINLINK: the link appears from the first page after verification.
+    await o.page.goto(origin + "/account");
     return o;
   }
   const month = (

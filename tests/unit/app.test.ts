@@ -1,3 +1,4 @@
+import { disabledAssignmentReadinessStore } from "../../src/assignment-readiness.ts";
 import {
   learningDisclosure,
   learningSegments,
@@ -6734,15 +6735,23 @@ it("NAV-05 and NAV-06 offer Administration only where administrator entry exists
     learner: member,
   });
   const off = app(db, { origin, secret: "navigation-test" });
+  const owner = {
+    verifiedOwner: vi.fn().mockResolvedValue(true),
+    status: vi.fn(),
+    enter: vi.fn(),
+    end: vi.fn(),
+  };
   const on = app(db, {
     origin,
     secret: "navigation-test",
     localStaffEntry: true,
+    administratorEntry: owner,
   });
   const live = app(db, {
     origin,
     secret: "navigation-test",
     localStaffEntry: true,
+    administratorEntry: owner,
     mode: "live",
   });
   const [hidden, shown, liveHidden] = await Promise.all(
@@ -6838,6 +6847,12 @@ it("NAV-08 shows signed-out visitors Sign in instead of member account links", a
   const options = { origin, secret: "navigation-test", localStaffEntry: true };
   const application = app(db, {
     ...options,
+    administratorEntry: {
+      verifiedOwner: async () => true,
+      status: vi.fn(),
+      enter: vi.fn(),
+      end: vi.fn(),
+    },
     memberEmail: {
       signOut: async () => "signed_out",
     } as unknown as MemberEmailAccess,
@@ -6887,6 +6902,191 @@ it("NAV-08 shows signed-out visitors Sign in instead of member account links", a
   ])
     expect(links).toContain(`>${label}</a>`);
   expect(links).not.toContain("/email/sign-in");
+});
+it("ADMINLINK-01/02/03 shows Administration only to verified owners and grants nothing by showing it", async () => {
+  const db = storage();
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    deadline: performance.now() + 60000,
+    learner: member,
+  });
+  const verifiedOwner = vi.fn<(token: string) => Promise<boolean>>();
+  const status = vi.fn().mockResolvedValue({ kind: "denied" });
+  const application = app(db, {
+    origin,
+    secret: "navigation-test",
+    localStaffEntry: true,
+    administratorEntry: {
+      verifiedOwner,
+      status,
+      enter: vi.fn(),
+      end: vi.fn(),
+    },
+  });
+  const bearer = "d".repeat(64);
+  const read = (path: string, cookie = `${COOKIE}=${bearer}`) =>
+    withLoopback(application, (s) => {
+      const call = request(s).get(path).set("Host", host);
+      return cookie ? call.set("Cookie", cookie) : call;
+    });
+  const navigation = (html: string) =>
+    html.match(
+      /<nav[^>]*aria-label="Main navigation"[^>]*>([\s\S]*?)<\/nav>/,
+    )?.[1];
+
+  // ADMINLINK-01: an ordinary member sees no link, and /admin still refuses.
+  verifiedOwner.mockResolvedValue(false);
+  const ordinary = await read("/readiness");
+  expect(navigation(ordinary!.text)).toContain('href="/account/sign-out"');
+  expect(ordinary!.text).not.toContain('href="/admin"');
+  expect((await read("/account"))!.text).not.toContain('href="/admin"');
+  expect((await read("/admin"))!.status).toBe(403);
+
+  // ADMINLINK-02: a verified owner sees it, whatever their session state.
+  verifiedOwner.mockResolvedValue(true);
+  const owner = await read("/readiness");
+  expect(navigation(owner!.text)).toContain('href="/admin">Administration</a>');
+  expect((await read("/account"))!.text).toContain(
+    '<a class="button secondary" href="/admin">Administration</a>',
+  );
+  // ADMINLINK-03: seeing the link gives no authority; the route still decides.
+  expect((await read("/admin"))!.status).toBe(403);
+  expect(status).toHaveBeenCalled();
+  expect(verifiedOwner).toHaveBeenCalledWith(bearer);
+
+  // ADMINLINK-03: a failing check hides the link and the page still renders.
+  verifiedOwner.mockRejectedValue(new Error("database unavailable"));
+  const failed = await read("/readiness");
+  expect(failed!.status).toBe(200);
+  expect(failed!.text).not.toContain('href="/admin"');
+
+  // ADMINLINK-03: signed-out visitors and assets cost no owner check.
+  verifiedOwner.mockClear();
+  verifiedOwner.mockResolvedValue(true);
+  const visitor = await read("/readiness", "");
+  expect(visitor!.text).not.toContain('href="/admin"');
+  await read("/assets/style.css");
+  await read("/readiness", `${COOKIE}=not-a-member-token`);
+  expect(verifiedOwner).not.toHaveBeenCalled();
+});
+it("HOSTEDCOPY-01/02 hosted member pages describe a real account while the local preview keeps its wording", async () => {
+  const hostedOrigin = "https://engine.deepnative.io";
+  const secret = "hosted-copy-test";
+  const bearer = "c".repeat(64);
+  const id = "11111111-1111-4111-8111-111111111111";
+  const build = (target: string, hostedOriginOption?: string) => {
+    const db = storage();
+    const signedIn = {
+      kind: "active" as const,
+      expiresAt: new Date(Date.now() + 3600000),
+      deadline: performance.now() + 60000,
+      learner: { ...member, experience: "new" as const },
+    };
+    db.session.mockResolvedValue(signedIn);
+    const attempt = {
+      id,
+      contentId: "SYN-960",
+      contentVersion: 1,
+      title: "Invented assignment",
+      goalAtStart: "everyday",
+      response: "My saved answer",
+      revision: 2,
+      startedAt: new Date(),
+      savedAt: new Date(),
+      submittedAt: new Date(),
+      currentPublished: true,
+      currentEligible: true,
+      submissionCount: 1,
+    };
+    const attempts = {
+      list: vi.fn().mockResolvedValue([attempt]),
+      detail: vi.fn().mockResolvedValue(attempt),
+      start: vi.fn().mockResolvedValue(null),
+      save: vi.fn().mockResolvedValue(false),
+      submit: vi.fn().mockResolvedValue(false),
+      revise: vi.fn().mockResolvedValue(false),
+      remove: vi.fn().mockResolvedValue(false),
+      saveReflection: vi.fn().mockResolvedValue(false),
+      deleteReflection: vi.fn().mockResolvedValue(false),
+    };
+    const application = app(db, {
+      origin: target,
+      ...(hostedOriginOption ? { hostedOrigin: hostedOriginOption } : {}),
+      secret,
+      attempts,
+      assignmentReadiness: {
+        ...disabledAssignmentReadinessStore(),
+        list: vi.fn().mockResolvedValue([]),
+      },
+    });
+    const requestHost = new URL(target).host;
+    return {
+      db,
+      signedIn,
+      get: (path: string, signedOut = false) =>
+        withLoopback(application, (s) => {
+          const call = request(s).get(path).set("Host", requestHost);
+          return signedOut ? call : call.set("Cookie", `${COOKIE}=${bearer}`);
+        }),
+      post: (path: string, fields: Record<string, string>) =>
+        withLoopback(application, (s) =>
+          request(s)
+            .post(path)
+            .set("Host", requestHost)
+            .set("Origin", target)
+            .set("Cookie", `${COOKIE}=${bearer}`)
+            .type("form")
+            .send({ csrf: csrf(bearer, secret), ...fields }),
+        ),
+    };
+  };
+  const hosted = build(hostedOrigin, hostedOrigin);
+  const local = build(origin);
+  const paths = [
+    "/learn",
+    "/progress",
+    "/lesson",
+    "/account",
+    "/account/coaching",
+    "/email/sign-in",
+    "/assignments/attempts",
+    `/assignments/attempts/${id}`,
+  ];
+  const untrue =
+    /\bpreview\b|synthetic|local submission|local sample|submitted locally|locally|sample details|sample information|invented or sample/i;
+  const found: string[] = [];
+  for (const path of paths) {
+    const result = await hosted.get(path);
+    expect([path, result!.status]).toEqual([path, 200]);
+    const main = result!.text.match(/<main[^>]*>([\s\S]*)<\/main>/)?.[1] ?? "";
+    for (const match of main.matchAll(new RegExp(untrue, "gi")))
+      found.push(
+        `${path}: ${main.slice(Math.max(match.index - 60, 0), match.index + 40)}`,
+      );
+  }
+  expect(found).toEqual([]);
+  hosted.db.session.mockResolvedValue({ kind: "new" });
+  const landing = await hosted.get("/", true);
+  expect(landing!.text).toContain("Use Delete my account");
+  expect(landing!.text).not.toContain("Delete this preview");
+  hosted.db.session.mockResolvedValue(hosted.signedIn);
+  const refused = await hosted.post("/delete", {});
+  expect(refused!.text).toContain("before deleting your account");
+
+  // HOSTEDCOPY-02: the local preview wording is unchanged.
+  const localActivity = await local.get("/progress");
+  expect(localActivity!.text).toContain("SYNTHETIC WORK");
+  const localDashboard = await local.get("/learn");
+  expect(localDashboard!.text).toContain("use only sample details");
+  const localAttempts = await local.get("/assignments/attempts");
+  expect(localAttempts!.text).toContain("1 private local submission");
+  const localRefusal = await local.post("/delete", {});
+  expect(localRefusal!.text).toContain("before deleting this preview");
+  local.db.session.mockResolvedValue({ kind: "new" });
+  expect((await local.get("/", true))!.text).toContain(
+    "Use Delete this preview",
+  );
 });
 it("REALINPUT-01/02/03 hosted private learning forms take real information while the local preview stays invented only", async () => {
   const hostedOrigin = "https://engine.deepnative.io";

@@ -15,6 +15,10 @@ These forms no longer ask for, or check, an invented-information confirmation: a
 - **Simulation.** Practice and study stay labelled as simulated, and no live AI is connected.
 - **Forms left as they were.** Circle discussion and event rehearsal (shared or rehearsal data), evidence uploads and local AI simulation, member proposals (#97, `DNE_MEMBER_CONTRIBUTIONS`) and support (its own intake flag).
 
+## Hosted wording (#657)
+
+Hosted member pages no longer call a member's own work a preview, synthetic or a local submission, or tell them to use only sample details: `/`, `/learn`, `/progress`, `/lesson`, `/account/coaching`, `/email/sign-in`, assignment attempts, the records download label and matching error messages. Forms left as they were still say what they require. HOSTEDCOPY-01/02 in `tests/unit/app.test.ts` check these pages on an app instance with the hosted origin and check that the local preview wording stays.
+
 ## Evidence
 
 REALINPUT-01..04 are in `tests/unit/real-member-input.test.ts`, `tests/unit/app.test.ts` and `tests/unit/practice-session-ui.test.ts`, using a real app instance with the hosted origin. No browser journey runs the hosted runtime, because the browser suite serves plain HTTP on a local address and the hosted switch requires HTTPS.

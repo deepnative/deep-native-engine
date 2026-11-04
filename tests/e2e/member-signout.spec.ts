@@ -345,12 +345,15 @@ test("[L281] NAV-01/03/04 finds account tools and deliberately signs out without
       "Learning",
       "Account",
       "Monthly coaching hours",
-      "Administration",
       "Sign out",
     ])
       await expect(
         navigation.getByRole("link", { name: label, exact: true }),
       ).toBeVisible();
+    // ADMINLINK-01: an ordinary member is not offered Administration.
+    await expect(
+      navigation.getByRole("link", { name: "Administration", exact: true }),
+    ).toHaveCount(0);
     for (let index = 0; index < 4; index++) await page.keyboard.press("Tab");
     await expect(
       navigation.getByRole("link", { name: "Account", exact: true }),
@@ -379,10 +382,8 @@ test("[L281] NAV-01/03/04 finds account tools and deliberately signs out without
         exact: false,
       }),
     ).toBeVisible();
-    await page
-      .getByRole("navigation", { name: "Main navigation" })
-      .getByRole("link", { name: "Administration", exact: true })
-      .click();
+    // ADMINLINK-01: opening it directly still refuses them.
+    await page.goto(`${f.origin}/admin`);
     await expect(
       page.getByRole("heading", { name: "Administration unavailable" }),
     ).toBeVisible();

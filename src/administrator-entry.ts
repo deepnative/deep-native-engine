@@ -66,6 +66,8 @@ export interface AdministratorEntry {
     ownerId?: string,
     view?: { page?: number; search?: string },
   ): Promise<AdministratorConsoleResult>;
+  /** Read-only: selects the Administration link and grants nothing. */
+  verifiedOwner?(memberToken: string): Promise<boolean>;
   status(memberToken: string): Promise<AdministratorResult>;
   enter(memberToken: string): Promise<AdministratorResult>;
   end(memberToken: string): Promise<AdministratorResult>;
@@ -142,6 +144,18 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
     }
   }
   return {
+    async verifiedOwner(memberToken) {
+      if (!/^[a-f0-9]{64}$/.test(memberToken)) return false;
+      const owner = await pool.query(
+        `SELECT 1 FROM principals p
+         JOIN workspaces w ON w.owner_principal_id=p.id AND w.deleting_at IS NULL
+         JOIN member_email_identities i ON i.principal_id=p.id AND i.email_hash=ANY($2::text[])
+         WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
+           AND p.expires_at>clock_timestamp() LIMIT 1`,
+        [hash(memberToken), selected],
+      );
+      return Boolean(owner.rowCount);
+    },
     async console(credential, ownerId, view = {}) {
       if (
         !/^[a-f0-9]{64}$/.test(credential) ||

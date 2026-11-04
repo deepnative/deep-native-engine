@@ -143,12 +143,7 @@ it("LWORK-05 lists owner notebooks in bounded pages without serving teaching sou
   expect(first.text).toContain('href="/member/export"');
   expect(first.text).toContain('class="workspace-brand"');
   expect(first.text).toContain('aria-label="Deep Native learning home"');
-  for (const path of [
-    "/account",
-    "/account/sign-out",
-    "/account/coaching",
-    "/admin",
-  ])
+  for (const path of ["/account", "/account/sign-out", "/account/coaching"])
     expect(first.text).toContain(`href="${path}"`);
   expect(first.text).toContain(`${base}?after=${id}`);
   expect(first.text).toContain("everyday notebook");
