@@ -96,12 +96,12 @@ function fixture(
   accountRoles.mockResolvedValue(["student", "coach", "admin"]);
   const application = express();
   application.use(express.urlencoded({ extended: false }));
-  mountAccountViews(application, options.missing ? {} : { accountRoles }, {
-    origin,
-    secret,
-    localStaffEntry: !options.disabled,
-    mode: options.live ? "live" : "simulated",
-  });
+  mountAccountViews(
+    application,
+    options.missing ? {} : { accountRoles },
+    { origin, secret, localStaffEntry: !options.disabled },
+    options.live ? "live" : "simulated",
+  );
   application.get("/probe", (_req, res) =>
     res.send(
       page("Probe", administrationLink('<a href="/admin">Administration</a>')),

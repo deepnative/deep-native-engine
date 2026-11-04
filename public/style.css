@@ -1558,6 +1558,19 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   white-space: normal;
   overflow-wrap: break-word;
 }
+/* ROLES-03: the coach table has three short columns and fits a phone. */
+.coach-hours td:first-child {
+  min-width: 0;
+}
+.coach-hours td:last-child {
+  white-space: normal;
+}
+@media (max-width: 480px) {
+  .coach-hours th,
+  .coach-hours td {
+    padding: 8px 10px;
+  }
+}
 .member-table td a {
   display: inline-flex;
   align-items: center;

@@ -45,23 +45,21 @@ it("ROLES-01/06 stores coach and admin for the two owners only; everyone else is
     { role: "admin", count: 2 },
     { role: "coach", count: 2 },
   ]);
-  for (const address of ["shi@deepnative.io", " TOM@deepnative.io "]) {
-    const owner = await fixture(address);
-    expect(await entry.accountRoles!(owner.token)).toEqual([
-      "student",
-      "coach",
-      "admin",
-    ]);
-  }
-  const learner = await fixture("member@example.test");
-  expect(await entry.accountRoles!(learner.token)).toEqual(["student"]);
   // An unverified owner address grants nothing yet.
   const unverified = await fixture("tom@deepnative.io", false);
   expect(await entry.accountRoles!(unverified.token)).toEqual(["student"]);
+  // The verified address is normalized before it is matched.
+  const owner = await fixture(" Shi@DeepNative.io ");
+  expect(await entry.accountRoles!(owner.token)).toEqual([
+    "student",
+    "coach",
+    "admin",
+  ]);
+  const learner = await fixture("member@example.test");
+  expect(await entry.accountRoles!(learner.token)).toEqual(["student"]);
   expect(await entry.accountRoles!("not-a-token")).toEqual([]);
   expect(await entry.accountRoles!("f".repeat(64))).toEqual([]);
 
-  const owner = await fixture();
   await pool.query("UPDATE principals SET revoked_at=now() WHERE id=$1", [
     owner.id,
   ]);

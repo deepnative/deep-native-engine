@@ -37,11 +37,11 @@ export function mountAccountViews(
     origin: string;
     secret: string;
     localStaffEntry?: boolean;
-    mode?: string;
   },
+  mode?: string,
 ) {
   const lookup = store?.accountRoles?.bind(store);
-  if (!options.localStaffEntry || options.mode === "live" || !lookup) return;
+  if (!options.localStaffEntry || mode === "live" || !lookup) return;
   // One lookup per request, shared by the header and these routes.
   const roles = (res: Response): Promise<AccountRole[]> =>
     (res.locals.accountRoles as Promise<AccountRole[]> | undefined) ??

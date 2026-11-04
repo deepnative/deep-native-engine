@@ -561,12 +561,7 @@ export function app(
     mode !== "live" &&
     options.administratorEntry?.accountRoles,
   );
-  mountAccountViews(app, options.administratorEntry, {
-    origin: options.origin,
-    secret: options.secret,
-    localStaffEntry: options.localStaffEntry,
-    mode,
-  });
+  mountAccountViews(app, options.administratorEntry, options, mode);
   // Admit evidence creation against the shared budget before reading its body.
   const uploadAdmission = options.uploadAdmission;
   if (uploadAdmission) {
