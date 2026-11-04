@@ -1587,6 +1587,33 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 .account-page > .profile-form form {
   margin-top: 20px;
 }
+/* ACCT-LAYOUT-01/02: wide screens use the page width. The summary spans the
+   top; email and sign-out sit beside the profile form. Text stays readable. */
+@media (min-width: 1000px) {
+  .account-page {
+    max-width: none;
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    /* The last row takes the profile's extra height, so sign-out follows
+       email directly. */
+    grid-template-rows: auto auto 1fr;
+    column-gap: 56px;
+    align-items: start;
+  }
+  .account-intro {
+    grid-column: 1 / -1;
+  }
+  .account-intro > p {
+    max-width: 72ch;
+  }
+  .account-page > section {
+    grid-column: 1;
+  }
+  .account-page > .profile-form {
+    grid-column: 2;
+    grid-row: 2 / span 2;
+  }
+}
 
 /* Coaching administration: manager hours dashboard. */
 .invoice-workspace:has(.hours-dashboard) {

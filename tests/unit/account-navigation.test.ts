@@ -43,7 +43,7 @@ it.each(["unlinked", "unavailable"] as const)(
   },
 );
 it.each(["linked", "unlinked", "unavailable"] as const)(
-  "ACCT-LAYOUT-02 renders the %s account page in its own single-column layout",
+  "ACCT-LAYOUT-02 renders the %s account page in its own account layout",
   (status) => {
     const html = accountPage(
       { id: "invented", background: "explorer", goal: "everyday" },

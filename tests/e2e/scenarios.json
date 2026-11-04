@@ -1918,7 +1918,7 @@
       "preconditions": "Existing private learning record, email link sender replaced with deterministic invented outbox",
       "steps": "EMAIL-ACCESS-01/02/04/05A/05B/05E and MON-05/06/07: open visible My account from Signed in learning, inspect browser-only profile, link and verify an email with duplicate suppression, inspect existing linked-status/stale-form denial, find Sign in as a returning visitor and deny unsigned account access, then confirm sign-in and inspect own linked account and exact saved exercise",
       "expected": "Account status is visible above learning; private preferences and linked/unlinked status use current ownership without displaying or storing a plaintext email. New visitors have a visible Sign in entry and cannot open an account. Linked members see no attach action; sign-in restores the same member/work, invalidates the old token and copies no workspace; reading status dispatches no message.",
-      "issues": [538, 28],
+      "issues": [538, 28, 661],
       "critical": true
     },
     {
