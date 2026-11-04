@@ -6888,6 +6888,212 @@ it("NAV-08 shows signed-out visitors Sign in instead of member account links", a
     expect(links).toContain(`>${label}</a>`);
   expect(links).not.toContain("/email/sign-in");
 });
+it("REALINPUT-01/02/03 hosted private learning forms take real information while the local preview stays invented only", async () => {
+  const hostedOrigin = "https://engine.deepnative.io";
+  const secret = "real-input-test";
+  const bearer = "c".repeat(64);
+  const id = "11111111-1111-4111-8111-111111111111";
+  const lesson: ContentVersion = {
+    id: "SYN-106",
+    version: 2,
+    kind: "lesson",
+    origin: "curated",
+    title: "Invented learning sample",
+    body: "Check each suggestion against the original.",
+    owner: "Test editor",
+    sources: "Original invented text",
+    rights: "Owned sample",
+    goals: ["everyday", "work", "build"],
+    backgrounds: ["explorer", "professional", "technical"],
+    domains: [],
+    prerequisites: "None",
+    rubric: null,
+    rubricVersion: null,
+    state: "published",
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date(),
+    publishedAt: new Date(),
+  };
+  const build = (target: string, hostedOriginOption?: string) => {
+    const db = storage();
+    db.session.mockResolvedValue({
+      kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
+      learner: member,
+    });
+    db.openLesson.mockResolvedValue(true);
+    db.createMilestone.mockResolvedValue(id);
+    const catalog = catalogMock();
+    catalog.published.mockResolvedValue(lesson);
+    const attempts = {
+      list: vi.fn().mockResolvedValue([]),
+      detail: vi.fn().mockResolvedValue({
+        id,
+        contentId: "SYN-960",
+        contentVersion: 1,
+        title: "Invented assignment",
+        goalAtStart: "everyday",
+        response: "",
+        revision: 2,
+        startedAt: new Date(),
+        savedAt: null,
+        submittedAt: null,
+        currentPublished: true,
+        currentEligible: true,
+      }),
+      start: vi.fn().mockResolvedValue(null),
+      save: vi.fn().mockResolvedValue(true),
+      submit: vi.fn().mockResolvedValue(false),
+      revise: vi.fn().mockResolvedValue(false),
+      remove: vi.fn().mockResolvedValue(false),
+      saveReflection: vi.fn().mockResolvedValue(false),
+      deleteReflection: vi.fn().mockResolvedValue(false),
+    };
+    const practice = {
+      current: vi.fn<PracticeStore["current"]>().mockResolvedValue({
+        id: "SYN-106",
+        version: 2,
+        title: "Invented lesson",
+        body: "Compare details with the source.",
+        goal: "everyday" as const,
+        response: null,
+        withdrawnAt: null,
+      }),
+      history: vi.fn<PracticeStore["history"]>().mockResolvedValue([]),
+      save: vi.fn<PracticeStore["save"]>().mockResolvedValue("saved"),
+      withdraw: vi
+        .fn<PracticeStore["withdraw"]>()
+        .mockResolvedValue("unavailable"),
+    };
+    const application = app(db, {
+      origin: target,
+      ...(hostedOriginOption ? { hostedOrigin: hostedOriginOption } : {}),
+      secret,
+      catalog,
+      attempts,
+      practice,
+    });
+    const requestHost = new URL(target).host;
+    const post = (path: string, fields: Record<string, string>) =>
+      withLoopback(application, (s) =>
+        request(s)
+          .post(path)
+          .set("Host", requestHost)
+          .set("Origin", target)
+          .set("Cookie", `${COOKIE}=${bearer}`)
+          .type("form")
+          .send({ csrf: csrf(bearer, secret), ...fields }),
+      );
+    const get = (path: string) =>
+      withLoopback(application, (s) =>
+        request(s)
+          .get(path)
+          .set("Host", requestHost)
+          .set("Cookie", `${COOKIE}=${bearer}`),
+      );
+    return { db, attempts, practice, post, get };
+  };
+  const hosted = build(hostedOrigin, hostedOrigin);
+  const local = build(origin);
+  const milestone = {
+    goal_title: "Plan my real project",
+    milestone_title: "Write the first draft",
+    next_action: "Ask one clearer question",
+  };
+  // REALINPUT-02: nothing is asked for, and a stale form with the field still saves.
+  expect((await hosted.post("/milestones", milestone)).status).toBe(303);
+  expect(
+    (await hosted.post("/milestones", { ...milestone, sample_only: "yes" }))
+      .status,
+  ).toBe(303);
+  expect(hosted.db.createMilestone).toHaveBeenCalledTimes(2);
+  const study = await hosted.post("/library/SYN-106/study", {
+    content_version: "2",
+    reflection: "My real reflection",
+  });
+  expect(study.status).toBe(200);
+  expect(study.text).not.toContain("invented or sample");
+  expect(
+    (
+      await hosted.post("/library/SYN-106/practice", {
+        content_version: "2",
+        response: "My real note",
+      })
+    ).status,
+  ).toBe(303);
+  expect(hosted.practice.save).toHaveBeenCalledOnce();
+  const saved = await hosted.post(`/assignments/attempts/${id}/save`, {
+    revision: "2",
+    response: "My real response",
+  });
+  expect(saved.status).toBe(303);
+  expect(hosted.attempts.save).toHaveBeenCalledOnce();
+  // Limits still apply, with wording that does not ask for invented data.
+  const tooLong = await hosted.post("/library/SYN-106/practice", {
+    content_version: "2",
+    response: "x".repeat(1001),
+  });
+  expect(tooLong.status).toBe(422);
+  expect(tooLong.text).toContain("Write 1 to 1,000 characters.");
+  expect(tooLong.text).not.toContain("invented");
+
+  // REALINPUT-03: the local preview still refuses without the checkbox.
+  expect((await local.post("/milestones", milestone)).status).toBe(422);
+  expect(local.db.createMilestone).not.toHaveBeenCalled();
+  expect(
+    (
+      await local.post("/library/SYN-106/study", {
+        content_version: "2",
+        reflection: "Note",
+      })
+    ).status,
+  ).toBe(422);
+  expect(
+    (
+      await local.post("/library/SYN-106/practice", {
+        content_version: "2",
+        response: "Note",
+      })
+    ).status,
+  ).toBe(422);
+  expect(
+    (
+      await local.post(`/assignments/attempts/${id}/save`, {
+        revision: "2",
+        response: "Draft",
+      })
+    ).status,
+  ).toBe(422);
+
+  // REALINPUT-01/04: the forms themselves.
+  for (const path of [
+    "/milestones",
+    "/library/SYN-106/study",
+    "/library/SYN-106/practice",
+    `/assignments/attempts/${id}`,
+  ]) {
+    const page = await hosted.get(path);
+    expect([path, page.status]).toEqual([path, 200]);
+    expect(page.text).not.toContain('name="sample_only"');
+    expect(page.text).not.toContain('name="sample_confirmed"');
+    expect(page.text).not.toContain('name="synthetic"');
+    expect(page.text).not.toContain("invented or sample");
+    expect(page.text).not.toContain("sample information only");
+    expect(page.text).toContain("Leave out passwords");
+    const here = await local.get(path);
+    expect(here.status).toBe(200);
+    expect(here.text).toContain("invented or sample");
+  }
+  const practiceForm = await hosted.get("/library/SYN-106/practice");
+  expect(practiceForm.text).toContain("PRACTICE · SIMULATED · UNREVIEWED");
+  expect(practiceForm.text).not.toContain("SAMPLE ONLY");
+  const dashboardPage = await hosted.get("/learn");
+  expect(dashboardPage.text).toContain("YOUR PRIVATE PLAN");
+  expect(dashboardPage.text).toContain("Delete my account");
+  expect(dashboardPage.text).not.toContain("Delete this preview");
+  expect(dashboardPage.text).not.toContain("FOUNDATION PREVIEW");
+  expect((await local.get("/learn")).text).toContain("Delete this preview");
+});
 it("HOSTED-12 presents accurate hosted persistence while concurrent local rendering stays local", async () => {
   const hosted = app(storage(), {
     origin: "https://engine.deepnative.io",

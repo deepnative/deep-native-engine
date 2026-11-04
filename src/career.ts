@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { hash } from "./store.ts";
 import type { Fields } from "./validation.ts";
+import { inventedInputOnly } from "./hosting-presentation.ts";
 
 export type CareerKind = "career" | "opportunity" | "contract";
 export type DraftKind = "professional" | "proposal" | "renewal";
@@ -95,7 +96,7 @@ export function parseCareerEntry(fields: Fields): {
     errors.push("Write a next action between 3 and 500 characters.");
   if (selfReportedOutcome.length > 500)
     errors.push("Keep the self-reported outcome within 500 characters.");
-  if (fields.sample_only !== "yes")
+  if (inventedInputOnly() && fields.sample_only !== "yes")
     errors.push("Confirm that you used only invented or sample information.");
   return {
     input: {
@@ -122,7 +123,7 @@ export function parseCareerDraft(fields: Fields): {
     errors.push("Write a title between 3 and 160 characters.");
   if (body.length < 20 || body.length > 4000)
     errors.push("Write a draft between 20 and 4,000 characters.");
-  if (fields.sample_only !== "yes")
+  if (inventedInputOnly() && fields.sample_only !== "yes")
     errors.push("Confirm that you used only invented or sample information.");
   return { input: { kind: kind as DraftKind, title, body }, errors };
 }

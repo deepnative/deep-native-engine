@@ -450,3 +450,59 @@ it("escapes source, response and stored comparisons while preserving ordering an
     practiceSessionHistoryPage({ items: [withdrawn], nextCursor: null }),
   ).toContain("response, comparison and excerpt text removed");
 });
+it("REALINPUT-01/02 hosted practice sessions need no invented-information checkbox", async () => {
+  const hostedOrigin = "https://engine.deepnative.io";
+  const f = fixture();
+  const application = app(f.db, {
+    origin: hostedOrigin,
+    hostedOrigin,
+    secret,
+    practiceSessions: f.practiceSessions,
+  });
+  const send = (path: string, fields: Record<string, string>) =>
+    withLoopback(application, (server) =>
+      request(server)
+        .post(path)
+        .set("Host", "engine.deepnative.io")
+        .set("Origin", hostedOrigin)
+        .set("Cookie", `${COOKIE}=${token}`)
+        .type("form")
+        .send({ csrf: csrf(token, secret), ...fields }),
+    );
+  const withoutCheckbox = (fields: Record<string, string>) =>
+    Object.fromEntries(
+      Object.entries(fields).filter(([key]) => key !== "synthetic"),
+    );
+  const start = withoutCheckbox(startFields);
+  const append = withoutCheckbox(appendFields);
+  expect(
+    (await send(`/library/${source.contentId}/practice-session/start`, start))
+      .status,
+  ).toBe(303);
+  expect(f.practiceSessions.start).toHaveBeenCalledOnce();
+  expect(
+    (await send(`/practice-sessions/${sessionId}/responses`, append)).status,
+  ).toBe(303);
+  expect(f.practiceSessions.append).toHaveBeenCalledOnce();
+  const pages = await Promise.all(
+    [
+      `/library/${source.contentId}/practice-session`,
+      `/practice-sessions/${sessionId}`,
+    ].map((path) =>
+      withLoopback(application, (server) =>
+        request(server)
+          .get(path)
+          .set("Host", "engine.deepnative.io")
+          .set("Cookie", `${COOKIE}=${token}`),
+      ),
+    ),
+  );
+  for (const page of pages) {
+    expect(page.status).toBe(200);
+    expect(page.text).not.toContain('name="synthetic"');
+    expect(page.text).not.toContain("invented or sample");
+    expect(page.text).not.toContain("SAMPLE ONLY");
+    expect(page.text).toContain("SIMULATED");
+  }
+  expect(pages[0]!.text).toContain("Leave out passwords");
+});
