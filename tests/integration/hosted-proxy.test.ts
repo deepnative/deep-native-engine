@@ -1,10 +1,13 @@
-import { request as httpRequest, type IncomingHttpHeaders } from "node:http";
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, writeFileSync, rmSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import {
+  OWNED_PROXY_TEST_MS,
+  ownedProxyRequest,
+} from "../support/owned-proxy-request.ts";
 
 const canonical = "engine.deepnative.io";
 const legacy =
@@ -186,44 +189,9 @@ async function reloadProxy() {
     await new Promise((done) => setTimeout(done, 50));
   }
 }
-async function proxyRequest(
-  url: string,
-  options: {
-    method?: string;
-    headers?: Record<string, string>;
-    body?: string;
-  } = {},
-) {
-  return new Promise<{
-    status: number;
-    headers: IncomingHttpHeaders;
-    text: () => Promise<string>;
-  }>((resolve, reject) => {
-    // Each probe is an independent real HTTP request, not a pooled socket
-    // that nginx may close while an old worker drains during reload.
-    const request = httpRequest(
-      url,
-      { ...options, agent: false },
-      (response) => {
-        const chunks: Buffer[] = [];
-        response.on("data", (chunk: Buffer) => chunks.push(chunk));
-        response.on("end", () =>
-          resolve({
-            status: response.statusCode!,
-            headers: response.headers,
-            text: async () => Buffer.concat(chunks).toString("utf8"),
-          }),
-        );
-        response.on("error", reject);
-      },
-    );
-    request.on("error", reject);
-    request.setTimeout(5_000, () =>
-      request.destroy(Error("Owned proxy request timed out.")),
-    );
-    request.end(options.body);
-  });
-}
+const proxyRequest = ownedProxyRequest;
+// A stalled request gets its own limit and one retry, so name the failure here.
+vi.setConfig({ testTimeout: OWNED_PROXY_TEST_MS });
 beforeAll(async () => {
   writeFileSync(
     join(directory, "upstream.conf"),

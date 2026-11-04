@@ -9,7 +9,14 @@ export default defineConfig({
   timeout: 30000,
   reporter: [["list"], ["json", { outputFile: "artifacts/e2e-results.json" }]],
   outputDir: "artifacts/browser-results",
-  use: { baseURL: browserOrigin, trace: "retain-on-failure" },
+  use: {
+    baseURL: browserOrigin,
+    trace: "retain-on-failure",
+    // #633: a hung action fails on its own with a call log, leaving test time
+    // for cleanup, instead of a bare test timeout that can strand fixtures.
+    actionTimeout: 15_000,
+    navigationTimeout: 20_000,
+  },
   projects: [
     { name: "desktop-chromium", use: { ...devices["Desktop Chrome"] } },
     { name: "mobile-chromium", use: { ...devices["Pixel 7"] } },
