@@ -1317,7 +1317,8 @@ test("[L13] lost idle database connections do not terminate the server and saved
   );
   expect(remaining.rowCount).toBe(0);
   // Re-request the current URL after the disconnect. A request concurrent with it may fail honestly.
-  const response = await page.goto(page.url());
+  // Saving lands on a fragment, and going to the same URL would not reach the server.
+  const response = await page.goto(page.url().split("#")[0]!);
   expect([200, 503]).toContain(response!.status());
   await page.goto("/lesson");
   await expect(page.getByLabel("Your instruction to AI")).toHaveValue(

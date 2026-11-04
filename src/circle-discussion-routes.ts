@@ -379,7 +379,7 @@ export function registerCircleDiscussion(
           shell(
             circle,
             "Your retained circle contributions",
-            `<p>These are your private retained records, including hidden contributions. Earlier circle choices never republish them. Withdraw a contribution to remove its saved body; delete your account to erase your owned records.</p>${listing(circle, csrf, value, `${base(circle)}/owned`, true)}<p><a href="/member/export">Download your private records</a></p>`,
+            `<p>These are your private retained records, including hidden contributions. Earlier circle choices never republish them. Withdraw a contribution to remove its saved body; delete your account to erase your owned records.</p>${listing(circle, csrf, value, `${base(circle)}/owned`, true)}<p><a href="${base(circle)}">Back to the circle questions</a> · <a href="/member/export">Download your private records</a></p>`,
           ),
         );
     }),

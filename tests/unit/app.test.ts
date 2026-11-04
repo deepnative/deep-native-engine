@@ -20,6 +20,7 @@ import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import request from "supertest";
 import { createServer, type Server } from "node:http";
 import { app } from "../../src/app.ts";
+import { accountPage, lesson } from "../../src/views.ts";
 import type { UploadAdmissionStore } from "../../src/upload-admission.ts";
 import {
   LessonActivityUnavailable,
@@ -224,7 +225,7 @@ it("HOSTED-09 upgrades the same inherited HTTPS member cookie at its original ex
     .set("Host", "engine.deepnative.io")
     .set("Cookie", `dne_preview=${bearer}`)
     .expect(303);
-  expect(expired.headers["set-cookie"]).toBeUndefined();
+  expect(String(expired.headers["set-cookie"])).not.toContain("dne_preview");
   db.session.mockResolvedValue(active);
   const local = await managedAgent(app(db, { origin, secret: "local-secret" }));
   const loopback = await local
@@ -7594,4 +7595,114 @@ it("NAME01 enforces Display name on server registration and retains safe choices
       goal: "work",
     }),
   );
+});
+
+// #658 member friction found in the real-member rehearsal.
+it("FRICTION-01 returns a saved draft or chosen assignment to its confirmation", async () => {
+  const { agent, csrf } = await client();
+  active();
+  db.save.mockResolvedValue({ kind: "saved" } as never);
+  const saved = await agent
+    .post("/exercise")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({
+      csrf,
+      lesson_id: LESSON.id,
+      lesson_version: String(LESSON.version),
+      goal: "everyday",
+      revision: "0",
+      instruction: "My invented instruction for this lesson",
+      intent: "draft",
+    });
+  expect(saved.status, saved.text).toBe(303);
+  expect(saved.headers.location).toBe("/lesson#exercise-status");
+  const draft = lesson(
+    member,
+    { revision: 1, instruction: "Mine", verification: "Check" } as never,
+    csrf,
+  );
+  expect(draft).toContain('id="exercise-status"');
+});
+it("FRICTION-02/05 explains a deleted account and a signed-out bounce once", async () => {
+  const signedOut = await managedAgent(app(db, { origin, secret: "s" }));
+  await signedOut.get("/learn").set("Host", host).expect(303);
+  const explained = await signedOut.get("/").set("Host", host).expect(200);
+  expect(explained.text).toContain("Sign in or create an account");
+  const again = await signedOut.get("/").set("Host", host).expect(200);
+  expect(again.text).not.toContain("Sign in or create an account");
+  const { agent, csrf } = await client(evidenceStorage());
+  active();
+  await agent
+    .post("/delete")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf, confirm: "yes" })
+    .expect(303);
+  db.session.mockResolvedValue({ kind: "missing" } as never);
+  const landing = await agent.get("/").set("Host", host).expect(200);
+  expect(landing.text).toContain(
+    "Your account and its saved work were deleted",
+  );
+  const account = accountPage(
+    { id: "invented", background: "explorer", goal: "everyday" },
+    csrf,
+    "unlinked",
+  );
+  expect(account).toMatch(/action="\/delete"/);
+});
+it("FRICTION-06 offers no member tools on staff pages to a signed-out visitor", async () => {
+  const signedOut = await managedAgent(
+    app(db, { origin, secret: "s", localStaffEntry: true }),
+  );
+  const staff = await signedOut.get("/admin").set("Host", host);
+  const navigation = staff.text.match(
+    /<nav[^>]*aria-label="Main navigation"[^>]*>([\s\S]*?)<\/nav>/,
+  )?.[1];
+  expect(navigation).toBeDefined();
+  expect(navigation).not.toContain("/account/sign-out");
+  expect(navigation).not.toContain("/account/coaching");
+});
+it("FRICTION-10 gives a way back when email is off", async () => {
+  const { agent } = await client();
+  active();
+  const off = await agent.get("/email/attach").set("Host", host);
+  expect(off.text).toContain("Email unavailable");
+  expect(off.text).toContain('href="/account">Return to My account');
+});
+it("FRICTION-04 points the learning path at feedback", async () => {
+  const { agent } = await client();
+  active();
+  const learn = await agent.get("/learn").set("Host", host).expect(200);
+  expect(learn.text).toContain('href="/evidence">Find feedback on your work');
+});
+it("FRICTION-05/06 ignores an unknown notice and reads member state only where needed", async () => {
+  const agent = await managedAgent(
+    app(db, { origin, secret: "s", localStaffEntry: true }),
+  );
+  const unknown = await agent
+    .get("/")
+    .set("Host", host)
+    .set("Cookie", "dne_landing_notice=<script>")
+    .expect(200);
+  expect(unknown.text).not.toContain("<script>alert");
+  expect(unknown.text).not.toContain('class="notice" role="status"');
+  const bearer = "d".repeat(64);
+  const navigation = async () =>
+    (
+      await agent
+        .get("/admin")
+        .set("Host", host)
+        .set("Cookie", `dne_preview=${bearer}`)
+    ).text.match(
+      /<nav[^>]*aria-label="Main navigation"[^>]*>([\s\S]*?)<\/nav>/,
+    )?.[1];
+  active();
+  expect(await navigation()).toContain("/account/sign-out");
+  db.session.mockResolvedValue({ kind: "missing" } as never);
+  expect(await navigation()).not.toContain("/account/sign-out");
+  db.session.mockRejectedValue(new Error("synthetic store failure"));
+  expect(await navigation()).toContain("/account/sign-out");
 });

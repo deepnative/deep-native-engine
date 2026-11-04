@@ -106,7 +106,9 @@ export function supportMemberDetailPage(
       timeReceipt.state === "completed" ||
       timeReceipt.state === "cancelled") &&
     !value.withdrawnAt &&
-    !value.resolvedAt
+    !value.resolvedAt &&
+    // FRICTION-03: never offer a hold the account has no minutes for.
+    value.supportMinutesAvailable !== false
       ? `<section aria-labelledby="support-time-allocation-heading"><h2 id="support-time-allocation-heading">Allocate private support test minutes</h2><p>Use one existing support test allowance. No minutes are purchased or created. Replies and acknowledgements remain unmetered. Withdrawal before work begins releases the hold; after begin, unresolved work stays held for reconciliation.</p><form method="post" action="${base}/time/allocate">${hidden(csrf)}<input type="hidden" name="idempotencyKey" value="${escape(randomUUID())}"><label for="support-time-ceiling">Maximum support and preparation minutes</label><input id="support-time-ceiling" name="ceiling" type="number" min="1" max="120" step="1" required><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Hold this ceiling from my existing private support test minutes for this invented request.</span></label><button type="submit">Hold support test minutes</button></form></section>`
       : "";
   const cancel =
