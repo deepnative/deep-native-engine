@@ -187,26 +187,31 @@ test("[L213] email verification restores the exact saved member in another brows
       fresh.locator('select[name="goal"], input[name="goal"]:checked'),
     ).toHaveValue("everyday");
     await expect(fresh.getByText(emailAddress)).toHaveCount(0);
-    // ACCT-LAYOUT-01: one left edge and a readable column.
-    const accountEdges = await Promise.all(
-      [
-        "My account",
-        "Verified email linked",
-        "Sign out of your account",
-        "Your learning profile",
-      ].map(
-        async (name) =>
-          (
-            await fresh
-              .getByRole("heading", { name, exact: true })
-              .boundingBox()
-          )?.x,
+    // ACCT-LAYOUT-01/02: phones read one column with one left edge; wide
+    // screens use the page width, with the profile beside email and sign-out.
+    const box = async (name: string) =>
+      (await fresh.getByRole("heading", { name, exact: true }).boundingBox())!;
+    const title = await box("My account"),
+      email = await box("Verified email linked"),
+      signOut = await box("Sign out of your account"),
+      profile = await box("Your learning profile");
+    const accountWidth = (await fresh.locator(".account-page").boundingBox())!
+      .width;
+    expect(new Set([title.x, email.x, signOut.x]).size).toBe(1);
+    if (fresh.viewportSize()!.width >= 1000) {
+      expect(accountWidth).toBeGreaterThan(1000);
+      expect(profile.x).toBeGreaterThan(email.x + accountWidth / 3);
+      expect(Math.abs(profile.y - email.y)).toBeLessThan(4);
+      expect(signOut.y - email.y).toBeLessThan(400);
+    } else {
+      expect(profile.x).toBe(title.x);
+      expect(profile.y).toBeGreaterThan(signOut.y);
+    }
+    expect(
+      await fresh.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
       ),
-    );
-    expect(new Set(accountEdges).size).toBe(1);
-    const accountWidth = (await fresh.locator(".account-page").boundingBox())
-      ?.width;
-    expect(accountWidth).toBeLessThanOrEqual(760);
+    ).toBe(true);
     await fresh.screenshot({
       path: `artifacts/member-account-${test.info().project.name}.png`,
       fullPage: true,
