@@ -2586,6 +2586,15 @@
       "expected": "Each view has its own landing page and header link, the switch offers the other views, Coaching shows hours and status with no billing, switching neither grants nor ends administration, the chosen view is remembered, the student sees no switch and is refused Coaching, and pages avoid sideways scrolling on desktop and mobile",
       "issues": [673],
       "critical": true
+    },
+    {
+      "id": "L291",
+      "actor": "Member reading pages on a wide screen and a phone",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server; desktop/mobile Chromium",
+      "steps": "READWIDTH-01..03: open the readiness, starter guidance, lesson, milestone and career pages and the email link form",
+      "expected": "Headings and paragraphs on these pages use the page's full text width on a wide screen; the email form stays at most 620px wide; narrow screens have no sideways scrolling",
+      "issues": [682],
+      "critical": true
     }
   ],
   "fullMvp": [

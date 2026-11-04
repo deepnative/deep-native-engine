@@ -23,11 +23,6 @@
   font-synthesis: none;
 }
 
-.guidance-header,
-.guidance,
-.guidance-footer {
-  max-width: 920px;
-}
 .guidance-header nav {
   display: flex;
   flex-wrap: wrap;
@@ -39,13 +34,9 @@
   padding-bottom: 40px;
 }
 .guidance h1 {
-  max-width: 780px;
   font-size: clamp(32px, 4.3vw, 48px);
   letter-spacing: -1.5px;
   line-height: 1.15;
-}
-.guidance .lead {
-  max-width: 730px;
 }
 .guidance-steps {
   display: flex;
@@ -347,7 +338,6 @@ p {
 .lead {
   font-size: 18px;
   line-height: 1.7;
-  max-width: 580px;
 }
 .eyebrow {
   color: var(--accent);
@@ -609,10 +599,6 @@ progress {
   padding-left: 20px;
   border-left: 2px solid var(--line);
 }
-.milestone-page,
-.career-page {
-  max-width: 850px;
-}
 .milestone-list,
 .career-list {
   list-style: none;
@@ -695,9 +681,6 @@ progress {
 .breadcrumb span {
   letter-spacing: 1px;
   color: var(--muted);
-}
-.lesson-heading {
-  max-width: 780px;
 }
 .lesson-heading h1 {
   font-size: 48px;
@@ -816,7 +799,11 @@ progress {
 }
 .error-page {
   padding: 80px 0;
-  max-width: 750px;
+}
+/* READWIDTH-02: text uses the page width; forms stay a comfortable size. */
+.error-page form {
+  max-width: 620px;
+  margin-bottom: 20px;
 }
 footer {
   border-top: 1px solid var(--line);
