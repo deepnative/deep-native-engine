@@ -5,7 +5,11 @@ import { hash } from "./store.ts";
 export type EmailPurpose = "attach" | "sign_in";
 export interface MemberEmailSender {
   send(address: string, link: string): Promise<void>;
+  /** #665: tell an address no account uses how to start. No sign-in link. */
+  sendNoAccount?(address: string, startLink: string): Promise<void>;
 }
+/** Notices to unused addresses, per address and in all, in any hour. */
+const NOTICE_LIMITS = { perAddress: 1, total: 20 };
 export interface MemberEmailAccess {
   signOut(
     memberToken: string,
@@ -136,7 +140,9 @@ type RequestOutcome =
   | "not_bound"
   | "member_unavailable"
   | "pending"
-  | "rate_limited";
+  | "rate_limited"
+  | "no_account_notice"
+  | "no_account_limited";
 /**
  * EMAIL-DIAG-01: one line an operator can read for each request. It carries no
  * address, hash, link, member identifier or provider message text.
@@ -254,6 +260,10 @@ export function memberEmailAccess(
         return "queued";
       },
     );
+    if (queued === "not_bound" && sender.sendNoAccount) {
+      await notice(normalized, digest);
+      return "unavailable";
+    }
     if (queued !== "queued") {
       logRequest(purpose, queued);
       return "unavailable";
@@ -272,6 +282,41 @@ export function memberEmailAccess(
         [hash(code)],
       );
       return "unavailable";
+    }
+  }
+  async function notice(address: string, digest: string) {
+    const id = await transaction(pool, async (client) => {
+      // One lock for every notice keeps both hourly counts exact.
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended('member_email_notices',0))",
+      );
+      const recent = (
+        await client.query<{ total: number; mine: number }>(
+          `SELECT count(*)::int AS total, count(*) FILTER (WHERE email_hash=$1)::int AS mine
+           FROM member_email_notices WHERE created_at>clock_timestamp()-INTERVAL '1 hour'`,
+          [digest],
+        )
+      ).rows[0]!;
+      if (
+        recent.mine >= NOTICE_LIMITS.perAddress ||
+        recent.total >= NOTICE_LIMITS.total
+      )
+        return null;
+      return (
+        await client.query<{ id: string }>(
+          "INSERT INTO member_email_notices(email_hash) VALUES($1) RETURNING id",
+          [digest],
+        )
+      ).rows[0]!.id;
+    });
+    if (id === null) return logRequest("sign_in", "no_account_limited");
+    try {
+      await sender.sendNoAccount!(address, `${origin}/`);
+      logRequest("sign_in", "no_account_notice");
+    } catch (error) {
+      logRequest("sign_in", "send_failed", error);
+      // Nothing reached the inbox, so this request does not count.
+      await pool.query("DELETE FROM member_email_notices WHERE id=$1", [id]);
     }
   }
   return {

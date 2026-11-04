@@ -34,6 +34,26 @@ export function azureEmailSender(
           code: result.error?.code,
         });
     },
+    async sendNoAccount(address, startLink) {
+      const poller = await client.beginSend(
+        {
+          senderAddress,
+          content: {
+            subject: "No Deep Native Engine account uses this email yet",
+            plainText: `Someone asked for a sign-in link for this address, but no Deep Native Engine account uses it yet. You don't need to sign in first.\n\nTo start, open ${startLink} and fill in the start form. If it asks for an email and password, use this address. Otherwise, after you start, open My account and choose Link an email to keep access on any device.\n\nIf you did not ask for this, ignore this message. Nothing has been created.`,
+          },
+          recipients: { to: [{ address }] },
+        },
+        { abortSignal: AbortSignal.timeout(15_000) },
+      );
+      const result = await poller.pollUntilDone({
+        abortSignal: AbortSignal.timeout(30_000),
+      });
+      if (result.status !== "Succeeded")
+        throw Object.assign(new Error("Email send was not confirmed"), {
+          code: result.error?.code,
+        });
+    },
   };
 }
 

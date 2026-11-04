@@ -117,6 +117,21 @@ it("shows configured email sign-in and links it from the welcome page", async ()
   expect(welcome.text).toContain('href="/email/sign-in">Sign in</a>');
 });
 
+it("NOACCOUNT-03 tells newcomers they start on the home page, not by signing in", async () => {
+  const { application } = fixture(false);
+  const landing = await get(application, "/email/sign-in");
+  expect(landing.text).toContain("New here?");
+  expect(landing.text).toContain(
+    'You don’t need to sign in first. <a href="/">Start learning</a>',
+  );
+  const response = await post(application, "/email/sign-in", {
+    email: "x@example.com",
+  });
+  expect(response.text).toContain(
+    "If no account uses this address yet, we’ll email it the steps to start.",
+  );
+});
+
 it("offers active members an email link from their learning path", async () => {
   const { application } = fixture();
   const dashboard = await get(application, "/learn");

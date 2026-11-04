@@ -149,7 +149,7 @@ export function mountMemberEmailRoutes(
     res.send(
       page(
         "Return to your learning",
-        `<section class="sign-in-page"><h1>Return to your learning</h1>${passwordSignIn ? passwordSignInForm(res.locals.csrf as string) : ""}<section class="sign-in-option" aria-labelledby="email-sign-in"><h2 id="email-sign-in">${passwordSignIn ? "Or get an email link" : "Get an email link"}</h2><p>Enter the email you previously linked to this learning record. A private sign-in link expires after 15 minutes.</p>${access ? form("/email/sign-in", res.locals.csrf as string, "Send sign-in link") : `<p>Email sign-in is unavailable ${hostingText("on this preview", "here")}.</p>`}</section><p class="account-links"><a class="button secondary" href="/">Start a new learning path</a></p></section>`,
+        `<section class="sign-in-page"><h1>Return to your learning</h1>${passwordSignIn ? passwordSignInForm(res.locals.csrf as string) : ""}<section class="sign-in-option" aria-labelledby="email-sign-in"><h2 id="email-sign-in">${passwordSignIn ? "Or get an email link" : "Get an email link"}</h2><p>Enter the email you previously linked to this learning record. A private sign-in link expires after 15 minutes.</p><p><strong>New here?</strong> You don’t need to sign in first. <a href="/">Start learning</a>, then link your email from My account.</p>${access ? form("/email/sign-in", res.locals.csrf as string, "Send sign-in link") : `<p>Email sign-in is unavailable ${hostingText("on this preview", "here")}.</p>`}</section><p class="account-links"><a class="button secondary" href="/">Start a new learning path</a></p></section>`,
       ),
     );
   });
@@ -168,7 +168,7 @@ export function mountMemberEmailRoutes(
     return res.send(
       page(
         "Check your email",
-        '<section class="error-page"><h1>Check your email</h1><p>If this address is linked to a learning record, a private sign-in link will arrive shortly. Check your inbox and spam folder. Repeating this request will not send another message while a link is pending. Use that link within 15 minutes; if it has not arrived, wait 15 minutes before requesting again.</p>' +
+        '<section class="error-page"><h1>Check your email</h1><p>If this address is linked to a learning record, a private sign-in link will arrive shortly. If no account uses this address yet, we’ll email it the steps to start. Check your inbox and spam folder. Repeating this request will not send another message while a link is pending. Use that link within 15 minutes; if it has not arrived, wait 15 minutes before requesting again.</p>' +
           NOTHING_ARRIVED +
           "</section>",
       ),
