@@ -507,3 +507,28 @@ it("ADMINCON04 denies learner, unbound, revoked, malformed and expired console a
   );
   expect(await entry.console!(second.credential)).toEqual({ kind: "denied" });
 });
+it("CONSOLECOACH-01 lists each learner's latest saved coaching month, or none", async () => {
+  const admin = await consoleAdmin();
+  const [busy, idle] = await learners(2);
+  const save = (month: string, minutes: number, state = "draft") =>
+    pool.query(
+      `INSERT INTO coaching_months(owner_id,month,minutes,name,email,state,revision,submitted_revision)
+       VALUES($1,$2,$3,'Invented','invented@example.test',$4,1,$5)`,
+      [busy, month, minutes, state, state === "draft" ? null : 1],
+    );
+  await save("2026-09", 600, "submitted");
+  await save("2026-10", 10320);
+  const listed = await view(admin.credential);
+  const row = (id: string | undefined) =>
+    listed.members.find((m) => m.id === id);
+  expect(row(busy)!.coaching).toEqual({
+    month: "2026-10",
+    minutes: 10320,
+    state: "draft",
+    returned: false,
+    totalCents: null,
+    paidCents: null,
+    voided: false,
+  });
+  expect(row(idle)!.coaching).toBeNull();
+});

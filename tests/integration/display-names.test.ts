@@ -151,6 +151,7 @@ it("NAME02/03/04 preserves legacy rows and work, names the same account, exports
     background: "explorer",
     goal: "everyday",
     joined: expect.any(Date),
+    coaching: null,
   });
   expect(JSON.stringify(listed)).not.toContain("Private original practice");
   expect(JSON.stringify(listed)).not.toContain("tom@deepnative.io");
