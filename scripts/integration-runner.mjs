@@ -98,6 +98,79 @@ export function integrationFiles(root) {
   return files;
 }
 
+// Committed per-file seconds (including setup) from a measured run; refresh with
+// `python3 scripts/pipeline_timings.py durations`. Only lane grouping uses it:
+// every inventory file still runs once and the union check is unchanged.
+const DURATIONS = "tests/integration/durations.json";
+
+export function readDurations(root) {
+  let text;
+  try {
+    text = readFileSync(path.join(root, DURATIONS), "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") return {};
+    throw Error("Integration duration register invalid", { cause: error });
+  }
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    value = undefined;
+  }
+  requireGate(
+    value?.schema === "integration-durations-v1" &&
+      value.files &&
+      typeof value.files === "object" &&
+      !Array.isArray(value.files) &&
+      Object.entries(value.files).every(
+        ([name, seconds]) =>
+          /^tests\/integration\/[A-Za-z0-9._-]+\.test\.ts$/u.test(name) &&
+          Number.isFinite(seconds) &&
+          seconds >= 0,
+      ),
+    "Integration duration register invalid",
+  );
+  return value.files;
+}
+
+// Longest file first onto the least-loaded lane (fewest files on a tie, then
+// lowest index), so the same inventory and durations always give the same lanes.
+export function planLanes(files, root, durations, count) {
+  requireGate(files.length >= count, "Fewer integration files than lanes");
+  const known = Object.values(durations).sort((a, b) => a - b);
+  const median = known.length ? known[Math.floor((known.length - 1) / 2)] : 10;
+  const items = files
+    .map((file) => {
+      const recorded = durations[path.relative(root, file)];
+      return {
+        file,
+        seconds: recorded === undefined ? median : recorded,
+      };
+    })
+    .sort((a, b) => b.seconds - a.seconds || a.file.localeCompare(b.file));
+  const lanes = Array.from({ length: count }, (_, position) => ({
+    index: position + 1,
+    files: [],
+    estimatedSeconds: 0,
+  }));
+  for (const item of items) {
+    const lane = lanes.reduce((best, candidate) =>
+      candidate.estimatedSeconds < best.estimatedSeconds ||
+      (candidate.estimatedSeconds === best.estimatedSeconds &&
+        candidate.files.length < best.files.length)
+        ? candidate
+        : best,
+    );
+    lane.files.push(item.file);
+    lane.estimatedSeconds += item.seconds;
+  }
+  for (const lane of lanes) {
+    lane.files.sort();
+    lane.estimatedSeconds = Math.round(lane.estimatedSeconds);
+  }
+  return lanes;
+}
+
 export function mergeUnhandled(reports) {
   let count = 0;
   const entries = [];
@@ -354,7 +427,7 @@ export async function dropLaneDatabase(admin, record) {
   );
 }
 
-function launch(index, root, env, children) {
+function launch(index, files, root, env, children) {
   const started = new Date().toISOString();
   const child = spawn(
     process.execPath,
@@ -363,7 +436,7 @@ function launch(index, root, env, children) {
       "run",
       "--config",
       "vitest.integration.config.ts",
-      `--shard=${index}/${LANES.length}`,
+      ...files,
     ],
     { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] },
   );
@@ -444,6 +517,17 @@ export async function runIntegration(root = process.cwd()) {
   const read = (file) => JSON.parse(readFileSync(file, "utf8"));
   try {
     const expectedFiles = integrationFiles(root);
+    const plan = planLanes(
+      expectedFiles,
+      root,
+      readDurations(root),
+      LANES.length,
+    ).map((lane) => ({
+      ...lane,
+      files: lane.files.map((file) => path.relative(root, file)),
+    }));
+    evidence.assignment = "measured-durations";
+    evidence.plan = plan;
     const url = controlUrl(process.env.DNE_TEST_DATABASE_URL);
     const destination = path.join(root, "artifacts/integration-shards");
     rmSync(destination, { recursive: true, force: true });
@@ -488,6 +572,7 @@ export async function runIntegration(root = process.cwd()) {
       pending.push(
         launch(
           index,
+          plan[position].files,
           root,
           {
             ...process.env,

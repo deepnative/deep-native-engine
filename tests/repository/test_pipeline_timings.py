@@ -182,10 +182,68 @@ class History(Fixture):
         self.assertIn("deploy", lines[-1])
         self.assertIn("2m54s", lines[-1])
 
+    def test_time05_history_follows_the_given_checkout_even_inside_a_git_hook(self):
+        # Git hooks export GIT_DIR; a fixture checkout must never write the real history.
+        self.init_git()
+        other = self.root / "other"
+        subprocess.run(["git", "init", "-q", str(other)], check=True)
+        with patch.dict(os.environ, {"GIT_DIR": str(other / ".git")}):
+            timings.append_history(self.root, timings.deploy_record(DEPLOY_RUN))
+        self.assertTrue((self.root / ".git" / timings.HISTORY_NAME).exists())
+        self.assertFalse((other / ".git" / timings.HISTORY_NAME).exists())
+
     def test_record_after_gate_never_raises(self):
         with redirect_stdout(io.StringIO()) as out:
             timings.record_after_gate(self.root / "missing")
         self.assertIn("Timing summary unavailable", out.getvalue())
+
+
+class IntegrationDurations(Fixture):
+    def results(self, run_root):
+        write(self.artifacts, "repository-verification.json", {"commit": "c" * 40})
+        write(self.artifacts, "integration-results.json", {"testResults": [
+            {"name": f"{run_root}/tests/integration/slow.test.ts", "startTime": 1000, "endTime": 240450},
+            {"name": f"{run_root}/tests/integration/fast.test.ts", "startTime": 5000, "endTime": 5040},
+        ]})
+
+    def test_lane_bal05_refresh_writes_every_file_with_its_seconds(self):
+        # The run may come from another worktree; only the repository-relative path is kept.
+        self.results("/elsewhere/tests/integration/../worktree")
+        with redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(timings.main(["durations", str(self.artifacts)], root=self.root), 0)
+        register = json.loads((self.root / "tests/integration/durations.json").read_text())
+        self.assertEqual(register, {
+            "schema": "integration-durations-v1", "source": "c" * 40,
+            "files": {"tests/integration/fast.test.ts": 0.0, "tests/integration/slow.test.ts": 239.4},
+        })
+        self.assertIn("2 integration files", out.getvalue())
+
+    def test_lane_bal06_refresh_charges_setup_time_before_a_file_to_that_file(self):
+        # Vitest file times exclude beforeAll; the lane plan shows what ran before each file.
+        run = "/run"
+        write(self.artifacts, "repository-verification.json", {"commit": "d" * 40})
+        write(self.artifacts, "integration-results.json", {"testResults": [
+            {"name": f"{run}/tests/integration/a.test.ts", "startTime": 2000, "endTime": 12000},
+            {"name": f"{run}/tests/integration/waits.test.ts", "startTime": 138000, "endTime": 140000},
+            {"name": f"{run}/tests/integration/other.test.ts", "startTime": 1000, "endTime": 31000},
+        ]})
+        write(self.artifacts, "integration-shards.json", {
+            "plan": [{"index": 1, "files": ["tests/integration/a.test.ts", "tests/integration/waits.test.ts"]},
+                     {"index": 2, "files": ["tests/integration/other.test.ts"]}],
+            "lanes": [{"index": 1, "started": "1970-01-01T00:00:01.000Z", "finished": "1970-01-01T00:02:20.000Z"},
+                      {"index": 2, "started": "1970-01-01T00:00:00.000Z", "finished": "1970-01-01T00:00:31.000Z"}]})
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(timings.main(["durations", str(self.artifacts)], root=self.root), 0)
+        files = json.loads((self.root / "tests/integration/durations.json").read_text())["files"]
+        self.assertEqual(files, {"tests/integration/a.test.ts": 11.0,
+                                 "tests/integration/other.test.ts": 31.0,
+                                 "tests/integration/waits.test.ts": 128.0})
+
+    def test_lane_bal05_refresh_refuses_missing_or_empty_results(self):
+        self.artifacts.mkdir()
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(timings.main(["durations", str(self.artifacts)], root=self.root), 1)
+        self.assertFalse((self.root / "tests/integration/durations.json").exists())
 
 
 class Formatting(unittest.TestCase):

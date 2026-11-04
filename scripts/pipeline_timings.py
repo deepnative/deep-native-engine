@@ -9,9 +9,14 @@ so verification receipts and artifact hashes are unaffected.
     python3 scripts/pipeline_timings.py gate [ARTIFACTS_DIR] [--record]
     python3 scripts/pipeline_timings.py deploy RUN_ID... [--record]
     python3 scripts/pipeline_timings.py history [COUNT]
+    python3 scripts/pipeline_timings.py durations [ARTIFACTS_DIR]
+
+`durations` rewrites tests/integration/durations.json, the committed per-file
+seconds that scripts/integration-runner.mjs uses to balance its lanes.
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -118,8 +123,12 @@ def format_record(record):
 
 
 def history_path(root):
+    # Resolve from the given checkout only: Git hooks export GIT_DIR and friends,
+    # which would otherwise point a test fixture at the real repository.
+    env = {key: value for key, value in os.environ.items()
+           if key not in ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
     common = subprocess.run(["git", "-C", str(root), "rev-parse", "--git-common-dir"],
-                            check=True, capture_output=True, text=True).stdout.strip()
+                            check=True, capture_output=True, text=True, env=env).stdout.strip()
     common = Path(common)
     return (common if common.is_absolute() else Path(root) / common) / HISTORY_NAME
 
@@ -139,12 +148,46 @@ def record_after_gate(root):
         print("Timing summary unavailable; the gate result is unchanged.")
 
 
+def write_durations(root, artifacts):
+    """Refresh the committed integration duration register from one run."""
+    results = load(artifacts, "integration-results.json").get("testResults") or []
+    times = {}
+    for result in results:
+        name = result["name"]
+        times[name[name.rindex("/tests/integration/") + 1:]] = (result["startTime"], result["endTime"])
+    files = {name: round((end - start) / 1000, 1) for name, (start, end) in times.items()}
+    # Vitest file times exclude beforeAll and collection. Where the run recorded
+    # its lane plan, charge each file from the previous file's end (or the lane
+    # start) to its own end, so setup and waits count against the file causing them.
+    shards = load(artifacts, "integration-shards.json")
+    for lane, run in zip(shards.get("plan") or [], shards.get("lanes") or []):
+        previous = datetime.fromisoformat(run["started"]).timestamp() * 1000
+        for name in sorted((f for f in lane["files"] if f in times), key=lambda f: times[f][0]):
+            start, end = times[name]
+            files[name] = round((end - min(start, max(previous, 0))) / 1000, 1)
+            previous = max(previous, end)
+    if not files:
+        print("No integration results found; durations unchanged.")
+        return 1
+    register = {"schema": "integration-durations-v1",
+                "source": load(artifacts, "repository-verification.json").get("commit"),
+                "files": dict(sorted(files.items()))}
+    target = Path(root) / "tests/integration/durations.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(register, indent=2) + "\n")
+    print(f"Recorded durations for {len(files)} integration files in {target.relative_to(root)}.")
+    return 0
+
+
 def main(argv, root=Path(__file__).resolve().parents[1]):
     args = [arg for arg in argv if arg != "--record"]
     store = "--record" in argv
-    if not args or args[0] not in ("gate", "deploy", "history"):
-        print("Usage: pipeline_timings.py gate [ARTIFACTS_DIR] | deploy RUN_ID... | history [COUNT], with optional --record")
+    if not args or args[0] not in ("gate", "deploy", "history", "durations"):
+        print("Usage: pipeline_timings.py gate [ARTIFACTS_DIR] | deploy RUN_ID... | history [COUNT]"
+              " | durations [ARTIFACTS_DIR], with optional --record")
         return 2
+    if args[0] == "durations":
+        return write_durations(root, Path(args[1]) if len(args) > 1 else Path(root) / "artifacts")
     if args[0] == "history":
         path = history_path(root)
         rows = [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
