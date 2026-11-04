@@ -1495,6 +1495,22 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   color: var(--accent);
   background: #eaf0ff;
 }
+/* CREATEACCT-01: the one filled header action for signed-out visitors. */
+.main-navigation a.nav-create {
+  color: #fff;
+  background: var(--accent);
+}
+.main-navigation a.nav-create:hover {
+  color: #fff;
+  background: var(--accent);
+  filter: brightness(0.92);
+}
+.sign-in-page .sign-in-new {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
 .main-navigation a[aria-current="page"],
 .guidance-header nav a[aria-current="page"] {
   color: var(--accent);

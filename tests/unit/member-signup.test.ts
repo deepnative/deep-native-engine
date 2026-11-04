@@ -297,3 +297,16 @@ it("SIGNUP-03 refuses registration for a taken, invalid or unavailable account",
   expect(await passwords.emailAvailable("one@example.com")).toBe(false);
   expect(await passwords.emailAvailable("free@example.com")).toBe(true);
 });
+
+it("CREATEACCT-02 names the start form's sign-in fields as creating an account", async () => {
+  const welcome = await get("/", visitor());
+  expect(welcome.text).toContain(
+    '<fieldset class="signup-fields"><legend>Create your account</legend>',
+  );
+  expect(welcome.text).toContain(
+    "No email is needed to start: you are signed in as soon as you press Start my learning path.",
+  );
+  expect(welcome.text).toContain(
+    '<a class="button landing-start" href="#your-path">Create account and start</a>',
+  );
+});

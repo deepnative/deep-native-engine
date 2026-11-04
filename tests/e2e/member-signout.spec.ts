@@ -197,6 +197,16 @@ test("[L239] MOUT-01/02 a linked member signs out and deliberately returns by em
         await expect(
           header.getByRole("link", { name: label, exact: true }),
         ).toHaveCount(0);
+      // CREATEACCT-01: newcomers see account creation beside sign-in, and
+      // the header still fits a phone screen.
+      await expect(
+        header.getByRole("link", { name: "Create account", exact: true }),
+      ).toHaveAttribute("href", "/#your-path");
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
     }
     const stale = await copied.newPage();
     await stale.goto(`${f.origin}/account`);

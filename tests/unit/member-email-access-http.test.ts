@@ -120,9 +120,16 @@ it("shows configured email sign-in and links it from the welcome page", async ()
 it("NOACCOUNT-03 tells newcomers they start on the home page, not by signing in", async () => {
   const { application } = fixture(false);
   const landing = await get(application, "/email/sign-in");
-  expect(landing.text).toContain("New here?");
+  // CREATEACCT-01: newcomers see how to create an account before any
+  // sign-in box, and in the header on every signed-out page.
+  const main = landing.text.match(/<main[^>]*>([\s\S]*?)<\/main>/)![1]!;
+  expect(main.indexOf("New here?")).toBeGreaterThan(-1);
+  expect(main.indexOf("New here?")).toBeLessThan(main.indexOf("<form"));
+  expect(main).toContain(
+    '<strong>New here?</strong> You don’t need to sign in first. <a class="button" href="/#your-path">Create an account</a>',
+  );
   expect(landing.text).toContain(
-    'You don’t need to sign in first. <a href="/">Start learning</a>',
+    '<a class="nav-create" href="/#your-path">Create account</a>',
   );
   const response = await post(application, "/email/sign-in", {
     email: "x@example.com",
