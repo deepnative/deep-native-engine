@@ -661,6 +661,8 @@ it("ADMIN-LAYOUT-02 separates console areas into cards with button actions and w
     [`/operator/coaching/${id}`, "Monthly coaching and rates"],
     ["/operator/invoices", "Courses and invoices"],
     ["/operator/coaching", "Monthly coaching"],
+    // DIAG-02: read-only checks are one step from the console.
+    ["/operator/diagnostics", "Diagnostics"],
     ["/admin", "Administrator session"],
     ["/account", "My learning account"],
   ]);

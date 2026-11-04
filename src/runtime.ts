@@ -1,5 +1,6 @@
 import { billingProfileStore } from "./billing-profile.ts";
 import { administratorEntry } from "./administrator-entry.ts";
+import { administratorDiagnostics } from "./administrator-diagnostics.ts";
 import { simpleInvoiceSettings } from "./simple-invoice-config.ts";
 import { simpleInvoiceStore } from "./simple-invoice-store.ts";
 import { learningWorkspaceStore } from "./learning-workspace-store.ts";
@@ -178,6 +179,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       }),
       staffEntry: staffEntryStore(pool),
       administratorEntry: administratorEntry(pool),
+      administratorDiagnostics: administratorDiagnostics(pool),
       workflowReviewStaff: workflowReviewStaffStore(
         pool,
         { enabled: settings.workflowReviewRequests, mode: settings.mode },

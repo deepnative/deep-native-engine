@@ -32,3 +32,10 @@ ADMINTABLE-01..04 map to `administrator-entry-routes` units and real PostgreSQL 
 ## Administration link — #656
 
 The header and `/account` show **Administration** only to a verified owner: the existing approved-owner check, with a current account and workspace. An ended or expired administrator session keeps the link, so an owner can enter again. The link appears from the first page after email verification. It grants nothing: `/admin` and the console still authorize every request and still refuse everyone else. The check is one read-only query on signed-in pages. Signed-out visitors and static assets make no query, and a failed check hides the link while the page still renders. Tests: ADMINLINK-01/02/03 in `tests/unit/app.test.ts` and `tests/integration/administrator-entry.test.ts`, with browser coverage in L281 and L284.
+
+## Diagnostics
+
+`/operator/diagnostics` (linked from the console footer) holds fixed, read-only checks for troubleshooting the hosted engine without opening its database (DIAG-01..03, [#669](https://github.com/deepnative/deep-native-engine/issues/669), journey L288). It needs a current administrator session, and every read runs in a read-only transaction.
+
+- **Look up an email.** The address is posted, never put in a URL. The result shows the verified or unverified account it belongs to, its latest emailed links (used, open or expired) and any no-account notices. A listed link was handed to the email service; if it never arrived, check spam or quarantine.
+- **Site.** Accounts, verified and unverified emails, accounts with a password, the last 24 hours of email links and no-account notices, and the latest database migration.
