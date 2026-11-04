@@ -7,6 +7,7 @@ import {
   privateRecordsLabel,
 } from "./hosting-presentation.ts";
 import { administrationLink } from "./administration-presentation.ts";
+import { accountView, viewSwitch } from "./account-view.ts";
 import { navigationLink } from "./navigation-presentation.ts";
 import { signedIn, signInAvailable } from "./membership-presentation.ts";
 import { randomUUID } from "node:crypto";
@@ -94,7 +95,15 @@ export function accountActionLinks() {
     return signInAvailable()
       ? `${navigationLink("/email/sign-in", "Sign in")}<a class="nav-create" href="/#your-path">Create account</a>`
       : "";
-  return `${navigationLink("/account/coaching", "Monthly coaching hours")}${administrationLink(navigationLink("/admin", "Administration"))}${navigationLink("/account/sign-out", "Sign out")}`;
+  // ROLES-01..03: each view has its own link; the switch offers the others.
+  const view = accountView()?.view ?? "student";
+  const own =
+    view === "coach"
+      ? navigationLink("/coach", "Coaching")
+      : view === "admin"
+        ? navigationLink("/admin", "Administration")
+        : navigationLink("/account/coaching", "Monthly coaching hours");
+  return `${own}${viewSwitch()}${navigationLink("/account/sign-out", "Sign out")}`;
 }
 
 // REALINPUT-01: what replaces the invented-information checkbox when hosted.

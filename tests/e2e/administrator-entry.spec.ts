@@ -15,6 +15,7 @@ import { administratorDiagnostics } from "../../src/administrator-diagnostics.ts
 import { authorizationStore } from "../../src/authorization.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
 import { simpleInvoiceStore } from "../../src/simple-invoice-store.ts";
+import { coachViewStore } from "../../src/coach-view.ts";
 const control = testPool();
 let pool: Pool,
   resource: { name: string; oid: number; marker: string } | undefined;
@@ -128,6 +129,7 @@ async function fixture(
         enter: (token) => administratorEntry(fault).enter(token),
       },
       administratorDiagnostics: administratorDiagnostics(pool),
+      coachView: coachViewStore(pool),
       staffEntry: staffEntryStore(pool),
       billingProfiles: billingProfileStore(pool),
       memberExport: memberExportStore(pool),
@@ -787,6 +789,138 @@ test("[L288] DIAG-01..03 an administrator checks an email's account and link his
     ).toBe(1);
   } finally {
     await closeLoopback(f.server);
+  }
+});
+test("[L289] ROLES-01..05 each account type lands on its own view and an owner switches views without gaining authority", async ({
+  page,
+}) => {
+  const header = () =>
+    page.getByRole("navigation", { name: "Main navigation" });
+  const fits = async () =>
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  const signInAgain = async (
+    f: Awaited<ReturnType<typeof fixture>>,
+    address: string,
+  ) => {
+    await page.goto(f.origin + "/account/sign-out");
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await page.goto(f.origin + "/email/sign-in");
+    await page.getByLabel("Email address").fill(address);
+    const before = f.emailLink;
+    await page.getByRole("button", { name: "Send sign-in link" }).click();
+    await expect.poll(() => f.emailLink).not.toBe(before);
+    await page.goto(f.emailLink.replace("http://127.0.0.1:0", f.origin));
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+  };
+  const owner = await fixture(page);
+  try {
+    await owner.verify();
+    await pool.query(
+      "UPDATE learners SET display_name='Invented Coachee' WHERE id=$1",
+      [owner.id],
+    );
+    await pool.query(
+      `INSERT INTO coaching_months(owner_id,month,minutes,name,email,state,revision,submitted_revision)
+       VALUES($1,to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM'),90,'Invented Coachee','shi@deepnative.io','submitted',1,1)`,
+      [owner.id],
+    );
+    // ROLES-02: an owner without a saved view lands on Administration.
+    await signInAgain(owner, "shi@deepnative.io");
+    await expect(page).toHaveURL(owner.origin + "/admin");
+    await expect(
+      header().getByRole("link", { name: "Administration", exact: true }),
+    ).toBeVisible();
+    for (const view of ["student", "coach"])
+      await expect(
+        header().getByRole("button", { name: `Switch to ${view} view` }),
+      ).toBeVisible();
+    await fits();
+
+    // ROLES-03: the coach view lists saved hours, never billing.
+    await header()
+      .getByRole("button", { name: "Switch to coach view" })
+      .click();
+    await expect(page).toHaveURL(owner.origin + "/coach");
+    await expect(
+      page.getByRole("heading", { name: "Coaching", level: 1 }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("row", { name: "Invented Coachee 1h 30m Submitted" }),
+    ).toBeVisible();
+    await expect(page.getByText(/CAD|\$/)).toHaveCount(0);
+    await expect(
+      header().getByRole("link", { name: "Coaching", exact: true }),
+    ).toBeVisible();
+    await expect(
+      header().getByRole("link", { name: "Administration", exact: true }),
+    ).toHaveCount(0);
+    await fits();
+    await page.screenshot({
+      path: test.info().outputPath("coach-view.png"),
+      fullPage: true,
+    });
+
+    // ROLES-05: the admin view grants nothing until Enter administration.
+    await header()
+      .getByRole("button", { name: "Switch to admin view" })
+      .click();
+    await expect(page).toHaveURL(owner.origin + "/admin");
+    expect((await page.request.get(owner.origin + "/operator")).status()).toBe(
+      403,
+    );
+    await page.getByRole("button", { name: "Enter administration" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Administration console" }),
+    ).toBeVisible();
+    // Switching to the student view keeps the administrator session.
+    await header()
+      .getByRole("button", { name: "Switch to student view" })
+      .click();
+    await expect(page).toHaveURL(owner.origin + "/learn");
+    await expect(
+      header().getByRole("link", {
+        name: "Monthly coaching hours",
+        exact: true,
+      }),
+    ).toBeVisible();
+    expect((await page.request.get(owner.origin + "/operator")).status()).toBe(
+      200,
+    );
+    // ROLES-03: the chosen view is remembered on the next sign-in.
+    await signInAgain(owner, "shi@deepnative.io");
+    await expect(page).toHaveURL(owner.origin + "/learn");
+  } finally {
+    await closeLoopback(owner.server);
+  }
+
+  // ROLES-01/04: a student sees student links only and cannot take a view.
+  const student = await fixture(page, "member@example.test");
+  try {
+    await student.verify();
+    await signInAgain(student, "member@example.test");
+    await expect(page).toHaveURL(student.origin + "/learn");
+    await page.goto(student.origin + "/account");
+    await expect(
+      header().getByRole("link", { name: "Monthly coaching hours" }),
+    ).toBeVisible();
+    await expect(
+      header().getByRole("button", { name: /^Switch to/ }),
+    ).toHaveCount(0);
+    await expect(
+      header().getByRole("link", { name: "Administration" }),
+    ).toHaveCount(0);
+    const coach = await page.goto(student.origin + "/coach");
+    expect(coach?.status()).toBe(403);
+    await expect(
+      page.getByRole("heading", { name: "Coaching is for coaches" }),
+    ).toBeVisible();
+    await fits();
+  } finally {
+    await closeLoopback(student.server);
   }
 });
 test("[L282] required names identify learners while legacy work and administrator boundaries stay intact", async ({

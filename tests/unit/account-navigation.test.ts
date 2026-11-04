@@ -2,15 +2,22 @@ import { expect, it } from "vitest";
 import { starterGuidanceExample } from "../../src/starter-guidance-views.ts";
 import { withAdministration } from "../../src/administration-presentation.ts";
 import { withCurrentPath } from "../../src/navigation-presentation.ts";
+import { withAccountView, type AccountRole } from "../../src/account-view.ts";
 import { accountPage, page } from "../../src/views.ts";
 
+const views = (view: AccountRole) => ({
+  roles: ["student", "coach", "admin"] as AccountRole[],
+  view,
+  csrf: "c".repeat(64),
+});
 it("NAV-01 exposes account, logout, coaching and administration in shared navigation", () => {
-  const html = withAdministration(true, () =>
-    page("Learning", "<h1>Learning</h1>"),
-  );
-  const navigation = html.match(
-    /<nav[^>]*aria-label="Main navigation"[^>]*>([\s\S]*?)<\/nav>/,
-  )?.[1];
+  const nav = (view: AccountRole) =>
+    withAdministration(true, () =>
+      withAccountView(views(view), () => page("Learning", "<h1>Learning</h1>")),
+    ).match(
+      /<nav[^>]*aria-label="Main navigation"[^>]*>([\s\S]*?)<\/nav>/,
+    )?.[1];
+  const navigation = nav("student");
   expect(navigation).toBeDefined();
   expect(navigation).toContain(
     'href="/account/coaching">Monthly coaching hours</a>',
@@ -19,20 +26,19 @@ it("NAV-01 exposes account, logout, coaching and administration in shared naviga
     "/learn",
     "/account",
     "/account/coaching",
-    "/admin",
     "/account/sign-out",
   ])
     expect(navigation).toContain(`href="${path}"`);
-  const guidance = withAdministration(true, () =>
-    starterGuidanceExample("everyday"),
-  );
-  for (const path of [
-    "/account",
-    "/account/sign-out",
-    "/account/coaching",
-    "/admin",
-  ])
-    expect(guidance).toContain(`href="${path}"`);
+  // ROLES-02: Administration belongs to the admin view's header.
+  expect(nav("admin")).toContain('href="/admin">Administration</a>');
+  const guidance = (view: AccountRole) =>
+    withAdministration(true, () =>
+      withAccountView(views(view), () => starterGuidanceExample("everyday")),
+    );
+  for (const path of ["/account", "/account/sign-out", "/account/coaching"])
+    expect(guidance("student")).toContain(`href="${path}"`);
+  expect(guidance("admin")).toContain('href="/admin"');
+  expect(guidance("coach")).toContain('href="/coach"');
 });
 it.each(["unlinked", "unavailable"] as const)(
   "NAV-03 makes logout available to %s accounts",
@@ -95,7 +101,10 @@ it.each([
   ["/readiness", null],
 ])("NAV-07 marks only the header destination that owns %s", (path, label) => {
   const html = withAdministration(true, () =>
-    withCurrentPath(path, () => page("Page", "<h1>Page</h1>")),
+    withAccountView(
+      views(label === "Administration" ? "admin" : "student"),
+      () => withCurrentPath(path, () => page("Page", "<h1>Page</h1>")),
+    ),
   );
   const current = [...html.matchAll(/aria-current="page">([^<]+)</g)].map(
     (m) => m[1],

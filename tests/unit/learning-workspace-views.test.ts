@@ -1,5 +1,6 @@
 import { withAdministration } from "../../src/administration-presentation.ts";
 import { expect, it } from "vitest";
+import { withAccountView } from "../../src/account-view.ts";
 import { learningWorkspacePage } from "../../src/learning-workspace-views.ts";
 import { LEARNING_WORKSPACE_ASSET_BASE } from "../../src/learning-workspace-assets.ts";
 
@@ -22,7 +23,6 @@ it("LWORK-01/07 gives the account reader its private context and preserves earli
       "/account",
       "/account/sign-out",
       "/account/coaching",
-      "/admin",
       "/learn/notebooks",
       "/learn/records",
       "/my-courses",
@@ -31,6 +31,13 @@ it("LWORK-01/07 gives the account reader its private context and preserves earli
     ])
       expect(html).toContain(`href="${path}"`);
     expect(html).toContain("Signed in");
+    // ROLES-02: Administration is the admin view's header link.
+    expect(
+      withAccountView(
+        { roles: ["student", "admin"], view: "admin", csrf: "c".repeat(64) },
+        () => learningWorkspacePage(route, "x"),
+      ),
+    ).toContain('href="/admin"');
     expect(html).toContain("<noscript>");
     expect(html).not.toContain("local-entry.mjs");
   }

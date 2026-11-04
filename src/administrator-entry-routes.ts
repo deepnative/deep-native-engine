@@ -3,7 +3,6 @@ import type {
   AdministratorConsole,
   AdministratorEntry,
 } from "./administrator-entry.ts";
-import { withAdministration } from "./administration-presentation.ts";
 import { COOKIE, cookieOptions, csrf, validCsrf } from "./session.ts";
 import {
   STAFF_COOKIE,
@@ -56,23 +55,6 @@ function memberToken(req: Request) {
   return cookie.kind === "value" && /^[a-f0-9]{64}$/.test(cookie.value)
     ? cookie.value
     : "";
-}
-
-/** ADMINLINK: mount after static assets, so signed-out pages and assets cost no query. */
-export function mountAdministrationLink(
-  app: Express,
-  store: AdministratorEntry | undefined,
-  options: { localStaffEntry?: boolean; mode?: string },
-) {
-  if (!options.localStaffEntry || options.mode === "live" || !store) return;
-  app.use((req, _res, next) => {
-    const token = memberToken(req);
-    if (!token) return next();
-    Promise.resolve(store.verifiedOwner?.(token))
-      .catch(() => false)
-      .then((owner) => (owner ? withAdministration(true, next) : next()))
-      .catch(next);
-  });
 }
 
 export function mountAdministratorEntry(

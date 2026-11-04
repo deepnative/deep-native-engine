@@ -2568,6 +2568,15 @@
       "expected": "Diagnostics shows the account, link history and no-account notices for each address without putting it in a URL, changes nothing, and fits desktop and mobile without sideways scrolling",
       "issues": [669],
       "critical": true
+    },
+    {
+      "id": "L289",
+      "actor": "A student and an owner who is also a coach and an administrator",
+      "preconditions": "Dedicated synthetic PostgreSQL database, one invented saved coaching month, verified owner and ordinary member identities, port0 server; desktop/mobile Chromium",
+      "steps": "ROLES-01..05: the owner signs in and lands on Administration, switches to the coach view and reads saved hours, switches to the admin view, enters administration, switches to the student view and signs in again; a student signs in and opens Coaching",
+      "expected": "Each view has its own landing page and header link, the switch offers the other views, Coaching shows hours and status with no billing, switching neither grants nor ends administration, the chosen view is remembered, the student sees no switch and is refused Coaching, and pages avoid sideways scrolling on desktop and mobile",
+      "issues": [673],
+      "critical": true
     }
   ],
   "fullMvp": [

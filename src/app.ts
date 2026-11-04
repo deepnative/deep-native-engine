@@ -6,10 +6,10 @@ import {
 } from "./invoice-selection.ts";
 import type { BillingProfileStore } from "./billing-profile.ts";
 import { mountCoachingRoutes } from "./coaching-routes.ts";
-import {
-  mountAdministrationLink,
-  mountAdministratorEntry,
-} from "./administrator-entry-routes.ts";
+import { mountAccountViews } from "./account-view-routes.ts";
+import { mountCoachView } from "./coach-view-routes.ts";
+import type { CoachView } from "./coach-view.ts";
+import { mountAdministratorEntry } from "./administrator-entry-routes.ts";
 import type { AdministratorEntry } from "./administrator-entry.ts";
 import {
   mountSimpleInvoiceRoutes,
@@ -381,6 +381,7 @@ export function app(
   memberStore: Store,
   options: {
     administratorEntry?: AdministratorEntry;
+    coachView?: CoachView;
     administratorDiagnostics?: AdministratorDiagnostics;
     localStaffEntry?: boolean;
     staffEntry?: StaffEntryStore;
@@ -510,7 +511,7 @@ export function app(
   app.disable("x-powered-by");
   app.use((req, _res, next) => withCurrentPath(req.path, next));
   app.use((_req, _res, next) =>
-    // Hidden until mountAdministrationLink confirms a verified owner.
+    // Hidden until mountAccountViews reads a stored admin role.
     withAdministration(false, next),
   );
   app.use((_req, _res, next) => withDemoSite(options.demoSite === true, next));
@@ -555,7 +556,14 @@ export function app(
     "/assets",
     express.static(fileURLToPath(new URL("../public", import.meta.url))),
   );
-  mountAdministrationLink(app, options.administratorEntry, {
+  const accountViews = Boolean(
+    options.localStaffEntry &&
+    mode !== "live" &&
+    options.administratorEntry?.accountRoles,
+  );
+  mountAccountViews(app, options.administratorEntry, {
+    origin: options.origin,
+    secret: options.secret,
     localStaffEntry: options.localStaffEntry,
     mode,
   });
@@ -818,12 +826,15 @@ export function app(
     invoiceResumeTarget(raw, options.secret) ??
     programResumeTarget(raw, options.secret);
   mountInvoiceSelection(app, store, options);
+  // ROLES-02: without a resumed selection, sign-in lands on the account's view.
+  const signInLanding = (raw: string | undefined) =>
+    resumeSelection(raw) ?? (accountViews ? "/home" : null);
   mountMemberEmailRoutes(
     app,
     store,
     options.memberEmail,
     options.origin,
-    resumeSelection,
+    signInLanding,
     options.memberSignOut,
     options.memberPassword,
   );
@@ -833,7 +844,7 @@ export function app(
       store,
       options.memberPassword,
       options.origin,
-      resumeSelection,
+      signInLanding,
       (memberToken, address) =>
         void options.memberEmail
           ?.requestAttach(memberToken, address)
@@ -1607,6 +1618,7 @@ export function app(
   }
   mountSimpleInvoiceRoutes(app, options.simpleInvoices, options);
   mountCoachingRoutes(app, options.simpleInvoices, options);
+  mountCoachView(app, options.coachView);
   mountStarterGuidanceRoutes(app);
   if (options.sampleFeedback && options.reviewTime)
     mountReviewTimeRoutes(

@@ -41,7 +41,7 @@ async function fixture(address = "shi@deepnative.io", verify = true) {
 }
 it("ADMINLINK-01/02/03 recognizes only a current verified owner, without changing any session", async () => {
   const owner = await fixture();
-  expect(await entry.verifiedOwner!(owner.token)).toBe(true);
+  expect(await entry.accountRoles!(owner.token)).toContain("admin");
   // An ended or expired administrator session must not hide the way back in.
   const entered = await entry.enter(owner.token);
   expect(entered.kind).toBe("ready");
@@ -49,22 +49,22 @@ it("ADMINLINK-01/02/03 recognizes only a current verified owner, without changin
     "UPDATE administrator_sessions SET created_at=clock_timestamp()-INTERVAL '2 minutes',expires_at=clock_timestamp()-INTERVAL '1 minute' WHERE member_id=$1",
     [owner.id],
   );
-  expect(await entry.verifiedOwner!(owner.token)).toBe(true);
+  expect(await entry.accountRoles!(owner.token)).toContain("admin");
   await entry.end(owner.token);
-  expect(await entry.verifiedOwner!(owner.token)).toBe(true);
+  expect(await entry.accountRoles!(owner.token)).toContain("admin");
 
   const other = await fixture("member@example.test");
-  expect(await entry.verifiedOwner!(other.token)).toBe(false);
+  expect(await entry.accountRoles!(other.token)).not.toContain("admin");
   const unverified = await fixture("tom@deepnative.io", false);
-  expect(await entry.verifiedOwner!(unverified.token)).toBe(false);
-  expect(await entry.verifiedOwner!("not-a-token")).toBe(false);
-  expect(await entry.verifiedOwner!("f".repeat(64))).toBe(false);
+  expect(await entry.accountRoles!(unverified.token)).not.toContain("admin");
+  expect(await entry.accountRoles!("not-a-token")).not.toContain("admin");
+  expect(await entry.accountRoles!("f".repeat(64))).toEqual([]);
 
   await pool.query(
     "UPDATE workspaces SET deleting_at=now() WHERE owner_principal_id=$1",
     [owner.id],
   );
-  expect(await entry.verifiedOwner!(owner.token)).toBe(false);
+  expect(await entry.accountRoles!(owner.token)).not.toContain("admin");
   await pool.query(
     "UPDATE workspaces SET deleting_at=NULL WHERE owner_principal_id=$1",
     [owner.id],
@@ -72,7 +72,7 @@ it("ADMINLINK-01/02/03 recognizes only a current verified owner, without changin
   await pool.query("UPDATE principals SET revoked_at=now() WHERE id=$1", [
     owner.id,
   ]);
-  expect(await entry.verifiedOwner!(owner.token)).toBe(false);
+  expect(await entry.accountRoles!(owner.token)).not.toContain("admin");
 });
 it("ADMINONLY01/04 enters both exact normalized verified owner identities without losing learner work", async () => {
   for (const address of [" Shi@DeepNative.io ", "TOM@deepnative.io"]) {
