@@ -8,6 +8,8 @@ import type { BillingProfileStore } from "./billing-profile.ts";
 import { mountCoachingRoutes } from "./coaching-routes.ts";
 import { mountAccountViews } from "./account-view-routes.ts";
 import { mountCoachView } from "./coach-view-routes.ts";
+import { mountAccountRoleAdmin } from "./account-role-admin-routes.ts";
+import type { AccountRoleAdmin } from "./account-role-admin.ts";
 import type { CoachView } from "./coach-view.ts";
 import { mountAdministratorEntry } from "./administrator-entry-routes.ts";
 import type { AdministratorEntry } from "./administrator-entry.ts";
@@ -387,6 +389,7 @@ export function app(
   options: {
     administratorEntry?: AdministratorEntry;
     coachView?: CoachView;
+    roleAdmin?: AccountRoleAdmin;
     administratorDiagnostics?: AdministratorDiagnostics;
     localStaffEntry?: boolean;
     staffEntry?: StaffEntryStore;
@@ -1656,6 +1659,11 @@ export function app(
   mountSimpleInvoiceRoutes(app, options.simpleInvoices, options);
   mountCoachingRoutes(app, options.simpleInvoices, options);
   mountCoachView(app, options.coachView);
+  mountAccountRoleAdmin(
+    app,
+    options.localStaffEntry && mode !== "live" ? options.roleAdmin : undefined,
+    options,
+  );
   mountStarterGuidanceRoutes(app);
   if (options.sampleFeedback && options.reviewTime)
     mountReviewTimeRoutes(

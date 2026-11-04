@@ -2595,6 +2595,15 @@
       "expected": "Headings and paragraphs on these pages use the page's full text width on a wide screen; the email form stays at most 620px wide; narrow screens have no sideways scrolling",
       "issues": [682],
       "critical": true
+    },
+    {
+      "id": "L292",
+      "actor": "An owner administrator, a coach and a learner",
+      "preconditions": "Dedicated synthetic PostgreSQL database, verified owner and coach identities, one invented learner with a saved coaching month, port0 servers; desktop/mobile Chromium",
+      "steps": "ROLEADMIN-01..05, COACHLINK-01..04: the owner enters administration, opens Roles, gives the coach role to a typed email, assigns the learner to that coach from the console, the coach opens Coaching, then the owner removes the coach role",
+      "expected": "The owner's own admin role has no remove button; the coach sees only the assigned learner and the unassigned owner sees nobody; after removal the coach is refused and the assignment is gone; each change is audited; no sideways scrolling",
+      "issues": [684],
+      "critical": true
     }
   ],
   "fullMvp": [
