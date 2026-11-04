@@ -86,7 +86,10 @@ export function escape(value: string) {
 }
 export function accountActionLinks() {
   if (!signedIn())
-    return signInAvailable() ? navigationLink("/email/sign-in", "Sign in") : "";
+    // CREATEACCT-01: newcomers find account creation beside sign-in.
+    return signInAvailable()
+      ? `${navigationLink("/email/sign-in", "Sign in")}<a class="nav-create" href="/#your-path">Create account</a>`
+      : "";
   return `${navigationLink("/account/coaching", "Monthly coaching hours")}${administrationLink(navigationLink("/admin", "Administration"))}${navigationLink("/account/sign-out", "Sign out")}`;
 }
 
@@ -836,7 +839,7 @@ export function careerPage(
 function signupFields(email: string, errors: { field: string }[]) {
   const invalid = (field: string) =>
     errors.some((error) => error.field === field) ? ' aria-invalid="true"' : "";
-  return `<fieldset class="signup-fields"><legend>Your sign-in</legend><p class="small">Your email is your username. You can sign in with your password straight away; we send a link to verify the email in the background.</p><label for="signup_email">Email address</label><input id="signup_email" name="signup_email" type="email" autocomplete="username" maxlength="254" required value="${escape(email)}"${invalid("signup_email")}><label for="signup_password">Password</label><input id="signup_password" name="signup_password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required aria-describedby="signup_password_rule"${invalid("signup_password")}><p id="signup_password_rule" class="small">12 to 128 characters. A short phrase is easiest to remember.</p></fieldset>`;
+  return `<fieldset class="signup-fields"><legend>Create your account</legend><p class="small">No email is needed to start: you are signed in as soon as you press Start my learning path. Your email is your username. You can sign in with your password straight away; we send a link to verify the email in the background.</p><label for="signup_email">Email address</label><input id="signup_email" name="signup_email" type="email" autocomplete="username" maxlength="254" required value="${escape(email)}"${invalid("signup_email")}><label for="signup_password">Password</label><input id="signup_password" name="signup_password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required aria-describedby="signup_password_rule"${invalid("signup_password")}><p id="signup_password_rule" class="small">12 to 128 characters. A short phrase is easiest to remember.</p></fieldset>`;
 }
 export function welcome(
   csrf: string,
@@ -851,7 +854,7 @@ export function welcome(
       : "A practical start with AI",
     `<div class="welcome-page">
       <section class="landing-hero" aria-labelledby="landing-title">
-        <div class="landing-intro"><h1 id="landing-title">Make AI useful.<br><em>One small win</em><br>at a time.</h1><p class="lead">Learn a little. Try it for yourself. Turn a new idea into something you can use in everyday life or at work.</p><a class="button landing-start" href="#your-path">Start my learning path</a><p class="landing-access">No coding required. No-charge foundation access.<br><a href="/readiness/offers">View access details</a>${emailRecovery ? ' · Already started? <a href="/email/sign-in">Sign in</a>' : ""}</p></div>
+        <div class="landing-intro"><h1 id="landing-title">Make AI useful.<br><em>One small win</em><br>at a time.</h1><p class="lead">Learn a little. Try it for yourself. Turn a new idea into something you can use in everyday life or at work.</p><a class="button landing-start" href="#your-path">${signup ? "Create account and start" : "Start my learning path"}</a><p class="landing-access">No coding required. No-charge foundation access.<br><a href="/readiness/offers">View access details</a>${emailRecovery ? ' · Already started? <a href="/email/sign-in">Sign in</a>' : ""}</p></div>
         <section class="landing-example" aria-labelledby="example-title"><h2 id="example-title">Your first small win.<br>A clearer instruction.</h2><p class="example-source">The note: “Book swap. Saturday, 10 am. Community room. Bring one book.”</p><p class="example-question">You need a short invitation. Which instruction gives AI enough to work with?</p><div class="example-answers">
           <details name="landing-example"><summary><span class="answer-letter" aria-hidden="true">A</span><span>“Write a great invitation to our event.”</span></summary><div class="landing-feedback"><strong>Give it something concrete.</strong><p>“Great” leaves the details open. Include the note and ask for a short invitation, so AI has the time, place and what to bring.</p></div></details>
           <details name="landing-example"><summary><span class="answer-letter" aria-hidden="true">B</span><span>“Using this note, write a two-sentence invitation. Keep the time, place and what to bring. Add no new facts.”</span></summary><div class="landing-feedback"><strong>That's a useful starting point.</strong><p>You supplied a source, a clear task and a boundary. Next, check that the answer keeps all three details and invents nothing.</p></div></details>

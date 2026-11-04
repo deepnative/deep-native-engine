@@ -149,3 +149,27 @@ it("OFFPUR-02 sends individual course invoices using a separate message from sig
     sender.send("invented@example.invalid", doc, "private-invoice"),
   ).rejects.toThrow("Provider unavailable");
 });
+
+it("NOACCOUNT-01 tells an address with no account how to start, without a sign-in link", async () => {
+  const sender = azureEmailSender(
+    "https://synthetic.communication.azure.com",
+    "noreply@example.com",
+    "invented-identity",
+  );
+  await sender.sendNoAccount!(
+    "new@example.com",
+    "https://engine.deepnative.io/",
+  );
+  const message = sdk.beginSend.mock.calls[0]![0];
+  expect(message.recipients).toEqual({ to: [{ address: "new@example.com" }] });
+  expect(message.content.subject).toBe(
+    "No Deep Native Engine account uses this email yet",
+  );
+  expect(message.content.plainText).toContain("https://engine.deepnative.io/");
+  expect(message.content.plainText).toContain("My account");
+  expect(message.content.plainText).not.toContain("/email/confirm");
+  sdk.pollUntilDone.mockResolvedValue({ status: "Failed" });
+  await expect(
+    sender.sendNoAccount!("new@example.com", "https://engine.deepnative.io/"),
+  ).rejects.toThrow("Email send was not confirmed");
+});

@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import {
@@ -691,4 +699,110 @@ it("NAV-03 deliberately signs out without an email provider and preserves saved 
   });
   expect((await members.session(other.token)).kind).toBe("active");
   expect(sent).toHaveLength(0);
+});
+
+describe("no-account notice (#665)", () => {
+  const notices: { address: string; link: string }[] = [];
+  let failNotice = false;
+  const noticing = memberEmailAccess(
+    pool,
+    {
+      ...sender,
+      async sendNoAccount(address: string, link: string) {
+        if (failNotice) throw Error("Private provider failure");
+        notices.push({ address, link });
+      },
+    },
+    "https://engine.deepnative.io",
+  );
+  beforeEach(async () => {
+    notices.length = 0;
+    failNotice = false;
+    await pool.query("TRUNCATE member_email_notices");
+  });
+  const outcomes = (info: { mock: { calls: unknown[][] } }) =>
+    info.mock.calls.map((call) => JSON.parse(String(call[0])).outcome);
+
+  it("NOACCOUNT-01 tells an unused address how to start, and sends linked addresses their link", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    try {
+      await noticing.requestSignIn("  New.Person@Example.com ");
+      expect(notices).toEqual([
+        {
+          address: "new.person@example.com",
+          link: "https://engine.deepnative.io/",
+        },
+      ]);
+      expect(sent).toHaveLength(0);
+      expect(
+        (await pool.query("SELECT 1 FROM member_email_links")).rowCount,
+      ).toBe(0);
+      const owner = await member();
+      expect(
+        await noticing.requestAttach(owner.token, "kept@example.com"),
+      ).toBe("sent");
+      await noticing.consume(code(), owner.token);
+      await noticing.requestSignIn("kept@example.com");
+      expect(sent).toHaveLength(2);
+      expect(notices).toHaveLength(1);
+      expect(outcomes(info)).toEqual(["no_account_notice", "sent", "sent"]);
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  it("NOACCOUNT-02 limits notices per address and site-wide", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    try {
+      await noticing.requestSignIn("repeat@example.com");
+      await noticing.requestSignIn("repeat@example.com");
+      expect(notices).toHaveLength(1);
+      expect(outcomes(info)).toEqual([
+        "no_account_notice",
+        "no_account_limited",
+      ]);
+      await pool.query(
+        "UPDATE member_email_notices SET created_at=clock_timestamp()-INTERVAL '61 minutes'",
+      );
+      await noticing.requestSignIn("repeat@example.com");
+      expect(notices).toHaveLength(2);
+      for (let index = 0; index < 25; index++)
+        await noticing.requestSignIn(`flood${index}@example.com`);
+      // 20 per hour in all: the repeat plus 19 others. The expired first
+      // notice no longer counts.
+      expect(notices).toHaveLength(21);
+      expect(outcomes(info).at(-1)).toBe("no_account_limited");
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  it("NOACCOUNT-02 frees the limit after a failed notice and logs the failure", async () => {
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      failNotice = true;
+      await noticing.requestSignIn("failed@example.com");
+      expect(JSON.parse(String(error.mock.calls[0]![0]))).toEqual({
+        event: "member_email_request",
+        purpose: "sign_in",
+        outcome: "send_failed",
+        errorName: "Error",
+      });
+      failNotice = false;
+      await noticing.requestSignIn("failed@example.com");
+      expect(notices).toHaveLength(1);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it("NOACCOUNT-01 keeps the old silent behaviour for a sender without notices", async () => {
+    await access.requestSignIn("silent@example.com");
+    expect(sent).toHaveLength(0);
+    expect(
+      (await pool.query("SELECT 1 FROM member_email_notices")).rowCount,
+    ).toBe(0);
+  });
 });

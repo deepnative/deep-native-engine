@@ -117,6 +117,28 @@ it("shows configured email sign-in and links it from the welcome page", async ()
   expect(welcome.text).toContain('href="/email/sign-in">Sign in</a>');
 });
 
+it("NOACCOUNT-03 tells newcomers they start on the home page, not by signing in", async () => {
+  const { application } = fixture(false);
+  const landing = await get(application, "/email/sign-in");
+  // CREATEACCT-01: newcomers see how to create an account before any
+  // sign-in box, and in the header on every signed-out page.
+  const main = landing.text.match(/<main[^>]*>([\s\S]*?)<\/main>/)![1]!;
+  expect(main.indexOf("New here?")).toBeGreaterThan(-1);
+  expect(main.indexOf("New here?")).toBeLessThan(main.indexOf("<form"));
+  expect(main).toContain(
+    '<strong>New here?</strong> You don’t need to sign in first. <a class="button" href="/#your-path">Create an account</a>',
+  );
+  expect(landing.text).toContain(
+    '<a class="nav-create" href="/#your-path">Create account</a>',
+  );
+  const response = await post(application, "/email/sign-in", {
+    email: "x@example.com",
+  });
+  expect(response.text).toContain(
+    "If no account uses this address yet, we’ll email it the steps to start.",
+  );
+});
+
 it("offers active members an email link from their learning path", async () => {
   const { application } = fixture();
   const dashboard = await get(application, "/learn");

@@ -6802,7 +6802,7 @@ it("NAV-09/10 keeps the signed-out header on form responses and offers sign-in b
   const invalid = await post("/start", { display_name: "" });
   expect(invalid.status).toBe(422);
   expect(navigation(invalid.text)).toBe(
-    '<a href="/learn">Learning</a><a href="/email/sign-in">Sign in</a>',
+    '<a href="/learn">Learning</a><a href="/email/sign-in">Sign in</a><a class="nav-create" href="/#your-path">Create account</a>',
   );
   // An active member signs out: the response is already a signed-out page.
   db.session.mockResolvedValue({
@@ -6813,7 +6813,7 @@ it("NAV-09/10 keeps the signed-out header on form responses and offers sign-in b
   const out = await post("/account/sign-out", {});
   expect(out.text).toContain("Signed out");
   expect(navigation(out.text)).toBe(
-    '<a href="/learn">Learning</a><a href="/email/sign-in">Sign in</a>',
+    '<a href="/learn">Learning</a><a href="/email/sign-in">Sign in</a><a class="nav-create" href="/#your-path">Create account</a>',
   );
   const main = out.text.match(/<main[^>]*>([\s\S]*?)<\/main>/)?.[1] ?? "";
   expect(main).toContain('class="button" href="/email/sign-in">Sign in</a>');
