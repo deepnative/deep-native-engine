@@ -15,17 +15,25 @@ import { invoiceUuid } from "./simple-invoice-values.ts";
 import { BACKGROUNDS, GOALS, type Background, type Goal } from "./content.ts";
 import { page, escape } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
+import { coachingStatus } from "./coaching-routes.ts";
+import { hours } from "./coaching-dashboard-views.ts";
+import { monthLabel } from "./coaching-values.ts";
 
 const CONSOLE_SEARCH_MAX = 120;
 
 function learnersCard(v: AdministratorConsole, ownerId?: string) {
-  const href = (page: number, selected = ownerId) => {
+  const href = (page: number, selected = ownerId, anchor = "") => {
     const query = new URLSearchParams();
     if (selected) query.set("ownerId", selected);
     query.set("page", String(page));
     if (v.search) query.set("q", v.search);
-    return escape(`/operator?${query}`);
+    return escape(`/operator?${query}${anchor}`);
   };
+  // CONSOLECOACH-01: the latest saved month, its hours and where it stands.
+  const coaching = (m: AdministratorConsole["members"][number]) =>
+    m.coaching
+      ? `<td class="member-coaching"><a href="/operator/coaching/${escape(m.id)}?month=${escape(m.coaching.month)}">${monthLabel(m.coaching.month)}</a><span>${hours(m.coaching.minutes)} · ${coachingStatus(m.coaching)}</span></td>`
+      : '<td class="member-coaching">—</td>';
   const first = (v.page - 1) * v.pageSize + 1,
     last = first + v.members.length - 1,
     pages = Math.max(Math.ceil(v.total / v.pageSize), 1);
@@ -33,11 +41,11 @@ function learnersCard(v: AdministratorConsole, ownerId?: string) {
   const rows = v.members
     .map(
       (m) =>
-        `<tr${m.id === ownerId ? ' aria-current="true"' : ""}><td><a href="${href(v.page, m.id)}">${escape(m.displayName ?? "Name needed")}</a></td><td>${escape(BACKGROUNDS[m.background as Background] ?? m.background)}</td><td>${escape(GOALS[m.goal as Goal] ?? m.goal)}</td><td>${m.joined.toISOString().slice(0, 10)}</td><td><code>${escape(m.id)}</code></td></tr>`,
+        `<tr${m.id === ownerId ? ' aria-current="true"' : ""}><td><a href="${href(v.page, m.id, "#selected-member")}">${escape(m.displayName ?? "Name needed")}</a></td><td>${escape(BACKGROUNDS[m.background as Background] ?? m.background)}</td><td>${escape(GOALS[m.goal as Goal] ?? m.goal)}</td>${coaching(m)}<td>${m.joined.toISOString().slice(0, 10)}</td><td><code>${escape(m.id)}</code></td></tr>`,
     )
     .join("");
   const list = v.members.length
-    ? `<p role="status">Showing ${count(first)}–${count(last)} of ${count(v.total)}</p><div class="table-scroll" tabindex="0" role="region" aria-label="Learner accounts"><table class="member-table"><thead><tr><th scope="col">Name</th><th scope="col">Starting point</th><th scope="col">Goal</th><th scope="col">Joined</th><th scope="col">Account reference</th></tr></thead><tbody>${rows}</tbody></table></div><nav class="member-pager" aria-label="Learner pages">${v.page > 1 ? `<a class="button secondary" href="${href(v.page - 1)}">Previous</a>` : ""}<span>Page ${count(v.page)} of ${count(pages)}</span>${v.page < pages ? `<a class="button secondary" href="${href(v.page + 1)}">Next</a>` : ""}</nav>`
+    ? `<p role="status">Showing ${count(first)}–${count(last)} of ${count(v.total)}</p><div class="table-scroll" tabindex="0" role="region" aria-label="Learner accounts"><table class="member-table"><thead><tr><th scope="col">Name</th><th scope="col">Starting point</th><th scope="col">Goal</th><th scope="col">Latest coaching</th><th scope="col">Joined</th><th scope="col">Account reference</th></tr></thead><tbody>${rows}</tbody></table></div><nav class="member-pager" aria-label="Learner pages">${v.page > 1 ? `<a class="button secondary" href="${href(v.page - 1)}">Previous</a>` : ""}<span>Page ${count(v.page)} of ${count(pages)}</span>${v.page < pages ? `<a class="button secondary" href="${href(v.page + 1)}">Next</a>` : ""}</nav>`
     : `<p role="status">${v.search ? "No learner accounts match this search." : "No learner accounts available."}</p>`;
   return `<section class="portal-card" id="learners"><h2>Learners</h2><form class="portal-search" method="get" action="/operator">${ownerId ? `<input type="hidden" name="ownerId" value="${escape(ownerId)}">` : ""}<label for="console-search">Search by name or account reference</label><div><input id="console-search" type="text" name="q" maxlength="${CONSOLE_SEARCH_MAX}" value="${escape(v.search)}"><button>Search</button></div></form>${v.search ? '<p><a href="/operator">Clear search</a></p>' : ""}${list}</section>`;
 }

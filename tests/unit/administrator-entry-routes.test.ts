@@ -485,7 +485,7 @@ it("ADMINTABLE-01/02/03/04 renders a paged table that keeps the search and selec
     'href="/operator?page=3&amp;q=a%26b+%3Cc%3E">Next',
   );
   expect(searched.text).toContain(
-    `href="/operator?ownerId=${members[0]!.id}&amp;page=2&amp;q=a%26b+%3Cc%3E"`,
+    `href="/operator?ownerId=${members[0]!.id}&amp;page=2&amp;q=a%26b+%3Cc%3E#selected-member"`,
   );
   expect(searched.text).toContain('href="/operator">Clear search</a>');
 
@@ -674,4 +674,109 @@ it("ADMIN-LAYOUT-02 separates console areas into cards with button actions and w
   const plain = mainHtml(await get());
   expect(plain).not.toContain("selected-member");
   expect(plain.match(/<section class="portal-card"/g)).toHaveLength(3);
+});
+
+it("CONSOLECOACH-01/02 shows each learner's latest coaching month and jumps to the selection", async () => {
+  const f = fixture();
+  const base = {
+    background: "professional",
+    goal: "work",
+    joined: new Date("2026-11-02T12:00:00Z"),
+  };
+  const coaching = (state: string, extra = {}) => ({
+    month: "2026-10",
+    minutes: 10320,
+    state,
+    returned: false,
+    totalCents: null,
+    paidCents: null,
+    voided: false,
+    ...extra,
+  });
+  const id = (n: number) =>
+    `${String(n).padStart(8, "0")}-1111-4111-8111-111111111111`;
+  const members = [
+    { id: id(1), displayName: "Draft", ...base, coaching: coaching("draft") },
+    {
+      id: id(2),
+      displayName: "Review",
+      ...base,
+      coaching: coaching("submitted"),
+    },
+    {
+      id: id(3),
+      displayName: "Paid",
+      ...base,
+      coaching: coaching("invoiced", { totalCents: "5000", paidCents: "5000" }),
+    },
+    {
+      id: id(4),
+      displayName: "Due",
+      ...base,
+      coaching: coaching("invoiced", { totalCents: "5000", paidCents: "1000" }),
+    },
+    {
+      id: id(5),
+      displayName: "Void",
+      ...base,
+      coaching: coaching("invoiced", { totalCents: "5000", voided: true }),
+    },
+    {
+      id: id(6),
+      displayName: "Returned",
+      ...base,
+      coaching: coaching("draft", { returned: true, minutes: 90 }),
+    },
+    { id: id(7), displayName: "None", ...base, coaching: null },
+  ];
+  const app = express();
+  mountAdministratorEntry(
+    app,
+    {
+      status: f.fn,
+      enter: f.fn,
+      end: f.fn,
+      console: async () => ({
+        kind: "ready" as const,
+        value: {
+          members,
+          courses: [],
+          total: 7,
+          page: 1,
+          pageSize: 25,
+          search: "",
+        },
+      }),
+    },
+    {
+      origin,
+      secret,
+      localStaffEntry: true,
+      mode: "local",
+      simpleInvoices: true,
+    },
+  );
+  const res = await (
+    await http(app)
+  )
+    .get("/operator")
+    .set("Cookie", `dne_staff=${credential}`);
+  expect(res.status).toBe(200);
+  expect(res.text).toContain('<th scope="col">Latest coaching</th>');
+  expect(res.text).toContain(
+    `<a href="/operator/coaching/${id(1)}?month=2026-10">October 2026</a><span>172h · Draft</span>`,
+  );
+  for (const label of [
+    "172h · Awaiting review",
+    "172h · Invoiced · Paid",
+    "172h · Invoiced · CAD 40.00 due",
+    "172h · Void",
+    "1h 30m · Returned for correction",
+  ])
+    expect(res.text).toContain(`<span>${label}</span>`);
+  expect(res.text).toContain('<td class="member-coaching">—</td>');
+  // CONSOLECOACH-02: a learner's name jumps to their summary below the table.
+  expect(res.text).toContain(
+    `href="/operator?ownerId=${id(1)}&amp;page=1#selected-member"`,
+  );
 });

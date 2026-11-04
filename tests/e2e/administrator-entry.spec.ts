@@ -644,6 +644,12 @@ test("[L287] ADMINTABLE-01..05 an administrator pages and searches 60 learners a
         session.learner.id,
         `Invented learner ${String(index).padStart(2, "0")}`,
       ]);
+      if (index === 1)
+        await pool.query(
+          `INSERT INTO coaching_months(owner_id,month,minutes,name,email,state,revision,submitted_revision)
+           VALUES($1,'2026-10',10320,'Invented','invented@example.test','submitted',1,1)`,
+          [session.learner.id],
+        );
     }
     await f.verify();
     await page.goto(f.origin + "/admin");
@@ -654,6 +660,11 @@ test("[L287] ADMINTABLE-01..05 an administrator pages and searches 60 learners a
     await expect(rows).toHaveCount(25);
     await expect(page.getByText("Showing 1–25 of 60")).toBeVisible();
     await expect(rows.first()).toContainText("Invented learner 01");
+    // CONSOLECOACH-01: the latest saved month, its hours and state.
+    await expect(rows.first().locator(".member-coaching")).toHaveText(
+      "October 2026172h · Awaiting review",
+    );
+    await expect(rows.nth(1).locator(".member-coaching")).toHaveText("—");
     await expect(pager.getByRole("link", { name: "Next" })).toBeVisible();
     await expect(pager.getByRole("link", { name: "Previous" })).toHaveCount(0);
     const fits = async () => {
@@ -680,9 +691,10 @@ test("[L287] ADMINTABLE-01..05 an administrator pages and searches 60 learners a
     await pager.getByRole("link", { name: "Next" }).click();
     await expect(page.getByText("Showing 26–50 of 60")).toBeVisible();
     await page.getByRole("link", { name: "Invented learner 30" }).click();
+    // CONSOLECOACH-02: choosing a learner brings their summary into view.
     await expect(
       page.getByRole("heading", { name: "Selected learner", exact: true }),
-    ).toBeVisible();
+    ).toBeInViewport();
     await expect(page.locator(".portal-summary")).toContainText(
       "Invented learner 30",
     );

@@ -14,6 +14,16 @@ export type AdministratorResult =
   | { kind: "ready"; credential?: string; expires?: Date }
   | { kind: "denied" | "unavailable" };
 export const LEARNERS_PER_PAGE = 25;
+/** A learner's most recent saved coaching month, as the console summarises it. */
+export interface LatestCoaching {
+  month: string;
+  minutes: number;
+  state: string;
+  returned: boolean;
+  totalCents: string | null;
+  paidCents: string | null;
+  voided: boolean;
+}
 export interface AdministratorConsole {
   members: Array<{
     id: string;
@@ -21,6 +31,7 @@ export interface AdministratorConsole {
     background: string;
     goal: string;
     joined: Date;
+    coaching?: LatestCoaching | null;
   }>;
   /** Learners matching the search; `members` holds only the current page. */
   total: number;
@@ -173,14 +184,22 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
             Math.max(Math.ceil(total / LEARNERS_PER_PAGE), 1),
           );
           const columns = `l.id,l.display_name AS "displayName",l.background,l.goal,p.created_at AS joined`;
-          const members = (
-            await tx.query<AdministratorConsole["members"][number]>(
-              `SELECT ${columns} ${matching}
+          const members =
+            // CONSOLECOACH-01: each listed learner's latest saved coaching month.
+            (
+              await tx.query<AdministratorConsole["members"][number]>(
+                `SELECT ${columns},
+                 (SELECT json_build_object('month',m.month,'minutes',m.minutes,'state',m.state,
+                    'returned',m.return_reason IS NOT NULL,'totalCents',i.total_cents::text,
+                    'paidCents',i.paid_cents::text,'voided',i.voided_at IS NOT NULL)
+                  FROM coaching_months m LEFT JOIN simple_invoices i ON i.id=m.invoice_id
+                  WHERE m.owner_id=l.id ORDER BY m.month DESC LIMIT 1) AS coaching
+               ${matching}
                ORDER BY lower(l.display_name) NULLS LAST,l.display_name,l.id
                LIMIT $3 OFFSET $4`,
-              [...filter, LEARNERS_PER_PAGE, (page - 1) * LEARNERS_PER_PAGE],
-            )
-          ).rows;
+                [...filter, LEARNERS_PER_PAGE, (page - 1) * LEARNERS_PER_PAGE],
+              )
+            ).rows;
           const chosen = ownerId
             ? (
                 await tx.query<AdministratorConsole["members"][number]>(

@@ -54,6 +54,28 @@ function failure(
     );
 }
 /** HOURTABLE-01/02: saved months with hours, amount, readable status and invoice. */
+/** A saved month's state as members and administrators read it. */
+export function coachingStatus(m: {
+  state: string;
+  returned?: boolean;
+  totalCents?: string | number | null;
+  paidCents?: string | number | null;
+  voided?: boolean | null;
+}) {
+  const total = m.totalCents == null ? null : Number(m.totalCents);
+  const paid = Number(m.paidCents ?? 0);
+  if (m.state === "invoiced")
+    return m.voided
+      ? "Void"
+      : total === null
+        ? "Invoiced"
+        : paid >= total
+          ? "Invoiced · Paid"
+          : `Invoiced · ${money(total - paid)} due`;
+  if (m.state === "submitted") return "Awaiting review";
+  return m.returned ? "Returned for correction" : "Draft";
+}
+
 function savedMonthsTable(
   months: SavedCoachingMonth[],
   rates: CoachingRate[],
@@ -81,20 +103,7 @@ function savedMonthsTable(
           : draftRate
             ? money(coachingSubtotal(m.minutes, draftRate.cents) ?? 0)
             : "No rate";
-    const status =
-      m.state === "invoiced"
-        ? m.voided
-          ? "Void"
-          : total === null
-            ? "Invoiced"
-            : paid >= total
-              ? "Invoiced · Paid"
-              : `Invoiced · ${money(total - paid)} due`
-        : m.state === "submitted"
-          ? "Awaiting review"
-          : m.returned
-            ? "Returned for correction"
-            : "Draft";
+    const status = coachingStatus(m);
     const invoice = m.invoiceId
       ? `<a href="${invoicePath}${escape(m.invoiceId)}">View invoice</a>`
       : "—";
