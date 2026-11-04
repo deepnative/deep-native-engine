@@ -203,6 +203,26 @@ test("[L213] email verification restores the exact saved member in another brows
       expect(profile.x).toBeGreaterThan(email.x + accountWidth / 3);
       expect(Math.abs(profile.y - email.y)).toBeLessThan(4);
       expect(signOut.y - email.y).toBeLessThan(400);
+      // ACCT-LAYOUT-03/04: the intro uses the page width, so each paragraph
+      // stays on one line and the account links share one row.
+      const introLines = await fresh
+        .locator(".account-intro > p:not(.eyebrow, .account-links)")
+        .evaluateAll((paragraphs) =>
+          paragraphs.map(
+            (paragraph) =>
+              paragraph.getBoundingClientRect().height /
+              parseFloat(getComputedStyle(paragraph).lineHeight),
+          ),
+        );
+      expect(introLines.length).toBeGreaterThanOrEqual(2);
+      expect(Math.max(...introLines)).toBeLessThan(1.5);
+      const accountLinkRows = await fresh
+        .locator(".account-intro .account-links a")
+        .evaluateAll(
+          (links) =>
+            new Set(links.map((link) => link.getBoundingClientRect().top)).size,
+        );
+      expect(accountLinkRows).toBe(1);
     } else {
       expect(profile.x).toBe(title.x);
       expect(profile.y).toBeGreaterThan(signOut.y);

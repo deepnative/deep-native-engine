@@ -1603,8 +1603,9 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 .account-page > .profile-form form {
   margin-top: 20px;
 }
-/* ACCT-LAYOUT-01/02: wide screens use the page width. The summary spans the
-   top; email and sign-out sit beside the profile form. Text stays readable. */
+/* ACCT-LAYOUT-01..04: wide screens use the page width. The summary spans the
+   top, with its text and links on full-width lines; email and sign-out sit
+   beside the profile form. */
 @media (min-width: 1000px) {
   .account-page {
     max-width: none;
@@ -1618,9 +1619,6 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   }
   .account-intro {
     grid-column: 1 / -1;
-  }
-  .account-intro > p {
-    max-width: 72ch;
   }
   .account-page > section {
     grid-column: 1;
