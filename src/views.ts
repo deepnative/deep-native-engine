@@ -1,7 +1,11 @@
 import { LEARNING_WORKSPACE_CONTENT } from "./learning-workspace-pack.ts";
 import { isReviewedAssignment } from "./reviewed-assignments.ts";
 import { isReviewedFoundation } from "./foundation-pack.ts";
-import { hostingText, privateRecordsLabel } from "./hosting-presentation.ts";
+import {
+  demoBanner,
+  hostingText,
+  privateRecordsLabel,
+} from "./hosting-presentation.ts";
 import { administrationLink } from "./administration-presentation.ts";
 import { navigationLink } from "./navigation-presentation.ts";
 import { signedIn, signInAvailable } from "./membership-presentation.ts";
@@ -101,7 +105,7 @@ function inputConfirmation(local: string) {
 }
 
 export function page(title: string, body: string) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a><header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a><nav class="main-navigation" aria-label="Main navigation">${navigationLink("/learn", "Learning")}${signedIn() ? navigationLink("/account", "Account") : ""}${accountActionLinks()}</nav></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><nav class="footer-links" aria-label="Site links"><a href="/programs">Explore programs</a><a href="/my-courses">My courses</a><a href="/circles">Local circles</a><a href="/workflows">Workflow demonstrations</a><a href="/readiness">Integration readiness</a></nav></footer></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a>${demoBanner()}<header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a><nav class="main-navigation" aria-label="Main navigation">${navigationLink("/learn", "Learning")}${signedIn() ? navigationLink("/account", "Account") : ""}${accountActionLinks()}</nav></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><nav class="footer-links" aria-label="Site links"><a href="/programs">Explore programs</a><a href="/my-courses">My courses</a><a href="/circles">Local circles</a><a href="/workflows">Workflow demonstrations</a><a href="/readiness">Integration readiness</a></nav></footer></body></html>`;
 }
 export function memberExportPage(
   payload: MemberExportPayload,

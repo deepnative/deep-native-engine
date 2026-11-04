@@ -9,7 +9,8 @@ export function simpleInvoiceSettings(
     throw Error("DNE_INVOICE_MODE must be disabled, sample or configured.");
   if (mode === "disabled") return undefined;
   if (mode === "sample") {
-    if (hosted)
+    // DEMOSITE-01: a host may issue samples only while it says it is a demo.
+    if (hosted && env.DNE_DEMO_SITE !== "enabled")
       throw Error("Sample invoicing requires an isolated local preview.");
     return {
       sample: true,

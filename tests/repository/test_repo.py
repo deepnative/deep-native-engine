@@ -1170,22 +1170,21 @@ class AzureReleasePreservation(unittest.TestCase):
         app['properties']['template'] = r.prepare(app, 'a'*40, self.receipt())['properties']['template']
         return app
 
-    def test_azinv01_release_sets_owner_approved_configured_cad_invoicing(self):
+    def test_azinv01_release_sets_owner_approved_demo_site_with_sample_invoices(self):
+        # DEMOSITE-01 (#667, 4 Nov 2026): the owner turned the hosted engine into a
+        # visible demo. Invoices are nonpayable samples and send no email.
         r = self.release()
-        self.assertEqual(r.INVOICE, {
-            'DNE_INVOICE_MODE': 'configured',
-            'DNE_INVOICE_ISSUER': 'Deep Native Inc.',
-            'DNE_INVOICE_PAYMENT_INSTRUCTIONS': 'Pay by Interac e-Transfer (EMT) to info@deepnative.io. Include your invoice number in the message.',
-            'DNE_INVOICE_CURRENCY': 'CAD',
-        })
+        self.assertEqual(r.INVOICE, {'DNE_INVOICE_MODE': 'sample'})
+        self.assertEqual(r.DEMO, {'DNE_DEMO_SITE': 'enabled'})
+        released = {**r.INVOICE, **r.DEMO}
         cutover = r.env_values(r.prepare(self.app(), 'a'*40, self.receipt())['properties']['template']['containers'][0])
-        self.assertEqual({k: cutover[k] for k in r.INVOICE}, r.INVOICE)
+        self.assertEqual({k: cutover[k] for k in released}, released)
         app = self.durable()
-        app['properties']['template']['containers'][0]['env'] = [v for v in app['properties']['template']['containers'][0]['env'] if not v['name'].startswith('DNE_INVOICE_')]
+        app['properties']['template']['containers'][0]['env'] = [v for v in app['properties']['template']['containers'][0]['env'] if not v['name'].startswith('DNE_INVOICE_') and v['name'] != 'DNE_DEMO_SITE']
         before = r.env_values(app['properties']['template']['containers'][0])
         after = r.env_values(r.prepare(app, 'b'*40)['properties']['template']['containers'][0])
-        self.assertEqual({k: after[k] for k in r.INVOICE}, r.INVOICE)
-        for key in ('DNE_RELEASE_REVISION', *r.INVOICE): before.pop(key, None); after.pop(key)
+        self.assertEqual({k: after[k] for k in released}, released)
+        for key in ('DNE_RELEASE_REVISION', *released): before.pop(key, None); after.pop(key)
         self.assertEqual(before, after, 'Invoice settings must not change any other app setting.')
         self.assertEqual(after['DNE_APP_MODE'], 'demo')
 
@@ -1199,6 +1198,8 @@ class AzureReleasePreservation(unittest.TestCase):
         names = [v['name'] for v in container['env']]
         self.assertEqual(len(names), len(set(names)))
         self.assertEqual({k: r.env_values(container)[k] for k in r.INVOICE}, r.INVOICE)
+        # Earlier configured-invoice values do not linger in the demo release.
+        self.assertNotIn('DNE_INVOICE_ISSUER', names)
         proxy = r.prepare(app, 'b'*40)['properties']['template']['containers'][1]
         self.assertFalse(any(v['name'].startswith('DNE_INVOICE_') for v in proxy.get('env', [])))
 
@@ -1208,10 +1209,10 @@ class AzureReleasePreservation(unittest.TestCase):
         self.assertIsNotNone(node, 'Node is required by the application gate.')
         script = ("import { simpleInvoiceSettings } from './src/simple-invoice-config.ts';"
                   "process.stdout.write(JSON.stringify(simpleInvoiceSettings(process.env, true)));")
-        env = {'PATH': os.environ['PATH'], **r.INVOICE}
+        env = {'PATH': os.environ['PATH'], **r.INVOICE, **r.DEMO}
         result = subprocess.run([node, '--input-type=module', '-e', script], cwd=SOURCE, env=env, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr[-500:])
-        self.assertEqual(json.loads(result.stdout), {'sample': False, 'issuer': r.INVOICE['DNE_INVOICE_ISSUER'], 'instructions': r.INVOICE['DNE_INVOICE_PAYMENT_INSTRUCTIONS']})
+        self.assertTrue(json.loads(result.stdout)['sample'])
 
     def test_hosted14_refuses_foreign_target_lost_certificate_and_concurrent_changes(self):
         r = self.release()

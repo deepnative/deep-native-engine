@@ -2041,3 +2041,13 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 #selected-member {
   scroll-margin-top: 24px;
 }
+/* DEMOSITE-01: every page of a demo site says so before anything else. */
+.demo-banner {
+  margin: 0;
+  padding: 8px 16px;
+  background: #fff4d6;
+  border-bottom: 1px solid #e8c36a;
+  color: #5a4300;
+  font-size: 0.9rem;
+  text-align: center;
+}

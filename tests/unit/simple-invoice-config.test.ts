@@ -38,3 +38,19 @@ it("OFFPUR-07 requires explicit issuer, offline instructions and currency before
       "requires issuer",
     );
 });
+
+it("DEMOSITE-01 allows nonpayable sample invoices on a host only when it is a visible demo site", () => {
+  expect(() =>
+    simpleInvoiceSettings({ DNE_INVOICE_MODE: "sample" }, true),
+  ).toThrow("isolated local preview");
+  expect(
+    simpleInvoiceSettings(
+      { DNE_INVOICE_MODE: "sample", DNE_DEMO_SITE: "enabled" },
+      true,
+    ),
+  ).toEqual({
+    sample: true,
+    issuer: expect.stringContaining("Invented"),
+    instructions: expect.stringContaining("Do not send money"),
+  });
+});

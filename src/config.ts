@@ -59,6 +59,9 @@ export function config(env: NodeJS.ProcessEnv) {
       "Live application hosting requires a separately authorized configuration.",
     );
   if (!hosted) validateDatabaseIsolation(mode, url);
+  const demoSite = env.DNE_DEMO_SITE ?? "disabled";
+  if (!["enabled", "disabled"].includes(demoSite))
+    throw new Error("DNE_DEMO_SITE must be enabled or disabled.");
   const port = Number(env.DNE_PORT ?? 3000);
   const ephemeralTestPort = mode === "test" && env.DNE_PORT === "0";
   if (
@@ -196,6 +199,7 @@ export function config(env: NodeJS.ProcessEnv) {
     mode,
     adapters: adapterReadiness(env, mode),
     demoImpersonation: demoImpersonation(env.DNE_DEMO_IMPERSONATION, mode),
+    demoSite: demoSite === "enabled",
     privateStorageRoot,
   };
 }
