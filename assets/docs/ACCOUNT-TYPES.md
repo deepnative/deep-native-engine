@@ -16,10 +16,10 @@ A view only changes what is shown. Switching to the admin view grants nothing un
 
 | Scenario                                                   | Executable evidence                                                                                                    |
 | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| ROLES-01 a student lands on Learning with student links    | `account-views` and `account-navigation` units, `account-roles` PostgreSQL test, L289                                  |
-| ROLES-02 an owner lands on Administration with the switch  | `account-views` units (view choice, `/home`), app NAV-08, L289                                                         |
-| ROLES-03 the coach view shows hours only and is remembered | `coach-view` units, `account-roles` PostgreSQL summary, L289                                                           |
-| ROLES-04 a student is refused Coaching and other views     | `coach-view` and `account-views` units, `account-roles` PostgreSQL test, L289                                          |
-| ROLES-05 switching neither grants nor ends administration  | `account-views` units (no credential cookies), L289 `/operator` 403 then 200                                           |
+| ROLES-01 a student lands on Learning with student links    | `account-views` and `account-navigation` units, `account-roles` PostgreSQL test, L290                                  |
+| ROLES-02 an owner lands on Administration with the switch  | `account-views` units (view choice, `/home`), app NAV-08, L290                                                         |
+| ROLES-03 the coach view shows hours only and is remembered | `coach-view` units, `account-roles` PostgreSQL summary, L290                                                           |
+| ROLES-04 a student is refused Coaching and other views     | `coach-view` and `account-views` units, `account-roles` PostgreSQL test, L290                                          |
+| ROLES-05 switching neither grants nor ends administration  | `account-views` units (no credential cookies), L290 `/operator` 403 then 200                                           |
 | ROLES-06 admin entry and the fence follow the stored role  | `administrator-entry-owner` unit, `account-roles` PostgreSQL test (removing the role denies entry and an open session) |
 | ROLES-07 forged switches are refused                       | `account-views` units (CSRF, origin, unknown view, extra fields, query, non-form body)                                 |

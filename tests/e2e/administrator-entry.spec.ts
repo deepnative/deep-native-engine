@@ -739,6 +739,9 @@ test("[L288] DIAG-01..03 an administrator checks an email's account and link his
     await f.verify();
     await page.goto(f.origin + "/admin");
     await page.getByRole("button", { name: "Enter administration" }).click();
+    // FRICTION-11: staff tools link to the administration console.
+    await page.goto(f.origin + "/staff");
+    await page.getByRole("link", { name: "Administration console" }).click();
     await page.getByRole("link", { name: "Diagnostics", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Diagnostics", level: 1 }),
@@ -791,7 +794,7 @@ test("[L288] DIAG-01..03 an administrator checks an email's account and link his
     await closeLoopback(f.server);
   }
 });
-test("[L289] ROLES-01..05 each account type lands on its own view and an owner switches views without gaining authority", async ({
+test("[L290] ROLES-01..05 each account type lands on its own view and an owner switches views without gaining authority", async ({
   page,
 }) => {
   const header = () =>

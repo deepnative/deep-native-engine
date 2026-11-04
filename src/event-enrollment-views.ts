@@ -30,7 +30,7 @@ export function eventEnrollmentPage(
         preview.remaining !== null &&
         preview.remaining > 0
       ? `<form method="post" action="/events/${encodeURIComponent(event.id)}/${event.version}/enroll">${hidden(escape(csrf))}<input type="hidden" name="operation_id" value="${escape(operationId)}"><label class="check"><input type="checkbox" name="synthetic" value="yes" required><span>I want to save an invented-data registration; this is not a real appointment.</span></label><button type="submit">Enroll in local rehearsal</button></form>`
-      : `<p role="status">${preview.canEnroll ? "This local rehearsal is full." : "New local registrations are unavailable."}</p>`;
+      : `<p role="status">${preview.canEnroll ? "This local rehearsal is full. Choose another event from Sample events below, or check back later." : "New local registrations are unavailable."}</p>`;
   return page(
     "Local event rehearsal",
     `<section class="reading">${notice}<h1>${escape(event.title)}</h1><p>Exact version ${event.version}</p>${schedule(new Date(event.startsAt), new Date(event.endsAt), timezone)}${preview.remaining !== null ? `<p>Observed rehearsal seats remaining: ${preview.remaining} of ${event.fixtureCapacity}. Availability can change before you enroll.</p>` : ""}${cancellation}${action}<p><a href="/events/registrations">Your registration history</a> · <a href="/events">Sample events</a></p></section>`,

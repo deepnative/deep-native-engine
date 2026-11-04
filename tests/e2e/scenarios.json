@@ -2571,6 +2571,15 @@
     },
     {
       "id": "L289",
+      "actor": "Member saving, leaving and deleting their account",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server; desktop/mobile Chromium",
+      "steps": "FRICTION-01/02/05/06/12: open Learning signed out, read the explanation once, open Administration signed out, save a lesson draft, open workflow feedback, delete the account from My account",
+      "expected": "The explanation shows once; staff pages offer no member tools; the draft confirmation is on screen after saving; the checkbox is at least 18px wide; My account confirms deletion on the home page, with no sideways scrolling",
+      "issues": [658],
+      "critical": true
+    },
+    {
+      "id": "L290",
       "actor": "A student and an owner who is also a coach and an administrator",
       "preconditions": "Dedicated synthetic PostgreSQL database, one invented saved coaching month, verified owner and ordinary member identities, port0 server; desktop/mobile Chromium",
       "steps": "ROLES-01..05: the owner signs in and lands on Administration, switches to the coach view and reads saved hours, switches to the admin view, enters administration, switches to the student view and signs in again; a student signs in and opens Coaching",

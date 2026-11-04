@@ -630,14 +630,16 @@ it("ADMIN-LAYOUT-02 separates console areas into cards with button actions and w
       selected: { member, enrollments: [], plans: [], invoices: [] },
     },
   };
-  const get = async (app = f.app) =>
+  const get = async (app = f.app, cookie = `; ${COOKIE}=${"a".repeat(64)}`) =>
     (
       await (
         await http(app)
       )
         .get("/operator")
-        .set("Cookie", `dne_staff=${credential}`)
+        .set("Cookie", `dne_staff=${credential}${cookie}`)
     ).text;
+  // FRICTION-11: /admin needs a member account, so staff alone are not sent there.
+  expect(await get(f.app, "")).not.toContain('href="/admin"');
   const selected = await get();
   const main = mainHtml(selected);
   expect(main).toContain('<div class="portal-page administrator-console">');

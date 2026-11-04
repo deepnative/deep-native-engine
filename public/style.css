@@ -485,6 +485,12 @@ textarea {
   resize: vertical;
   line-height: 1.5;
 }
+/* FRICTION-12: a checkbox outside .check stays large enough to use. */
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
 .check {
   display: flex;
   align-items: flex-start;
@@ -799,6 +805,10 @@ progress {
   padding: 12px;
   border-left: 2px solid var(--line);
   font-size: 14px;
+}
+/* FRICTION-01: keep the form in view above the confirmation. */
+#exercise-status {
+  scroll-margin-top: 45vh;
 }
 .saved-note {
   margin: 18px 0 0;
@@ -1627,7 +1637,7 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
     grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
     /* The last row takes the profile's extra height, so sign-out follows
        email directly. */
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto auto auto 1fr;
     column-gap: 56px;
     align-items: start;
   }
@@ -1639,7 +1649,7 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   }
   .account-page > .profile-form {
     grid-column: 2;
-    grid-row: 2 / span 2;
+    grid-row: 2 / span 3;
   }
 }
 

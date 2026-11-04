@@ -461,10 +461,9 @@ test("[L229] a lost committed publication remains inspectable after a fresh-secr
       })
       .click();
     await expect(
-      a.owner.getByText(
-        "New contribution intake, acceptance and sharing are paused.",
-        { exact: false },
-      ),
+      a.owner.getByText("Sharing with other members is paused.", {
+        exact: false,
+      }),
     ).toBeVisible();
     await a.owner
       .getByLabel("Withdraw display permission for this revision")

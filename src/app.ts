@@ -53,7 +53,12 @@ import type { EventAttendanceRuntimeStore } from "./event-attendance.ts";
 import type { EventCancellationStore } from "./event-cancellation-values.ts";
 import { mountCircleGrantRoutes } from "./circle-grant-routes.ts";
 import type { CircleGrantAdminStore } from "./circle-grant-values.ts";
-import { selectedStaffToken, staffFamily } from "./staff-entry-selection.ts";
+import {
+  selectedStaffToken,
+  staffCookie,
+  staffFamily,
+} from "./staff-entry-selection.ts";
+import { setLandingNotice, takeLandingNotice } from "./landing-notice.ts";
 import { mountReviewerWorklistRoutes } from "./reviewer-worklist-routes.ts";
 import type { ReviewerWorklistStore } from "./reviewer-worklist.ts";
 import { mountReviewTimeGrantRoutes } from "./review-time-grant-routes.ts";
@@ -632,6 +637,37 @@ export function app(
     return ordinaryForm(req, res, next);
   });
   app.use(cookieParser());
+  // FRICTION-06: staff and administration pages render before member state is
+  // read. A visitor with no staff cookie and no active member session is signed
+  // out, even with the anonymous cookie the home page gives every visitor.
+  app.use((req, _res, next) => {
+    if (
+      !["GET", "HEAD"].includes(req.method) ||
+      !(/^\/admin(?:\/|$)/i.test(req.path) || staffFamily(req.path)) ||
+      staffCookie(req.headers.cookie).kind !== "absent"
+    )
+      return next();
+    const signInAvailable = Boolean(
+      options.memberEmail || options.memberPassword,
+    );
+    const member: unknown = req.cookies[COOKIE];
+    if (typeof member !== "string" || !/^[a-f0-9]{64}$/.test(member))
+      return withMembership({ signedIn: false, signInAvailable }, next);
+    // Other staff pages may hold a credential in this cookie and never read
+    // member state; only these two can be opened by an ordinary visitor.
+    if (!/^\/(?:admin(?:\/|$)|staff\/sign-in\/?$)/i.test(req.path))
+      return next();
+    Promise.resolve()
+      .then(() => memberStore.session(member))
+      .then(
+        (current) =>
+          withMembership(
+            { signedIn: current?.kind === "active", signInAvailable },
+            next,
+          ),
+        () => next(),
+      );
+  });
   mountAdministratorEntry(app, options.administratorEntry, options);
   mountAdministratorDiagnostics(app, options.administratorDiagnostics, options);
   mountStaffEntryRoutes(app, options.staffEntry, options, {
@@ -665,6 +701,7 @@ export function app(
       Boolean(options.localHoldInspection) &&
       options.localHoldInspectionReads === true,
     proposals: Boolean(options.proposals),
+    console: Boolean(options.administratorEntry),
     circles:
       Boolean(options.circleDiscussion) &&
       options.circleDiscussionEnabled === true,
@@ -1431,6 +1468,7 @@ export function app(
         undefined,
         Boolean(options.memberEmail),
         options.memberPassword ? { email: "" } : undefined,
+        takeLandingNotice(req, res, options.origin),
       ),
     );
   });
@@ -1581,6 +1619,8 @@ export function app(
             );
           return;
         }
+        if (req.method === "GET")
+          setLandingNotice(res, "signed-out", options.origin);
         res.redirect(303, "/");
         return;
       }
@@ -1625,7 +1665,11 @@ export function app(
   if (options.reviewerWorklist)
     mountReviewerWorklistRoutes(app, options.reviewerWorklist);
   if (options.sampleFeedback)
-    mountSampleFeedbackRoutes(app, options.sampleFeedback);
+    mountSampleFeedbackRoutes(
+      app,
+      options.sampleFeedback,
+      Boolean(options.reviewTime) && options.reviewTimeWrites === true,
+    );
   mountWorkflowReviewStaffRoutes(app, options.workflowReviewStaff, options);
   mountSupportAssignmentRoutes(app, options.supportAssignment, options);
   mountSupportTimeGrantRoutes(app, options.supportTimeGrantAdmin, {
@@ -4205,7 +4249,8 @@ export function app(
         );
       return;
     }
-    res.redirect(303, "/learn");
+    // FRICTION-01: return to the chosen assignment, not the top of the page.
+    res.redirect(303, "/learn#assignment-options");
   });
   app.get("/assignments/attempts", async (_req, res) => {
     const items = await attempts.list(res.locals.token as string);
@@ -5441,7 +5486,8 @@ export function app(
         );
       return;
     }
-    res.redirect(303, "/lesson");
+    // FRICTION-01: land on the saved confirmation below the form.
+    res.redirect(303, "/lesson#exercise-status");
   });
   app.post("/exercise/:lessonId/:version/withdraw", async (req, res) => {
     const { lessonId, version } = req.params;
@@ -5537,6 +5583,7 @@ export function app(
       path: "/",
       secure: cookieOptions(options.origin).secure,
     });
+    setLandingNotice(res, "deleted", options.origin);
     res.redirect(303, "/");
   });
   app.use((_req, res) =>

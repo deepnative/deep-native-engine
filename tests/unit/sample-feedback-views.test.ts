@@ -308,3 +308,12 @@ it("keeps manual publication recovery scoped to original fields and escapes atte
     ),
   ).not.toContain("Reconcile original publication");
 });
+it("FRICTION-04 offers review minutes only while they can be reserved", () => {
+  const source = { ...view(), assignmentOrigin: undefined };
+  expect(sampleFeedbackPage(source as never, "csrf", false, true)).toContain(
+    "Reserve review test minutes",
+  );
+  expect(
+    sampleFeedbackPage(source as never, "csrf", false, false),
+  ).not.toContain("Reserve review test minutes");
+});

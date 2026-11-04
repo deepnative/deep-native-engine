@@ -155,3 +155,12 @@ it("shows event cancellation separately from withdrawal and offers no new regist
   expect(withdrawn).toContain("Registration withdrawn");
   expect(withdrawn).toContain("Event cancelled");
 });
+it("FRICTION-13 gives a next step when a rehearsal is full", () => {
+  const full = eventEnrollmentPage(
+    { ...preview, remaining: 0, canEnroll: true },
+    "csrf",
+    "new",
+  );
+  expect(full).toContain("Choose another event from Sample events");
+  expect(full).toContain('href="/events">Sample events');
+});

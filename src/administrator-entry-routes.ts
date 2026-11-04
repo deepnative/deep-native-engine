@@ -166,7 +166,10 @@ export function mountAdministratorEntry(
             : "<p>Invoicing is disabled. Learning accounts and saved work remain available.</p>"
         }</section><div class="portal-footer">${portalActions([
           ["/operator/diagnostics", "Diagnostics"],
-          ["/admin", "Administrator session"],
+          // FRICTION-11: /admin needs a member account, so offer it only then.
+          ...(member(req)
+            ? ([["/admin", "Administrator session"]] as [string, string][])
+            : []),
           ["/account", "My learning account"],
         ])}</div></div>`,
       ),
