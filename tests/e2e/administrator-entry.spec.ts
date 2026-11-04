@@ -8,7 +8,7 @@ import { Pool, type PoolClient } from "pg";
 import { testPool } from "../support/database.ts";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 import { app } from "../../src/app.ts";
-import { migrate, store } from "../../src/store.ts";
+import { migrate, store, hash } from "../../src/store.ts";
 import { memberEmailAccess } from "../../src/member-email-access.ts";
 import { administratorEntry } from "../../src/administrator-entry.ts";
 import { administratorDiagnostics } from "../../src/administrator-diagnostics.ts";
@@ -16,6 +16,7 @@ import { authorizationStore } from "../../src/authorization.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
 import { simpleInvoiceStore } from "../../src/simple-invoice-store.ts";
 import { coachViewStore } from "../../src/coach-view.ts";
+import { accountRoleAdmin } from "../../src/account-role-admin.ts";
 const control = testPool();
 let pool: Pool,
   resource: { name: string; oid: number; marker: string } | undefined;
@@ -130,6 +131,7 @@ async function fixture(
       },
       administratorDiagnostics: administratorDiagnostics(pool),
       coachView: coachViewStore(pool),
+      roleAdmin: accountRoleAdmin(pool),
       staffEntry: staffEntryStore(pool),
       billingProfiles: billingProfileStore(pool),
       memberExport: memberExportStore(pool),
@@ -846,6 +848,11 @@ test("[L290] ROLES-01..05 each account type lands on its own view and an owner s
        VALUES($1,to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM'),90,'Invented Coachee','shi@deepnative.io','submitted',1,1)`,
       [owner.id],
     );
+    // #684: a coach sees only learners assigned to them.
+    await pool.query(
+      "INSERT INTO coach_assignments(learner_id,coach_email_hash,assigned_by) VALUES($1,$2,$1)",
+      [owner.id, hash("shi@deepnative.io")],
+    );
     // ROLES-02: an owner without a saved view lands on Administration.
     await signInAgain(owner, "shi@deepnative.io");
     await expect(page).toHaveURL(owner.origin + "/admin");
@@ -939,6 +946,126 @@ test("[L290] ROLES-01..05 each account type lands on its own view and an owner s
     await fits();
   } finally {
     await closeLoopback(student.server);
+  }
+});
+test("[L292] ROLEADMIN/COACHLINK an administrator grants a coach role, assigns a learner and removes the role", async ({
+  page,
+  browser,
+}) => {
+  const fits = async () =>
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  // Cookies ignore ports, so the future coach gets their own browser context.
+  const coachContext = await browser.newContext();
+  const coachPage = await coachContext.newPage();
+  const coach = await fixture(coachPage, "coach@example.test");
+  const owner = await fixture(page);
+  try {
+    await coach.verify();
+    await owner.verify();
+    await pool.query(
+      "UPDATE learners SET display_name=CASE id WHEN $1 THEN 'Invented Coach' ELSE 'Invented Owner' END WHERE id=ANY($2::uuid[])",
+      [coach.id, [coach.id, owner.id]],
+    );
+    const ada = randomBytes(32).toString("hex");
+    await owner.members.create(ada, {
+      background: "explorer",
+      goal: "everyday",
+    });
+    const adaSession = await owner.members.session(ada);
+    if (adaSession.kind !== "active") throw Error("No invented learner");
+    const adaId = adaSession.learner.id;
+    await pool.query(
+      "UPDATE learners SET display_name='Invented Ada' WHERE id=$1",
+      [adaId],
+    );
+    await pool.query(
+      `INSERT INTO coaching_months(owner_id,month,minutes,name,email,state,revision)
+       VALUES($1,to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM'),90,'Invented Ada','ada@example.test','draft',1)`,
+      [adaId],
+    );
+
+    // ROLEADMIN-01/04: the Roles page lists holders; the owner's own admin role stays.
+    await page.goto(owner.origin + "/admin");
+    await page.getByRole("button", { name: "Enter administration" }).click();
+    await page.getByRole("link", { name: "Roles", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Roles", level: 1 }),
+    ).toBeVisible();
+    const ownRow = page.getByRole("row", { name: /Invented Owner/ });
+    await expect(ownRow.getByText("(you)")).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: "Remove admin role from Invented Owner",
+      }),
+    ).toHaveCount(0);
+    await fits();
+
+    // ROLEADMIN-02: grant the coach role to a typed, verified email.
+    await page.getByLabel("Verified email").fill(" Coach@Example.test ");
+    await page.getByLabel("Coach", { exact: true }).check();
+    await page.getByRole("button", { name: "Give role" }).click();
+    await expect(page).toHaveURL(owner.origin + "/operator/roles");
+    await expect(
+      page.getByRole("button", {
+        name: "Remove coach role from Invented Coach",
+      }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath("roles.png"),
+      fullPage: true,
+    });
+
+    // COACHLINK-01: assign Ada to the new coach from the console.
+    await page.goto(`${owner.origin}/operator?ownerId=${adaId}`);
+    await page
+      .getByLabel("Coach for this learner")
+      .selectOption({ label: "Invented Coach" });
+    await page.getByRole("button", { name: "Save coach" }).click();
+    await expect(page.getByLabel("Coach for this learner")).toHaveValue(
+      hash("coach@example.test"),
+    );
+    await fits();
+
+    // COACHLINK-02: the coach sees Ada; the unassigned owner-coach sees nobody.
+    await coachPage.goto(coach.origin + "/coach");
+    await expect(
+      coachPage.getByRole("row", { name: "Invented Ada 1h 30m Draft" }),
+    ).toBeVisible();
+    await page.goto(owner.origin + "/coach");
+    await expect(
+      page.getByText("No coaching hours saved for this month."),
+    ).toBeVisible();
+
+    // ROLEADMIN-03 / COACHLINK-03: removing the role ends the coach's access.
+    await page.goto(owner.origin + "/operator/roles");
+    await page
+      .getByRole("button", { name: "Remove coach role from Invented Coach" })
+      .click();
+    await expect(
+      page.getByRole("button", {
+        name: "Remove coach role from Invented Coach",
+      }),
+    ).toHaveCount(0);
+    expect((await coachPage.goto(coach.origin + "/coach"))?.status()).toBe(403);
+    expect((await pool.query("SELECT 1 FROM coach_assignments")).rowCount).toBe(
+      0,
+    );
+    // ROLEADMIN-05 / COACHLINK-04: every change is audited.
+    expect(
+      (
+        await pool.query<{ action: string }>(
+          "SELECT action FROM account_role_events ORDER BY id",
+        )
+      ).rows.map((r) => r.action),
+    ).toEqual(["granted", "assigned", "removed"]);
+  } finally {
+    await closeLoopback(owner.server);
+    await closeLoopback(coach.server);
+    await coachContext.close();
   }
 });
 test("[L282] required names identify learners while legacy work and administrator boundaries stay intact", async ({

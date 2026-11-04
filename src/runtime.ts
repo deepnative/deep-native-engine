@@ -1,6 +1,7 @@
 import { billingProfileStore } from "./billing-profile.ts";
 import { administratorEntry } from "./administrator-entry.ts";
 import { coachViewStore } from "./coach-view.ts";
+import { accountRoleAdmin } from "./account-role-admin.ts";
 import { administratorDiagnostics } from "./administrator-diagnostics.ts";
 import { simpleInvoiceSettings } from "./simple-invoice-config.ts";
 import { simpleInvoiceStore } from "./simple-invoice-store.ts";
@@ -181,6 +182,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       staffEntry: staffEntryStore(pool),
       administratorEntry: administratorEntry(pool),
       coachView: coachViewStore(pool),
+      roleAdmin: accountRoleAdmin(pool),
       administratorDiagnostics: administratorDiagnostics(pool),
       workflowReviewStaff: workflowReviewStaffStore(
         pool,

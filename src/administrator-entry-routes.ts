@@ -18,6 +18,8 @@ import { portalActions } from "./backend-portal-presentation.ts";
 import { coachingStatus } from "./coaching-routes.ts";
 import { hours } from "./coaching-dashboard-views.ts";
 import { monthLabel } from "./coaching-values.ts";
+import type { AccountRoleAdmin } from "./account-role-admin.ts";
+import { coachAssignmentCard } from "./account-role-admin-routes.ts";
 
 const CONSOLE_SEARCH_MAX = 120;
 
@@ -66,6 +68,7 @@ export function mountAdministratorEntry(
     localStaffEntry?: boolean;
     mode?: string;
     simpleInvoices?: unknown;
+    roleAdmin?: AccountRoleAdmin;
   },
 ) {
   const member = memberToken;
@@ -133,6 +136,18 @@ export function mountAdministratorEntry(
       );
     const v = result.value,
       chosen = v.selected;
+    // COACHLINK-01: the selected learner's coach, chosen from coach-role holders.
+    const coachCard =
+      chosen && options.roleAdmin
+        ? coachAssignmentCard(
+            await options.roleAdmin.learnerCoach(
+              cookie.value,
+              chosen.member.id,
+            ),
+            chosen.member.id,
+            csrf(cookie.value, options.secret),
+          )
+        : "";
     const summaries = chosen
       ? `<section class="portal-card" aria-labelledby="selected-member"><h2 id="selected-member">Selected learner</h2><p class="portal-summary">${escape(chosen.member.displayName ?? "Name needed")} · ${escape(BACKGROUNDS[chosen.member.background as Background] ?? chosen.member.background)} · ${escape(GOALS[chosen.member.goal as Goal] ?? chosen.member.goal)}</p><p class="portal-reference">Account reference: <code>${escape(chosen.member.id)}</code></p><p>Only enrollment and billing summaries are shown. Private writing and files are not available here.</p><div class="portal-columns"><div><h3>Enrollments</h3><ul>${chosen.enrollments.map((e) => `<li>${escape(e.title)} · ${escape(e.id)}</li>`).join("") || "<li>No recorded enrollment.</li>"}</ul></div><div><h3>Course bundles</h3><ul>${chosen.plans.map((p) => `<li>${escape(p.id)} · ${escape(p.state)}</li>`).join("") || "<li>No course bundles.</li>"}</ul></div><div><h3>Invoices</h3><ul>${chosen.invoices.map((i) => `<li><a href="/operator/invoices/${escape(i.id)}">${escape(i.number)}</a> · CAD ${(Number(i.totalCents) / 100).toFixed(2)} · delivery ${escape(i.delivery)}</li>`).join("") || "<li>No issued invoices.</li>"}</ul></div></div>${
           options.simpleInvoices
@@ -150,7 +165,7 @@ export function mountAdministratorEntry(
                 true,
               )
             : "<p>Billing is disabled. No proposal, invoice or rate can be created from this console.</p>"
-        }</section>`
+        }</section>${coachCard}`
       : "";
     return res.send(
       page(
@@ -165,6 +180,9 @@ export function mountAdministratorEntry(
               )}`
             : "<p>Invoicing is disabled. Learning accounts and saved work remain available.</p>"
         }</section><div class="portal-footer">${portalActions([
+          ...(options.roleAdmin
+            ? ([["/operator/roles", "Roles"]] as [string, string][])
+            : []),
           ["/operator/diagnostics", "Diagnostics"],
           // FRICTION-11: /admin needs a member account, so offer it only then.
           ...(member(req)
@@ -191,6 +209,9 @@ export function mountAdministratorEntry(
             ["/operator", "Administration console"],
             ["/operator/invoices", "Courses and invoices"],
             ["/operator/coaching", "Monthly coaching"],
+            ...(options.roleAdmin
+              ? ([["/operator/roles", "Roles"]] as [string, string][])
+              : []),
             ["/staff", "Staff tools"],
           ],
         )}</section><section class="portal-card" aria-labelledby="admin-learning"><h2 id="admin-learning">Your learning account</h2>${portalActions([["/account", "My learning account"]])}</section></div>`,

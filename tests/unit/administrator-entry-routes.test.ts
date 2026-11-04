@@ -784,3 +784,72 @@ it("CONSOLECOACH-01/02 shows each learner's latest coaching month and jumps to t
     `href="/operator?ownerId=${id(1)}&amp;page=1#selected-member"`,
   );
 });
+it("COACHLINK-01/ROLEADMIN-01 shows the selected learner's coach control and the Roles links", async () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const learnerCoach = vi.fn(async () => ({
+    kind: "ready" as const,
+    value: {
+      coach: null,
+      coaches: [{ emailHash: "d".repeat(64), label: "Invented Coach" }],
+    },
+  }));
+  const status = vi.fn(async () => ({ kind: "ready" as const }));
+  const app = express();
+  mountAdministratorEntry(
+    app,
+    {
+      status,
+      enter: status,
+      end: status,
+      console: async () => ({
+        kind: "ready" as const,
+        value: {
+          members: [],
+          courses: [],
+          ...listing,
+          selected: {
+            member: {
+              id,
+              displayName: "Invented Ada",
+              background: "explorer",
+              goal: "everyday",
+              joined,
+            },
+            enrollments: [],
+            plans: [],
+            invoices: [],
+          },
+        },
+      }),
+    },
+    {
+      origin,
+      secret,
+      localStaffEntry: true,
+      mode: "local",
+      roleAdmin: {
+        learnerCoach,
+        roles: vi.fn(),
+        grant: vi.fn(),
+        remove: vi.fn(),
+        assignCoach: vi.fn(),
+      },
+    },
+  );
+  const http = await (await import("supertest")).default(app);
+  const res = await http
+    .get(`/operator?ownerId=${id}`)
+    .set("Cookie", `dne_staff=${credential}`);
+  expect(res.status).toBe(200);
+  expect(learnerCoach).toHaveBeenCalledWith(credential, id);
+  expect(res.text).toContain('<h2 id="learner-coach">Coach</h2>');
+  expect(res.text).toContain(
+    `<input type="hidden" name="csrf" value="${csrf(credential, secret)}">`,
+  );
+  expect(res.text).toContain(">Invented Coach</option>");
+  expect(res.text).toContain('href="/operator/roles"');
+  const admin = await http.get("/admin").set("Cookie", `${COOKIE}=${token}`);
+  expect(admin.text).toContain(
+    '<a href="/operator/roles" class="button secondary">Roles</a>',
+  );
+});

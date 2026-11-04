@@ -10,6 +10,7 @@ import {
 } from "../../src/coach-view.ts";
 import { mountCoachView } from "../../src/coach-view-routes.ts";
 import { COOKIE } from "../../src/session.ts";
+import { hash } from "../../src/store.ts";
 
 const token = "a".repeat(64);
 const owned: Promise<Server>[] = [];
@@ -61,7 +62,9 @@ it("ROLES-03/04 the coach summary checks the coach role, then reads hours only",
   });
   const sql = String(query.mock.calls.at(-1)![0]);
   expect(sql).not.toMatch(/rate|cents|invoice|INSERT|UPDATE |DELETE/i);
-  expect(query.mock.calls.at(-1)![1]).toEqual(["2026-11"]);
+  // #684 COACHLINK-02: only learners assigned to this coach are read.
+  expect(sql).toContain("FROM coach_assignments a");
+  expect(query.mock.calls.at(-1)![1]).toEqual(["2026-11", hash(token)]);
 
   query.mockRejectedValueOnce(new Error("database unavailable"));
   expect(await coach.summary(token)).toEqual({ kind: "unavailable" });

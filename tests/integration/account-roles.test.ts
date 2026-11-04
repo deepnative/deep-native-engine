@@ -124,6 +124,13 @@ it("ROLES-03/04 a coach reads each person's saved hours for a month; a student i
      VALUES($1,$2,90,'Invented Ada','member@example.test','submitted',1,1)`,
     [learner.id, today],
   );
+  // #684 COACHLINK-02: an unassigned learner is shown to no coach.
+  const unassigned = await coach.summary(owner.token);
+  expect(unassigned.kind === "ready" && unassigned.value.rows).toEqual([]);
+  await pool.query(
+    "INSERT INTO coach_assignments(learner_id,coach_email_hash,assigned_by) VALUES($1,$2,$1)",
+    [learner.id, hash("tom@deepnative.io")],
+  );
   const ready = await coach.summary(owner.token);
   expect(ready).toEqual({
     kind: "ready",

@@ -20,7 +20,8 @@ function status(state: string, returned: boolean) {
   return returned ? "Returned for changes" : "Draft";
 }
 
-/** #673 ROLES-03/04: read-only Coaching summary for accounts with the coach role. */
+/** #673 ROLES-03/04: read-only Coaching summary for accounts with the coach role,
+ * limited to the learners an administrator assigned to them (#684). */
 export function coachViewStore(pool: Pool): CoachView {
   return {
     async summary(memberToken, month) {
@@ -53,9 +54,14 @@ export function coachViewStore(pool: Pool): CoachView {
              FROM coaching_months m
              JOIN learners l ON l.id=m.owner_id
              JOIN workspaces w ON w.owner_principal_id=l.id AND w.deleting_at IS NULL
-            WHERE m.month=$1
+            WHERE m.month=$1 AND m.owner_id IN (
+              -- #684 COACHLINK-02: only learners assigned to this coach.
+              SELECT a.learner_id FROM coach_assignments a
+                JOIN member_email_identities i ON i.email_hash=a.coach_email_hash
+                JOIN principals c ON c.id=i.principal_id
+               WHERE c.token_hash=$2)
             ORDER BY l.display_name NULLS LAST,l.id LIMIT 200`,
-          [selected],
+          [selected, hash(memberToken)],
         );
         return {
           kind: "ready",
