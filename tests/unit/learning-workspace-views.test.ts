@@ -1,10 +1,13 @@
+import { withAdministration } from "../../src/administration-presentation.ts";
 import { expect, it } from "vitest";
 import { learningWorkspacePage } from "../../src/learning-workspace-views.ts";
 import { LEARNING_WORKSPACE_ASSET_BASE } from "../../src/learning-workspace-assets.ts";
 
 it("LWORK-01/07 gives the account reader its private context and preserves earlier learning and account recovery", () => {
   for (const route of ["everyday", "work", "technical"] as const) {
-    const html = learningWorkspacePage(route, '"<unsafe>');
+    const html = withAdministration(true, () =>
+      learningWorkspacePage(route, '"<unsafe>'),
+    );
     expect(html).toContain(`data-workspace-route="${route}"`);
     expect(html).toContain(
       `data-workspace-module-base="${LEARNING_WORKSPACE_ASSET_BASE}"`,

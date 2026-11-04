@@ -9,6 +9,12 @@ export function withHosting<T>(hosted: boolean, render: () => T): T {
 export function hostingText(local: string, hosted: string): string {
   return hosting.getStore() === true ? hosted : local;
 }
+export function privateRecordsLabel(): string {
+  return hostingText(
+    "Download private preview records",
+    "Download my private records",
+  );
+}
 /**
  * #653 Members may use real information on hosted private learning forms. The
  * local preview still takes invented data only, and this request's validated

@@ -4,7 +4,10 @@ import {
 } from "./invoice-selection.ts";
 import type { BillingProfileStore } from "./billing-profile.ts";
 import { mountCoachingRoutes } from "./coaching-routes.ts";
-import { mountAdministratorEntry } from "./administrator-entry-routes.ts";
+import {
+  mountAdministrationLink,
+  mountAdministratorEntry,
+} from "./administrator-entry-routes.ts";
 import type { AdministratorEntry } from "./administrator-entry.ts";
 import {
   mountSimpleInvoiceRoutes,
@@ -501,10 +504,8 @@ export function app(
   app.disable("x-powered-by");
   app.use((req, _res, next) => withCurrentPath(req.path, next));
   app.use((_req, _res, next) =>
-    withAdministration(
-      options.localStaffEntry === true && mode !== "live",
-      next,
-    ),
+    // Hidden until mountAdministrationLink confirms a verified owner.
+    withAdministration(false, next),
   );
   app.use((_req, _res, next) =>
     withHosting(
@@ -547,6 +548,10 @@ export function app(
     "/assets",
     express.static(fileURLToPath(new URL("../public", import.meta.url))),
   );
+  mountAdministrationLink(app, options.administratorEntry, {
+    localStaffEntry: options.localStaffEntry,
+    mode,
+  });
   // Admit evidence creation against the shared budget before reading its body.
   const uploadAdmission = options.uploadAdmission;
   if (uploadAdmission) {
@@ -1252,7 +1257,7 @@ export function app(
       fail(
         413,
         "export_limit",
-        `A single record cannot fit within this preview's ${MAX_MEMBER_EXPORT_RECORDS} records and ${MAX_MEMBER_EXPORT_BYTES / 1024} KiB per-page bounds. No records from this page were returned.`,
+        `A single record cannot fit within ${hostingText("this preview's", "the")} ${MAX_MEMBER_EXPORT_RECORDS} records and ${MAX_MEMBER_EXPORT_BYTES / 1024} KiB per-page bounds. No records from this page were returned.`,
       );
       return;
     }
@@ -2233,7 +2238,10 @@ export function app(
             await evidence.owned(res.locals.token as string),
             res.locals.csrf as string,
             [
-              "Acknowledge that no qualified reviewer or response time is available in this preview.",
+              hostingText(
+                "Acknowledge that no qualified reviewer or response time is available in this preview.",
+                "Acknowledge that no qualified reviewer or response time is available here.",
+              ),
             ],
           ),
         );
@@ -3171,7 +3179,10 @@ export function app(
               "Check your practice request",
             ),
             hostingText(
-              "Open an eligible source and confirm invented or sample-only practice using its exact version, goal and prompt.",
+              hostingText(
+                "Open an eligible source and confirm invented or sample-only practice using its exact version, goal and prompt.",
+                "Open an eligible source using its exact version, goal and prompt.",
+              ),
               "Open an eligible source and start practice using its exact version, goal and prompt.",
             ),
           ),
@@ -3274,7 +3285,10 @@ export function app(
           practiceSessionRecoveryPage(
             "Response not accepted",
             hostingText(
-              "Write 1 to 1,000 characters using only invented or sample information, confirm saving, and use the next sequence from the saved session.",
+              hostingText(
+                "Write 1 to 1,000 characters using only invented or sample information, confirm saving, and use the next sequence from the saved session.",
+                "Write 1 to 1,000 characters and use the next sequence from the saved session.",
+              ),
               "Write 1 to 1,000 characters and use the next sequence from the saved session.",
             ),
           ),
@@ -3473,7 +3487,10 @@ export function app(
             source,
             res.locals.csrf as string,
             hostingText(
-              "Write 1 to 1,000 characters using only invented or sample information, then confirm the saving checkbox.",
+              hostingText(
+                "Write 1 to 1,000 characters using only invented or sample information, then confirm the saving checkbox.",
+                "Write 1 to 1,000 characters.",
+              ),
               "Write 1 to 1,000 characters.",
             ),
             typeof response === "string" ? response.slice(0, 1000) : "",
@@ -3598,7 +3615,10 @@ export function app(
             res.locals.csrf as string,
             null,
             hostingText(
-              "Write a reflection of at most 1,000 characters using only invented or sample information, then confirm the sample-information checkbox.",
+              hostingText(
+                "Write a reflection of at most 1,000 characters using only invented or sample information, then confirm the sample-information checkbox.",
+                "Write a reflection of at most 1,000 characters.",
+              ),
               "Write a reflection of at most 1,000 characters.",
             ),
           ),
@@ -4073,7 +4093,10 @@ export function app(
           errorPage(
             "Usefulness response not saved",
             hostingText(
-              "Choose a response and confirm it uses only sample information, or reopen your private activity to withdraw a saved answer.",
+              hostingText(
+                "Choose a response and confirm it uses only sample information, or reopen your private activity to withdraw a saved answer.",
+                "Choose a response, or reopen your private activity to withdraw a saved answer.",
+              ),
               "Choose a response and confirm it, or reopen your private activity to withdraw a saved answer.",
             ),
           ),
@@ -4287,7 +4310,10 @@ export function app(
               item,
               res.locals.csrf as string,
               hostingText(
-                "Enter at least one self-reflection field, keep each field within 1,000 characters and confirm sample information. Nothing was saved.",
+                hostingText(
+                  "Enter at least one self-reflection field, keep each field within 1,000 characters and confirm sample information. Nothing was saved.",
+                  "Enter at least one self-reflection field and keep each field within 1,000 characters. Nothing was saved.",
+                ),
                 "Enter at least one self-reflection field and keep each field within 1,000 characters. Nothing was saved.",
               ),
               undefined,
@@ -4512,7 +4538,10 @@ export function app(
             item,
             res.locals.csrf as string,
             hostingText(
-              "Use a valid revision, at most 4,000 characters, and confirm sample information. Nothing was saved.",
+              hostingText(
+                "Use a valid revision, at most 4,000 characters, and confirm sample information. Nothing was saved.",
+                "Use a valid revision and at most 4,000 characters. Nothing was saved.",
+              ),
               "Use a valid revision and at most 4,000 characters. Nothing was saved.",
             ),
             response,
@@ -4617,7 +4646,10 @@ export function app(
         return;
       }
       const reason = latest.submittedAt
-        ? "This saved version was already submitted locally. No second submission was created."
+        ? hostingText(
+            "This saved version was already submitted locally. No second submission was created.",
+            "This saved version was already submitted. No second submission was created.",
+          )
         : !latest.currentEligible
           ? "The assignment or your learning direction changed. Nothing was submitted."
           : latest.revision !== revision
@@ -5474,7 +5506,10 @@ export function app(
         .send(
           errorPage(
             "Confirm before deleting",
-            "Check the confirmation box on your learning path before deleting this preview.",
+            hostingText(
+              "Check the confirmation box on your learning path before deleting this preview.",
+              "Check the confirmation box on your learning path before deleting your account.",
+            ),
           ),
         );
       return;

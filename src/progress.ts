@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { LESSON, GOALS } from "./content.ts";
 import type { AssignmentAttemptListItem } from "./attempts.ts";
 import type { Exercise, ExerciseHistory, LessonActivity } from "./store.ts";
@@ -83,7 +84,7 @@ export function activityItems(
         kind: "assignment attempt",
         title: attempt.title,
         version: attempt.contentVersion,
-        state: `Submission ${submission.sequence} · submitted locally; no qualified review`,
+        state: `Submission ${submission.sequence} · ${hostingText("submitted locally", "submitted privately")}; no qualified review`,
         availability,
         href: `/assignments/attempts/${encodeURIComponent(attempt.id)}?version=${attempt.contentVersion}&submission=${submission.sequence}#submission-${submission.sequence}`,
         submittedAt: submission.submittedAt,
@@ -95,7 +96,10 @@ export function activityItems(
       title: attempt.title,
       version: attempt.contentVersion,
       state: attempt.submittedAt
-        ? "Submitted locally; no qualified review"
+        ? hostingText(
+            "Submitted locally; no qualified review",
+            "Submitted privately; no qualified review",
+          )
         : attempt.submissionHistory?.length
           ? attempt.savedAt
             ? "Current revision draft saved"

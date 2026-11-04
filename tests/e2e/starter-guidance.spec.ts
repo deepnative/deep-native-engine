@@ -20,7 +20,6 @@ async function fixture(page: Page, goal: Goal) {
         return origin;
       },
       secret: "synthetic-guidance-browser",
-      // NAV-06: the guidance header offers Administration where entry exists.
       localStaffEntry: true,
     }),
   );
@@ -120,12 +119,7 @@ for (const journey of journeys)
       const accountActions = page.getByRole("navigation", {
         name: "Learning account",
       });
-      for (const label of [
-        "My account",
-        "Sign out",
-        "Monthly coaching hours",
-        "Administration",
-      ])
+      for (const label of ["My account", "Sign out", "Monthly coaching hours"])
         await expect(
           accountActions.getByRole("link", { name: label, exact: true }),
         ).toBeVisible();

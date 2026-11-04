@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { parseCareerDraft, parseCareerEntry } from "../../src/career.ts";
 import {
   inventedInputOnly,
+  privateRecordsLabel,
   withHosting,
 } from "../../src/hosting-presentation.ts";
 import { parseMilestone } from "../../src/milestones.ts";
@@ -61,4 +62,11 @@ it("REALINPUT-01 career forms replace the checkbox with the privacy note when ho
   expect(local).toContain('name="sample_only"');
   expect(local).toContain("Use invented information only.");
   expect(local).not.toContain("Leave out passwords");
+});
+
+it("HOSTEDCOPY-01/02 the records download label follows the runtime", () => {
+  expect(privateRecordsLabel()).toBe("Download private preview records");
+  expect(withHosting(true, privateRecordsLabel)).toBe(
+    "Download my private records",
+  );
 });

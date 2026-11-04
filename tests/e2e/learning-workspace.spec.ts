@@ -252,7 +252,6 @@ for (const [background, goal, route, sourceFact, freshFact, correction] of [
         ["My account", "/account"],
         ["Sign out", "/account/sign-out"],
         ["Monthly coaching hours", "/account/coaching"],
-        ["Administration", "/admin"],
       ] as const) {
         const action = accountServices.getByRole("link", {
           name: label,
@@ -505,12 +504,7 @@ for (const [background, goal, route, sourceFact, freshFact, correction] of [
       const recordActions = member.getByRole("navigation", {
         name: "Learning and account",
       });
-      for (const label of [
-        "My account",
-        "Sign out",
-        "Monthly coaching hours",
-        "Administration",
-      ])
+      for (const label of ["My account", "Sign out", "Monthly coaching hours"])
         await expect(
           recordActions.getByRole("link", { name: label, exact: true }),
         ).toBeVisible();
