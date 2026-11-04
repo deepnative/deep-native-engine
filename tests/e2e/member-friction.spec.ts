@@ -32,7 +32,7 @@ const inView = (page: Page, selector: string) =>
     return box.top >= 0 && box.bottom <= innerHeight;
   });
 
-test("[L289] FRICTION-01/02/05/06/12 a member sees what happened after saving, leaving and deleting", async ({
+test("[L289] FRICTION-01/02/05/06/12 READABLE-01..03 a member sees what happened after saving, leaving and deleting", async ({
   page,
 }) => {
   let origin = "http://127.0.0.1:0";
@@ -80,6 +80,44 @@ test("[L289] FRICTION-01/02/05/06/12 a member sees what happened after saving, l
     await expect(page).toHaveURL(/\/lesson#exercise-status$/);
     await expect(page.locator("#exercise-status")).toBeVisible();
     await expect.poll(() => inView(page, "#exercise-status")).toBe(true);
+
+    // READABLE-01..03: one text style in the plan, and links with room to breathe.
+    await page.goto(`${origin}/learn`);
+    const planText = await page
+      .locator(".learning-plan > p:not(.eyebrow), .learning-plan li")
+      .evaluateAll((items) =>
+        items.map((item) => {
+          const style = getComputedStyle(item);
+          return `${style.fontSize} ${style.color}`;
+        }),
+      );
+    expect(planText.length).toBeGreaterThan(2);
+    expect([...new Set(planText)]).toEqual([planText[0]]);
+    expect(planText[0]).toContain("16px");
+    const links = await page.locator(".learning-links a").evaluateAll((items) =>
+      items.map((item) => {
+        const box = item.getBoundingClientRect();
+        return { top: box.top, bottom: box.bottom, height: box.height };
+      }),
+    );
+    expect(links.length).toBeGreaterThanOrEqual(11);
+    for (const [index, link] of links.entries()) {
+      expect(link.height).toBeGreaterThanOrEqual(24);
+      const below = links
+        .slice(index + 1)
+        .filter((other) => other.top > link.top + 1);
+      if (below.length)
+        expect(
+          Math.min(...below.map((other) => other.top)),
+        ).toBeGreaterThanOrEqual(link.bottom + 6);
+    }
+    await expect(
+      page.locator(".learning-links").getByRole("heading"),
+    ).toHaveCount(3);
+    await page.screenshot({
+      path: `artifacts/member-learning-links-${test.info().project.name}.png`,
+      fullPage: true,
+    });
 
     // FRICTION-12: a plain checkbox stays large enough to use.
     await page.goto(`${origin}/workflow-feedback/WF-001`);

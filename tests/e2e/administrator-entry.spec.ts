@@ -738,6 +738,21 @@ test("[L288] DIAG-01..03 an administrator checks an email's account and link his
   try {
     await f.verify();
     await page.goto(f.origin + "/admin");
+    // READABLE-04: on a wide screen the intro uses the page width.
+    if (page.viewportSize()!.width >= 1000)
+      expect(
+        await page
+          .locator(".portal-intro > p")
+          .first()
+          .evaluate(
+            (paragraph) =>
+              paragraph.getBoundingClientRect().height /
+              parseFloat(getComputedStyle(paragraph).lineHeight),
+          ),
+      ).toBeLessThan(2.5);
+    await page.screenshot({
+      path: `artifacts/administration-intro-${test.info().project.name}.png`,
+    });
     await page.getByRole("button", { name: "Enter administration" }).click();
     // FRICTION-11: staff tools link to the administration console.
     await page.goto(f.origin + "/staff");
