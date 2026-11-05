@@ -262,7 +262,7 @@ function profileFields(
     : select("goal", "What would you like to do?", GOALS, goal, true);
   const timezoneError = fieldError("timezone");
   const exploratoryError = fieldError("exploratory");
-  return `<label for="display_name">Display name</label><input type="text" id="display_name" name="display_name" autocomplete="nickname" maxlength="80" value="${escape(attempted ? attempted.displayName : (learner?.displayName ?? ""))}" required aria-describedby="display-name-help${fieldError("display_name") ? " display_name-error" : ""}"${fieldError("display_name") ? ' aria-invalid="true"' : ""}><p id="display-name-help" class="small">The name you want to use here. You, your coaches and account administrators can see it. We don’t check it, and it isn’t your billing name.</p>${errorText("display_name")}
+  return `<label for="display_name">Display name</label><input type="text" id="display_name" name="display_name" autocomplete="nickname" maxlength="80" value="${escape(attempted ? attempted.displayName : (learner?.displayName ?? ""))}" required aria-describedby="display-name-help${fieldError("display_name") ? " display_name-error" : ""}"${fieldError("display_name") ? ' aria-invalid="true"' : ""}><p id="display-name-help" class="small">The name you want to use here. Visible to you, your coaches and account administrators. We don’t check it, and it isn’t your billing name.</p>${errorText("display_name")}
     ${select("background", "Your starting point", BACKGROUNDS, attempted ? attempted.background : learner?.background, true)}
     ${goalChoices}
     <p class="small">You can add more interests or change your goal later. These choices never determine admission or payment.</p>
