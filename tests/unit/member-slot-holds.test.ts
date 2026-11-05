@@ -1,3 +1,4 @@
+import { readableRange, readableTime } from "../../src/display-time.ts";
 import { expect, it, vi } from "vitest";
 import type { Pool } from "pg";
 import {
@@ -76,7 +77,8 @@ it("does not show a request without the right category and shows only escaped ow
   const held = sampleHoldReceiptPage(receipt, "America/Toronto");
   expect(held).toContain("SAMPLE HOLD — NOT A BOOKING");
   expect(held).toContain("60 minutes");
-  expect(held).toContain(receipt.expiresAt.toISOString());
+  expect(held).toContain(`datetime="${receipt.expiresAt.toISOString()}"`);
+  expect(held).toContain(readableTime(receipt.expiresAt));
   expect(held).toContain("Reload this receipt");
   expect(held).not.toContain(grant);
   const expired = sampleHoldReceiptPage(
@@ -85,7 +87,7 @@ it("does not show a request without the right category and shows only escaped ow
   );
   expect(expired).toContain("&lt;script&gt;");
   expect(expired).toContain("units stay expired");
-  expect(expired).toContain(receipt.startsAt.toISOString());
+  expect(expired).toContain(readableRange(receipt.startsAt, receipt.endsAt));
   expect(sampleHoldReceiptPage(receipt)).toContain("GMT");
   expect(sampleHoldRecoveryPage(id, "Unknown <private>")).toContain(
     "Unknown &lt;private&gt;",
@@ -319,7 +321,7 @@ it("labels the receipt UTC fallback when a member removes or has no valid timezo
     const html = sampleHoldReceiptPage(receipt, zone);
     expect(html).toContain("UTC display window (no valid member time zone)");
     expect(html).not.toContain("Member-local window");
-    expect(html).toContain(receipt.startsAt.toISOString());
+    expect(html).toContain(readableRange(receipt.startsAt, receipt.endsAt));
   }
   const local = sampleHoldReceiptPage(receipt, "America/Toronto");
   expect(local).toContain("Member-local window");
@@ -342,7 +344,7 @@ it("offers explicit withdrawal only on held receipts and keeps a released receip
       "csrf-marker",
     );
     expect(html).not.toContain("Withdraw sample hold");
-    expect(html).toContain(receipt.expiresAt.toISOString());
+    expect(html).toContain(readableTime(receipt.expiresAt));
     expect(html).toContain("units stay expired");
     expect(html).toContain(`/availability/holds/${id}`);
   }

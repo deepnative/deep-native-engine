@@ -15,7 +15,7 @@ test.afterAll(async () => pool.end());
 const noSidewaysScroll = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
-test("[L294] WHOSEES-01..03 a member sees what they share and the moment it changes", async ({
+test("[L295] WHOSEES-01..03 a member sees what they share and the moment it changes", async ({
   page,
 }) => {
   const storage = await mkdtemp(join(tmpdir(), "dne-who-can-see-"));

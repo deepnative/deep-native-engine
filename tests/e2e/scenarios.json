@@ -2616,6 +2616,15 @@
     },
     {
       "id": "L294",
+      "actor": "A learner reading on a phone 375 pixels wide",
+      "preconditions": "Dedicated synthetic PostgreSQL database, one invented published assignment, port0 server; desktop/mobile Chromium at a 375px viewport",
+      "steps": "READABLE-09..12: read events, programs, the account page and a reviewed workflow, then submit an invented attempt and read it and progress",
+      "expected": "Dates read in words with the zone stated and keep their exact value in the datetime attribute; short codes and dates stay on one line; words break only when wider than the line; no sideways scrolling",
+      "issues": [659],
+      "critical": true
+    },
+    {
+      "id": "L295",
       "actor": "Member checking what they share",
       "preconditions": "Dedicated synthetic PostgreSQL database, circle discussion enabled, port0 server; desktop/mobile Chromium",
       "steps": "WHOSEES-01..03: open Who can see my work from My account with nothing shared, join a circle, turn sharing on, post a question, return, then withdraw sharing and return",
