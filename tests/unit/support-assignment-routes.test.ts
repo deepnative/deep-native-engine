@@ -69,6 +69,9 @@ function fixture(
     revoke: vi
       .fn<SupportAssignmentStore["revoke"]>()
       .mockResolvedValue(ready({ requestId, grantId, disposition: "revoked" })),
+    take: vi
+      .fn<SupportAssignmentStore["take"]>()
+      .mockResolvedValue(ready({ requestId, grantId, disposition: "created" })),
   };
   const session = vi.fn().mockResolvedValue({ kind: "missing" });
   const admit = vi.fn().mockResolvedValue({
@@ -471,4 +474,55 @@ it("SUPADM-05 malformed or ambiguous reference checks deny before content-free e
   });
   expect(f.port.check).not.toHaveBeenCalled();
   expect(f.port.assign).not.toHaveBeenCalled();
+});
+it("ADMSUP-01/03 confirmed take opens the administrator's own grant; malformed, unconfirmed or failed takes do not", async () => {
+  const f = fixture();
+  await withLoopback(f.application, async (s) => {
+    const post = () =>
+      request(s)
+        .post(`${base}/take`)
+        .set("Host", host)
+        .set("Origin", origin)
+        .set("Cookie", cookie)
+        .type("form");
+    const body = {
+      csrf: csrf(staff, secret),
+      requestId,
+      idempotencyKey: key,
+      confirm: "yes",
+    };
+    for (const changes of [
+      { confirm: "no" },
+      { requestId: "bad" },
+      { idempotencyKey: "bad" },
+      { staffId },
+    ])
+      await post()
+        .send({ ...body, ...changes })
+        .expect(403);
+    await request(s)
+      .post(`${base}/take?x=1`)
+      .set("Host", host)
+      .set("Origin", origin)
+      .set("Cookie", cookie)
+      .type("form")
+      .send(body)
+      .expect(403);
+    expect(f.port.take).not.toHaveBeenCalled();
+    const saved = await post().send(body).expect(200);
+    expect(f.port.take).toHaveBeenCalledWith(staff, requestId, key);
+    expect(saved.text).toContain("You can answer this request");
+    expect(saved.text).toContain(
+      `/operator/support/${requestId}?grant=${grantId}`,
+    );
+    f.port.take.mockResolvedValueOnce({ kind: "conflict" });
+    const conflict = await post().send(body).expect(409);
+    expect(conflict.text).toContain(`key=${key}`);
+    f.port.take.mockResolvedValueOnce({ kind: "denied" });
+    await post().send(body).expect(403);
+    f.port.take.mockRejectedValueOnce(Error("PRIVATE_TAKE_ERROR"));
+    const failed = await post().send(body).expect(503);
+    expect(failed.text).toContain("Inspect saved assignment state");
+    expect(failed.text).not.toContain("PRIVATE_TAKE_ERROR");
+  });
 });

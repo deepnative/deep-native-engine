@@ -98,6 +98,11 @@ export interface SupportAssignmentStore {
     requestId: string,
     grantId: string,
   ): Promise<AssignmentResult<AssignmentReceipt>>;
+  take(
+    token: string,
+    requestId: string,
+    idempotencyKey: string,
+  ): Promise<AssignmentResult<AssignmentReceipt>>;
 }
 type Person = {
   id: string;
@@ -293,6 +298,68 @@ export function supportAssignmentStore(
     ).rows;
   }
   return {
+    /** ADMSUP-01/03 (#39): a current administrator answers one open request
+     * themselves. The grant is to their own session, from now until it ends,
+     * and is audited and revocable like any other assignment. */
+    take(token, requestId, idempotencyKey) {
+      if (![requestId, idempotencyKey].every(assignmentId))
+        return Promise.resolve({ kind: "denied" });
+      return run<AssignmentReceipt>(token, true, async (ctx) => {
+        const found = await discover(ctx, requestId),
+          scope = await locks(
+            ctx,
+            [found.memberId],
+            [],
+            "platform_admin",
+            true,
+          );
+        const existing = (
+          await ctx.tx.query<Grant>(
+            `SELECT ${grantColumns} FROM support_request_grants WHERE granted_by=$1 AND idempotency_key=$2 ORDER BY id FOR UPDATE`,
+            [ctx.actorId, idempotencyKey],
+          )
+        ).rows[0];
+        const row = await request(ctx, found, true);
+        if (existing) {
+          requireState(
+            existing.requestId === requestId &&
+              existing.staffId === ctx.actorId &&
+              existing.role === "platform_admin" &&
+              !existing.revokedAt,
+            "conflict",
+          );
+          return () => ({
+            requestId,
+            grantId: existing.id,
+            disposition: "replayed" as const,
+          });
+        }
+        const owner = scope.people.get(row.memberId)!,
+          self = scope.people.get(ctx.actorId)!,
+          state = (
+            await ctx.tx.query<{ resolvedAt: Date | null; now: Date }>(
+              `SELECT resolved_at AS "resolvedAt",clock_timestamp() AS now FROM support_requests WHERE id=$1`,
+              [requestId],
+            )
+          ).rows[0]!;
+        requireState(owner.active && !row.withdrawnAt && !state.resolvedAt);
+        ctx.deadlines.push(owner.expiresAt);
+        await ctx.tx.observe(ctx.deadlines);
+        const grantId = await createSupportGrantRecord(ctx.tx, ctx.actorId, {
+          requestId,
+          staffId: ctx.actorId,
+          role: "platform_admin",
+          startsAt: state.now,
+          expiresAt: self.expiresAt,
+          idempotencyKey,
+        });
+        return () => ({
+          requestId,
+          grantId,
+          disposition: "created" as const,
+        });
+      });
+    },
     inbox(token, after) {
       return run(token, false, async (ctx) => {
         const domain = "support-intake-inbox";

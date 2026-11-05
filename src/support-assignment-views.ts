@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
@@ -46,13 +47,18 @@ export function assignmentHomePage(csrf: string): string {
     `<section class="reading">${notice}<h1>Support request assignments</h1><p><a href="${base}/inbox">Open support intake inbox</a></p><p>Obtain the exact request reference from the intake inbox or the member's receipt and the operator's own assignment reference. This page does not list members, operators or private requests.</p><form method="post" action="${base}/check">${hidden(escape(csrf))}<label for="requestId">Exact request receipt ID</label><input id="requestId" name="requestId" type="text" maxlength="36" required><label for="staffId">Exact operator assignment ID</label><input id="staffId" name="staffId" type="text" maxlength="36" required><button type="submit">Check exact references</button></form><h2>Inspect an exact request</h2><form method="get" action="${base}/history"><label for="historyRequestId">Request receipt ID to inspect</label><input id="historyRequestId" name="requestId" type="text" maxlength="36" required><label for="historyKey">Original submission key (optional)</label><input id="historyKey" name="key" type="text" maxlength="36"><p>Use your original key to inspect an unconfirmed assignment. Inspection does not create or revoke access.</p><button type="submit">Inspect saved assignment state</button></form>${navigation}</section>`,
   );
 }
+/** ADMSUP-01 (#39): one explicit, confirmed form per open request. */
+function takeForm(csrf: string, requestId: string, key: string) {
+  return `<form method="post" action="${base}/take">${hidden(escape(csrf))}<input type="hidden" name="requestId" value="${escape(requestId)}"><input type="hidden" name="idempotencyKey" value="${escape(key)}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I will answer request ${escape(requestId)} myself until my administrator session ends.</span></label><button type="submit">Answer this request myself</button></form>`;
+}
 export function supportIntakeInboxPage(
   csrf: string,
   inbox: SupportIntakeInbox,
+  newKey: () => string = randomUUID,
 ): string {
   return page(
     "Support intake inbox",
-    `<section class="reading">${notice}<h1>Support intake inbox</h1><p>Request receipts and lifecycle only. Member identities, subjects, request text and notes are not shown. Reading this inbox does not grant access or acknowledge a request. At most 20 receipts per page, newest first.</p>${inbox.items.length ? `<ul aria-label="Support intake receipts">${inbox.items.map((item) => `<li data-intake-request="${escape(item.requestId)}"><dl><dt>Request receipt</dt><dd>${escape(item.requestId)}</dd><dt>Received</dt><dd>${time(item.receivedAt)}</dd><dt>Acknowledgement</dt><dd>${item.acknowledgedAt ? time(item.acknowledgedAt) : "No separate acknowledgement recorded"}</dd><dt>Resolution</dt><dd>${item.resolvedAt ? time(item.resolvedAt) : "Open; no resolution recorded"}</dd>${item.withdrawnAt ? `<dt>Withdrawn</dt><dd>${time(item.withdrawnAt)}</dd>` : ""}</dl>${item.withdrawnAt || item.resolvedAt ? "<p>No new assignment offered for this closed request.</p>" : `<form method="post" action="${base}/check">${hidden(escape(csrf))}<input type="hidden" name="requestId" value="${escape(item.requestId)}"><label>Exact operator assignment ID for ${escape(item.requestId)}<input name="staffId" maxlength="36" required></label><button>Check operator for this request</button></form>`}<a href="${escape(historyPath(item.requestId))}">Inspect this request's assignment history</a></li>`).join("")}</ul>` : "<p>No support receipts on this page.</p>"}<p><a href="${base}/inbox">Return to newest receipts</a>${inbox.nextCursor ? ` · <a href="${base}/inbox?after=${encodeURIComponent(inbox.nextCursor)}">Next intake receipts</a>` : ""}</p>${navigation}</section>`,
+    `<section class="reading">${notice}<h1>Support intake inbox</h1><p>Request receipts and lifecycle only. Member identities, subjects, request text and notes are not shown. Reading this inbox does not grant access or acknowledge a request. At most 20 receipts per page, newest first.</p>${inbox.items.length ? `<ul aria-label="Support intake receipts">${inbox.items.map((item) => `<li data-intake-request="${escape(item.requestId)}"><dl><dt>Request receipt</dt><dd>${escape(item.requestId)}</dd><dt>Received</dt><dd>${time(item.receivedAt)}</dd><dt>Acknowledgement</dt><dd>${item.acknowledgedAt ? time(item.acknowledgedAt) : "No separate acknowledgement recorded"}</dd><dt>Resolution</dt><dd>${item.resolvedAt ? time(item.resolvedAt) : "Open; no resolution recorded"}</dd>${item.withdrawnAt ? `<dt>Withdrawn</dt><dd>${time(item.withdrawnAt)}</dd>` : ""}</dl>${item.withdrawnAt || item.resolvedAt ? "<p>No new assignment offered for this closed request.</p>" : `<form method="post" action="${base}/check">${hidden(escape(csrf))}<input type="hidden" name="requestId" value="${escape(item.requestId)}"><label>Exact operator assignment ID for ${escape(item.requestId)}<input name="staffId" maxlength="36" required></label><button>Check operator for this request</button></form>${takeForm(csrf, item.requestId, newKey())}`}<a href="${escape(historyPath(item.requestId))}">Inspect this request's assignment history</a></li>`).join("")}</ul>` : "<p>No support receipts on this page.</p>"}<p><a href="${base}/inbox">Return to newest receipts</a>${inbox.nextCursor ? ` · <a href="${base}/inbox?after=${encodeURIComponent(inbox.nextCursor)}">Next intake receipts</a>` : ""}</p>${navigation}</section>`,
   );
 }
 export function assignmentReferencePage(
@@ -119,5 +125,17 @@ export function assignmentNoticePage(
   return page(
     "Support assignment unavailable",
     `<section class="reading"><h1>Support assignment unavailable</h1><p role="alert">${escape(message)}</p>${recovery ? `<p><a href="${escape(historyPath(recovery.requestId, recovery.key))}">Inspect saved assignment state</a></p>` : ""}${attempt && csrf !== undefined ? `<p>The assignment may already have committed. Inspect its saved state first. Any explicit retry below keeps your original submission key and payload; it never creates a new key automatically. Changing its payload conflicts with a saved submission.</p>${assignmentForm(csrf, attempt, true)}` : ""}${navigation}</section>`,
+  );
+}
+/** ADMSUP-01 (#39): confirms the administrator's own grant and links to it. */
+export function takenReceiptPage(receipt: {
+  requestId: string;
+  grantId: string;
+  disposition: string;
+}): string {
+  const open = `/operator/support/${encodeURIComponent(receipt.requestId)}?grant=${encodeURIComponent(receipt.grantId)}`;
+  return page(
+    "You can answer this request",
+    `<section class="reading">${notice}<h1>You can answer this request</h1><p>${receipt.disposition === "replayed" ? "This was already saved; nothing new was recorded." : "Saved. Access ends when your administrator session ends, or earlier if this grant is revoked."}</p><dl><dt>Request receipt ID</dt><dd>${escape(receipt.requestId)}</dd><dt>Grant ID</dt><dd data-assignment-grant>${escape(receipt.grantId)}</dd></dl><p><a href="${escape(open)}">Open the request</a></p><p><a href="${escape(historyPath(receipt.requestId))}">Inspect saved assignment state</a></p>${navigation}</section>`,
   );
 }

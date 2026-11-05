@@ -2631,6 +2631,15 @@
       "expected": "The page first says nothing is shared, then names the circle with sharing off, then counts one readable post, then says sharing is off with no readable posts; links reach the existing controls; no sideways scrolling",
       "issues": [40],
       "critical": true
+    },
+    {
+      "id": "L296",
+      "actor": "Hosted administrator and member",
+      "preconditions": "Dedicated synthetic PostgreSQL database; support assignment and staff entry enabled; administrator entered through a verified admin email; no operator account; desktop/mobile Chromium",
+      "steps": "ADMSUP-01..04: a member sends a support request; the administrator enters administration, opens the support intake inbox, confirms Answer this request myself, opens the request, saves an internal note, acknowledges and replies; the member reads it; the administrator revokes that grant from history and reopens the request",
+      "expected": "One grant to the administrator's own session, shown as platform_admin in history; the member sees the reply and acknowledgement but not the internal note; after revoking, the request is refused (403) without its text, and the member still sees the reply",
+      "issues": [39],
+      "critical": true
     }
   ],
   "fullMvp": [
