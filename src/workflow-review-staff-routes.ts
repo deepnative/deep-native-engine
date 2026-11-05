@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { hostingText } from "./hosting-presentation.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Response } from "express";
@@ -55,7 +56,7 @@ function recovery(message: string, csrf: string, original?: Original) {
 function receipt(grant: WorkflowReviewGrant) {
   return page(
     "Private workflow review assignment",
-    `${notice()}<h1>Private workflow review assignment</h1><dl><dt>Grant reference</dt><dd data-grant-id="${escape(grant.grantId)}">${escape(grant.grantId)}</dd><dt>Request</dt><dd>${escape(grant.requestId)}</dd><dt>Assigned moderator</dt><dd>${escape(grant.moderatorId)}</dd><dt>Reading starts</dt><dd>${escape(grant.startsAt)}</dd><dt>Reading ends</dt><dd>${escape(grant.expiresAt)}</dd></dl><p>Assignment status: ${escape(grant.state ?? (grant.revokedAt ? "revoked" : "recorded"))}. This receipt contains no private note.</p><p><a href="${base}/receipts/${escape(grant.grantId)}">Reload this assignment receipt</a></p>`,
+    `${notice()}<h1>Private workflow review assignment</h1><dl><dt>Grant reference</dt><dd data-grant-id="${escape(grant.grantId)}">${escape(grant.grantId)}</dd><dt>Request</dt><dd>${escape(grant.requestId)}</dd><dt>Assigned moderator</dt><dd>${escape(grant.moderatorId)}</dd><dt>Reading starts</dt><dd>${timeTag(grant.startsAt)}</dd><dt>Reading ends</dt><dd>${timeTag(grant.expiresAt)}</dd></dl><p>Assignment status: ${escape(grant.state ?? (grant.revokedAt ? "revoked" : "recorded"))}. This receipt contains no private note.</p><p><a href="${base}/receipts/${escape(grant.grantId)}">Reload this assignment receipt</a></p>`,
   );
 }
 export function mountWorkflowReviewStaffRoutes(
@@ -144,7 +145,7 @@ export function mountWorkflowReviewStaffRoutes(
     return send(res, result.deadline, () =>
       page(
         "My private workflow review reference",
-        `${notice()}<h1>My private workflow review reference</h1><p>${escape(result.actorId)}</p><p>Current staff access ends ${escape(result.expiresAt)}. A reference alone permits no reading.</p>`,
+        `${notice()}<h1>My private workflow review reference</h1><p>${escape(result.actorId)}</p><p>Current staff access ends ${timeTag(result.expiresAt)}. A reference alone permits no reading.</p>`,
       ),
     );
   });
@@ -170,7 +171,7 @@ export function mountWorkflowReviewStaffRoutes(
     return send(res, result.deadline, () =>
       page(
         "Check private workflow assignment",
-        `${notice()}<h1>Check private workflow assignment</h1><p>${escape(result.workflowId)} · version ${result.workflowVersion} · note revision ${result.revision}</p><p>Request ${escape(result.requestId)} · moderator ${escape(result.moderatorId)}</p><p>Reading starts ${escape(result.startsAt)}</p><p>Reading ends ${escape(result.expiresAt)}</p><form method="post" action="${base}/assign">${hidden(nonce(res))}${field("checked", result.checked)}${field("operationId", randomUUID())}<label><input type="checkbox" name="confirm" value="yes" required> Assign only this exact private note to the checked moderator until the fixed deadline</label><button type="submit">Assign private workflow review</button></form>`,
+        `${notice()}<h1>Check private workflow assignment</h1><p>${escape(result.workflowId)} · version ${result.workflowVersion} · note revision ${result.revision}</p><p>Request ${escape(result.requestId)} · moderator ${escape(result.moderatorId)}</p><p>Reading starts ${timeTag(result.startsAt)}</p><p>Reading ends ${timeTag(result.expiresAt)}</p><form method="post" action="${base}/assign">${hidden(nonce(res))}${field("checked", result.checked)}${field("operationId", randomUUID())}<label><input type="checkbox" name="confirm" value="yes" required> Assign only this exact private note to the checked moderator until the fixed deadline</label><button type="submit">Assign private workflow review</button></form>`,
       ),
     );
   });
@@ -242,7 +243,7 @@ export function mountWorkflowReviewStaffRoutes(
     return send(res, result.deadline, () =>
       page(
         "My assigned private workflow reviews",
-        `${notice()}<h1>My assigned private workflow reviews</h1>${result.entries.length ? `<ul>${result.entries.map((r) => `<li><a href="${read}/${escape(r.grantId)}">${escape(r.workflowId)} · version ${r.workflowVersion} · revision ${r.revision}</a> · reading starts ${escape(r.startsAt)} · reading ends ${escape(r.expiresAt)}</li>`).join("")}</ul>` : "<p>No currently permitted exact assignments on this page.</p>"}${result.next ? `<a href="${read}?cursor=${encodeURIComponent(result.next)}">Next assigned reviews</a>` : ""}`,
+        `${notice()}<h1>My assigned private workflow reviews</h1>${result.entries.length ? `<ul>${result.entries.map((r) => `<li><a href="${read}/${escape(r.grantId)}">${escape(r.workflowId)} · version ${r.workflowVersion} · revision ${r.revision}</a> · reading starts ${timeTag(r.startsAt)} · reading ends ${timeTag(r.expiresAt)}</li>`).join("")}</ul>` : "<p>No currently permitted exact assignments on this page.</p>"}${result.next ? `<a href="${read}?cursor=${encodeURIComponent(result.next)}">Next assigned reviews</a>` : ""}`,
       ),
     );
   });
@@ -252,7 +253,7 @@ export function mountWorkflowReviewStaffRoutes(
     return send(res, result.deadline, () =>
       page(
         "Assigned private workflow note",
-        `${notice()}<h1>Assigned private workflow note</h1><p>${escape(result.workflowId)} · version ${result.workflowVersion} · revision ${result.revision} · reading ends ${escape(result.expiresAt)}</p><pre>${escape(result.note)}</pre>`,
+        `${notice()}<h1>Assigned private workflow note</h1><p>${escape(result.workflowId)} · version ${result.workflowVersion} · revision ${result.revision} · reading ends ${timeTag(result.expiresAt)}</p><pre>${escape(result.note)}</pre>`,
       ),
     );
   });

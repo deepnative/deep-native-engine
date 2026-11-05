@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import { defaultWindow } from "./staff-window.ts";
@@ -31,10 +32,7 @@ function historyPath(requestId: string, key?: string, after?: string) {
   if (after !== undefined) path += `&after=${encodeURIComponent(after)}`;
   return path;
 }
-function time(value: Date) {
-  const text = escape(value.toISOString());
-  return `<time datetime="${text}">${text}</time>`;
-}
+const time = (value: Date) => timeTag(value);
 function assignmentForm(
   csrf: string,
   attempt: AssignmentAttempt,

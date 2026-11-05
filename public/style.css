@@ -212,6 +212,9 @@
 body {
   min-height: 100vh;
   margin: 0;
+  /* Split a word only when it is wider than its whole line. Unlike "anywhere",
+     this also keeps columns from shrinking until ordinary words split. */
+  overflow-wrap: break-word;
   background: var(--paper);
   color: var(--ink);
   accent-color: var(--accent);
@@ -592,7 +595,7 @@ progress {
   margin: 8px 0;
 }
 .assignment-preparation li {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .assignment-preparation ul ul {
   margin-top: 12px;
@@ -784,7 +787,7 @@ progress {
 }
 .saved-answer {
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   padding: 12px;
   border-left: 2px solid var(--line);
   font-size: 16px;
@@ -920,7 +923,7 @@ footer span {
 }
 .content-text {
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font: inherit;
   line-height: 1.65;
 }
@@ -934,23 +937,23 @@ footer span {
 }
 .circle-discussion-nav a {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* Exact-source feedback stays readable without expanding a narrow viewport. */
 .sample-feedback {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* Long allowed sample titles stay readable through queueing and discovery. */
 .private-evidence,
 .reviewer-worklist {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* Reviewed source URLs and hashes must not expand the narrow reader viewport. */
 .reading dd {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* Landing and learning retain their wider layout within the shared identity. */
@@ -1241,7 +1244,7 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 .invoice-controls {
   max-width: 760px;
   margin-inline: auto;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .invoice-workspace h1,
 .invoice-document h1 {
@@ -1523,7 +1526,7 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 }
 
 .member-display-name {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 /* The learner table needs the page width, so references stay readable. */
 .portal-page.administrator-console {
@@ -1575,7 +1578,7 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 }
 .role-holders td:first-child {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .role-list {
   list-style: none;
@@ -1626,7 +1629,7 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   margin: 42px 0 70px;
 }
 .account-page code {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .account-links {
   display: flex;
@@ -1798,7 +1801,7 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 .portal-page {
   max-width: none;
   margin: 42px 0 70px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .portal-intro h1 {
   font-size: clamp(34px, 5vw, 52px);
@@ -1830,7 +1833,7 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .portal-card h2 {
   font-size: 22px;
@@ -1864,7 +1867,7 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 .portal-reference code,
 .portal-page code,
 .portal-workspace code {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .portal-columns {
   display: grid;
@@ -1934,7 +1937,7 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   margin-top: 0;
 }
 .portal-workspace {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   padding-block: 12px 56px;
 }
 .portal-workspace > .portal-actions {
@@ -2094,7 +2097,7 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   border-bottom: 1px solid var(--line, #d9dee8);
   text-align: left;
   vertical-align: top;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .diagnostics-table th {
   font-weight: 600;
@@ -2145,4 +2148,9 @@ p:has(> a.button) {
 }
 .learning-grid {
   margin-bottom: 24px;
+}
+
+/* Short codes and dates such as FND-003 never split at their hyphen. */
+.no-break {
+  white-space: nowrap;
 }

@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import {
   keepCodesTogether,
   noBreak,
+  rangeTag,
   readableDay,
   readableRange,
   readableTime,
@@ -33,8 +34,8 @@ it("READABLE-02 converts to a saved zone across a daylight-saving change and sta
     "November 3, 2030, 1:30 a.m. GMT-5 (America/Toronto)",
   );
   // A date can differ from its UTC date once converted.
-  expect(readableTime("2030-11-03T02:00:00.000Z", "America/Vancouver")).toBe(
-    "November 2, 2030, 7:00 p.m. GMT-7 (America/Vancouver)",
+  expect(readableTime("2030-11-03T02:00:00.000Z", "America/Toronto")).toBe(
+    "November 2, 2030, 10:00 p.m. GMT-4 (America/Toronto)",
   );
 });
 
@@ -79,10 +80,10 @@ it("READABLE-06 shortens a same-day range but keeps both dates otherwise", () =>
     readableRange(
       "2030-11-03T02:00:00.000Z",
       "2030-11-03T09:00:00.000Z",
-      "America/Vancouver",
+      "America/Toronto",
     ),
   ).toBe(
-    "November 2, 2030, 7:00 p.m. GMT-7 (America/Vancouver) to November 3, 2030, 1:00 a.m. GMT-8 (America/Vancouver)",
+    "November 2, 2030, 10:00 p.m. GMT-4 (America/Toronto) to November 3, 2030, 4:00 a.m. GMT-5 (America/Toronto)",
   );
 });
 
@@ -93,6 +94,13 @@ it("READABLE-07 keeps the exact machine value in the datetime attribute", () => 
   expect(timeTag("2030-11-03T05:30:00Z", "America/Toronto")).toBe(
     '<time datetime="2030-11-03T05:30:00.000Z">November 3, 2030, 1:30 a.m. GMT-4 (America/Toronto)</time>',
   );
+});
+
+it("READABLE-07 keeps both exact ends of a range", () => {
+  expect(rangeTag(start, end)).toBe(
+    '<time datetime="2030-11-03T05:30:00.000Z">November 3, 2030, 5:30 a.m.</time> to <time datetime="2030-11-03T06:30:00.000Z">6:30 a.m. UTC</time>',
+  );
+  expect(rangeTag("nope", end)).toBe("Time unavailable");
 });
 
 it("READABLE-08 keeps short codes and dates in free text on one line", () => {
