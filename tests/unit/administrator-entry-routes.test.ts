@@ -836,8 +836,8 @@ it("COACHLINK-01/ROLEADMIN-01 shows the selected learner's coach control and the
       },
     },
   );
-  const http = await (await import("supertest")).default(app);
-  const res = await http
+  const client = await http(app);
+  const res = await client
     .get(`/operator?ownerId=${id}`)
     .set("Cookie", `dne_staff=${credential}`);
   expect(res.status).toBe(200);
@@ -848,7 +848,7 @@ it("COACHLINK-01/ROLEADMIN-01 shows the selected learner's coach control and the
   );
   expect(res.text).toContain(">Invented Coach</option>");
   expect(res.text).toContain('href="/operator/roles"');
-  const admin = await http.get("/admin").set("Cookie", `${COOKIE}=${token}`);
+  const admin = await client.get("/admin").set("Cookie", `${COOKIE}=${token}`);
   expect(admin.text).toContain(
     '<a href="/operator/roles" class="button secondary">Roles</a>',
   );
