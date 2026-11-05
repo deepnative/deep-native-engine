@@ -2604,6 +2604,15 @@
       "expected": "The owner's own admin role has no remove button; the coach sees only the assigned learner and the unassigned owner sees nobody; after removal the coach is refused and the assignment is gone; each change is audited; no sideways scrolling",
       "issues": [684],
       "critical": true
+    },
+    {
+      "id": "L293",
+      "actor": "Visitor signing up on the demo site",
+      "preconditions": "Dedicated synthetic PostgreSQL database, demo site enabled, port0 server; desktop/mobile Chromium",
+      "steps": "SIGNUPCOPY-01 and DEMOSITE-02: read the sign-up form on the home page, then open starter guidance as a member",
+      "expected": "Sign-up says the email is the username and never says no email is needed; the styled demo banner is the first thing on the starter guidance page; no sideways scrolling",
+      "issues": [686],
+      "critical": true
     }
   ],
   "fullMvp": [
