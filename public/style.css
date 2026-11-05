@@ -1654,9 +1654,9 @@ footer {
     max-width: none;
     display: grid;
     grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-    /* The last row takes the profile's extra height, so sign-out follows
-       email directly. */
-    grid-template-rows: auto auto auto 1fr;
+    /* The last row takes the profile's extra height, so each section on the
+       left follows the one above it directly. */
+    grid-template-rows: auto auto auto auto 1fr;
     column-gap: 56px;
     align-items: start;
   }
@@ -1668,7 +1668,7 @@ footer {
   }
   .account-page > .profile-form {
     grid-column: 2;
-    grid-row: 2 / span 3;
+    grid-row: 2 / span 4;
   }
 }
 

@@ -217,6 +217,12 @@ test("[L213] email verification restores the exact saved member in another brows
       expect(profile.x).toBeGreaterThan(email.x + accountWidth / 3);
       expect(Math.abs(profile.y - email.y)).toBeLessThan(4);
       expect(signOut.y - email.y).toBeLessThan(400);
+      // ACCT-PLAIN-01: the left column has no empty space before Delete, even
+      // though the profile beside it is much taller.
+      const records = await box("Your records");
+      expect((await box("Delete your account")).y - records.y).toBeLessThan(
+        250,
+      );
       // ACCT-LAYOUT-03/04: the intro uses the page width, so each paragraph
       // stays on one line and the account links share one row.
       const introLines = await fresh
