@@ -913,6 +913,19 @@ it("escapes private proposal text and never renders a publish action", () => {
   expect(
     moderationPage([], "csrf", new Date("2026-09-25T12:00:00Z")),
   ).toContain("No submitted proposals");
+  // CONTRIB-CONTACT-01: moderators see the review contact members are given.
+  expect(
+    moderationPage([], "csrf", new Date("2026-09-25T12:00:00Z"), {
+      nextCursor: null,
+      continued: false,
+      memberContributions: true,
+    }),
+  ).toContain(
+    'Members are given <a href="mailto:info@deepnative.io">info@deepnative.io</a> as the contribution review contact',
+  );
+  expect(
+    moderationPage([], "csrf", new Date("2026-09-25T12:00:00Z")),
+  ).not.toContain("info@deepnative.io");
   expect(
     moderationPage(
       [

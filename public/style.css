@@ -953,25 +953,19 @@ footer span {
   overflow-wrap: anywhere;
 }
 
-/* Landing and learning retain their wider layout within the shared identity. */
-body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
-  .site-header,
-body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
-  main,
-body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
-  footer {
+/* PAGEFRAME-01: every page shares one frame, so the header stays put between pages. */
+.site-header,
+main,
+footer {
   max-width: 1280px;
 }
-body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
-  .site-header {
+.site-header {
   min-height: 92px;
 }
-body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
-  .brand {
+.brand {
   letter-spacing: -0.02em;
 }
-body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
-  .preview-tag {
+.preview-tag {
   letter-spacing: 0.08em;
 }
 .welcome-page h1,
@@ -1211,16 +1205,12 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   }
 }
 @media (max-width: 420px) {
-  body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
-    .site-header,
-  body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
-    main,
-  body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
-    footer {
+  .site-header,
+  main,
+  footer {
     padding-inline: 20px;
   }
-  body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
-    .site-header {
+  .site-header {
     flex-wrap: wrap;
     align-content: center;
     gap: 12px;
