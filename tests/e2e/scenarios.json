@@ -2634,6 +2634,15 @@
     },
     {
       "id": "L296",
+      "actor": "Administrator noticing a member's waiting support request",
+      "preconditions": "Dedicated synthetic PostgreSQL database, administrator entry and support assignment enabled, port0 server; desktop/mobile Chromium",
+      "steps": "WAITWORK-01/02/09: a member sends a private support request; a verified owner enters administration and reads Work waiting; an invented operator is assigned; the owner reloads the console",
+      "expected": "The console shows one waiting support request with no member text and says no support operator is set up; its link opens the support inbox; after assignment the request counts as assigned, not waiting; no sideways page scrolling",
+      "issues": [39],
+      "critical": true
+    },
+    {
+      "id": "L297",
       "actor": "Members following a circle conversation",
       "preconditions": "Dedicated synthetic PostgreSQL database, circle discussion enabled, port0 server; two members in separate desktop/mobile Chromium contexts",
       "steps": "FOLLOW-01..04, 06: one member asks two questions; another reads them, replies twice to one; the asker checks Circles, follows the link to their questions, opens the conversation; the replier withdraws one reply and the asker checks again",

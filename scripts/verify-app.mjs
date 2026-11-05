@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { watchInterruption } from "./interruption.mjs";
 import {
   mkdirSync,
   readFileSync,
@@ -199,6 +200,7 @@ function source(dir) {
     p.isDirectory() ? source(`${dir}/${p.name}`) : [`${dir}/${p.name}`],
   );
 }
+const interruption = watchInterruption();
 try {
   mkdirSync("artifacts", { recursive: true });
   for (const item of [
@@ -282,15 +284,18 @@ try {
     path.join(tmpdir(), "dne-private-evidence-"),
   );
   env.DNE_TEST_PRIVATE_STORAGE_ROOT = privateStorageRoot;
+  await interruption.check();
   run("npm", ["run", "test:integration"], env);
   stage = "integration test evidence";
   report.integrationTests = assertUnitResults(read("integration-results.json"));
+  await interruption.check();
   run("npm", ["run", "test:e2e"], env);
   stage = "browser journey evidence";
   report.journeys = assertJourneys(
     JSON.parse(readFileSync("tests/e2e/scenarios.json", "utf8")),
     read("e2e-results.json"),
   );
+  await interruption.check();
   run("npm", ["run", "test:e2e:cross-browser"], env);
   stage = "local cross-browser keyboard journey evidence";
   report.crossBrowserKeyboardJourney = assertCrossBrowserJourney(
@@ -298,12 +303,14 @@ try {
     JSON.parse(readFileSync("tests/e2e/scenarios.json", "utf8")),
     read("e2e-cross-browser-results.json"),
   );
+  await interruption.check();
   stage = "provisional test database setup";
   provisionalName = `dne_test_${randomBytes(16).toString("hex")}`;
   await admin.query(`CREATE DATABASE "${provisionalName}"`);
   provisionalCreated = true;
   const provisionalUrl = new URL(url);
   provisionalUrl.pathname = `/${provisionalName}`;
+  await interruption.check();
   run("npm", ["run", "test:e2e:provisional"], {
     ...env,
     DNE_TEST_DATABASE_URL: provisionalUrl.toString(),
@@ -313,7 +320,9 @@ try {
     JSON.parse(readFileSync("tests/e2e/scenarios.json", "utf8")),
     read("e2e-provisional-results.json"),
   );
+  await interruption.check();
   run("npm", ["audit", "--omit=dev", "--audit-level=high"]);
+  await interruption.check();
   report.exitStatus = report.databaseError ? 1 : 0;
 } catch {
   report.error = `Verification failed during ${stage}.`;
@@ -358,5 +367,6 @@ try {
     report.exitStatus = 1;
     console.error("Application verification report could not be written.");
   }
+  interruption.release();
   process.exitCode = report.exitStatus;
 }

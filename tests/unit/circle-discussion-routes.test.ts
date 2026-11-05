@@ -778,3 +778,25 @@ it("FOLLOW-05 links my question to its conversation only while it has a count", 
     expect(page.text).not.toContain(`${root}/threads/${key}"`);
   });
 });
+
+it("GAPS-06 returns a reply to its thread and a new question to the member's contributions", async () => {
+  const f = fixture();
+  f.mocks.post.mockResolvedValue({ kind: "ready", value: post });
+  await withLoopback(f.application, async (server) => {
+    const reply = await request(server)
+      .post(root + "/posts")
+      .type("form")
+      .send({
+        idempotencyKey: key,
+        body: "Invented reply",
+        rootId: id,
+        confirm: "yes",
+      });
+    expect(reply.headers.location).toBe(`${root}/threads/${id}`);
+    const question = await request(server)
+      .post(root + "/posts")
+      .type("form")
+      .send({ idempotencyKey: key, body: "Invented question", confirm: "yes" });
+    expect(question.headers.location).toBe(`${root}/owned`);
+  });
+});

@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { databaseMoment as utc, timeTag } from "./display-time.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
@@ -14,7 +15,8 @@ import {
 } from "./circle-discussion.ts";
 import { escape, hidden, page } from "./views.ts";
 
-const warning = `<p class="eyebrow">INVENTED LOCAL CIRCLE · UNREVIEWED</p><p>Share invented examples only. No private exercise or evidence is copied here. This sandbox has no staffed moderation, response-time promise, qualified review, AI provider or payment service.</p>`;
+const warning = () =>
+  `<p class="eyebrow">${hostingText("INVENTED LOCAL CIRCLE", "INVENTED SAMPLE CIRCLE")} · UNREVIEWED</p><p>Share invented examples only. No private exercise or evidence is copied here. ${hostingText("This sandbox", "This sample circle")} has no staffed moderation, response-time promise, qualified review, AI provider or payment service.</p>`;
 const rules = `<details><summary>Rules, privacy and review limits</summary><p>Use invented information only. Keep personal, client, private assignment and evidence text out of shared contributions. Keep discussion respectful and relevant; report the exact shared item for privacy, conduct or off-topic concerns. A current moderator needs a finite grant for this exact circle to hide or restore a contribution.</p><p>Leaving or withdrawing sharing removes your text from peer views; a later choice does not republish old contributions. Withdrawing a contribution removes its body. Content-free decision records remain part of your private retained history until account deletion. Downloading a notice saves a copy on your device that account deletion cannot remove.</p><p>You may request reconsideration of the latest hidden decision while your contribution and its question remain deliberately shared in this circle. A structured request is not a promise of response, independent review or qualified judgment. You may withdraw a pending request. Leaving, withdrawing sharing or withdrawing text removes staff availability; your content-free appeal history remains private until account deletion. A notice download alone is not an appeal or proof of human review.</p></details>`;
 const base = (circle: string) =>
   `/circles/${encodeURIComponent(circle)}/discussion`;
@@ -22,7 +24,7 @@ function shell(circle: string, title: string, body: string) {
   const url = base(circle);
   return page(
     title,
-    `<nav class="breadcrumb circle-discussion-nav"><a href="/circles">Local circles</a> · <a href="${url}">Questions</a> · <a href="${url}/owned">Your contributions</a> · <a href="${url}/reports">Your sample reports</a> · <a href="${url}/reconcile">Check an original form key</a> · <a href="${url}/choice">Sharing choice</a></nav><section class="reading">${warning}<h1>${escape(title)}</h1>${rules}${body}</section>`,
+    `<nav class="breadcrumb circle-discussion-nav"><a href="/circles">${hostingText("Local circles", "Learning circles")}</a> · <a href="${url}">Questions</a> · <a href="${url}/owned">Your contributions</a> · <a href="${url}/reports">Your sample reports</a> · <a href="${url}/reconcile">Check an original form key</a> · <a href="${url}/choice">Sharing choice</a></nav><section class="reading">${warning()}<h1>${escape(title)}</h1>${rules}${body}</section>`,
   );
 }
 function confirmation(text: string) {
@@ -142,7 +144,7 @@ function result<T>(
       staff
         ? page(
             "Circle request unavailable",
-            `<section class="reading">${warning}<h1>Circle request unavailable</h1><p>The request was not accepted (${escape(value.kind)}). Your moderation grant for this circle may not have started, may have ended or may have been revoked. Ask the administrator to check the exact grant before trying again.</p><p><a href="/staff">Your staff tools</a></p></section>`,
+            `<section class="reading">${warning()}<h1>Circle request unavailable</h1><p>The request was not accepted (${escape(value.kind)}). Your moderation grant for this circle may not have started, may have ended or may have been revoked. Ask the administrator to check the exact grant before trying again.</p><p><a href="/staff">Your staff tools</a></p></section>`,
           )
         : shell(
             circle,
@@ -291,7 +293,7 @@ export function registerCircleDiscussion(
         res.send(
           page(
             "Check original circle submission",
-            `<section class="reading">${warning}<h1>Check original circle submission</h1>${content}<p><a href="${url}">${moderator ? "Inspect current report worklist" : "Inspect your retained contributions"}</a></p></section>`,
+            `<section class="reading">${warning()}<h1>Check original circle submission</h1>${content}<p><a href="${url}">${moderator ? "Inspect current report worklist" : "Inspect your retained contributions"}</a></p></section>`,
           ),
         );
       }),
@@ -305,7 +307,7 @@ export function registerCircleDiscussion(
         shell(
           circle,
           "Choose circle sharing",
-          `<p>Joining a circle does not give permission to share discussion text. This choice applies only to this circle, current membership generation ${escape(value.generation)}, and policy <strong>${CIRCLE_DISCUSSION_POLICY}</strong>. Leaving or withdrawing the choice removes your contributions from peer views. A later choice does not republish older contributions.</p>${value.active ? `<p role="status">Your current sharing choice is active.</p><form method="post" action="${base(circle)}/choice/withdraw">${hidden(csrf)}${confirmation("Withdraw this circle's sharing permission.")}<button type="submit">Withdraw sharing permission</button></form>` : `<form method="post" action="${base(circle)}/choice">${hidden(csrf)}<input type="hidden" name="generation" value="${escape(value.generation)}"><input type="hidden" name="policyVersion" value="${CIRCLE_DISCUSSION_POLICY}">${originalKey(circle, "choice")}${confirmation("I choose invented local discussion sharing under this exact circle policy.")}<button type="submit">Enable invented circle sharing</button></form>`}`,
+          `<p>Joining a circle does not give permission to share discussion text. This choice applies only to this circle, ${hostingText(`current membership generation ${escape(value.generation)}, and policy <strong>${CIRCLE_DISCUSSION_POLICY}</strong>`, "your current membership and its current sharing policy")}. Leaving or withdrawing the choice removes your contributions from peer views. A later choice does not republish older contributions.</p>${value.active ? `<p role="status">Your current sharing choice is active.</p><form method="post" action="${base(circle)}/choice/withdraw">${hidden(csrf)}${confirmation("Withdraw this circle's sharing permission.")}<button type="submit">Withdraw sharing permission</button></form>` : `<form method="post" action="${base(circle)}/choice">${hidden(csrf)}<input type="hidden" name="generation" value="${escape(value.generation)}"><input type="hidden" name="policyVersion" value="${CIRCLE_DISCUSSION_POLICY}">${originalKey(circle, "choice")}${confirmation(hostingText("I choose invented local discussion sharing under this exact circle policy.", "I choose to share invented examples in this circle under this exact policy."))}<button type="submit">Enable invented circle sharing</button></form>`}`,
         ),
       );
     }),
@@ -622,7 +624,7 @@ export function registerCircleDiscussion(
       res.send(
         page(
           "Scoped reconsideration requests",
-          `<section class="reading">${warning}<h1>Scoped reconsideration requests</h1><p>Your current finite grant applies only to this circle and existing test purpose. Only currently shared eligible source is shown. The original moderator may reconsider a decision; this is not independent review, staffed coverage or a response promise.</p><p><a href="${url}/reports">Inspect current reports</a> · <a href="${url}/reconcile">Check an original action key</a></p>${rows ? `<ul>${rows}</ul>` : "<p>No currently available reconsideration requests on this page.</p>"}${value.nextCursor ? `<p><a href="${url}/appeals?cursor=${encodeURIComponent(value.nextCursor)}">Next page</a></p>` : ""}</section>`,
+          `<section class="reading">${warning()}<h1>Scoped reconsideration requests</h1><p>Your current finite grant applies only to this circle and existing test purpose. Only currently shared eligible source is shown. The original moderator may reconsider a decision; this is not independent review, staffed coverage or a response promise.</p><p><a href="${url}/reports">Inspect current reports</a> · <a href="${url}/reconcile">Check an original action key</a></p>${rows ? `<ul>${rows}</ul>` : "<p>No currently available reconsideration requests on this page.</p>"}${value.nextCursor ? `<p><a href="${url}/appeals?cursor=${encodeURIComponent(value.nextCursor)}">Next page</a></p>` : ""}</section>`,
         ),
       );
     }),
@@ -718,7 +720,14 @@ export function registerCircleDiscussion(
           req.body.rootId,
         ),
       );
-      if (value) res.redirect(303, `${base(circle)}/owned`);
+      // GAPS-06: a reply returns to its conversation.
+      if (value)
+        res.redirect(
+          303,
+          req.body.rootId
+            ? `${base(circle)}/threads/${encodeURIComponent(req.body.rootId)}`
+            : `${base(circle)}/owned`,
+        );
     }),
   );
   app.post(
@@ -798,7 +807,7 @@ export function registerCircleDiscussion(
       res.send(
         page(
           "Synthetic circle report worklist",
-          `<section class="reading">${warning}<h1>Synthetic circle report worklist</h1><p><a href="${url}/reconcile">Check an original action key</a> · <a href="${url}/appeals">Inspect reconsideration requests</a></p><p>Your current grant applies only to this exact circle and test purpose. Reporter identity is not displayed. Actions do not establish staffed moderation, appeal coverage or qualified approval.</p>${rows ? `<ul>${rows}</ul>` : "<p>No reports available on this page.</p>"}${value.nextCursor ? `<p><a href="${url}/reports?cursor=${encodeURIComponent(value.nextCursor)}">Next page</a></p>` : ""}</section>`,
+          `<section class="reading">${warning()}<h1>Synthetic circle report worklist</h1><p><a href="${url}/reconcile">Check an original action key</a> · <a href="${url}/appeals">Inspect reconsideration requests</a></p><p>Your current grant applies only to this exact circle and test purpose. Reporter identity is not displayed. Actions do not establish staffed moderation, appeal coverage or qualified approval.</p>${rows ? `<ul>${rows}</ul>` : "<p>No reports available on this page.</p>"}${value.nextCursor ? `<p><a href="${url}/reports?cursor=${encodeURIComponent(value.nextCursor)}">Next page</a></p>` : ""}</section>`,
         ),
       );
     }),

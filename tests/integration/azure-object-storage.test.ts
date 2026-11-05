@@ -94,7 +94,7 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(async () => {
   try {
-    if (created) docker("rm", "--force", name);
+    if (created) docker("rm", "--force", "--volumes", name);
   } finally {
     if (directory) await rm(directory, { recursive: true, force: true });
   }

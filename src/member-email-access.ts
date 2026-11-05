@@ -1,6 +1,11 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { hash } from "./store.ts";
+import {
+  UNKNOWN_VISITOR,
+  type VisitorAddress,
+  type VisitorScope,
+} from "./visitor-address.ts";
 
 export type EmailPurpose = "attach" | "sign_in";
 export interface MemberEmailSender {
@@ -8,8 +13,8 @@ export interface MemberEmailSender {
   /** #665: tell an address no account uses how to start. No sign-in link. */
   sendNoAccount?(address: string, startLink: string): Promise<void>;
 }
-/** Notices to unused addresses, per address and in all, in any hour. */
-const NOTICE_LIMITS = { perAddress: 1, total: 20 };
+/** Notices to unused addresses, per address, per visitor and in all, in any hour. */
+const NOTICE_LIMITS = { perAddress: 1, perVisitor: 3, total: 20 };
 // NOTICE-RETAIN-01: long enough for a support lookup, then the hash is gone.
 const NOTICE_RETENTION = "30 days";
 export interface MemberEmailAccess {
@@ -24,7 +29,7 @@ export interface MemberEmailAccess {
     memberToken: string,
     address: string,
   ): Promise<"sent" | "unavailable">;
-  requestSignIn(address: string): Promise<void>;
+  requestSignIn(address: string, visitor?: VisitorAddress): Promise<void>;
   consume(
     code: string,
     currentToken?: string,
@@ -144,7 +149,8 @@ type RequestOutcome =
   | "pending"
   | "rate_limited"
   | "no_account_notice"
-  | "no_account_limited";
+  | "no_account_limited"
+  | "no_account_visitor_limited";
 /**
  * EMAIL-DIAG-01: one line an operator can read for each request. It carries no
  * address, hash, link, member identifier or provider message text.
@@ -153,8 +159,14 @@ function logRequest(
   purpose: EmailPurpose,
   outcome: RequestOutcome,
   error?: unknown,
+  visitorScope?: VisitorScope,
 ) {
-  const line = { event: "member_email_request", purpose, outcome };
+  const line = {
+    event: "member_email_request",
+    purpose,
+    outcome,
+    ...(visitorScope ? { visitorScope } : {}),
+  };
   if (outcome !== "send_failed") return console.info(JSON.stringify(line));
   const { name, code } = Object(error) as { name?: unknown; code?: unknown };
   console.error(
@@ -175,10 +187,15 @@ export function memberEmailAccess(
   sender: MemberEmailSender,
   origin: string,
 ): MemberEmailAccess {
+  // NOTICE-VISITOR-04: IPv4 is small enough to reverse an unkeyed hash, so the
+  // key stays in memory. Counts restart with the process; old rows then match
+  // nothing and no longer identify anyone.
+  const visitorKey = randomBytes(32);
   async function request(
     purpose: EmailPurpose,
     address: string,
     memberToken?: string,
+    visitor: VisitorAddress = UNKNOWN_VISITOR,
   ): Promise<"sent" | "unavailable"> {
     const normalized = normalizedEmail(address);
     if (!normalized) {
@@ -263,7 +280,7 @@ export function memberEmailAccess(
       },
     );
     if (queued === "not_bound" && sender.sendNoAccount) {
-      await notice(normalized, digest);
+      await notice(normalized, digest, visitor);
       return "unavailable";
     }
     if (queued !== "queued") {
@@ -286,42 +303,70 @@ export function memberEmailAccess(
       return "unavailable";
     }
   }
-  async function notice(address: string, digest: string) {
-    const id = await transaction(pool, async (client) => {
-      // One lock for every notice keeps both hourly counts exact.
+  async function notice(
+    address: string,
+    digest: string,
+    visitor: VisitorAddress,
+  ) {
+    const visitorHash = createHmac("sha256", visitorKey)
+      .update(visitor.key)
+      .digest("hex");
+    const recorded = await transaction(pool, async (client) => {
+      // One lock for every notice keeps all the hourly counts exact.
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended('member_email_notices',0))",
       );
+      // NOTICE-VISITOR-04: these rows have no use once they stop counting.
+      await client.query(
+        "DELETE FROM member_email_notice_visitors WHERE created_at<=clock_timestamp()-INTERVAL '1 hour'",
+      );
       const recent = (
-        await client.query<{ total: number; mine: number }>(
-          `SELECT count(*)::int AS total, count(*) FILTER (WHERE email_hash=$1)::int AS mine
+        await client.query<{ total: number; mine: number; visitor: number }>(
+          `SELECT count(*)::int AS total, count(*) FILTER (WHERE email_hash=$1)::int AS mine,
+             (SELECT count(*)::int FROM member_email_notice_visitors WHERE visitor_hash=$2) AS visitor
            FROM member_email_notices WHERE created_at>clock_timestamp()-INTERVAL '1 hour'`,
-          [digest],
+          [digest, visitorHash],
         )
       ).rows[0]!;
       if (
         recent.mine >= NOTICE_LIMITS.perAddress ||
         recent.total >= NOTICE_LIMITS.total
       )
-        return null;
+        return "no_account_limited" as const;
+      if (recent.visitor >= NOTICE_LIMITS.perVisitor)
+        return "no_account_visitor_limited" as const;
       await client.query(
         `DELETE FROM member_email_notices WHERE created_at<clock_timestamp()-INTERVAL '${NOTICE_RETENTION}'`,
       );
-      return (
-        await client.query<{ id: string }>(
-          "INSERT INTO member_email_notices(email_hash) VALUES($1) RETURNING id",
-          [digest],
-        )
-      ).rows[0]!.id;
+      return {
+        notice: (
+          await client.query<{ id: string }>(
+            "INSERT INTO member_email_notices(email_hash) VALUES($1) RETURNING id",
+            [digest],
+          )
+        ).rows[0]!.id,
+        visitor: (
+          await client.query<{ id: string }>(
+            "INSERT INTO member_email_notice_visitors(visitor_hash) VALUES($1) RETURNING id",
+            [visitorHash],
+          )
+        ).rows[0]!.id,
+      };
     });
-    if (id === null) return logRequest("sign_in", "no_account_limited");
+    if (typeof recorded === "string")
+      return logRequest("sign_in", recorded, undefined, visitor.scope);
     try {
       await sender.sendNoAccount!(address, `${origin}/`);
-      logRequest("sign_in", "no_account_notice");
+      logRequest("sign_in", "no_account_notice", undefined, visitor.scope);
     } catch (error) {
       logRequest("sign_in", "send_failed", error);
       // Nothing reached the inbox, so this request does not count.
-      await pool.query("DELETE FROM member_email_notices WHERE id=$1", [id]);
+      await pool.query("DELETE FROM member_email_notices WHERE id=$1", [
+        recorded.notice,
+      ]);
+      await pool.query("DELETE FROM member_email_notice_visitors WHERE id=$1", [
+        recorded.visitor,
+      ]);
     }
   }
   return {
@@ -346,8 +391,8 @@ export function memberEmailAccess(
       }
     },
     requestAttach: (token, address) => request("attach", address, token),
-    async requestSignIn(address) {
-      await request("sign_in", address);
+    async requestSignIn(address, visitor) {
+      await request("sign_in", address, undefined, visitor);
     },
     async consume(code, currentToken) {
       if (!/^[a-f0-9]{64}$/.test(code)) return { kind: "unavailable" };

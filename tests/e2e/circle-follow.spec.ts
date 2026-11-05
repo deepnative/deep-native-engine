@@ -53,7 +53,7 @@ async function share(page: Page, label: string, body: string, button: string) {
   await page.getByRole("button", { name: button, exact: true }).click();
 }
 
-test("[L296] FOLLOW-01..04, 06 a member can follow a circle conversation", async ({
+test("[L297] FOLLOW-01..04, 06 a member can follow a circle conversation", async ({
   page,
   browser,
 }) => {

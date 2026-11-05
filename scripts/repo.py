@@ -79,7 +79,8 @@ APP_FILES = {
     "scripts/private-preview.mjs", "scripts/private-preview.d.mts",
     # Two explicitly isolated integration lanes; raw union/process/resource
     # invariants are exercised by tooling units and real PostgreSQL evidence.
-    "scripts/integration-runner.mjs", "scripts/browser-runner.mjs",
+    "scripts/integration-runner.mjs", "scripts/browser-runner.mjs", "scripts/interruption.mjs",
+    "scripts/cleanup-test-resources.mjs",
     "scripts/verify-app.mjs", "scripts/check-installed-deps.mjs", "scripts/verify-full-release.mjs", "scripts/full-release-evidence.mjs", "tests/e2e/scenarios.json", "tests/integration/durations.json", "tests/e2e/cross-browser-scenarios.json", "tests/e2e/full-mvp-approval.json", "src/main.ts", "migrations/001-learning.sql",
     "assets/docs/content/circles/preview-circles.json", "public/pages-demo.js", "public/attempt-save.js", "public/member-export.js", "public/evidence-export.js", "public/exercise-error-focus.js",
     "assets/docs/content/events/preview-events.json",

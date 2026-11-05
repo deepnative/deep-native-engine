@@ -413,6 +413,56 @@ it("fails before provisional evidence when the required cross-browser run fails"
   expect(report.provisionalFullMvpEvidence).toBeUndefined();
   expect(doubles.query).toHaveBeenCalledTimes(2);
 });
+it.each(["SIGTERM", "SIGINT"])(
+  "LEFTOVER-07 removes its test database when stopped by %s between steps",
+  async (signal) => {
+    const earlier = process.listeners(signal);
+    let delivered = 0;
+    doubles.spawn.mockImplementation((command, args) => {
+      if (command === "npm" && args[1] === "test:integration")
+        for (const listener of process.listeners(signal))
+          if (!earlier.includes(listener)) {
+            listener(signal);
+            delivered++;
+          }
+      return {
+        status: 0,
+        stdout: command === "git" && args[0] !== "status" ? "a".repeat(40) : "",
+      };
+    });
+    const report = await run();
+    expect(delivered).toBeGreaterThan(0);
+    expect(report.exitStatus).toBe(1);
+    expect(
+      doubles.spawn.mock.calls.some(
+        ([command, args]) => command === "npm" && args[1] === "test:e2e",
+      ),
+    ).toBe(false);
+    expect(
+      doubles.query.mock.calls.filter(([sql]) =>
+        /^DROP DATABASE "dne_test_[a-f0-9]{32}" WITH \(FORCE\)$/.test(sql),
+      ),
+    ).toHaveLength(1);
+    expect(process.listeners(signal)).toEqual(earlier);
+  },
+);
+it("LEFTOVER-08 fails a run stopped during its last step", async () => {
+  const earlier = process.listeners("SIGTERM");
+  doubles.spawn.mockImplementation((command, args) => {
+    if (command === "npm" && args[0] === "audit")
+      for (const listener of process.listeners("SIGTERM"))
+        if (!earlier.includes(listener)) listener("SIGTERM");
+    return {
+      status: 0,
+      stdout: command === "git" && args[0] !== "status" ? "a".repeat(40) : "",
+    };
+  });
+  const report = await run();
+  expect(report.exitStatus).toBe(1);
+  expect(
+    doubles.query.mock.calls.filter(([sql]) => /^DROP/.test(sql)),
+  ).toHaveLength(2);
+});
 it("treats an idle database error as failure without leaking or losing cleanup", async () => {
   doubles.query.mockImplementationOnce(async () => {
     doubles.pool.emit("error", new Error(marker));
