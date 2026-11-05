@@ -6,6 +6,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { Pool, type PoolClient } from "pg";
 import { testPool } from "../support/database.ts";
+import { expectReadableAtNarrowWidth } from "../support/narrow-readability.ts";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 import { app } from "../../src/app.ts";
 import { migrate, store, hash } from "../../src/store.ts";
@@ -1014,6 +1015,11 @@ test("[L292] ROLEADMIN/COACHLINK/DEFCOACH an administrator grants a coach role, 
     await expect(
       page.getByRole("row", { name: /to…@deepnative\.io · not signed up yet/ }),
     ).toBeVisible();
+    // #659: at phone width each Remove button stays one whole word.
+    const roomy = page.viewportSize()!;
+    await page.setViewportSize({ width: 375, height: 812 });
+    await expectReadableAtNarrowWidth(page, "/operator/roles");
+    await page.setViewportSize(roomy);
     await page.screenshot({
       path: test.info().outputPath("roles.png"),
       fullPage: true,

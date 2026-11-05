@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import type {
   AttendanceChecked,
@@ -30,7 +31,7 @@ function attendanceSharing(view: AttendanceMemberView, observedAt: Date) {
         ? "Attendance sharing stopped because the registration is unavailable."
         : +view.permission.expiresAt <= +observedAt
           ? "Attendance permission expired."
-          : `Permission saved until ${view.permission.expiresAt.toISOString()}.`;
+          : `Permission saved until ${timeTag(view.permission.expiresAt)}.`;
 }
 export function attendanceMemberPage(
   csrf: string,
@@ -41,7 +42,7 @@ export function attendanceMemberPage(
   const permission = view.permission;
   const sharing = attendanceSharing(view, observedAt);
   const observation = view.observation
-    ? `<p role="status">Present observation recorded · ${view.observation.recordedAt.toISOString()} · ${escape(view.observation.attribution)}.</p><form method="post" action="${attendancePath(view.registrationId)}/remove-check">${hidden(escape(csrf))}<input type="hidden" name="observationId" value="${escape(view.observation.id)}"><button type="submit">Check removal of my observation</button></form>`
+    ? `<p role="status">Present observation recorded · ${timeTag(view.observation.recordedAt)} · ${escape(view.observation.attribution)}.</p><form method="post" action="${attendancePath(view.registrationId)}/remove-check">${hidden(escape(csrf))}<input type="hidden" name="observationId" value="${escape(view.observation.id)}"><button type="submit">Check removal of my observation</button></form>`
     : `<p role="status">No observation recorded.</p>`;
   const request =
     view.creationEnabled &&
@@ -57,7 +58,7 @@ export function attendanceMemberPage(
       : "";
   return page(
     "Private attendance receipt",
-    `<section class="reading">${notice}<h1>Private attendance receipt</h1>${details(view.registrationId, view.title, view.eventVersion)}<p>Event window: ${view.eventStartsAt.toISOString()} to ${view.eventEndsAt.toISOString()} (UTC).</p><p role="status">${escape(sharing)}</p>${observation}${permission && !permission.withdrawnAt && permission.administratorId ? `<p>Share only this permission reference with your selected administrator: <code style="overflow-wrap:anywhere">${escape(permission.id)}</code>.</p>` : ""}${request}${withdrawal}<p><a href="/events/registrations/${encodeURIComponent(view.registrationId)}">Your registration</a> · <a href="/events/attendance">My private attendance history</a> · <a href="/events/registrations">Registration history</a> · <a href="/member/export">Download your private records</a></p></section>`,
+    `<section class="reading">${notice}<h1>Private attendance receipt</h1>${details(view.registrationId, view.title, view.eventVersion)}<p>Event window: ${timeTag(view.eventStartsAt)} to ${timeTag(view.eventEndsAt)} (UTC).</p><p role="status">${escape(sharing)}</p>${observation}${permission && !permission.withdrawnAt && permission.administratorId ? `<p>Share only this permission reference with your selected administrator: <code style="overflow-wrap:anywhere">${escape(permission.id)}</code>.</p>` : ""}${request}${withdrawal}<p><a href="/events/registrations/${encodeURIComponent(view.registrationId)}">Your registration</a> · <a href="/events/attendance">My private attendance history</a> · <a href="/events/registrations">Registration history</a> · <a href="/member/export">Download your private records</a></p></section>`,
   );
 }
 export function attendancePermissionConfirm(
@@ -72,7 +73,7 @@ export function attendancePermissionConfirm(
   };
   return page(
     "Confirm attendance permission",
-    `<section class="reading">${notice}<h1>Confirm attendance permission</h1>${details(checked.registrationId, checked.title, checked.eventVersion)}<p>Selected administrator: <span style="overflow-wrap:anywhere">${escape(checked.administratorId)}</span>.</p><p>Exact observation window: ${escape(checked.startsAt)} to ${escape(checked.expiresAt)} (UTC).</p><form method="post" action="${attempt.target}">${hidden(escape(csrf))}${attemptFields(attempt)}${confirm("Permit only this selected administrator to record a present observation for this exact registration during this window.")}<button type="submit">Save this attendance permission</button></form><p><a href="${attendancePath(checked.registrationId)}">Back to my receipt</a></p></section>`,
+    `<section class="reading">${notice}<h1>Confirm attendance permission</h1>${details(checked.registrationId, checked.title, checked.eventVersion)}<p>Selected administrator: <span style="overflow-wrap:anywhere">${escape(checked.administratorId)}</span>.</p><p>Exact observation window: ${timeTag(checked.startsAt)} to ${timeTag(checked.expiresAt)} (UTC).</p><form method="post" action="${attempt.target}">${hidden(escape(csrf))}${attemptFields(attempt)}${confirm("Permit only this selected administrator to record a present observation for this exact registration during this window.")}<button type="submit">Save this attendance permission</button></form><p><a href="${attendancePath(checked.registrationId)}">Back to my receipt</a></p></section>`,
   );
 }
 export function attendanceStaffHome(
@@ -97,7 +98,7 @@ export function attendanceObservationConfirm(
   };
   return page(
     "Confirm a present observation",
-    `<section class="reading">${notice}<h1>Confirm a present observation</h1><p>Exact event: ${escape(checked.eventId)} · version ${checked.eventVersion}.</p><p>Exact registration: <span style="overflow-wrap:anywhere">${escape(checked.registrationId)}</span>.</p><p>Permission window: ${escape(checked.startsAt)} to ${escape(checked.expiresAt)} (UTC).</p><form method="post" action="${attempt.target}">${hidden(escape(csrf))}${attemptFields(attempt)}${confirm("I personally observed this member present in this exact invented local rehearsal. This is not a qualified assessment.")}<button type="submit">Record present observation</button></form><p><a href="/operator/event-attendance">Attendance tools</a></p></section>`,
+    `<section class="reading">${notice}<h1>Confirm a present observation</h1><p>Exact event: ${escape(checked.eventId)} · version ${checked.eventVersion}.</p><p>Exact registration: <span style="overflow-wrap:anywhere">${escape(checked.registrationId)}</span>.</p><p>Permission window: ${timeTag(checked.startsAt)} to ${timeTag(checked.expiresAt)} (UTC).</p><form method="post" action="${attempt.target}">${hidden(escape(csrf))}${attemptFields(attempt)}${confirm("I personally observed this member present in this exact invented local rehearsal. This is not a qualified assessment.")}<button type="submit">Record present observation</button></form><p><a href="/operator/event-attendance">Attendance tools</a></p></section>`,
   );
 }
 export function attendanceRemovalConfirm(
@@ -118,7 +119,7 @@ export function attendanceRemovalConfirm(
 export function attendanceStaffReceipt(receipt: AttendancePermission) {
   return page(
     "Permitted attendance scope",
-    `<section class="reading">${notice}<h1>Permitted attendance scope</h1>${details(receipt.registrationId, receipt.title, receipt.eventVersion)}<p>Finite permission: ${receipt.startsAt.toISOString()} to ${receipt.expiresAt.toISOString()} (UTC).</p><p><a href="/operator/event-attendance">Attendance tools</a></p></section>`,
+    `<section class="reading">${notice}<h1>Permitted attendance scope</h1>${details(receipt.registrationId, receipt.title, receipt.eventVersion)}<p>Finite permission: ${timeTag(receipt.startsAt)} to ${timeTag(receipt.expiresAt)} (UTC).</p><p><a href="/operator/event-attendance">Attendance tools</a></p></section>`,
   );
 }
 export function attendanceHistoryPage(
@@ -130,7 +131,7 @@ export function attendanceHistoryPage(
 ) {
   return page(
     "My private attendance history",
-    `<section class="reading">${notice}<h1>My private attendance history</h1>${history.items.length ? `<ul>${history.items.map((item) => `<li><a href="${attendancePath(item.registrationId)}">${escape(item.title)} · version ${item.eventVersion}</a><p>${item.observation ? `Present observation recorded ${item.observation.recordedAt.toISOString()} by ${escape(item.observation.attribution)}.` : "No observation recorded."}${escape(attendanceSharing(item, observedAt))}</p></li>`).join("")}</ul>` : "<p>No attendance permissions or observations are saved.</p>"}${history.nextCursor ? `<p><a href="/events/attendance?after=${encodeURIComponent(history.nextCursor)}">More private attendance history</a></p>` : ""}<p><a href="/events/registrations">Your registrations</a> · <a href="/member/export">Download your private records</a></p></section>`,
+    `<section class="reading">${notice}<h1>My private attendance history</h1>${history.items.length ? `<ul>${history.items.map((item) => `<li><a href="${attendancePath(item.registrationId)}">${escape(item.title)} · version ${item.eventVersion}</a><p>${item.observation ? `Present observation recorded ${timeTag(item.observation.recordedAt)} by ${escape(item.observation.attribution)}.` : "No observation recorded."}${escape(attendanceSharing(item, observedAt))}</p></li>`).join("")}</ul>` : "<p>No attendance permissions or observations are saved.</p>"}${history.nextCursor ? `<p><a href="/events/attendance?after=${encodeURIComponent(history.nextCursor)}">More private attendance history</a></p>` : ""}<p><a href="/events/registrations">Your registrations</a> · <a href="/member/export">Download your private records</a></p></section>`,
   );
 }
 export function attendanceSavedPage(
@@ -145,7 +146,7 @@ export function attendanceSavedPage(
         : receipt.permission.registrationId;
   const message =
     receipt.kind === "observe"
-      ? `Present observation recorded at ${receipt.observation.recordedAt.toISOString()} by ${receipt.observation.attribution}.`
+      ? `Present observation recorded at ${timeTag(receipt.observation.recordedAt)} by ${receipt.observation.attribution}.`
       : receipt.kind === "remove"
         ? "Private observation and attendance permission links removed. Registration retained."
         : receipt.kind === "withdraw"

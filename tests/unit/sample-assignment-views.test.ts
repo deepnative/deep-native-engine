@@ -312,7 +312,8 @@ it("REVADM-01/06 shows only the current reviewer's noncredential reference and e
   );
   expect(html).toContain("Your reviewer reference");
   expect(html).toContain("data-reviewer-reference>reviewer/&lt;&quot;");
-  expect(html).toContain("expiry/&lt;&quot;");
+  expect(html).not.toContain("expiry/");
+  expect(html).toContain("Time unavailable");
   expect(html).toContain("not a sign-in credential");
   expect(html).not.toContain("SECRET");
   expect(html).not.toContain("PRIVATE_MEMBER");

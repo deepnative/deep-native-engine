@@ -1,6 +1,7 @@
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect } from "@playwright/test";
+import { readableRange } from "../../src/display-time.ts";
 import { randomBytes, randomUUID } from "node:crypto";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { availabilityStore } from "../../src/availability.ts";
@@ -114,7 +115,7 @@ test("[L64] private sample availability respects verified coverage, time zone an
       page.getByText("Education · coaching", { exact: false }).first(),
     ).toBeVisible();
     await expect(
-      page.getByText(start.toISOString(), { exact: false }),
+      page.getByText(readableRange(start, end), { exact: false }),
     ).toBeVisible();
     await expect(
       page.getByText("GMT-05:00", { exact: false }).first(),
@@ -166,7 +167,7 @@ test("[L64] private sample availability respects verified coverage, time zone an
       technicalPage.getByText("Times shown for Europe/Berlin"),
     ).toBeVisible();
     await expect(
-      technicalPage.getByText(start.toISOString(), { exact: false }),
+      technicalPage.getByText(readableRange(start, end), { exact: false }),
     ).toBeVisible();
     await expect(
       technicalPage.getByRole("button", { name: /book|buy|reserve/i }),
@@ -197,7 +198,7 @@ test("[L64] private sample availability respects verified coverage, time zone an
       otherLearnerPage.getByText("Times shown for America/Vancouver"),
     ).toBeVisible();
     await expect(
-      otherLearnerPage.getByText(start.toISOString(), { exact: false }),
+      otherLearnerPage.getByText(readableRange(start, end), { exact: false }),
     ).toBeVisible();
     await expect(
       otherLearnerPage.getByRole("button", { name: /book|buy|reserve/i }),
@@ -236,10 +237,10 @@ test("[L64] private sample availability respects verified coverage, time zone an
     );
     await page.reload();
     await expect(
-      page.getByText(start.toISOString(), { exact: false }),
+      page.getByText(readableRange(start, end), { exact: false }),
     ).toHaveCount(0);
     await expect(
-      page.getByText(fallStart.toISOString(), { exact: false }),
+      page.getByText(readableRange(fallStart, fallEnd), { exact: false }),
     ).toBeVisible();
     await expect(page.getByText("sample window, not bookable")).toHaveCount(1);
     await expect(
@@ -248,7 +249,7 @@ test("[L64] private sample availability respects verified coverage, time zone an
     expect(await slots.retire(operatorToken, conflictingSlotId)).toBe(true);
     await page.reload();
     await expect(
-      page.getByText(start.toISOString(), { exact: false }),
+      page.getByText(readableRange(start, end), { exact: false }),
     ).toBeVisible();
     await expect(page.getByText("sample window, not bookable")).toHaveCount(2);
 
