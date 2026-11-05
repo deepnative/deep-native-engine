@@ -1,5 +1,5 @@
 import { timeTag } from "./display-time.ts";
-import { escape, page } from "./views.ts";
+import { page } from "./views.ts";
 import type { MemberTestUnitSnapshot } from "./member-test-units.ts";
 
 const names = {

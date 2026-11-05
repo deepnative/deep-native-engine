@@ -96,7 +96,7 @@ it("READABLE-07 keeps the exact machine value in the datetime attribute", () => 
   );
 });
 
-it("READABLE-07 keeps both exact ends of a range", () => {
+it("READABLE-13 keeps both exact ends of a range", () => {
   expect(rangeTag(start, end)).toBe(
     '<time datetime="2030-11-03T05:30:00.000Z">November 3, 2030, 5:30 a.m.</time> to <time datetime="2030-11-03T06:30:00.000Z">6:30 a.m. UTC</time>',
   );

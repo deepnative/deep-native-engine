@@ -1,4 +1,10 @@
-import { keepCodesTogether, readableDay, readableRange, readableTime, timeTag } from "./display-time.ts";
+import {
+  keepCodesTogether,
+  readableDay,
+  readableRange,
+  readableTime,
+  timeTag,
+} from "./display-time.ts";
 import { LEARNING_WORKSPACE_CONTENT } from "./learning-workspace-pack.ts";
 import { isReviewedAssignment } from "./reviewed-assignments.ts";
 import { isReviewedFoundation } from "./foundation-pack.ts";
