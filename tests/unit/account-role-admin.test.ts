@@ -161,10 +161,10 @@ it("ROLEADMIN-03/04 removes a role, never the actor's own admin role", async () 
   ).toEqual([[actor()[0]!.id, "removed", h("a"), "coach", null]]);
 });
 
-it("COACHLINK-01 lists coach choices by name and the learner's current coach", async () => {
+it("DEFCOACH-04 lists coach choices by name and the learner's current coaches", async () => {
   const { pool } = fakePool({
     "FROM principals p": [actor(), actor()],
-    "FROM learners l": [[{ coach: h("d") }], []],
+    "FROM learners l": [[{ assigned: [h("c"), h("d")] }], []],
     "FROM account_roles r": [
       [
         { emailHash: h("e"), people: [] },
@@ -174,13 +174,13 @@ it("COACHLINK-01 lists coach choices by name and the learner's current coach", a
     ],
   });
   const admin = accountRoleAdmin(pool);
-  expect(await admin.learnerCoach(staff, "nope")).toEqual({
+  expect(await admin.learnerCoaches(staff, "nope")).toEqual({
     kind: "not-found",
   });
-  expect(await admin.learnerCoach(staff, ada)).toEqual({
+  expect(await admin.learnerCoaches(staff, ada)).toEqual({
     kind: "ready",
     value: {
-      coach: h("d"),
+      assigned: [h("c"), h("d")],
       coaches: [
         { emailHash: h("c"), label: "Bo, Name needed" },
         { emailHash: h("d"), label: "Bo, Name needed" },
@@ -188,47 +188,51 @@ it("COACHLINK-01 lists coach choices by name and the learner's current coach", a
       ],
     },
   });
-  expect(await admin.learnerCoach(staff, ada)).toEqual({ kind: "not-found" });
+  expect(await admin.learnerCoaches(staff, ada)).toEqual({
+    kind: "not-found",
+  });
 });
 
-it("COACHLINK-01/03/04 assigns only coach-role holders, clears, and audits changes", async () => {
+it("DEFCOACH-01/04 sets only coach-role holders and audits each added and removed coach", async () => {
   const { pool, calls } = fakePool({
-    "FROM principals p": [actor(), actor(), actor(), actor(), actor()],
-    "FROM learners WHERE": [[{}], [{}], [{}], [{}], []],
-    "FROM account_roles WHERE": [[{}], []],
-    "DELETE FROM coach_assignments": [[{}], []],
+    "FROM principals p": [actor(), actor(), actor()],
+    "FROM learners WHERE": [[{}], [{}], []],
+    "FROM account_roles WHERE": [[{}, {}], [{}]],
+    "DELETE FROM coach_assignments": [[{ coach: h("f") }, { coach: h("e") }]],
+    "INSERT INTO coach_assignments": [[{ coach: h("d") }]],
   });
   const admin = accountRoleAdmin(pool);
+  const set = (learnerId: string, coaches: string[]) =>
+    admin.setCoaches(staff, { learnerId, coaches });
+  expect(await set("x", [])).toEqual({ kind: "not-found" });
+  expect(await set(ada, ["x"])).toEqual({ kind: "invalid" });
+  expect(await set(ada, [h("d"), h("d")])).toEqual({ kind: "invalid" });
   expect(
-    await admin.assignCoach(staff, { learnerId: "x", coach: null }),
-  ).toEqual({ kind: "not-found" });
-  expect(
-    await admin.assignCoach(staff, { learnerId: ada, coach: "x" }),
-  ).toEqual({ kind: "invalid" });
-  expect(
-    await admin.assignCoach(staff, { learnerId: ada, coach: h("d") }),
-  ).toEqual({ kind: "ready" });
-  expect(
-    await admin.assignCoach(staff, { learnerId: ada, coach: h("e") }),
-  ).toEqual({ kind: "invalid" });
-  expect(
-    await admin.assignCoach(staff, { learnerId: ada, coach: null }),
-  ).toEqual({ kind: "ready" });
-  expect(
-    await admin.assignCoach(staff, { learnerId: ada, coach: null }),
-  ).toEqual({ kind: "ready" });
-  expect(
-    await admin.assignCoach(staff, { learnerId: ada, coach: h("d") }),
-  ).toEqual({ kind: "not-found" });
+    await set(
+      ada,
+      Array.from({ length: 101 }, () => h("d")),
+    ),
+  ).toEqual({
+    kind: "invalid",
+  });
+  expect(calls).toHaveLength(0);
+  expect(await set(ada, [h("c"), h("d")])).toEqual({ kind: "ready" });
+  // One of the two no longer holds the coach role.
+  expect(await set(ada, [h("c"), h("d")])).toEqual({ kind: "invalid" });
+  expect(await set(ada, [])).toEqual({ kind: "not-found" });
   const id = actor()[0]!.id;
   expect(
     calls
       .filter((c) => c.sql.includes("account_role_events"))
       .map((c) => c.values),
   ).toEqual([
+    [id, "cleared", h("e"), null, ada],
+    [id, "cleared", h("f"), null, ada],
     [id, "assigned", h("d"), null, ada],
-    [id, "cleared", null, null, ada],
   ]);
+  expect(
+    calls.find((c) => c.sql.includes("INSERT INTO coach_assignments"))?.values,
+  ).toEqual([ada, [h("c"), h("d")], id]);
 });
 
 function routes(store?: Partial<AccountRoleAdmin>) {
@@ -389,41 +393,69 @@ it("ROLEADMIN-02..04 posts grants and removals only with origin, CSRF and known 
   expect(grant).not.toHaveBeenCalled();
 });
 
-it("COACHLINK-01 saves or clears a learner's coach and returns to the learner", async () => {
-  const assignCoach = vi.fn<AccountRoleAdmin["assignCoach"]>(async () => ({
+it("DEFCOACH-04 saves one, several or no coaches and returns to the learner", async () => {
+  const setCoaches = vi.fn<AccountRoleAdmin["setCoaches"]>(async () => ({
     kind: "ready",
   }));
-  const http = await routes({ assignCoach })();
-  const post = (body: object) =>
+  const http = await routes({ setCoaches })();
+  const post = (body: string) =>
     http
       .post("/operator/coach-assignments")
       .set("Origin", origin)
       .type("form")
       .send(body);
-  const saved = await post({ ...good, learnerId: ada, coach: h("d") });
+  const form = (fields: [string, string][]) =>
+    new URLSearchParams([["csrf", good.csrf], ...fields]).toString();
+  const saved = await post(
+    form([
+      ["learnerId", ada],
+      ["coach", h("d")],
+    ]),
+  );
   expect(saved.status).toBe(303);
   expect(saved.headers.location).toBe(`/operator?ownerId=${ada}#learner-coach`);
-  expect(assignCoach).toHaveBeenCalledWith(staff, {
+  expect(setCoaches).toHaveBeenCalledWith(staff, {
     learnerId: ada,
-    coach: h("d"),
+    coaches: [h("d")],
   });
-  await post({ ...good, learnerId: ada, coach: "" });
-  expect(assignCoach).toHaveBeenLastCalledWith(staff, {
+  await post(
+    form([
+      ["learnerId", ada],
+      ["coach", h("c")],
+      ["coach", h("d")],
+    ]),
+  );
+  expect(setCoaches).toHaveBeenLastCalledWith(staff, {
     learnerId: ada,
-    coach: null,
+    coaches: [h("c"), h("d")],
   });
-  assignCoach.mockClear();
-  expect((await post({ ...good, learnerId: ada })).status).toBe(400);
-  expect(assignCoach).not.toHaveBeenCalled();
-  assignCoach.mockResolvedValueOnce({ kind: "not-found" });
-  expect((await post({ ...good, coach: "" })).status).toBe(404);
-  expect(assignCoach).toHaveBeenLastCalledWith(staff, {
+  await post(form([["learnerId", ada]]));
+  expect(setCoaches).toHaveBeenLastCalledWith(staff, {
+    learnerId: ada,
+    coaches: [],
+  });
+  setCoaches.mockClear();
+  // Only `coach` may repeat, and no unknown field is accepted.
+  for (const fields of [
+    [
+      ["learnerId", ada],
+      ["learnerId", ada],
+    ],
+    [
+      ["learnerId", ada],
+      ["x", "1"],
+    ],
+  ] as [string, string][][])
+    expect((await post(form(fields))).status).toBe(403);
+  expect(setCoaches).not.toHaveBeenCalled();
+  setCoaches.mockResolvedValueOnce({ kind: "not-found" });
+  expect((await post(form([]))).status).toBe(404);
+  expect(setCoaches).toHaveBeenLastCalledWith(staff, {
     learnerId: "",
-    coach: null,
+    coaches: [],
   });
-  expect(
-    (await post({ ...good, coach: "", learnerId: ada, x: "1" })).status,
-  ).toBe(403);
+  setCoaches.mockResolvedValueOnce({ kind: "invalid" });
+  expect((await post(form([["learnerId", ada]]))).status).toBe(400);
 });
 
 it("ROLEADMIN-01 adds no routes without a store", async () => {
@@ -431,13 +463,13 @@ it("ROLEADMIN-01 adds no routes without a store", async () => {
   expect((await http.get("/operator/roles")).status).toBe(404);
 });
 
-it("COACHLINK-01 renders the console coach card", () => {
+it("DEFCOACH-04 renders the console coaches card", () => {
   const anti = good.csrf;
   const card = coachAssignmentCard(
     {
       kind: "ready",
       value: {
-        coach: h("d"),
+        assigned: [h("d")],
         coaches: [
           { emailHash: h("c"), label: "<Bo>" },
           { emailHash: h("d"), label: "Cy" },
@@ -447,19 +479,24 @@ it("COACHLINK-01 renders the console coach card", () => {
     ada,
     anti,
   );
-  expect(card).toContain('<option value="">No coach</option>');
-  expect(card).toContain(`<option value="${h("c")}">&lt;Bo&gt;</option>`);
-  expect(card).toContain(`<option value="${h("d")}" selected>Cy</option>`);
+  expect(card).toContain('<h2 id="learner-coach">Coaches</h2>');
+  expect(card).toContain(
+    `<input type="checkbox" name="coach" value="${h("c")}"><span>&lt;Bo&gt;</span>`,
+  );
+  expect(card).toContain(
+    `<input type="checkbox" name="coach" value="${h("d")}" checked><span>Cy</span>`,
+  );
   expect(card).toContain(`name="learnerId" value="${ada}"`);
   expect(card).toContain(`name="csrf" value="${anti}"`);
+  expect(card).toContain("Save coaches");
   expect(card).not.toContain("Nobody holds the coach role yet");
   const none = coachAssignmentCard(
-    { kind: "ready", value: { coach: null, coaches: [] } },
+    { kind: "ready", value: { assigned: [], coaches: [] } },
     ada,
     anti,
   );
-  expect(none).toContain('<option value="" selected>No coach</option>');
   expect(none).toContain("Nobody holds the coach role yet");
+  expect(none).not.toContain("<form");
   for (const kind of ["denied", "not-found", "unavailable"] as const)
     expect(coachAssignmentCard({ kind }, ada, anti)).toContain(
       "Coach assignment is unavailable right now.",
