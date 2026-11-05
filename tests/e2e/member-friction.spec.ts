@@ -147,7 +147,7 @@ test("[L289] FRICTION-01/02/05/06/12 READABLE-01..03 a member sees what happened
   }
 });
 
-test("[L291] READWIDTH-01..03 reading pages use the page width and forms stay comfortable", async ({
+test("[L291] READWIDTH-01..03 PAGEFRAME-01/02 reading pages use the page width and forms stay comfortable", async ({
   page,
 }) => {
   let origin = "http://127.0.0.1:0";
@@ -204,6 +204,19 @@ test("[L291] READWIDTH-01..03 reading pages use the page width and forms stay co
       ]);
       expect(text!.width, path).toBeGreaterThanOrEqual(main - 1);
     }
+    // PAGEFRAME-01/02: the logo, header and text edge stay put between pages.
+    const frames = new Set<string>();
+    for (const path of ["/learn", "/lesson", "/readiness", "/account"]) {
+      await page.goto(`${origin}${path}`);
+      const logo = await page.locator(".site-header .brand").boundingBox();
+      const header = await page.locator(".site-header").boundingBox();
+      const main = await page.locator("main").boundingBox();
+      // A phone's header can wrap to fit a page's own links.
+      frames.add(
+        JSON.stringify([logo!.x, main!.width, wide ? header!.height : 0]),
+      );
+    }
+    expect([...frames]).toHaveLength(1);
     // READWIDTH-02: a short form does not stretch across the page.
     await page.goto(`${origin}/email/attach`);
     const form = await page.locator(".error-page form").first().boundingBox();
