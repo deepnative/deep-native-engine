@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import type { Server } from "node:http";
 import request from "supertest";
 import { app } from "../../src/app.ts";
 import type { Store } from "../../src/store.ts";
@@ -75,19 +76,19 @@ function application(
   return { server, member, claimStore };
 }
 const path = "/member/study-allowance";
-const get = (server: ReturnType<typeof app>, url = path) =>
+const get = (server: Server, url = path) =>
   request(server)
     .get(url)
     .set("Host", "127.0.0.1:3000")
     .set("Cookie", `${COOKIE}=${owner}`);
-async function csrf(server: ReturnType<typeof app>) {
-  const page = await get(server);
+async function csrf(listener: ReturnType<typeof app>) {
+  const page = await get(listener);
   const match = /name="csrf" value="([^"]+)"/.exec(page.text);
   if (!match) throw Error(`Expected a claim form: ${page.text}`);
   return match[1]!;
 }
 const post = (
-  server: ReturnType<typeof app>,
+  server: Server,
   token: string,
   fields: Record<string, string> = {},
 ) =>
@@ -108,8 +109,8 @@ const post = (
 
 it("ALLOW-01 shows the exact policy, an unticked confirmation and no claim on opening", async () => {
   const { server, member, claimStore } = application({});
-  await withLoopback(server, async () => {
-    const response = await get(server);
+  await withLoopback(server, async (listener) => {
+    const response = await get(listener);
     expect(response.status).toBe(200);
     expect(response.headers["cache-control"]).toContain("no-store");
     expect(response.text).toContain("study-allowance-test-v1");
@@ -124,9 +125,9 @@ it("ALLOW-01 shows the exact policy, an unticked confirmation and no claim on op
 
 it("ALLOW-02 passes the exact confirmed instruction, then returns to the page", async () => {
   const { server, claimStore } = application({});
-  await withLoopback(server, async () => {
-    const token = await csrf(server);
-    const response = await post(server, token);
+  await withLoopback(server, async (listener) => {
+    const token = await csrf(listener);
+    const response = await post(listener, token);
     expect(response.status).toBe(303);
     expect(response.headers.location).toBe(path);
     expect(claimStore).toHaveBeenCalledWith(owner, key, {
@@ -143,8 +144,8 @@ it.each([
   ["a malformed period", { periodStart: "soon" }],
 ])("ALLOW-06 refuses %s before reaching the store", async (_name, fields) => {
   const { server, claimStore } = application({});
-  await withLoopback(server, async () => {
-    const response = await post(server, await csrf(server), fields);
+  await withLoopback(server, async (listener) => {
+    const response = await post(listener, await csrf(listener), fields);
     expect(response.status).toBe(422);
     expect(claimStore).not.toHaveBeenCalled();
   });
@@ -152,14 +153,14 @@ it.each([
 
 it("ALLOW-06 refuses an unexpected field and a query string", async () => {
   const { server, claimStore, member } = application({});
-  await withLoopback(server, async () => {
-    const token = await csrf(server);
-    expect((await post(server, token, { quantity: "100000" })).status).toBe(
+  await withLoopback(server, async (listener) => {
+    const token = await csrf(listener);
+    expect((await post(listener, token, { quantity: "100000" })).status).toBe(
       422,
     );
     expect(claimStore).not.toHaveBeenCalled();
     member.mockClear();
-    expect((await get(server, `${path}?quantity=9`)).status).toBe(422);
+    expect((await get(listener, `${path}?quantity=9`)).status).toBe(422);
     expect(member).not.toHaveBeenCalled();
   });
 });
@@ -173,8 +174,8 @@ it.each([
   "ALLOW-06 reports a %s claim without claiming success",
   async (kind, status) => {
     const { server } = application({ claim: async () => ({ kind }) });
-    await withLoopback(server, async () => {
-      const response = await post(server, await csrf(server));
+    await withLoopback(server, async (listener) => {
+      const response = await post(listener, await csrf(listener));
       expect(response.status).toBe(status);
       expect(response.text).not.toContain("Claimed");
     });
@@ -185,8 +186,8 @@ it("ALLOW-03 tells a member a lost reply can be checked without risking a second
   const { server } = application({
     claim: async () => ({ kind: "unavailable" }),
   });
-  await withLoopback(server, async () => {
-    const response = await post(server, await csrf(server));
+  await withLoopback(server, async (listener) => {
+    const response = await post(listener, await csrf(listener));
     expect(response.text).toContain("may already have been saved");
     expect(response.text).toContain("never adds a second");
   });
@@ -197,12 +198,12 @@ it("ALLOW-06 withholds a read and a write outcome once authority has lapsed", as
   const { server, claimStore } = application({
     member: async () => ready(view().value, lapsed),
   });
-  await withLoopback(server, async () => {
-    expect((await get(server)).status).toBe(403);
+  await withLoopback(server, async (listener) => {
+    expect((await get(listener)).status).toBe(403);
   });
   const writing = application({ claim: async () => ready(claim, lapsed) });
-  await withLoopback(writing.server, async () => {
-    const response = await post(writing.server, await csrf(writing.server));
+  await withLoopback(writing.server, async (listener) => {
+    const response = await post(listener, await csrf(listener));
     expect(response.status).toBe(503);
   });
   expect(claimStore).not.toHaveBeenCalled();
@@ -214,24 +215,24 @@ it("ALLOW-06 gives a safe answer when the store throws", async () => {
       throw Error("offline");
     },
   });
-  await withLoopback(reading.server, async () => {
-    expect((await get(reading.server)).status).toBe(503);
+  await withLoopback(reading.server, async (listener) => {
+    expect((await get(listener)).status).toBe(503);
   });
   const writing = application({
     claim: async () => {
       throw Error("offline");
     },
   });
-  await withLoopback(writing.server, async () => {
-    const response = await post(writing.server, await csrf(writing.server));
+  await withLoopback(writing.server, async (listener) => {
+    const response = await post(listener, await csrf(listener));
     expect(response.status).toBe(503);
   });
 });
 
 it("ALLOW-06 has no route in live mode or without a store", async () => {
   const live = application({}, "live");
-  await withLoopback(live.server, async () => {
-    expect((await get(live.server)).status).toBe(404);
+  await withLoopback(live.server, async (listener) => {
+    expect((await get(listener)).status).toBe(404);
     expect(live.member).not.toHaveBeenCalled();
   });
   const absent = app(
@@ -244,15 +245,15 @@ it("ALLOW-06 has no route in live mode or without a store", async () => {
       mode: "test",
     } as Parameters<typeof app>[1],
   );
-  await withLoopback(absent, async () => {
-    expect((await get(absent)).status).toBe(404);
+  await withLoopback(absent, async (listener) => {
+    expect((await get(listener)).status).toBe(404);
   });
 });
 
 it("ALLOW-06 denies a read the store refuses, without showing the policy", async () => {
   const { server } = application({ member: async () => ({ kind: "denied" }) });
-  await withLoopback(server, async () => {
-    const response = await get(server);
+  await withLoopback(server, async (listener) => {
+    const response = await get(listener);
     expect(response.status).toBe(403);
     expect(response.text).not.toContain("study-allowance-test-v1");
   });
