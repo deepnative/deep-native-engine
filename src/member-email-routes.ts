@@ -8,6 +8,7 @@ import { hostingText } from "./hosting-presentation.ts";
 import { withMembership } from "./membership-presentation.ts";
 import { passwordSignInForm } from "./member-password-routes.ts";
 import type { MemberPasswordAccess } from "./member-password-access.ts";
+import { visitorAddress } from "./visitor-address.ts";
 
 function form(action: string, csrf: string, button: string) {
   return `<form method="post" action="${action}"><input type="hidden" name="csrf" value="${csrf}"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" required><button type="submit">${button}</button></form>`;
@@ -164,7 +165,11 @@ export function mountMemberEmailRoutes(
           ),
         );
     const address = String(req.body.email ?? "");
-    dispatch(() => access.requestSignIn(address));
+    const visitor = visitorAddress(
+      req.socket.remoteAddress,
+      req.get("x-forwarded-for"),
+    );
+    dispatch(() => access.requestSignIn(address, visitor));
     return res.send(
       page(
         "Check your email",

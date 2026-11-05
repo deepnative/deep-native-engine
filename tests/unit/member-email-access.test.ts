@@ -740,8 +740,11 @@ describe("no-account notice (#665)", () => {
   beforeEach(async () => {
     notices.length = 0;
     failNotice = false;
-    await pool.query("TRUNCATE member_email_notices");
+    await pool.query(
+      "TRUNCATE member_email_notices, member_email_notice_visitors",
+    );
   });
+  const visitor = (key: string) => ({ key, scope: "public" as const });
   const outcomes = (info: { mock: { calls: unknown[][] } }) =>
     info.mock.calls.map((call) => JSON.parse(String(call[0])).outcome);
 
@@ -809,11 +812,199 @@ describe("no-account notice (#665)", () => {
       await noticing.requestSignIn("repeat@example.com");
       expect(notices).toHaveLength(2);
       for (let index = 0; index < 25; index++)
-        await noticing.requestSignIn(`flood${index}@example.com`);
+        await noticing.requestSignIn(
+          `flood${index}@example.com`,
+          visitor(`198.51.100.${index}`),
+        );
       // 20 per hour in all: the repeat plus 19 others. The expired first
       // notice no longer counts.
       expect(notices).toHaveLength(21);
       expect(outcomes(info).at(-1)).toBe("no_account_limited");
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  it("NOTICE-VISITOR-01/02 limits one visitor to three notices an hour without blocking others", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    try {
+      for (let index = 0; index < 5; index++)
+        await noticing.requestSignIn(
+          `stranger${index}@example.com`,
+          visitor("203.0.113.9"),
+        );
+      expect(notices).toHaveLength(3);
+      expect(outcomes(info)).toEqual([
+        "no_account_notice",
+        "no_account_notice",
+        "no_account_notice",
+        "no_account_visitor_limited",
+        "no_account_visitor_limited",
+      ]);
+      await noticing.requestSignIn(
+        "stranger9@example.com",
+        visitor("203.0.113.10"),
+      );
+      expect(notices).toHaveLength(4);
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  it("NOTICE-VISITOR-01 allows a visitor more notices after the hour", async () => {
+    for (let index = 0; index < 4; index++)
+      await noticing.requestSignIn(
+        `later${index}@example.com`,
+        visitor("203.0.113.9"),
+      );
+    expect(notices).toHaveLength(3);
+    await pool.query(
+      "UPDATE member_email_notice_visitors SET created_at=clock_timestamp()-INTERVAL '61 minutes'",
+    );
+    await noticing.requestSignIn("later9@example.com", visitor("203.0.113.9"));
+    expect(notices).toHaveLength(4);
+  });
+
+  it("NOTICE-VISITOR-04 stores only a keyed hash, unlinked to the inbox, and deletes it after the hour", async () => {
+    await noticing.requestSignIn("kept@example.com", visitor("203.0.113.9"));
+    await noticing.requestSignIn("old@example.com", visitor("203.0.113.10"));
+    await pool.query(
+      `UPDATE member_email_notice_visitors SET created_at=clock_timestamp()-INTERVAL '61 minutes'
+       WHERE id=(SELECT max(id) FROM member_email_notice_visitors)`,
+    );
+    const stored = await pool.query<{ visitor_hash: string }>(
+      "SELECT visitor_hash FROM member_email_notice_visitors ORDER BY id",
+    );
+    const [first] = stored.rows.map((row) => row.visitor_hash);
+    expect(first).toMatch(/^[a-f0-9]{64}$/);
+    expect(first).not.toBe(emailHash("203.0.113.9"));
+    expect(JSON.stringify(stored.rows)).not.toContain("203.0.113");
+    expect(
+      (
+        await pool.query(
+          "SELECT column_name FROM information_schema.columns WHERE table_name='member_email_notice_visitors' ORDER BY ordinal_position",
+        )
+      ).rows.map((row) => row.column_name),
+    ).toEqual(["id", "visitor_hash", "created_at"]);
+
+    // A refused request still clears what has aged out.
+    await pool.query("TRUNCATE member_email_notices");
+    await pool.query(
+      "INSERT INTO member_email_notices(email_hash) SELECT $1 FROM generate_series(1,20)",
+      [emailHash("full@example.com")],
+    );
+    await noticing.requestSignIn("late@example.com", visitor("203.0.113.11"));
+    const left = await pool.query<{ visitor_hash: string }>(
+      "SELECT visitor_hash FROM member_email_notice_visitors",
+    );
+    expect(left.rows.map((row) => row.visitor_hash)).toEqual([first]);
+
+    // Another process has its own key, so the same address hashes differently.
+    await pool.query(
+      "TRUNCATE member_email_notices, member_email_notice_visitors",
+    );
+    const restarted = memberEmailAccess(
+      pool,
+      { ...sender, async sendNoAccount() {} },
+      "https://engine.deepnative.io",
+    );
+    await restarted.requestSignIn("again@example.com", visitor("203.0.113.9"));
+    expect(
+      (
+        await pool.query(
+          "SELECT visitor_hash FROM member_email_notice_visitors",
+        )
+      ).rows[0].visitor_hash,
+    ).not.toBe(first);
+  });
+
+  it("NOTICE-VISITOR-05 does not count a notice that failed to send", async () => {
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      failNotice = true;
+      for (let index = 0; index < 4; index++)
+        await noticing.requestSignIn(
+          `failing${index}@example.com`,
+          visitor("203.0.113.9"),
+        );
+      expect(
+        (await pool.query("SELECT 1 FROM member_email_notice_visitors"))
+          .rowCount,
+      ).toBe(0);
+      failNotice = false;
+      await noticing.requestSignIn("works@example.com", visitor("203.0.113.9"));
+      expect(notices).toHaveLength(1);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it("NOTICE-VISITOR-06 counts requests without a known visitor as one", async () => {
+    for (let index = 0; index < 5; index++)
+      await noticing.requestSignIn(`nobody${index}@example.com`);
+    expect(notices).toHaveLength(3);
+  });
+
+  it("NOTICE-VISITOR-07 still sends a linked address its sign-in link at the limit", async () => {
+    const owner = await member();
+    await noticing.requestAttach(owner.token, "linked@example.com");
+    await noticing.consume(code(), owner.token);
+    sent.length = 0;
+    for (let index = 0; index < 4; index++)
+      await noticing.requestSignIn(
+        `limit${index}@example.com`,
+        visitor("203.0.113.9"),
+      );
+    await noticing.requestSignIn("linked@example.com", visitor("203.0.113.9"));
+    expect(notices).toHaveLength(3);
+    expect(sent.map((message) => message.address)).toEqual([
+      "linked@example.com",
+    ]);
+  });
+
+  it("NOTICE-VISITOR-10 logs the kind of address, never the address or its hash", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    try {
+      await noticing.requestSignIn(
+        "scope1@example.com",
+        visitor("203.0.113.9"),
+      );
+      await noticing.requestSignIn("scope2@example.com", {
+        key: "10.0.0.4",
+        scope: "private",
+      });
+      await noticing.requestSignIn("scope3@example.com");
+      for (let index = 0; index < 3; index++)
+        await noticing.requestSignIn(
+          `scope1${index}@example.com`,
+          visitor("203.0.113.9"),
+        );
+      const lines = info.mock.calls.map((call) => String(call[0]));
+      expect(lines.slice(0, 3).map((line) => JSON.parse(line))).toEqual(
+        ["public", "private", "unknown"].map((visitorScope) => ({
+          event: "member_email_request",
+          purpose: "sign_in",
+          outcome: "no_account_notice",
+          visitorScope,
+        })),
+      );
+      expect(JSON.parse(lines.at(-1)!)).toEqual({
+        event: "member_email_request",
+        purpose: "sign_in",
+        outcome: "no_account_visitor_limited",
+        visitorScope: "public",
+      });
+      const stored = await pool.query<{ visitor_hash: string }>(
+        "SELECT visitor_hash FROM member_email_notice_visitors",
+      );
+      for (const line of lines) {
+        expect(line).not.toContain("203.0.113");
+        expect(line).not.toContain("10.0.0.4");
+        for (const { visitor_hash } of stored.rows)
+          expect(line).not.toContain(visitor_hash);
+      }
     } finally {
       info.mockRestore();
     }
