@@ -388,7 +388,8 @@ test("[F-ECO-04-B] circle participation, reporting and accountable scoped modera
         maxRedirects: 0,
       });
       expect(attempt.status()).toBe(303);
-      expect(attempt.headers().location).toBe("/learn#assignment-options");
+      // A staff principal has no learner, so it is sent home with nothing shown.
+      expect(attempt.headers().location).toBe("/");
       expect(await attempt.text()).not.toContain(privateAnswer);
       await moderator.goto(`${origin}${attemptPath}`);
       expect(new URL(moderator.url()).pathname).not.toBe(attemptPath);
