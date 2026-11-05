@@ -129,3 +129,16 @@ it("AHO-05 presents pinned member assignment provenance to both owner and assign
     expect(html).toContain("Earlier response&#13;\nwith a second line");
   }
 });
+
+it("GAPS-05 offers no feedback copy for a version that kept no rubric", () => {
+  const html = assignmentAttemptPage(
+    { ...attempt, rubric: null, rubricVersion: null } as never,
+    "nonce",
+    "",
+    undefined,
+    false,
+    undefined,
+    true,
+  );
+  expect(html).not.toContain("/handoff?");
+});

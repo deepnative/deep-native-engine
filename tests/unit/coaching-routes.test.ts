@@ -820,3 +820,14 @@ it("HOURTABLE-01 prices drafts at the newest applicable rate and labels an invoi
     mainHtml((await f.get(`/account/coaching?month=${month}`)).text),
   ).toContain("<p>No saved months.</p>");
 });
+
+it("GAPS-03 tells the administrator to set a missing rate, and the member to ask for one", async () => {
+  const f = fixture();
+  const none = ready({ ...value, rate: null, rateVersion: null });
+  f.service.coachingOverview.mockResolvedValue(none);
+  const member = (await f.get("/account/coaching")).text;
+  expect(member).toContain("Ask the administrator to enter your agreed rate");
+  const staff = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(staff).toContain("No rate is set for this month. Set the rate below.");
+  expect(staff).not.toContain("Ask the administrator");
+});

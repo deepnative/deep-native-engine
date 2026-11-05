@@ -20,6 +20,12 @@ import { hours } from "./coaching-dashboard-views.ts";
 import { monthLabel } from "./coaching-values.ts";
 import type { AccountRoleAdmin } from "./account-role-admin.ts";
 import { coachAssignmentCard } from "./account-role-admin-routes.ts";
+import type { AdministratorDiagnostics } from "./administrator-diagnostics.ts";
+import {
+  workWaitingCard,
+  workWaitingUnavailable,
+  type WorkQueueTools,
+} from "./administrator-work-waiting-views.ts";
 import { hostingText } from "./hosting-presentation.ts";
 
 const CONSOLE_SEARCH_MAX = 120;
@@ -70,7 +76,9 @@ export function mountAdministratorEntry(
     mode?: string;
     simpleInvoices?: unknown;
     roleAdmin?: AccountRoleAdmin;
+    administratorDiagnostics?: Pick<AdministratorDiagnostics, "work">;
   },
+  workQueues?: WorkQueueTools,
 ) {
   const member = memberToken;
   const fail = (res: Response, status: number) =>
@@ -137,11 +145,11 @@ export function mountAdministratorEntry(
       );
     const v = result.value,
       chosen = v.selected;
-    // COACHLINK-01: the selected learner's coach, chosen from coach-role holders.
+    // COACHLINK-01 / #689: the selected learner's coaches, chosen from coach-role holders.
     const coachCard =
       chosen && options.roleAdmin
         ? coachAssignmentCard(
-            await options.roleAdmin.learnerCoach(
+            await options.roleAdmin.learnerCoaches(
               cookie.value,
               chosen.member.id,
             ),
@@ -168,10 +176,21 @@ export function mountAdministratorEntry(
             : "<p>Billing is disabled. No proposal, invoice or rate can be created from this console.</p>"
         }</section>${coachCard}`
       : "";
+    // WAITWORK-08: a failed read says so, never shows zero, and keeps the console.
+    let waiting = "";
+    if (workQueues && options.administratorDiagnostics) {
+      const work = await options.administratorDiagnostics
+        .work(cookie.value)
+        .catch(() => undefined);
+      waiting =
+        work?.kind === "ready"
+          ? workWaitingCard(work.value, workQueues)
+          : workWaitingUnavailable();
+    }
     return res.send(
       page(
         "Administration console",
-        `<div class="portal-page administrator-console"><div class="portal-intro"><h1>Administration console</h1><p>Manage the selected learner’s courses and billing. Registration and a proposal do not create enrollment or a charge; the learner must accept exact billing terms.</p><nav class="portal-actions" aria-label="Administration sections"><a href="#learners" class="button secondary">Learners</a><a href="#courses" class="button secondary">Courses/services</a><a href="#invoices" class="button secondary">Invoices</a></nav></div>${learnersCard(v, target)}${summaries}<section class="portal-card" id="courses"><h2>Courses/services</h2><p>Published lesson versions only. Planned services, prices and support capacity are not published offers. These are course candidates; final eligibility is checked for the exact learner.</p><ul>${v.courses.map((c) => `<li>${escape(c.title)} · ${escape(c.id)} version ${c.version}</li>`).join("") || "<li>No published course candidates.</li>"}</ul></section><section class="portal-card" id="invoices"><h2>Invoices</h2>${
+        `<div class="portal-page administrator-console"><div class="portal-intro"><h1>Administration console</h1><p>Manage the selected learner’s courses and billing. Registration and a proposal do not create enrollment or a charge; the learner must accept exact billing terms.</p><nav class="portal-actions" aria-label="Administration sections"><a href="#learners" class="button secondary">Learners</a><a href="#courses" class="button secondary">Courses/services</a><a href="#invoices" class="button secondary">Invoices</a></nav></div>${waiting}${learnersCard(v, target)}${summaries}<section class="portal-card" id="courses"><h2>Courses/services</h2><p>Published lesson versions only. Planned services, prices and support capacity are not published offers. These are course candidates; final eligibility is checked for the exact learner.</p><ul>${v.courses.map((c) => `<li>${escape(c.title)} · ${escape(c.id)} version ${c.version}</li>`).join("") || "<li>No published course candidates.</li>"}</ul></section><section class="portal-card" id="invoices"><h2>Invoices</h2>${
           options.simpleInvoices
             ? `<p>Select a learner above to inspect their retained invoices or compose a proposal for that exact account.</p>${portalActions(
                 [

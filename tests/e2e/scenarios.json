@@ -2600,9 +2600,9 @@
       "id": "L292",
       "actor": "An owner administrator, a coach and a learner",
       "preconditions": "Dedicated synthetic PostgreSQL database, verified owner and coach identities, one invented learner with a saved coaching month, port0 servers; desktop/mobile Chromium",
-      "steps": "ROLEADMIN-01..05, COACHLINK-01..04: the owner enters administration, opens Roles, gives the coach role to a typed email, assigns the learner to that coach from the console, the coach opens Coaching, then the owner removes the coach role",
-      "expected": "The owner's own admin role has no remove button; the coach sees only the assigned learner and the unassigned owner sees nobody; after removal the coach is refused and the assignment is gone; each change is audited; no sideways scrolling",
-      "issues": [684],
+      "steps": "ROLEADMIN-01..05, COACHLINK-01..04, DEFCOACH-03/04: the owner enters administration, opens Roles, gives the coach role to a typed email, finds the learner already assigned to the default coaches, moves the learner from the owner to the new coach in the console, the coach opens Coaching, then the owner removes the coach role",
+      "expected": "The owner's own admin role has no remove button; a new learner starts with the owner as a default coach; after saving, the coach sees the learner and the owner sees nobody; after removal the coach is refused and their assignment is gone; each change is audited; no sideways scrolling",
+      "issues": [684, 689],
       "critical": true
     },
     {
@@ -2621,6 +2621,24 @@
       "steps": "READABLE-09..12: read events, programs, the account page and a reviewed workflow, then submit an invented attempt and read it and progress",
       "expected": "Dates read in words with the zone stated and keep their exact value in the datetime attribute; short codes and dates stay on one line; words break only when wider than the line; no sideways scrolling",
       "issues": [659],
+      "critical": true
+    },
+    {
+      "id": "L295",
+      "actor": "Member checking what they share",
+      "preconditions": "Dedicated synthetic PostgreSQL database, circle discussion enabled, port0 server; desktop/mobile Chromium",
+      "steps": "WHOSEES-01..03: open Who can see my work from My account with nothing shared, join a circle, turn sharing on, post a question, return, then withdraw sharing and return",
+      "expected": "The page first says nothing is shared, then names the circle with sharing off, then counts one readable post, then says sharing is off with no readable posts; links reach the existing controls; no sideways scrolling",
+      "issues": [40],
+      "critical": true
+    },
+    {
+      "id": "L296",
+      "actor": "Administrator noticing a member's waiting support request",
+      "preconditions": "Dedicated synthetic PostgreSQL database, administrator entry and support assignment enabled, port0 server; desktop/mobile Chromium",
+      "steps": "WAITWORK-01/02/09: a member sends a private support request; a verified owner enters administration and reads Work waiting; an invented operator is assigned; the owner reloads the console",
+      "expected": "The console shows one waiting support request with no member text and says no support operator is set up; its link opens the support inbox; after assignment the request counts as assigned, not waiting; no sideways page scrolling",
+      "issues": [39],
       "critical": true
     }
   ],
