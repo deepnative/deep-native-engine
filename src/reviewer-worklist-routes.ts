@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import type { Express, Response } from "express";
 import type {
   ReviewerWorklistStore,
@@ -45,7 +46,7 @@ export function mountReviewerWorklistRoutes(
       res.send(
         page(
           "Your sample feedback worklist",
-          `<section class="reading reviewer-worklist"><p class="eyebrow">PRIVATE LOCAL REVIEW</p><h1>Your sample feedback worklist</h1><p>Only samples currently assigned and explicitly shared with you appear here. This is private sample feedback, not a qualified service or a promised response time. Opening this list does not begin a review.</p>${navigation}<h2>${view === "active" ? "Active" : "Completed"} feedback</h2>${result.items.length ? `<ul>${result.items.map((item) => `<li><h3><a href="/review/evidence/${encodeURIComponent(item.evidenceId)}/feedback">${escape(item.title)}</a></h3><p>Source version ${item.version} · ${labels[item.state]}</p><p>Submitted <time datetime="${escape(item.submittedAt)}">${escape(item.submittedAt)}</time> · ${item.ageMinutes} minute${item.ageMinutes === 1 ? "" : "s"} since submission when this page was read.</p></li>`).join("")}</ul>` : `<p>No ${view} sample feedback is available to you.</p>`}${result.next ? `<p><a href="${path}?view=${view}&amp;after=${encodeURIComponent(result.next)}">Next feedback page</a></p>` : ""}<p>Access and work status are checked again on every page. The list can change as members withdraw samples or grants change.</p></section>`,
+          `<section class="reading reviewer-worklist"><p class="eyebrow">PRIVATE LOCAL REVIEW</p><h1>Your sample feedback worklist</h1><p>Only samples currently assigned and explicitly shared with you appear here. This is private sample feedback, not a qualified service or a promised response time. Opening this list does not begin a review.</p>${navigation}<h2>${view === "active" ? "Active" : "Completed"} feedback</h2>${result.items.length ? `<ul>${result.items.map((item) => `<li><h3><a href="/review/evidence/${encodeURIComponent(item.evidenceId)}/feedback">${escape(item.title)}</a></h3><p>Source version ${item.version} · ${labels[item.state]}</p><p>Submitted ${timeTag(item.submittedAt)} · ${item.ageMinutes} minute${item.ageMinutes === 1 ? "" : "s"} since submission when this page was read.</p></li>`).join("")}</ul>` : `<p>No ${view} sample feedback is available to you.</p>`}${result.next ? `<p><a href="${path}?view=${view}&amp;after=${encodeURIComponent(result.next)}">Next feedback page</a></p>` : ""}<p>Access and work status are checked again on every page. The list can change as members withdraw samples or grants change.</p></section>`,
         ),
       );
     } catch {
