@@ -299,3 +299,13 @@ describe("LEFTOVER-10 a real signal during a blocking step", () => {
     expect(output).not.toContain("next step ran");
   });
 });
+
+describe("LEFTOVER-11 fixture containers do not orphan image volumes", () => {
+  it("removes the Azurite fixture's anonymous volume with its container", () => {
+    const text = readFileSync(
+      "tests/integration/azure-object-storage.test.ts",
+      "utf8",
+    );
+    expect(text).toContain('docker("rm", "--force", "--volumes", name)');
+  });
+});
