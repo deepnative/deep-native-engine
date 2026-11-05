@@ -94,7 +94,7 @@ it("WHOSEES-01 a new member has nothing shared", async () => {
     eventPermissions: 0,
     openSupport: 0,
     publishedContributions: 0,
-    coaches: 0,
+    coaches: expect.any(Number) as number,
   });
 });
 
@@ -257,7 +257,7 @@ it("WHOSEES-04 staff-reviewed work counts only what is still shared", async () =
   expect((await summary(token)).eventPermissions).toBe(1);
 });
 
-it("WHOSEES-05/06 published contributions and coaches are counted", async () => {
+it("WHOSEES-05 published contributions are counted", async () => {
   const { token, id } = await member();
   const workspace = (
     await pool.query<{ id: string }>(
@@ -279,15 +279,25 @@ it("WHOSEES-05/06 published contributions and coaches are counted", async () => 
        VALUES($1,$2,$3,$4,1,$5,'platform_admin','${state}'${values && `,${values}`})`,
       [randomUUID(), randomUUID(), id, workspace, randomUUID()],
     );
+  expect((await summary(token)).publishedContributions).toBe(1);
+});
+
+it("WHOSEES-06 default coaches count from the start and a removed coach stops counting", async () => {
+  await pool.query(
+    `INSERT INTO account_roles(email_hash,role)
+     SELECT email_hash,'coach' FROM default_coaches ON CONFLICT DO NOTHING`,
+  );
+  const { token, id } = await member();
+  const defaults = await pool.query("SELECT 1 FROM default_coaches");
+  expect((await summary(token)).coaches).toBe(defaults.rowCount);
+  await pool.query("DELETE FROM coach_assignments WHERE learner_id=$1", [id]);
+  expect((await summary(token)).coaches).toBe(0);
   await seed(
     `INSERT INTO coach_assignments(learner_id,coach_email_hash,assigned_by)
      VALUES($1,$2,$3)`,
     [id, hash("invented-coach@example.test"), randomUUID()],
   );
-  expect(await summary(token)).toMatchObject({
-    publishedContributions: 1,
-    coaches: 1,
-  });
+  expect((await summary(token)).coaches).toBe(1);
 });
 
 it("WHOSEES-07 a member reads only their own page and departed members are denied", async () => {

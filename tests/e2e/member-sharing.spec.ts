@@ -43,6 +43,11 @@ test("[L295] WHOSEES-01..03 a member sees what they share and the moment it chan
     if (session.kind !== "active") throw Error("Invented member unavailable");
     owner = session.learner.id;
 
+    // WHOSEES-06: a known start, since new members get the default coaches.
+    await pool.query("DELETE FROM coach_assignments WHERE learner_id=$1", [
+      owner,
+    ]);
+
     // WHOSEES-01: reached from My account, and nothing is shared yet.
     await page.goto(`${origin}/account`);
     await page.getByRole("link", { name: "Who can see my work" }).click();
