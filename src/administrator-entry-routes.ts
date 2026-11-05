@@ -20,6 +20,7 @@ import { hours } from "./coaching-dashboard-views.ts";
 import { monthLabel } from "./coaching-values.ts";
 import type { AccountRoleAdmin } from "./account-role-admin.ts";
 import { coachAssignmentCard } from "./account-role-admin-routes.ts";
+import { hostingText } from "./hosting-presentation.ts";
 
 const CONSOLE_SEARCH_MAX = 120;
 
@@ -76,7 +77,7 @@ export function mountAdministratorEntry(
     res.status(status).send(
       page(
         "Administration unavailable",
-        `<section class="reading"><h1>Administration unavailable</h1><p>Use your current verified owner account. Administration is restricted to the existing approved owners. Open Email sign-in with your already verified owner email, return to Administration, then choose Enter administration. A learning profile or billing email does not grant administrator access. No authority was renewed or operation replayed. If a previous entry could not be confirmed, end administration before deliberately entering again.</p>${portalActions(
+        `<section class="reading"><h1>Administration unavailable</h1><p>Use your current verified owner account. Administration is restricted to the existing approved owners. ${hostingText("Open Email sign-in with your already verified owner email, return to Administration, then choose Enter administration.", "If this is your owner account, open the verification link we emailed you, or send a new one from My account. If you are signed out, sign in with that email first. Then return to Administration and choose Enter administration.")} A learning profile or billing email does not grant administrator access. No authority was renewed or operation replayed. If a previous entry could not be confirmed, end administration before deliberately entering again.</p>${portalActions(
           [
             ["/admin", "Administration"],
             ["/email/sign-in", "Email sign-in"],

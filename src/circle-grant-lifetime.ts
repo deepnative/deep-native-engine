@@ -3,8 +3,10 @@ import type { CircleGrantResult } from "./circle-grant-values.ts";
 export type CircleGrantFailureKind =
   "denied" | "invalid" | "conflict" | "unavailable";
 export class CircleGrantFailure extends Error {
-  constructor(readonly kind: CircleGrantFailureKind) {
+  readonly kind: CircleGrantFailureKind;
+  constructor(kind: CircleGrantFailureKind) {
     super("Private circle grant action unavailable.");
+    this.kind = kind;
   }
 }
 export interface CircleGrantTransaction {
