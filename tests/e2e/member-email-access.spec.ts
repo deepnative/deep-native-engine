@@ -187,6 +187,20 @@ test("[L213] email verification restores the exact saved member in another brows
       fresh.locator('select[name="goal"], input[name="goal"]:checked'),
     ).toHaveValue("everyday");
     await expect(fresh.getByText(emailAddress)).toHaveCount(0);
+    // ACCT-PLAIN-01: the checkbox follows its heading, with no second divider.
+    const deleteHeading = (await fresh
+      .getByRole("heading", { name: "Delete your account", exact: true })
+      .boundingBox())!;
+    const deleteCheck = (await fresh
+      .locator(".account-delete .check")
+      .boundingBox())!;
+    expect(
+      deleteCheck.y - (deleteHeading.y + deleteHeading.height),
+    ).toBeLessThanOrEqual(24);
+    await expect(fresh.locator(".account-delete .delete-form")).toHaveCSS(
+      "border-top-style",
+      "none",
+    );
     // ACCT-LAYOUT-01/02: phones read one column with one left edge; wide
     // screens use the page width, with the profile beside email and sign-out.
     const box = async (name: string) =>
@@ -239,6 +253,11 @@ test("[L213] email verification restores the exact saved member in another brows
     await fresh
       .getByRole("link", { name: "Return to learning", exact: true })
       .click();
+    // ACCT-PLAIN-01: on the learning page the form stands alone and keeps it.
+    await expect(fresh.locator(".delete-form")).toHaveCSS(
+      "border-top-style",
+      "solid",
+    );
     await fresh.getByRole("link", { name: "Review your work" }).click();
     await expect(
       fresh.getByText("My invented learning plan has three careful steps."),

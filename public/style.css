@@ -1649,6 +1649,13 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 .account-page > .profile-form form {
   margin-top: 20px;
 }
+/* ACCT-PLAIN-01: the section already has a divider and heading; the form's own
+   spacing and line are for /learn, where it stands alone. */
+.account-page > .account-delete .delete-form {
+  margin: 0;
+  padding-top: 0;
+  border-top: 0;
+}
 /* ACCT-LAYOUT-01..04: wide screens use the page width. The summary spans the
    top, with its text and links on full-width lines; email and sign-out sit
    beside the profile form. */
