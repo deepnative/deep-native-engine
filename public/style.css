@@ -1568,6 +1568,41 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
     padding: 8px 10px;
   }
 }
+/* #684 Roles: each role and its Remove button wrap inside the row. */
+.role-holders td {
+  white-space: normal;
+  vertical-align: top;
+}
+.role-holders td:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.role-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.role-list form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.role-admin fieldset {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+}
+@media (max-width: 480px) {
+  .role-holders th,
+  .role-holders td {
+    padding: 8px 10px;
+  }
+  .role-holders td:first-child code {
+    font-size: 0.8em;
+  }
+}
 .member-table td a {
   display: inline-flex;
   align-items: center;
@@ -2046,16 +2081,6 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
 /* CONSOLECOACH-02: the selected learner's summary is reached by its anchor. */
 #selected-member {
   scroll-margin-top: 24px;
-}
-/* DEMOSITE-01: every page of a demo site says so before anything else. */
-.demo-banner {
-  margin: 0;
-  padding: 8px 16px;
-  background: #fff4d6;
-  border-bottom: 1px solid #e8c36a;
-  color: #5a4300;
-  font-size: 0.9rem;
-  text-align: center;
 }
 /* DIAG-01/02: label and value pairs for administrator checks. */
 .diagnostics-table {

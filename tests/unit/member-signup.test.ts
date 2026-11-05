@@ -303,8 +303,10 @@ it("CREATEACCT-02 names the start form's sign-in fields as creating an account",
   expect(welcome.text).toContain(
     '<fieldset class="signup-fields"><legend>Create your account</legend>',
   );
+  // SIGNUPCOPY-01: the form never says an email is optional above its email field.
+  expect(welcome.text).not.toContain("No email is needed");
   expect(welcome.text).toContain(
-    "No email is needed to start: you are signed in as soon as you press Start my learning path.",
+    "Your email is your username. You are signed in as soon as you press Start my learning path, and you can sign in with your password from then on. We send a link to verify the email in the background.",
   );
   expect(welcome.text).toContain(
     '<a class="button landing-start" href="#your-path">Create account and start</a>',
