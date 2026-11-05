@@ -5,6 +5,7 @@ import { app } from "../../src/app.ts";
 import type { Store } from "../../src/store.ts";
 import type { MemberEmailAccess } from "../../src/member-email-access.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
+import { UNKNOWN_VISITOR } from "../../src/visitor-address.ts";
 import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 
 const origin = "http://127.0.0.1:3000";
@@ -167,9 +168,12 @@ it("returns the same generic sign-in response for any address and requires CSRF"
   expect(response.text).toContain(
     "will not send another message while a link is pending",
   );
-  expect(email.requestSignIn).toHaveBeenCalledExactlyOnceWith("x@example.com");
+  expect(email.requestSignIn).toHaveBeenCalledExactlyOnceWith(
+    "x@example.com",
+    UNKNOWN_VISITOR,
+  );
   await post(application, "/email/sign-in", {});
-  expect(email.requestSignIn).toHaveBeenLastCalledWith("");
+  expect(email.requestSignIn).toHaveBeenLastCalledWith("", UNKNOWN_VISITOR);
 });
 
 it.each([
@@ -256,6 +260,7 @@ it("keeps a delivery error out of the generic response and private logs", async 
     await vi.waitFor(() => {
       expect(email.requestSignIn).toHaveBeenCalledExactlyOnceWith(
         "saved@example.com",
+        UNKNOWN_VISITOR,
       );
       expect(stderr).toHaveBeenCalledWith(
         "Member email request could not be confirmed.\n",
@@ -424,6 +429,7 @@ it("EMAIL-HTTP-01 keeps a competing listener out of the exact email error reques
     await vi.waitFor(() => {
       expect(email.requestSignIn).toHaveBeenCalledExactlyOnceWith(
         "saved@example.com",
+        UNKNOWN_VISITOR,
       );
       expect(stderr).toHaveBeenCalledWith(
         "Member email request could not be confirmed.\n",
