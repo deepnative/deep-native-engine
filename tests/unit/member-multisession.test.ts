@@ -278,6 +278,7 @@ it("MULTISESSION-06 cookies issued before this change keep working after the mig
     )
   ).rows[0]!.id;
   // The shape before migration 098: the member row holds one browser's hash.
+  await pool.query("DELETE FROM schema_migrations WHERE version=98");
   await pool.query("DELETE FROM member_sessions");
   await pool.query(
     "UPDATE principals SET token_hash=$2,separate_sessions=false WHERE id=$1",
@@ -299,8 +300,23 @@ it("MULTISESSION-06 cookies issued before this change keep working after the mig
   const second = await passwordSignIn();
   expect(await signedIn(first)).toBe(true);
   expect(await signedIn(second)).toBe(true);
-  // Running the migration again changes nothing.
+  // Running the migration again changes nothing, even for an account that
+  // some other path left with one browser's hash.
+  const third = visitor();
+  await members.create(third, { background: "explorer", goal: "everyday" });
+  await pool.query(
+    "INSERT INTO member_email_identities(email_hash,principal_id) SELECT $1,id FROM principals WHERE token_hash=$2",
+    [emailHash("direct@example.com"), sha256(third)],
+  );
   await migrate(pool);
+  expect(
+    (
+      await pool.query(
+        "SELECT separate_sessions AS separate FROM principals WHERE token_hash=$1",
+        [sha256(third)],
+      )
+    ).rows[0]?.separate,
+  ).toBe(false);
   expect(await signedIn(first)).toBe(true);
   expect(await signedIn(second)).toBe(true);
 });

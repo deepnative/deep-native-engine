@@ -11,23 +11,28 @@ CREATE TABLE IF NOT EXISTS member_sessions (
 );
 CREATE INDEX IF NOT EXISTS member_sessions_principal ON member_sessions(principal_id);
 -- Existing accounts keep their one signed-in browser: its fingerprint moves to
--- a session row before the account's own value is replaced. Runs once per row.
-WITH accounts AS (
- SELECT p.id,p.token_hash,p.expires_at FROM principals p
- WHERE p.kind='member' AND NOT p.separate_sessions
-   AND (EXISTS(SELECT 1 FROM member_email_identities i WHERE i.principal_id=p.id)
-     OR EXISTS(SELECT 1 FROM member_login_emails e WHERE e.principal_id=p.id))
- FOR UPDATE OF p
-), moved AS (
- INSERT INTO member_sessions(token_hash,principal_id,expires_at)
- SELECT token_hash,id,expires_at FROM accounts ON CONFLICT DO NOTHING
-)
-UPDATE principals p
- SET token_hash=encode(sha256(convert_to(gen_random_uuid()::text||gen_random_uuid()::text,'UTF8')),'hex'),
-     separate_sessions=true
- FROM accounts a WHERE p.id=a.id;
-UPDATE learners l SET token_hash=p.token_hash FROM principals p
- WHERE p.id=l.id AND p.separate_sessions AND l.token_hash<>p.token_hash;
+-- a session row before the account's own value is replaced. This runs once,
+-- the first time 098 is applied; afterwards sign-up and email linking do it.
+DO $$
+BEGIN
+ IF EXISTS(SELECT 1 FROM schema_migrations WHERE version=98) THEN RETURN; END IF;
+ WITH accounts AS (
+  SELECT p.id,p.token_hash,p.expires_at FROM principals p
+  WHERE p.kind='member' AND NOT p.separate_sessions
+    AND (EXISTS(SELECT 1 FROM member_email_identities i WHERE i.principal_id=p.id)
+      OR EXISTS(SELECT 1 FROM member_login_emails e WHERE e.principal_id=p.id))
+  FOR UPDATE OF p
+ ), moved AS (
+  INSERT INTO member_sessions(token_hash,principal_id,expires_at)
+  SELECT token_hash,id,expires_at FROM accounts ON CONFLICT DO NOTHING
+ )
+ UPDATE principals p
+  SET token_hash=encode(sha256(convert_to(gen_random_uuid()::text||gen_random_uuid()::text,'UTF8')),'hex'),
+      separate_sessions=true
+  FROM accounts a WHERE p.id=a.id;
+ UPDATE learners l SET token_hash=p.token_hash FROM principals p
+  WHERE p.id=l.id AND p.separate_sessions AND l.token_hash<>p.token_hash;
+END $$;
 -- Administration entered from a browser lasts while that browser's own
 -- session does (083/094 bound it to the account's single value).
 CREATE OR REPLACE VIEW authorized_staff_profiles AS
