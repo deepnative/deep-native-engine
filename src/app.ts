@@ -9,6 +9,8 @@ import type { BillingProfileStore } from "./billing-profile.ts";
 import { mountCoachingRoutes } from "./coaching-routes.ts";
 import { mountAccountViews } from "./account-view-routes.ts";
 import { mountCoachView } from "./coach-view-routes.ts";
+import type { MemberSharing } from "./member-sharing.ts";
+import { mountMemberSharing } from "./member-sharing-routes.ts";
 import { mountAccountRoleAdmin } from "./account-role-admin-routes.ts";
 import type { AccountRoleAdmin } from "./account-role-admin.ts";
 import type { CoachView } from "./coach-view.ts";
@@ -391,6 +393,7 @@ export function app(
   options: {
     administratorEntry?: AdministratorEntry;
     coachView?: CoachView;
+    memberSharing?: MemberSharing;
     roleAdmin?: AccountRoleAdmin;
     administratorDiagnostics?: AdministratorDiagnostics;
     localStaffEntry?: boolean;
@@ -3991,6 +3994,9 @@ export function app(
     }
     res.redirect(303, "/editor/library");
   });
+  mountMemberSharing(app, options.memberSharing, {
+    contributions: options.memberContributions === true,
+  });
   app.get("/account", async (_req, res) => {
     const memberToken = res.locals.token as string;
     const memberId = (res.locals.learner as Learner).id;
@@ -4027,6 +4033,7 @@ export function app(
       res.locals.csrf as string,
       status,
       passwordSet,
+      Boolean(options.memberSharing),
     );
     if (performance.now() >= deadline) return res.redirect(303, "/");
     return res.send(html);

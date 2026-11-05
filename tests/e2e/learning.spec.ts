@@ -1331,22 +1331,22 @@ test("[L14] integration readiness labels every provider as simulated", async ({
 }) => {
   await page.goto("/readiness");
   await expect(
-    page.getByRole("heading", { name: "Integration readiness" }),
+    page.getByRole("heading", { name: "Service status" }),
   ).toBeVisible();
-  await expect(page.getByText("TEST ENVIRONMENT")).toBeVisible();
-  for (const kind of [
-    "ai",
-    "payment",
-    "storage",
-    "calendar",
-    "email",
-    "auth",
-    "analytics",
+  await expect(page.getByText("TEST SITE")).toBeVisible();
+  for (const name of [
+    "AI",
+    "Payments",
+    "File storage",
+    "Calendar",
+    "Email",
+    "Sign-in",
+    "Analytics",
   ])
-    await expect(page.getByText(`${kind} · simulated`)).toBeVisible();
-  await expect(
-    page.getByText("no external side effect occurs", { exact: false }),
-  ).toHaveCount(7);
+    await expect(page.getByText(`${name} · Simulated`)).toBeVisible();
+  await expect(page.getByText("Simulated. No", { exact: false })).toHaveCount(
+    7,
+  );
   await expect(page.getByText("configured", { exact: false })).toHaveCount(0);
 });
 

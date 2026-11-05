@@ -158,7 +158,9 @@ test("[L239] MOUT-01/02 a linked member signs out and deliberately returns by em
       ]);
     await page.goto(`${f.origin}/account`);
     await expect(
-      page.getByText("including any copied browser cookies", { exact: false }),
+      page.getByText("Any copy of this sign-in saved elsewhere stops working", {
+        exact: false,
+      }),
     ).toBeVisible();
     const sends = f.messages.length;
     await page.getByRole("button", { name: "Sign out", exact: true }).click();

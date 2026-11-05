@@ -17,7 +17,7 @@ import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 const control = testPool();
 test.afterAll(() => control.end());
 
-test("[L295] WAITWORK-01/02/09 an administrator notices a waiting support request on the console", async ({
+test("[L296] WAITWORK-01/02/09 an administrator notices a waiting support request on the console", async ({
   page,
 }) => {
   // A database of its own: the shared browser lane's data is never ours.

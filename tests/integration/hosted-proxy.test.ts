@@ -197,7 +197,7 @@ beforeAll(async () => {
     join(directory, "upstream.conf"),
     // The observer must accept more than the application evidence limit so its
     // own nginx default cannot masquerade as a refusal by the public proxy.
-    'log_format upstream_observation "$request_method $uri"; server { listen 3000; client_max_body_size 16m; access_log /tmp/owned-upstream.log upstream_observation; error_log /dev/null; location / { default_type text/plain; return 200 "$http_host|$http_origin|$http_cookie|$http_x_forwarded_host|$http_x_forwarded_proto"; } }',
+    'log_format upstream_observation "$request_method $uri"; server { listen 3000; client_max_body_size 16m; access_log /tmp/owned-upstream.log upstream_observation; error_log /dev/null; location = /forwarded-for { default_type text/plain; return 200 "$http_x_forwarded_for"; } location / { default_type text/plain; return 200 "$http_host|$http_origin|$http_cookie|$http_x_forwarded_host|$http_x_forwarded_proto"; } }',
   );
   chmodSync(join(directory, "upstream.conf"), 0o644);
   docker("build", "--tag", name, "infra/proxy");
@@ -302,6 +302,19 @@ it.each([
     });
     expect(response.status).toBe(403);
     expect(await response.text()).not.toContain("invented-form");
+  },
+);
+it.each(["203.0.113.9", "198.51.100.7, 192.0.2.1, 203.0.113.9", ""])(
+  "NOTICE-VISITOR-09 forwards the ingress X-Forwarded-For unchanged: %j",
+  async (forwardedFor) => {
+    const response = await proxyRequest(address + "/forwarded-for", {
+      headers: {
+        Host: canonical,
+        ...(forwardedFor ? { "X-Forwarded-For": forwardedFor } : {}),
+      },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(forwardedFor);
   },
 );
 it("HOSTED-10 allows owned read navigation without Origin but rejects a foreign read Origin", async () => {

@@ -8,6 +8,7 @@ import { hostingText } from "./hosting-presentation.ts";
 import { withMembership } from "./membership-presentation.ts";
 import { passwordSignInForm } from "./member-password-routes.ts";
 import type { MemberPasswordAccess } from "./member-password-access.ts";
+import { visitorAddress } from "./visitor-address.ts";
 
 function form(action: string, csrf: string, button: string) {
   return `<form method="post" action="${action}"><input type="hidden" name="csrf" value="${csrf}"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" required><button type="submit">${button}</button></form>`;
@@ -120,7 +121,7 @@ export function mountMemberEmailRoutes(
         () =>
           page(
             "Signed out",
-            `<section class="error-page"><h1>Signed out</h1><p>Your saved records were not deleted. This access token, including any copied browser cookies, no longer opens them. ${password ? "Sign in again with your email and password, or with an email link." : "Return with a previously verified email, if you linked one. Without it, you cannot recover this account."} No email was sent.</p><p class="account-links"><a class="button" href="/email/sign-in">Sign in</a> <a class="button secondary" href="/">Start a new learning path</a></p></section>`,
+            `<section class="error-page"><h1>Signed out</h1><p>Your saved records were not deleted. This access token, including any copied browser cookies, no longer opens them. ${password ? "Sign in again with your email and password, or with an email link." : "Return with a previously verified email, if you linked one. Without it, you cannot recover this account."} No email was sent.</p><p class="account-links"><a class="button" href="/email/sign-in">Sign in</a> <a class="button secondary" href="/#your-path">Start my learning path</a></p></section>`,
           ),
       ),
     );
@@ -149,7 +150,7 @@ export function mountMemberEmailRoutes(
     res.send(
       page(
         "Return to your learning",
-        `<section class="sign-in-page"><h1>Return to your learning</h1><p class="sign-in-new"><strong>New here?</strong> You don’t need to sign in first. <a class="button" href="/#your-path">Create an account</a></p>${passwordSignIn ? passwordSignInForm(res.locals.csrf as string) : ""}<section class="sign-in-option" aria-labelledby="email-sign-in"><h2 id="email-sign-in">${passwordSignIn ? "Or get an email link" : "Get an email link"}</h2><p>Enter the email you previously linked to this learning record. A private sign-in link expires after 15 minutes.</p>${access ? form("/email/sign-in", res.locals.csrf as string, "Send sign-in link") : `<p>Email sign-in is unavailable ${hostingText("on this preview", "here")}.</p>`}</section><p class="account-links"><a class="button secondary" href="/">Start a new learning path</a></p></section>`,
+        `<section class="sign-in-page"><h1>Return to your learning</h1><p class="sign-in-new"><strong>New here?</strong> You don’t need to sign in first. <a class="button" href="/#your-path">Create account</a></p>${passwordSignIn ? passwordSignInForm(res.locals.csrf as string) : ""}<section class="sign-in-option" aria-labelledby="email-sign-in"><h2 id="email-sign-in">${passwordSignIn ? "Or get an email link" : "Get an email link"}</h2><p>Enter the email you previously linked to this learning record. A private sign-in link expires after 15 minutes.</p>${access ? form("/email/sign-in", res.locals.csrf as string, "Send sign-in link") : `<p>Email sign-in is unavailable ${hostingText("on this preview", "here")}.</p>`}</section></section>`,
       ),
     );
   });
@@ -164,7 +165,11 @@ export function mountMemberEmailRoutes(
           ),
         );
     const address = String(req.body.email ?? "");
-    dispatch(() => access.requestSignIn(address));
+    const visitor = visitorAddress(
+      req.socket.remoteAddress,
+      req.get("x-forwarded-for"),
+    );
+    dispatch(() => access.requestSignIn(address, visitor));
     return res.send(
       page(
         "Check your email",
