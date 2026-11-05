@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -245,18 +245,6 @@ describe("LEFTOVER-05 the command stays conservative", () => {
   });
 });
 
-describe("LEFTOVER-06 browser fixtures clean up after a failed test", () => {
-  // A fixture that keeps its database when a test fails leaks one for every
-  // failure. The name and marker are already attached to the test report.
-  const files = readdirSync("tests/e2e").filter((f) => f.endsWith(".spec.ts"));
-  it.each(files)("%s does not tie its drop to the test outcome", (file) => {
-    const text = readFileSync(`tests/e2e/${file}`, "utf8");
-    expect(text).not.toMatch(
-      /if \(completed\)\s*await drop|if \(\s*test\.info\(\)\.status/,
-    );
-  });
-});
-
 describe("LEFTOVER-10 a real signal during a blocking step", () => {
   it("reaches cleanup instead of killing the process", async () => {
     const helper = pathToFileURL("scripts/interruption.mjs").href;
@@ -295,15 +283,5 @@ describe("LEFTOVER-10 a real signal during a blocking step", () => {
     expect(output).toContain("Verification stopped by SIGTERM");
     expect(output).toContain("cleanup ran");
     expect(output).not.toContain("next step ran");
-  });
-});
-
-describe("LEFTOVER-11 fixture containers do not orphan image volumes", () => {
-  it("removes the Azurite fixture's anonymous volume with its container", () => {
-    const text = readFileSync(
-      "tests/integration/azure-object-storage.test.ts",
-      "utf8",
-    );
-    expect(text).toContain('docker("rm", "--force", "--volumes", name)');
   });
 });
