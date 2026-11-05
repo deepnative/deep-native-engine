@@ -2299,13 +2299,13 @@ it("serves the local welcome, stylesheet and safe security headers", async () =>
   expect(res.headers["x-powered-by"]).toBeUndefined();
   expect(res.headers["cache-control"]).toBe("no-store");
 });
-it("reports deterministic integration readiness without claiming live effects", async () => {
+it("reports simulated service status without claiming live effects", async () => {
   const agent = await managedAgent(app(db, { origin, secret: "s" }));
   const res = await agent.get("/readiness").set("Host", host).expect(200);
-  expect(res.text).toContain("DEMO ENVIRONMENT");
-  expect(res.text).toMatch(/<strong>ai<\/strong> · simulated/);
-  expect(res.text).toMatch(/<strong>payment<\/strong> · simulated/);
-  expect(res.text).toContain("no external side effect occurs");
+  expect(res.text).toContain("DEMO SITE");
+  expect(res.text).toMatch(/<strong>AI<\/strong> · Simulated/);
+  expect(res.text).toMatch(/<strong>Payments<\/strong> · Simulated/);
+  expect(res.text).toContain("Simulated. No payment is taken.");
   expect(res.text).not.toContain("configured");
 });
 it("serves concurrent requests through one test agent without transport failures", async () => {
@@ -2319,7 +2319,7 @@ it("serves concurrent requests through one test agent without transport failures
     );
     expect(responses).toHaveLength(8);
     for (const response of responses) {
-      expect(response.text).toContain("DEMO ENVIRONMENT");
+      expect(response.text).toContain("DEMO SITE");
     }
   } finally {
     await closeLoopback(server);
@@ -6819,7 +6819,7 @@ it("NAV-09/10 keeps the signed-out header on form responses and offers sign-in b
   const main = out.text.match(/<main[^>]*>([\s\S]*?)<\/main>/)?.[1] ?? "";
   expect(main).toContain('class="button" href="/email/sign-in">Sign in</a>');
   expect(main).toContain(
-    'class="button secondary" href="/">Start a new learning path</a>',
+    'class="button secondary" href="/#your-path">Start my learning path</a>',
   );
 });
 it("FOOTER-01 lists footer links as whole items without dot separators", async () => {
@@ -6839,7 +6839,7 @@ it("FOOTER-01 lists footer links as whole items without dot separators", async (
     "My courses",
     "Local circles",
     "Workflow demonstrations",
-    "Integration readiness",
+    "Service status",
   ])
     expect(footer).toContain(`>${label}</a>`);
 });

@@ -696,3 +696,39 @@ it("AUDIT-01/02/03 shows readable delivery states, month names and button naviga
     '<a class="button secondary" href="/account/billing">Billing recipient</a>',
   );
 });
+
+it("GAPS-01 an administrator's invoice links stay in administration; a member's keep theirs", async () => {
+  const f = fixture();
+  const staff = (await f.get(`/operator/invoices/${id}`)).text;
+  expect(staff).toContain('href="/operator/invoices">Courses and invoices</a>');
+  expect(staff).toContain('href="/operator">Administration console</a>');
+  expect(staff).not.toContain('href="/account/purchases"');
+  const member = (await f.get(`${base}/invoices/${id}`)).text;
+  expect(member).toContain(
+    'href="/account/purchases">Courses and invoices</a>',
+  );
+  expect(member).toContain('href="/account">My account</a>');
+});
+it("GAPS-02 confirms a prepared proposal and keeps the learner selected", async () => {
+  const f = fixture();
+  const done = await f.post(`${admin}/plans`, {
+    ownerId: id,
+    courses: JSON.stringify(["FND-001", 2]),
+    "amount_FND-001_2": "10.01",
+    tax: "1.00",
+    cadence: "one_time",
+    startsOn: "2026-10-31",
+  });
+  expect(done.status).toBe(303);
+  expect(done.headers.location).toBe(`${admin}?ownerId=${id}&prepared=1`);
+  const page = await f.get(done.headers.location!);
+  expect(page.status).toBe(200);
+  expect(page.text).toContain(
+    '<p role="status">Course billing proposal prepared. The learner can now review and accept it in Courses and invoices.</p>',
+  );
+  expect((await f.get(`${admin}?ownerId=${id}`)).text).not.toContain(
+    "Course billing proposal prepared",
+  );
+  expect((await f.get(`${admin}?ownerId=${id}&prepared=2`)).status).toBe(422);
+  expect((await f.get(`${admin}?prepared=1`)).status).toBe(422);
+});
