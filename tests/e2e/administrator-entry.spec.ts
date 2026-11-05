@@ -63,8 +63,7 @@ test.afterEach(async () => {
       )
     ).rows[0];
     expect(actual).toEqual({ oid: resource.oid, marker: resource.marker });
-    if (test.info().status === test.info().expectedStatus)
-      await dropAttendanceBrowserDatabase(control, resource.name);
+    await dropAttendanceBrowserDatabase(control, resource.name);
     resource = undefined;
   }
   // The shared browser lane's identities and seeded curriculum are never ours to clear.

@@ -113,6 +113,20 @@ Before creating restore resources, the restore adapter checks the explicit `DNE_
 
 After verification, retain any failed fixture needed for diagnosis and its exact cleanup responsibility. A matching generated name alone is not ownership. Only when no gate/preview/session uses this instance, all databases created in the campaign have been ordinarily removed with actual absence confirmed, and the creation record and mount identities still match, orderly stop and remove **this recorded container**. Use `docker stop --timeout -1 "$DNE_TEST_POSTGRES_CONTAINER"` to wait for shutdown, then `docker rm "$DNE_TEST_POSTGRES_CONTAINER"`. Confirm no remaining container references the exact recorded volume before `docker volume rm "$DNE_TEST_POSTGRES_VOLUME"`. Do not force removal, prune by prefix or conceal a failed DROP by deleting the instance. Remove only these per-command environment options to return to the default fixture; no persistent Git, Docker or PostgreSQL configuration changes are required.
 
+## Leftover test resources
+
+A verifier removes its test databases when a step fails or when it receives `SIGTERM` or `SIGINT`. A signal sent only to the verifier takes effect when the current step ends; one sent to the whole process group ends that step straight away. Nothing inside a run can clean up after `SIGKILL`, `docker rm -f` of the verifier or a machine crash, so those can leave databases on the shared Compose PostgreSQL. To see what is left, run:
+
+```sh
+npm run cleanup:test-resources
+```
+
+That is a dry run that lists each resource and why it is kept. Add `-- --apply` to remove what it lists as disposable. It refuses everything while a `dne-gate-active` container exists, so run it between gates.
+
+A generated `dne_test_<32 hex>` database is disposable only if it has no connection, has a generated marker or none, has not changed for 24 hours (`--min-age-hours` can lower this to no less than 1), is not named by a live process or a running container's settings, and has not changed since any running container started. No connections alone proves nothing: a running gate's own databases sit at zero connections between stages. The drop never uses `FORCE`, so PostgreSQL still refuses if anything has connected.
+
+A stopped `dne-verify-*` container is removed only if it has the `io.deepnative.verification-owner=gate` label, holds no volume, stopped at least 24 hours ago and has a `io.deepnative.verification-claim` label equal to `--claim <your claim>`. Other workers' stopped verifiers are listed and left for them. The command never removes a running container, the shared PostgreSQL container, its development database or any volume. It only counts unattached volumes, because they may hold data.
+
 ## Configurable local resources
 
 Test groups and Docker resource limits are separate settings. Select any complete group count from `1` through `8`, or use memory-aware `auto`:
