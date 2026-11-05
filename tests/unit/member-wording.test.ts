@@ -1,6 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { expect, it, vi } from "vitest";
+import { withLoopback } from "../support/loopback-server.ts";
 import { adapterReadiness } from "../../src/adapters.ts";
 import { registerCircleDiscussion } from "../../src/circle-discussion-routes.ts";
 import {
@@ -549,8 +550,8 @@ it("READABLE-11 hosted circle discussion keeps invented examples only", async ()
     ]),
   ) as unknown as CircleDiscussionStore;
   registerCircleDiscussion(application, store);
-  const { text } = await request(application).get(
-    "/circles/everyday-ai/discussion/choice",
+  const { text } = await withLoopback(application, (listener) =>
+    request(listener).get("/circles/everyday-ai/discussion/choice"),
   );
   expect(visibleText(text)).not.toMatch(LOCAL_ON_HOSTED);
   expect(text).toContain('<a href="/circles">Learning circles</a>');

@@ -4,6 +4,7 @@ export default defineConfig({
     include: ["tests/unit/**/*.test.{ts,mjs}"],
     passWithNoTests: false,
     allowOnly: false,
+    setupFiles: ["tests/support/loopback-only.ts"],
     retry: 0,
     // Unit files mock shared runtime modules. Serial file execution avoids the
     // observed order-sensitive full-suite failure in the isolated gate probe.

@@ -1,5 +1,6 @@
 import express from "express";
 import request from "supertest";
+import { withLoopback } from "../support/loopback-server.ts";
 import type { Pool } from "pg";
 import { expect, it, vi } from "vitest";
 import {
@@ -21,6 +22,9 @@ const empty: SharingSummary = {
   publishedContributions: 0,
   coaches: 0,
 };
+
+const open = (site: ReturnType<typeof server>, path = "/account/sharing") =>
+  withLoopback(site, (listener) => request(listener).get(path));
 
 function server(store: MemberSharing | undefined, contributions = false) {
   const site = express();
@@ -92,7 +96,7 @@ it("WHOSEES-02/08 the store names known circles and reports a failed read as una
 });
 
 it("WHOSEES-01 a member with nothing shared is told so in every area", async () => {
-  const res = await request(server(ready({}))).get("/account/sharing");
+  const res = await open(server(ready({})));
   expect(res.status).toBe(200);
   expect(res.headers["cache-control"]).toBe("no-store");
   const body = text(res.text);
@@ -107,7 +111,7 @@ it("WHOSEES-01 a member with nothing shared is told so in every area", async () 
 });
 
 it("WHOSEES-02 sharing on and off are distinct, and a circle links to its controls", async () => {
-  const res = await request(
+  const res = await open(
     server(
       ready({
         circles: [
@@ -118,7 +122,7 @@ it("WHOSEES-02 sharing on and off are distinct, and a circle links to its contro
         ],
       }),
     ),
-  ).get("/account/sharing");
+  );
   const body = text(res.text);
   expect(res.text).toContain("A &lt;b&gt;");
   expect(body).toContain("can read 1 of your posts");
@@ -130,7 +134,7 @@ it("WHOSEES-02 sharing on and off are distinct, and a circle links to its contro
 });
 
 it("WHOSEES-04 each reviewed area shows a count, a reader and a control", async () => {
-  const many = await request(
+  const many = await open(
     server(
       ready({
         evidence: 2,
@@ -139,7 +143,7 @@ it("WHOSEES-04 each reviewed area shows a count, a reader and a control", async 
         openSupport: 2,
       }),
     ),
-  ).get("/account/sharing");
+  );
   const body = text(many.text);
   expect(body).toContain("2 files or samples allowed for private review");
   expect(body).toContain("2 workflow notes waiting for private review");
@@ -154,7 +158,7 @@ it("WHOSEES-04 each reviewed area shows a count, a reader and a control", async 
     expect(many.text).toContain(`href="${link}"`);
   const one = text(
     (
-      await request(
+      await open(
         server(
           ready({
             evidence: 1,
@@ -163,7 +167,7 @@ it("WHOSEES-04 each reviewed area shows a count, a reader and a control", async 
             openSupport: 1,
           }),
         ),
-      ).get("/account/sharing")
+      )
     ).text,
   );
   expect(one).toContain("1 file or sample allowed for private review");
@@ -173,32 +177,20 @@ it("WHOSEES-04 each reviewed area shows a count, a reader and a control", async 
 });
 
 it("WHOSEES-05 contributions appear when the feature is on or something is published", async () => {
-  const on = text(
-    (await request(server(ready({}), true)).get("/account/sharing")).text,
-  );
+  const on = text((await open(server(ready({}), true))).text);
   expect(on).toContain("No contributions are published");
-  const published = await request(
-    server(ready({ publishedContributions: 2 })),
-  ).get("/account/sharing");
+  const published = await open(server(ready({ publishedContributions: 2 })));
   expect(text(published.text)).toContain(
     "2 contributions are published to signed-in members",
   );
   expect(published.text).toContain('href="/contribute"');
   expect(
-    text(
-      (
-        await request(server(ready({ publishedContributions: 1 }))).get(
-          "/account/sharing",
-        )
-      ).text,
-    ),
+    text((await open(server(ready({ publishedContributions: 1 })))).text),
   ).toContain("1 contribution is published to signed-in members");
 });
 
 it("WHOSEES-06 coach and administrator access is stated without naming anyone", async () => {
-  const two = text(
-    (await request(server(ready({ coaches: 2 }))).get("/account/sharing")).text,
-  );
+  const two = text((await open(server(ready({ coaches: 2 })))).text);
   expect(two).toContain("You have 2 coaches");
   expect(two).toContain(
     "display name, monthly coaching hours and their status",
@@ -206,12 +198,9 @@ it("WHOSEES-06 coach and administrator access is stated without naming anyone", 
   expect(two).toContain("Account administrators");
   expect(two).toContain("enrollment and billing summaries");
   expect(two).toContain("don't show your private writing or files");
-  expect(
-    text(
-      (await request(server(ready({ coaches: 1 }))).get("/account/sharing"))
-        .text,
-    ),
-  ).toContain("You have 1 coach.");
+  expect(text((await open(server(ready({ coaches: 1 })))).text)).toContain(
+    "You have 1 coach.",
+  );
   const learner = {
     displayName: "Ada",
     background: "explorer",
@@ -229,27 +218,26 @@ it("WHOSEES-06 coach and administrator access is stated without naming anyone", 
 });
 
 it("WHOSEES-07/08 denial, stray queries and failures never look like nothing shared", async () => {
-  const denied = await request(
+  const denied = await open(
     server({ summary: () => Promise.resolve({ kind: "denied" }) }),
-  ).get("/account/sharing");
+  );
   expect(denied.status).toBe(303);
   expect(denied.headers.location).toBe("/");
 
-  const stray = await request(server(ready({ coaches: 1 }))).get(
+  const stray = await open(
+    server(ready({ coaches: 1 })),
     "/account/sharing?x=1",
   );
   expect(stray.status).toBe(400);
   expect(text(stray.text)).toContain("Open this page from My account");
 
-  const failed = await request(
+  const failed = await open(
     server({ summary: () => Promise.resolve({ kind: "unavailable" }) }),
-  ).get("/account/sharing");
+  );
   expect(failed.status).toBe(503);
   expect(failed.headers["cache-control"]).toBe("no-store");
   expect(text(failed.text)).toContain("can't be checked right now");
   expect(text(failed.text)).not.toContain("You haven't");
 
-  expect(
-    (await request(server(undefined)).get("/account/sharing")).status,
-  ).toBe(404);
+  expect((await open(server(undefined))).status).toBe(404);
 });
