@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import {
@@ -35,7 +36,7 @@ function revokeForm(
   return `<form method="post" action="${base}/revoke">${hidden(escape(csrf))}${field("grantId", input.grantId)}${field("operationId", input.operationId)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I confirm revoking this exact permission only.</span></label><button type="submit">${retry ? "Retry this exact revocation" : "Revoke this exact permission"}</button></form>`;
 }
 function rowDetails(row: SupportMinuteRow) {
-  return `<dl><dt>Permission reference</dt><dd data-support-time-grant-reference>${escape(row.grantId)}</dd><dt>Request reference</dt><dd>${escape(row.requestId)}</dd><dt>Allocation reference</dt><dd>${escape(row.allocationId)}</dd><dt>Operator reference</dt><dd>${escape(row.operatorId)}</dd><dt>Recipient role</dt><dd>${escape(row.role)}</dd><dt>Allocation state</dt><dd>${escape(row.allocationState)}</dd><dt>Reserved ceiling</dt><dd>${row.ceiling}</dd><dt>Observed permission state</dt><dd data-support-time-grant-state>${escape(row.state)}</dd><dt>Starts at (UTC)</dt><dd>${escape(row.startsAt)}</dd><dt>Expires at (UTC)</dt><dd>${escape(row.expiresAt)}</dd><dt>Created at (UTC)</dt><dd>${escape(row.createdAt)}</dd>${row.revokedAt === null ? "" : `<dt>Revoked at (UTC)</dt><dd>${escape(row.revokedAt)}</dd>`}</dl>${row.sourceAvailable ? "" : "<p>The source is unavailable. This retained permission metadata does not restore source access.</p>"}`;
+  return `<dl><dt>Permission reference</dt><dd data-support-time-grant-reference>${escape(row.grantId)}</dd><dt>Request reference</dt><dd>${escape(row.requestId)}</dd><dt>Allocation reference</dt><dd>${escape(row.allocationId)}</dd><dt>Operator reference</dt><dd>${escape(row.operatorId)}</dd><dt>Recipient role</dt><dd>${escape(row.role)}</dd><dt>Allocation state</dt><dd>${escape(row.allocationState)}</dd><dt>Reserved ceiling</dt><dd>${row.ceiling}</dd><dt>Observed permission state</dt><dd data-support-time-grant-state>${escape(row.state)}</dd><dt>Starts at (UTC)</dt><dd>${timeTag(row.startsAt)}</dd><dt>Expires at (UTC)</dt><dd>${timeTag(row.expiresAt)}</dd><dt>Created at (UTC)</dt><dd>${timeTag(row.createdAt)}</dd>${row.revokedAt === null ? "" : `<dt>Revoked at (UTC)</dt><dd>${timeTag(row.revokedAt)}</dd>`}</dl>${row.sourceAvailable ? "" : "<p>The source is unavailable. This retained permission metadata does not restore source access.</p>"}`;
 }
 export function supportMinuteForm(
   csrf: string,
@@ -54,7 +55,7 @@ export function supportMinuteCheck(
 ) {
   return page(
     "Confirm support-minute permission",
-    `<section class="reading">${notice}<h1>Confirm support-minute permission</h1><p>Checking references created no permission or allowance change.</p><dl><dt>Allocation state</dt><dd>${escape(check.allocationState)}</dd><dt>Reserved ceiling</dt><dd>${check.ceiling}</dd><dt>Maximum current authority expiry (UTC)</dt><dd>${escape(check.authorityExpiresAt)}</dd></dl>${grantForm(csrf, { requestId: check.requestId, allocationId: check.allocationId, operatorId: check.operatorId, operationId, startsAt: "", expiresAt: "" }, false)}${navigation}</section>`,
+    `<section class="reading">${notice}<h1>Confirm support-minute permission</h1><p>Checking references created no permission or allowance change.</p><dl><dt>Allocation state</dt><dd>${escape(check.allocationState)}</dd><dt>Reserved ceiling</dt><dd>${check.ceiling}</dd><dt>Maximum current authority expiry (UTC)</dt><dd>${timeTag(check.authorityExpiresAt)}</dd></dl>${grantForm(csrf, { requestId: check.requestId, allocationId: check.allocationId, operatorId: check.operatorId, operationId, startsAt: "", expiresAt: "" }, false)}${navigation}</section>`,
   );
 }
 export function supportMinuteReceipt(
