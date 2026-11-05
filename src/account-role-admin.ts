@@ -112,14 +112,14 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
     tx: PoolClient,
     actor: string,
     action: string,
-    fields: { emailHash?: string | null; role?: string; learnerId?: string },
+    fields: { emailHash: string; role?: string; learnerId?: string },
   ) =>
     tx.query(
       "INSERT INTO account_role_events(actor_id,action,email_hash,role,learner_id) VALUES($1,$2,$3,$4,$5)",
       [
         actor,
         action,
-        fields.emailHash ?? null,
+        fields.emailHash,
         fields.role ?? null,
         fields.learnerId ?? null,
       ],
