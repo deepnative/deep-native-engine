@@ -284,6 +284,8 @@ import {
   type MemberTestUnitsStore,
 } from "./member-test-units.ts";
 import { registerMemberTestUnitsRoutes } from "./member-test-units-routes.ts";
+import { mountStudyAllowanceRoutes } from "./study-allowance-routes.ts";
+import type { StudyAllowanceStore } from "./study-allowances.ts";
 import type { StudyUnitFixtureStore } from "./study-unit-fixtures.ts";
 import { mountStudyUnitFixtureRoutes } from "./study-unit-fixture-routes.ts";
 import { disabledPracticeStore, type PracticeStore } from "./practice.ts";
@@ -443,6 +445,7 @@ export function app(
     localHoldInspection?: LocalAiHoldInspectionStore;
     memberTestUnits?: MemberTestUnitsStore;
     studyUnitFixtures?: StudyUnitFixtureStore;
+    studyAllowances?: StudyAllowanceStore;
     localTestUnitIssuance?: boolean;
     attempts?: AttemptStore;
     practice?: PracticeStore;
@@ -927,7 +930,9 @@ export function app(
     options.memberTestUnits ?? disabledMemberTestUnitsStore(),
     mode,
     Boolean(options.studyUnitFixtures),
+    Boolean(options.studyAllowances) && options.localTestUnitIssuance === true,
   );
+  mountStudyAllowanceRoutes(app, options.studyAllowances, mode);
   mountStudyUnitFixtureRoutes(app, options.studyUnitFixtures, options);
   app.get("/operator/experts", async (_req, res) => {
     const records = await tracks.registry(res.locals.token as string);

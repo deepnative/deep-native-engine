@@ -14,7 +14,7 @@ The reviewer opens `/review/evidence/<evidence-id>/feedback`. Save one to five c
 
 The member follows **Read private feedback** from their evidence list. Published comments remain immutable. While consent remains active, the owner can ask one clarification and the same currently authorized reviewer can answer once; each allows 2000 characters. A revision creates a separate source requiring its own safety check, consent, queue and exact grant. Earlier feedback stays attached to its original source.
 
-Withdrawal stops reviewer access and new exchanges, while the owner retains published feedback. Reviewed status remains historical; it does not imply current consent. Deleting the source, workspace or account cascades the feedback and draft-operation records. Bounded member export v19 includes published feedback and clarification/answer, excludes drafts and replay identities, and preserves existing cursor section indices. Since `local-member-records-v33` each exported feedback is labelled `reviewer-attributed-private-sample-not-formal`: reviewer account attribution does not verify human authorship.
+Withdrawal stops reviewer access and new exchanges, while the owner retains published feedback. Reviewed status remains historical; it does not imply current consent. Deleting the source, workspace or account cascades the feedback and draft-operation records. Bounded member export v19 includes published feedback and clarification/answer, excludes drafts and replay identities, and preserves existing cursor section indices. Since `local-member-records-v34` each exported feedback is labelled `reviewer-attributed-private-sample-not-formal`: reviewer account attribution does not verify human authorship.
 
 ## Failure recovery and boundaries
 

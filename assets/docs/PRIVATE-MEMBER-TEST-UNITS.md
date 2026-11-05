@@ -12,4 +12,6 @@ The page and download use the current cookie, reject query scope, prevent cachin
 
 Delivery scope is [#435](https://github.com/deepnative/deep-native-engine/issues/435). Parents #199, #34 and #27 remain open for their broader policies and behavior. PostgreSQL and browser evidence covers private local synthetic fixtures, not commercial or full-MVP acceptance.
 
+A member can also deliberately claim an explicitly enabled [versioned monthly study allowance](PRIVATE-STUDY-ALLOWANCES.md).
+
 An explicitly enabled [one-time local study fixture](PRIVATE-STUDY-UNIT-FIXTURES.md) can now be requested and issued through normal member/administrator confirmations. Reading this balance still creates nothing. Its withdrawal makes only unused units unavailable; original held/consumed history and deadlines remain distinct.
