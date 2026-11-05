@@ -107,10 +107,11 @@ function fixture(
       revision: number;
     } | null;
     error?: Error;
+    refs?: number;
   } = {},
 ) {
   let receipts = options.receipts ?? [accepted];
-  const query = vi.fn(async (sql: string) => {
+  const query = vi.fn(async (sql: string, _values?: unknown[]) => {
     if (options.error) throw options.error;
     if (sql.includes("token_hash=$1"))
       return {
@@ -148,8 +149,15 @@ function fixture(
                 },
               ],
       };
-    if (sql.startsWith("SELECT id,proposal_id FROM proposal_publications"))
-      return { rows: [{ id: publicationId, proposal_id: id }] };
+    if (
+      sql.startsWith("SELECT pp.id,pp.proposal_id FROM proposal_publications")
+    )
+      return {
+        rows: Array.from({ length: options.refs ?? 1 }, (_, n) => ({
+          id: n ? randomUUID() : publicationId,
+          proposal_id: id,
+        })),
+      };
     if (sql.includes('accepted_at AS "acceptedAt"')) {
       const row = receipts[0];
       if (receipts.length > 1) receipts = receipts.slice(1);
@@ -387,8 +395,22 @@ it("returns only still-published exact source revisions and fails closed on tran
   const r = published();
   expect(await fixture({ receipts: [r] }).target.list(token)).toMatchObject({
     kind: "ready",
-    value: [{ receipt: r, source }],
+    value: { items: [{ receipt: r, source }], older: null },
   });
+  // Only valid shared rows reach the page limit; one extra row marks an older page.
+  const paged = fixture({ receipts: [r], refs: 21 });
+  expect(await paged.target.list(token, publicationId)).toMatchObject({
+    kind: "ready",
+    value: { older: expect.any(String) },
+  });
+  const refs = paged.query.mock.calls.find(([sql]) =>
+    sql.includes("FROM proposal_publications pp"),
+  )!;
+  expect(refs[0]).toMatch(
+    /p\.state='submitted'[\s\S]*ORDER BY pp\.published_at DESC,pp\.id DESC LIMIT 21/,
+  );
+  expect(refs[1]).toEqual([null, publicationId]);
+  expect(await paged.target.list(token, "bad")).toEqual({ kind: "invalid" });
   expect(
     await fixture({ receipts: [r] }).target.detail(token, r.id),
   ).toMatchObject({ kind: "ready", value: { receipt: r, source } });
@@ -403,7 +425,7 @@ it("returns only still-published exact source revisions and fails closed on tran
   }
   expect(await fixture({ receipts: [null] }).target.list(token)).toMatchObject({
     kind: "ready",
-    value: [],
+    value: { items: [], older: null },
   });
   expect(
     await fixture({ error: new Error("private diagnostics") }).target.owner(
@@ -439,6 +461,12 @@ it("renders exact private and shared states without converting acceptance into c
         { source: { ...source, origin }, receipt: published() },
       ]),
     ).toContain("&lt;example&gt;");
+    expect(
+      contributionsPage(
+        [{ source: { ...source, origin }, receipt: published() }],
+        publicationId,
+      ),
+    ).toContain(`href="/contributions?before=${publicationId}"`);
   }
   expect(
     publicationOwnerPage(
@@ -467,6 +495,19 @@ it("renders exact private and shared states without converting acceptance into c
     publicationOwnerPage("nonce", source, withdrawn(), true),
   ).not.toContain("Withdraw sharing</button>");
   expect(contributionsPage([])).toContain("No contributions");
+  expect(contributionsPage([])).not.toContain("?before=");
+  expect(contributionsPage([], null, true)).toContain(
+    'href="/contributions">Newest contributions',
+  );
+  // CONTRIB-CONTACT-01: the owner-chosen review contact, with no response promise.
+  for (const text of [
+    contributionsPage([]),
+    publicationOwnerPage("nonce", source, accepted, true),
+    publicationReceiptPage(accepted),
+  ]) {
+    expect(text).toContain('href="mailto:info@deepnative.io"');
+    expect(text).toContain("No response time is promised");
+  }
   expect(publicationInspectionPage("<nonce>")).toContain("&lt;nonce&gt;");
   expect(publicationRecoveryPage("nonce", "<failure>")).toContain(
     "&lt;failure&gt;",
@@ -493,7 +534,11 @@ async function routeFixture(present = true) {
     publish: vi.fn().mockResolvedValue(ready(r)),
     inspect: vi.fn().mockResolvedValue(ready(r)),
     withdraw: vi.fn().mockResolvedValue(ready(withdrawn(r))),
-    list: vi.fn().mockResolvedValue(ready([{ source, receipt: r }])),
+    list: vi
+      .fn()
+      .mockResolvedValue(
+        ready({ items: [{ source, receipt: r }], older: null }),
+      ),
     detail: vi.fn().mockResolvedValue(ready({ source, receipt: r })),
   };
   const app = express();
@@ -554,6 +599,10 @@ it("mounts private inspection, explicit actions and bounded member reads with no
     .type("form")
     .send({ csrf: "nonce", operationId: randomUUID() })
     .expect(200);
+  await request(f.server)
+    .get(`/contributions?before=${publicationId}`)
+    .expect(200);
+  expect(f.store.list).toHaveBeenLastCalledWith(token, publicationId);
   vi.mocked(f.store.inspect).mockResolvedValue({
     kind: "ready",
     value: null,
@@ -585,6 +634,14 @@ it("rejects absent services and malformed requests without creating publication"
   for (const path of [paths[0]!, paths[3]!, paths[4]!, paths[5]!])
     await request(f.server)
       .get(path + "?extra=1")
+      .expect(422);
+  for (const query of [
+    "?before=bad",
+    "?before=a&before=b",
+    `?before=${publicationId}&extra=1`,
+  ])
+    await request(f.server)
+      .get(paths[4]! + query)
       .expect(422);
   for (const path of [paths[1]!, paths[2]!, paths[3]!, paths[6]!]) {
     await request(f.server)
