@@ -2616,6 +2616,15 @@
     },
     {
       "id": "L294",
+      "actor": "A learner reading on a phone 375 pixels wide",
+      "preconditions": "Dedicated synthetic PostgreSQL database, one invented published assignment, port0 server; desktop/mobile Chromium at a 375px viewport",
+      "steps": "READABLE-09..12: read events, programs, the account page and a reviewed workflow, then submit an invented attempt and read it and progress",
+      "expected": "Dates read in words with the zone stated and keep their exact value in the datetime attribute; short codes and dates stay on one line; words break only when wider than the line; no sideways scrolling",
+      "issues": [659],
+      "critical": true
+    },
+    {
+      "id": "L295",
       "actor": "Administrator noticing a member's waiting support request",
       "preconditions": "Dedicated synthetic PostgreSQL database, administrator entry and support assignment enabled, port0 server; desktop/mobile Chromium",
       "steps": "WAITWORK-01/02/09: a member sends a private support request; a verified owner enters administration and reads Work waiting; an invented operator is assigned; the owner reloads the console",

@@ -1,3 +1,4 @@
+import { readableTime } from "./display-time.ts";
 import { randomUUID } from "node:crypto";
 import type { SupportTimeReceipt } from "./support-time.ts";
 import { escape, hidden, page } from "./views.ts";
@@ -34,7 +35,7 @@ export interface SupportMessageAttempt {
 const disclosure =
   "Private support · no guaranteed response time. Sending a request has no charge and does not create a paid allowance or service promise. Request content is available only to you and an explicitly assigned operator.";
 function time(value: Date) {
-  return `<time datetime="${escape(value.toISOString())}">${escape(value.toISOString())}</time>`;
+  return `<time datetime="${escape(value.toISOString())}">${readableTime(value)}</time>`;
 }
 function lifecycle(value: SupportRequestSummary) {
   return `<dl><dt>Request receipt</dt><dd>${escape(value.requestId)}</dd><dt>Received</dt><dd>${time(value.receivedAt)}</dd><dt>Acknowledgement</dt><dd>${value.acknowledgedAt ? `Acknowledged ${time(value.acknowledgedAt)}` : "No separate acknowledgement recorded"}</dd><dt>Resolution</dt><dd>${value.resolvedAt ? `Resolved ${time(value.resolvedAt)}; this does not establish member satisfaction or completed paid work` : "Open; no resolution recorded"}</dd>${value.withdrawnAt ? `<dt>Withdrawal</dt><dd>${time(value.withdrawnAt)}</dd>` : ""}</dl>`;
