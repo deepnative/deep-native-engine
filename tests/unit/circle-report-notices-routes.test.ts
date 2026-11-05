@@ -101,7 +101,8 @@ it("RPTN-01 untrusted projected text is escaped in HTML", async () => {
   await withLoopback(f.app, async (server) => {
     const r = await request(server).get(path).expect(200);
     expect(r.text).not.toContain("<script>unsafe");
-    expect(r.text).toContain("&lt;script&gt;unsafe");
+    expect(r.text).not.toContain("unsafe");
+    expect(r.text).toContain("Time unavailable");
     expect(r.text).toContain("&lt;img&gt;");
   });
 });

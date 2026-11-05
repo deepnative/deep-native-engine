@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import { defaultWindow } from "./staff-window.ts";
@@ -21,8 +22,7 @@ const navigation = portalActions([
   ["/learn", "Your learning space"],
 ]);
 const alert = (message: string) => `<p role="alert">${escape(message)}</p>`;
-const time = (value: string) =>
-  `<time datetime="${escape(value)}">${escape(value)}</time>`;
+const time = (value: string) => timeTag(value);
 const field = (name: string, value: string | number) =>
   `<input type="hidden" name="${name}" value="${escape(String(value))}">`;
 function sourceFields(source: SampleAssignmentSource) {

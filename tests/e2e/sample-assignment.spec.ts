@@ -1,6 +1,7 @@
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
+import { readableTime } from "../../src/display-time.ts";
 import { randomBytes } from "node:crypto";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
@@ -224,7 +225,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
       ).trim();
       expect(reviewerId).toBe(staffId);
       await expect(
-        reviewer.getByText(expires.toISOString(), { exact: true }),
+        reviewer.getByText(readableTime(expires), { exact: true }),
       ).toBeVisible();
       await signIn(administrator, adminToken);
       await administrator

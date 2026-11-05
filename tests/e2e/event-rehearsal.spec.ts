@@ -153,7 +153,7 @@ for (const [index, [background, goal]] of (
       await page.goto(origin + "/events");
       await expect(page.locator(`a[href="${detailPath}"]`)).toBeVisible();
       await page.locator(`a[href="${detailPath}"]`).click();
-      await expect(page.locator("body")).toContainText(startsAt);
+      await expect(page.locator(`time[datetime="${startsAt}"]`)).toBeVisible();
       await expect(
         page.getByRole("link", {
           name: "Try local registration rehearsal",
@@ -200,7 +200,7 @@ for (const [index, [background, goal]] of (
         admin.getByRole("button", { name: "Check proposed schedule" }),
       ).toHaveCount(0);
       await page.goto(origin + detailPath);
-      await expect(page.locator("body")).toContainText(startsAt);
+      await expect(page.locator(`time[datetime="${startsAt}"]`)).toBeVisible();
       await expect(
         page.getByRole("link", {
           name: "Try local registration rehearsal",

@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { CIRCLES } from "./circles.ts";
 import { defaultWindow } from "./staff-window.ts";
 import { CIRCLE_DISCUSSION_POLICY } from "./circle-discussion.ts";
@@ -24,10 +25,7 @@ const field = (name: string, value: string) =>
   `<input type="hidden" name="${name}" value="${escape(value)}">`;
 const scopeFields = (scope: CircleGrantScope) =>
   field("staffId", scope.staffId) + field("circleId", scope.circleId);
-const time = (date: Date) => {
-  const value = escape(date.toISOString());
-  return `<time datetime="${value}">${value}</time>`;
-};
+const time = (date: Date) => timeTag(date);
 function circles(id = "circleId", label = "Exact circle") {
   return `<label for="${id}">${label}</label><select id="${id}" name="circleId" required>${CIRCLES.map((circle) => `<option value="${escape(circle.id)}">${escape(circle.title)} (${escape(circle.id)})</option>`).join("")}</select>`;
 }
@@ -118,7 +116,7 @@ export function circleGrantNoticePage(
   canRetry = false,
 ) {
   const recovery = attempt
-    ? `<p>The grant may already have committed. Inspect its saved state before any further action. Missing state is an unknown outcome, not proof of noncommit. Nothing is retried automatically.</p>${inspectForm(csrf, attempt, "key", attempt.idempotencyKey)}${canRetry ? `<p>Any explicit retry preserves the original key and exact instruction. Changed instructions conflict with a retained submission.</p>${creationForm(csrf, attempt, true)}` : `<dl><dt>Exact staff reference</dt><dd>${escape(attempt.staffId)}</dd><dt>Exact circle</dt><dd>${escape(attempt.circleId)}</dd><dt>Original submission key</dt><dd>${escape(attempt.idempotencyKey)}</dd><dt>Original expiry</dt><dd>${escape(attempt.expiresAt)}</dd></dl>`}`
+    ? `<p>The grant may already have committed. Inspect its saved state before any further action. Missing state is an unknown outcome, not proof of noncommit. Nothing is retried automatically.</p>${inspectForm(csrf, attempt, "key", attempt.idempotencyKey)}${canRetry ? `<p>Any explicit retry preserves the original key and exact instruction. Changed instructions conflict with a retained submission.</p>${creationForm(csrf, attempt, true)}` : `<dl><dt>Exact staff reference</dt><dd>${escape(attempt.staffId)}</dd><dt>Exact circle</dt><dd>${escape(attempt.circleId)}</dd><dt>Original submission key</dt><dd>${escape(attempt.idempotencyKey)}</dd><dt>Original expiry</dt><dd>${timeTag(attempt.expiresAt)}</dd></dl>`}`
     : "";
   return page(
     "Circle grant unavailable",

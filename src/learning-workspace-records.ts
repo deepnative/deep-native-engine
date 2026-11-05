@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { demoBanner } from "./hosting-presentation.ts";
 import { randomUUID } from "node:crypto";
 import express, { type Express, type Response } from "express";
@@ -95,7 +96,7 @@ function notebookBody(value: LearningRead) {
 }
 
 function decisionBody(item: LearningDecision & { acceptedAt: Date }) {
-  return `<article class="notebook"><h2>Decision ${item.id}: ${escape(item.decision)}</h2><p>Comment version ${item.commentVersion} · Artifact ${item.fromVersion} → ${item.toVersion} · ${escape(item.acceptedAt.toISOString())}</p>${writing("Accepted artifact", item.text)}${writing("Proposed text", item.proposedText)}${writing("Reason", item.reason)}${writing("Question", item.question)}</article>`;
+  return `<article class="notebook"><h2>Decision ${item.id}: ${escape(item.decision)}</h2><p>Comment version ${item.commentVersion} · Artifact ${item.fromVersion} → ${item.toVersion} · ${timeTag(item.acceptedAt)}</p>${writing("Accepted artifact", item.text)}${writing("Proposed text", item.proposedText)}${writing("Reason", item.reason)}${writing("Question", item.question)}</article>`;
 }
 
 function deleteForm(
@@ -146,7 +147,7 @@ export function mountLearningWorkspaceRecords(
     return res.send(
       page(
         "Saved notebooks",
-        `<p>Your private saved writing, including notebooks whose teaching source is no longer available.</p><p>Up to 20 notebooks per page.</p>${items.length ? items.map((item) => `<article class="notebook"><h2><a href="${base}/${item.id}">${escape(item.variant)} notebook</a></h2><p>${escape(item.contentId)} version ${item.contentVersion} · Revision ${item.revision} · Saved ${escape(item.savedAt.toISOString())}</p></article>`).join("") : "<p>No saved notebooks on this page.</p>"}${nextCursor ? `<p><a rel="next" href="${base}?after=${nextCursor}">Next notebooks</a></p>` : ""}`,
+        `<p>Your private saved writing, including notebooks whose teaching source is no longer available.</p><p>Up to 20 notebooks per page.</p>${items.length ? items.map((item) => `<article class="notebook"><h2><a href="${base}/${item.id}">${escape(item.variant)} notebook</a></h2><p>${escape(item.contentId)} version ${item.contentVersion} · Revision ${item.revision} · Saved ${timeTag(item.savedAt)}</p></article>`).join("") : "<p>No saved notebooks on this page.</p>"}${nextCursor ? `<p><a rel="next" href="${base}?after=${nextCursor}">Next notebooks</a></p>` : ""}`,
       ),
     );
   });
