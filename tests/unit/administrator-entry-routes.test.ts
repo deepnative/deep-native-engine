@@ -5,7 +5,10 @@ import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 import { afterEach, expect, it, vi } from "vitest";
 import type { AdministratorDiagnostics } from "../../src/administrator-diagnostics.ts";
 import type { WorkWaiting } from "../../src/administrator-work-waiting.ts";
-import { waitedFor } from "../../src/administrator-work-waiting-views.ts";
+import {
+  waitedFor,
+  workQueueTools,
+} from "../../src/administrator-work-waiting-views.ts";
 import { mountAdministratorEntry } from "../../src/administrator-entry-routes.ts";
 import type {
   AdministratorResult,
@@ -1080,4 +1083,48 @@ it("WAITWORK ages read naturally at each boundary", () => {
     "2 days",
     "2 days",
   ]);
+});
+
+it("WAITWORK-06 turns a queue on only when its store and its site setting are both on", () => {
+  const none = {
+    support: false,
+    feedback: false,
+    workflow: false,
+    contributions: false,
+  };
+  expect(workQueueTools({})).toEqual(none);
+  // A store alone isn't enough: the site must also have the tool switched on.
+  expect(
+    workQueueTools({
+      supportAssignment: {},
+      sampleAssignments: {},
+      workflowReviewStaff: {},
+      localSupportAssignment: false,
+      sampleAssignmentAdministration: false,
+      workflowReviewRequests: false,
+    }),
+  ).toEqual(none);
+  expect(
+    workQueueTools({
+      localSupportAssignment: true,
+      sampleAssignmentAdministration: true,
+      workflowReviewRequests: true,
+    }),
+  ).toEqual(none);
+  expect(
+    workQueueTools({
+      supportAssignment: {},
+      localSupportAssignment: true,
+      sampleAssignments: {},
+      sampleAssignmentAdministration: true,
+      workflowReviewStaff: {},
+      workflowReviewRequests: true,
+      proposals: {},
+    }),
+  ).toEqual({
+    support: true,
+    feedback: true,
+    workflow: true,
+    contributions: true,
+  });
 });

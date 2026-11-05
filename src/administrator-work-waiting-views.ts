@@ -12,6 +12,29 @@ export interface WorkQueueTools {
   workflow: boolean;
   contributions: boolean;
 }
+/** WAITWORK-06: the same conditions that show each queue's own staff tool. */
+export function workQueueTools(options: {
+  supportAssignment?: unknown;
+  localSupportAssignment?: boolean;
+  sampleAssignments?: unknown;
+  sampleAssignmentAdministration?: boolean;
+  workflowReviewStaff?: unknown;
+  workflowReviewRequests?: boolean;
+  proposals?: unknown;
+}): WorkQueueTools {
+  return {
+    support:
+      Boolean(options.supportAssignment) &&
+      options.localSupportAssignment === true,
+    feedback:
+      Boolean(options.sampleAssignments) &&
+      options.sampleAssignmentAdministration === true,
+    workflow:
+      Boolean(options.workflowReviewStaff) &&
+      options.workflowReviewRequests === true,
+    contributions: Boolean(options.proposals),
+  };
+}
 const QUEUES: Array<{
   key: keyof WorkQueueTools;
   label: string;
