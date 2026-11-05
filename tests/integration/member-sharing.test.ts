@@ -95,6 +95,7 @@ it("WHOSEES-01 a new member has nothing shared", async () => {
     openSupport: 0,
     publishedContributions: 0,
     coaches: expect.any(Number) as number,
+    staffWithAccess: 0,
   });
 });
 
