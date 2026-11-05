@@ -136,11 +136,11 @@ export function mountAdministratorEntry(
       );
     const v = result.value,
       chosen = v.selected;
-    // COACHLINK-01: the selected learner's coach, chosen from coach-role holders.
+    // COACHLINK-01 / #689: the selected learner's coaches, chosen from coach-role holders.
     const coachCard =
       chosen && options.roleAdmin
         ? coachAssignmentCard(
-            await options.roleAdmin.learnerCoach(
+            await options.roleAdmin.learnerCoaches(
               cookie.value,
               chosen.member.id,
             ),

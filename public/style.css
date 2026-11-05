@@ -1590,9 +1590,16 @@ body:has(.welcome-page, .dashboard-head, .lesson-heading, .learning-portal)
   align-items: center;
   gap: 8px;
 }
-.role-admin fieldset {
+.role-admin fieldset,
+.coach-choices fieldset {
   margin: 12px 0 0;
   padding: 8px 12px;
+}
+.coach-choices .check {
+  margin-bottom: 8px;
+}
+.coach-choices button {
+  margin-top: 12px;
 }
 @media (max-width: 480px) {
   .role-holders th,

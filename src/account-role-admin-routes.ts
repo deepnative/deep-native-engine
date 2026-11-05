@@ -52,28 +52,31 @@ function refuse(res: Response, kind: Kind) {
   );
 }
 
-/** COACHLINK-01: the coach control on the selected learner's console card. */
+/** COACHLINK-01 / #689 DEFCOACH-04: the coaches control on the selected learner's console card. */
 export function coachAssignmentCard(
   result: LearnerCoachResult,
   learnerId: string,
   anti: string,
 ) {
   if (result.kind !== "ready")
-    return '<section class="portal-card" aria-labelledby="learner-coach"><h2 id="learner-coach">Coach</h2><p role="status">Coach assignment is unavailable right now.</p></section>';
-  const { coach, coaches } = result.value;
-  const options = [
-    `<option value=""${coach ? "" : " selected"}>No coach</option>`,
-    ...coaches.map(
+    return '<section class="portal-card" aria-labelledby="learner-coach"><h2 id="learner-coach">Coaches</h2><p role="status">Coach assignment is unavailable right now.</p></section>';
+  const { assigned, coaches } = result.value;
+  const choices = coaches
+    .map(
       (c) =>
-        `<option value="${c.emailHash}"${c.emailHash === coach ? " selected" : ""}>${escape(c.label)}</option>`,
-    ),
-  ].join("");
-  return `<section class="portal-card" aria-labelledby="learner-coach"><h2 id="learner-coach">Coach</h2><p>The assigned coach sees this learner's monthly hours on their Coaching page. ${coaches.length ? "" : 'Nobody holds the coach role yet. Grant it on <a href="/operator/roles">Roles</a>.'}</p><form class="portal-search" method="post" action="/operator/coach-assignments"><input type="hidden" name="csrf" value="${anti}"><input type="hidden" name="learnerId" value="${escape(learnerId)}"><label for="learner-coach-choice">Coach for this learner</label><div><select id="learner-coach-choice" name="coach">${options}</select><button type="submit">Save coach</button></div></form></section>`;
+        `<label class="check"><input type="checkbox" name="coach" value="${c.emailHash}"${assigned.includes(c.emailHash) ? " checked" : ""}><span>${escape(c.label)}</span></label>`,
+    )
+    .join("");
+  return `<section class="portal-card" aria-labelledby="learner-coach"><h2 id="learner-coach">Coaches</h2><p>Each coach ticked here sees this learner's monthly hours on their Coaching page. New learners start with the default coaches.</p>${
+    coaches.length
+      ? `<form class="coach-choices" method="post" action="/operator/coach-assignments"><input type="hidden" name="csrf" value="${anti}"><input type="hidden" name="learnerId" value="${escape(learnerId)}"><fieldset><legend>Coaches for this learner</legend>${choices}</fieldset><button type="submit">Save coaches</button></form>`
+      : '<p role="status">Nobody holds the coach role yet. Grant it on <a href="/operator/roles">Roles</a>.</p>'
+  }</section>`;
 }
 
 /**
  * #684 ROLEADMIN-01..05 and COACHLINK-01: administrators manage coach and
- * admin roles and assign coaches. Mounted after the shared staff-session,
+ * admin roles and set each learner's coaches (#689). Mounted after the shared staff-session,
  * origin and CSRF checks; the store re-checks the administrator session.
  */
 export function mountAccountRoleAdmin(
@@ -83,8 +86,14 @@ export function mountAccountRoleAdmin(
 ) {
   if (!store) return;
   const token = (res: Response) => res.locals.token as string;
-  // Only these fields, each a single string, and the same-origin CSRF token.
-  function valid(req: Request, res: Response, fields: string[]) {
+  // Only these fields, each a single string (or a list for `lists`), and the
+  // same-origin CSRF token.
+  function valid(
+    req: Request,
+    res: Response,
+    fields: string[],
+    lists: string[] = [],
+  ) {
     res.set("Cache-Control", "no-store");
     const body: unknown = req.body;
     return (
@@ -95,7 +104,11 @@ export function mountAccountRoleAdmin(
       !Array.isArray(body) &&
       Object.entries(body).every(
         ([key, value]) =>
-          typeof value === "string" && ["csrf", ...fields].includes(key),
+          (typeof value === "string" ||
+            (lists.includes(key) &&
+              Array.isArray(value) &&
+              value.every((v) => typeof v === "string"))) &&
+          ["csrf", ...fields].includes(key),
       ) &&
       validCsrf((body as { csrf?: unknown }).csrf, token(res), options.secret)
     );
@@ -172,14 +185,13 @@ export function mountAccountRoleAdmin(
   });
 
   app.post("/operator/coach-assignments", async (req, res) => {
-    if (!valid(req, res, ["learnerId", "coach"])) return refuse(res, "denied");
-    const body = req.body as Record<string, string>;
-    if (body.coach === undefined) return refuse(res, "invalid");
-    const learnerId = body.learnerId ?? "";
-    const result = await store.assignCoach(token(res), {
-      learnerId,
-      coach: body.coach ? body.coach : null,
-    });
+    if (!valid(req, res, ["learnerId", "coach"], ["coach"]))
+      return refuse(res, "denied");
+    const body = req.body as Record<string, string | string[]>;
+    const learnerId = typeof body.learnerId === "string" ? body.learnerId : "";
+    // No ticked box sends no `coach` field: the learner keeps no coach.
+    const coaches = body.coach === undefined ? [] : [body.coach].flat();
+    const result = await store.setCoaches(token(res), { learnerId, coaches });
     return done(
       res,
       result,

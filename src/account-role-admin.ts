@@ -31,7 +31,11 @@ export type RolesResult =
 export type ChangeResult =
   { kind: "ready" } | Failure | Refusal<"invalid" | "not-found" | "self">;
 export type LearnerCoachResult =
-  | { kind: "ready"; value: { coach: string | null; coaches: CoachChoice[] } }
+  | {
+      kind: "ready";
+      /** `assigned` holds the email hashes of the learner's current coaches. */
+      value: { assigned: string[]; coaches: CoachChoice[] };
+    }
   | Failure
   | Refusal<"not-found">;
 
@@ -45,13 +49,14 @@ export interface AccountRoleAdmin {
     staffToken: string,
     input: { emailHash: string; role: GrantedRole },
   ): Promise<ChangeResult>;
-  learnerCoach(
+  learnerCoaches(
     staffToken: string,
     learnerId: string,
   ): Promise<LearnerCoachResult>;
-  assignCoach(
+  /** Replaces the learner's coaches with exactly `coaches`. */
+  setCoaches(
     staffToken: string,
-    input: { learnerId: string; coach: string | null },
+    input: { learnerId: string; coaches: string[] },
   ): Promise<ChangeResult>;
 }
 
@@ -67,7 +72,7 @@ const label = (names: (string | null)[]) =>
 
 /**
  * #684 ROLEADMIN / COACHLINK: administrators manage coach and admin roles
- * and assign each learner one coach. Every call re-checks the current
+ * and set each learner's coaches (#689: several per learner). Every call re-checks the current
  * administrator session through the shared `authorized_staff_profiles` fence.
  */
 export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
@@ -209,15 +214,17 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
       );
     },
 
-    async learnerCoach(staffToken, learnerId) {
+    async learnerCoaches(staffToken, learnerId) {
       if (!invoiceUuid(learnerId)) return { kind: "not-found" };
       return run<Extract<LearnerCoachResult, { kind: "ready" }>, "not-found">(
         staffToken,
         async (tx) => {
-          const learner = await tx.query<{ coach: string | null }>(
-            `SELECT a.coach_email_hash AS coach FROM learners l
-             LEFT JOIN coach_assignments a ON a.learner_id=l.id
-            WHERE l.id=$1`,
+          const learner = await tx.query<{ assigned: string[] }>(
+            `SELECT COALESCE(array_agg(a.coach_email_hash ORDER BY a.coach_email_hash)
+                      FILTER (WHERE a.coach_email_hash IS NOT NULL),'{}') AS assigned
+               FROM learners l
+               LEFT JOIN coach_assignments a ON a.learner_id=l.id
+              WHERE l.id=$1 GROUP BY l.id`,
             [learnerId],
           );
           if (!learner.rowCount) throw new Refused("not-found");
@@ -228,7 +235,7 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
           return {
             kind: "ready" as const,
             value: {
-              coach: learner.rows[0]!.coach,
+              assigned: learner.rows[0]!.assigned,
               coaches: coaches.rows
                 .map((c) => ({
                   emailHash: c.emailHash,
@@ -245,44 +252,51 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
       );
     },
 
-    async assignCoach(staffToken, input) {
+    async setCoaches(staffToken, input) {
       if (!invoiceUuid(input.learnerId)) return { kind: "not-found" };
-      if (input.coach !== null && !emailHashValue(input.coach))
+      const coaches = input.coaches;
+      if (
+        coaches.length > 100 ||
+        !coaches.every(emailHashValue) ||
+        new Set(coaches).size !== coaches.length
+      )
         return { kind: "invalid" };
       return run<{ kind: "ready" }, "invalid" | "not-found" | "self">(
         staffToken,
         async (tx, actor) => {
-          const learner = await tx.query("SELECT 1 FROM learners WHERE id=$1", [
-            input.learnerId,
-          ]);
+          const learner = await tx.query(
+            "SELECT 1 FROM learners WHERE id=$1 FOR UPDATE",
+            [input.learnerId],
+          );
           if (!learner.rowCount) throw new Refused("not-found");
-          if (input.coach === null) {
-            const cleared = await tx.query(
-              "DELETE FROM coach_assignments WHERE learner_id=$1",
-              [input.learnerId],
-            );
-            if (cleared.rowCount)
-              await record(tx, actor.id, "cleared", {
+          const held = await tx.query(
+            "SELECT 1 FROM account_roles WHERE email_hash=ANY($1) AND role='coach' FOR SHARE",
+            [coaches],
+          );
+          if (held.rowCount !== coaches.length) throw new Refused("invalid");
+          const removed = await tx.query<{ coach: string }>(
+            `DELETE FROM coach_assignments
+              WHERE learner_id=$1 AND NOT coach_email_hash=ANY($2)
+             RETURNING coach_email_hash AS coach`,
+            [input.learnerId, coaches],
+          );
+          const added = await tx.query<{ coach: string }>(
+            `INSERT INTO coach_assignments(learner_id,coach_email_hash,assigned_by)
+             SELECT $1,c,$3 FROM unnest($2::text[]) c
+             ON CONFLICT DO NOTHING RETURNING coach_email_hash AS coach`,
+            [input.learnerId, coaches, actor.id],
+          );
+          for (const [action, rows] of [
+            ["cleared", removed.rows],
+            ["assigned", added.rows],
+          ] as const)
+            for (const row of [...rows].sort((a, b) =>
+              a.coach.localeCompare(b.coach),
+            ))
+              await record(tx, actor.id, action, {
+                emailHash: row.coach,
                 learnerId: input.learnerId,
               });
-            return { kind: "ready" as const };
-          }
-          const held = await tx.query(
-            "SELECT 1 FROM account_roles WHERE email_hash=$1 AND role='coach' FOR SHARE",
-            [input.coach],
-          );
-          if (!held.rowCount) throw new Refused("invalid");
-          await tx.query(
-            `INSERT INTO coach_assignments(learner_id,coach_email_hash,assigned_by)
-           VALUES($1,$2,$3) ON CONFLICT(learner_id) DO UPDATE
-           SET coach_email_hash=EXCLUDED.coach_email_hash,
-               assigned_by=EXCLUDED.assigned_by,assigned_at=clock_timestamp()`,
-            [input.learnerId, input.coach, actor.id],
-          );
-          await record(tx, actor.id, "assigned", {
-            emailHash: input.coach,
-            learnerId: input.learnerId,
-          });
           return { kind: "ready" as const };
         },
       );

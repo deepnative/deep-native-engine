@@ -848,11 +848,7 @@ test("[L290] ROLES-01..05 each account type lands on its own view and an owner s
        VALUES($1,to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM'),90,'Invented Coachee','shi@deepnative.io','submitted',1,1)`,
       [owner.id],
     );
-    // #684: a coach sees only learners assigned to them.
-    await pool.query(
-      "INSERT INTO coach_assignments(learner_id,coach_email_hash,assigned_by) VALUES($1,$2,$1)",
-      [owner.id, hash("shi@deepnative.io")],
-    );
+    // #684/#689: a coach sees only assigned learners; Shi is a default coach.
     // ROLES-02: an owner without a saved view lands on Administration.
     await signInAgain(owner, "shi@deepnative.io");
     await expect(page).toHaveURL(owner.origin + "/admin");
@@ -948,7 +944,7 @@ test("[L290] ROLES-01..05 each account type lands on its own view and an owner s
     await closeLoopback(student.server);
   }
 });
-test("[L292] ROLEADMIN/COACHLINK an administrator grants a coach role, assigns a learner and removes the role", async ({
+test("[L292] ROLEADMIN/COACHLINK/DEFCOACH an administrator grants a coach role, sets a learner's coaches and removes the role", async ({
   page,
   browser,
 }) => {
@@ -1019,18 +1015,24 @@ test("[L292] ROLEADMIN/COACHLINK an administrator grants a coach role, assigns a
       fullPage: true,
     });
 
-    // COACHLINK-01: assign Ada to the new coach from the console.
+    // DEFCOACH-03/04: Ada starts with the default coaches; move her to the new coach.
     await page.goto(`${owner.origin}/operator?ownerId=${adaId}`);
-    await page
-      .getByLabel("Coach for this learner")
-      .selectOption({ label: "Invented Coach" });
-    await page.getByRole("button", { name: "Save coach" }).click();
-    await expect(page.getByLabel("Coach for this learner")).toHaveValue(
-      hash("coach@example.test"),
+    const coaches = page.getByRole("group", {
+      name: "Coaches for this learner",
+    });
+    await expect(coaches.getByLabel("Invented Owner")).toBeChecked();
+    await expect(coaches.getByLabel("Invented Coach")).not.toBeChecked();
+    await coaches.getByLabel("Invented Owner").uncheck();
+    await coaches.getByLabel("Invented Coach").check();
+    await page.getByRole("button", { name: "Save coaches" }).click();
+    await expect(page).toHaveURL(
+      `${owner.origin}/operator?ownerId=${adaId}#learner-coach`,
     );
+    await expect(coaches.getByLabel("Invented Coach")).toBeChecked();
+    await expect(coaches.getByLabel("Invented Owner")).not.toBeChecked();
     await fits();
 
-    // COACHLINK-02: the coach sees Ada; the unassigned owner-coach sees nobody.
+    // COACHLINK-02: the coach sees Ada; the owner, no longer her coach, sees nobody.
     await coachPage.goto(coach.origin + "/coach");
     await expect(
       coachPage.getByRole("row", { name: "Invented Ada 1h 30m Draft" }),
@@ -1051,9 +1053,14 @@ test("[L292] ROLEADMIN/COACHLINK an administrator grants a coach role, assigns a
       }),
     ).toHaveCount(0);
     expect((await coachPage.goto(coach.origin + "/coach"))?.status()).toBe(403);
-    expect((await pool.query("SELECT 1 FROM coach_assignments")).rowCount).toBe(
-      0,
-    );
+    expect(
+      (
+        await pool.query(
+          "SELECT 1 FROM coach_assignments WHERE coach_email_hash=$1",
+          [hash("coach@example.test")],
+        )
+      ).rowCount,
+    ).toBe(0);
     // ROLEADMIN-05 / COACHLINK-04: every change is audited.
     expect(
       (
@@ -1061,7 +1068,7 @@ test("[L292] ROLEADMIN/COACHLINK an administrator grants a coach role, assigns a
           "SELECT action FROM account_role_events ORDER BY id",
         )
       ).rows.map((r) => r.action),
-    ).toEqual(["granted", "assigned", "removed"]);
+    ).toEqual(["granted", "cleared", "assigned", "removed"]);
   } finally {
     await closeLoopback(owner.server);
     await closeLoopback(coach.server);
