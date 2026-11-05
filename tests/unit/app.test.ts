@@ -7663,6 +7663,25 @@ it("FRICTION-06 offers no member tools on staff pages to a signed-out visitor", 
   expect(navigation).not.toContain("/account/sign-out");
   expect(navigation).not.toContain("/account/coaching");
 });
+it("ROLES-NAV-01/02 keeps the Roles denial header true to the visitor", async () => {
+  const roleAdmin = { roles: async () => ({ kind: "denied" }) } as never;
+  const navigation = (text: string) =>
+    text.match(
+      /<nav[^>]*aria-label="Main navigation"[^>]*>([\s\S]*?)<\/nav>/,
+    )?.[1];
+  const agent = await managedAgent(
+    app(db, { origin, secret: "s", localStaffEntry: true, roleAdmin }),
+  );
+  const signedOut = await agent.get("/operator/roles").set("Host", host);
+  expect(signedOut.status).toBe(403);
+  expect(navigation(signedOut.text)).not.toContain("/account/sign-out");
+  expect(navigation(signedOut.text)).not.toContain('href="/account"');
+  const student = await agent
+    .get("/operator/roles")
+    .set("Host", host)
+    .set("Cookie", `dne_preview=${"d".repeat(64)}`);
+  expect(navigation(student.text)).toContain("/account/sign-out");
+});
 it("FRICTION-10 gives a way back when email is off", async () => {
   const { agent } = await client();
   active();
