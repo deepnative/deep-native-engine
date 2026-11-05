@@ -696,7 +696,14 @@ export function registerCircleDiscussion(
           req.body.rootId,
         ),
       );
-      if (value) res.redirect(303, `${base(circle)}/owned`);
+      // GAPS-06: a reply returns to its conversation.
+      if (value)
+        res.redirect(
+          303,
+          req.body.rootId
+            ? `${base(circle)}/threads/${encodeURIComponent(req.body.rootId)}`
+            : `${base(circle)}/owned`,
+        );
     }),
   );
   app.post(

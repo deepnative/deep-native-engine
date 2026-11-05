@@ -10,9 +10,19 @@ import type {
   WorkflowReviewStaffStore,
   WorkflowReviewGrant,
 } from "./workflow-review-staff.ts";
+import { portalActions } from "./backend-portal-presentation.ts";
 const base = "/operator/workflow-reviews",
   reference = "/moderate/workflow-review-reference",
   read = "/moderate/workflow-reviews";
+// GAPS-04: staff pages always offer a way back.
+const administratorLinks = () =>
+  portalActions([["/staff", "Your staff tools"]]);
+const moderatorLinks = () =>
+  portalActions([
+    [read, "My assigned private workflow reviews"],
+    [reference, "My private workflow review reference"],
+    ["/staff", "Your staff tools"],
+  ]);
 const field = (name: string, value: string) =>
   `<input type="hidden" name="${name}" value="${escape(value)}">`;
 const notice = () =>
@@ -55,7 +65,7 @@ function recovery(message: string, csrf: string, original?: Original) {
 function receipt(grant: WorkflowReviewGrant) {
   return page(
     "Private workflow review assignment",
-    `${notice()}<h1>Private workflow review assignment</h1><dl><dt>Grant reference</dt><dd data-grant-id="${escape(grant.grantId)}">${escape(grant.grantId)}</dd><dt>Request</dt><dd>${escape(grant.requestId)}</dd><dt>Assigned moderator</dt><dd>${escape(grant.moderatorId)}</dd><dt>Reading starts</dt><dd>${escape(grant.startsAt)}</dd><dt>Reading ends</dt><dd>${escape(grant.expiresAt)}</dd></dl><p>Assignment status: ${escape(grant.state ?? (grant.revokedAt ? "revoked" : "recorded"))}. This receipt contains no private note.</p><p><a href="${base}/receipts/${escape(grant.grantId)}">Reload this assignment receipt</a></p>`,
+    `${notice()}<h1>Private workflow review assignment</h1><dl><dt>Grant reference</dt><dd data-grant-id="${escape(grant.grantId)}">${escape(grant.grantId)}</dd><dt>Request</dt><dd>${escape(grant.requestId)}</dd><dt>Assigned moderator</dt><dd>${escape(grant.moderatorId)}</dd><dt>Reading starts</dt><dd>${escape(grant.startsAt)}</dd><dt>Reading ends</dt><dd>${escape(grant.expiresAt)}</dd></dl><p>Assignment status: ${escape(grant.state ?? (grant.revokedAt ? "revoked" : "recorded"))}. This receipt contains no private note.</p><p><a href="${base}/receipts/${escape(grant.grantId)}">Reload this assignment receipt</a></p>${administratorLinks()}`,
   );
 }
 export function mountWorkflowReviewStaffRoutes(
@@ -134,7 +144,7 @@ export function mountWorkflowReviewStaffRoutes(
     return send(res, result.deadline, () =>
       page(
         "Assign private workflow review",
-        `${notice()}<h1>Assign private workflow review</h1><form method="post" action="${base}/inspect">${hidden(nonce(res))}<label>Original operation key<input name="operationId" required></label><button type="submit">Inspect original operation</button></form><form method="post" action="${base}/revoke">${hidden(nonce(res))}<label>Exact grant reference<input name="grantId" required></label>${field("operationId", randomUUID())}<label><input type="checkbox" name="confirm" value="yes" required> Revoke this exact reading grant</label><button type="submit">Revoke private workflow review</button></form>${result.enabled ? `<form method="post" action="${base}/check">${hidden(nonce(res))}<label>Member request reference<input name="requestId" required></label><label>Moderator reference<input name="moderatorId" required></label><label>Reading starts (UTC)<input name="startsAt" value="${escape(result.startsAt)}" required></label><label>Reading ends (UTC)<input name="expiresAt" value="${escape(result.endsAt)}" required></label><button type="submit">Check exact assignment</button></form>` : "<p>New private review assignments are paused.</p>"}`,
+        `${notice()}<h1>Assign private workflow review</h1><form method="post" action="${base}/inspect">${hidden(nonce(res))}<label>Original operation key<input name="operationId" required></label><button type="submit">Inspect original operation</button></form><form method="post" action="${base}/revoke">${hidden(nonce(res))}<label>Exact grant reference<input name="grantId" required></label>${field("operationId", randomUUID())}<label><input type="checkbox" name="confirm" value="yes" required> Revoke this exact reading grant</label><button type="submit">Revoke private workflow review</button></form>${result.enabled ? `<form method="post" action="${base}/check">${hidden(nonce(res))}<label>Member request reference<input name="requestId" required></label><label>Moderator reference<input name="moderatorId" required></label><label>Reading starts (UTC)<input name="startsAt" value="${escape(result.startsAt)}" required></label><label>Reading ends (UTC)<input name="expiresAt" value="${escape(result.endsAt)}" required></label><button type="submit">Check exact assignment</button></form>` : "<p>New private review assignments are paused.</p>"}${administratorLinks()}`,
       ),
     );
   });
@@ -144,7 +154,7 @@ export function mountWorkflowReviewStaffRoutes(
     return send(res, result.deadline, () =>
       page(
         "My private workflow review reference",
-        `${notice()}<h1>My private workflow review reference</h1><p>${escape(result.actorId)}</p><p>Current staff access ends ${escape(result.expiresAt)}. A reference alone permits no reading.</p>`,
+        `${notice()}<h1>My private workflow review reference</h1><p>${escape(result.actorId)}</p><p>Current staff access ends ${escape(result.expiresAt)}. A reference alone permits no reading.</p>${moderatorLinks()}`,
       ),
     );
   });
@@ -170,7 +180,7 @@ export function mountWorkflowReviewStaffRoutes(
     return send(res, result.deadline, () =>
       page(
         "Check private workflow assignment",
-        `${notice()}<h1>Check private workflow assignment</h1><p>${escape(result.workflowId)} · version ${result.workflowVersion} · note revision ${result.revision}</p><p>Request ${escape(result.requestId)} · moderator ${escape(result.moderatorId)}</p><p>Reading starts ${escape(result.startsAt)}</p><p>Reading ends ${escape(result.expiresAt)}</p><form method="post" action="${base}/assign">${hidden(nonce(res))}${field("checked", result.checked)}${field("operationId", randomUUID())}<label><input type="checkbox" name="confirm" value="yes" required> Assign only this exact private note to the checked moderator until the fixed deadline</label><button type="submit">Assign private workflow review</button></form>`,
+        `${notice()}<h1>Check private workflow assignment</h1><p>${escape(result.workflowId)} · version ${result.workflowVersion} · note revision ${result.revision}</p><p>Request ${escape(result.requestId)} · moderator ${escape(result.moderatorId)}</p><p>Reading starts ${escape(result.startsAt)}</p><p>Reading ends ${escape(result.expiresAt)}</p><form method="post" action="${base}/assign">${hidden(nonce(res))}${field("checked", result.checked)}${field("operationId", randomUUID())}<label><input type="checkbox" name="confirm" value="yes" required> Assign only this exact private note to the checked moderator until the fixed deadline</label><button type="submit">Assign private workflow review</button></form>${administratorLinks()}`,
       ),
     );
   });
@@ -242,7 +252,7 @@ export function mountWorkflowReviewStaffRoutes(
     return send(res, result.deadline, () =>
       page(
         "My assigned private workflow reviews",
-        `${notice()}<h1>My assigned private workflow reviews</h1>${result.entries.length ? `<ul>${result.entries.map((r) => `<li><a href="${read}/${escape(r.grantId)}">${escape(r.workflowId)} · version ${r.workflowVersion} · revision ${r.revision}</a> · reading starts ${escape(r.startsAt)} · reading ends ${escape(r.expiresAt)}</li>`).join("")}</ul>` : "<p>No currently permitted exact assignments on this page.</p>"}${result.next ? `<a href="${read}?cursor=${encodeURIComponent(result.next)}">Next assigned reviews</a>` : ""}`,
+        `${notice()}<h1>My assigned private workflow reviews</h1>${result.entries.length ? `<ul>${result.entries.map((r) => `<li><a href="${read}/${escape(r.grantId)}">${escape(r.workflowId)} · version ${r.workflowVersion} · revision ${r.revision}</a> · reading starts ${escape(r.startsAt)} · reading ends ${escape(r.expiresAt)}</li>`).join("")}</ul>` : "<p>No currently permitted exact assignments on this page.</p>"}${result.next ? `<a href="${read}?cursor=${encodeURIComponent(result.next)}">Next assigned reviews</a>` : ""}${moderatorLinks()}`,
       ),
     );
   });
@@ -252,7 +262,7 @@ export function mountWorkflowReviewStaffRoutes(
     return send(res, result.deadline, () =>
       page(
         "Assigned private workflow note",
-        `${notice()}<h1>Assigned private workflow note</h1><p>${escape(result.workflowId)} · version ${result.workflowVersion} · revision ${result.revision} · reading ends ${escape(result.expiresAt)}</p><pre>${escape(result.note)}</pre>`,
+        `${notice()}<h1>Assigned private workflow note</h1><p>${escape(result.workflowId)} · version ${result.workflowVersion} · revision ${result.revision} · reading ends ${escape(result.expiresAt)}</p><pre>${escape(result.note)}</pre>${moderatorLinks()}`,
       ),
     );
   });
