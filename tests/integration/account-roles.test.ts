@@ -125,6 +125,9 @@ it("ROLES-03/04 a coach reads each person's saved hours for a month; a student i
     [learner.id, today],
   );
   // #684 COACHLINK-02: an unassigned learner is shown to no coach.
+  await pool.query("DELETE FROM coach_assignments WHERE learner_id=$1", [
+    learner.id,
+  ]);
   const unassigned = await coach.summary(owner.token);
   expect(unassigned.kind === "ready" && unassigned.value.rows).toEqual([]);
   await pool.query(
