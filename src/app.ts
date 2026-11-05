@@ -1,4 +1,5 @@
 import { mountAdministratorDiagnostics } from "./administrator-diagnostics-routes.ts";
+import { workQueueTools } from "./administrator-work-waiting-views.ts";
 import type { AdministratorDiagnostics } from "./administrator-diagnostics.ts";
 import {
   invoiceResumeTarget,
@@ -677,7 +678,12 @@ export function app(
         () => next(),
       );
   });
-  mountAdministratorEntry(app, options.administratorEntry, options);
+  mountAdministratorEntry(
+    app,
+    options.administratorEntry,
+    options,
+    workQueueTools(options),
+  );
   mountAdministratorDiagnostics(app, options.administratorDiagnostics, options);
   mountStaffEntryRoutes(app, options.staffEntry, options, {
     library: Boolean(options.catalog),

@@ -1,6 +1,10 @@
 import type { Pool, PoolClient } from "pg";
 import { emailHash, normalizedEmail } from "./member-email-access.ts";
 import { hash } from "./store.ts";
+import {
+  readWorkWaiting,
+  type WorkWaiting,
+} from "./administrator-work-waiting.ts";
 
 /**
  * DIAG-01/02: fixed, read-only checks an administrator can run on the hosted
@@ -52,6 +56,8 @@ export interface AdministratorDiagnostics {
     credential: string,
     address: string,
   ): Promise<DiagnosticsResult<EmailDiagnosis>>;
+  /** WAITWORK: counts and ages of waiting member work, nothing private. */
+  work(credential: string): Promise<DiagnosticsResult<WorkWaiting>>;
 }
 
 const RECENT = 10;
@@ -93,6 +99,7 @@ export function administratorDiagnostics(pool: Pool): AdministratorDiagnostics {
     }
   }
   return {
+    work: (credential) => asAdmin(credential, readWorkWaiting),
     site: (credential) =>
       asAdmin(credential, async (client) => {
         const row = (

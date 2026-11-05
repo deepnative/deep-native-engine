@@ -19,21 +19,28 @@ interface Candidate extends SampleAssignmentPendingItem {
 }
 // Only deliberately requested, still-shareable sources need intake. A valid
 // scheduled pair already assigns the work even though it cannot yet be read.
-const selection = `SELECT e.id AS "evidenceId",e.revision_number AS "sourceRevision",
+export const feedbackQueueSelection = (
+  profiles: string,
+  grant: "EXISTS" | "NOT EXISTS",
+) => `SELECT e.id AS "evidenceId",e.revision_number AS "sourceRevision",
  to_char(s.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "submittedAt",
  e.owner_principal_id AS "ownerId",e.workspace_id AS "workspaceId"
  FROM evidence_review_submissions s JOIN evidence_objects e ON e.id=s.evidence_id AND e.owner_principal_id=s.submitted_by
  JOIN principals p ON p.id=e.owner_principal_id AND p.kind='member' AND p.revoked_at IS NULL AND p.expires_at>clock_timestamp()
  JOIN workspaces w ON w.id=e.workspace_id AND w.owner_principal_id=p.id AND w.deleting_at IS NULL
  WHERE s.status='queued' AND e.private_review_allowed AND e.quarantine_state='clean' AND e.media_type='text/plain'
- AND NOT EXISTS (
+ AND ${grant} (
   SELECT 1 FROM reviewer_evidence_grants g JOIN assignment_grants a ON a.id=g.assignment_id
   JOIN principals r ON r.id=g.reviewer_id AND r.kind='staff' AND r.revoked_at IS NULL
-  JOIN authorized_staff_profiles rp ON rp.principal_id=r.id AND rp.role='reviewer'
+  JOIN ${profiles} rp ON rp.principal_id=r.id AND rp.role='reviewer'
   WHERE g.submission_id=s.id AND g.purpose=$1 AND g.revoked_at IS NULL
    AND a.staff_id=r.id AND a.staff_role='reviewer' AND a.workspace_id=w.id AND a.revoked_at IS NULL
    AND LEAST(a.expires_at,g.expires_at,r.expires_at)>GREATEST(a.starts_at,g.starts_at,clock_timestamp())
  )`;
+const selection = feedbackQueueSelection(
+  "authorized_staff_profiles",
+  "NOT EXISTS",
+);
 const order = ` ORDER BY s.created_at,e.id LIMIT ${SAMPLE_ASSIGNMENT_PAGE_SIZE + 1}`;
 async function candidates(
   context: SampleAssignmentContext,
