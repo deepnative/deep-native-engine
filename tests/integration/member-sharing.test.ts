@@ -1,6 +1,14 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import request from "supertest";
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import { app } from "../../src/app.ts";
 import {
   circleDiscussionStore,
@@ -12,6 +20,7 @@ import { memberSharingStore } from "../../src/member-sharing.ts";
 import { COOKIE } from "../../src/session.ts";
 import { hash, migrate, store } from "../../src/store.ts";
 import { supportRequestStore } from "../../src/support-requests.ts";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool(),
@@ -308,11 +317,14 @@ it("WHOSEES-07 a member reads only their own page and departed members are denie
     origin = "http://127.0.0.1:1";
   await share(owner.token);
   await post(owner.token, "An invented question");
-  const server = app(members, {
-    origin,
-    secret,
-    memberSharing: sharing,
-  });
+  const server = await listenLoopback(
+    app(members, {
+      origin,
+      secret,
+      memberSharing: sharing,
+    }),
+  );
+  onTestFinished(() => closeLoopback(server));
   const open = (token: string, path = "/account/sharing") =>
     request(server)
       .get(path)

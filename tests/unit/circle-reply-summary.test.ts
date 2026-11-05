@@ -1,5 +1,6 @@
 import request from "supertest";
 import { expect, it, vi } from "vitest";
+import { withLoopback } from "../support/loopback-server.ts";
 import { app } from "../../src/app.ts";
 import { COOKIE } from "../../src/session.ts";
 import type { Learner } from "../../src/store.ts";
@@ -129,11 +130,13 @@ it("FOLLOW-04 the Circles page asks only for joined circles while discussion is 
       },
     );
   const read = (enabled: boolean) =>
-    request(site(enabled))
-      .get("/circles")
-      .set("Host", "127.0.0.1")
-      .set("Cookie", `${COOKIE}=${"a".repeat(64)}`)
-      .expect(200);
+    withLoopback(site(enabled), (listener) =>
+      request(listener)
+        .get("/circles")
+        .set("Host", "127.0.0.1")
+        .set("Cookie", `${COOKIE}=${"a".repeat(64)}`)
+        .expect(200),
+    );
   expect((await read(true)).text).toContain("No replies to your questions yet");
   expect(activity.mock.calls.map((call) => call[1])).toEqual([circle.id]);
   activity.mockClear();
