@@ -155,7 +155,9 @@ test("[L36] professional's local reminder and edit survive reload while stale ta
     reminder: true,
   });
   const item = page.locator(".milestone-list li").filter({ hasText: title });
-  await expect(item).toContainText("2028-02-29 at 14:30 (America/Toronto)");
+  await expect(item).toContainText(
+    "February 29, 2028 at 14:30 (America/Toronto)",
+  );
   await expect(item).toContainText("shown here only");
   const stale = await context.newPage();
   await stale.goto("/milestones");

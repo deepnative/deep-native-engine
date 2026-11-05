@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import {
@@ -16,7 +17,7 @@ const explanation = `<p class="eyebrow">PRIVATE · LOCAL TEST PREVIEW</p><p>This
 const back = `<p><a href="${STUDY_MEMBER_PATH}">Your test fixture</a> · <a href="/member/test-units">Current local balances</a> · <a href="/learn">Learning path</a></p>`;
 function receiptText(receipt: StudyFixtureReceipt, observed: Date) {
   const state = studyFixtureState(receipt, observed);
-  return `<dl><dt>Request reference</dt><dd>${escape(receipt.id)}</dd><dt>Fixed test quantity</dt><dd>3 study requests</dd><dt>State</dt><dd>${escape(state)}</dd><dt>Original request deadline</dt><dd>${escape(receipt.expiresAt.toISOString())}</dd>${receipt.grantExpiresAt ? `<dt>Original unit deadline</dt><dd>${escape(receipt.grantExpiresAt.toISOString())}</dd>` : ""}${receipt.withdrawnAt ? `<dt>Owner withdrawal</dt><dd>${escape(receipt.withdrawnAt.toISOString())}</dd>` : ""}</dl>`;
+  return `<dl><dt>Request reference</dt><dd>${escape(receipt.id)}</dd><dt>Fixed test quantity</dt><dd>3 study requests</dd><dt>State</dt><dd>${escape(state)}</dd><dt>Original request deadline</dt><dd>${timeTag(receipt.expiresAt)}</dd>${receipt.grantExpiresAt ? `<dt>Original unit deadline</dt><dd>${timeTag(receipt.grantExpiresAt)}</dd>` : ""}${receipt.withdrawnAt ? `<dt>Owner withdrawal</dt><dd>${timeTag(receipt.withdrawnAt)}</dd>` : ""}</dl>`;
 }
 export function studyFixtureMemberPage(
   csrf: string,

@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import { upcomingExample } from "./staff-window.ts";
@@ -65,7 +66,7 @@ export function eventRehearsalConfirm(
 export function eventRehearsalReceipt(receipt: RehearsalReceipt | null) {
   return page(
     "Private rehearsal receipt",
-    `<section class="reading">${notice}<h1>Private rehearsal receipt</h1>${receipt ? `<dl><dt>Canonical receipt</dt><dd>${escape(receipt.id)}</dd><dt>Exact event/version</dt><dd>${escape(receipt.eventId)} / ${receipt.eventVersion}</dd><dt>Title</dt><dd>${escape(receipt.title)}</dd><dt>Schedule (UTC)</dt><dd>${receipt.startsAt.toISOString()} to ${receipt.endsAt.toISOString()}</dd><dt>Scheduled (UTC)</dt><dd>${receipt.scheduledAt.toISOString()}</dd></dl><p role="status">This invented rehearsal is saved. Current cancellation state and registration availability are checked separately.</p><p><a href="/events/${escape(receipt.eventId)}/${receipt.eventVersion}">Open member event detail with your learner access</a></p>` : `<p role="status">No saved rehearsal is confirmed by this inspection. An earlier uncertain instruction could still complete; do not substitute a new key.</p>`}${nav}</section>`,
+    `<section class="reading">${notice}<h1>Private rehearsal receipt</h1>${receipt ? `<dl><dt>Canonical receipt</dt><dd>${escape(receipt.id)}</dd><dt>Exact event/version</dt><dd>${escape(receipt.eventId)} / ${receipt.eventVersion}</dd><dt>Title</dt><dd>${escape(receipt.title)}</dd><dt>Schedule (UTC)</dt><dd>${timeTag(receipt.startsAt)} to ${timeTag(receipt.endsAt)}</dd><dt>Scheduled (UTC)</dt><dd>${timeTag(receipt.scheduledAt)}</dd></dl><p role="status">This invented rehearsal is saved. Current cancellation state and registration availability are checked separately.</p><p><a href="/events/${escape(receipt.eventId)}/${receipt.eventVersion}">Open member event detail with your learner access</a></p>` : `<p role="status">No saved rehearsal is confirmed by this inspection. An earlier uncertain instruction could still complete; do not substitute a new key.</p>`}${nav}</section>`,
   );
 }
 export function eventRehearsalNotice(
