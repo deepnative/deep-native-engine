@@ -352,7 +352,7 @@ it.each([
     "Staff accessed your private work.",
   ],
 ])("STAFFSEE-02..04 says %j in plain words", async (row, words) => {
-  const res = await request(server(showing([row]))).get(PATH);
+  const res = await open(server(showing([row])), PATH);
   expect(res.status).toBe(200);
   expect(res.headers["cache-control"]).toContain("no-store");
   expect(text(res.text).replace(/ \./g, ".")).toContain(words);
@@ -360,19 +360,20 @@ it.each([
 });
 
 it("STAFFSEE-03 a member's file name is escaped", async () => {
-  const res = await request(
+  const res = await open(
     server(
       showing([
         entry("access", "evidence_bytes_loaded", "assignment", "<b>x</b>.txt"),
       ]),
     ),
-  ).get(PATH);
+    PATH,
+  );
   expect(res.text).toContain("&lt;b&gt;x&lt;/b&gt;.txt");
   expect(res.text).not.toContain("<b>x</b>");
 });
 
 it("STAFFSEE-01 an empty history says none is recorded and what it doesn't cover", async () => {
-  const res = await request(server(showing([]))).get(PATH);
+  const res = await open(server(showing([])), PATH);
   expect(text(res.text)).toContain(
     "No staff access to your private work is recorded.",
   );
@@ -406,7 +407,7 @@ it("STAFFSEE-06 paging passes the position on and refuses anything else", async 
       });
     }),
   );
-  const first = await request(site).get(PATH);
+  const first = await open(site, PATH);
   expect(first.text).toContain(`${PATH}?before=next%2B%2Fposition`);
   const later = await open(site, `${PATH}?before=abc`);
   expect(seen).toEqual([undefined, "abc"]);
@@ -422,14 +423,16 @@ it("STAFFSEE-06 paging passes the position on and refuses anything else", async 
 });
 
 it("STAFFSEE-07/08 denial goes home and a failed read never looks like an empty history", async () => {
-  const denied = await request(
+  const denied = await open(
     server(history(() => Promise.resolve({ kind: "denied" }))),
-  ).get(PATH);
+    PATH,
+  );
   expect(denied.status).toBe(303);
   expect(denied.headers.location).toBe("/");
-  const failed = await request(
+  const failed = await open(
     server(history(() => Promise.resolve({ kind: "unavailable" }))),
-  ).get(PATH);
+    PATH,
+  );
   expect(failed.status).toBe(503);
   expect(text(failed.text)).toContain("can't be checked right now");
   expect(failed.text).not.toContain("is recorded");

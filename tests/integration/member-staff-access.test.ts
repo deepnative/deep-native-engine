@@ -1,6 +1,15 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import request from "supertest";
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
+import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 import { app } from "../../src/app.ts";
 import { evidenceStore } from "../../src/evidence.ts";
 import {
@@ -329,7 +338,10 @@ it("STAFFSEE-07 only the member's own entries, with no staff identity or purpose
   await access.readWorkspace(coach.token, owner.id);
   expect((await history(peer.token)).entries).toEqual([]);
 
-  const server = app(members, { origin, secret, memberSharing: sharing });
+  const server = await listenLoopback(
+    app(members, { origin, secret, memberSharing: sharing }),
+  );
+  onTestFinished(() => closeLoopback(server));
   const open = (token: string, path = "/account/sharing/staff-access") =>
     request(server)
       .get(path)
