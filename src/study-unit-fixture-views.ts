@@ -1,5 +1,6 @@
 import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
+import { hostingText } from "./hosting-presentation.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import {
   studyFixtureState,
@@ -13,8 +14,10 @@ export interface StudyFixtureAttempt {
   key: string;
   checked: unknown;
 }
-const explanation = `<p class="eyebrow">PRIVATE · LOCAL TEST PREVIEW</p><p>This one-time test fixture contains exactly three study requests. It is not money, a purchased plan, live AI access or a qualified service. There is no automatic allowance or renewal.</p>`;
-const back = `<p><a href="${STUDY_MEMBER_PATH}">Your test fixture</a> · <a href="/member/test-units">Current local balances</a> · <a href="/learn">Learning path</a></p>`;
+const explanation = () =>
+  `<p class="eyebrow">PRIVATE · ${hostingText("LOCAL TEST PREVIEW", "TEST ONLY")}</p><p>This one-time ${hostingText("test fixture", "test allowance")} contains exactly three study requests. It is not money, a purchased plan, live AI access or a qualified service. There is no automatic allowance or renewal.</p>`;
+const back = () =>
+  `<p><a href="${STUDY_MEMBER_PATH}">${hostingText("Your test fixture", "Your study units")}</a> · <a href="/member/test-units">${hostingText("Current local balances", "Current balances")}</a> · <a href="/learn">Learning path</a></p>`;
 function receiptText(receipt: StudyFixtureReceipt, observed: Date) {
   const state = studyFixtureState(receipt, observed);
   return `<dl><dt>Request reference</dt><dd>${escape(receipt.id)}</dd><dt>Fixed test quantity</dt><dd>3 study requests</dd><dt>State</dt><dd>${escape(state)}</dd><dt>Original request deadline</dt><dd>${timeTag(receipt.expiresAt)}</dd>${receipt.grantExpiresAt ? `<dt>Original unit deadline</dt><dd>${timeTag(receipt.grantExpiresAt)}</dd>` : ""}${receipt.withdrawnAt ? `<dt>Owner withdrawal</dt><dd>${timeTag(receipt.withdrawnAt)}</dd>` : ""}</dl>`;
@@ -25,9 +28,13 @@ export function studyFixtureMemberPage(
   creationEnabled: boolean,
   observed: Date,
 ) {
-  return page(
+  const heading = hostingText(
     "Request three local study units",
-    `<article class="reading">${explanation}<h1>Request three local study units</h1>${receipt ? `${receiptText(receipt, observed)}<p>This policy slot cannot be reset by another request, expiry, cancellation or withdrawal.</p>${receipt.withdrawnAt ? "" : `<form method="post" action="${STUDY_MEMBER_PATH}/withdraw/check">${hidden(csrf)}<input type="hidden" name="requestId" value="${escape(receipt.id)}"><button class="secondary">Review fixture withdrawal</button></form>`}` : creationEnabled ? `<p>Select one current local platform administrator using the reference they have deliberately given you. This page provides no administrator directory.</p><p>The request lasts at most 30 minutes, bounded by both original access deadlines. Issued units last at most 15 minutes and never beyond the original request deadline.</p><form method="post" action="${STUDY_MEMBER_PATH}/check">${hidden(csrf)}<label>Administrator reference<input name="administratorId" required maxlength="36" autocomplete="off"></label><button>Review request</button></form>` : `<p role="status">New fixture requests and issuance are paused. Your retained receipt, balances, export, withdrawal and account erasure remain available.</p>`}${back}</article>`,
+    "Request three study units",
+  );
+  return page(
+    heading,
+    `<article class="reading">${explanation()}<h1>${heading}</h1>${receipt ? `${receiptText(receipt, observed)}<p>${hostingText("This policy slot", "This one-time request")} cannot be reset by another request, expiry, cancellation or withdrawal.</p>${receipt.withdrawnAt ? "" : `<form method="post" action="${STUDY_MEMBER_PATH}/withdraw/check">${hidden(csrf)}<input type="hidden" name="requestId" value="${escape(receipt.id)}"><button class="secondary">${hostingText("Review fixture withdrawal", "Review withdrawal")}</button></form>`}` : creationEnabled ? `<p>Select one current ${hostingText("local ", "")}platform administrator using the reference they have deliberately given you. This page provides no administrator directory.</p><p>The request lasts at most 30 minutes, bounded by both original access deadlines. Issued units last at most 15 minutes and never beyond the original request deadline.</p><form method="post" action="${STUDY_MEMBER_PATH}/check">${hidden(csrf)}<label>Administrator reference<input name="administratorId" required maxlength="36" autocomplete="off"></label><button>Review request</button></form>` : `<p role="status">${hostingText("New fixture requests", "New requests")} and issuance are paused. Your retained receipt, balances, export, withdrawal and account erasure remain available.</p>`}${back()}</article>`,
   );
 }
 export function studyFixtureStaffPage(
@@ -35,9 +42,13 @@ export function studyFixtureStaffPage(
   reference: string,
   creationEnabled: boolean,
 ) {
-  return page(
+  const heading = hostingText(
     "Local study-unit issuance",
-    `<article class="reading">${explanation}<h1>Local study-unit issuance</h1><p>Your noncredential administrator reference: <code>${escape(reference)}</code></p><p>Share this reference deliberately with the invented member. It does not sign anyone in or grant access.</p>${creationEnabled ? "" : '<p role="status">New requests and issuance are paused. Finite original receipt inspection remains available.</p>'}<form method="post" action="${STUDY_STAFF_PATH}/check">${hidden(csrf)}<label>Member-supplied request reference<input name="requestId" required maxlength="36" autocomplete="off"></label><button>Review exact request</button></form><p><a href="/staff">Staff work</a></p></article>`,
+    "Study-unit issuance",
+  );
+  return page(
+    heading,
+    `<article class="reading">${explanation()}<h1>${heading}</h1><p>Your noncredential administrator reference: <code>${escape(reference)}</code></p><p>Share this reference deliberately with the invented member. It does not sign anyone in or grant access.</p>${creationEnabled ? "" : '<p role="status">New requests and issuance are paused. Finite original receipt inspection remains available.</p>'}<form method="post" action="${STUDY_STAFF_PATH}/check">${hidden(csrf)}<label>Member-supplied request reference<input name="requestId" required maxlength="36" autocomplete="off"></label><button>Review exact request</button></form><p><a href="/staff">Staff work</a></p></article>`,
   );
 }
 function confirmationForm(csrf: string, attempt: StudyFixtureAttempt) {
@@ -54,8 +65,11 @@ export function studyFixtureConfirmation(
     attempt.kind === "request"
       ? "Confirm your fixed test-unit request"
       : staff
-        ? "Confirm three local study units"
-        : "Confirm fixture withdrawal";
+        ? hostingText(
+            "Confirm three local study units",
+            "Confirm three study units",
+          )
+        : hostingText("Confirm fixture withdrawal", "Confirm withdrawal");
   const facts = attempt.checked as Record<string, unknown>;
   const labels: Record<string, string> = {
     administratorId: "Selected administrator reference",
@@ -68,7 +82,7 @@ export function studyFixtureConfirmation(
   };
   return page(
     title,
-    `<article class="reading">${explanation}<h1>${title}</h1><dl>${Object.entries(
+    `<article class="reading">${explanation()}<h1>${title}</h1><dl>${Object.entries(
       facts,
     )
       .filter(([name]) => name !== "policy")
@@ -78,7 +92,7 @@ export function studyFixtureConfirmation(
       )
       .join(
         "",
-      )}</dl><p>${attempt.kind === "withdraw" ? "This cancels a pending request or makes only remaining usable units unavailable. Held and consumed history stays intact. No job is refunded or retried, and this policy cannot be issued again." : "Exactly three study requests, one lifetime test fixture under this policy. This grants no permission to use private source material; that remains a separate explicit choice."}</p>${confirmationForm(csrf, attempt)}<p><a href="${base}">Cancel this form</a></p></article>`,
+      )}</dl><p>${attempt.kind === "withdraw" ? "This cancels a pending request or makes only remaining usable units unavailable. Held and consumed history stays intact. No job is refunded or retried, and this policy cannot be issued again." : `Exactly three study requests, one lifetime ${hostingText("test fixture", "test allowance")} under this policy. This grants no permission to use private source material; that remains a separate explicit choice.`}</p>${confirmationForm(csrf, attempt)}<p><a href="${base}">Cancel this form</a></p></article>`,
   );
 }
 export function studyFixtureReceiptPage(
@@ -86,15 +100,19 @@ export function studyFixtureReceiptPage(
   observed: Date,
   staff: boolean,
 ) {
+  const heading = hostingText("Saved local test fixture", "Saved test request");
   return page(
-    "Saved local test fixture",
-    `<article class="reading">${explanation}<h1>Saved local test fixture</h1>${receiptText(receipt, observed)}<p>Reload before taking another action. Current balances and request-source permission are separate.</p>${
+    heading,
+    `<article class="reading">${explanation()}<h1>${heading}</h1>${receiptText(receipt, observed)}<p>Reload before taking another action. Current balances and request-source permission are separate.</p>${
       staff
         ? `${portalActions([
-            [STUDY_STAFF_PATH, "Local issuance work"],
+            [
+              STUDY_STAFF_PATH,
+              hostingText("Local issuance work", "Issuance work"),
+            ],
             ["/staff", "Staff work"],
           ])}`
-        : `${back}<p><a href="/member/export">Export your retained records</a></p>`
+        : `${back()}<p><a href="/member/export">Export your retained records</a></p>`
     }</article>`,
   );
 }
@@ -104,9 +122,13 @@ export function studyFixtureNotice(
   attempt?: StudyFixtureAttempt,
 ) {
   const base = attempt?.kind === "issue" ? STUDY_STAFF_PATH : STUDY_MEMBER_PATH;
-  return page(
+  const heading = hostingText(
     "Local test fixture unavailable",
-    `<article class="reading"><h1>Local test fixture unavailable</h1><p role="status">${escape(message)}</p>${attempt ? `<p>A write may already have committed. Inspect the original operation before deliberately repeating that same instruction; this form does not dispatch anything.</p><form method="post" action="${base}/inspect">${hidden(csrf)}<input type="hidden" name="kind" value="${escape(attempt.kind)}"><input type="hidden" name="key" value="${escape(attempt.key)}"><input type="hidden" name="checked" value="${escape(JSON.stringify(attempt.checked))}"><button>Inspect original operation</button></form>` : ""}<p><a href="${base}">Read current fixture state</a></p></article>`,
+    "Test request unavailable",
+  );
+  return page(
+    heading,
+    `<article class="reading"><h1>${heading}</h1><p role="status">${escape(message)}</p>${attempt ? `<p>A write may already have committed. Inspect the original operation before deliberately repeating that same instruction; this form does not dispatch anything.</p><form method="post" action="${base}/inspect">${hidden(csrf)}<input type="hidden" name="kind" value="${escape(attempt.kind)}"><input type="hidden" name="key" value="${escape(attempt.key)}"><input type="hidden" name="checked" value="${escape(JSON.stringify(attempt.checked))}"><button>Inspect original operation</button></form>` : ""}<p><a href="${base}">${hostingText("Read current fixture state", "Read current state")}</a></p></article>`,
   );
 }
 export function studyFixtureUncommitted(

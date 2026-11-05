@@ -138,7 +138,7 @@ function links(role: StaffRole, tools: StaffTools) {
       [
         tools.studyUnits === true,
         "/operator/study-test-units",
-        "Issue local study test units",
+        hostingText("Issue local study test units", "Issue study test units"),
       ],
       [
         tools.eventAttendance === true,

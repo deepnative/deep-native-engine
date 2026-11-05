@@ -1,8 +1,15 @@
 import type { Express, Response } from "express";
-import type { MemberSharing, SharingSummary } from "./member-sharing.ts";
+import { readableTime } from "./display-time.ts";
+import type {
+  MemberSharing,
+  SharingSummary,
+  StaffAccessEntry,
+} from "./member-sharing.ts";
 import { escape, page } from "./views.ts";
 
 const PATH = "/account/sharing";
+const HISTORY_PATH = `${PATH}/staff-access`;
+const HISTORY_TITLE = "When staff opened my work";
 const plural = (n: number, one: string, many: string) =>
   `${n} ${n === 1 ? one : many}`;
 const link = (href: string, text: string) => `<a href="${href}">${text}</a>`;
@@ -72,8 +79,98 @@ function sharingPage(v: SharingSummary, contributionsOn: boolean) {
     v.coaches
       ? `You have ${plural(v.coaches, "coach", "coaches")}. A coach sees your display name, monthly coaching hours and their status.`
       : "No coach is assigned to you."
-  }</p><p>Account administrators see your display name, starting point, goal, coaching summary, and enrollment and billing summaries. They can also check whether an email address belongs to an account.</p><p>These pages don't show your private writing or files.</p></section>
+  }</p><p>Account administrators see your display name, starting point, goal, coaching summary, and enrollment and billing summaries. They can also check whether an email address belongs to an account.</p><p>These pages don't show your private writing or files.</p><p>${
+    v.staffWithAccess
+      ? `${v.staffWithAccess === 1 ? "1 staff member has" : `${v.staffWithAccess} staff members have`} access to your private work right now, given by an administrator for a limited time.`
+      : "No staff access to your private work is active right now."
+  } ${link(HISTORY_PATH, HISTORY_TITLE)}</p></section>
 <section class="reading" aria-labelledby="sharing-records"><h2 id="sharing-records">Your records</h2><p>${link("/member/export", "Download my records")}. To delete your account, go to ${link("/account", "My account")}.</p></section>`;
+}
+
+function accessWho(via: string | null) {
+  if (via === "support") return "Support staff";
+  return via === "evidence_review" ? "A reviewer" : "Assigned staff";
+}
+function givenWord(via: string | null) {
+  return via === "evidence_review" ? "was" : "were";
+}
+function accessObject(via: string | null) {
+  return via === "evidence_review"
+    ? "one of your files"
+    : "your learning workspace";
+}
+/** Only the member's own file name comes from stored text; it is escaped. */
+function staffAccessText(entry: StaffAccessEntry) {
+  const { source, action, via } = entry;
+  const file = entry.file
+    ? `<strong>${escape(entry.file)}</strong>`
+    : "a file you've since removed";
+  if (source === "access") {
+    const who = accessWho(via);
+    switch (action) {
+      case "grant_created":
+        return `${who} ${givenWord(via)} given access to ${accessObject(via)}.`;
+      case "grant_revoked":
+        return `Access to ${accessObject(via)} was taken away from ${who === "A reviewer" ? "a reviewer" : who.toLowerCase()}.`;
+      case "workspace_read":
+        return `${who} opened your learning workspace.`;
+      case "support_content_read":
+        return `${who} read your support content.`;
+      case "evidence_link_issued":
+        return `${who} got a link to ${file}.`;
+      case "evidence_bytes_loaded":
+        return `${who} opened ${file}.`;
+    }
+  }
+  if (source === "feedback") {
+    switch (action) {
+      case "read":
+        return `A reviewer read your sample ${file}.`;
+      case "draft-saved":
+        return `A reviewer saved draft feedback on ${file}.`;
+      case "published":
+        return `A reviewer published feedback on ${file}.`;
+      case "answered":
+        return `A reviewer answered your question about feedback on ${file}.`;
+    }
+  }
+  if (source === "proposal") {
+    const who = via === "platform_admin" ? "An administrator" : "A moderator";
+    switch (action) {
+      case "proposal_read":
+        return `${who} read a proposal you sent.`;
+      case "proposal_quarantined":
+        return `${who} set aside a proposal you sent for closer review.`;
+      case "proposal_rejected":
+        return `${who} rejected a proposal you sent.`;
+      case "proposal_changes_requested":
+        return `${who} asked for changes to a proposal you sent.`;
+    }
+  }
+  // A later kind of record still shows rather than silently vanishing.
+  return "Staff accessed your private work.";
+}
+
+function staffAccessPage(
+  entries: StaffAccessEntry[],
+  older: string | null,
+  first: boolean,
+) {
+  const items = entries
+    .map(
+      (entry) =>
+        `<li><time datetime="${entry.at.toISOString()}">${readableTime(entry.at)}</time><br>${staffAccessText(entry)}</li>`,
+    )
+    .join("");
+  const list = items
+    ? `<ul>${items}</ul>`
+    : `<p role="status">${first ? "No staff access to your private work is recorded." : "There are no older entries."}</p>`;
+  return `<section class="reading"><p class="eyebrow">My account</p><h1>${HISTORY_TITLE}</h1><p class="lead">Each time staff were given access to your private work, or opened it. Names aren't shown.</p>${list}${
+    older
+      ? `<p>${link(`${HISTORY_PATH}?before=${encodeURIComponent(older)}`, "Older entries")}</p>`
+      : ""
+  }</section>
+<section class="reading" aria-labelledby="staff-access-covers"><h2 id="staff-access-covers">What this covers</h2><p>Your learning workspace, the files and samples you sent for review, and proposals you submitted.</p><p>It doesn't list workflow notes you sent for private review, support requests or circle post moderation, because opening those isn't recorded here. It also doesn't list access that ended on its own at its set time.</p><p>This history is deleted with your account. It isn't part of ${link("/member/export", "Download my records")}.</p><p>${link(PATH, "Who can see my work")}</p></section>`;
 }
 
 /** #40 WHOSEES-01..08: read-only; every change happens on the linked page. */
@@ -83,6 +180,39 @@ export function mountMemberSharing(
   options: { contributions: boolean },
 ) {
   if (!store) return;
+  app.get(HISTORY_PATH, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const { before, ...rest } = req.query;
+    if (
+      Object.keys(rest).length ||
+      (before !== undefined && typeof before !== "string")
+    )
+      return refuse(res, 400, HISTORY_TITLE, "Open this page from My account.");
+    const result = await store.staffAccess(
+      res.locals.token as string,
+      before as string | undefined,
+    );
+    if (result.kind === "denied") return res.redirect(303, "/");
+    if (result.kind === "invalid")
+      return refuse(res, 400, HISTORY_TITLE, "Open this page from My account.");
+    if (result.kind !== "ready")
+      return refuse(
+        res,
+        503,
+        HISTORY_TITLE,
+        "This history can't be checked right now. Try again shortly.",
+      );
+    return res.send(
+      page(
+        HISTORY_TITLE,
+        staffAccessPage(
+          result.value.entries,
+          result.value.older,
+          before === undefined,
+        ),
+      ),
+    );
+  });
   app.get(PATH, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (Object.keys(req.query).length)

@@ -2237,7 +2237,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v33",
+          version: "local-member-records-v34",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2277,7 +2277,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v33",
+    version: "local-member-records-v34",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -2299,13 +2299,13 @@ it("serves the local welcome, stylesheet and safe security headers", async () =>
   expect(res.headers["x-powered-by"]).toBeUndefined();
   expect(res.headers["cache-control"]).toBe("no-store");
 });
-it("reports deterministic integration readiness without claiming live effects", async () => {
+it("reports simulated service status without claiming live effects", async () => {
   const agent = await managedAgent(app(db, { origin, secret: "s" }));
   const res = await agent.get("/readiness").set("Host", host).expect(200);
-  expect(res.text).toContain("DEMO ENVIRONMENT");
-  expect(res.text).toMatch(/<strong>ai<\/strong> · simulated/);
-  expect(res.text).toMatch(/<strong>payment<\/strong> · simulated/);
-  expect(res.text).toContain("no external side effect occurs");
+  expect(res.text).toContain("DEMO SITE");
+  expect(res.text).toMatch(/<strong>AI<\/strong> · Simulated/);
+  expect(res.text).toMatch(/<strong>Payments<\/strong> · Simulated/);
+  expect(res.text).toContain("Simulated. No payment is taken.");
   expect(res.text).not.toContain("configured");
 });
 it("serves concurrent requests through one test agent without transport failures", async () => {
@@ -2319,7 +2319,7 @@ it("serves concurrent requests through one test agent without transport failures
     );
     expect(responses).toHaveLength(8);
     for (const response of responses) {
-      expect(response.text).toContain("DEMO ENVIRONMENT");
+      expect(response.text).toContain("DEMO SITE");
     }
   } finally {
     await closeLoopback(server);
@@ -5849,7 +5849,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v33" as const,
+    version: "local-member-records-v34" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -6819,7 +6819,7 @@ it("NAV-09/10 keeps the signed-out header on form responses and offers sign-in b
   const main = out.text.match(/<main[^>]*>([\s\S]*?)<\/main>/)?.[1] ?? "";
   expect(main).toContain('class="button" href="/email/sign-in">Sign in</a>');
   expect(main).toContain(
-    'class="button secondary" href="/">Start a new learning path</a>',
+    'class="button secondary" href="/#your-path">Start my learning path</a>',
   );
 });
 it("FOOTER-01 lists footer links as whole items without dot separators", async () => {
@@ -6839,7 +6839,7 @@ it("FOOTER-01 lists footer links as whole items without dot separators", async (
     "My courses",
     "Local circles",
     "Workflow demonstrations",
-    "Integration readiness",
+    "Service status",
   ])
     expect(footer).toContain(`>${label}</a>`);
 });
@@ -7305,6 +7305,68 @@ it("REALINPUT-01/02/03 hosted private learning forms take real information while
   expect(dashboardPage.text).not.toContain("Delete this preview");
   expect(dashboardPage.text).not.toContain("FOUNDATION PREVIEW");
   expect((await local.get("/learn")).text).toContain("Delete this preview");
+});
+it("READABLE-14 a hosted member sees the prerequisite lesson's title on its route", async () => {
+  const hostedOrigin = "https://engine.deepnative.io";
+  const base: ContentVersion = {
+    id: "SYN-960",
+    version: 1,
+    kind: "assignment",
+    origin: "curated",
+    title: "Invented assignment",
+    body: "Invented body.",
+    owner: "Invented owner",
+    sources: "Invented source",
+    rights: "Invented rights",
+    goals: ["everyday", "work", "build"],
+    backgrounds: ["explorer", "professional", "technical"],
+    domains: [],
+    prerequisites: "",
+    rubric: null,
+    rubricVersion: null,
+    state: "published",
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date(),
+    publishedAt: new Date(),
+  };
+  const assignment: ContentVersion = {
+    ...base,
+    structuredPrerequisites: {
+      schemaVersion: 1,
+      all: [{ kind: "lesson", id: "SYN-805", version: 2, activity: "started" }],
+    },
+  };
+  const lesson: ContentVersion = {
+    ...base,
+    id: "SYN-805",
+    version: 2,
+    kind: "lesson",
+    title: "Check an invented claim",
+  };
+  const db = storage();
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
+  const catalog = catalogMock();
+  catalog.published.mockResolvedValue(assignment);
+  catalog.search.mockResolvedValue([assignment, lesson]);
+  const secret = "hosting-copy-test";
+  const bearer = "c".repeat(64);
+  const page = await withLoopback(
+    app(db, { origin: hostedOrigin, hostedOrigin, secret, catalog }),
+    (s) =>
+      request(s)
+        .get("/library/SYN-960")
+        .set("Host", "engine.deepnative.io")
+        .set("Cookie", `${COOKIE}=${bearer}`),
+  );
+  expect(page.status).toBe(200);
+  expect(page.text).toContain(
+    "Lesson “Check an invented claim” version 2: started",
+  );
+  expect(page.text).not.toContain("SYN-805");
 });
 it("HOSTED-12 presents accurate hosted persistence while concurrent local rendering stays local", async () => {
   const hosted = app(storage(), {

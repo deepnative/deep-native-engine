@@ -26,6 +26,14 @@ export interface CircleItem {
   revision: number;
   createdAt: string;
   rootId?: string | null;
+  // Questions only. Counts the replies a member can read right now.
+  replyCount?: number;
+  latestReplyAt?: string | null;
+}
+export interface CircleActivity {
+  questions: number;
+  replies: number;
+  latestReplyAt: string | null;
 }
 export type CircleResult<T> =
   | { kind: "ready"; value: T }
@@ -108,6 +116,10 @@ export interface CircleAppealPage {
   items: CircleAppeal[];
 }
 export interface CircleDiscussionStore {
+  activity(
+    token: string,
+    circle: string,
+  ): Promise<CircleResult<CircleActivity>>;
   reportModerationNotice(
     token: string,
     circle: string,
@@ -286,6 +298,7 @@ interface Metadata {
   root_id: string | null;
   state: string;
   revision: number;
+  created_at?: string;
 }
 interface Context {
   actor: string;
@@ -298,6 +311,7 @@ interface Context {
 
 export function disabledCircleDiscussionStore(): CircleDiscussionStore {
   return {
+    activity: async () => denied,
     reportModerationNotice: async () => denied,
     appeals: async () => denied,
     appealHistory: async () => denied,
@@ -826,6 +840,7 @@ export function circleDiscussionStore(
     circle: string,
     kind: string,
     last: string,
+    at?: string,
   ) {
     const data = Buffer.from(
       JSON.stringify({
@@ -833,6 +848,7 @@ export function circleDiscussionStore(
         circle,
         kind,
         last,
+        at,
         policy: CIRCLE_DISCUSSION_POLICY,
         choice: context.choices.get(context.actor)?.id ?? null,
       }),
@@ -869,6 +885,65 @@ export function circleDiscussionStore(
     } catch {
       return false;
     }
+  }
+  // Questions and replies page by time. The position travels in the signed
+  // cursor, so erasing the last-seen post can't lose the member's place.
+  function cursorAt(cursor?: string) {
+    if (!cursor) return null;
+    const at = (
+      JSON.parse(
+        Buffer.from(cursor.split(".")[0]!, "base64url").toString("utf8"),
+      ) as { at?: unknown }
+    ).at;
+    return typeof at === "string" ? at : false;
+  }
+  // The rule readers get: a reply counts only under its author's current choice,
+  // while that author is current. Text and authors never leave this query.
+  async function replyTotals(
+    client: PoolClient,
+    circle: string,
+    roots: string[],
+    excludeAuthor: string | null = null,
+  ) {
+    if (!roots.length) return new Map<string, { n: number; latest: string }>();
+    const { rows } = await client.query<{
+      root: string;
+      n: number;
+      latest: string;
+    }>(
+      `SELECT r.root_id AS root,count(*)::integer AS n,max(r.created_at)::text AS latest
+   FROM preview_circle_posts r
+   JOIN principals p ON p.id=r.member_id AND p.kind='member'
+     AND p.revoked_at IS NULL AND p.expires_at>clock_timestamp()
+   JOIN workspaces w ON w.owner_principal_id=r.member_id AND w.deleting_at IS NULL
+   JOIN preview_circle_choices c ON c.id=r.choice_id AND c.member_id=r.member_id
+     AND c.circle_id=r.circle_id AND c.policy_version=$3 AND c.revoked_at IS NULL
+   JOIN preview_circle_memberships m ON m.member_id=r.member_id
+     AND m.circle_id=r.circle_id AND m.generation=c.generation AND m.left_at IS NULL
+   WHERE r.circle_id=$1 AND r.root_id=ANY($2::uuid[]) AND r.state='visible'
+     AND ($4::uuid IS NULL OR r.member_id<>$4::uuid)
+   GROUP BY r.root_id`,
+      [circle, roots, CIRCLE_DISCUSSION_POLICY, excludeAuthor],
+    );
+    return new Map(rows.map((row) => [row.root, row]));
+  }
+  async function withReplyCounts(
+    client: PoolClient,
+    circle: string,
+    rows: CircleItem[],
+    questions: string[],
+  ) {
+    const totals = await replyTotals(client, circle, questions);
+    const counted = new Set(questions);
+    return rows.map((row) =>
+      counted.has(row.id)
+        ? {
+            ...row,
+            replyCount: totals.get(row.id)?.n ?? 0,
+            latestReplyAt: totals.get(row.id)?.latest ?? null,
+          }
+        : row,
+    );
   }
   async function items(
     client: PoolClient,
@@ -907,6 +982,8 @@ export function circleDiscussionStore(
         : context.choices.get(row.member_id)!.pseudonym,
     }));
   }
+  const position = (metadata: Metadata[], id: string) =>
+    metadata.findIndex((row) => row.id === id);
   const page = (
     context: Context,
     circle: string,
@@ -914,10 +991,19 @@ export function circleDiscussionStore(
     metadata: Metadata[],
     visible: CircleItem[],
   ): CirclePage => ({
-    items: visible,
+    // Rows are read and locked by ID, so restore the order the page was chosen in.
+    items: [...visible].sort(
+      (a, b) => position(metadata, a.id) - position(metadata, b.id),
+    ),
     nextCursor:
       metadata.length > CIRCLE_PAGE_SIZE
-        ? encode(context, circle, kind, metadata[CIRCLE_PAGE_SIZE - 1]!.id)
+        ? encode(
+            context,
+            circle,
+            kind,
+            metadata[CIRCLE_PAGE_SIZE - 1]!.id,
+            metadata[CIRCLE_PAGE_SIZE - 1]!.created_at,
+          )
         : null,
   });
   async function readReports(
@@ -1993,6 +2079,35 @@ export function circleDiscussionStore(
         return ready({ id });
       });
     },
+    async activity(token, circle) {
+      if (!input(token, circle) || !writes) return denied;
+      return transaction(circle, false, async (client, finish) => {
+        const context = await authorize(client, token, circle, [], true);
+        if (!context) return denied;
+        finish(context);
+        const questions = (
+          await client.query<{ id: string }>(
+            "SELECT id FROM preview_circle_posts WHERE member_id=$1 AND circle_id=$2 AND root_id IS NULL AND state='visible' AND choice_id=$3",
+            [context.actor, circle, context.choices.get(context.actor)!.id],
+          )
+        ).rows.map((row) => row.id);
+        const totals = [
+          ...(
+            await replyTotals(client, circle, questions, context.actor)
+          ).values(),
+        ];
+        return ready({
+          questions: questions.length,
+          replies: totals.reduce((sum, row) => sum + row.n, 0),
+          // PostgreSQL's text form sorts by time for one session time zone.
+          latestReplyAt:
+            totals
+              .map((row) => row.latest)
+              .sort()
+              .pop() ?? null,
+        });
+      });
+    },
     async list(token, circle, cursor) {
       if (!input(token, circle) || !writes) return denied;
       return transaction(circle, false, async (client, finish) => {
@@ -2000,10 +2115,12 @@ export function circleDiscussionStore(
         if (!initial) return denied;
         const after = decode(initial, circle, "roots", cursor);
         if (after === false) return invalid;
+        const at = cursorAt(cursor);
+        if (at === false) return invalid;
         const metadata = (
           await client.query<Metadata>(
-            "SELECT id,member_id,choice_id,root_id,state,revision FROM preview_circle_posts WHERE circle_id=$1 AND root_id IS NULL AND state='visible' AND ($2::uuid IS NULL OR id>$2::uuid) ORDER BY id LIMIT 21",
-            [circle, after],
+            "SELECT id,member_id,choice_id,root_id,state,revision,created_at::text AS created_at FROM preview_circle_posts WHERE circle_id=$1 AND root_id IS NULL AND state='visible' AND ($2::uuid IS NULL OR (created_at,id)<($3::timestamptz,$2::uuid)) ORDER BY created_at DESC,id DESC LIMIT 21",
+            [circle, after, at],
           )
         ).rows;
         // Discover every candidate owner before acquiring sorted source locks.
@@ -2011,13 +2128,19 @@ export function circleDiscussionStore(
         if (!context) return denied;
         finish(context);
         if (decode(context, circle, "roots", cursor) === false) return invalid;
+        const shown = await items(client, context, metadata.slice(0, 20));
         return ready(
           page(
             context,
             circle,
             "roots",
             metadata,
-            await items(client, context, metadata.slice(0, 20)),
+            await withReplyCounts(
+              client,
+              circle,
+              shown,
+              shown.map((row) => row.id),
+            ),
           ),
         );
       });
@@ -2034,10 +2157,12 @@ export function circleDiscussionStore(
         if (!preview) return denied;
         const after = decode(preview, circle, "replies:" + id, cursor);
         if (after === false) return invalid;
+        const at = cursorAt(cursor);
+        if (at === false) return invalid;
         const metadata = (
           await client.query<Metadata>(
-            "SELECT id,member_id,choice_id,root_id,state,revision FROM preview_circle_posts WHERE circle_id=$1 AND root_id=$2 AND state='visible' AND ($3::uuid IS NULL OR id>$3::uuid) ORDER BY id LIMIT 21",
-            [circle, id, after],
+            "SELECT id,member_id,choice_id,root_id,state,revision,created_at::text AS created_at FROM preview_circle_posts WHERE circle_id=$1 AND root_id=$2 AND state='visible' AND ($3::uuid IS NULL OR (created_at,id)>($4::timestamptz,$3::uuid)) ORDER BY created_at,id LIMIT 21",
+            [circle, id, after, at],
           )
         ).rows;
         const context = await authorize(
@@ -2253,13 +2378,31 @@ export function circleDiscussionStore(
             [context.actor, circle, after],
           )
         ).rows;
+        // A link to the conversation only helps while the member can open it.
+        const current = writes ? await observe(client, token, circle) : null;
+        const choice = current?.choices.get(context.actor)?.id;
+        const stillShared = metadata
+          .slice(0, 20)
+          .filter(
+            (row) =>
+              choice &&
+              !row.root_id &&
+              row.state === "visible" &&
+              row.choice_id === choice,
+          )
+          .map((row) => row.id);
         return ready(
           page(
             context,
             circle,
             "owned",
             metadata,
-            await items(client, context, metadata.slice(0, 20), true),
+            await withReplyCounts(
+              client,
+              circle,
+              await items(client, context, metadata.slice(0, 20), true),
+              stillShared,
+            ),
           ),
         );
       });

@@ -1,4 +1,5 @@
 import { mountAdministratorDiagnostics } from "./administrator-diagnostics-routes.ts";
+import { workQueueTools } from "./administrator-work-waiting-views.ts";
 import type { AdministratorDiagnostics } from "./administrator-diagnostics.ts";
 import {
   invoiceResumeTarget,
@@ -127,6 +128,7 @@ import {
   memberExportPage,
   localAiConsentPage,
   localAiControlPage,
+  withPrerequisiteTitles,
   evidenceRevisionPage,
   lesson,
   readinessPage,
@@ -238,7 +240,10 @@ import {
 } from "./workflow-feedback.ts";
 import type { WorkflowReviewStore } from "./workflow-review.ts";
 import { mountWorkflowReviewRoutes } from "./workflow-review-routes.ts";
-import { registerCircleDiscussion } from "./circle-discussion-routes.ts";
+import {
+  circleReplySummaries,
+  registerCircleDiscussion,
+} from "./circle-discussion-routes.ts";
 import { disabledProgramStore, type ProgramStore } from "./program-values.ts";
 import { mountProgramRoutes } from "./program-routes.ts";
 import { programResumeTarget } from "./program-selection.ts";
@@ -279,6 +284,8 @@ import {
   type MemberTestUnitsStore,
 } from "./member-test-units.ts";
 import { registerMemberTestUnitsRoutes } from "./member-test-units-routes.ts";
+import { mountStudyAllowanceRoutes } from "./study-allowance-routes.ts";
+import type { StudyAllowanceStore } from "./study-allowances.ts";
 import type { StudyUnitFixtureStore } from "./study-unit-fixtures.ts";
 import { mountStudyUnitFixtureRoutes } from "./study-unit-fixture-routes.ts";
 import { disabledPracticeStore, type PracticeStore } from "./practice.ts";
@@ -438,6 +445,7 @@ export function app(
     localHoldInspection?: LocalAiHoldInspectionStore;
     memberTestUnits?: MemberTestUnitsStore;
     studyUnitFixtures?: StudyUnitFixtureStore;
+    studyAllowances?: StudyAllowanceStore;
     localTestUnitIssuance?: boolean;
     attempts?: AttemptStore;
     practice?: PracticeStore;
@@ -677,7 +685,12 @@ export function app(
         () => next(),
       );
   });
-  mountAdministratorEntry(app, options.administratorEntry, options);
+  mountAdministratorEntry(
+    app,
+    options.administratorEntry,
+    options,
+    workQueueTools(options),
+  );
   mountAdministratorDiagnostics(app, options.administratorDiagnostics, options);
   mountStaffEntryRoutes(app, options.staffEntry, options, {
     library: Boolean(options.catalog),
@@ -917,7 +930,9 @@ export function app(
     options.memberTestUnits ?? disabledMemberTestUnitsStore(),
     mode,
     Boolean(options.studyUnitFixtures),
+    Boolean(options.studyAllowances) && options.localTestUnitIssuance === true,
   );
+  mountStudyAllowanceRoutes(app, options.studyAllowances, mode);
   mountStudyUnitFixtureRoutes(app, options.studyUnitFixtures, options);
   app.get("/operator/experts", async (_req, res) => {
     const records = await tracks.registry(res.locals.token as string);
@@ -2035,7 +2050,10 @@ export function app(
         .send(
           errorPage(
             "Confirmation needed",
-            "Choose the local-only permission before continuing.",
+            hostingText(
+              "Choose the local-only permission before continuing.",
+              "Choose the simulation permission before continuing.",
+            ),
           ),
         );
       return;
@@ -2049,7 +2067,10 @@ export function app(
         .status(403)
         .send(
           errorPage(
-            "Local simulation unavailable",
+            hostingText(
+              "Local simulation unavailable",
+              "Simulation unavailable",
+            ),
             "Refresh your evidence and check the current version and safety state.",
           ),
         );
@@ -2080,7 +2101,10 @@ export function app(
         .send(
           errorPage(
             "Permission unavailable",
-            "This local permission is no longer available.",
+            hostingText(
+              "This local permission is no longer available.",
+              "This simulation permission is no longer available.",
+            ),
           ),
         );
       return;
@@ -2100,9 +2124,15 @@ export function app(
         .status(outcome.kind === "conflict" ? 409 : 403)
         .send(
           errorPage(
-            "Local simulation unavailable",
+            hostingText(
+              "Local simulation unavailable",
+              "Simulation unavailable",
+            ),
             paused
-              ? "Local simulations are paused. No new local job was queued."
+              ? hostingText(
+                  "Local simulations are paused. No new local job was queued.",
+                  "Simulations are paused. No new simulation was queued.",
+                )
               : "Refresh the page and check the exact-source permission.",
           ),
         );
@@ -2118,7 +2148,10 @@ export function app(
         .send(
           errorPage(
             "Confirmation needed",
-            "Confirm use of one existing local test request before continuing.",
+            hostingText(
+              "Confirm use of one existing local test request before continuing.",
+              "Confirm use of one existing test request before continuing.",
+            ),
           ),
         );
       return;
@@ -2133,8 +2166,14 @@ export function app(
         .status(outcome.kind === "conflict" ? 409 : 403)
         .send(
           errorPage(
-            "Local test request unavailable",
-            "Check current permission, the local pause state and your existing test units. No allowance was granted and no live provider was contacted.",
+            hostingText(
+              "Local test request unavailable",
+              "Test request unavailable",
+            ),
+            hostingText(
+              "Check current permission, the local pause state and your existing test units. No allowance was granted and no live provider was contacted.",
+              "Check current permission, whether simulations are paused and your existing test units. No allowance was granted and no live provider was contacted.",
+            ),
           ),
         );
       return;
@@ -2152,9 +2191,15 @@ export function app(
         .status(outcome.kind === "unavailable" ? 409 : 403)
         .send(
           errorPage(
-            "Local simulation unavailable",
+            hostingText(
+              "Local simulation unavailable",
+              "Simulation unavailable",
+            ),
             paused
-              ? "Local simulations are paused. This attempt will not retry automatically."
+              ? hostingText(
+                  "Local simulations are paused. This attempt will not retry automatically.",
+                  "Simulations are paused. This attempt will not retry automatically.",
+                )
               : "Refresh the page. No live AI provider was contacted.",
           ),
         );
@@ -2410,6 +2455,13 @@ export function app(
         (res.locals.learner as Learner).goal,
         res.locals.csrf as string,
         options.circleDiscussionEnabled ?? false,
+        await circleReplySummaries(
+          options.circleDiscussion ?? disabledCircleDiscussionStore(),
+          res.locals.token as string,
+          options.circleDiscussionEnabled
+            ? items.filter((item) => item.joined).map((item) => item.id)
+            : [],
+        ),
       ),
     );
   });
@@ -3201,7 +3253,16 @@ export function app(
               entry.contentVersion === item.version,
           )
         : undefined;
-    res.send(contentPreview(item, false, res.locals.csrf as string, activity));
+    res.send(
+      contentPreview(
+        item.structuredPrerequisites
+          ? withPrerequisiteTitles([item], await catalog.search({}))[0]!
+          : item,
+        false,
+        res.locals.csrf as string,
+        activity,
+      ),
+    );
   });
   app.get("/library/:id/practice-session", async (req, res) => {
     const source = await practiceSessions.source(
@@ -4058,7 +4119,10 @@ export function app(
       progress,
       res.locals.csrf as string,
       [],
-      eligibleAssignments(published, member, progress, activity),
+      withPrerequisiteTitles(
+        eligibleAssignments(published, member, progress, activity),
+        published,
+      ),
       choice,
       recommendLesson(published, member, progress, activity),
       undefined,
@@ -5264,7 +5328,10 @@ export function app(
             progress,
             res.locals.csrf as string,
             [],
-            eligibleAssignments(published, member, progress, activity),
+            withPrerequisiteTitles(
+              eligibleAssignments(published, member, progress, activity),
+              published,
+            ),
             choice,
             recommendLesson(published, member, progress, activity),
             edit,

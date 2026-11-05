@@ -182,7 +182,7 @@ test("[F-ROADMAP-08-B] uncovered reviewer and exhausted service capacity are dis
       const reviewer = await pair("reviewer", "formal-review");
       await page.goto("/readiness/tracks");
       const row = page.getByRole("listitem").filter({
-        hasText: "Education · formal-review",
+        hasText: "Education · formal review",
       });
       await expect(row).toContainText("in preparation");
       await expect(row).not.toContainText(
