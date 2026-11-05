@@ -79,6 +79,7 @@ import cookieParser from "cookie-parser";
 import {
   withHosting,
   withDemoSite,
+  withMemberContributions,
   hostingText,
   inventedInputOnly,
 } from "./hosting-presentation.ts";
@@ -523,6 +524,9 @@ export function app(
     withAdministration(false, next),
   );
   app.use((_req, _res, next) => withDemoSite(options.demoSite === true, next));
+  app.use((_req, _res, next) =>
+    withMemberContributions(options.memberContributions === true, next),
+  );
   app.use((_req, _res, next) =>
     withHosting(
       options.hostedOrigin === options.origin &&

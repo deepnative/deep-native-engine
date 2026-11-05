@@ -34,3 +34,15 @@ export function privateRecordsLabel(): string {
 export function inventedInputOnly(): boolean {
   return hosting.getStore() !== true;
 }
+// WFB-NORMAL-03 (#115): proposal pages follow whether member contributions
+// (intake, editorial acceptance and member sharing) are on for this app.
+const contributions = new AsyncLocalStorage<boolean>();
+export function withMemberContributions<T>(
+  enabled: boolean,
+  render: () => T,
+): T {
+  return contributions.run(enabled, render);
+}
+export function memberContributionsOn(): boolean {
+  return contributions.getStore() === true;
+}

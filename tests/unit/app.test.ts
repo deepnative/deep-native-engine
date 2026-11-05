@@ -502,6 +502,21 @@ it("keeps workflow feedback owner-only and never claims a failed or stale write"
     .expect(503);
   expect(failed.text).not.toContain("private database detail");
 });
+it("WFB-NORMAL-03 workflow pages follow whether this app turns on member contributions", async () => {
+  for (const memberContributions of [true, false]) {
+    const agent = await managedAgent(
+      app(db, { origin, secret: "secret", memberContributions }),
+    );
+    const page = await agent.get("/workflows/WF-001").set("Host", host);
+    expect(page.status).toBe(200);
+    expect(
+      page.text.includes("private version-pinned improvement proposal"),
+    ).toBe(memberContributions);
+    expect(page.text.includes("It will not be published")).toBe(
+      !memberContributions,
+    );
+  }
+});
 it("keeps optional slot discovery private and reports read failures without implying a booking", async () => {
   const availability = {
     ...disabledAvailabilityStore(),
