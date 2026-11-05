@@ -157,6 +157,11 @@ function fixture(disabled = false) {
     );
   return { app, service, profiles, get, post };
 }
+it("WORDING-04 does not call the opening month a past month", async () => {
+  const text = (await fixture().get("/account/coaching")).text;
+  expect(text).toContain("Choose the month you want to invoice");
+  expect(text).not.toContain("past month");
+});
 it("HOUR01/02/09 keeps empty, disabled, sample and configured states honest and escapes private recipient text", async () => {
   const f = fixture();
   expect((await f.get("/account/coaching")).text).toContain(

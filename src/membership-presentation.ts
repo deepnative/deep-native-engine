@@ -17,6 +17,10 @@ export function withMembership<T>(state: Membership, render: () => T): T {
 export function signedIn(): boolean {
   return membership.getStore()?.signedIn !== false;
 }
+/** What an earlier check found, undefined when it has not been checked. */
+export function knownSignedIn(): boolean | undefined {
+  return membership.getStore()?.signedIn;
+}
 export function signInAvailable(): boolean {
   return membership.getStore()?.signInAvailable === true;
 }

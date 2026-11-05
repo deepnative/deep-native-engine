@@ -117,6 +117,7 @@ resource "azurerm_container_app" "app" {
           DNE_LOCAL_EVENT_SCHEDULING           = "enabled"
           DNE_WORKFLOW_REVIEW_REQUESTS         = "enabled"
           DNE_LOCAL_SUPPORT_ASSIGNMENT         = "enabled"
+          DNE_MEMBER_CONTRIBUTIONS             = "enabled"
         }
         content {
           name  = env.key

@@ -73,6 +73,24 @@ async function fixture(
   return { http: request(server), store };
 }
 
+it("WORDING-03 says no account uses an address that has none", async () => {
+  const f = await fixture({
+    email: {
+      kind: "ready",
+      value: { ...found, verified: null, unverified: null },
+    },
+  });
+  const result = await f.http
+    .post("/operator/diagnostics/email")
+    .set("Origin", origin)
+    .set("Cookie", cookies)
+    .type("form")
+    .send({ csrf: csrf(token, secret), email: "nobody@example.test" });
+  expect(result.text).toContain(
+    "Verified email</th><td>No account uses this address</td>",
+  );
+  expect(result.text).not.toContain("Not verified");
+});
 it("DIAG-02 shows site counts and an email lookup form to an administrator", async () => {
   const f = await fixture();
   const page = await f.http.get("/operator/diagnostics").set("Cookie", cookies);

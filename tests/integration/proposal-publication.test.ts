@@ -72,7 +72,7 @@ it("keeps ordinary intake and acceptance private; publishes only the accepted ex
     state: "submitted",
     revision: 1,
   });
-  expect(ready(await publications.list(f.peer))).toEqual([]);
+  expect(ready(await publications.list(f.peer)).items).toEqual([]);
   expect(await publications.publish(f.owner, f.instruction)).toEqual({
     kind: "conflict",
   });
@@ -82,7 +82,7 @@ it("keeps ordinary intake and acceptance private; publishes only the accepted ex
     attribution: null,
     operationId: null,
   });
-  expect(ready(await publications.list(f.peer))).toEqual([]);
+  expect(ready(await publications.list(f.peer)).items).toEqual([]);
   expect(await publications.publish(f.peer, f.instruction)).toEqual({
     kind: "denied",
   });
@@ -147,7 +147,7 @@ it.each([
     expect(await publications.detail(f.peer, shared.id)).toEqual({
       kind: "denied",
     });
-    expect(ready(await publications.list(f.peer))).toEqual([]);
+    expect(ready(await publications.list(f.peer)).items).toEqual([]);
     if (action === "delete") {
       expect(
         (await pool.query("SELECT count(*)::int n FROM proposal_publications"))
@@ -453,7 +453,7 @@ it("rechecks source withdrawal committed during a genuine publication row wait",
     );
     await blocker.query("COMMIT");
     expect(await pending).toEqual({ kind: "conflict" });
-    expect(ready(await publications.list(f.peer))).toEqual([]);
+    expect(ready(await publications.list(f.peer)).items).toEqual([]);
     expect(
       ready(await publications.owner(f.owner, f.id)).receipt,
     ).toMatchObject({
@@ -496,7 +496,7 @@ it.each(["revoke", "remove-role"] as const)(
       await blocker.query("COMMIT");
       expect(await pending).toEqual({ kind: "denied" });
       expect(ready(await publications.owner(f.owner, f.id)).receipt).toBeNull();
-      expect(ready(await publications.list(f.peer))).toEqual([]);
+      expect(ready(await publications.list(f.peer)).items).toEqual([]);
     } finally {
       await blocker.query("ROLLBACK");
       blocker.release();
@@ -504,3 +504,42 @@ it.each(["revoke", "remove-role"] as const)(
     }
   },
 );
+it("CONTRIB-LIST-01 lists shared contributions newest first, skips withdrawn ones before the page limit and pages older items", async () => {
+  const f = await fixture();
+  ready(await publications.accept(f.moderator, f.id, 1, true));
+  const shared = [ready(await publications.publish(f.owner, f.instruction))];
+  for (let n = 1; n < 23; n++) {
+    const id = (await proposals.createDraft(
+      f.owner,
+      { ...value, title: `Invented method ${n}` },
+      false,
+    ))!;
+    expect(await proposals.submit(f.owner, id, true, 1)).toBe("submitted");
+    ready(await publications.accept(f.moderator, id, 1, true));
+    shared.push(
+      ready(
+        await publications.publish(f.owner, {
+          ...f.instruction,
+          operationId: randomUUID(),
+          proposalId: id,
+        }),
+      ),
+    );
+  }
+  // The two newest are withdrawn: they must not take places on the first page.
+  for (const r of shared.slice(-2))
+    expect(await proposals.withdraw(f.owner, r.proposalId)).toBe(true);
+  const valid = shared.slice(0, 21).reverse();
+  const first = ready(await publications.list(f.peer));
+  expect(first.items.map((v) => v.receipt.id)).toEqual(
+    valid.slice(0, 20).map((r) => r.id),
+  );
+  expect(first.older).toBe(valid[19]!.id);
+  const second = ready(await publications.list(f.peer, first.older!));
+  expect(second.items.map((v) => v.receipt.id)).toEqual([valid[20]!.id]);
+  expect(second.older).toBeNull();
+  expect(ready(await publications.list(f.peer, randomUUID()))).toEqual({
+    items: [],
+    older: null,
+  });
+});
