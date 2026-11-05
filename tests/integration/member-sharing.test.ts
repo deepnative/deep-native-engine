@@ -222,28 +222,36 @@ it("WHOSEES-04 staff-reviewed work counts only what is still shared", async () =
       [id],
     )
   ).rows[0]!.id;
-  for (const [expires, withdrawn] of [
-    ["clock_timestamp()+interval '1 day'", "NULL"],
-    ["clock_timestamp()+interval '1 day'", "clock_timestamp()"],
-    ["clock_timestamp()+interval '1 second'", "NULL"],
+  // Created and expired well in the past, so no count can land inside its life.
+  const ago = (days: number) => `clock_timestamp()-interval '${days} days'`;
+  for (const [created, expires, withdrawn] of [
+    ["clock_timestamp()", "clock_timestamp()+interval '1 day'", "NULL"],
+    [
+      "clock_timestamp()",
+      "clock_timestamp()+interval '1 day'",
+      "clock_timestamp()",
+    ],
+    [ago(3), ago(1), "NULL"],
   ])
     await seed(
-      `INSERT INTO workflow_review_requests(id,workspace_id,member_id,source_instance_id,workflow_id,workflow_version,source_revision,expires_at,withdrawn_at)
-       VALUES($1,$2,$3,$4,'WF-001',1,1,${expires},${withdrawn})`,
+      `INSERT INTO workflow_review_requests(id,workspace_id,member_id,source_instance_id,workflow_id,workflow_version,source_revision,created_at,expires_at,withdrawn_at)
+       VALUES($1,$2,$3,$4,'WF-001',1,1,${created},${expires},${withdrawn})`,
       [randomUUID(), workspace, id, randomUUID()],
     );
-  await pool.query(
-    "UPDATE workflow_review_requests SET expires_at=created_at+interval '1 millisecond' WHERE expires_at<clock_timestamp()+interval '1 hour'",
-  );
   expect((await summary(token)).workflowReviews).toBe(1);
 
-  for (const [expires, withdrawn] of [
-    ["clock_timestamp()+interval '1 day'", "NULL"],
-    ["clock_timestamp()+interval '1 day'", "clock_timestamp()"],
+  for (const [created, expires, withdrawn] of [
+    ["clock_timestamp()", "clock_timestamp()+interval '1 day'", "NULL"],
+    [
+      "clock_timestamp()",
+      "clock_timestamp()+interval '1 day'",
+      "clock_timestamp()",
+    ],
+    [ago(3), ago(1), "NULL"],
   ])
     await seed(
-      `INSERT INTO private_event_attendance_permissions(id,registration_id,workspace_id,member_id,starts_at,expires_at,withdrawn_at)
-       VALUES($1,$2,$3,$4,clock_timestamp(),${expires},${withdrawn})`,
+      `INSERT INTO private_event_attendance_permissions(id,registration_id,workspace_id,member_id,created_at,starts_at,expires_at,withdrawn_at)
+       VALUES($1,$2,$3,$4,${created},${created},${expires},${withdrawn})`,
       [randomUUID(), randomUUID(), workspace, id],
     );
   expect((await summary(token)).eventPermissions).toBe(1);
