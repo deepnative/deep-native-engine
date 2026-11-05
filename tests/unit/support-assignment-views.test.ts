@@ -71,7 +71,8 @@ it("shows only the operator's own noncredential reference and finite expiry", ()
   } as Parameters<typeof assignmentReferencePage>[0]);
   expect(html).toContain("data-assignment-id>operator/&lt;&quot;");
   expect(html).toContain("not a sign-in credential");
-  expect(html.match(/>2026-10-06T12:00:00.000Z</g)).toHaveLength(1);
+  expect(html).toContain('datetime="2026-10-06T12:00:00.000Z"');
+  expect(html.match(/>October 6, 2026, 12:00 p\.m\. UTC</g)).toHaveLength(1);
   expect(html).not.toContain("SECRET");
   expect(html).not.toContain("PRIVATE_MEMBER");
 });

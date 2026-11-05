@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { randomUUID } from "node:crypto";
 import { page, escape, hidden } from "./views.ts";
 import {
@@ -32,7 +33,7 @@ export function preparedReceiptPage(
 ) {
   return page(
     "Your provided-copy receipt",
-    `<section class="reading"><h1>Your provided-copy receipt</h1><p role="status">${escape(message)}</p><p>Receipt ${escape(receipt.receiptId)} · ${receipt.createdAt.toISOString()} · ${receipt.state}</p>${receipt.origin ? `<p>${PROVIDED_SAMPLE_LABEL}. Template ${escape(receipt.origin.templateId)} · version ${receipt.origin.templateVersion} · digest <code>${receipt.origin.templateDigest}</code></p>` : "<p>The private source has been removed. Repeating the original instruction cannot recreate it.</p>"}${receipt.evidenceId ? `<p data-prepared-evidence="${escape(receipt.evidenceId)}">Private source ${escape(receipt.evidenceId)} · version 1</p>` : ""}<p>Nothing was automatically queued, assigned, assessed or allocated. Withdrawal does not recreate permission.</p><p><a href="/evidence">Manage my private samples and separately queue for review</a></p></section>`,
+    `<section class="reading"><h1>Your provided-copy receipt</h1><p role="status">${escape(message)}</p><p>Receipt ${escape(receipt.receiptId)} · ${timeTag(receipt.createdAt)} · ${receipt.state}</p>${receipt.origin ? `<p>${PROVIDED_SAMPLE_LABEL}. Template ${escape(receipt.origin.templateId)} · version ${receipt.origin.templateVersion} · digest <code>${receipt.origin.templateDigest}</code></p>` : "<p>The private source has been removed. Repeating the original instruction cannot recreate it.</p>"}${receipt.evidenceId ? `<p data-prepared-evidence="${escape(receipt.evidenceId)}">Private source ${escape(receipt.evidenceId)} · version 1</p>` : ""}<p>Nothing was automatically queued, assigned, assessed or allocated. Withdrawal does not recreate permission.</p><p><a href="/evidence">Manage my private samples and separately queue for review</a></p></section>`,
   );
 }
 export function preparedRecoveryPage(

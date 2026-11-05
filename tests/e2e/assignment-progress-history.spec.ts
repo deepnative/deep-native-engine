@@ -134,10 +134,10 @@ test("[L91] retained assignment submissions stay separate, exact and private on 
       await expect(rows.nth(0)).toContainText("version 1 · Submission 1");
       await expect(rows.nth(1)).toContainText("version 1 · Submission 2");
       await expect(rows.nth(0)).toContainText(
-        /submitted locally; no qualified review · 20\d\d-/,
+        /submitted locally; no qualified review · \w+ \d+, 20\d\d, .+ UTC/,
       );
       await expect(rows.nth(1)).toContainText(
-        /submitted locally; no qualified review · 20\d\d-/,
+        /submitted locally; no qualified review · \w+ \d+, 20\d\d, .+ UTC/,
       );
       await expect(rows.nth(2)).toContainText("Current revision draft saved");
       await expect(learner.locator("main")).not.toContainText(first);
