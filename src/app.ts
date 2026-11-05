@@ -238,7 +238,10 @@ import {
 } from "./workflow-feedback.ts";
 import type { WorkflowReviewStore } from "./workflow-review.ts";
 import { mountWorkflowReviewRoutes } from "./workflow-review-routes.ts";
-import { registerCircleDiscussion } from "./circle-discussion-routes.ts";
+import {
+  circleReplySummaries,
+  registerCircleDiscussion,
+} from "./circle-discussion-routes.ts";
 import { disabledProgramStore, type ProgramStore } from "./program-values.ts";
 import { mountProgramRoutes } from "./program-routes.ts";
 import { programResumeTarget } from "./program-selection.ts";
@@ -2410,6 +2413,13 @@ export function app(
         (res.locals.learner as Learner).goal,
         res.locals.csrf as string,
         options.circleDiscussionEnabled ?? false,
+        await circleReplySummaries(
+          options.circleDiscussion ?? disabledCircleDiscussionStore(),
+          res.locals.token as string,
+          options.circleDiscussionEnabled
+            ? items.filter((item) => item.joined).map((item) => item.id)
+            : [],
+        ),
       ),
     );
   });

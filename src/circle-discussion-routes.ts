@@ -1,10 +1,11 @@
-import { timeTag } from "./display-time.ts";
+import { databaseMoment as utc, timeTag } from "./display-time.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import {
   CIRCLE_DISCUSSION_POLICY,
   REPORT_CATEGORIES,
   CIRCLE_APPEAL_REASONS,
+  type CircleActivity,
   type CircleAppeal,
   type CircleDiscussionStore,
   type CircleItem,
@@ -17,14 +18,6 @@ const warning = `<p class="eyebrow">INVENTED LOCAL CIRCLE · UNREVIEWED</p><p>Sh
 const rules = `<details><summary>Rules, privacy and review limits</summary><p>Use invented information only. Keep personal, client, private assignment and evidence text out of shared contributions. Keep discussion respectful and relevant; report the exact shared item for privacy, conduct or off-topic concerns. A current moderator needs a finite grant for this exact circle to hide or restore a contribution.</p><p>Leaving or withdrawing sharing removes your text from peer views; a later choice does not republish old contributions. Withdrawing a contribution removes its body. Content-free decision records remain part of your private retained history until account deletion. Downloading a notice saves a copy on your device that account deletion cannot remove.</p><p>You may request reconsideration of the latest hidden decision while your contribution and its question remain deliberately shared in this circle. A structured request is not a promise of response, independent review or qualified judgment. You may withdraw a pending request. Leaving, withdrawing sharing or withdrawing text removes staff availability; your content-free appeal history remains private until account deletion. A notice download alone is not an appeal or proof of human review.</p></details>`;
 const base = (circle: string) =>
   `/circles/${encodeURIComponent(circle)}/discussion`;
-// Show PostgreSQL text timestamps in the ISO UTC form used on other pages.
-function utc(value: string) {
-  const match =
-    /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(?:\.(\d+))?\+00$/.exec(value);
-  return match
-    ? `${match[1]}T${match[2]}.${(match[3] ?? "").padEnd(3, "0").slice(0, 3)}Z`
-    : value;
-}
 function shell(circle: string, title: string, body: string) {
   const url = base(circle);
   return page(
@@ -55,9 +48,18 @@ function originalKey(
 function composer(circle: string, csrf: string, root?: string) {
   return `<form method="post" action="${base(circle)}/posts">${hidden(csrf)}${originalKey(circle, "post")}${root ? `<input type="hidden" name="rootId" value="${escape(root)}">` : ""}<label for="circle-body">${root ? "Your invented reply" : "Your invented question"} (up to 2,000 characters)</label><textarea id="circle-body" name="body" maxlength="2000" required></textarea>${confirmation("I used only invented information and choose to share it with this circle.")}<button type="submit">${root ? "Share reply" : "Share question"}</button></form>`;
 }
+function replyLine(count: number, latest: string | null | undefined) {
+  if (!count) return `<p class="small">No replies yet</p>`;
+  return `<p class="small">${count} ${count === 1 ? "reply" : "replies"} · latest ${timeTag(utc(latest!))}</p>`;
+}
 function item(circle: string, csrf: string, row: CircleItem, owned: boolean) {
   const url = base(circle);
-  return `<li><article><h2>${escape(row.pseudonym)}</h2><p class="small">${escape(utc(row.createdAt))} · ${escape(row.state)} · revision ${row.revision}</p>${row.body === null ? "<p>Text withdrawn.</p>" : `<pre class="content-text">${escape(row.body)}</pre>`}${owned ? `<p><a href="${url}/posts/${encodeURIComponent(row.id)}/moderation-notice">Inspect this contribution's moderation notice</a></p>` : ""}${owned ? (row.state === "withdrawn" ? "" : `<form method="post" action="${url}/posts/${encodeURIComponent(row.id)}/withdraw">${hidden(csrf)}${confirmation("Withdraw this contribution's text; a content-free marker remains until account deletion.")}<button type="submit">Withdraw contribution</button></form>`) : `<p><a href="${url}/threads/${encodeURIComponent(row.rootId ?? row.id)}">Open question and replies</a></p><form method="post" action="${url}/posts/${encodeURIComponent(row.id)}/reports">${hidden(csrf)}${originalKey(circle, "report")}<label for="report-${escape(row.id)}">Report this exact invented contribution</label><select id="report-${escape(row.id)}" name="category">${REPORT_CATEGORIES.map((category) => `<option value="${category}">${escape(category.replace("_", " "))}</option>`).join("")}</select><button type="submit">Save private sample report</button></form>`}</article></li>`;
+  const conversation = `<p><a href="${url}/threads/${encodeURIComponent(row.rootId ?? row.id)}">Open question and replies</a></p>`;
+  const replies =
+    row.replyCount === undefined
+      ? ""
+      : replyLine(row.replyCount, row.latestReplyAt);
+  return `<li><article><h2>${escape(row.pseudonym)}</h2><p class="small">${timeTag(utc(row.createdAt))} · ${escape(row.state)} · revision ${row.revision}</p>${row.body === null ? "<p>Text withdrawn.</p>" : `<pre class="content-text">${escape(row.body)}</pre>`}${replies}${owned && row.replyCount !== undefined ? conversation : ""}${owned ? `<p><a href="${url}/posts/${encodeURIComponent(row.id)}/moderation-notice">Inspect this contribution's moderation notice</a></p>` : ""}${owned ? (row.state === "withdrawn" ? "" : `<form method="post" action="${url}/posts/${encodeURIComponent(row.id)}/withdraw">${hidden(csrf)}${confirmation("Withdraw this contribution's text; a content-free marker remains until account deletion.")}<button type="submit">Withdraw contribution</button></form>`) : `${conversation}<form method="post" action="${url}/posts/${encodeURIComponent(row.id)}/reports">${hidden(csrf)}${originalKey(circle, "report")}<label for="report-${escape(row.id)}">Report this exact invented contribution</label><select id="report-${escape(row.id)}" name="category">${REPORT_CATEGORIES.map((category) => `<option value="${category}">${escape(category.replace("_", " "))}</option>`).join("")}</select><button type="submit">Save private sample report</button></form>`}</article></li>`;
 }
 function listing(
   circle: string,
@@ -67,6 +69,25 @@ function listing(
   owned = false,
 ) {
   return `${rows.items.length ? `<ul>${rows.items.map((row) => item(circle, csrf, row, owned)).join("")}</ul>` : "<p>No contributions available on this page.</p>"}${rows.nextCursor ? `<p><a href="${url}?cursor=${encodeURIComponent(rows.nextCursor)}">Next page</a></p>` : ""}`;
+}
+/** Reply summaries for the circles a member joined. A failed read is its own state. */
+export async function circleReplySummaries(
+  store: CircleDiscussionStore,
+  token: string,
+  circles: string[],
+) {
+  const summaries = new Map<string, CircleActivity | "unavailable">();
+  await Promise.all(
+    circles.map(async (circle) => {
+      try {
+        const value = await store.activity(token, circle);
+        if (value.kind === "ready") summaries.set(circle, value.value);
+      } catch {
+        summaries.set(circle, "unavailable");
+      }
+    }),
+  );
+  return summaries;
 }
 function fields(req: Request, allowed: string[]) {
   const body = req.body as Record<string, unknown>;

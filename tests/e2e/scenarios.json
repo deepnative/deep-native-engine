@@ -2631,6 +2631,15 @@
       "expected": "The page first says nothing is shared, then names the circle with sharing off, then counts one readable post, then says sharing is off with no readable posts; links reach the existing controls; no sideways scrolling",
       "issues": [40],
       "critical": true
+    },
+    {
+      "id": "L296",
+      "actor": "Members following a circle conversation",
+      "preconditions": "Dedicated synthetic PostgreSQL database, circle discussion enabled, port0 server; two members in separate desktop/mobile Chromium contexts",
+      "steps": "FOLLOW-01..04, 06: one member asks two questions; another reads them, replies twice to one; the asker checks Circles, follows the link to their questions, opens the conversation; the replier withdraws one reply and the asker checks again",
+      "expected": "Newest question first, replies oldest first, each question states its reply count, Circles says how many replies the asker's questions have and links to them, the count drops when a reply is withdrawn; no sideways scrolling",
+      "issues": [40],
+      "critical": true
     }
   ],
   "fullMvp": [

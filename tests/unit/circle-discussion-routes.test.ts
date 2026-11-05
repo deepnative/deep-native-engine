@@ -736,3 +736,45 @@ it("COPY-597-03 gives a refused moderator staff guidance, not member guidance", 
     expect(response.text).not.toContain("your retained contributions");
   });
 });
+
+it.each([
+  [0, null, "No replies yet"],
+  [1, "2026-10-04 12:00:00+00", "1 reply · latest"],
+  [3, "2026-10-04 12:00:00+00", "3 replies · latest"],
+])(
+  "FOLLOW-03 shows %s replies on a listed question",
+  async (replyCount, latestReplyAt, words) => {
+    const f = fixture();
+    f.mocks.list.mockResolvedValue({
+      kind: "ready",
+      value: {
+        items: [{ ...post, replyCount, latestReplyAt }],
+        nextCursor: null,
+      },
+    });
+    await withLoopback(f.application, async (server) => {
+      const page = await request(server).get(root).expect(200);
+      expect(page.text).toContain(words);
+      expect(page.text).toContain(`${root}/threads/${id}`);
+    });
+  },
+);
+it("FOLLOW-05 links my question to its conversation only while it has a count", async () => {
+  const f = fixture();
+  const reply = { ...post, id: key, rootId: undefined };
+  f.mocks.owned.mockResolvedValue({
+    kind: "ready",
+    value: {
+      items: [
+        { ...post, rootId: undefined, replyCount: 0, latestReplyAt: null },
+        reply,
+      ],
+      nextCursor: null,
+    },
+  });
+  await withLoopback(f.application, async (server) => {
+    const page = await request(server).get(`${root}/owned`).expect(200);
+    expect(page.text).toContain(`${root}/threads/${id}"`);
+    expect(page.text).not.toContain(`${root}/threads/${key}"`);
+  });
+});
