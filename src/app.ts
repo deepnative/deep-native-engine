@@ -128,6 +128,7 @@ import {
   memberExportPage,
   localAiConsentPage,
   localAiControlPage,
+  withPrerequisiteTitles,
   evidenceRevisionPage,
   lesson,
   readinessPage,
@@ -2041,7 +2042,10 @@ export function app(
         .send(
           errorPage(
             "Confirmation needed",
-            "Choose the local-only permission before continuing.",
+            hostingText(
+              "Choose the local-only permission before continuing.",
+              "Choose the simulation permission before continuing.",
+            ),
           ),
         );
       return;
@@ -2055,7 +2059,10 @@ export function app(
         .status(403)
         .send(
           errorPage(
-            "Local simulation unavailable",
+            hostingText(
+              "Local simulation unavailable",
+              "Simulation unavailable",
+            ),
             "Refresh your evidence and check the current version and safety state.",
           ),
         );
@@ -2086,7 +2093,10 @@ export function app(
         .send(
           errorPage(
             "Permission unavailable",
-            "This local permission is no longer available.",
+            hostingText(
+              "This local permission is no longer available.",
+              "This simulation permission is no longer available.",
+            ),
           ),
         );
       return;
@@ -2106,9 +2116,15 @@ export function app(
         .status(outcome.kind === "conflict" ? 409 : 403)
         .send(
           errorPage(
-            "Local simulation unavailable",
+            hostingText(
+              "Local simulation unavailable",
+              "Simulation unavailable",
+            ),
             paused
-              ? "Local simulations are paused. No new local job was queued."
+              ? hostingText(
+                  "Local simulations are paused. No new local job was queued.",
+                  "Simulations are paused. No new simulation was queued.",
+                )
               : "Refresh the page and check the exact-source permission.",
           ),
         );
@@ -2124,7 +2140,10 @@ export function app(
         .send(
           errorPage(
             "Confirmation needed",
-            "Confirm use of one existing local test request before continuing.",
+            hostingText(
+              "Confirm use of one existing local test request before continuing.",
+              "Confirm use of one existing test request before continuing.",
+            ),
           ),
         );
       return;
@@ -2139,8 +2158,14 @@ export function app(
         .status(outcome.kind === "conflict" ? 409 : 403)
         .send(
           errorPage(
-            "Local test request unavailable",
-            "Check current permission, the local pause state and your existing test units. No allowance was granted and no live provider was contacted.",
+            hostingText(
+              "Local test request unavailable",
+              "Test request unavailable",
+            ),
+            hostingText(
+              "Check current permission, the local pause state and your existing test units. No allowance was granted and no live provider was contacted.",
+              "Check current permission, whether simulations are paused and your existing test units. No allowance was granted and no live provider was contacted.",
+            ),
           ),
         );
       return;
@@ -2158,9 +2183,15 @@ export function app(
         .status(outcome.kind === "unavailable" ? 409 : 403)
         .send(
           errorPage(
-            "Local simulation unavailable",
+            hostingText(
+              "Local simulation unavailable",
+              "Simulation unavailable",
+            ),
             paused
-              ? "Local simulations are paused. This attempt will not retry automatically."
+              ? hostingText(
+                  "Local simulations are paused. This attempt will not retry automatically.",
+                  "Simulations are paused. This attempt will not retry automatically.",
+                )
               : "Refresh the page. No live AI provider was contacted.",
           ),
         );
@@ -3207,7 +3238,16 @@ export function app(
               entry.contentVersion === item.version,
           )
         : undefined;
-    res.send(contentPreview(item, false, res.locals.csrf as string, activity));
+    res.send(
+      contentPreview(
+        item.structuredPrerequisites
+          ? withPrerequisiteTitles([item], await catalog.search({}))[0]!
+          : item,
+        false,
+        res.locals.csrf as string,
+        activity,
+      ),
+    );
   });
   app.get("/library/:id/practice-session", async (req, res) => {
     const source = await practiceSessions.source(
@@ -4064,7 +4104,10 @@ export function app(
       progress,
       res.locals.csrf as string,
       [],
-      eligibleAssignments(published, member, progress, activity),
+      withPrerequisiteTitles(
+        eligibleAssignments(published, member, progress, activity),
+        published,
+      ),
       choice,
       recommendLesson(published, member, progress, activity),
       undefined,
@@ -5270,7 +5313,10 @@ export function app(
             progress,
             res.locals.csrf as string,
             [],
-            eligibleAssignments(published, member, progress, activity),
+            withPrerequisiteTitles(
+              eligibleAssignments(published, member, progress, activity),
+              published,
+            ),
             choice,
             recommendLesson(published, member, progress, activity),
             edit,
