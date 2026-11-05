@@ -27,7 +27,7 @@ async function noSidewaysScroll(page: Page) {
     ),
   ).toBe(true);
 }
-test("[L298] ALLOW-01/02/03/08 a member claims a monthly test study allowance once and uses it", async ({
+test("[L299] ALLOW-01/02/03/08 a member claims a monthly test study allowance once and uses it", async ({
   browser,
 }, info) => {
   test.setTimeout(90000);

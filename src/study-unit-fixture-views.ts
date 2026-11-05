@@ -42,9 +42,13 @@ export function studyFixtureStaffPage(
   reference: string,
   creationEnabled: boolean,
 ) {
-  return page(
+  const heading = hostingText(
     "Local study-unit issuance",
-    `<article class="reading">${explanation()}<h1>Local study-unit issuance</h1><p>Your noncredential administrator reference: <code>${escape(reference)}</code></p><p>Share this reference deliberately with the invented member. It does not sign anyone in or grant access.</p>${creationEnabled ? "" : '<p role="status">New requests and issuance are paused. Finite original receipt inspection remains available.</p>'}<form method="post" action="${STUDY_STAFF_PATH}/check">${hidden(csrf)}<label>Member-supplied request reference<input name="requestId" required maxlength="36" autocomplete="off"></label><button>Review exact request</button></form><p><a href="/staff">Staff work</a></p></article>`,
+    "Study-unit issuance",
+  );
+  return page(
+    heading,
+    `<article class="reading">${explanation()}<h1>${heading}</h1><p>Your noncredential administrator reference: <code>${escape(reference)}</code></p><p>Share this reference deliberately with the invented member. It does not sign anyone in or grant access.</p>${creationEnabled ? "" : '<p role="status">New requests and issuance are paused. Finite original receipt inspection remains available.</p>'}<form method="post" action="${STUDY_STAFF_PATH}/check">${hidden(csrf)}<label>Member-supplied request reference<input name="requestId" required maxlength="36" autocomplete="off"></label><button>Review exact request</button></form><p><a href="/staff">Staff work</a></p></article>`,
   );
 }
 function confirmationForm(csrf: string, attempt: StudyFixtureAttempt) {
@@ -61,7 +65,10 @@ export function studyFixtureConfirmation(
     attempt.kind === "request"
       ? "Confirm your fixed test-unit request"
       : staff
-        ? "Confirm three local study units"
+        ? hostingText(
+            "Confirm three local study units",
+            "Confirm three study units",
+          )
         : hostingText("Confirm fixture withdrawal", "Confirm withdrawal");
   const facts = attempt.checked as Record<string, unknown>;
   const labels: Record<string, string> = {
@@ -99,7 +106,10 @@ export function studyFixtureReceiptPage(
     `<article class="reading">${explanation()}<h1>${heading}</h1>${receiptText(receipt, observed)}<p>Reload before taking another action. Current balances and request-source permission are separate.</p>${
       staff
         ? `${portalActions([
-            [STUDY_STAFF_PATH, "Local issuance work"],
+            [
+              STUDY_STAFF_PATH,
+              hostingText("Local issuance work", "Issuance work"),
+            ],
             ["/staff", "Staff work"],
           ])}`
         : `${back()}<p><a href="/member/export">Export your retained records</a></p>`

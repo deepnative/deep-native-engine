@@ -2652,6 +2652,15 @@
     },
     {
       "id": "L298",
+      "actor": "Member checking when staff opened their work",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, invented staff provisioned through the authorization store; desktop/mobile Chromium",
+      "steps": "STAFFSEE-01, 02, 05: a new member opens the history from Who can see my work; an administrator gives a coach access and the coach opens the workspace; the member checks both pages; the administrator ends the access and the member checks again",
+      "expected": "First says no access is recorded and none is active; then 1 staff member has access and the history lists given and opened, newest first, without any staff name or purpose text; after the access ends, none is active and the ending is listed; no sideways scrolling",
+      "issues": [40],
+      "critical": false
+    },
+    {
+      "id": "L299",
       "actor": "Member claiming a monthly test study allowance",
       "preconditions": "Dedicated synthetic PostgreSQL database, test-unit issuance enabled, port0 server; desktop/mobile Chromium",
       "steps": "ALLOW-01/02/03/08: a member reads the versioned rules from their test units, reloads, ticks the confirmation and claims; reloads; submits the original form again from another tab; uses one local test request",

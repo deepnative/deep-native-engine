@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import type { Express } from "express";
 import type { ApplicationMode } from "./adapters.ts";
 import type { MemberTestUnitsStore } from "./member-test-units.ts";
@@ -27,6 +28,7 @@ export function registerMemberTestUnitsRoutes(
           const value = result.value;
           if (req.path.replace(/\/$/, "") === "/member/test-units/download") {
             // Explicit whitelist: never serialize extra dependency-store metadata.
+            // #717 scope is a stable machine value, shared by older downloads.
             const body = {
               scope: "synthetic-local-preview",
               asOf: value.asOf.toISOString(),
@@ -48,7 +50,7 @@ export function registerMemberTestUnitsRoutes(
             };
             res.set(
               "Content-Disposition",
-              'attachment; filename="local-test-units.json"',
+              `attachment; filename="${hostingText("local-test-units", "test-units")}.json"`,
             );
             return res.json(body);
           }

@@ -7,6 +7,7 @@ import {
   disabledCircleDiscussionStore,
   type CircleDiscussionStore,
 } from "../../src/circle-discussion.ts";
+import { attendanceHistoryPage } from "../../src/event-attendance-views.ts";
 import {
   eventEnrollmentHistoryPage,
   eventEnrollmentPage,
@@ -22,7 +23,9 @@ import {
   memberTestUnitsPage,
   memberTestUnitsUnavailablePage,
 } from "../../src/member-test-units-views.ts";
+import { registerMemberTestUnitsRoutes } from "../../src/member-test-units-routes.ts";
 import type { MemberTestUnitSnapshot } from "../../src/member-test-units.ts";
+import { COACHING_OFFERS, FOUNDATION_ACCESS } from "../../src/offers.ts";
 import {
   myCoursesPage,
   programAccountPage,
@@ -41,6 +44,7 @@ import {
   studyFixtureMemberPage,
   studyFixtureNotice,
   studyFixtureReceiptPage,
+  studyFixtureStaffPage,
 } from "../../src/study-unit-fixture-views.ts";
 import type { StudyFixtureReceipt } from "../../src/study-unit-fixture-values.ts";
 import {
@@ -59,6 +63,7 @@ import {
   contentPreview,
   libraryPage,
   localAiConsentPage,
+  offerHypothesesPage,
   readinessPage,
   withPrerequisiteTitles,
   trackReadinessPage,
@@ -645,4 +650,156 @@ it("READABLE-14 hosted lesson history and prerequisites show titles instead of l
   expect(libraryPage([], { q: "" }, [lessonActivity])).toContain(
     "<li>SYN-131 · version 2 ·",
   );
+});
+
+// #717: what #716 left. Versioned content and machine values stay as they are.
+const practiceEvent = EVENT_PREVIEWS.find(
+  (item) => item.id === "local-registration-rehearsal",
+)!;
+const PRACTICE_TITLE = "Event registration practice";
+
+it("READABLE-15 hosted foundation access page uses plan names instead of policy and terms IDs", () => {
+  const html = hosted(offerHypothesesPage);
+  const text = visibleText(html);
+  expect(html).not.toContain(FOUNDATION_ACCESS.policyVersion);
+  expect(text).not.toContain("Access policy");
+  expect(text).not.toMatch(LOCAL_ON_HOSTED);
+  expect(html).toContain("CAD 0.00 for initial foundation access.");
+  for (const offer of COACHING_OFFERS) {
+    expect(html).not.toContain(offer.termsVersion);
+    expect(html).not.toContain(`<strong>${offer.id}</strong>`);
+    expect(html).toContain(
+      `CAD ${(offer.priceCents / 100).toLocaleString("en-CA")} · ${offer.months} monthly periods`,
+    );
+  }
+  expect(html).toContain("<strong>Professional plan</strong>");
+  expect(html).not.toContain(" · hypothesis</li>");
+  expect(html.match(/ · Not available<\/li>/g)).toHaveLength(
+    COACHING_OFFERS.length,
+  );
+  // Keeping the promise: none of these plans can be bought, and no price is permanent.
+  expect(html).toContain(
+    "These historical prices and allowances are hypotheses, not available offers.",
+  );
+  expect(html).toContain("cannot be bought on this page");
+  expect(html).toContain("not a promise of a permanent price or term");
+  const local = offerHypothesesPage();
+  expect(local).toContain(`Access policy: ${FOUNDATION_ACCESS.policyVersion}`);
+  expect(local).toContain("<strong>professional</strong>");
+  expect(local).toContain("2026-09-15-hypothesis-v1 · hypothesis</li>");
+});
+
+it("READABLE-16 hosted event agenda and practice title read plainly while the content stays versioned", () => {
+  const detail = hosted(() =>
+    eventDetailPage(
+      { status: "current", event: practiceEvent } as never,
+      "UTC",
+    ),
+  );
+  expect(visibleText(detail)).not.toMatch(LOCAL_ON_HOSTED);
+  expect(detail).toContain("<li>Read an invented example</li>");
+  expect(detail).toContain(`<h1>${PRACTICE_TITLE}</h1>`);
+  expect(detail).toContain(`<title>${PRACTICE_TITLE}`);
+  const list = hosted(() => eventDiscoveryPage([practiceEvent], "UTC"));
+  expect(list).toContain(`>${PRACTICE_TITLE}</a>`);
+  expect(visibleText(list)).not.toMatch(LOCAL_ON_HOSTED);
+  const saved = { ...registration, title: practiceEvent.title };
+  for (const html of [
+    hosted(() => eventEnrollmentReceiptPage(saved, "csrf")),
+    hosted(() =>
+      eventEnrollmentHistoryPage({ items: [saved], nextCursor: null }),
+    ),
+    hosted(() =>
+      eventEnrollmentPage(
+        {
+          ...(preview as object),
+          event: { ...practiceEvent, fixtureCapacity: 5 },
+        } as never,
+        "csrf",
+        "operation",
+      ),
+    ),
+  ]) {
+    expect(html).toContain(PRACTICE_TITLE);
+    expect(visibleText(html)).not.toMatch(LOCAL_ON_HOSTED);
+  }
+  const attendance = hosted(() =>
+    attendanceHistoryPage(
+      {
+        items: [
+          {
+            registrationId: registration.id,
+            title: practiceEvent.title,
+            eventVersion: practiceEvent.version,
+          } as never,
+        ],
+        nextCursor: null,
+      },
+      new Date("2026-09-24"),
+    ),
+  );
+  expect(attendance).toContain(PRACTICE_TITLE);
+  expect(attendance).not.toContain("Local event registration rehearsal");
+  // The stored content and the local preview keep the original words.
+  expect(practiceEvent.title).toBe("Local event registration rehearsal");
+  expect(practiceEvent.agenda).toContain("Read a synthetic example");
+  const local = eventDetailPage(
+    { status: "current", event: practiceEvent } as never,
+    "UTC",
+  );
+  expect(local).toContain("<li>Read a synthetic example</li>");
+  expect(local).toContain("<h1>Local event registration rehearsal</h1>");
+  expect(eventEnrollmentReceiptPage(saved, "csrf")).toContain(
+    "Local event registration rehearsal",
+  );
+});
+
+it("READABLE-17 hosted test-unit download has a plain file name and keeps its machine-readable scope", async () => {
+  const download = async (isHosted: boolean) => {
+    const application = express();
+    application.use((_req, res, next) => {
+      res.locals.token = "invented-token";
+      withHosting(isHosted, next);
+    });
+    registerMemberTestUnitsRoutes(
+      application,
+      { snapshot: vi.fn().mockResolvedValue({ kind: "ready", value: units }) },
+      "demo",
+    );
+    return request(application).get("/member/test-units/download");
+  };
+  const online = await download(true);
+  expect(online.headers["content-disposition"]).toBe(
+    'attachment; filename="test-units.json"',
+  );
+  expect(online.body.scope).toBe("synthetic-local-preview");
+  const local = await download(false);
+  expect(local.headers["content-disposition"]).toBe(
+    'attachment; filename="local-test-units.json"',
+  );
+  expect(local.body.scope).toBe("synthetic-local-preview");
+});
+
+it("READABLE-18 hosted study-unit staff titles drop local wording and local keeps it", () => {
+  const attempt = {
+    kind: "issue",
+    key: "key",
+    checked: { requestId: fixtureReceipt.id },
+  } as const;
+  const staffPage = () => studyFixtureStaffPage("csrf", "reference", true);
+  const confirm = () => studyFixtureConfirmation("csrf", attempt);
+  const receipt = () =>
+    studyFixtureReceiptPage(fixtureReceipt, new Date("2026-09-24"), true);
+  expect(hosted(staffPage)).toContain("<h1>Study-unit issuance</h1>");
+  expect(hosted(confirm)).toContain("Confirm three study units");
+  expect(hosted(receipt)).toContain(">Issuance work</a>");
+  for (const render of [staffPage, confirm, receipt])
+    expect(visibleText(hosted(render))).not.toMatch(/\blocal\b/i);
+  // The limits on what these units are stay on the staff page.
+  expect(hosted(staffPage)).toContain(
+    "It is not money, a purchased plan, live AI access or a qualified service.",
+  );
+  expect(staffPage()).toContain("<h1>Local study-unit issuance</h1>");
+  expect(confirm()).toContain("Confirm three local study units");
+  expect(receipt()).toContain(">Local issuance work</a>");
 });

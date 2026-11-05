@@ -1,4 +1,5 @@
 import { timeTag } from "./display-time.ts";
+import { eventText } from "./hosting-presentation.ts";
 import { escape, hidden, page } from "./views.ts";
 import type {
   AttendanceChecked,
@@ -17,7 +18,7 @@ export interface AttendanceAttempt {
   checked: object;
 }
 const details = (registrationId: string, title: string, version: number) =>
-  `<h2>${escape(title)}</h2><dl><dt>Exact event version</dt><dd>${version}</dd><dt>Private registration reference</dt><dd style="overflow-wrap:anywhere">${escape(registrationId)}</dd></dl>`;
+  `<h2>${escape(eventText(title))}</h2><dl><dt>Exact event version</dt><dd>${version}</dd><dt>Private registration reference</dt><dd style="overflow-wrap:anywhere">${escape(registrationId)}</dd></dl>`;
 const attemptFields = (attempt: AttendanceAttempt) =>
   `<input type="hidden" name="key" value="${escape(attempt.key)}"><input type="hidden" name="checked" value="${escape(JSON.stringify(attempt.checked))}">`;
 const confirm = (text: string) =>
@@ -131,7 +132,7 @@ export function attendanceHistoryPage(
 ) {
   return page(
     "My private attendance history",
-    `<section class="reading">${notice}<h1>My private attendance history</h1>${history.items.length ? `<ul>${history.items.map((item) => `<li><a href="${attendancePath(item.registrationId)}">${escape(item.title)} · version ${item.eventVersion}</a><p>${item.observation ? `Present observation recorded ${timeTag(item.observation.recordedAt)} by ${escape(item.observation.attribution)}.` : "No observation recorded."}${escape(attendanceSharing(item, observedAt))}</p></li>`).join("")}</ul>` : "<p>No attendance permissions or observations are saved.</p>"}${history.nextCursor ? `<p><a href="/events/attendance?after=${encodeURIComponent(history.nextCursor)}">More private attendance history</a></p>` : ""}<p><a href="/events/registrations">Your registrations</a> · <a href="/member/export">Download your private records</a></p></section>`,
+    `<section class="reading">${notice}<h1>My private attendance history</h1>${history.items.length ? `<ul>${history.items.map((item) => `<li><a href="${attendancePath(item.registrationId)}">${escape(eventText(item.title))} · version ${item.eventVersion}</a><p>${item.observation ? `Present observation recorded ${timeTag(item.observation.recordedAt)} by ${escape(item.observation.attribution)}.` : "No observation recorded."}${escape(attendanceSharing(item, observedAt))}</p></li>`).join("")}</ul>` : "<p>No attendance permissions or observations are saved.</p>"}${history.nextCursor ? `<p><a href="/events/attendance?after=${encodeURIComponent(history.nextCursor)}">More private attendance history</a></p>` : ""}<p><a href="/events/registrations">Your registrations</a> · <a href="/member/export">Download your private records</a></p></section>`,
   );
 }
 export function attendanceSavedPage(
