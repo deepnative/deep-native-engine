@@ -5,8 +5,10 @@ import type { Pool } from "pg";
 import { expect, it, vi } from "vitest";
 import {
   memberSharingStore,
+  STAFF_ACCESS_PAGE,
   type MemberSharing,
   type SharingSummary,
+  type StaffAccessEntry,
 } from "../../src/member-sharing.ts";
 import { mountMemberSharing } from "../../src/member-sharing-routes.ts";
 import { accountPage, dashboard } from "../../src/views.ts";
@@ -21,6 +23,7 @@ const empty: SharingSummary = {
   openSupport: 0,
   publishedContributions: 0,
   coaches: 0,
+  staffWithAccess: 0,
 };
 
 const open = (site: ReturnType<typeof server>, path = "/account/sharing") =>
@@ -38,6 +41,7 @@ function server(store: MemberSharing | undefined, contributions = false) {
 const ready = (value: Partial<SharingSummary>): MemberSharing => ({
   summary: () =>
     Promise.resolve({ kind: "ready", value: { ...empty, ...value } }),
+  staffAccess: () => Promise.resolve({ kind: "unavailable" }),
 });
 const text = (html: string) =>
   html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
@@ -219,7 +223,10 @@ it("WHOSEES-06 coach and administrator access is stated without naming anyone", 
 
 it("WHOSEES-07/08 denial, stray queries and failures never look like nothing shared", async () => {
   const denied = await open(
-    server({ summary: () => Promise.resolve({ kind: "denied" }) }),
+    server({
+      summary: () => Promise.resolve({ kind: "denied" }),
+      staffAccess: () => Promise.resolve({ kind: "unavailable" }),
+    }),
   );
   expect(denied.status).toBe(303);
   expect(denied.headers.location).toBe("/");
@@ -232,7 +239,7 @@ it("WHOSEES-07/08 denial, stray queries and failures never look like nothing sha
   expect(text(stray.text)).toContain("Open this page from My account");
 
   const failed = await open(
-    server({ summary: () => Promise.resolve({ kind: "unavailable" }) }),
+    server(history(() => Promise.resolve({ kind: "unavailable" }))),
   );
   expect(failed.status).toBe(503);
   expect(failed.headers["cache-control"]).toBe("no-store");
@@ -240,4 +247,250 @@ it("WHOSEES-07/08 denial, stray queries and failures never look like nothing sha
   expect(text(failed.text)).not.toContain("You haven't");
 
   expect((await open(server(undefined))).status).toBe(404);
+});
+
+const entry = (
+  source: StaffAccessEntry["source"],
+  action: string,
+  via: string | null = null,
+  file: string | null = null,
+): StaffAccessEntry => ({
+  source,
+  action,
+  via,
+  file,
+  at: new Date("2026-11-05T12:00:00Z"),
+});
+const history = (staffAccess: MemberSharing["staffAccess"]): MemberSharing => ({
+  summary: () => Promise.resolve({ kind: "unavailable" }),
+  staffAccess,
+});
+const showing = (entries: StaffAccessEntry[], older: string | null = null) =>
+  history(() => Promise.resolve({ kind: "ready", value: { entries, older } }));
+const PATH = "/account/sharing/staff-access";
+
+it.each([
+  [
+    entry("access", "grant_created", "assignment"),
+    "Assigned staff were given access to your learning workspace.",
+  ],
+  [
+    entry("access", "grant_created", "support"),
+    "Support staff were given access to your learning workspace.",
+  ],
+  [
+    entry("access", "grant_created", "evidence_review"),
+    "A reviewer was given access to one of your files.",
+  ],
+  [
+    entry("access", "grant_revoked", "assignment"),
+    "Access to your learning workspace was taken away from assigned staff.",
+  ],
+  [
+    entry("access", "grant_revoked", "evidence_review"),
+    "Access to one of your files was taken away from a reviewer.",
+  ],
+  [
+    entry("access", "workspace_read", "support"),
+    "Support staff opened your learning workspace.",
+  ],
+  [
+    entry("access", "support_content_read", "support"),
+    "Support staff read your support content.",
+  ],
+  [
+    entry("access", "evidence_link_issued", "assignment", "Notes.txt"),
+    "Assigned staff got a link to Notes.txt.",
+  ],
+  [
+    entry("access", "evidence_bytes_loaded", "evidence_review", "Notes.txt"),
+    "A reviewer opened Notes.txt.",
+  ],
+  [
+    entry("access", "evidence_bytes_loaded", "assignment"),
+    "Assigned staff opened a file you've since removed.",
+  ],
+  [
+    entry("feedback", "read", null, "Notes.txt"),
+    "A reviewer read your sample Notes.txt.",
+  ],
+  [
+    entry("feedback", "draft-saved", null, "Notes.txt"),
+    "A reviewer saved draft feedback on Notes.txt.",
+  ],
+  [
+    entry("feedback", "published"),
+    "A reviewer published feedback on a file you've since removed.",
+  ],
+  [
+    entry("feedback", "answered", null, "Notes.txt"),
+    "A reviewer answered your question about feedback on Notes.txt.",
+  ],
+  [
+    entry("proposal", "proposal_read", "moderator"),
+    "A moderator read a proposal you sent.",
+  ],
+  [
+    entry("proposal", "proposal_quarantined", "moderator"),
+    "A moderator set aside a proposal you sent for closer review.",
+  ],
+  [
+    entry("proposal", "proposal_rejected", "platform_admin"),
+    "An administrator rejected a proposal you sent.",
+  ],
+  [
+    entry("proposal", "proposal_changes_requested", "moderator"),
+    "A moderator asked for changes to a proposal you sent.",
+  ],
+  [
+    entry("access", "a_later_kind", "assignment"),
+    "Staff accessed your private work.",
+  ],
+  [entry("feedback", "a_later_kind"), "Staff accessed your private work."],
+  [
+    entry("proposal", "a_later_kind", "moderator"),
+    "Staff accessed your private work.",
+  ],
+])("STAFFSEE-02..04 says %j in plain words", async (row, words) => {
+  const res = await request(server(showing([row]))).get(PATH);
+  expect(res.status).toBe(200);
+  expect(res.headers["cache-control"]).toContain("no-store");
+  expect(text(res.text).replace(/ \./g, ".")).toContain(words);
+  expect(res.text).toContain('<time datetime="2026-11-05T12:00:00.000Z">');
+});
+
+it("STAFFSEE-03 a member's file name is escaped", async () => {
+  const res = await request(
+    server(
+      showing([
+        entry("access", "evidence_bytes_loaded", "assignment", "<b>x</b>.txt"),
+      ]),
+    ),
+  ).get(PATH);
+  expect(res.text).toContain("&lt;b&gt;x&lt;/b&gt;.txt");
+  expect(res.text).not.toContain("<b>x</b>");
+});
+
+it("STAFFSEE-01 an empty history says none is recorded and what it doesn't cover", async () => {
+  const res = await request(server(showing([]))).get(PATH);
+  expect(text(res.text)).toContain(
+    "No staff access to your private work is recorded.",
+  );
+  expect(text(res.text)).toContain(
+    "workflow notes you sent for private review",
+  );
+  expect(text(res.text)).toContain(
+    "This history is deleted with your account.",
+  );
+  expect(res.text).not.toContain("Older entries");
+});
+
+it("STAFFSEE-05 the sharing page says how much staff access is active", async () => {
+  const words = async (staffWithAccess: number) =>
+    text((await open(server(ready({ staffWithAccess })))).text);
+  expect(await words(0)).toContain(
+    "No staff access to your private work is active right now.",
+  );
+  expect(await words(1)).toContain("1 staff member has access");
+  expect(await words(2)).toContain("2 staff members have access");
+});
+
+it("STAFFSEE-06 paging passes the position on and refuses anything else", async () => {
+  const seen: (string | undefined)[] = [];
+  const site = server(
+    history((_token, before) => {
+      seen.push(before);
+      return Promise.resolve({
+        kind: "ready",
+        value: { entries: [], older: before ? null : "next+/position" },
+      });
+    }),
+  );
+  const first = await request(site).get(PATH);
+  expect(first.text).toContain(`${PATH}?before=next%2B%2Fposition`);
+  const later = await open(site, `${PATH}?before=abc`);
+  expect(seen).toEqual([undefined, "abc"]);
+  expect(text(later.text)).toContain("There are no older entries.");
+  expect((await open(site, `${PATH}?other=1`)).status).toBe(400);
+  expect((await open(site, `${PATH}?before=a&before=b`)).status).toBe(400);
+  expect(seen).toHaveLength(2);
+  const refused = await open(
+    server(history(() => Promise.resolve({ kind: "invalid" }))),
+    `${PATH}?before=bad`,
+  );
+  expect(refused.status).toBe(400);
+});
+
+it("STAFFSEE-07/08 denial goes home and a failed read never looks like an empty history", async () => {
+  const denied = await request(
+    server(history(() => Promise.resolve({ kind: "denied" }))),
+  ).get(PATH);
+  expect(denied.status).toBe(303);
+  expect(denied.headers.location).toBe("/");
+  const failed = await request(
+    server(history(() => Promise.resolve({ kind: "unavailable" }))),
+  ).get(PATH);
+  expect(failed.status).toBe(503);
+  expect(text(failed.text)).toContain("can't be checked right now");
+  expect(failed.text).not.toContain("is recorded");
+});
+
+it("STAFFSEE-06/07/08 the store checks the token and position, then reads only the owner", async () => {
+  const query = vi.fn();
+  const store = memberSharingStore({ query } as unknown as Pool);
+  expect(await store.staffAccess("not-a-token")).toEqual({ kind: "denied" });
+  const encode = (value: string) => Buffer.from(value).toString("base64url");
+  for (const before of [
+    "junk",
+    encode("2026-11-05T12:00:00.000000Z|elsewhere|1"),
+    encode("2026-13-45T12:00:00.000000Z|access|1"),
+    encode("2026-11-05T12:00:00.000000Z|access|1;DROP"),
+  ])
+    expect(await store.staffAccess(token, before)).toEqual({ kind: "invalid" });
+  expect(query).not.toHaveBeenCalled();
+
+  query.mockResolvedValueOnce({ rows: [] });
+  expect(await store.staffAccess(token)).toEqual({ kind: "denied" });
+  query.mockRejectedValueOnce(Error("invented failure"));
+  expect(await store.staffAccess(token)).toEqual({ kind: "unavailable" });
+
+  const row = {
+    source: "access",
+    id: "7",
+    action: "workspace_read",
+    via: "support",
+    file: null,
+    at: new Date("2026-11-05T12:00:00Z"),
+    key: "2026-11-05T12:00:00.000000Z",
+  };
+  query
+    .mockResolvedValueOnce({ rows: [{ id: "w" }] })
+    .mockResolvedValueOnce({ rows: Array(STAFF_ACCESS_PAGE + 1).fill(row) });
+  const full = await store.staffAccess(token);
+  if (full.kind !== "ready") throw Error("Expected a page");
+  expect(full.value.entries).toHaveLength(STAFF_ACCESS_PAGE);
+  expect(Object.keys(full.value.entries[0]!).sort()).toEqual([
+    "action",
+    "at",
+    "file",
+    "source",
+    "via",
+  ]);
+  const position = full.value.older!;
+  expect(Buffer.from(position, "base64url").toString()).toBe(
+    "2026-11-05T12:00:00.000000Z|access|7",
+  );
+
+  query
+    .mockResolvedValueOnce({ rows: [{ id: "w" }] })
+    .mockResolvedValueOnce({ rows: [row] });
+  const last = await store.staffAccess(token, position);
+  expect(last).toMatchObject({ kind: "ready", value: { older: null } });
+  expect(query.mock.lastCall![1]).toEqual([
+    "w",
+    "2026-11-05T12:00:00.000000Z",
+    "access",
+    "7",
+    STAFF_ACCESS_PAGE + 1,
+  ]);
 });
