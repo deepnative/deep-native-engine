@@ -63,12 +63,15 @@ test("[F-BUILD-07-C] a declared workflow version downloads its exact bytes and a
       for (const [term, key] of [
         ["Supported environment", "supported_environment"],
         ["Last verification", "last_verification"],
-        ["Readiness", "readiness"],
         ["Limitations", "limitations"],
       ] as const) {
         const value = page.locator(`dt:text-is("${term}") + dd`);
         await expect(value).toHaveText(metadata(source, key));
       }
+      // The registry states readiness itself; the file's older wording is not shown.
+      await expect(page.locator('dt:text-is("Readiness") + dd')).toHaveText(
+        "Editorially reviewed ordinary education for manual use; not qualified assessment",
+      );
       // The label must not claim tested compatibility that never happened.
       await expect(
         page.locator('dt:text-is("Last verification") + dd'),

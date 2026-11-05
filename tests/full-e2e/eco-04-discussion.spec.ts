@@ -384,8 +384,14 @@ test("[F-ECO-04-B] circle participation, reporting and accountable scoped modera
           )
         )?.status(),
       ).toBe(403);
-      const attempt = await moderator.goto(`${origin}${attemptPath}`);
-      expect(attempt?.status()).not.toBe(200);
+      const attempt = await moderator.request.get(`${origin}${attemptPath}`, {
+        maxRedirects: 0,
+      });
+      expect(attempt.status()).toBe(303);
+      expect(attempt.headers().location).toBe("/learn#assignment-options");
+      expect(await attempt.text()).not.toContain(privateAnswer);
+      await moderator.goto(`${origin}${attemptPath}`);
+      expect(new URL(moderator.url()).pathname).not.toBe(attemptPath);
       for (const secret of [privateAnswer, assignmentTitle])
         await expect(moderator.locator("body")).not.toContainText(secret);
       const list = await moderator.goto(`${origin}/assignments/attempts`);

@@ -118,9 +118,9 @@ export async function grantedReviewer(
     page: await context.newPage(),
     async cleanup() {
       await context.close();
-      await pool.query("DELETE FROM principals WHERE id = ANY($1)", [
-        [reviewerId, adminId],
-      ]);
+      // The reviewer goes first: its grants, which name the administrator, cascade.
+      for (const id of [reviewerId, adminId])
+        await pool.query("DELETE FROM principals WHERE id=$1", [id]);
     },
   };
 }
