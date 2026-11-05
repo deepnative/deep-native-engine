@@ -7306,6 +7306,68 @@ it("REALINPUT-01/02/03 hosted private learning forms take real information while
   expect(dashboardPage.text).not.toContain("FOUNDATION PREVIEW");
   expect((await local.get("/learn")).text).toContain("Delete this preview");
 });
+it("READABLE-14 a hosted member sees the prerequisite lesson's title on its route", async () => {
+  const hostedOrigin = "https://engine.deepnative.io";
+  const base: ContentVersion = {
+    id: "SYN-960",
+    version: 1,
+    kind: "assignment",
+    origin: "curated",
+    title: "Invented assignment",
+    body: "Invented body.",
+    owner: "Invented owner",
+    sources: "Invented source",
+    rights: "Invented rights",
+    goals: ["everyday", "work", "build"],
+    backgrounds: ["explorer", "professional", "technical"],
+    domains: [],
+    prerequisites: "",
+    rubric: null,
+    rubricVersion: null,
+    state: "published",
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date(),
+    publishedAt: new Date(),
+  };
+  const assignment: ContentVersion = {
+    ...base,
+    structuredPrerequisites: {
+      schemaVersion: 1,
+      all: [{ kind: "lesson", id: "SYN-805", version: 2, activity: "started" }],
+    },
+  };
+  const lesson: ContentVersion = {
+    ...base,
+    id: "SYN-805",
+    version: 2,
+    kind: "lesson",
+    title: "Check an invented claim",
+  };
+  const db = storage();
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
+  const catalog = catalogMock();
+  catalog.published.mockResolvedValue(assignment);
+  catalog.search.mockResolvedValue([assignment, lesson]);
+  const secret = "hosting-copy-test";
+  const bearer = "c".repeat(64);
+  const page = await withLoopback(
+    app(db, { origin: hostedOrigin, hostedOrigin, secret, catalog }),
+    (s) =>
+      request(s)
+        .get("/library/SYN-960")
+        .set("Host", "engine.deepnative.io")
+        .set("Cookie", `${COOKIE}=${bearer}`),
+  );
+  expect(page.status).toBe(200);
+  expect(page.text).toContain(
+    "Lesson “Check an invented claim” version 2: started",
+  );
+  expect(page.text).not.toContain("SYN-805");
+});
 it("HOSTED-12 presents accurate hosted persistence while concurrent local rendering stays local", async () => {
   const hosted = app(storage(), {
     origin: "https://engine.deepnative.io",
