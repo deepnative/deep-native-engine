@@ -116,9 +116,8 @@ it.each(["email-first", "signout-first"])(
     }
     const [a, b] = await Promise.all([first, second]);
     const signedIn = order === "email-first" ? a : b;
-    expect(order === "email-first" ? b : a).toBe(
-      order === "email-first" ? "unavailable" : "signed_out",
-    );
+    // MULTISESSION-02 (#695): the stale sign-out ends only its own browser.
+    expect(order === "email-first" ? b : a).toBe("signed_out");
     if (typeof signedIn === "string") throw Error("Missing sign-in result");
     expect(signedIn.kind).toBe("signed_in");
     expect(await members.session(signedIn.token!)).toMatchObject({
@@ -271,6 +270,8 @@ it.each(["before-commit", "lost-commit"])(
       },
     );
     expect(mutations).toBe(1);
+    // A request looks the browser up again before reading anything.
+    await members.browserSession!(owner.token);
     expect((await members.session(owner.token)).kind === "active").toBe(
       failure === "before-commit",
     );

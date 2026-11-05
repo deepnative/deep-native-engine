@@ -964,7 +964,7 @@ export function accountPage(
           : '<section class="account-recovery"><h2>Email recovery is unavailable</h2><p>Keep this browser’s signed-in session to access your saved learning. Email recovery cannot be checked right now.</p></section>';
   const signOut =
     emailStatus === "linked" || passwordSet
-      ? `<section><h2>Sign out of your account</h2><p>This ends access for the current token, including any copied browser cookies. Your saved work stays in this account. ${emailStatus === "linked" ? "Use your verified email to return" : "Use your email and password to return"}; no email is sent automatically.</p><form method="post" action="/account/sign-out">${hidden(csrf)}<button type="submit">Sign out</button></form></section>`
+      ? `<section><h2>Sign out of your account</h2><p>This signs out this browser, including any copies of its sign-in cookie. Other browsers where you signed in stay signed in. Your saved work stays in this account. ${emailStatus === "linked" ? "Use your verified email to return" : "Use your email and password to return"}; no email is sent automatically.</p><form method="post" action="/account/sign-out">${hidden(csrf)}<button type="submit">Sign out</button></form></section>`
       : '<section><h2>Sign out of your account</h2><p>Signing out does not delete your saved records. Review how you can return before ending access.</p><p><a class="button secondary" href="/account/sign-out">Sign out</a></p></section>';
   return page(
     "My account",

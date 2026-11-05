@@ -158,7 +158,9 @@ test("[L239] MOUT-01/02 a linked member signs out and deliberately returns by em
       ]);
     await page.goto(`${f.origin}/account`);
     await expect(
-      page.getByText("including any copied browser cookies", { exact: false }),
+      page.getByText("including any copies of its sign-in cookie", {
+        exact: false,
+      }),
     ).toBeVisible();
     const sends = f.messages.length;
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
@@ -324,6 +326,8 @@ test("[L241] MOUT-06 failed and lost-commit signout shows uncertainty without re
         (await page.context().cookies()).find((c) => c.name === "dne_preview")
           ?.value,
       ).toBe(f.token);
+      // A request looks the browser up again before reading anything.
+      await members.browserSession!(f.token);
       expect((await members.session(f.token)).kind === "active").toBe(
         failure === "before-commit",
       );

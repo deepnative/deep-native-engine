@@ -180,7 +180,11 @@ for (const [index, [background, goal]] of audiences.entries()) {
       await expect(returning).toHaveURL(f.origin + PROGRAM_PATH + "/confirm");
       const recoveredToken = await bearer(returning);
       expect(recoveredToken !== originalToken).toBe(true);
-      expect(await f.programs.mine(originalToken)).toEqual({ kind: "denied" });
+      // MULTISESSION-01 (#695): the first browser stays signed in too.
+      expect(await f.programs.mine(originalToken)).toEqual({
+        kind: "ready",
+        value: null,
+      });
       expect(await f.programs.mine(recoveredToken)).toEqual({
         kind: "ready",
         value: null,

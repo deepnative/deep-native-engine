@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { Pool, PoolClient } from "pg";
 import { LESSON, type LearnerProfile } from "./content.ts";
+import { accountHash, openBrowserSession } from "./member-sessions.ts";
 import type { MilestoneInput } from "./milestones.ts";
 export interface Learner extends Pick<LearnerProfile, "background" | "goal"> {
   // Existing accounts retain access until they supply their required name.
@@ -74,6 +75,8 @@ export type Session =
   | { kind: "expired" }
   | { kind: "active"; learner: Learner; expiresAt: Date; deadline?: number };
 export interface Store {
+  /** #695: look up this browser's own sign-in before the request reads records. */
+  browserSession?(token: string): Promise<void>;
   session(token: string, scope?: "account"): Promise<Session>;
   create(
     token: string,
@@ -144,7 +147,8 @@ export interface Store {
   remove(id: string): Promise<void>;
 }
 export function hash(token: string) {
-  return createHash("sha256").update(token).digest("hex");
+  // #695: a browser signed in to an account finds that account's record.
+  return accountHash(createHash("sha256").update(token).digest("hex"));
 }
 export async function migrate(pool: Pool) {
   const scripts = await Promise.all(
@@ -245,6 +249,7 @@ export async function migrate(pool: Pool) {
       "095-role-admin-coach-links.sql",
       "096-administrator-email-lookups.sql",
       "097-default-coaches.sql",
+      "099-member-browser-sessions.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
@@ -308,6 +313,7 @@ export function store(pool: Pool): Store {
     }
   }
   return {
+    browserSession: (token) => openBrowserSession(pool, token),
     async session(token, scope) {
       const entered = performance.now();
       const row = (

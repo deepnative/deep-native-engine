@@ -716,7 +716,11 @@ it("PROGRAM-15/ENR-07 uses actual email confirmation to return to the same saved
     const recovered = responseCookie(signedIn.headers, COOKIE),
       recoveredToken = cookieValue(recovered);
     expect(recoveredToken !== owner.token).toBe(true);
-    expect(await f.programs.mine(owner.token)).toEqual({ kind: "denied" });
+    // MULTISESSION-01 (#695): the first browser stays signed in too.
+    expect(await f.programs.mine(owner.token)).toEqual({
+      kind: "ready",
+      value: null,
+    });
     expect(await f.members.session(recoveredToken)).toMatchObject({
       kind: "active",
       learner: { id: owner.id },

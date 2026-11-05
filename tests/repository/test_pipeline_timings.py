@@ -152,9 +152,15 @@ class DeployTimings(Fixture):
             self.assertEqual(timings.main(["deploy", "--repo=x"], root=self.root), 2)
 
 
+# Inside a Git hook GIT_DIR points at the real repository; `git init` would
+# then reinitialize it (setting core.bare) instead of the fixture.
+CLEAN_GIT_ENV = {key: value for key, value in os.environ.items()
+                 if key not in ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
+
+
 class History(Fixture):
     def init_git(self):
-        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True, env=CLEAN_GIT_ENV)
 
     def test_time05_recording_writes_only_outside_artifacts(self):
         self.init_git()
@@ -186,7 +192,7 @@ class History(Fixture):
         # Git hooks export GIT_DIR; a fixture checkout must never write the real history.
         self.init_git()
         other = self.root / "other"
-        subprocess.run(["git", "init", "-q", str(other)], check=True)
+        subprocess.run(["git", "init", "-q", str(other)], check=True, env=CLEAN_GIT_ENV)
         with patch.dict(os.environ, {"GIT_DIR": str(other / ".git")}):
             timings.append_history(self.root, timings.deploy_record(DEPLOY_RUN))
         self.assertTrue((self.root / ".git" / timings.HISTORY_NAME).exists())

@@ -243,7 +243,8 @@ test("[L213] email verification restores the exact saved member in another brows
     await expect(
       fresh.getByText("My invented learning plan has three careful steps."),
     ).toBeVisible();
-    expect((await members.session(token)).kind).not.toBe("active");
+    // MULTISESSION-01 (#695): the first browser stays signed in too.
+    expect((await members.session(token)).kind).toBe("active");
   } finally {
     await returning?.close();
     await closeLoopback(server);

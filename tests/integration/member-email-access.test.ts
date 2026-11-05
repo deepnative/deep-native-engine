@@ -125,7 +125,8 @@ it("EMAIL-ACCESS-01/02 links only the current verified member and reopens the sa
     /dne_preview=([a-f0-9]{64})/,
   )?.[1];
   expect(nextToken).toBeDefined();
-  expect((await members.session(owner.token)).kind).not.toBe("active");
+  // MULTISESSION-01 (#695): the first browser stays signed in too.
+  expect((await members.session(owner.token)).kind).toBe("active");
   const resumed = await members.session(nextToken!);
   expect(resumed).toMatchObject({ kind: "active", learner: { id: owner.id } });
   expect(await members.progress(owner.id)).toMatchObject({
