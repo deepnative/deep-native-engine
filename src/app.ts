@@ -577,7 +577,9 @@ export function app(
     const parseCookies = cookieParser();
     app.post("/api/evidence", (req, res, next) =>
       parseCookies(req, res, async () => {
-        const result = await uploadAdmission.admit(token(req.cookies[COOKIE]));
+        const member = token(req.cookies[COOKIE]);
+        await store.browserSession?.(member);
+        const result = await uploadAdmission.admit(member);
         if (result.kind === "admitted") {
           await holdLease(req, res, result.release, next);
           return;
@@ -641,6 +643,17 @@ export function app(
     return ordinaryForm(req, res, next);
   });
   app.use(cookieParser());
+  // #695 MULTISESSION: find which account this browser's own sign-in opens.
+  app.use((req, _res, next) => {
+    const member: unknown = req.cookies[COOKIE];
+    if (
+      !store.browserSession ||
+      typeof member !== "string" ||
+      !/^[a-f0-9]{64}$/.test(member)
+    )
+      return next();
+    void store.browserSession(member).then(() => next());
+  });
   // FRICTION-06: staff and administration pages render before member state is
   // read. A visitor with no staff cookie and no active member session is signed
   // out, even with the anonymous cookie the home page gives every visitor.
