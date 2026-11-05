@@ -12,10 +12,10 @@ CREATE TABLE IF NOT EXISTS member_sessions (
 CREATE INDEX IF NOT EXISTS member_sessions_principal ON member_sessions(principal_id);
 -- Existing accounts keep their one signed-in browser: its fingerprint moves to
 -- a session row before the account's own value is replaced. This runs once,
--- the first time 098 is applied; afterwards sign-up and email linking do it.
+-- the first time 099 is applied; afterwards sign-up and email linking do it.
 DO $$
 BEGIN
- IF EXISTS(SELECT 1 FROM schema_migrations WHERE version=98) THEN RETURN; END IF;
+ IF EXISTS(SELECT 1 FROM schema_migrations WHERE version=99) THEN RETURN; END IF;
  WITH accounts AS (
   SELECT p.id,p.token_hash,p.expires_at FROM principals p
   WHERE p.kind='member' AND NOT p.separate_sessions
@@ -66,5 +66,5 @@ CREATE OR REPLACE VIEW authorized_staff_profiles AS
          AND b.principal_id=m.id AND b.expires_at>clock_timestamp()))
    FOR SHARE OF a
  );
-INSERT INTO schema_migrations(version) VALUES(98) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(99) ON CONFLICT DO NOTHING;
 COMMIT;
