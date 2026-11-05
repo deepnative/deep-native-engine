@@ -44,6 +44,24 @@ reissued with its existing database deadline and Secure/HttpOnly/SameSite=Strict
 The proxy suppresses request access/error logs because private download URLs
 and referrers can carry signed capabilities; startup/configuration logs and the
 application's sanitized errors remain available.
+
+`POST /email/sign-in` is the one place that reads a client address, to allow a
+visitor at most three no-account notices per hour
+([#693](https://github.com/deepnative/deep-native-engine/issues/693)). The proxy
+must keep passing `X-Forwarded-For` unchanged, because Azure ingress appends to
+what the client sent and
+[documents](https://learn.microsoft.com/en-us/azure/container-apps/ingress-overview)
+that only the rightmost entry is its own. Only that entry is read, and only when
+the request came from loopback. Express `trust proxy` stays unset. Adding another
+proxy or CDN in front moves the real client away from the rightmost entry, so
+this must be revisited first: every visitor would otherwise share one allowance.
+Stored rows hold a hash keyed with a value kept in process memory and are deleted
+after an hour, the next time a notice is requested. Per-visitor counts restart
+with the process and would not be shared across replicas; the per-address and
+site-wide limits are unaffected. To confirm the hosted behaviour, read
+`visitorScope` on `member_email_request` log lines: it should say `public`.
+`private` means the rightmost entry is an internal address, and `unknown` means
+it was missing or unreadable. Either way, those visitors share one allowance.
 This upgrades transport protection without creating a principal or renewing the
 session, saved work or finite staff grants. HTTP loopback behavior is unchanged;
 expired/revoked members receive no active-cookie upgrade. HTTPS member cookies,

@@ -2622,6 +2622,15 @@
       "expected": "Dates read in words with the zone stated and keep their exact value in the datetime attribute; short codes and dates stay on one line; words break only when wider than the line; no sideways scrolling",
       "issues": [659],
       "critical": true
+    },
+    {
+      "id": "L295",
+      "actor": "Member checking what they share",
+      "preconditions": "Dedicated synthetic PostgreSQL database, circle discussion enabled, port0 server; desktop/mobile Chromium",
+      "steps": "WHOSEES-01..03: open Who can see my work from My account with nothing shared, join a circle, turn sharing on, post a question, return, then withdraw sharing and return",
+      "expected": "The page first says nothing is shared, then names the circle with sharing off, then counts one readable post, then says sharing is off with no readable posts; links reach the existing controls; no sideways scrolling",
+      "issues": [40],
+      "critical": true
     }
   ],
   "fullMvp": [

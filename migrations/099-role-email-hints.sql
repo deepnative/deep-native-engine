@@ -18,6 +18,6 @@ UPDATE account_roles r SET granted_at=e.at
   FROM (SELECT email_hash,role,max(occurred_at) AS at FROM account_role_events
          WHERE action='granted' GROUP BY email_hash,role) e
  WHERE r.granted_at IS NULL AND r.email_hash=e.email_hash AND r.role=e.role
-   AND NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version=98);
-INSERT INTO schema_migrations(version) VALUES(98) ON CONFLICT DO NOTHING;
+   AND NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version=99);
+INSERT INTO schema_migrations(version) VALUES(99) ON CONFLICT DO NOTHING;
 COMMIT;
