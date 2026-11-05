@@ -3,8 +3,10 @@ import type { EventCancellationResult } from "./event-cancellation-values.ts";
 export type EventCancellationFailureKind =
   "denied" | "invalid" | "conflict" | "unavailable";
 export class EventCancellationFailure extends Error {
-  constructor(readonly kind: EventCancellationFailureKind) {
+  readonly kind: EventCancellationFailureKind;
+  constructor(kind: EventCancellationFailureKind) {
     super("Private event cancellation unavailable.");
+    this.kind = kind;
   }
 }
 export interface EventCancellationTransaction {

@@ -61,8 +61,10 @@ export interface AccountRoleAdmin {
 }
 
 class Refused extends Error {
-  constructor(readonly kind: "denied" | "invalid" | "not-found" | "self") {
+  readonly kind: "denied" | "invalid" | "not-found" | "self";
+  constructor(kind: Refused["kind"]) {
     super(kind);
+    this.kind = kind;
   }
 }
 const label = (names: (string | null)[]) =>

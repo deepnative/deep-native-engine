@@ -2591,9 +2591,9 @@
       "id": "L291",
       "actor": "Member reading pages on a wide screen and a phone",
       "preconditions": "Dedicated synthetic PostgreSQL database, port0 server; desktop/mobile Chromium",
-      "steps": "READWIDTH-01..03: open the readiness, starter guidance, lesson, milestone and career pages and the email link form",
-      "expected": "Headings and paragraphs on these pages use the page's full text width on a wide screen; the email form stays at most 620px wide; narrow screens have no sideways scrolling",
-      "issues": [682],
+      "steps": "READWIDTH-01..03 and PAGEFRAME-01/02: open the readiness, starter guidance, lesson, milestone and career pages and the email link form, then move between Learning, a lesson, readiness and My account",
+      "expected": "Headings and paragraphs on these pages use the page's full text width on a wide screen; the email form stays at most 620px wide; the logo, header height and page width stay the same between pages; narrow screens have no sideways scrolling",
+      "issues": [682, 691],
       "critical": true
     },
     {

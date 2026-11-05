@@ -789,7 +789,7 @@ test("[L288] DIAG-01..03 an administrator checks an email's account and link his
     await lookup("nobody@example.test");
     await expect(
       page.getByRole("row", { name: /^Verified email (?!s)/ }),
-    ).toContainText("Not verified");
+    ).toContainText("No account uses this address");
     await expect(
       page.getByText("No links were created for this address."),
     ).toBeVisible();

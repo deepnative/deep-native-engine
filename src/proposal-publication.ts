@@ -10,6 +10,7 @@ import {
 } from "./sample-feedback-lifetime.ts";
 
 export const DISPLAY_PERMISSION = "member-display-v1";
+const PAGE = 20;
 export interface PublicationSource {
   id: string;
   memberId: string;
@@ -76,12 +77,15 @@ export interface PublicationStore {
     proposalId: string,
     revision: number,
   ): Promise<PublicationResult<PublicationReceipt>>;
+  /** Newest shared first; `before` is the last publication id of the previous page. */
   list(
     token: string,
+    before?: string,
   ): Promise<
-    PublicationResult<
-      Array<{ receipt: PublicationReceipt; source: PublicationSource }>
-    >
+    PublicationResult<{
+      items: Array<{ receipt: PublicationReceipt; source: PublicationSource }>;
+      older: string | null;
+    }>
   >;
   detail(
     token: string,
@@ -242,15 +246,24 @@ export function publicationStore(
       ).rows[0] ?? null
     );
   }
-  async function readPublished(token: string, id?: string) {
+  async function readPublished(token: string, id?: string, before?: string) {
     return run(token, false, false, async (tx) => {
-      const refs = (
+      // Filter to currently valid shared sources before the limit, so withdrawn
+      // or changed items never take a place on the page.
+      const found = (
         await tx.query<{ id: string; proposal_id: string }>(
-          `SELECT id,proposal_id FROM proposal_publications WHERE state='published'
-        AND ($1::uuid IS NULL OR id=$1) ORDER BY id LIMIT 50`,
-          [id ?? null],
+          `SELECT pp.id,pp.proposal_id FROM proposal_publications pp
+        JOIN member_proposals p ON p.id=pp.proposal_id AND p.member_id=pp.member_id
+        JOIN workspaces w ON w.id=pp.workspace_id AND w.deleting_at IS NULL
+        WHERE pp.state='published' AND p.state='submitted' AND p.revision=pp.revision AND p.rights_attested_revision=pp.revision
+        AND ($1::uuid IS NULL OR pp.id=$1)
+        AND ($2::uuid IS NULL OR (pp.published_at,pp.id)<(SELECT published_at,id FROM proposal_publications WHERE id=$2))
+        ORDER BY pp.published_at DESC,pp.id DESC LIMIT ${PAGE + 1}`,
+          [id ?? null, before ?? null],
         )
       ).rows;
+      const refs = found.slice(0, PAGE);
+      const older = found.length > PAGE ? refs[PAGE - 1]!.id : null;
       const rows = await sources(
         tx,
         refs.map((r) => r.proposal_id),
@@ -262,16 +275,21 @@ export function publicationStore(
           [refs.map((r) => r.id)],
         )
       ).rows;
-      return publications.flatMap((r) => {
-        const source = rows.find(
-          (s) =>
-            s.id === r.proposalId &&
-            s.revision === r.revision &&
-            s.state === "submitted" &&
-            s.rightsRevision === r.revision,
-        );
+      // Keep the newest-first page order; recheck each row after locking it.
+      const items = refs.flatMap((ref) => {
+        const r = publications.find((p) => p.id === ref.id);
+        const source =
+          r &&
+          rows.find(
+            (s) =>
+              s.id === r.proposalId &&
+              s.revision === r.revision &&
+              s.state === "submitted" &&
+              s.rightsRevision === r.revision,
+          );
         return source ? [{ receipt: r, source }] : [];
       });
+      return { items, older };
     });
   }
   return {
@@ -387,13 +405,17 @@ export function publicationStore(
         return (await receipt(tx, id, revision))!;
       });
     },
-    list: (token) => readPublished(token),
+    async list(token, before) {
+      if (before !== undefined && !sampleUuid(before))
+        return { kind: "invalid" };
+      return readPublished(token, undefined, before);
+    },
     async detail(token, id) {
       if (!sampleUuid(id)) return { kind: "invalid" };
       const result = await readPublished(token, id);
       if (result.kind !== "ready") return result;
-      return result.value[0]
-        ? { ...result, value: result.value[0] }
+      return result.value.items[0]
+        ? { ...result, value: result.value.items[0] }
         : { kind: "denied" };
     },
   };
