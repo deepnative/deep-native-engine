@@ -13,6 +13,7 @@ import {
   contributionsPage,
   contributionPage,
 } from "./proposal-publication-views.ts";
+import { sampleUuid } from "./sample-feedback-values.ts";
 const exact = (
   value: unknown,
   keys: string[],
@@ -193,11 +194,14 @@ export function mountPublicationRoutes(
   });
   app.get("/contributions", async (req, res) => {
     if (!store) return failure(res, "disabled");
-    if (!exact(req.query, [])) return failure(res, "invalid");
+    const paged = exact(req.query, ["before"]);
+    if (!(paged ? sampleUuid(req.query.before) : exact(req.query, [])))
+      return failure(res, "invalid");
+    const before = paged ? (req.query.before as string) : undefined;
     return send(
       res,
-      await store.list(res.locals.token as string),
-      contributionsPage,
+      await store.list(res.locals.token as string, before),
+      (v) => contributionsPage(v.items, v.older, before !== undefined),
     );
   });
   app.get("/contributions/:id", async (req, res) => {
