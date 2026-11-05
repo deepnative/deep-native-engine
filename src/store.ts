@@ -245,6 +245,7 @@ export async function migrate(pool: Pool) {
       "095-role-admin-coach-links.sql",
       "096-administrator-email-lookups.sql",
       "097-default-coaches.sql",
+      "098-role-email-hints.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

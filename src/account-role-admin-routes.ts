@@ -10,6 +10,12 @@ import { csrf, validCsrf } from "./session.ts";
 import { escape, page } from "./views.ts";
 
 const ROLE_LABEL = { coach: "Coach", admin: "Admin" } as const;
+const MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
+/** "2026-11-04" → "4 Nov 2026". */
+const dateLabel = (day: string) => {
+  const [y, m, d] = day.split("-").map(Number);
+  return `${d} ${MONTHS[m! - 1]} ${y}`;
+};
 const REFUSALS = {
   denied: [
     403,
@@ -133,15 +139,20 @@ export function mountAccountRoleAdmin(
                   `${escape(p.name ?? "Name needed")} <span class="small">· <code>${escape(p.id)}</code></span>`,
               )
               .join("<br>")
-          : '<span class="small">Email not linked to an account yet</span>';
+          : h.hint
+            ? `${escape(h.hint)} <span class="small">· not signed up yet</span>`
+            : '<span class="small">Email not linked to an account yet</span>';
+        const granted = h.grantedAt
+          ? `<br><span class="small">Granted ${dateLabel(h.grantedAt)}</span>`
+          : "";
         const roles = h.roles
           .map((role) =>
             h.self && role === "admin"
               ? `<li>${ROLE_LABEL[role]} <span class="small">(you)</span></li>`
-              : `<li><form method="post" action="/operator/roles/remove">${hidden("csrf", anti)}${hidden("emailHash", h.emailHash)}${hidden("role", role)}${ROLE_LABEL[role]} <button class="secondary" type="submit" aria-label="Remove ${ROLE_LABEL[role].toLowerCase()} role from ${escape(h.people[0] ? (h.people[0].name ?? "Name needed") : "this email")}">Remove</button></form></li>`,
+              : `<li><form method="post" action="/operator/roles/remove">${hidden("csrf", anti)}${hidden("emailHash", h.emailHash)}${hidden("role", role)}${ROLE_LABEL[role]} <button class="secondary" type="submit" aria-label="Remove ${ROLE_LABEL[role].toLowerCase()} role from ${escape(h.people[0] ? (h.people[0].name ?? "Name needed") : (h.hint ?? "this email"))}">Remove</button></form></li>`,
           )
           .join("");
-        return `<tr><td>${who}</td><td><ul class="role-list">${roles}</ul></td></tr>`;
+        return `<tr><td>${who}${granted}</td><td><ul class="role-list">${roles}</ul></td></tr>`;
       })
       .join("");
     res.send(

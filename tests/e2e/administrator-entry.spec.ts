@@ -1010,6 +1010,10 @@ test("[L292] ROLEADMIN/COACHLINK/DEFCOACH an administrator grants a coach role, 
         name: "Remove coach role from Invented Coach",
       }),
     ).toBeVisible();
+    // #696 ROLE-LABEL-01: Tom has not signed up here, so his row shows a hint.
+    await expect(
+      page.getByRole("row", { name: /to…@deepnative\.io · not signed up yet/ }),
+    ).toBeVisible();
     await page.screenshot({
       path: test.info().outputPath("roles.png"),
       fullPage: true,
@@ -1022,6 +1026,10 @@ test("[L292] ROLEADMIN/COACHLINK/DEFCOACH an administrator grants a coach role, 
     });
     await expect(coaches.getByLabel("Invented Owner")).toBeChecked();
     await expect(coaches.getByLabel("Invented Coach")).not.toBeChecked();
+    // ROLE-LABEL-02: the unlinked default coach carries the same hint.
+    await expect(
+      coaches.getByLabel("to…@deepnative.io (not signed up yet)"),
+    ).toBeChecked();
     await coaches.getByLabel("Invented Owner").uncheck();
     await coaches.getByLabel("Invented Coach").check();
     await page.getByRole("button", { name: "Save coaches" }).click();
