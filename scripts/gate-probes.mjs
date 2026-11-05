@@ -38,6 +38,7 @@ try {
     "vitest.config.ts",
     "vitest.integration.config.ts",
     "package.json",
+    "tsconfig.json",
     "Makefile",
   ]) {
     mkdirSync(path.dirname(path.join(sandbox, name)), { recursive: true });

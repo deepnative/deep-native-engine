@@ -8,6 +8,9 @@ import {
 } from "./proposal-publication.ts";
 const input = (name: string, value: string | number) =>
   `<input type="hidden" name="${name}" value="${escape(String(value))}">`;
+// CONTRIB-CONTACT-01: owner-chosen contribution review contact (#97, 27 Oct 2026).
+const reviewContact =
+  '<p>For contribution reviews, email <a href="mailto:info@deepnative.io">info@deepnative.io</a>. No response time is promised. Keep private assignments and evidence out of email.</p>';
 const ownerPath = (id: string) =>
   `/contribute/${encodeURIComponent(id)}/publication`;
 function publishForm(
@@ -25,7 +28,7 @@ export function publicationOwnerPage(
 ) {
   return page(
     "Your contribution sharing",
-    `<section class="reading"><h1>Your contribution sharing</h1><h2>${escape(source.title ?? "Removed proposal")}</h2><p>Revision ${source.revision} · ${source.origin === "sample" ? "Originally submitted as a sample" : "Original member contribution"}. Saving, submitting and editorial acceptance remain private.</p>${source.body === null ? "<p>The source text has been removed.</p>" : `<pre class="content-text" data-publication-source>${escape(source.body).replace(/\r/g, "&#13;")}</pre><h3>Sources and rights notes</h3><p>${escape(source.sources!)}</p>`}${receipt ? `<p>Editorial acceptance for revision ${receipt.revision} recorded ${receipt.acceptedAt.toISOString()}. This is ordinary editorial review, not formal assessment.</p>${publicationReceiptContent(receipt)}` : "<p>Editorial acceptance is needed before sharing.</p>"}${receipt?.state === "accepted" && enabled && source.state === "submitted" ? publishForm(csrf, { operationId: randomUUID(), proposalId: source.id, revision: source.revision, attribution: "", audience: "members", permissionVersion: DISPLAY_PERMISSION }) : ""}${!enabled ? "<p>Sharing with other members is paused. Inspection and withdrawal remain available.</p>" : ""}${receipt && receipt.state !== "withdrawn" ? `<form method="post" action="/contribute/${encodeURIComponent(source.id)}/unshare">${hidden(escape(csrf))}${input("revision", receipt.revision)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Withdraw display permission for this revision. Keep my private proposal.</span></label><button>Withdraw sharing</button></form>` : ""}<p><a href="/contribute/${encodeURIComponent(source.id)}">Return to my private proposal</a> · <a href="/contributions">Read member contributions</a> · <a href="/contribution-requests/inspect">Inspect an earlier publication request</a></p></section>`,
+    `<section class="reading"><h1>Your contribution sharing</h1><h2>${escape(source.title ?? "Removed proposal")}</h2><p>Revision ${source.revision} · ${source.origin === "sample" ? "Originally submitted as a sample" : "Original member contribution"}. Saving, submitting and editorial acceptance remain private.</p>${source.body === null ? "<p>The source text has been removed.</p>" : `<pre class="content-text" data-publication-source>${escape(source.body).replace(/\r/g, "&#13;")}</pre><h3>Sources and rights notes</h3><p>${escape(source.sources!)}</p>`}${receipt ? `<p>Editorial acceptance for revision ${receipt.revision} recorded ${receipt.acceptedAt.toISOString()}. This is ordinary editorial review, not formal assessment.</p>${publicationReceiptContent(receipt)}` : "<p>Editorial acceptance is needed before sharing.</p>"}${receipt?.state === "accepted" && enabled && source.state === "submitted" ? publishForm(csrf, { operationId: randomUUID(), proposalId: source.id, revision: source.revision, attribution: "", audience: "members", permissionVersion: DISPLAY_PERMISSION }) : ""}${!enabled ? "<p>Sharing with other members is paused. Inspection and withdrawal remain available.</p>" : ""}${receipt && receipt.state !== "withdrawn" ? `<form method="post" action="/contribute/${encodeURIComponent(source.id)}/unshare">${hidden(escape(csrf))}${input("revision", receipt.revision)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Withdraw display permission for this revision. Keep my private proposal.</span></label><button>Withdraw sharing</button></form>` : ""}<p><a href="/contribute/${encodeURIComponent(source.id)}">Return to my private proposal</a> · <a href="/contributions">Read member contributions</a> · <a href="/contribution-requests/inspect">Inspect an earlier publication request</a></p>${reviewContact}</section>`,
   );
 }
 function publicationReceiptContent(r: PublicationReceipt) {
@@ -34,7 +37,7 @@ function publicationReceiptContent(r: PublicationReceipt) {
 export function publicationReceiptPage(receipt: PublicationReceipt) {
   return page(
     "Contribution request result",
-    `<section class="reading"><h1>Contribution request result</h1>${publicationReceiptContent(receipt)}<p><a href="${ownerPath(receipt.proposalId)}">Inspect my current contribution</a> · <a href="/moderate/proposals">Private moderation queue</a></p></section>`,
+    `<section class="reading"><h1>Contribution request result</h1>${publicationReceiptContent(receipt)}<p><a href="${ownerPath(receipt.proposalId)}">Inspect my current contribution</a> · <a href="/moderate/proposals">Private moderation queue</a></p>${reviewContact}</section>`,
   );
 }
 export function publicationInspectionPage(csrf: string) {
@@ -55,10 +58,18 @@ export function publicationRecoveryPage(
 }
 export function contributionsPage(
   items: Array<{ source: PublicationSource; receipt: PublicationReceipt }>,
+  older: string | null = null,
+  paged = false,
 ) {
+  const pages = [
+    paged ? '<a href="/contributions">Newest contributions</a>' : "",
+    older
+      ? `<a href="/contributions?before=${encodeURIComponent(older)}">Older contributions</a>`
+      : "",
+  ].filter(Boolean);
   return page(
     "Member contributions",
-    `<section class="reading"><h1>Member contributions</h1><p>Original contributions shared deliberately with signed-in members after ordinary editorial review. These are not formal instruction, credentials or an external reuse licence. Showing up to 50 currently shared contributions.</p><ul>${items.map(({ source, receipt }) => `<li><a href="/contributions/${encodeURIComponent(receipt.id)}">${escape(source.title!)}</a> · ${escape(receipt.attribution!)} · revision ${receipt.revision}${source.origin === "sample" ? " · originally submitted as a sample" : ""}</li>`).join("")}</ul>${items.length ? "" : "<p>No contributions are currently shared.</p>"}<p><a href="/contribute">Create or manage my private proposal</a> · <a href="/learn">My learning</a></p></section>`,
+    `<section class="reading"><h1>Member contributions</h1><p>Original contributions shared deliberately with signed-in members after ordinary editorial review. These are not formal instruction, credentials or an external reuse licence. Newest first, 20 per page.</p><ul>${items.map(({ source, receipt }) => `<li><a href="/contributions/${encodeURIComponent(receipt.id)}">${escape(source.title!)}</a> · ${escape(receipt.attribution!)} · revision ${receipt.revision}${source.origin === "sample" ? " · originally submitted as a sample" : ""}</li>`).join("")}</ul>${items.length ? "" : "<p>No contributions are currently shared.</p>"}${pages.length ? `<nav aria-label="Contribution pages"><p>${pages.join(" · ")}</p></nav>` : ""}<p><a href="/contribute">Create or manage my private proposal</a> · <a href="/learn">My learning</a></p>${reviewContact}</section>`,
   );
 }
 export function contributionPage(
