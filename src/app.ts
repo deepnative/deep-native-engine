@@ -86,6 +86,7 @@ import { withAdministration } from "./administration-presentation.ts";
 import { withCurrentPath } from "./navigation-presentation.ts";
 import {
   sharingHeaderSession,
+  knownSignedIn,
   withMembership,
 } from "./membership-presentation.ts";
 import { fileURLToPath } from "node:url";
@@ -768,7 +769,11 @@ export function app(
       /^\/admin(?:\/|$)/i.test(req.path) ||
       staffFamily(req.path)
     )
-      return withMembership({ signedIn: undefined, signInAvailable }, next);
+      // ROLES-NAV-01: keep what FRICTION-06 already established for staff pages.
+      return withMembership(
+        { signedIn: knownSignedIn(), signInAvailable },
+        next,
+      );
     if (typeof member !== "string" || !/^[a-f0-9]{64}$/.test(member))
       return withMembership({ signedIn: false, signInAvailable }, next);
     const result = Promise.resolve().then(() => memberStore.session(member));

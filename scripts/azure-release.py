@@ -56,6 +56,10 @@ INVOICE = {"DNE_INVOICE_MODE": "sample"}
 # demo with test data only. Sample invoices are nonpayable and send no email.
 # Every release sets exactly these values.
 DEMO = {"DNE_DEMO_SITE": "enabled"}
+# CONTRIB-HOSTED-01 (#40, 4 Nov 2026): members may share an editorially accepted
+# contribution with signed-in members. The owner chose info@deepnative.io as the
+# contribution review contact on #97. Every release sets exactly these values.
+FEATURES = {"DNE_MEMBER_CONTRIBUTIONS": "enabled"}
 
 
 def require(condition):
@@ -142,7 +146,7 @@ def prepare(app, revision, receipt=None, now=None):
         template = {
             "scale": {"minReplicas": 1, "maxReplicas": 1},
             "containers": [
-                {"name": "app", "image": f"{REGISTRY}/deepnative/app:{revision}", "resources": {"cpu": 0.5, "memory": "1Gi"}, "env": [{"name": key, "value": value} for key, value in {**CONFIG, **INVOICE, **DEMO, "DNE_PRESERVATION_RECEIPT_SHA256": preservation, "DNE_RELEASE_REVISION": revision}.items()]},
+                {"name": "app", "image": f"{REGISTRY}/deepnative/app:{revision}", "resources": {"cpu": 0.5, "memory": "1Gi"}, "env": [{"name": key, "value": value} for key, value in {**CONFIG, **INVOICE, **DEMO, **FEATURES, "DNE_PRESERVATION_RECEIPT_SHA256": preservation, "DNE_RELEASE_REVISION": revision}.items()]},
                 {"name": "proxy", "image": f"{REGISTRY}/deepnative/proxy:{revision}", "resources": {"cpu": 0.25, "memory": "0.5Gi"}, "env": [{"name": "PUBLIC_HOST", "value": HOST}, {"name": "LEGACY_HOST", "value": LEGACY}], "probes": [
                     {"type": "Readiness", "httpGet": {"path": "/", "port": 8080, "httpHeaders": [{"name": "Host", "value": HOST}]}, "initialDelaySeconds": 5, "periodSeconds": 5, "timeoutSeconds": 3, "failureThreshold": 3},
                     {"type": "Startup", "httpGet": {"path": "/", "port": 8080, "httpHeaders": [{"name": "Host", "value": HOST}]}, "initialDelaySeconds": 5, "periodSeconds": 5, "timeoutSeconds": 3, "failureThreshold": 60},
@@ -162,7 +166,7 @@ def prepare(app, revision, receipt=None, now=None):
         for container in template["containers"]:
             container["image"] = f"{REGISTRY}/deepnative/{container['name']}:{revision}"
             if container["name"] == "app":
-                released = {**INVOICE, **DEMO, "DNE_RELEASE_REVISION": revision}
+                released = {**INVOICE, **DEMO, **FEATURES, "DNE_RELEASE_REVISION": revision}
                 # Drop every earlier invoice setting so none outlives its mode.
                 container["env"] = [v for v in container["env"] if v["name"] not in released and not v["name"].startswith("DNE_INVOICE_")] + [{"name": key, "value": value} for key, value in released.items()]
     template["revisionSuffix"] = f"rel-{revision[:12]}"

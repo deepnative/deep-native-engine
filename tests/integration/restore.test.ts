@@ -1,4 +1,4 @@
-import { it, expect } from "vitest";
+import { afterAll, it, expect } from "vitest";
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -18,6 +18,7 @@ import { migrate, store, type Learner } from "../../src/store.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { postgresArchiveTools } from "../support/postgres-archive-tools.ts";
+import { deferredCleanup } from "../support/deferred-cleanup.ts";
 
 function checked(
   result: ReturnType<ReturnType<typeof postgresArchiveTools>["execute"]>,
@@ -93,6 +94,22 @@ async function closePoolSockets(pool: Pool) {
   }
 }
 
+// DROP DATABASE waits for a forced checkpoint, which under eight integration
+// lanes has taken 30-75s (#677). The drops therefore run after the test's 60s
+// budget: every step still runs, any failure still fails this file, and the
+// acceptance report is written only after cleanup succeeded.
+const cleanup = deferredCleanup();
+let report: Record<string, unknown> | undefined;
+afterAll(async () => {
+  await cleanup.run();
+  if (!report) return;
+  await mkdir("artifacts", { recursive: true });
+  await writeFile(
+    "artifacts/restore-drill.json",
+    `${JSON.stringify(report, null, 2)}\n`,
+  );
+}, 120_000);
+
 it("restores only a synthetic snapshot into a new database and preserves private evidence boundaries", async () => {
   await rm("artifacts/restore-drill.json", { force: true });
   const configured = process.env.DNE_TEST_DATABASE_URL;
@@ -133,7 +150,20 @@ it("restores only a synthetic snapshot into a new database and preserves private
   const sourceObjects = join(root, "source");
   const snapshotObjects = join(root, "snapshot");
   const targetObjects = join(root, "restored");
-  let report;
+  cleanup.add("drop restore databases", async () => {
+    const dropped = await Promise.allSettled(
+      owned.map((name) => admin.query(`DROP DATABASE "${name}"`)),
+    );
+    const errors = dropped.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
+    if (errors.length)
+      throw new AggregateError(errors, "Restore database drop failed");
+  });
+  cleanup.add("close restore admin pool", () => admin.end());
+  cleanup.add("remove restore files", () =>
+    rm(root, { recursive: true, force: true }),
+  );
   let cleanupFailed: boolean;
   try {
     async function freshDatabase() {
@@ -393,30 +423,19 @@ it("restores only a synthetic snapshot into a new database and preserves private
       cleanupCompleted: true,
     };
   } finally {
-    // Attempt every owned-resource cleanup even if another cleanup fails.
+    // Close every pool here; the drops, admin pool and files follow in afterAll.
     const closed = await Promise.allSettled(pools.map(closePoolSockets));
-    const dropped = await Promise.allSettled(
-      owned.map((name) => admin.query(`DROP DATABASE "${name}"`)),
-    );
-    const removed = await Promise.allSettled([
-      admin.end(),
-      rm(root, { recursive: true, force: true }),
-    ]);
-    cleanupFailed = [...closed, ...dropped, ...removed].some(
-      (result) => result.status === "rejected",
-    );
-    if (cleanupFailed)
+    cleanup.release();
+    cleanupFailed = closed.some((result) => result.status === "rejected");
+    if (cleanupFailed) {
+      report = undefined;
       console.error(
         "Synthetic restore cleanup failed; acceptance report withheld.",
       );
+    }
   }
   if (cleanupFailed)
     throw new Error(
       "Synthetic restore cleanup failed; acceptance report withheld.",
     );
-  await mkdir("artifacts", { recursive: true });
-  await writeFile(
-    "artifacts/restore-drill.json",
-    `${JSON.stringify(report, null, 2)}\n`,
-  );
 }, 60_000);
