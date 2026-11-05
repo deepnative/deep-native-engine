@@ -78,6 +78,8 @@ test("[L294] READABLE-09..12 a phone reader sees readable dates, whole codes and
   // READABLE-11: long references and URLs wrap only where they must.
   await page.goto("/account");
   await expectReadableAtNarrowWidth(page, "/account");
+  await page.goto("/evidence");
+  await expectReadableAtNarrowWidth(page, "/evidence");
   await page.goto("/workflows");
   await expectReadableAtNarrowWidth(page, "/workflows");
   await page.goto("/workflows/WF-001");

@@ -493,6 +493,11 @@ input[type="checkbox"] {
   line-height: 1.55;
   font-weight: 450;
 }
+/* A flex item will not shrink below its longest word without this, so a long
+   unbroken title would widen the page instead of wrapping. */
+.check > :not(input) {
+  min-width: 0;
+}
 .check input {
   width: 18px;
   height: 18px;
@@ -948,7 +953,7 @@ footer span {
 /* Long allowed sample titles stay readable through queueing and discovery. */
 .private-evidence,
 .reviewer-worklist {
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* Reviewed source URLs and hashes must not expand the narrow reader viewport. */
