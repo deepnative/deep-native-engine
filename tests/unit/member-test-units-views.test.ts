@@ -97,3 +97,9 @@ it("TESTISSUE-08 an installed fixture reader links deliberate request/withdrawal
   expect(html).toContain("withdrawal does not mean it elapsed naturally");
   expect(html).not.toContain("<form");
 });
+it("ALLOW-01 links the monthly allowance only when claims are switched on", () => {
+  const link = 'href="/member/study-allowance"';
+  expect(memberTestUnitsPage(fixture(), true, true)).toContain(link);
+  expect(memberTestUnitsPage(fixture(), true, false)).not.toContain(link);
+  expect(memberTestUnitsPage(fixture())).not.toContain(link);
+});

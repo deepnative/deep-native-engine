@@ -508,6 +508,15 @@ const sections = {
     "id",
     true,
   ),
+  // v34 appends own study allowance claims (#199): no operation key or workspace.
+  studyAllowanceClaims: section(
+    `c.id AS "claimId",c.policy_version AS "policyVersion",c.category,c.quantity,
+     c.period_start AS "periodStart",c.period_end AS "periodEnd",c.grant_id AS "grantId",
+     c.created_at AS "createdAt"`,
+    `study_allowance_claims c JOIN workspaces w ON w.id=c.workspace_id AND w.owner_principal_id=c.member_id
+     WHERE c.member_id=$1 AND w.deleting_at IS NULL`,
+    "c.id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -521,7 +530,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v33";
+  version: "local-member-records-v34";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -655,7 +664,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v33",
+          version: "local-member-records-v34",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

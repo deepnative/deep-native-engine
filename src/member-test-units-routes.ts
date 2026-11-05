@@ -11,6 +11,7 @@ export function registerMemberTestUnitsRoutes(
   store: MemberTestUnitsStore,
   mode: ApplicationMode,
   fixtureReader = false,
+  allowanceClaims = false,
 ) {
   app.get(
     ["/member/test-units", "/member/test-units/download"],
@@ -51,7 +52,9 @@ export function registerMemberTestUnitsRoutes(
             );
             return res.json(body);
           }
-          return res.send(memberTestUnitsPage(value, fixtureReader));
+          return res.send(
+            memberTestUnitsPage(value, fixtureReader, allowanceClaims),
+          );
         }
         return res
           .status(result.kind === "denied" ? 403 : 503)
