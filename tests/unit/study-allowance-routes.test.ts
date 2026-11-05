@@ -81,7 +81,7 @@ const get = (server: Server, url = path) =>
     .get(url)
     .set("Host", "127.0.0.1:3000")
     .set("Cookie", `${COOKIE}=${owner}`);
-async function csrf(listener: ReturnType<typeof app>) {
+async function csrf(listener: Server) {
   const page = await get(listener);
   const match = /name="csrf" value="([^"]+)"/.exec(page.text);
   if (!match) throw Error(`Expected a claim form: ${page.text}`);
