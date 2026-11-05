@@ -486,6 +486,27 @@ export function studyFixtureLedgerOnConnection(
   };
 }
 
+// Internal versioned allowance boundary. The allowance store owns current
+// authority, the one-per-period slot and the sole transaction; only the fixed
+// study category can be granted, and the policy supplies the integer limit.
+export function studyAllowanceLedgerOnConnection(client: LedgerConnection) {
+  const ledger = ledgerOperations(
+    client,
+    (key, input, change) => applyEvent(client, key, input, change),
+    undefined,
+  );
+  return {
+    grant(
+      memberId: string,
+      quantity: number,
+      key: string,
+      window: ValidityWindow,
+    ) {
+      return ledger.grant(memberId, "study_requests", quantity, key, window);
+    },
+  };
+}
+
 // Internal checked support boundary. The support store owns authorization,
 // allocation/entry/link writes and the sole transaction; this grants no units.
 export function supportLedgerOnConnection(

@@ -273,7 +273,7 @@ it("CM122-03 separates owner sharing revocation, source-change revocation and so
 
   const exported = await memberExportStore(pool).exportOwned(owner.token);
   if (exported.kind !== "ready") throw Error("Export failed");
-  expect(exported.payload.version).toBe("local-member-records-v33");
+  expect(exported.payload.version).toBe("local-member-records-v34");
   const own = exported.payload.records.contributionEvents!;
   expect(own).toHaveLength((await events()).length - 1);
   expect(own).toContainEqual(
