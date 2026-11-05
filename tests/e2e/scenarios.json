@@ -2613,6 +2613,15 @@
       "expected": "Sign-up says the email is the username and never says no email is needed; the styled demo banner is the first thing on the starter guidance page; no sideways scrolling",
       "issues": [686],
       "critical": true
+    },
+    {
+      "id": "L294",
+      "actor": "Administrator noticing a member's waiting support request",
+      "preconditions": "Dedicated synthetic PostgreSQL database, administrator entry and support assignment enabled, port0 server; desktop/mobile Chromium",
+      "steps": "WAITWORK-01/02/09: a member sends a private support request; a verified owner enters administration and reads Work waiting; an invented operator is assigned; the owner reloads the console",
+      "expected": "The console shows one waiting support request with no member text and says no support operator is set up; its link opens the support inbox; after assignment the request counts as assigned, not waiting; no sideways page scrolling",
+      "issues": [39],
+      "critical": true
     }
   ],
   "fullMvp": [

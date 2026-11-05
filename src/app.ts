@@ -673,7 +673,18 @@ export function app(
         () => next(),
       );
   });
-  mountAdministratorEntry(app, options.administratorEntry, options);
+  mountAdministratorEntry(app, options.administratorEntry, options, {
+    support:
+      Boolean(options.supportAssignment) &&
+      options.localSupportAssignment === true,
+    feedback:
+      Boolean(options.sampleAssignments) &&
+      options.sampleAssignmentAdministration === true,
+    workflow:
+      Boolean(options.workflowReviewStaff) &&
+      options.workflowReviewRequests === true,
+    contributions: Boolean(options.proposals),
+  });
   mountAdministratorDiagnostics(app, options.administratorDiagnostics, options);
   mountStaffEntryRoutes(app, options.staffEntry, options, {
     library: Boolean(options.catalog),
