@@ -319,7 +319,7 @@ it("DEFCOACH-02/03/05 default coaches reach existing and new learners once", asy
   await migrate(pool);
   expect(await coachesOf(ada.id)).toEqual([{ coach: shiHash, by: null }]);
   // The first run assigns every existing learner.
-  await pool.query("DELETE FROM schema_migrations WHERE version=96");
+  await pool.query("DELETE FROM schema_migrations WHERE version=97");
   await migrate(pool);
   expect(await coachesOf(ada.id)).toEqual(
     [shiHash, tomHash].sort().map((coach) => ({ coach, by: null })),

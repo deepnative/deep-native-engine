@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS default_coaches (
 INSERT INTO default_coaches(email_hash)
 SELECT encode(sha256(convert_to(address, 'UTF8')), 'hex')
   FROM unnest(ARRAY['shi@deepnative.io','tom@deepnative.io']) AS address
- WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version=96)
+ WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version=97)
 ON CONFLICT DO NOTHING;
 -- DEFCOACH-03: each new learner gets every default coach who holds the role.
 CREATE OR REPLACE FUNCTION assign_default_coaches() RETURNS trigger AS $$
@@ -40,7 +40,7 @@ INSERT INTO coach_assignments(learner_id, coach_email_hash)
 SELECT l.id, d.email_hash FROM learners l
  CROSS JOIN default_coaches d
   JOIN account_roles r ON r.email_hash=d.email_hash AND r.role='coach'
- WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version=96)
+ WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version=97)
 ON CONFLICT DO NOTHING;
-INSERT INTO schema_migrations(version) VALUES(96) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(97) ON CONFLICT DO NOTHING;
 COMMIT;
