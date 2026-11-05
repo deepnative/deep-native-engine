@@ -35,7 +35,8 @@ export function measureNarrowReadability(page: Page) {
       if (parent.closest("script,style,textarea,option,select,noscript"))
         continue;
       if (!parent.getClientRects().length) continue;
-      const preformatted = getComputedStyle(parent).whiteSpace.startsWith("pre");
+      const preformatted =
+        getComputedStyle(parent).whiteSpace.startsWith("pre");
       for (const match of text.data.matchAll(/\S{2,}/g)) {
         const word = match[0];
         const rects = Array.from(word, (_, offset) =>

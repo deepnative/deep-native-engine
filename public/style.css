@@ -1568,7 +1568,6 @@ footer {
 }
 .role-holders td:first-child {
   min-width: 0;
-  overflow-wrap: break-word;
 }
 .role-list {
   list-style: none;
@@ -2087,7 +2086,9 @@ footer {
   border-bottom: 1px solid var(--line, #d9dee8);
   text-align: left;
   vertical-align: top;
-  overflow-wrap: break-word;
+}
+.diagnostics-table td {
+  overflow-wrap: anywhere;
 }
 .diagnostics-table th {
   font-weight: 600;
@@ -2143,4 +2144,14 @@ p:has(> a.button) {
 /* Short codes and dates such as FND-003 never split at their hyphen. */
 .no-break {
   white-space: nowrap;
+}
+
+/* A table cannot shrink below its longest word, so a long reference inside one
+   alone may break anywhere. Ordinary words and buttons stay whole. */
+td code {
+  overflow-wrap: anywhere;
+}
+/* Grid columns may be narrower than a long word, which then wraps inside them. */
+.portal-columns > * {
+  min-width: 0;
 }

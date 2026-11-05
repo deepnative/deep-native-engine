@@ -63,7 +63,9 @@ test("[L294] READABLE-09..12 a phone reader sees readable dates, whole codes and
 
   // READABLE-09: event times are words with the zone stated, not raw values.
   await page.goto("/events?all=1");
-  await expect(page.getByText(/Sample schedule: .+ UTC\./).first()).toBeVisible();
+  await expect(
+    page.getByText(/Sample schedule: .+ UTC\./).first(),
+  ).toBeVisible();
   await expectReadableAtNarrowWidth(page, "/events");
 
   // READABLE-10: a short code such as FND-003 stays on one line.
@@ -98,15 +100,22 @@ test("[L294] READABLE-09..12 a phone reader sees readable dates, whole codes and
     .fill("A small invented plan compared with the sample brief.");
   await page.getByLabel("I used only invented or sample information").check();
   await page.getByRole("button", { name: /Save/ }).first().click();
-  await page.getByRole("button", { name: /Submit/ }).first().click();
+  await page
+    .getByRole("button", { name: /Submit/ })
+    .first()
+    .click();
   await page.goto(attempt);
-  await expect(page.locator("body")).toContainText(/\d{1,2}:\d{2} [ap]\.m\. UTC/);
+  await expect(page.locator("body")).toContainText(
+    /\d{1,2}:\d{2} [ap]\.m\. UTC/,
+  );
   await expect(page.locator("time[datetime]").first()).toHaveAttribute(
     "datetime",
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
   );
   await expectReadableAtNarrowWidth(page, attempt);
   await page.goto("/progress");
-  await expect(page.locator("body")).toContainText(/\d{1,2}:\d{2} [ap]\.m\. UTC/);
+  await expect(page.locator("body")).toContainText(
+    /\d{1,2}:\d{2} [ap]\.m\. UTC/,
+  );
   await expectReadableAtNarrowWidth(page, "/progress");
 });
