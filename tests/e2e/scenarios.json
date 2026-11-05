@@ -2600,9 +2600,9 @@
       "id": "L292",
       "actor": "An owner administrator, a coach and a learner",
       "preconditions": "Dedicated synthetic PostgreSQL database, verified owner and coach identities, one invented learner with a saved coaching month, port0 servers; desktop/mobile Chromium",
-      "steps": "ROLEADMIN-01..05, COACHLINK-01..04: the owner enters administration, opens Roles, gives the coach role to a typed email, assigns the learner to that coach from the console, the coach opens Coaching, then the owner removes the coach role",
-      "expected": "The owner's own admin role has no remove button; the coach sees only the assigned learner and the unassigned owner sees nobody; after removal the coach is refused and the assignment is gone; each change is audited; no sideways scrolling",
-      "issues": [684],
+      "steps": "ROLEADMIN-01..05, COACHLINK-01..04, DEFCOACH-03/04: the owner enters administration, opens Roles, gives the coach role to a typed email, finds the learner already assigned to the default coaches, moves the learner from the owner to the new coach in the console, the coach opens Coaching, then the owner removes the coach role",
+      "expected": "The owner's own admin role has no remove button; a new learner starts with the owner as a default coach; after saving, the coach sees the learner and the owner sees nobody; after removal the coach is refused and their assignment is gone; each change is audited; no sideways scrolling",
+      "issues": [684, 689],
       "critical": true
     },
     {
@@ -2612,6 +2612,15 @@
       "steps": "SIGNUPCOPY-01 and DEMOSITE-02: read the sign-up form on the home page, then open starter guidance as a member",
       "expected": "Sign-up says the email is the username and never says no email is needed; the styled demo banner is the first thing on the starter guidance page; no sideways scrolling",
       "issues": [686],
+      "critical": true
+    },
+    {
+      "id": "L294",
+      "actor": "A learner reading on a phone 375 pixels wide",
+      "preconditions": "Dedicated synthetic PostgreSQL database, one invented published assignment, port0 server; desktop/mobile Chromium at a 375px viewport",
+      "steps": "READABLE-09..12: read events, programs, the account page and a reviewed workflow, then submit an invented attempt and read it and progress",
+      "expected": "Dates read in words with the zone stated and keep their exact value in the datetime attribute; short codes and dates stay on one line; words break only when wider than the line; no sideways scrolling",
+      "issues": [659],
       "critical": true
     }
   ],

@@ -9,5 +9,5 @@ CREATE TABLE IF NOT EXISTS member_email_notice_visitors (
 );
 CREATE INDEX IF NOT EXISTS member_email_notice_visitors_limit_idx
  ON member_email_notice_visitors(visitor_hash, created_at);
-INSERT INTO schema_migrations(version) VALUES(97) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(98) ON CONFLICT DO NOTHING;
 COMMIT;

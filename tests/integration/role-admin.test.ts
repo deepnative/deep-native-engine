@@ -178,7 +178,7 @@ it("ROLEADMIN-03/04 removes roles but never the acting administrator's own admin
   ).toEqual([{ role: "coach" }]);
 });
 
-it("COACHLINK-01..04 an administrator assigns one coach per learner; each coach sees only theirs", async () => {
+it("DEFCOACH-01/04 an administrator sets each learner's coaches; each coach sees only theirs", async () => {
   const tom = await staff();
   const shi = await fixture("shi@deepnative.io", "Invented Shi");
   const ada = await fixture("ada@example.test", "Invented Ada");
@@ -197,89 +197,138 @@ it("COACHLINK-01..04 an administrator assigns one coach per learner; each coach 
        VALUES($1,$2,$3,'Invented','x@example.test','draft',1)`,
       [learner.id, month, minutes],
     );
-
-  const choices = await admin.learnerCoach(tom.credential, ada.id);
-  expect(choices).toEqual({
-    kind: "ready",
-    value: {
-      coach: null,
-      coaches: [
-        { emailHash: hash("shi@deepnative.io"), label: "Invented Shi" },
-        { emailHash: hash("tom@deepnative.io"), label: "Invented Tom" },
-      ],
-    },
-  });
-  // Nobody is assigned yet, so no coach sees anyone.
-  const empty = await coach.summary(tom.token);
-  expect(empty.kind === "ready" && empty.value.rows).toEqual([]);
-
   const shiHash = hash("shi@deepnative.io"),
     tomHash = hash("tom@deepnative.io");
-  expect(
-    await admin.assignCoach(tom.credential, {
-      learnerId: ada.id,
-      coach: shiHash,
-    }),
-  ).toEqual({ kind: "ready" });
-  expect(
-    await admin.assignCoach(tom.credential, {
-      learnerId: bo.id,
-      coach: tomHash,
-    }),
-  ).toEqual({ kind: "ready" });
   const rows = async (token: string) => {
     const r = await coach.summary(token);
     return r.kind === "ready" ? r.value.rows.map((row) => row.name) : r.kind;
   };
-  expect(await rows(shi.token)).toEqual(["Invented Ada"]);
-  expect(await rows(tom.token)).toEqual(["Invented Bo"]);
-  // Reassigning replaces the coach.
+
+  // DEFCOACH-03: new learners start with both default coaches.
+  expect(await admin.learnerCoaches(tom.credential, ada.id)).toEqual({
+    kind: "ready",
+    value: {
+      assigned: [shiHash, tomHash].sort(),
+      coaches: [
+        { emailHash: shiHash, label: "Invented Shi" },
+        { emailHash: tomHash, label: "Invented Tom" },
+      ],
+    },
+  });
+  expect(await rows(shi.token)).toEqual(["Invented Ada", "Invented Bo"]);
+  expect(await rows(tom.token)).toEqual(["Invented Ada", "Invented Bo"]);
+
   expect(
-    await admin.assignCoach(tom.credential, {
+    await admin.setCoaches(tom.credential, {
       learnerId: ada.id,
-      coach: tomHash,
+      coaches: [shiHash],
     }),
   ).toEqual({ kind: "ready" });
-  expect(await rows(shi.token)).toEqual([]);
-  expect(await rows(tom.token)).toEqual(["Invented Ada", "Invented Bo"]);
-  const assigned = await admin.learnerCoach(tom.credential, ada.id);
-  expect(assigned.kind === "ready" && assigned.value.coach).toBe(tomHash);
+  expect(
+    await admin.setCoaches(tom.credential, {
+      learnerId: bo.id,
+      coaches: [],
+    }),
+  ).toEqual({ kind: "ready" });
+  expect(await rows(shi.token)).toEqual(["Invented Ada"]);
+  expect(await rows(tom.token)).toEqual([]);
+  // Saving the same coaches again changes and records nothing.
+  expect(
+    await admin.setCoaches(tom.credential, {
+      learnerId: bo.id,
+      coaches: [],
+    }),
+  ).toEqual({ kind: "ready" });
+  expect(
+    await admin.setCoaches(tom.credential, {
+      learnerId: bo.id,
+      coaches: [tomHash, shiHash],
+    }),
+  ).toEqual({ kind: "ready" });
+  expect(await rows(tom.token)).toEqual(["Invented Bo"]);
+  const assigned = await admin.learnerCoaches(tom.credential, ada.id);
+  expect(assigned.kind === "ready" && assigned.value.assigned).toEqual([
+    shiHash,
+  ]);
 
-  // Only coach-role holders and real learners can be linked.
+  // Only coach-role holders and real learners can be linked; a refusal changes nothing.
   const learner = await fixture("member@example.test");
   expect(
-    await admin.assignCoach(tom.credential, {
+    await admin.setCoaches(tom.credential, {
       learnerId: ada.id,
-      coach: hash("member@example.test"),
+      coaches: [tomHash, hash("member@example.test")],
     }),
   ).toEqual({ kind: "invalid" });
+  expect(await rows(tom.token)).toEqual(["Invented Bo"]);
   expect(
-    await admin.assignCoach(tom.credential, {
+    await admin.setCoaches(tom.credential, {
       learnerId: "00000000-0000-4000-8000-000000000000",
-      coach: tomHash,
+      coaches: [tomHash],
     }),
   ).toEqual({ kind: "not-found" });
-  expect((await admin.learnerCoach(learner.token, ada.id)).kind).toBe("denied");
+  expect((await admin.learnerCoaches(learner.token, ada.id)).kind).toBe(
+    "denied",
+  );
 
-  // Clearing, then removing a coach role, drops that coach's learners.
-  expect(
-    await admin.assignCoach(tom.credential, { learnerId: bo.id, coach: null }),
-  ).toEqual({ kind: "ready" });
-  expect(
-    await admin.assignCoach(tom.credential, { learnerId: bo.id, coach: null }),
-  ).toEqual({ kind: "ready" });
+  // DEFCOACH-05: removing a coach role drops that coach's learners.
   expect(
     await admin.remove(tom.credential, { emailHash: tomHash, role: "coach" }),
   ).toEqual({ kind: "ready" });
-  expect((await pool.query("SELECT 1 FROM coach_assignments")).rowCount).toBe(
-    0,
-  );
+  expect(
+    (
+      await pool.query(
+        "SELECT 1 FROM coach_assignments WHERE coach_email_hash=$1",
+        [tomHash],
+      )
+    ).rowCount,
+  ).toBe(0);
   expect(await rows(tom.token)).toBe("denied");
   expect(await events()).toEqual([
-    { action: "assigned", role: null },
-    { action: "assigned", role: null },
-    { action: "assigned", role: null },
     { action: "cleared", role: null },
+    { action: "cleared", role: null },
+    { action: "cleared", role: null },
+    { action: "assigned", role: null },
+    { action: "assigned", role: null },
     { action: "removed", role: "coach" },
   ]);
+});
+
+it("DEFCOACH-02/03/05 default coaches reach existing and new learners once", async () => {
+  const shiHash = hash("shi@deepnative.io"),
+    tomHash = hash("tom@deepnative.io");
+  const coachesOf = async (id: string) =>
+    (
+      await pool.query<{ coach: string; by: string | null }>(
+        "SELECT coach_email_hash AS coach,assigned_by AS by FROM coach_assignments WHERE learner_id=$1 ORDER BY 1",
+        [id],
+      )
+    ).rows;
+  expect(
+    (await pool.query("SELECT email_hash FROM default_coaches ORDER BY 1"))
+      .rows,
+  ).toEqual([shiHash, tomHash].sort().map((email_hash) => ({ email_hash })));
+  const ada = await fixture("ada@example.test");
+  expect(await coachesOf(ada.id)).toEqual(
+    [shiHash, tomHash].sort().map((coach) => ({ coach, by: null })),
+  );
+  // A removed default assignment stays removed when the app restarts.
+  await pool.query(
+    "DELETE FROM coach_assignments WHERE learner_id=$1 AND coach_email_hash=$2",
+    [ada.id, tomHash],
+  );
+  await migrate(pool);
+  expect(await coachesOf(ada.id)).toEqual([{ coach: shiHash, by: null }]);
+  // The first run assigns every existing learner.
+  await pool.query("DELETE FROM schema_migrations WHERE version=97");
+  await migrate(pool);
+  expect(await coachesOf(ada.id)).toEqual(
+    [shiHash, tomHash].sort().map((coach) => ({ coach, by: null })),
+  );
+  // A default coach without the coach role is not assigned.
+  await pool.query(
+    "DELETE FROM account_roles WHERE email_hash=$1 AND role='coach'",
+    [tomHash],
+  );
+  const bo = await fixture("bo@example.test");
+  expect(await coachesOf(bo.id)).toEqual([{ coach: shiHash, by: null }]);
 });
