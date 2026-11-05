@@ -126,7 +126,7 @@ it("NOACCOUNT-03 tells newcomers they start on the home page, not by signing in"
   expect(main.indexOf("New here?")).toBeGreaterThan(-1);
   expect(main.indexOf("New here?")).toBeLessThan(main.indexOf("<form"));
   expect(main).toContain(
-    '<strong>New here?</strong> You don’t need to sign in first. <a class="button" href="/#your-path">Create an account</a>',
+    '<strong>New here?</strong> You don’t need to sign in first. <a class="button" href="/#your-path">Create account</a>',
   );
   expect(landing.text).toContain(
     '<a class="nav-create" href="/#your-path">Create account</a>',
