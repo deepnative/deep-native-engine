@@ -305,12 +305,16 @@ test("[L107] all three audiences receive only deliberate replies while exact-gra
       await form.getByRole("checkbox").check();
       await form.getByRole("button", { name: "Acknowledge request" }).click();
       await expect(
-        page.locator("dd").filter({ hasText: /^Acknowledged \d{4}-/ }),
+        page
+          .locator("dd")
+          .filter({ hasText: /^Acknowledged \w+ \d+, \d{4}, .+ UTC/ }),
       ).toBeVisible();
       await session(page, owner);
       await page.goto(`/support/${item.id}`);
       await expect(
-        page.locator("dd").filter({ hasText: /^Acknowledged \d{4}-/ }),
+        page
+          .locator("dd")
+          .filter({ hasText: /^Acknowledged \w+ \d+, \d{4}, .+ UTC/ }),
       ).toBeVisible();
       await expect(
         page.getByText("Open; no resolution recorded", { exact: true }),
@@ -364,7 +368,9 @@ test("[L108] all three audiences see independent resolution while terminal repla
         page.getByText("No separate acknowledgement recorded", { exact: true }),
       ).toBeVisible();
       await expect(
-        page.locator("dd").filter({ hasText: /^Resolved \d{4}-/ }),
+        page
+          .locator("dd")
+          .filter({ hasText: /^Resolved \w+ \d+, \d{4}, .+ UTC/ }),
       ).toBeVisible();
       const second = await intake(page, `${background} acknowledged`),
         secondGrant = await staff.grant(second.id);
@@ -374,16 +380,22 @@ test("[L108] all three audiences see independent resolution while terminal repla
       await ack.getByRole("checkbox").check();
       await ack.getByRole("button").click();
       await expect(
-        page.locator("dd").filter({ hasText: /^Acknowledged \d{4}-/ }),
+        page
+          .locator("dd")
+          .filter({ hasText: /^Acknowledged \w+ \d+, \d{4}, .+ UTC/ }),
       ).toBeVisible();
       await resolve(page);
       await session(page, owner);
       await page.goto(`/support/${second.id}`);
       await expect(
-        page.locator("dd").filter({ hasText: /^Acknowledged \d{4}-/ }),
+        page
+          .locator("dd")
+          .filter({ hasText: /^Acknowledged \w+ \d+, \d{4}, .+ UTC/ }),
       ).toBeVisible();
       await expect(
-        page.locator("dd").filter({ hasText: /^Resolved \d{4}-/ }),
+        page
+          .locator("dd")
+          .filter({ hasText: /^Resolved \w+ \d+, \d{4}, .+ UTC/ }),
       ).toBeVisible();
       expect((await support.revoke(staff.admin, grant)).kind).toBe("revoked");
       await session(page, staff.operator);

@@ -220,8 +220,9 @@ it("shows each immutable assignment submission separately from a later draft wit
     "/assignments/attempts/8f43dd18-6f38-4894-b348-ac0288dc15e3",
   ]);
   const html = privateProgressPage(items);
-  expect(html).toContain("2026-09-23T10:00:00Z");
-  expect(html).toContain("2026-09-24T10:00:00Z");
+  expect(html).toContain("September 23, 2026, 10:00 a.m. UTC");
+  expect(html).toContain("September 24, 2026, 10:00 a.m. UTC");
+  expect(html).toContain('datetime="2026-09-23T10:00:00.000Z"');
   expect(html).not.toContain(first);
   expect(html).not.toContain(second);
   expect(html).not.toContain("Private current draft");

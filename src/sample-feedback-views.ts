@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { randomUUID } from "node:crypto";
 import { escape, hidden, page } from "./views.ts";
 import type {
@@ -9,7 +10,7 @@ export const sampleFeedbackPath = (id: string, reviewer = false) =>
 const label =
   '<p class="eyebrow">PRIVATE SAMPLE FEEDBACK · NOT FORMAL ASSESSMENT</p><p>Reviewer account attribution does not verify human authorship. This feedback is not a qualification, score, paid review or promise of an outcome. Draft time observations are self-reported and unbilled. Reserved test-minute receipts separately show simulated consumption and returns; they are not money or a paid service.</p>';
 function published(row: SampleFeedbackRecord, assignment: boolean) {
-  return `<article><h2>${assignment ? "Published assignment feedback" : "Published sample feedback"}</h2><p>Reviewer reference ${escape(row.authorId)} · source version ${row.sourceRevision} · published ${escape(row.publishedAt!.toISOString())}</p>${row.criteria.map((c) => `<section><h3>${escape(c.label)}</h3><blockquote>${escape(c.quote)}</blockquote><p>${escape(c.comment)}</p></section>`).join("")}<p>Unbilled draft observation — preparation: ${observedMinutes(row.preparationMinutes)}; review: ${observedMinutes(row.reviewMinutes)}.</p>${row.clarification ? `<h3>Your clarification</h3><p>${escape(row.clarification)}</p>` : ""}${row.answer ? `<h3>Reviewer answer</h3><p>${escape(row.answer)}</p>` : ""}</article>`;
+  return `<article><h2>${assignment ? "Published assignment feedback" : "Published sample feedback"}</h2><p>Reviewer reference ${escape(row.authorId)} · source version ${row.sourceRevision} · published ${timeTag(row.publishedAt!)}</p>${row.criteria.map((c) => `<section><h3>${escape(c.label)}</h3><blockquote>${escape(c.quote)}</blockquote><p>${escape(c.comment)}</p></section>`).join("")}<p>Unbilled draft observation — preparation: ${observedMinutes(row.preparationMinutes)}; review: ${observedMinutes(row.reviewMinutes)}.</p>${row.clarification ? `<h3>Your clarification</h3><p>${escape(row.clarification)}</p>` : ""}${row.answer ? `<h3>Reviewer answer</h3><p>${escape(row.answer)}</p>` : ""}</article>`;
 }
 // Self-reported minutes, or that none were given.
 const observedMinutes = (value?: number | null) =>

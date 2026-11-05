@@ -153,7 +153,7 @@ it("lets the owner ask one clarification on published feedback", () => {
   expectUnverifiedAuthorship(html);
   expect(html).toContain("Reviewer reference invented-reviewer");
   expect(html).toContain(
-    "source version 1 · published 2026-10-03T12:00:00.000Z",
+    'source version 1 · published <time datetime="2026-10-03T12:00:00.000Z">October 3, 2026, 12:00 p.m. UTC</time>',
   );
   expect(html).toContain("Send clarification");
   expect(html).not.toContain("Send answer");

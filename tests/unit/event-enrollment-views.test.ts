@@ -61,8 +61,10 @@ it("requires deliberate invented-data enrollment and escapes text and hidden val
   expect(html).toContain('name="operation_id"');
   expect(html).toContain("Exact version 2");
   expect(html).toContain("America/Toronto");
-  expect(html).toContain("2030-11-03T05:30:00.000Z");
-  expect(html).toContain("2030-11-03T06:30:00.000Z");
+  expect(html).toContain('datetime="2030-11-03T05:30:00.000Z"');
+  expect(html).toContain('datetime="2030-11-03T06:30:00.000Z"');
+  expect(html).toContain("November 3, 2030, 5:30 a.m.");
+  expect(html).toContain("6:30 a.m. UTC");
   expect(html).toContain("&lt;script&gt;");
   expect(html).not.toContain(receipt.title);
   expect(html).not.toContain('value="csrf"<');
@@ -101,7 +103,7 @@ it("withdrawal targets the exact attempt and withdrawn receipts cannot reactivat
     "America/Toronto",
   );
   expect(withdrawn).toContain("This attempt cannot be reactivated");
-  expect(withdrawn).toContain("Withdrawn 2030-10-02T12:00:00.000Z");
+  expect(withdrawn).toContain("October 2, 2030, 12:00 p.m. UTC");
   expect(withdrawn).not.toContain("Withdraw registration</button>");
 });
 it("renders bounded history navigation and escaped uncertainty without automatic retry", () => {

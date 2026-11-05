@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import type {
@@ -47,7 +48,7 @@ export function eventCancellationReceipt(
 ) {
   return page(
     "Event cancellation receipt",
-    `<section class="reading">${notice}<h1>Event cancellation receipt</h1>${receipt ? `<h2>${escape(receipt.title)}</h2><dl><dt>Exact event/version</dt><dd>${escape(receipt.eventId)} / ${receipt.eventVersion}</dd><dt>Cancellation ID</dt><dd>${escape(receipt.id)}</dd><dt>Event cancelled (UTC)</dt><dd>${receipt.cancelledAt.toISOString()}</dd><dt>Original schedule (UTC)</dt><dd>${receipt.startsAt.toISOString()} to ${receipt.endsAt.toISOString()}</dd></dl><p role="status">New registrations are closed. Members retain their owned registration receipts and may separately withdraw them.</p>` : `<p role="status">No retained cancellation is confirmed by this inspection. This is not a guarantee that an earlier uncertain request cannot still complete. Nothing was created or reversed.</p>`}${key ? `<p>Original submission key: ${escape(key)}</p>` : ""}${inspectForm(csrf, scope, key)}${navigation}</section>`,
+    `<section class="reading">${notice}<h1>Event cancellation receipt</h1>${receipt ? `<h2>${escape(receipt.title)}</h2><dl><dt>Exact event/version</dt><dd>${escape(receipt.eventId)} / ${receipt.eventVersion}</dd><dt>Cancellation ID</dt><dd>${escape(receipt.id)}</dd><dt>Event cancelled (UTC)</dt><dd>${timeTag(receipt.cancelledAt)}</dd><dt>Original schedule (UTC)</dt><dd>${timeTag(receipt.startsAt)} to ${timeTag(receipt.endsAt)}</dd></dl><p role="status">New registrations are closed. Members retain their owned registration receipts and may separately withdraw them.</p>` : `<p role="status">No retained cancellation is confirmed by this inspection. This is not a guarantee that an earlier uncertain request cannot still complete. Nothing was created or reversed.</p>`}${key ? `<p>Original submission key: ${escape(key)}</p>` : ""}${inspectForm(csrf, scope, key)}${navigation}</section>`,
   );
 }
 export function eventCancellationNotice(

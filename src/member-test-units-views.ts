@@ -1,4 +1,5 @@
-import { escape, page } from "./views.ts";
+import { timeTag } from "./display-time.ts";
+import { page } from "./views.ts";
 import type { MemberTestUnitSnapshot } from "./member-test-units.ts";
 
 const names = {
@@ -8,10 +9,7 @@ const names = {
   mock_sessions: "Mock sessions",
   study_requests: "Study requests",
 };
-function time(value: Date) {
-  const text = escape(value.toISOString());
-  return `<time datetime="${text}">${text}</time>`;
-}
+const time = (value: Date) => timeTag(value);
 export function memberTestUnitsPage(
   value: MemberTestUnitSnapshot,
   fixtureReader = false,
