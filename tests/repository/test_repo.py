@@ -1184,9 +1184,25 @@ class AzureReleasePreservation(unittest.TestCase):
         before = r.env_values(app['properties']['template']['containers'][0])
         after = r.env_values(r.prepare(app, 'b'*40)['properties']['template']['containers'][0])
         self.assertEqual({k: after[k] for k in released}, released)
-        for key in ('DNE_RELEASE_REVISION', *released): before.pop(key, None); after.pop(key)
+        for key in ('DNE_RELEASE_REVISION', *released, *r.FEATURES): before.pop(key, None); after.pop(key)
         self.assertEqual(before, after, 'Invoice settings must not change any other app setting.')
         self.assertEqual(after['DNE_APP_MODE'], 'demo')
+
+    def test_contrib01_release_enables_member_contribution_sharing(self):
+        # CONTRIB-HOSTED-01 (#40, 4 Nov 2026): owner-chosen review contact on #97 lets
+        # hosted members share accepted contributions with signed-in members.
+        r = self.release()
+        self.assertEqual(r.FEATURES, {'DNE_MEMBER_CONTRIBUTIONS': 'enabled'})
+        cutover = r.env_values(r.prepare(self.app(), 'a'*40, self.receipt())['properties']['template']['containers'][0])
+        self.assertEqual(cutover['DNE_MEMBER_CONTRIBUTIONS'], 'enabled')
+        app = self.durable()
+        container = app['properties']['template']['containers'][0]
+        container['env'] = [v for v in container['env'] if v['name'] != 'DNE_MEMBER_CONTRIBUTIONS'] + [{'name': 'DNE_MEMBER_CONTRIBUTIONS', 'value': 'disabled'}]
+        released = r.prepare(app, 'b'*40)['properties']['template']['containers'][0]
+        names = [v['name'] for v in released['env']]
+        self.assertEqual(names.count('DNE_MEMBER_CONTRIBUTIONS'), 1)
+        self.assertEqual(r.env_values(released)['DNE_MEMBER_CONTRIBUTIONS'], 'enabled')
+        self.assertRegex((SOURCE / 'infra/app.tf').read_text(), r'DNE_MEMBER_CONTRIBUTIONS +=  *"enabled"')
 
     def test_azinv02_release_replaces_stale_invoice_values_exactly_once(self):
         r = self.release()
