@@ -10,6 +10,8 @@ export interface MemberEmailSender {
 }
 /** Notices to unused addresses, per address and in all, in any hour. */
 const NOTICE_LIMITS = { perAddress: 1, total: 20 };
+// NOTICE-RETAIN-01: long enough for a support lookup, then the hash is gone.
+const NOTICE_RETENTION = "30 days";
 export interface MemberEmailAccess {
   signOut(
     memberToken: string,
@@ -302,6 +304,9 @@ export function memberEmailAccess(
         recent.total >= NOTICE_LIMITS.total
       )
         return null;
+      await client.query(
+        `DELETE FROM member_email_notices WHERE created_at<clock_timestamp()-INTERVAL '${NOTICE_RETENTION}'`,
+      );
       return (
         await client.query<{ id: string }>(
           "INSERT INTO member_email_notices(email_hash) VALUES($1) RETURNING id",

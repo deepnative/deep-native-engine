@@ -26,7 +26,7 @@ const site: SiteDiagnosis = {
   verifiedEmails: 4,
   unverifiedEmails: 3,
   passwords: 5,
-  day: { attach: 2, signIn: 6, used: 1, notices: 3 },
+  day: { attach: 2, signIn: 6, used: 1, notices: 3, lookups: 4 },
   latestMigration: 93,
 };
 const found: EmailDiagnosis = {
@@ -84,6 +84,8 @@ it("DIAG-02 shows site counts and an email lookup form to an administrator", asy
     '<th scope="row">Accounts</th><td>12</td>',
     '<th scope="row">Sign-in links, last 24 hours</th><td>6</td>',
     '<th scope="row">No-account notices, last 24 hours</th><td>3</td>',
+    '<th scope="row">Email lookups here, last 24 hours</th><td>4</td>',
+    "Each email lookup is recorded.",
     '<th scope="row">Latest database migration</th><td>93</td>',
     'method="post" action="/operator/diagnostics/email"',
   ])

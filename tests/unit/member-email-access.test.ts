@@ -12,6 +12,7 @@ import { Pool } from "pg";
 import {
   memberEmailAccess,
   normalizedEmail,
+  emailHash,
 } from "../../src/member-email-access.ts";
 import { hash, migrate, store } from "../../src/store.ts";
 
@@ -722,6 +723,26 @@ describe("no-account notice (#665)", () => {
   });
   const outcomes = (info: { mock: { calls: unknown[][] } }) =>
     info.mock.calls.map((call) => JSON.parse(String(call[0])).outcome);
+
+  it("NOTICE-RETAIN-01 deletes notices older than 30 days when a new notice is recorded", async () => {
+    await noticing.requestSignIn("old@example.com");
+    await noticing.requestSignIn("recent@example.com");
+    await pool.query(
+      "UPDATE member_email_notices SET created_at=clock_timestamp()-INTERVAL '31 days' WHERE email_hash=$1",
+      [emailHash("old@example.com")],
+    );
+    await pool.query(
+      "UPDATE member_email_notices SET created_at=clock_timestamp()-INTERVAL '29 days' WHERE email_hash=$1",
+      [emailHash("recent@example.com")],
+    );
+    await noticing.requestSignIn("new@example.com");
+    const kept = await pool.query<{ email_hash: string }>(
+      "SELECT email_hash FROM member_email_notices",
+    );
+    expect(kept.rows.map((row) => row.email_hash).sort()).toEqual(
+      ["recent@example.com", "new@example.com"].map(emailHash).sort(),
+    );
+  });
 
   it("NOACCOUNT-01 tells an unused address how to start, and sends linked addresses their link", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
