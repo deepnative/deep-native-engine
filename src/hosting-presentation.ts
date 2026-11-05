@@ -20,6 +20,18 @@ export function demoBanner(): string {
     ? '<link rel="stylesheet" href="/assets/demo-banner.css"><p class="demo-banner" role="note"><strong>Demo site</strong> · Test data only. Invoices are samples and nothing is payable.</p>'
     : "";
 }
+/**
+ * #717 Event text is versioned content, and titles are also stored in saved
+ * registrations, so hosted pages reword it when shown and the records stay as
+ * they are. Text with no entry here reads the same on every site.
+ */
+const HOSTED_EVENT_TEXT = new Map([
+  ["Read a synthetic example", "Read an invented example"],
+  ["Local event registration rehearsal", "Event registration practice"],
+]);
+export function eventText(text: string): string {
+  return hostingText(text, HOSTED_EVENT_TEXT.get(text) ?? text);
+}
 export function privateRecordsLabel(): string {
   return hostingText(
     "Download private preview records",
