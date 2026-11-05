@@ -1,3 +1,4 @@
+import { readableRange } from "../../src/display-time.ts";
 import { it, expect } from "vitest";
 import type { OwnedEvidence } from "../../src/evidence.ts";
 import {
@@ -386,7 +387,8 @@ it("shows versioned synthetic event discovery and truthful local time without fi
   expect(matched).toContain("Events matched to your saved goal or interests");
   expect(matched).toContain("/events/everyday-ai-preview/2");
   expect(matched).toContain("GMT-04:00");
-  expect(matched).toContain(`UTC ${event.startsAt}`);
+  expect(matched).toContain(readableRange(event.startsAt, event.endsAt));
+  expect(matched).toContain(`datetime="${event.startsAt}"`);
   expect(matched).toContain("Synthetic preview; enrollment unavailable");
   expect(matched).toContain("Access and cost: unresolved");
   expect(matched).toContain("Expert coverage: unresolved");
@@ -458,7 +460,8 @@ it("offers confirmed exact-version practice withdrawal and redacts the retained 
     ],
     "csrf",
   );
-  expect(withdrawn).toContain("Withdrawn 2026-09-28T12:00:00.000Z");
+  expect(withdrawn).toContain("Withdrawn <time");
+  expect(withdrawn).toContain("September 28, 2026, 12:00 p.m. UTC");
   expect(withdrawn).toContain("Source unavailable");
   expect(withdrawn).not.toContain("private invented response");
   expect(withdrawn).not.toContain("Your saved words");
@@ -626,7 +629,7 @@ it("keeps optional availability labelled, escaped and timezone-explicit", () => 
   const shown = availabilityPage([slot], "America/Toronto");
   expect(shown).toContain("GMT-04:00");
   expect(shown).toContain("GMT-05:00");
-  expect(shown).toContain("UTC 2026-11-01T05:30:00.000Z");
+  expect(shown).toContain(readableRange(slot.startsAt, slot.endsAt));
   expect(shown).toContain("&lt;script&gt;");
   expect(shown).not.toContain("<script>");
   expect(shown).not.toContain("Book now");

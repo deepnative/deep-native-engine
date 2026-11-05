@@ -88,7 +88,7 @@ test("[L82] three backgrounds discover synthetic events by keyboard without enro
     await expect(page.getByText("Access and cost: unresolved")).toBeVisible();
     await expect(page.getByText("Expert coverage: unresolved")).toBeVisible();
     await expect(page.getByText("Recording: unresolved")).toBeVisible();
-    await expect(page.getByText(/UTC 2030-11-/)).toBeVisible();
+    await expect(page.getByText(/November \d+, 2030, .+ UTC/)).toBeVisible();
     await expect(
       page.getByRole("button", { name: /enroll|book|reserve|pay/i }),
     ).toHaveCount(0);

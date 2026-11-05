@@ -1,5 +1,6 @@
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, type Page } from "@playwright/test";
+import { readableTime } from "../../src/display-time.ts";
 import { randomBytes } from "node:crypto";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { store } from "../../src/store.ts";
@@ -110,7 +111,7 @@ for (const [index, [background, goal]] of audiences.entries())
       ).trim();
       expect(displayedStaffId).toBe(staffId);
       await expect(
-        page.getByText(expires.toISOString(), { exact: true }),
+        page.getByText(readableTime(expires), { exact: true }),
       ).toBeVisible();
       await signIn(page, admin);
       await page

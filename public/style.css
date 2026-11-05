@@ -212,6 +212,9 @@
 body {
   min-height: 100vh;
   margin: 0;
+  /* Split a word only when it is wider than its whole line. Unlike "anywhere",
+     this also keeps columns from shrinking until ordinary words split. */
+  overflow-wrap: break-word;
   background: var(--paper);
   color: var(--ink);
   accent-color: var(--accent);
@@ -490,6 +493,11 @@ input[type="checkbox"] {
   line-height: 1.55;
   font-weight: 450;
 }
+/* A flex item will not shrink below its longest word without this, so a long
+   unbroken title would widen the page instead of wrapping. */
+.check > :not(input) {
+  min-width: 0;
+}
 .check input {
   width: 18px;
   height: 18px;
@@ -592,7 +600,7 @@ progress {
   margin: 8px 0;
 }
 .assignment-preparation li {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .assignment-preparation ul ul {
   margin-top: 12px;
@@ -784,7 +792,7 @@ progress {
 }
 .saved-answer {
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   padding: 12px;
   border-left: 2px solid var(--line);
   font-size: 16px;
@@ -920,7 +928,7 @@ footer span {
 }
 .content-text {
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font: inherit;
   line-height: 1.65;
 }
@@ -934,12 +942,12 @@ footer span {
 }
 .circle-discussion-nav a {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* Exact-source feedback stays readable without expanding a narrow viewport. */
 .sample-feedback {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* Long allowed sample titles stay readable through queueing and discovery. */
@@ -950,7 +958,7 @@ footer span {
 
 /* Reviewed source URLs and hashes must not expand the narrow reader viewport. */
 .reading dd {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* PAGEFRAME-01: every page shares one frame, so the header stays put between pages. */
@@ -1231,7 +1239,7 @@ footer {
 .invoice-controls {
   max-width: 760px;
   margin-inline: auto;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .invoice-workspace h1,
 .invoice-document h1 {
@@ -1513,7 +1521,7 @@ footer {
 }
 
 .member-display-name {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 /* The learner table needs the page width, so references stay readable. */
 .portal-page.administrator-console {
@@ -1565,7 +1573,6 @@ footer {
 }
 .role-holders td:first-child {
   min-width: 0;
-  overflow-wrap: anywhere;
 }
 .role-list {
   list-style: none;
@@ -1623,7 +1630,7 @@ footer {
   margin: 42px 0 70px;
 }
 .account-page code {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .account-links {
   display: flex;
@@ -1795,7 +1802,7 @@ footer {
 .portal-page {
   max-width: none;
   margin: 42px 0 70px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .portal-intro h1 {
   font-size: clamp(34px, 5vw, 52px);
@@ -1827,7 +1834,7 @@ footer {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .portal-card h2 {
   font-size: 22px;
@@ -1861,7 +1868,7 @@ footer {
 .portal-reference code,
 .portal-page code,
 .portal-workspace code {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .portal-columns {
   display: grid;
@@ -1931,7 +1938,7 @@ footer {
   margin-top: 0;
 }
 .portal-workspace {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   padding-block: 12px 56px;
 }
 .portal-workspace > .portal-actions {
@@ -2091,6 +2098,8 @@ footer {
   border-bottom: 1px solid var(--line, #d9dee8);
   text-align: left;
   vertical-align: top;
+}
+.diagnostics-table td {
   overflow-wrap: anywhere;
 }
 .diagnostics-table th {
@@ -2142,4 +2151,19 @@ p:has(> a.button) {
 }
 .learning-grid {
   margin-bottom: 24px;
+}
+
+/* Short codes and dates such as FND-003 never split at their hyphen. */
+.no-break {
+  white-space: nowrap;
+}
+
+/* A table cannot shrink below its longest word, so a long reference inside one
+   alone may break anywhere. Ordinary words and buttons stay whole. */
+td code {
+  overflow-wrap: anywhere;
+}
+/* Grid columns may be narrower than a long word, which then wraps inside them. */
+.portal-columns > * {
+  min-width: 0;
 }

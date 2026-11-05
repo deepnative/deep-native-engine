@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { escape, page } from "./views.ts";
 import type { LocalAiHoldItem } from "./local-ai-hold-inspection.ts";
 const base = "/operator/local-ai-holds";
@@ -10,7 +11,7 @@ function row(value: LocalAiHoldItem) {
       : value.state === "expired-claim"
         ? "Expired claim: outcome unconfirmed"
         : "No longer an unconfirmed started hold";
-  return `<article><h2>${escape(state)}</h2><dl><dt>Local job reference</dt><dd>${escape(value.jobId)}</dd><dt>Stored status</dt><dd>${escape(value.status)}</dd><dt>Test request unit</dt><dd>${escape(value.unitState)}</dd><dt>Created</dt><dd>${escape(value.createdAt)}</dd><dt>Last recorded update</dt><dd>${escape(value.updatedAt)}</dd><dt>Recorded claim deadline</dt><dd>${value.leaseUntil === null ? "None retained" : escape(value.leaseUntil)}</dd><dt>Test policy</dt><dd>${escape(value.policy)}</dd><dt>Prompt contract</dt><dd>${escape(value.promptTemplateVersion)}</dd><dt>Model contract</dt><dd>${escape(value.modelContractVersion)}</dd></dl><p>Elapsed time does not establish execution, failure or permission to redispatch. <a href="${base}/${encodeURIComponent(value.jobId)}">Read a fresh assigned snapshot</a>.</p></article>`;
+  return `<article><h2>${escape(state)}</h2><dl><dt>Local job reference</dt><dd>${escape(value.jobId)}</dd><dt>Stored status</dt><dd>${escape(value.status)}</dd><dt>Test request unit</dt><dd>${escape(value.unitState)}</dd><dt>Created</dt><dd>${timeTag(value.createdAt)}</dd><dt>Last recorded update</dt><dd>${timeTag(value.updatedAt)}</dd><dt>Recorded claim deadline</dt><dd>${value.leaseUntil === null ? "None retained" : escape(value.leaseUntil)}</dd><dt>Test policy</dt><dd>${escape(value.policy)}</dd><dt>Prompt contract</dt><dd>${escape(value.promptTemplateVersion)}</dd><dt>Model contract</dt><dd>${escape(value.modelContractVersion)}</dd></dl><p>Elapsed time does not establish execution, failure or permission to redispatch. <a href="${base}/${encodeURIComponent(value.jobId)}">Read a fresh assigned snapshot</a>.</p></article>`;
 }
 export function localAiHoldListPage(
   items: LocalAiHoldItem[],

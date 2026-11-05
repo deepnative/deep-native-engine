@@ -1,3 +1,4 @@
+import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import {
@@ -35,7 +36,7 @@ function revokeForm(
   return `<form method="post" action="${base}/revoke">${hidden(escape(csrf))}${field("grantId", input.grantId)}${field("operationId", input.operationId)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I confirm revoking this exact permission only.</span></label><button type="submit">${retry ? "Retry this exact revocation" : "Revoke this exact permission"}</button></form>`;
 }
 function rowDetails(row: ReviewGrantRow) {
-  return `<dl><dt>Permission reference</dt><dd data-review-time-grant-reference>${escape(row.grantId)}</dd><dt>Allocation reference</dt><dd>${escape(row.allocationId)}</dd><dt>Reviewer reference</dt><dd>${escape(row.reviewerId)}</dd><dt>Source version</dt><dd>${row.sourceRevision}</dd><dt>Allocation state</dt><dd>${escape(row.allocationState)}</dd><dt>Reserved ceiling</dt><dd>${row.ceiling}</dd><dt>Observed permission state</dt><dd data-review-time-grant-state>${escape(row.state)}</dd><dt>Starts at (UTC)</dt><dd>${escape(row.startsAt)}</dd><dt>Expires at (UTC)</dt><dd>${escape(row.expiresAt)}</dd><dt>Created at (UTC)</dt><dd>${escape(row.createdAt)}</dd>${row.revokedAt === null ? "" : `<dt>Revoked at (UTC)</dt><dd>${escape(row.revokedAt)}</dd>`}</dl>${row.sourceAvailable ? "" : "<p>The source is unavailable. This retained permission metadata does not restore source access.</p>"}`;
+  return `<dl><dt>Permission reference</dt><dd data-review-time-grant-reference>${escape(row.grantId)}</dd><dt>Allocation reference</dt><dd>${escape(row.allocationId)}</dd><dt>Reviewer reference</dt><dd>${escape(row.reviewerId)}</dd><dt>Source version</dt><dd>${row.sourceRevision}</dd><dt>Allocation state</dt><dd>${escape(row.allocationState)}</dd><dt>Reserved ceiling</dt><dd>${row.ceiling}</dd><dt>Observed permission state</dt><dd data-review-time-grant-state>${escape(row.state)}</dd><dt>Starts at (UTC)</dt><dd>${timeTag(row.startsAt)}</dd><dt>Expires at (UTC)</dt><dd>${timeTag(row.expiresAt)}</dd><dt>Created at (UTC)</dt><dd>${timeTag(row.createdAt)}</dd>${row.revokedAt === null ? "" : `<dt>Revoked at (UTC)</dt><dd>${timeTag(row.revokedAt)}</dd>`}</dl>${row.sourceAvailable ? "" : "<p>The source is unavailable. This retained permission metadata does not restore source access.</p>"}`;
 }
 export function reviewGrantForm(csrf: string, creationEnabled: boolean) {
   return page(
@@ -50,7 +51,7 @@ export function reviewGrantCheck(
 ) {
   return page(
     "Confirm review-minute permission",
-    `<section class="reading">${notice}<h1>Confirm review-minute permission</h1><p>Checking references created no permission or allowance change.</p><dl><dt>Source version</dt><dd>${check.sourceRevision}</dd><dt>Allocation state</dt><dd>${escape(check.allocationState)}</dd><dt>Reserved ceiling</dt><dd>${check.ceiling}</dd><dt>Maximum current authority expiry (UTC)</dt><dd>${escape(check.authorityExpiresAt)}</dd></dl>${grantForm(csrf, { allocationId: check.allocationId, reviewerId: check.reviewerId, operationId, startsAt: "", expiresAt: "" }, false)}${navigation}</section>`,
+    `<section class="reading">${notice}<h1>Confirm review-minute permission</h1><p>Checking references created no permission or allowance change.</p><dl><dt>Source version</dt><dd>${check.sourceRevision}</dd><dt>Allocation state</dt><dd>${escape(check.allocationState)}</dd><dt>Reserved ceiling</dt><dd>${check.ceiling}</dd><dt>Maximum current authority expiry (UTC)</dt><dd>${timeTag(check.authorityExpiresAt)}</dd></dl>${grantForm(csrf, { allocationId: check.allocationId, reviewerId: check.reviewerId, operationId, startsAt: "", expiresAt: "" }, false)}${navigation}</section>`,
   );
 }
 export function reviewGrantReceipt(
