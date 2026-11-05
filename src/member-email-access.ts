@@ -96,20 +96,23 @@ export async function signOutMember(
   acknowledgeAccessLoss = false,
 ): ReturnType<MemberEmailAccess["signOut"]> {
   let change: { previous: string; account: string } | undefined;
-  // The next request looks this browser up again, whatever happened here.
+  let result: Awaited<ReturnType<MemberEmailAccess["signOut"]>>;
   try {
-    const result = await signOutTransaction(
+    result = await signOutTransaction(
       pool,
       memberToken,
       acknowledgeAccessLoss,
       (replacement) => (change = replacement),
     );
-    // The account's other browsers stay signed in under its new value.
-    if (change) replaced(change.previous, change.account);
-    return result;
-  } finally {
+  } catch (error) {
+    // The outcome is uncertain; the next request looks this browser up again.
     forget(cookieHash(memberToken));
+    throw error;
   }
+  if (result === "signed_out") forget(cookieHash(memberToken));
+  // The account's other browsers stay signed in under its new value.
+  if (change) replaced(change.previous, change.account);
+  return result;
 }
 
 function signOutTransaction(
