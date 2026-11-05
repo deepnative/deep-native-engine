@@ -10,7 +10,8 @@ export interface NarrowReadability {
 /**
  * Measures the laid-out page rather than its markup, so it reports what a
  * reader sees: a raw timestamp, a short code or date split across lines, a word
- * split although it would fit on a line of its own, or sideways scrolling.
+ * split although it would fit on a line of its own, or sideways scrolling. A long
+ * reference in a code element may wrap wherever it must.
  */
 export function measureNarrowReadability(page: Page) {
   return page.evaluate((): NarrowReadability => {
@@ -23,6 +24,13 @@ export function measureNarrowReadability(page: Page) {
       document.body,
       NodeFilter.SHOW_TEXT,
     );
+    const letter = /[\p{L}\p{N}]/u;
+    const blockOf = (start: Element) => {
+      let block = start;
+      while (getComputedStyle(block).display === "inline")
+        block = block.parentElement!;
+      return block;
+    };
     const top = (node: Text, index: number) => {
       const range = document.createRange();
       range.setStart(node, index);
@@ -51,25 +59,36 @@ export function measureNarrowReadability(page: Page) {
           splitCodes.push(word);
           continue;
         }
-        // Text wider than its whole line has to break somewhere.
-        const width = rects.reduce((sum, rect) => sum + rect!.width, 0);
-        let block: Element = parent;
-        while (getComputedStyle(block).display === "inline")
-          block = block.parentElement!;
+        if (preformatted || parent.closest("code")) continue;
+        const block = blockOf(parent);
         const style = getComputedStyle(block);
         const room =
           block.clientWidth -
           parseFloat(style.paddingLeft) -
           parseFloat(style.paddingRight);
-        if (width >= room || preformatted) continue;
+        // Only a run wider than its whole line, between the natural break
+        // points of a URL, has to split inside a word.
+        let segmentStart = 0;
         for (let offset = 1; offset < word.length; offset += 1) {
+          if (!letter.test(word[offset - 1]!)) segmentStart = offset;
           const before = rects[offset - 1]!,
             after = rects[offset]!;
           if (
-            Math.round(before.top) !== Math.round(after.top) &&
-            /[\p{L}\p{N}]/u.test(word[offset - 1]!) &&
-            /[\p{L}\p{N}]/u.test(word[offset]!)
-          ) {
+            Math.round(before.top) === Math.round(after.top) ||
+            !letter.test(word[offset - 1]!) ||
+            !letter.test(word[offset]!)
+          )
+            continue;
+          let segmentEnd = offset;
+          while (
+            segmentEnd + 1 < word.length &&
+            letter.test(word[segmentEnd + 1]!)
+          )
+            segmentEnd += 1;
+          const width = rects
+            .slice(segmentStart, segmentEnd + 1)
+            .reduce((sum, rect) => sum + rect!.width, 0);
+          if (width < room) {
             midWordBreaks.push(word);
             break;
           }

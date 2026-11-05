@@ -112,10 +112,17 @@ export function noBreak(html: string) {
   return `<span class="no-break">${html}</span>`;
 }
 
-/** Applies noBreak to short codes and dates inside already-escaped free text. */
-export function keepCodesTogether(html: string) {
-  return html.replace(
-    /(?<![\w/.-])(?:[A-Z]{2,5}-\d{2,4}|\d{4}-\d{2}-\d{2})(?![\w/-])/g,
-    noBreak,
-  );
+/**
+ * For already-escaped free text: keeps short codes and dates on one line and
+ * lets a long URL wrap after a slash rather than inside a word.
+ */
+export function readableText(html: string) {
+  return html
+    .replace(
+      /(?<![\w/.-])(?:[A-Z]{2,5}-\d{2,4}|\d{4}-\d{2}-\d{2})(?![\w/-])/g,
+      noBreak,
+    )
+    .replace(/https?:\/\/[^\s<]+/g, (url) =>
+      url.replace(/(?<=[^:/]\/)(?=[^\s/])/g, "<wbr>"),
+    );
 }

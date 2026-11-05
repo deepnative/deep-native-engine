@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import {
-  keepCodesTogether,
+  readableText,
   noBreak,
   rangeTag,
   readableDay,
@@ -103,17 +103,16 @@ it("READABLE-13 keeps both exact ends of a range", () => {
   expect(rangeTag("nope", end)).toBe("Time unavailable");
 });
 
-it("READABLE-08 keeps short codes and dates in free text on one line", () => {
+it("READABLE-08 keeps short codes and dates whole and wraps URLs at slashes", () => {
   expect(noBreak("FND-003")).toBe('<span class="no-break">FND-003</span>');
   expect(
-    keepCodesTogether("FND-002 and WF-001; reviewed 2026-10-27 by A&amp;B"),
+    readableText("FND-002 and WF-001; reviewed 2026-10-27 by A&amp;B"),
   ).toBe(
     '<span class="no-break">FND-002</span> and <span class="no-break">WF-001</span>; reviewed <span class="no-break">2026-10-27</span> by A&amp;B',
   );
-  // A long URL stays breakable, including the digits at its end.
-  const url = "https://example.test/articles/6654000-best-practices-WF-001x";
-  expect(keepCodesTogether(url)).toBe(url);
-  expect(keepCodesTogether("https://example.test/WF-001")).toBe(
-    "https://example.test/WF-001",
-  );
+  // A URL wraps after a slash, and a code inside it is left alone.
+  expect(
+    readableText("see https://example.test/articles/665-best/WF-001 ok"),
+  ).toBe("see https://example.test/<wbr>articles/<wbr>665-best/<wbr>WF-001 ok");
+  expect(readableText("https://example.test/")).toBe("https://example.test/");
 });

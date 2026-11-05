@@ -99,11 +99,15 @@ test("[L294] READABLE-09..12 a phone reader sees readable dates, whole codes and
     .getByLabel("Private sample response")
     .fill("A small invented plan compared with the sample brief.");
   await page.getByLabel("I used only invented or sample information").check();
-  await page.getByRole("button", { name: /Save/ }).first().click();
+  await page.getByRole("button", { name: "Save private draft" }).click();
+  await expect(page.getByText("private draft saved")).toBeVisible();
+  await page.getByLabel("Submit this saved version locally").check();
   await page
-    .getByRole("button", { name: /Submit/ })
-    .first()
+    .getByRole("button", { name: "Submit saved version locally" })
     .click();
+  await expect(
+    page.getByText(/Assignment version 1 .* submitted locally/),
+  ).toBeVisible();
   await page.goto(attempt);
   await expect(page.locator("body")).toContainText(
     /\d{1,2}:\d{2} [ap]\.m\. UTC/,
