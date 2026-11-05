@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { app } from "../../src/app.ts";
 import { memberEmailAccess } from "../../src/member-email-access.ts";
+import { memberPasswordAccess } from "../../src/member-password-access.ts";
 import { migrate, store } from "../../src/store.ts";
 import { COOKIE } from "../../src/session.ts";
 import { workflowFeedbackStore } from "../../src/workflow-feedback.ts";
@@ -210,6 +211,59 @@ test("[L291] READWIDTH-01..03 reading pages use the page width and forms stay co
     await page.screenshot({
       path: `artifacts/reading-width-email-${test.info().project.name}.png`,
       fullPage: true,
+    });
+  } finally {
+    await closeLoopback(server);
+  }
+});
+
+test("[L293] SIGNUPCOPY-01 DEMOSITE-02 sign-up is honest about email and starter guidance shows the demo banner", async ({
+  page,
+}) => {
+  let origin = "http://127.0.0.1:0";
+  const server = await listenLoopback(
+    app(members, {
+      get origin() {
+        return origin;
+      },
+      secret: "synthetic-demo-signup-browser",
+      demoSite: true,
+      memberEmail: memberEmailAccess(pool, { async send() {} }, origin),
+      memberPassword: memberPasswordAccess(pool),
+    }),
+  );
+  const address = server.address();
+  if (!address || typeof address === "string") throw Error("No test listener");
+  origin = `http://127.0.0.1:${address.port}`;
+  try {
+    await page.goto(origin);
+    const signup = page.locator(".signup-fields");
+    await expect(signup).toContainText("Your email is your username");
+    await expect(signup).not.toContainText("No email is needed");
+    await expect(signup.getByLabel("Email address")).toHaveAttribute(
+      "required",
+      "",
+    );
+
+    const token = randomBytes(32).toString("hex");
+    await members.create(token, { background: "explorer", goal: "everyday" });
+    await page
+      .context()
+      .addCookies([{ name: COOKIE, value: token, url: origin }]);
+    await page.goto(`${origin}/lesson/guide`);
+    const banner = page.locator(".demo-banner");
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText("Demo site");
+    // The banner's own stylesheet applied, and it sits above the header.
+    await expect(banner).toHaveCSS("background-color", "rgb(255, 244, 214)");
+    expect((await banner.boundingBox())!.y).toBe(0);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: `artifacts/demo-banner-guidance-${test.info().project.name}.png`,
     });
   } finally {
     await closeLoopback(server);
