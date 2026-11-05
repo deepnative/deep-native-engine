@@ -476,3 +476,41 @@ it.each([
     });
   },
 );
+
+it("GAPS-04 staff pages link back to staff tools and the moderator's pages link to each other", async () => {
+  const f = fixture(),
+    deadline = performance.now() + 60000;
+  f.port.list.mockResolvedValue({
+    kind: "ready",
+    deadline,
+    entries: [],
+    next: null,
+  });
+  await withLoopback(f.app, async (server) => {
+    const get = async (path: string) =>
+      (
+        await call(server, {
+          method: "get",
+          path,
+          operation: "entry",
+        } as (typeof routes)[number])
+      ).text;
+    for (const path of [base, "/moderate/workflow-review-reference", read])
+      expect(await get(path)).toContain(
+        'href="/staff" class="button secondary">Your staff tools</a>',
+      );
+    expect(await get(read)).toContain(
+      'href="/moderate/workflow-review-reference" class="button secondary">My private workflow review reference</a>',
+    );
+    const note = await call(
+      server,
+      routes.find((r) => r.operation === "read")!,
+    );
+    expect(note.text).toContain(
+      `href="${read}" class="button secondary">My assigned private workflow reviews</a>`,
+    );
+    expect(note.text).toContain(
+      'href="/staff" class="button secondary">Your staff tools</a>',
+    );
+  });
+});
