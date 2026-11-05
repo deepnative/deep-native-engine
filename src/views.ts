@@ -1,4 +1,5 @@
 import {
+  databaseMoment,
   readableText,
   readableDay,
   readableRange,
@@ -55,6 +56,7 @@ import type { WorkflowBundle } from "./workflow-registry.ts";
 import type { WorkflowFeedback } from "./workflow-feedback.ts";
 import type { ManualObservation } from "./manual-observations.ts";
 import type { CircleListing } from "./circles.ts";
+import type { CircleActivity } from "./circle-discussion.ts";
 import type {
   AssignmentAttempt,
   AssignmentAttemptListItem,
@@ -1282,15 +1284,29 @@ export function errorPage(title: string, message: string) {
     `<section class="error-page"><p class="eyebrow">A SMALL PAUSE</p><h1>${escape(title)}</h1><p class="lead">${escape(message)}</p><a class="button" href="/learn">Return to your learning path</a></section>`,
   );
 }
+function circleReplySummary(
+  circle: string,
+  activity: CircleActivity | "unavailable" | undefined,
+) {
+  if (activity === "unavailable")
+    return `<p role="status">Replies to your questions can't be checked right now. Nothing has changed in your questions.</p>`;
+  if (!activity?.questions) return "";
+  const link = `<a href="/circles/${escape(circle)}/discussion/owned">See your questions</a>`;
+  if (!activity.replies)
+    return `<p role="status">No replies to your questions yet. ${link}</p>`;
+  return `<p role="status"><strong>${activity.replies} ${activity.replies === 1 ? "reply" : "replies"}</strong> to your questions · latest ${timeTag(databaseMoment(activity.latestReplyAt!))}. ${link}</p>`;
+}
+
 export function circlesPage(
   items: CircleListing[],
   goal: keyof typeof GOALS,
   csrf: string,
   discussionEnabled = false,
+  activity: ReadonlyMap<string, CircleActivity | "unavailable"> = new Map(),
 ) {
   return page(
     hostingText("Local learning circles", "Learning circles"),
-    `<section class="lesson-heading"><p class="eyebrow">${hostingText("PRIVATE LOCAL PREVIEW", "PRIVATE LEARNING")} · NO LIVE COMMUNITY</p><h1>Explore learning circles</h1><p class="lead">Join a small, invented topic space to try the membership controls. ${discussionEnabled ? "Invented discussion is available only after a separate circle sharing choice. No staffed moderation, clinic, expert or recording is available." : "New discussion sharing is paused. No clinic, expert, recording or shared member evidence is enabled."} Your name and private learning work are not shown to other members.</p><p>Joining is optional and grants no paid service or staff role. You can leave at any time; only your own membership state and aggregate seats appear here.</p></section><section class="reading" aria-labelledby="circle-moderation-contact"><h2 id="circle-moderation-contact">Circle moderation contact</h2><p>For circle moderation, email <a href="mailto:info@deepnative.io">info@deepnative.io</a>. No response time or backup coverage is promised.</p><p>Use the report action on a specific shared contribution to save an in-app report. Emailing does not submit that report. Keep private assignments and evidence out of email.</p></section><section aria-label="Available circles"><ul>${items.map((item) => `<li><h2>${escape(item.title)}</h2><p>${escape(item.description)}</p><p>${item.goal === goal ? "Matches your current goal" : "Open to explore"} · ${escape(GOALS[item.goal])} · ${item.seatsRemaining} of ${item.capacity} seats available</p>${item.joined ? `<p role="status">You joined this ${hostingText("local ", "")}circle.</p>${discussionEnabled ? `<p><a href="/circles/${escape(item.id)}/discussion/choice">Choose invented discussion sharing</a> · <a href="/circles/${escape(item.id)}/discussion">Read circle questions</a></p>` : ""}<p><a href="/circles/${escape(item.id)}/discussion/owned">Your retained circle contributions</a></p><form method="post" action="/circles/${escape(item.id)}/leave">${hidden(csrf)}<button class="secondary" type="submit">Leave ${escape(item.title)}</button></form>` : item.seatsRemaining > 0 ? `<form method="post" action="/circles/${escape(item.id)}/join">${hidden(csrf)}<button type="submit">Join ${escape(item.title)}</button></form>` : '<p role="status">This local circle is full.</p>'}</li>`).join("")}</ul></section><p><a href="/learn">Return to your learning path</a></p>`,
+    `<section class="lesson-heading"><p class="eyebrow">${hostingText("PRIVATE LOCAL PREVIEW", "PRIVATE LEARNING")} · NO LIVE COMMUNITY</p><h1>Explore learning circles</h1><p class="lead">Join a small, invented topic space to try the membership controls. ${discussionEnabled ? "Invented discussion is available only after a separate circle sharing choice. No staffed moderation, clinic, expert or recording is available." : "New discussion sharing is paused. No clinic, expert, recording or shared member evidence is enabled."} Your name and private learning work are not shown to other members.</p><p>Joining is optional and grants no paid service or staff role. You can leave at any time; only your own membership state and aggregate seats appear here.</p></section><section class="reading" aria-labelledby="circle-moderation-contact"><h2 id="circle-moderation-contact">Circle moderation contact</h2><p>For circle moderation, email <a href="mailto:info@deepnative.io">info@deepnative.io</a>. No response time or backup coverage is promised.</p><p>Use the report action on a specific shared contribution to save an in-app report. Emailing does not submit that report. Keep private assignments and evidence out of email.</p></section><section aria-label="Available circles"><ul>${items.map((item) => `<li><h2>${escape(item.title)}</h2><p>${escape(item.description)}</p><p>${item.goal === goal ? "Matches your current goal" : "Open to explore"} · ${escape(GOALS[item.goal])} · ${item.seatsRemaining} of ${item.capacity} seats available</p>${item.joined ? `<p role="status">You joined this ${hostingText("local ", "")}circle.</p>${circleReplySummary(item.id, activity.get(item.id))}${discussionEnabled ? `<p><a href="/circles/${escape(item.id)}/discussion/choice">Choose invented discussion sharing</a> · <a href="/circles/${escape(item.id)}/discussion">Read circle questions</a></p>` : ""}<p><a href="/circles/${escape(item.id)}/discussion/owned">Your retained circle contributions</a></p><form method="post" action="/circles/${escape(item.id)}/leave">${hidden(csrf)}<button class="secondary" type="submit">Leave ${escape(item.title)}</button></form>` : item.seatsRemaining > 0 ? `<form method="post" action="/circles/${escape(item.id)}/join">${hidden(csrf)}<button type="submit">Join ${escape(item.title)}</button></form>` : '<p role="status">This local circle is full.</p>'}</li>`).join("")}</ul></section><p><a href="/learn">Return to your learning path</a></p>`,
   );
 }
 function previewEventTime(event: EventPreview, timezone?: string | null) {
