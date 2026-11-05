@@ -51,19 +51,19 @@ function databaseKeepReason(entry, context) {
   if (entry.connections !== 0) return "in use by a current connection";
   if (entry.marker !== null && !GENERATED_MARKER.test(entry.marker))
     return "has an unrecognised comment, which may be someone's note";
-  const created = age(entry.created, now),
-    changed = age(entry.changed, now);
-  if (created === null || changed === null) return "age unknown";
-  if (Math.min(created, changed) < minAgeHours * HOUR)
-    return `too recent (under ${minAgeHours}h)`;
+  // Creation time only: autovacuum and any connection rewrite the directory's
+  // relcache file, so the directory's own timestamp says nothing about clients.
+  const created = age(entry.created, now);
+  if (created === null) return "age unknown";
+  if (created < minAgeHours * HOUR) return `too recent (under ${minAgeHours}h)`;
   if (processText.includes(entry.name))
     return "a live process or container names it";
-  const newestChange = now - Math.min(created, changed);
+  const createdAt = now - created;
   const client = clients.find(
     // An unreadable start time cannot rule the client out.
-    (candidate) => !(Date.parse(candidate.startedAt) > newestChange),
+    (candidate) => !(Date.parse(candidate.startedAt) > createdAt),
   );
-  if (client) return `changed since ${client.name} started, so may be its own`;
+  if (client) return `created after ${client.name} started, so may be its own`;
   return null;
 }
 
@@ -192,7 +192,6 @@ const DATABASE_QUERY = `SELECT d.datname AS name, d.oid::text AS oid,
   shobj_description(d.oid,'pg_database') AS marker, d.datistemplate AS "isTemplate",
   (SELECT count(*)::integer FROM pg_stat_activity a WHERE a.datname=d.datname) AS connections,
   (pg_stat_file('base/'||d.oid||'/PG_VERSION')).modification AS created,
-  (pg_stat_file('base/'||d.oid)).modification AS changed,
   pg_database_size(d.oid)::text AS "sizeBytes"
   FROM pg_database d WHERE d.datname LIKE 'dne\\_test\\_%'`;
 
@@ -225,7 +224,6 @@ async function main(argv) {
       databases: databases.map((entry) => ({
         ...entry,
         created: entry.created?.toISOString?.() ?? entry.created,
-        changed: entry.changed?.toISOString?.() ?? entry.changed,
       })),
       containers,
       processText,

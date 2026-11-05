@@ -18,7 +18,6 @@ const database = (overrides = {}) => ({
   isTemplate: false,
   connections: 0,
   created: hoursAgo(48),
-  changed: hoursAgo(48),
   sizeBytes: 15000000,
   ...overrides,
 });
@@ -70,7 +69,6 @@ describe("LEFTOVER-01 test database selection", () => {
     ["a template", { isTemplate: true }, "template"],
     ["an open connection", { connections: 1 }, "in use"],
     ["a recent creation", { created: hoursAgo(2) }, "too recent"],
-    ["a recent change", { changed: hoursAgo(2) }, "too recent"],
     ["an unreadable age", { created: null }, "age unknown"],
     ["a human comment", { marker: "keep this for #576" }, "unrecognised"],
   ])("keeps %s", (_label, overrides, reason) => {
@@ -87,7 +85,7 @@ describe("LEFTOVER-01 test database selection", () => {
     expect(result.databases).toEqual([]);
     expect(reasonFor(result, `dne_test_${hex("a")}`)).toMatch("names it");
   });
-  it("keeps a database newer than a running client, which may own it", () => {
+  it("keeps a database created after a running client started, which may own it", () => {
     const result = plan({
       containers: [
         container({
