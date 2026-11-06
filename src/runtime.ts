@@ -4,7 +4,11 @@ import { coachViewStore } from "./coach-view.ts";
 import { memberSharingStore } from "./member-sharing.ts";
 import { accountRoleAdmin } from "./account-role-admin.ts";
 import { administratorDiagnostics } from "./administrator-diagnostics.ts";
-import { simpleInvoiceSettings } from "./simple-invoice-config.ts";
+import {
+  simpleInvoiceSettings,
+  testProviderEventKey,
+} from "./simple-invoice-config.ts";
+import { testProviderEventStore } from "./test-provider-events.ts";
 import { simpleInvoiceStore } from "./simple-invoice-store.ts";
 import { learningWorkspaceStore } from "./learning-workspace-store.ts";
 import { learningWorkspacePublicationStore } from "./learning-workspace-publication.ts";
@@ -134,8 +138,16 @@ export async function start(env: NodeJS.ProcessEnv) {
     const invoices = invoiceSettings
       ? simpleInvoiceStore(pool, invoiceSettings)
       : undefined;
+    const testEventKey = testProviderEventKey(
+      env,
+      Boolean(settings.hosted),
+      invoiceSettings,
+    );
     const options = {
       simpleInvoices: invoices,
+      testProviderEvents: testEventKey
+        ? { key: testEventKey, store: testProviderEventStore(pool) }
+        : undefined,
       billingProfiles: billingProfileStore(pool),
       invoiceSender: !invoiceSettings
         ? undefined

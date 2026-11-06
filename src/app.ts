@@ -21,6 +21,10 @@ import {
   type InvoiceSender,
 } from "./simple-invoice-routes.ts";
 import type { SimpleInvoiceStore } from "./simple-invoice-store.ts";
+import {
+  mountTestProviderEvents,
+  type TestProviderEvents,
+} from "./test-provider-events.ts";
 import { mountLearningWorkspaceRoutes } from "./learning-workspace-routes.ts";
 import { mountLearningWorkspaceAssets } from "./learning-workspace-assets.ts";
 import { mountLearningWorkspacePages } from "./learning-workspace-pages.ts";
@@ -433,6 +437,7 @@ export function app(
     learningWorkspacePublication?: LearningWorkspacePublicationStore;
     programs?: ProgramStore;
     simpleInvoices?: SimpleInvoiceStore;
+    testProviderEvents?: TestProviderEvents;
     billingProfiles?: BillingProfileStore;
     invoiceSender?: InvoiceSender;
     foundationImport?: FoundationImportStore;
@@ -581,6 +586,8 @@ export function app(
     }
     next();
   });
+  if (options.testProviderEvents)
+    mountTestProviderEvents(app, options.testProviderEvents);
   app.use(
     "/assets",
     express.static(fileURLToPath(new URL("../public", import.meta.url))),

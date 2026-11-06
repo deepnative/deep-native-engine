@@ -99,6 +99,8 @@ const roleName = (role: string | null) =>
   role === "admin" ? "Admin" : role === "coach" ? "Coach" : "staff";
 
 function actorText(entry: ChangeEntry) {
+  // TESTPAY-10: no staff member acted, so this can't read as a former administrator.
+  if (entry.action.startsWith("test_")) return "A signed test event";
   if (!entry.actorFound) return "A former administrator";
   return entry.actorName
     ? escape(entry.actorName)
@@ -131,6 +133,9 @@ export function changeText(entry: ChangeEntry) {
     "billing:monthly_invoice_issued": `issued ${person} a monthly invoice${money(entry.amountCents)}`,
     "billing:payment_recorded": `recorded a payment${money(entry.amountCents)} from ${person}`,
     "billing:payment_refunded": `recorded a refund${money(entry.amountCents)} to ${person}`,
+    "billing:test_payment_received": `recorded a simulated test payment${money(entry.amountCents)} for ${person}; no money moved`,
+    "billing:test_payment_failed": `recorded a simulated failed test payment${money(entry.amountCents)} for ${person}; no money moved`,
+    "billing:test_refund_recorded": `recorded a simulated test refund${money(entry.amountCents)} for ${person}; no money moved`,
     "billing:invoice_voided": `voided an invoice${money(entry.amountCents)} for ${person}`,
   };
   return `${who} ${change[`${entry.source}:${entry.action}`] ?? "made a change"}.`;
@@ -154,7 +159,7 @@ export function changeHistoryBody(history: ChangeHistory, first: boolean) {
     history.older
       ? `<p><a href="/operator/changes?before=${encodeURIComponent(history.older)}">Older entries</a></p>`
       : ""
-  }</section><section class="portal-card" aria-labelledby="change-covers"><h2 id="change-covers">What this covers</h2><p>Roles and coach assignments, offering plans, setting coaching rates, returning hours, issuing invoices, recording payments and refunds and voiding invoices.</p><p>It doesn't list what members do themselves, invoices the scheduled run creates, or invoices being emailed. It doesn't list time-limited staff access to a member's work. Members see that under When staff opened my work.</p><p>Issuing invoices, returning hours and setting rates are listed only from when this history began. Older records didn't say who did them.</p></section><div class="portal-footer">${portalActions(
+  }</section><section class="portal-card" aria-labelledby="change-covers"><h2 id="change-covers">What this covers</h2><p>Roles and coach assignments, offering plans, setting coaching rates, returning hours, issuing invoices, recording payments and refunds and voiding invoices.</p><p>It doesn't list what members do themselves, invoices the scheduled run creates, or invoices being emailed. It doesn't list time-limited staff access to a member's work. Members see that under When staff opened my work.</p><p>Signed test events on sample invoices are listed as test events. No staff member acted on them and no money moved.</p><p>Issuing invoices, returning hours and setting rates are listed only from when this history began. Older records didn't say who did them.</p></section><div class="portal-footer">${portalActions(
     [
       ["/operator/roles", "Roles"],
       ["/operator", "Administration console"],

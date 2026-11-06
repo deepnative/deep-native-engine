@@ -784,6 +784,15 @@ it("CHANGELOG-02/04 words every kind of change", () => {
   expect(said("payment_refunded")).toBe(
     "Ada recorded a refund of CAD 120.00 to Bo.",
   );
+  expect(said("test_payment_received", { actorFound: false })).toBe(
+    "A signed test event recorded a simulated test payment of CAD 120.00 for Bo; no money moved.",
+  );
+  expect(said("test_payment_failed", { actorFound: false })).toBe(
+    "A signed test event recorded a simulated failed test payment of CAD 120.00 for Bo; no money moved.",
+  );
+  expect(said("test_refund_recorded", { actorFound: false })).toBe(
+    "A signed test event recorded a simulated test refund of CAD 120.00 for Bo; no money moved.",
+  );
   expect(said("invoice_voided", { personName: null })).toBe(
     "Ada voided an invoice of CAD 120.00 for someone with no name set.",
   );

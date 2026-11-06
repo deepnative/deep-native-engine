@@ -30,6 +30,19 @@ export interface SimpleInvoiceDocument {
   };
 }
 
+const TEST_ENTRY = {
+  receipt: "Test receipt",
+  refund: "Test refund",
+  failure: "Test payment failed",
+  held: "Test event not applied",
+};
+const entryLabel = (event: InvoicePaymentEvent) =>
+  event.verification === "signed_test_event"
+    ? TEST_ENTRY[event.kind]
+    : event.kind === "refund"
+      ? "Refund"
+      : "Receipt";
+
 /** Amounts come from the validated immutable invoice, never query/form values. */
 export function simpleInvoiceDocument(
   invoice: SimpleInvoiceDocument,
@@ -56,7 +69,7 @@ export function simpleInvoiceDocument(
   const refunded = invoice.refundedCents ?? 0;
   // MANPAY-01/03: every entry stays visible and never reads as provider proof.
   const record = payments.length
-    ? `<h2>Payment record</h2><div class="table-scroll" role="region" aria-label="Payment record" tabindex="0"><table class="invoice-payment-record"><caption>Recorded receipts and refunds</caption><thead><tr><th scope="col">Date</th><th scope="col">Entry</th><th scope="col">Reference</th>${admin ? '<th scope="col">Recorded by</th>' : ""}<th scope="col">Amount</th></tr></thead><tbody>${payments.map((event) => `<tr><td>${escape(event.on)}</td><td>${event.kind === "refund" ? "Refund" : "Receipt"}</td><td>${event.evidence === null ? "Not recorded" : escape(event.evidence)}</td>${admin ? `<td>${escape(event.recordedBy ?? "")}</td>` : ""}<td>${event.kind === "refund" ? "−" : ""}${money(event.amountCents)}</td></tr>`).join("")}</tbody></table></div><p>Recorded manually by staff. Not verified by a payment provider.</p>${refunded ? "<p>A recorded refund does not reopen this balance or change the course agreement.</p>" : ""}`
+    ? `<h2>Payment record</h2><div class="table-scroll" role="region" aria-label="Payment record" tabindex="0"><table class="invoice-payment-record"><caption>Recorded receipts and refunds</caption><thead><tr><th scope="col">Date</th><th scope="col">Entry</th><th scope="col">Reference</th>${admin ? '<th scope="col">Recorded by</th>' : ""}<th scope="col">Amount</th></tr></thead><tbody>${payments.map((event) => `<tr><td>${escape(event.on)}</td><td>${entryLabel(event)}</td><td>${event.evidence === null ? "Not recorded" : escape(event.evidence)}</td>${admin ? `<td>${escape(event.recordedBy ?? "")}</td>` : ""}<td>${event.kind === "refund" ? "−" : ""}${money(event.amountCents)}</td></tr>`).join("")}</tbody></table></div>${payments.some((event) => event.verification === "manual_unverified") ? "<p>Recorded manually by staff. Not verified by a payment provider.</p>" : ""}${payments.some((event) => event.verification === "signed_test_event") ? "<p>Test entries come from signed test events simulated by this site’s test setup. No payment provider checked them and no money moved. A failed or not applied test event changes no amount.</p>" : ""}${refunded ? "<p>A recorded refund does not reopen this balance or change the course agreement.</p>" : ""}`
     : "";
   return page(
     `Invoice ${invoice.number}`,

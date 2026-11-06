@@ -99,11 +99,7 @@ const event = (invoiceId: string, change: Record<string, unknown> = {}) => ({
 });
 const sign = (body: string, using = key) =>
   "sha256=" + createHmac("sha256", using).update(body).digest("hex");
-const deliver = (
-  body: unknown,
-  signature?: string,
-  application = enabled,
-) => {
+const deliver = (body: unknown, signature?: string, application = enabled) => {
   const raw = typeof body === "string" ? body : JSON.stringify(body);
   return withLoopback(application, (s) => {
     const call = request(s)
@@ -260,7 +256,9 @@ it("TESTPAY-05 applies racing duplicates once", async () => {
     results = await Promise.all(
       Array.from({ length: 8 }, () =>
         testProviderEventStore(pool).apply(
-          e as Parameters<ReturnType<typeof testProviderEventStore>["apply"]>[0],
+          e as Parameters<
+            ReturnType<typeof testProviderEventStore>["apply"]
+          >[0],
         ),
       ),
     );
@@ -426,9 +424,7 @@ it("TESTPAY-09 refuses a real invoice, in the handler and in the database", asyn
       [randomUUID(), i.invoiceId, "a".repeat(64)],
     ),
   ).rejects.toThrow("sample");
-  expect(
-    (await deliver(event(randomUUID()))).status,
-  ).toBe(404);
+  expect((await deliver(event(randomUUID()))).status).toBe(404);
 });
 
 it("TESTPAY-09 holds a payment on a void invoice or above the balance, moving no money", async () => {
@@ -469,7 +465,9 @@ it("TESTPAY-10 reads as simulated to member and staff and is labelled in change 
   await deliver(
     event(i.invoiceId, { type: "refund.succeeded", amountCents: 500 }),
   );
-  await deliver(event(i.invoiceId, { type: "payment.failed", paymentRef: "p2" }));
+  await deliver(
+    event(i.invoiceId, { type: "payment.failed", paymentRef: "p2" }),
+  );
   const read = (address: string, token: string) =>
     withLoopback(enabled, (s) =>
       request(s)
@@ -486,7 +484,9 @@ it("TESTPAY-10 reads as simulated to member and staff and is labelled in change 
     expect(text).toContain("No payment provider checked them");
     expect(text).toContain("no money moved");
     expect(text).not.toContain("Recorded manually by staff");
-    expect(text).not.toMatch(/verified by (a|the) (payment )?provider\.?<\/p>(?!.*Not)/);
+    expect(text).not.toMatch(
+      /verified by (a|the) (payment )?provider\.?<\/p>(?!.*Not)/,
+    );
   }
   expect(staffView.text).toContain("Signed test event");
   expect(own.text).not.toContain("Recorded by");
@@ -494,7 +494,9 @@ it("TESTPAY-10 reads as simulated to member and staff and is labelled in change 
   try {
     const history = await readChangeHistory(client, undefined);
     if (history.kind !== "ready") throw Error("Expected history");
-    const mine = history.value.entries.filter((e) => e.personFound && e.action.startsWith("test_"));
+    const mine = history.value.entries.filter(
+      (e) => e.personFound && e.action.startsWith("test_"),
+    );
     expect(mine.map((e) => e.action)).toEqual(
       expect.arrayContaining([
         "test_payment_received",

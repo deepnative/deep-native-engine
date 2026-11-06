@@ -1,6 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { reviewedContentFixture } from "../support/reviewed-content-browser.ts";
 import { simpleInvoiceStore } from "../../src/simple-invoice-store.ts";
+import {
+  signTestProviderEvent,
+  TEST_PROVIDER_PATH,
+  TEST_PROVIDER_SIGNATURE,
+} from "../../src/test-provider-events.ts";
 // Staff credentials remain outside browser traces and captures.
 test.use({ trace: "off" });
 type Fixture = Awaited<ReturnType<typeof reviewedContentFixture>>;
@@ -322,6 +327,104 @@ test("[L304] staff records offline funds and refunds that the member sees as man
       path: info.outputPath("manual-refund-invoice.png"),
       fullPage: true,
     });
+  } finally {
+    await f.close();
+  }
+});
+test("[L305] signed test events reconcile out of order and read as simulated to member and staff", async ({
+  browser,
+}, info) => {
+  const key = "invented-browser-test-provider-key-01";
+  const f = await reviewedContentFixture(browser, info, {
+    sampleInvoices: true,
+    testProviderKey: key,
+  });
+  try {
+    const member = await f.member();
+    const { admin } = await offer(f, member);
+    const invoiceId = await accept(member);
+    const deliver = (change: Record<string, unknown>, using = key) => {
+      const body = JSON.stringify({
+        id: `evt-${String(change.type).replace(".", "-")}`,
+        invoiceId,
+        paymentRef: "pay-1",
+        occurredAt: "2026-11-01T12:00:00.000Z",
+        ...change,
+      });
+      return member.request.post(f.origin + TEST_PROVIDER_PATH, {
+        headers: {
+          "Content-Type": "application/json",
+          [TEST_PROVIDER_SIGNATURE]: signTestProviderEvent(using, body),
+        },
+        data: body,
+      });
+    };
+    const payment = { type: "payment.succeeded", amountCents: 3000 };
+    expect(
+      (await deliver(payment, "another-invented-key-0123456789abcde")).status(),
+    ).toBe(401);
+    await member.reload();
+    await expect(
+      member
+        .locator("dt")
+        .filter({ hasText: "Recorded payment" })
+        .locator("+ dd"),
+    ).toHaveText("CAD 0.00");
+    const refund = { type: "refund.succeeded", amountCents: 1000 };
+    expect(await (await deliver(refund)).json()).toEqual({ outcome: "held" });
+    await member.reload();
+    await expect(member.getByText("Test event not applied")).toBeVisible();
+    expect(await (await deliver(payment)).json()).toEqual({
+      outcome: "receipt",
+    });
+    expect(
+      await (
+        await deliver({ type: "payment.failed", amountCents: 3000 })
+      ).json(),
+    ).toEqual({ outcome: "failure" });
+    await member.reload();
+    const record = member.getByRole("table", {
+      name: "Recorded receipts and refunds",
+    });
+    await expect(record).toContainText("Test receipt");
+    await expect(record).toContainText("Test refund");
+    await expect(record).toContainText("Test payment failed");
+    await expect(record).not.toContainText("Test event not applied");
+    await expect(
+      member
+        .locator("dt")
+        .filter({ hasText: "Recorded payment" })
+        .locator("+ dd"),
+    ).toHaveText("CAD 30.00");
+    await expect(
+      member
+        .locator("dt")
+        .filter({ hasText: "Recorded refund" })
+        .locator("+ dd"),
+    ).toHaveText("CAD 10.00");
+    await expect(
+      member.getByText(/No payment provider checked them and no money moved/),
+    ).toBeVisible();
+    await expect(member.getByText("Recorded by")).toHaveCount(0);
+    await admin.page.goto(f.origin + "/operator/invoices/" + invoiceId);
+    await expect(
+      admin.page.getByRole("table", { name: "Recorded receipts and refunds" }),
+    ).toContainText("Signed test event");
+    await admin.page.goto(f.origin + "/operator/changes");
+    await expect(
+      admin.page.getByText(
+        /A signed test event recorded a simulated test refund/,
+      ),
+    ).toBeVisible();
+    for (const page of [member, admin.page]) {
+      expect(
+        await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth <=
+            document.documentElement.clientWidth,
+        ),
+      ).toBe(true);
+    }
   } finally {
     await f.close();
   }
