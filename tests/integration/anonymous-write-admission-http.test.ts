@@ -247,6 +247,8 @@ it("ANON-04 counts only the address our ingress vouches for, and a /64 as one vi
     ).status,
   ).toBe(429);
 
+  // The second part starts with a fresh whole-service count.
+  await pool.query("TRUNCATE anonymous_write_windows");
   for (let i = 1; i <= 3; i++)
     expect(
       (
