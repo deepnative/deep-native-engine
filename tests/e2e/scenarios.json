@@ -2667,6 +2667,15 @@
       "expected": "Opening the page adds nothing; the claim gives exactly five study requests ending at the month's end and appears on the balance; repeating the form adds no second grant; the local request leaves four; no sideways scrolling",
       "issues": [199],
       "critical": true
+    },
+    {
+      "id": "L300",
+      "actor": "Visitor starting an account from an address past its signup allowance",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, a documentation-range forwarded address; desktop/mobile Chromium",
+      "steps": "ANON-01/07: thirty earlier starts use the address's hourly allowance; the visitor fills the start form and submits; the window ends; the visitor submits the same form again",
+      "expected": "The refused start returns 429 with Retry-After and a plain wait message, creates nothing and keeps the visitor's answers on the page; the same form then starts normally; no sideways scrolling",
+      "issues": [728],
+      "critical": true
     }
   ],
   "fullMvp": [
