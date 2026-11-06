@@ -1,3 +1,4 @@
+import { withHosting } from "../../src/hosting-presentation.ts";
 import {
   learningCohorts,
   learningDisclosure,
@@ -166,4 +167,11 @@ it("MR-03 uses the selected actor and handles query, denial, failure and deliber
     await request(server).get("/operator/metrics/report").expect(200);
     expect(read).toHaveBeenCalledTimes(3);
   });
+});
+it("READABLE-19 the hosted metrics report drops local wording and stays not a business report", () => {
+  const html = withHosting(true, () => metricsReportPage(snapshot));
+  expect(html).toContain("PRIVATE STAFF SNAPSHOT · NOT A LIVE REPORT");
+  expect(html).toContain("This is not a live business report");
+  expect(html).not.toMatch(/\blocal\b/i);
+  expect(metricsReportPage(snapshot)).toContain("SYNTHETIC LOCAL PREVIEW");
 });
