@@ -2394,7 +2394,10 @@ export function app(
             await evidence.owned(res.locals.token as string),
             res.locals.csrf as string,
             [
-              "This sample is not eligible for the local review queue. Refresh and check its current safety, consent and submission state.",
+              hostingText(
+                "This sample is not eligible for the local review queue. Refresh and check its current safety, consent and submission state.",
+                "This sample is not eligible for the review queue. Refresh and check its current safety, consent and submission state.",
+              ),
             ],
           ),
         );
@@ -5739,7 +5742,10 @@ export function app(
         .send(
           errorPage(
             "Deletion status unconfirmed",
-            "We could not confirm completion. If the request was accepted, local cleanup will retry; this page is not a deletion receipt.",
+            hostingText(
+              "We could not confirm completion. If the request was accepted, local cleanup will retry; this page is not a deletion receipt.",
+              "We could not confirm completion. If the request was accepted, cleanup will retry; this page is not a deletion receipt.",
+            ),
           ),
         );
       return;
