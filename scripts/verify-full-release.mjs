@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { watchInterruption } from "./interruption.mjs";
 import { randomBytes, randomUUID } from "node:crypto";
 import {
   mkdirSync,
@@ -56,6 +57,7 @@ function revision() {
   };
 }
 
+const interruption = watchInterruption();
 try {
   mkdirSync("artifacts", { recursive: true });
   rmSync(output, { force: true });
@@ -118,7 +120,9 @@ try {
     DNE_FULL_RELEASE_TREE: result.revision.tree,
   };
 
+  await interruption.check();
   run("npm", ["run", "build"], env);
+  await interruption.check();
   run("npm", ["run", "test:e2e:full"], env);
   const browserFinishedAt = new Date().toISOString();
   stage = "full browser evidence";
@@ -145,6 +149,7 @@ try {
       finishedAt: browserFinishedAt,
     }),
   );
+  await interruption.check();
   result.exitStatus = result.databaseError ? 1 : 0;
 } catch {
   result.error = `Full-release verification failed during ${stage}.`;
@@ -181,5 +186,6 @@ try {
     result.exitStatus = 1;
     console.error("Full-release verification report could not be written.");
   }
+  interruption.release();
   process.exitCode = result.exitStatus;
 }

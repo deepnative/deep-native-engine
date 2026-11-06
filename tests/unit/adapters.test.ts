@@ -190,6 +190,23 @@ describe("deterministic adapter and synthetic fixtures", () => {
     expect(first.message).toContain("no external side effect");
   });
 
+  it("reports simulated AI usage for text input only", async () => {
+    const adapter = deterministicAdapter("ai", "test");
+    const operation = "summary";
+    expect(
+      (await adapter.execute(operation, { text: "é".repeat(21) })).usage,
+    ).toEqual({ inputTokens: 11, outputTokens: 64 });
+    for (const input of [null, "text", {}, { text: 5 }])
+      expect(await adapter.execute(operation, input)).not.toHaveProperty(
+        "usage",
+      );
+    expect(
+      await deterministicAdapter("email", "test").execute(operation, {
+        text: "invented",
+      }),
+    ).not.toHaveProperty("usage");
+  });
+
   it.each(["", "x".repeat(81)])(
     "rejects unsafe operation %j",
     async (operation) =>

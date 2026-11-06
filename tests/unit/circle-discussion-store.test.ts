@@ -20,6 +20,7 @@ afterEach(() => {
 });
 function operations(db: CircleDiscussionStore, t = token, c = circle) {
   return {
+    activity: () => db.activity(t, c),
     moderationNotice: () => db.moderationNotice(t, c, id),
     choice: () => db.choice(t, c),
     choose: () => db.choose(t, c, id, "1", CIRCLE_DISCUSSION_POLICY, true),
@@ -247,9 +248,8 @@ function fixture(overrides: Partial<MemberFixture> = {}) {
       };
     }
     if (
-      sql.startsWith(
-        "SELECT id,member_id,choice_id,root_id,state,revision FROM preview_circle_posts",
-      )
+      sql.startsWith("SELECT id,member_id,choice_id,root_id,state,revision") &&
+      sql.includes("FROM preview_circle_posts")
     ) {
       const rows = sql.includes("WHERE id=$1")
         ? state.posts.filter((p) => p.id === values[0])
@@ -767,6 +767,8 @@ it("filters old-choice, hidden and no-longer-authorized source metadata before e
       createdAt: "2026-10-03T00:00:00Z",
       rootId: null,
       pseudonym: "Peer aaaaaaaaaaaaaaaa",
+      replyCount: 0,
+      latestReplyAt: null,
     },
   ]);
 });
@@ -1132,7 +1134,9 @@ it("withholds a thread whose current root body is absent after target validation
 it("does not backfill an authorization-filtered group page from its lookahead item", async () => {
   const posts = Array.from({ length: 21 }, () =>
     inventedPost({ id: randomUUID(), choice_id: randomUUID() }),
-  ).sort((a, b) => a.id.localeCompare(b.id));
+  )
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map((post) => ({ ...post, created_at: "2026-10-03 00:00:00.000001+00" }));
   posts[20]!.choice_id = choice;
   const f = fixture({ posts });
   const listing = await f.db.list(token, circle);
@@ -1149,6 +1153,7 @@ it("does not backfill an authorization-filtered group page from its lookahead it
     circle,
     kind: "roots",
     last: posts[19]!.id,
+    at: "2026-10-03 00:00:00.000001+00",
     choice,
   });
   f.state.posts = posts.slice(20);
@@ -1156,6 +1161,25 @@ it("does not backfill an authorization-filtered group page from its lookahead it
   if (next.kind !== "ready")
     throw Error("Invented next group page unavailable");
   expect(next.value.items.map((p) => p.id)).toEqual([posts[20]!.id]);
+});
+it("refuses a correctly signed question or reply cursor that has no position", async () => {
+  const f = fixture({ posts: [inventedPost()] });
+  const binding = { actor, circle, last: id, policy: CIRCLE_DISCUSSION_POLICY };
+  expect(
+    await f.db.list(
+      token,
+      circle,
+      signed({ ...binding, kind: "roots", choice }),
+    ),
+  ).toEqual({ kind: "invalid" });
+  expect(
+    await f.db.thread(
+      token,
+      circle,
+      id,
+      signed({ ...binding, kind: "replies:" + id, choice }),
+    ),
+  ).toEqual({ kind: "invalid" });
 });
 it("rejects a thread cursor with another root or stale circle choice", async () => {
   const f = fixture({ posts: [inventedPost()] });
@@ -1463,4 +1487,77 @@ it("MODN-04 withholds a notice when connection release cannot be confirmed", asy
   await expect(f.db.moderationNotice(token, circle, id)).rejects.toThrow(
     "Circle outcome unconfirmed",
   );
+});
+
+function withReplyTotals(
+  f: ReturnType<typeof fixture>,
+  totals: { root: string; n: number; latest: string }[],
+  questions: string[] = [],
+) {
+  const base = f.query.getMockImplementation()!;
+  f.query.mockImplementation(async (sql: string, values?: unknown[]) => {
+    if (sql.includes("r.root_id AS root")) return { rows: totals };
+    if (sql.includes("root_id IS NULL AND state='visible' AND choice_id=$3"))
+      return { rows: questions.map((question) => ({ id: question })) };
+    return base(sql, values);
+  });
+}
+it("FOLLOW-03 adds readable reply totals to each listed question", async () => {
+  const other = randomUUID();
+  const f = fixture({ posts: [inventedPost(), inventedPost({ id: other })] });
+  withReplyTotals(f, [{ root: id, n: 2, latest: "2026-10-04 00:00:00+00" }]);
+  const listing = await f.db.list(token, circle);
+  if (listing.kind !== "ready") throw Error("Invented list unavailable");
+  const row = (value: string) =>
+    listing.value.items.find((item) => item.id === value);
+  expect(row(id)).toMatchObject({
+    replyCount: 2,
+    latestReplyAt: "2026-10-04 00:00:00+00",
+  });
+  expect(row(other)).toMatchObject({ replyCount: 0, latestReplyAt: null });
+});
+it("FOLLOW-04 totals replies across my questions and keeps the latest time", async () => {
+  const f = fixture();
+  withReplyTotals(
+    f,
+    [
+      { root: id, n: 2, latest: "2026-10-04 00:00:00+00" },
+      { root: choice, n: 1, latest: "2026-10-05 00:00:00+00" },
+    ],
+    [id, choice, randomUUID()],
+  );
+  expect(await f.db.activity(token, circle)).toEqual({
+    kind: "ready",
+    value: {
+      questions: 3,
+      replies: 3,
+      latestReplyAt: "2026-10-05 00:00:00+00",
+    },
+  });
+});
+it("FOLLOW-04 reports no replies when I have no shared questions", async () => {
+  const f = fixture();
+  expect(await f.db.activity(token, circle)).toEqual({
+    kind: "ready",
+    value: { questions: 0, replies: 0, latestReplyAt: null },
+  });
+});
+it("FOLLOW-05 counts only my own still-shared questions", async () => {
+  const reply = randomUUID(),
+    hidden = randomUUID(),
+    oldChoice = randomUUID();
+  const f = fixture({
+    posts: [
+      inventedPost(),
+      inventedPost({ id: reply, root_id: id }),
+      inventedPost({ id: hidden, state: "hidden" }),
+      inventedPost({ id: oldChoice, choice_id: randomUUID() }),
+    ],
+  });
+  const owned = await f.db.owned(token, circle);
+  if (owned.kind !== "ready") throw Error("Invented owned page unavailable");
+  const counted = owned.value.items.filter(
+    (item) => item.replyCount !== undefined,
+  );
+  expect(counted.map((item) => item.id)).toEqual([id]);
 });

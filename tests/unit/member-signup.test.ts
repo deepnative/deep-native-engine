@@ -309,6 +309,6 @@ it("CREATEACCT-02 names the start form's sign-in fields as creating an account",
     "Your email is your username. You are signed in as soon as you press Start my learning path, and you can sign in with your password from then on. We send a link to verify the email in the background.",
   );
   expect(welcome.text).toContain(
-    '<a class="button landing-start" href="#your-path">Create account and start</a>',
+    '<a class="button landing-start" href="#your-path">Start my learning path</a>',
   );
 });

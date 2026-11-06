@@ -107,11 +107,12 @@ it("keeps maximum retained-data pages, moderation and erasure bounded without ba
     c = await participant(),
     d = await participant();
   const root = "10000000-0000-4000-8000-000000000001";
-  await fill(a, 200, "10000000-0000-4000-8000-");
-  await fill(b, 100, "20000000-0000-4000-8000-", root);
   await fill(b, 100, "30000000-0000-4000-8000-");
   await fill(c, 200, "40000000-0000-4000-8000-");
   await fill(d, 200, "50000000-0000-4000-8000-");
+  // Newest questions come first, so a's posts fill the first page.
+  await fill(a, 200, "10000000-0000-4000-8000-");
+  await fill(b, 100, "20000000-0000-4000-8000-", root);
   await pool.query(
     `INSERT INTO preview_circle_reports(id,member_id,workspace_id,circle_id,target_id,category,idempotency_key) SELECT gen_random_uuid(),$1,$1,$2,id,'privacy',gen_random_uuid() FROM preview_circle_posts WHERE member_id=$3`,
     [b.id, circle, a.id],
