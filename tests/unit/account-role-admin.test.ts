@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 import {
   accountRoleAdmin,
+  maskedEmail,
   type AccountRoleAdmin,
 } from "../../src/account-role-admin.ts";
 import {
@@ -86,8 +87,16 @@ it("ROLEADMIN-01 lists holders in a fixed role order and marks the actor's own e
           emailHash: h("a"),
           roles: ["admin", "coach"],
           people: [{ id: ada, name: "Ada" }],
+          hint: "ad…@example.test",
+          grantedAt: null,
         },
-        { emailHash: h("c"), roles: ["coach"], people: [] },
+        {
+          emailHash: h("c"),
+          roles: ["coach"],
+          people: [],
+          hint: null,
+          grantedAt: "2026-11-04",
+        },
       ],
     ],
   });
@@ -99,12 +108,27 @@ it("ROLEADMIN-01 lists holders in a fixed role order and marks the actor's own e
           emailHash: h("a"),
           roles: ["coach", "admin"],
           people: [{ id: ada, name: "Ada" }],
+          hint: "ad…@example.test",
+          grantedAt: null,
           self: true,
         },
-        { emailHash: h("c"), roles: ["coach"], people: [], self: false },
+        {
+          emailHash: h("c"),
+          roles: ["coach"],
+          people: [],
+          hint: null,
+          grantedAt: "2026-11-04",
+          self: false,
+        },
       ],
     },
   });
+});
+
+it("ROLE-LABEL-01 masks an email to a short hint that tells rows apart", () => {
+  expect(maskedEmail("coach@example.test")).toBe("co…@example.test");
+  expect(maskedEmail("ab@example.test")).toBe("a…@example.test");
+  expect(maskedEmail("a@example.test")).toBe("a…@example.test");
 });
 
 it("ROLEADMIN-02/05 grants only new roles to a normalized email and audits each", async () => {
@@ -131,9 +155,14 @@ it("ROLEADMIN-02/05 grants only new roles to a normalized email and audits each"
   const target = emailHash("x@example.test");
   // Coach first, then admin; the admin role already existed, so one event.
   expect(inserts.map((c) => c.values)).toEqual([
-    [target, "coach"],
+    [target, "coach", "x…@example.test"],
     [actor()[0]!.id, "granted", target, "coach", null],
-    [target, "admin"],
+    [target, "admin", "x…@example.test"],
+  ]);
+  // ROLE-LABEL-01: a role granted before the hint existed gains one.
+  expect(calls.find((c) => c.sql.includes("SET email_hint"))?.values).toEqual([
+    target,
+    "x…@example.test",
   ]);
 });
 
@@ -172,8 +201,13 @@ it("DEFCOACH-04 lists coach choices by name and the learner's current coaches", 
     "FROM learners l": [[{ assigned: [h("c"), h("d")] }], []],
     "FROM account_roles r": [
       [
-        { emailHash: h("e"), people: [] },
-        { emailHash: h("d"), people: [{ name: "Bo" }, { name: null }] },
+        { emailHash: h("e"), people: [], hint: null },
+        { emailHash: h("f"), people: [], hint: "zz…@example.test" },
+        {
+          emailHash: h("d"),
+          people: [{ name: "Bo" }, { name: null }],
+          hint: "bo…@example.test",
+        },
         { emailHash: h("c"), people: [{ name: "Bo" }, { name: null }] },
       ],
     ],
@@ -190,6 +224,8 @@ it("DEFCOACH-04 lists coach choices by name and the learner's current coaches", 
         { emailHash: h("c"), label: "Bo, Name needed" },
         { emailHash: h("d"), label: "Bo, Name needed" },
         { emailHash: h("e"), label: "Email not linked to an account yet" },
+        // ROLE-LABEL-02: an unlinked coach carries the Roles page hint.
+        { emailHash: h("f"), label: "zz…@example.test (not signed up yet)" },
       ],
     },
   });
@@ -266,15 +302,34 @@ it("ROLEADMIN-01 renders the Roles page without a remove button for the actor's 
           emailHash: h("a"),
           roles: ["coach", "admin"],
           people: [{ id: ada, name: "<Ada>" }],
+          hint: "ad…@example.test",
+          grantedAt: "2026-11-04",
           self: true,
         },
         {
           emailHash: h("c"),
           roles: ["admin"],
           people: [{ id: ada, name: null }],
+          hint: null,
+          grantedAt: null,
           self: false,
         },
-        { emailHash: h("d"), roles: ["coach"], people: [], self: false },
+        {
+          emailHash: h("d"),
+          roles: ["coach"],
+          people: [],
+          hint: "co…@example.test",
+          grantedAt: "2026-11-05",
+          self: false,
+        },
+        {
+          emailHash: h("e"),
+          roles: ["coach"],
+          people: [],
+          hint: null,
+          grantedAt: null,
+          self: false,
+        },
       ],
     },
   }));
@@ -286,6 +341,15 @@ it("ROLEADMIN-01 renders the Roles page without a remove button for the actor's 
   expect(res.text).toContain('Admin <span class="small">(you)</span>');
   expect(res.text).toContain('aria-label="Remove coach role from &lt;Ada&gt;"');
   expect(res.text).toContain('aria-label="Remove admin role from Name needed"');
+  // ROLE-LABEL-01: an email with no account shows its hint and grant date.
+  expect(res.text).toContain(
+    'co…@example.test <span class="small">· not signed up yet</span>',
+  );
+  expect(res.text).toContain("Granted 5 Nov 2026");
+  expect(res.text).toContain("Granted 4 Nov 2026");
+  expect(res.text).toContain(
+    'aria-label="Remove coach role from co…@example.test"',
+  );
   expect(res.text).toContain('aria-label="Remove coach role from this email"');
   expect(res.text).toContain("Email not linked to an account yet");
   expect(res.text).toContain(`name="csrf" value="${good.csrf}"`);
