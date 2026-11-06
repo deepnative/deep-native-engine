@@ -31,5 +31,5 @@ END $$;
 DROP TRIGGER IF EXISTS simple_invoice_money_preserved ON simple_invoices;
 CREATE TRIGGER simple_invoice_money_preserved BEFORE UPDATE OF paid_cents,refunded_cents ON simple_invoices
  FOR EACH ROW EXECUTE FUNCTION preserve_simple_invoice_money();
-INSERT INTO schema_migrations(version) VALUES(100) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(101) ON CONFLICT DO NOTHING;
 COMMIT;

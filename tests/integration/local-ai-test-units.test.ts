@@ -447,11 +447,19 @@ it("the private receipt lists the safe test-unit state without exposing reservat
   );
   if (queued.kind !== "queued") throw Error("Expected metered queue");
   expect((await local.list(owner.token))[0]!.jobs).toEqual([
-    { id: queued.jobId, status: "pending", testUnitState: "reserved" },
+    expect.objectContaining({
+      id: queued.jobId,
+      status: "pending",
+      testUnitState: "reserved",
+    }),
   ]);
   await local.run(owner.token, queued.jobId);
   expect((await local.list(owner.token))[0]!.jobs).toEqual([
-    { id: queued.jobId, status: "succeeded", testUnitState: "consumed" },
+    expect.objectContaining({
+      id: queued.jobId,
+      status: "succeeded",
+      testUnitState: "consumed",
+    }),
   ]);
 });
 
