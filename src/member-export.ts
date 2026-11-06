@@ -517,6 +517,18 @@ const sections = {
      WHERE c.member_id=$1 AND w.deleting_at IS NULL`,
     "c.id",
   ),
+  // v35 appends own AI usage figures (#188): integers and versions only.
+  aiUsage: section(
+    `e.job_id AS "jobId",e.model_version AS "modelVersion",e.rate_version AS "rateVersion",
+     e.input_tokens AS "estimatedInputTokens",e.output_tokens AS "estimatedOutputTokens",
+     e.cost_points AS "estimatedCostPoints",e.created_at AS "estimatedAt",
+     s.input_tokens AS "actualInputTokens",s.output_tokens AS "actualOutputTokens",
+     s.cost_points AS "actualCostPoints",s.settled_at AS "settledAt",
+     'ESTIMATE · SIMULATED · NO MONEY CHARGED' AS label`,
+    `ai_usage_estimates e LEFT JOIN ai_usage_settlements s ON s.job_id=e.job_id
+     WHERE e.member_id=$1`,
+    "e.job_id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -530,7 +542,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v34";
+  version: "local-member-records-v35";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -664,7 +676,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v34",
+          version: "local-member-records-v35",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

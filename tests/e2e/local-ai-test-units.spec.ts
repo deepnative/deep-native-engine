@@ -83,6 +83,11 @@ for (const [index, [background, goal]] of audiences.entries()) {
       const action = await form.getAttribute("action");
       const key = await form.locator('[name="key"]').inputValue();
       const csrf = await form.locator('[name="csrf"]').inputValue();
+      // AIUSE-01: a labelled estimate is visible before the member commits.
+      const estimate = first.item.getByText(
+        "Estimate only: about 268 tokens and 158 simulated cost points (model simulated-model-v1, test rates simulated-rates-v1).",
+      );
+      await expect(estimate).toHaveCount(1);
       await first.item
         .getByLabel("Hold one existing local test request")
         .check();
@@ -111,6 +116,14 @@ for (const [index, [background, goal]] of audiences.entries()) {
           .getByRole("status")
           .filter({ hasText: "One local test request" }),
       ).toHaveText("One local test request: consumed.");
+      // AIUSE-02: reloading shows actual simulated use beside the estimate.
+      await page.reload();
+      await expect(estimate).toHaveCount(2);
+      await expect(
+        first.item.getByText(
+          "Actual simulated use: 76 tokens and 42 cost points. Within the estimate.",
+        ),
+      ).toBeVisible();
       await expect(
         first.item.getByRole("button", { name: "Run local test request" }),
       ).toHaveCount(0);

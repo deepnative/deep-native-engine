@@ -22,7 +22,7 @@ New claims need `DNE_LOCAL_TEST_UNIT_ISSUANCE=enabled` in demo or test mode, the
 
 ## Privacy
 
-The structured export appends `studyAllowanceClaims` as section 57 in `local-member-records-v34`. It lists the claim, version, category, quantity, period and grant reference, and leaves out the operation key and workspace. Erasing the account removes claims and grants. Policy rows contain no member data and remain.
+The structured export appends `studyAllowanceClaims` as section 57 in `local-member-records-v34` and later. It lists the claim, version, category, quantity, period and grant reference, and leaves out the operation key and workspace. Erasing the account removes claims and grants. Policy rows contain no member data and remain.
 
 ## Rollback
 
