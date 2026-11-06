@@ -92,7 +92,7 @@ test("[L300] ANON-01/07 a visitor past the signup allowance keeps their answers 
   }
 });
 
-test("[L305] OUTWARD-03/08 a visitor past the email-link allowance keeps the address and gets a link after waiting", async ({
+test("[L307] OUTWARD-03/08 a visitor past the email-link allowance keeps the address and gets a link after waiting", async ({
   page,
 }) => {
   test.setTimeout(120_000);

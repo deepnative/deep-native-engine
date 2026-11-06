@@ -72,7 +72,7 @@ What this doesn't do:
 - One inbox can still receive the existing five emails an hour.
 - Invoice email is staff-only and isn't counted here.
 
-Scenarios OUTWARD-01..08 run against the real HTTP application and PostgreSQL in `tests/integration/outward-email-admission-http.test.ts`, with browser journey L305. Before the change, a visitor's request past each allowance got 200 and its email or hash, against an expected 429.
+Scenarios OUTWARD-01..08 run against the real HTTP application and PostgreSQL in `tests/integration/outward-email-admission-http.test.ts`, with browser journey L307. Before the change, a visitor's request past each allowance got 200 and its email or hash, against an expected 429.
 
 ## Scope and remaining work
 

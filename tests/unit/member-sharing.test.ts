@@ -151,6 +151,9 @@ it("WHOSEES-04 each reviewed area shows a count, a reader and a control", async 
   const body = text(many.text);
   expect(body).toContain("2 files or samples allowed for private review");
   expect(body).toContain("2 workflow notes waiting for private review");
+  expect(body).toContain(
+    "Each reading is listed in When staff opened my work.",
+  );
   expect(body).toContain("2 event attendance permissions");
   expect(body).toContain("2 open support requests");
   for (const link of [
@@ -343,6 +346,10 @@ it.each([
     "A moderator asked for changes to a proposal you sent.",
   ],
   [
+    entry("workflow", "note_read", null, "WF-001, version 2"),
+    "A moderator read your workflow note for WF-001, version 2.",
+  ],
+  [
     entry("access", "a_later_kind", "assignment"),
     "Staff accessed your private work.",
   ],
@@ -378,8 +385,19 @@ it("STAFFSEE-01 an empty history says none is recorded and what it doesn't cover
     "No staff access to your private work is recorded.",
   );
   expect(text(res.text)).toContain(
-    "workflow notes you sent for private review",
+    "and workflow notes you sent for private review.",
   );
+  // NOTEREAD-08: what is still missing is stated, not implied.
+  expect(text(res.text)).toContain(
+    "It doesn't list support requests or circle post moderation",
+  );
+  expect(text(res.text)).toContain(
+    "Readings of workflow notes are listed from November 2026 on; earlier ones weren't recorded.",
+  );
+  expect(text(res.text)).toContain(
+    "It also doesn't list a moderator being assigned to a workflow note",
+  );
+  expect(text(res.text)).not.toContain("It doesn't list workflow notes");
   expect(text(res.text)).toContain(
     "This history is deleted with your account.",
   );
