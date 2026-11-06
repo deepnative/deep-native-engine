@@ -282,6 +282,11 @@ import {
 } from "./ledger-reconciliation.ts";
 import { registerLedgerReconciliationRoutes } from "./ledger-reconciliation-routes.ts";
 import {
+  disabledInvoiceReconciliationStore,
+  type InvoiceReconciliationStore,
+} from "./invoice-reconciliation.ts";
+import { registerInvoiceReconciliationRoutes } from "./invoice-reconciliation-routes.ts";
+import {
   disabledLocalAiHoldInspectionStore,
   type LocalAiHoldInspectionStore,
 } from "./local-ai-hold-inspection.ts";
@@ -449,6 +454,7 @@ export function app(
     localCircleAdmin?: boolean;
     metrics?: MetricsStore;
     ledgerReconciliation?: LedgerReconciliationStore;
+    invoiceReconciliation?: InvoiceReconciliationStore;
     localHoldInspection?: LocalAiHoldInspectionStore;
     memberTestUnits?: MemberTestUnitsStore;
     studyUnitFixtures?: StudyUnitFixtureStore;
@@ -950,6 +956,11 @@ export function app(
     res.send(trackReadinessPage(await tracks.snapshot())),
   );
   registerLedgerReconciliationRoutes(app, ledgerReconciliation, mode);
+  registerInvoiceReconciliationRoutes(
+    app,
+    options.invoiceReconciliation ?? disabledInvoiceReconciliationStore(),
+    mode,
+  );
   registerLocalAiHoldInspectionRoutes(
     app,
     options.localHoldInspection ?? disabledLocalAiHoldInspectionStore(),
