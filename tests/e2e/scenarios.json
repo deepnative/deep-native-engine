@@ -2712,6 +2712,15 @@
       "expected": "The member sees the receipt, reference and that it is not verified by a payment provider, never who recorded it; the administrator sees who recorded it; after refunds the payment stays, the status reads Partly refunded then Refunded, the balance stays zero and the refund form disappears; no sideways scrolling",
       "issues": [32],
       "critical": true
+    },
+    {
+      "id": "L305",
+      "actor": "Member checking when a moderator read a workflow note they sent for private review",
+      "preconditions": "Dedicated synthetic PostgreSQL database, local staff entry and workflow review requests enabled, invented staff provisioned through the authorization store, port0 server; desktop/mobile Chromium",
+      "steps": "NOTEREAD-01, 08: a member saves an invented workflow note and requests private review; it is assigned to an invented moderator and the member checks the history; the moderator opens the note; the member checks again",
+      "expected": "Assignment alone adds no entry; after the moderator opens it the history says a moderator read the note for that workflow and version and when, and says readings are listed from November 2026 on; no note text or staff identity; no sideways scrolling",
+      "issues": [40],
+      "critical": false
     }
   ],
   "fullMvp": [

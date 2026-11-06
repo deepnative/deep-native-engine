@@ -79,10 +79,12 @@ export function usefulnessDisclosure(
 
 export interface MetricsStore {
   snapshot(token: string): Promise<PreviewMetrics | null>;
+  /** #40 EXPORTLOG: false when this token may not take the JSON. */
+  logExport(token: string): Promise<boolean>;
 }
 
 export function disabledMetricsStore(): MetricsStore {
-  return { snapshot: async () => null };
+  return { snapshot: async () => null, logExport: async () => false };
 }
 
 // One distinct-revision and distinct-owner cell for the events matching a filter.
@@ -300,6 +302,18 @@ export function metricDefinitions(): PreviewMetrics["definitions"] {
 
 export function metricsStore(pool: Pool): MetricsStore {
   return {
+    async logExport(token) {
+      const logged = await pool.query(
+        `INSERT INTO staff_export_events(actor_id,action)
+         SELECT p.id,'metrics_json' FROM principals p
+         JOIN authorized_staff_profiles s ON s.principal_id=p.id
+         WHERE p.token_hash=$1 AND p.kind='staff'
+           AND s.role IN ('operator','platform_admin')
+           AND p.revoked_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP`,
+        [hash(token)],
+      );
+      return logged.rowCount === 1;
+    },
     async snapshot(token) {
       const row = await exactMetrics(pool, token);
       if (!row) return null;
