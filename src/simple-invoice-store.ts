@@ -84,7 +84,9 @@ const decodeInvoice = (row: StoredInvoice): StoredInvoice => ({
   document: {
     ...row.document,
     paidCents: Number(row.paidCents),
-    refundedCents: Number(row.refundedCents ?? 0),
+    ...(Number(row.refundedCents ?? 0)
+      ? { refundedCents: Number(row.refundedCents) }
+      : {}),
     ...(row.voidReason ? { voidReason: row.voidReason } : {}),
   },
 });

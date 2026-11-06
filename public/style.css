@@ -1284,7 +1284,11 @@ footer {
 .invoice-controls input {
   caret-color: var(--accent);
 }
-.invoice-payment-record td {
+.invoice-payment-record td:nth-child(-n + 2),
+.invoice-payment-record td:last-child {
+  white-space: nowrap;
+}
+.invoice-payment-record td:nth-child(3) {
   overflow-wrap: anywhere;
 }
 .invoice-document table {

@@ -306,6 +306,18 @@ test("[L300] staff records offline funds and refunds that the member sees as man
           document.documentElement.clientWidth,
       ),
     ).toBe(true);
+    for (const reader of [staffPage, member]) {
+      await expect(
+        reader.getByRole("cell", { name: "Refund", exact: true }).first(),
+      ).toHaveCSS("white-space", "nowrap");
+    }
+    expect(
+      await staffPage.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
     await member.screenshot({
       path: info.outputPath("manual-refund-invoice.png"),
       fullPage: true,

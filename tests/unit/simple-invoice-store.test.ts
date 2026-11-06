@@ -96,7 +96,6 @@ const action = { invoiceId, operationId, expectedRevision: 1 };
 const decoded = {
   ...invoice,
   refundedCents: 0,
-  document: { ...invoice.document, refundedCents: 0 },
 };
 function fixture(
   options: {
@@ -425,7 +424,6 @@ it("OFFPUR-02/05 returns only the available owned invoice and operation referenc
     value: {
       ...invoice,
       refundedCents: 0,
-      document: { ...invoice.document, refundedCents: 0 },
       payments: [],
     },
   });
