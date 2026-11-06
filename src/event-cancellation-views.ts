@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
@@ -8,7 +9,8 @@ import type {
   EventCancellationScope,
 } from "./event-cancellation-values.ts";
 const base = "/operator/event-cancellations";
-const notice = `<p class="eyebrow">PRIVATE LOCAL EVENT REHEARSAL</p><p>Cancel one exact invented event version. This does not cancel a real appointment, notify attendees, issue refunds or record attendance. No attendee directory or private member work is shown.</p>`;
+const notice = () =>
+  `<p class="eyebrow">${hostingText("PRIVATE LOCAL EVENT REHEARSAL", "PRIVATE EVENT REHEARSAL")}</p><p>Cancel one exact invented event version. This does not cancel a real appointment, notify attendees, issue refunds or record attendance. No attendee directory or private member work is shown.</p>`;
 const navigation = portalActions([
   [base, "Event cancellation"],
   ["/staff", "Your staff tools"],
@@ -19,7 +21,7 @@ const referenceInputs = `<label for="eventId">Exact event ID</label><input id="e
 export function eventCancellationHome(csrf: string, enabled: boolean) {
   return page(
     "Event cancellation",
-    `<section class="reading">${notice}<h1>Event cancellation</h1><p>${enabled ? "Check an exact future opted-in event before confirming cancellation." : "New cancellations are paused. Existing cancelled events remain closed; protected inspection is still available."}</p><form method="post" action="${base}/check">${hidden(escape(csrf))}${referenceInputs}<button type="submit">Check exact event</button></form><h2>Inspect retained cancellation</h2><form method="post" action="${base}/inspect">${hidden(escape(csrf))}${referenceInputs}<label for="key">Original submission key (optional)</label><input id="key" name="key" maxlength="36" autocomplete="off"><button type="submit">Inspect saved cancellation</button></form>${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Event cancellation</h1><p>${enabled ? "Check an exact future opted-in event before confirming cancellation." : "New cancellations are paused. Existing cancelled events remain closed; protected inspection is still available."}</p><form method="post" action="${base}/check">${hidden(escape(csrf))}${referenceInputs}<button type="submit">Check exact event</button></form><h2>Inspect retained cancellation</h2><form method="post" action="${base}/inspect">${hidden(escape(csrf))}${referenceInputs}<label for="key">Original submission key (optional)</label><input id="key" name="key" maxlength="36" autocomplete="off"><button type="submit">Inspect saved cancellation</button></form>${navigation}</section>`,
   );
 }
 function attemptFields(attempt: EventCancellationAttempt) {
@@ -37,7 +39,7 @@ export function eventCancellationConfirm(
     return eventCancellationReceipt(csrf, attempt, preview.receipt);
   return page(
     "Confirm event cancellation",
-    `<section class="reading">${notice}<h1>Confirm event cancellation</h1><p>Check the exact version and schedule. Cancellation is permanent for this version; saved registrations are retained separately from voluntary withdrawal.</p>${preview.creationEnabled ? `<form method="post" action="${base}/cancel">${hidden(escape(csrf))}${attemptFields(attempt)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I confirm cancelling this exact invented event version.</span></label><button type="submit">Cancel this event version</button></form>` : `<p role="status">New cancellation is unavailable for this version or configuration.</p>`}${inspectForm(csrf, attempt)}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Confirm event cancellation</h1><p>Check the exact version and schedule. Cancellation is permanent for this version; saved registrations are retained separately from voluntary withdrawal.</p>${preview.creationEnabled ? `<form method="post" action="${base}/cancel">${hidden(escape(csrf))}${attemptFields(attempt)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I confirm cancelling this exact invented event version.</span></label><button type="submit">Cancel this event version</button></form>` : `<p role="status">New cancellation is unavailable for this version or configuration.</p>`}${inspectForm(csrf, attempt)}${navigation}</section>`,
   );
 }
 export function eventCancellationReceipt(
@@ -48,7 +50,7 @@ export function eventCancellationReceipt(
 ) {
   return page(
     "Event cancellation receipt",
-    `<section class="reading">${notice}<h1>Event cancellation receipt</h1>${receipt ? `<h2>${escape(receipt.title)}</h2><dl><dt>Exact event/version</dt><dd>${escape(receipt.eventId)} / ${receipt.eventVersion}</dd><dt>Cancellation ID</dt><dd>${escape(receipt.id)}</dd><dt>Event cancelled (UTC)</dt><dd>${timeTag(receipt.cancelledAt)}</dd><dt>Original schedule (UTC)</dt><dd>${timeTag(receipt.startsAt)} to ${timeTag(receipt.endsAt)}</dd></dl><p role="status">New registrations are closed. Members retain their owned registration receipts and may separately withdraw them.</p>` : `<p role="status">No retained cancellation is confirmed by this inspection. This is not a guarantee that an earlier uncertain request cannot still complete. Nothing was created or reversed.</p>`}${key ? `<p>Original submission key: ${escape(key)}</p>` : ""}${inspectForm(csrf, scope, key)}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Event cancellation receipt</h1>${receipt ? `<h2>${escape(receipt.title)}</h2><dl><dt>Exact event/version</dt><dd>${escape(receipt.eventId)} / ${receipt.eventVersion}</dd><dt>Cancellation ID</dt><dd>${escape(receipt.id)}</dd><dt>Event cancelled (UTC)</dt><dd>${timeTag(receipt.cancelledAt)}</dd><dt>Original schedule (UTC)</dt><dd>${timeTag(receipt.startsAt)} to ${timeTag(receipt.endsAt)}</dd></dl><p role="status">New registrations are closed. Members retain their owned registration receipts and may separately withdraw them.</p>` : `<p role="status">No retained cancellation is confirmed by this inspection. This is not a guarantee that an earlier uncertain request cannot still complete. Nothing was created or reversed.</p>`}${key ? `<p>Original submission key: ${escape(key)}</p>` : ""}${inspectForm(csrf, scope, key)}${navigation}</section>`,
   );
 }
 export function eventCancellationNotice(
@@ -58,6 +60,6 @@ export function eventCancellationNotice(
 ) {
   return page(
     "Event cancellation needs attention",
-    `<section class="reading">${notice}<h1>Event cancellation needs attention</h1><p role="alert">${escape(message)}</p>${attempt ? `${inspectForm(csrf, attempt, attempt.key)}<details><summary>Repeat the exact original instruction manually</summary><p>Inspect saved state first. This keeps the original key and checked event snapshot; no automatic retry, replacement key or compensation occurs.</p><form method="post" action="${base}/cancel">${hidden(escape(csrf))}${attemptFields(attempt)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I confirm repeating this exact original instruction.</span></label><button type="submit">Repeat original cancellation</button></form></details>` : ""}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Event cancellation needs attention</h1><p role="alert">${escape(message)}</p>${attempt ? `${inspectForm(csrf, attempt, attempt.key)}<details><summary>Repeat the exact original instruction manually</summary><p>Inspect saved state first. This keeps the original key and checked event snapshot; no automatic retry, replacement key or compensation occurs.</p><form method="post" action="${base}/cancel">${hidden(escape(csrf))}${attemptFields(attempt)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I confirm repeating this exact original instruction.</span></label><button type="submit">Repeat original cancellation</button></form></details>` : ""}${navigation}</section>`,
   );
 }
