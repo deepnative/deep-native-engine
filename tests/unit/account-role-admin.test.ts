@@ -659,3 +659,90 @@ it("CHANGELOG-11 pages from the last entry shown and refuses a malformed positio
   ).toEqual(["2026-11-06T12:34:56.123456Z", "role", "30", 31]);
   expect(await admin.changes(staff, "nope")).toEqual({ kind: "invalid" });
 });
+
+it("CHANGELOG-03 logs each assignment lost with a coach role, in a stable order", async () => {
+  const { pool, calls } = fakePool({
+    "FROM principals p": [actor()],
+    "DELETE FROM coach_assignments": [[{ learner: "b" }, { learner: "a" }]],
+    "DELETE FROM account_roles": [[{}]],
+  });
+  expect(
+    await accountRoleAdmin(pool).remove(staff, {
+      emailHash: h("c"),
+      role: "coach",
+    }),
+  ).toEqual({ kind: "ready" });
+  expect(
+    calls
+      .filter((c) => c.sql.includes("INTO account_role_events"))
+      .map((c) => [c.values?.[1], c.values?.[4]]),
+  ).toEqual([
+    ["cleared", "a"],
+    ["cleared", "b"],
+    ["removed", null],
+  ]);
+});
+
+it("CHANGELOG-02/04 words every kind of change", () => {
+  const billing = {
+    ...changeEntry,
+    source: "billing" as const,
+    actorName: "Ada",
+    personFound: true,
+    personName: "Bo",
+    role: null,
+    month: "2026-11",
+    amountCents: 12000,
+  };
+  const said = (action: string, extra = {}) =>
+    changeText({ ...billing, action, ...extra });
+  expect(said("plan_offered")).toBe(
+    "Ada offered Bo a course plan of CAD 120.00.",
+  );
+  expect(said("plan_offered", { amountCents: null })).toBe(
+    "Ada offered Bo a course plan.",
+  );
+  expect(said("rate_set")).toBe(
+    "Ada set the coaching rate for Bo to CAD 120.00 per hour from 2026-11.",
+  );
+  expect(said("hours_returned", { amountCents: null })).toBe(
+    "Ada returned the coaching hours for Bo for 2026-11.",
+  );
+  expect(said("coaching_invoice_issued")).toBe(
+    "Ada issued Bo a coaching invoice of CAD 120.00 for 2026-11.",
+  );
+  expect(said("monthly_invoice_issued", { month: null })).toBe(
+    "Ada issued Bo a monthly invoice of CAD 120.00.",
+  );
+  expect(said("payment_recorded")).toBe(
+    "Ada recorded a payment of CAD 120.00 from Bo.",
+  );
+  expect(said("invoice_voided", { personName: null })).toBe(
+    "Ada voided an invoice of CAD 120.00 for someone with no name set.",
+  );
+  const role = { ...changeEntry, actorName: "Ada" };
+  const roleSaid = (action: string, extra = {}) =>
+    changeText({ ...role, action, ...extra });
+  expect(roleSaid("removed", { role: "admin" })).toBe(
+    "Ada removed the Admin role from Bo.",
+  );
+  expect(roleSaid("granted", { role: "later" })).toBe(
+    "Ada gave Bo the staff role.",
+  );
+  expect(roleSaid("assigned")).toBe(
+    "Ada made Bo a coach for a deleted account.",
+  );
+  expect(roleSaid("cleared")).toBe(
+    "Ada removed Bo as a coach for a deleted account.",
+  );
+});
+
+it("CHANGELOG-11 refuses a position with an impossible time", async () => {
+  const { pool } = fakePool({ "FROM principals p": [actor()] });
+  expect(
+    await accountRoleAdmin(pool).changes(
+      staff,
+      Buffer.from("2026-13-45T99:00:00.000000Z|role|1").toString("base64url"),
+    ),
+  ).toEqual({ kind: "invalid" });
+});

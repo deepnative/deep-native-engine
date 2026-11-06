@@ -96,7 +96,7 @@ const NAMELESS = "someone with no name set";
 const money = (cents: number | null) =>
   cents === null ? "" : ` of CAD ${(cents / 100).toFixed(2)}`;
 const roleName = (role: string | null) =>
-  role === "admin" ? "Admin" : role === "coach" ? "Coach" : "a";
+  role === "admin" ? "Admin" : role === "coach" ? "Coach" : "staff";
 
 function actorText(entry: ChangeEntry) {
   if (!entry.actorFound) return "A former administrator";
