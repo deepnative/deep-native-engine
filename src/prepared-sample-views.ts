@@ -1,5 +1,6 @@
 import { timeTag } from "./display-time.ts";
 import { randomUUID } from "node:crypto";
+import { providedSampleLabel } from "./hosting-presentation.ts";
 import { page, escape, hidden } from "./views.ts";
 import {
   PREPARED_SAMPLES,
@@ -24,7 +25,7 @@ export function preparedCopyForm(
 export function preparedSamplesPage(csrf: string, goal: string) {
   return page(
     "Choose a prepared invented sample",
-    `<nav class="breadcrumb"><a href="/evidence">Your private evidence</a></nav><section class="reading"><p class="eyebrow">${PROVIDED_SAMPLE_LABEL}</p><h1>Choose a prepared invented sample</h1><p>Choose one exact provided example to practise the private feedback journey. These fixed examples are unreviewed. Copying does not submit it, assign staff, complete learning or create test units. Your arbitrary uploads and edits still need their own safety check.</p>${PREPARED_SAMPLES.map((sample) => `<article data-prepared-template="${sample.id}"><h2>${escape(sample.name)}</h2>${goal === sample.goal ? "<p>Suggested for your current direction; choose any example.</p>" : ""}<p>Template ${sample.id} · version ${sample.version} · ${PROVIDED_SAMPLE_LABEL}</p><details open><summary>Exact provided text</summary><pre class="content-text">${escape(sample.text)}</pre></details><details><summary>Exact source digest</summary><code>${sample.digest}</code></details>${preparedCopyForm(csrf, { operationId: randomUUID(), templateId: sample.id, templateVersion: sample.version, templateDigest: sample.digest })}</article>`).join("")}</section>`,
+    `<nav class="breadcrumb"><a href="/evidence">Your private evidence</a></nav><section class="reading"><p class="eyebrow">${providedSampleLabel(PROVIDED_SAMPLE_LABEL)}</p><h1>Choose a prepared invented sample</h1><p>Choose one exact provided example to practise the private feedback journey. These fixed examples are unreviewed. Copying does not submit it, assign staff, complete learning or create test units. Your arbitrary uploads and edits still need their own safety check.</p>${PREPARED_SAMPLES.map((sample) => `<article data-prepared-template="${sample.id}"><h2>${escape(sample.name)}</h2>${goal === sample.goal ? "<p>Suggested for your current direction; choose any example.</p>" : ""}<p>Template ${sample.id} · version ${sample.version} · ${providedSampleLabel(PROVIDED_SAMPLE_LABEL)}</p><details open><summary>Exact provided text</summary><pre class="content-text">${escape(sample.text)}</pre></details><details><summary>Exact source digest</summary><code>${sample.digest}</code></details>${preparedCopyForm(csrf, { operationId: randomUUID(), templateId: sample.id, templateVersion: sample.version, templateDigest: sample.digest })}</article>`).join("")}</section>`,
   );
 }
 export function preparedReceiptPage(
@@ -33,7 +34,7 @@ export function preparedReceiptPage(
 ) {
   return page(
     "Your provided-copy receipt",
-    `<section class="reading"><h1>Your provided-copy receipt</h1><p role="status">${escape(message)}</p><p>Receipt ${escape(receipt.receiptId)} · ${timeTag(receipt.createdAt)} · ${receipt.state}</p>${receipt.origin ? `<p>${PROVIDED_SAMPLE_LABEL}. Template ${escape(receipt.origin.templateId)} · version ${receipt.origin.templateVersion} · digest <code>${receipt.origin.templateDigest}</code></p>` : "<p>The private source has been removed. Repeating the original instruction cannot recreate it.</p>"}${receipt.evidenceId ? `<p data-prepared-evidence="${escape(receipt.evidenceId)}">Private source ${escape(receipt.evidenceId)} · version 1</p>` : ""}<p>Nothing was automatically queued, assigned, assessed or allocated. Withdrawal does not recreate permission.</p><p><a href="/evidence">Manage my private samples and separately queue for review</a></p></section>`,
+    `<section class="reading"><h1>Your provided-copy receipt</h1><p role="status">${escape(message)}</p><p>Receipt ${escape(receipt.receiptId)} · ${timeTag(receipt.createdAt)} · ${receipt.state}</p>${receipt.origin ? `<p>${providedSampleLabel(PROVIDED_SAMPLE_LABEL)}. Template ${escape(receipt.origin.templateId)} · version ${receipt.origin.templateVersion} · digest <code>${receipt.origin.templateDigest}</code></p>` : "<p>The private source has been removed. Repeating the original instruction cannot recreate it.</p>"}${receipt.evidenceId ? `<p data-prepared-evidence="${escape(receipt.evidenceId)}">Private source ${escape(receipt.evidenceId)} · version 1</p>` : ""}<p>Nothing was automatically queued, assigned, assessed or allocated. Withdrawal does not recreate permission.</p><p><a href="/evidence">Manage my private samples and separately queue for review</a></p></section>`,
   );
 }
 export function preparedRecoveryPage(
