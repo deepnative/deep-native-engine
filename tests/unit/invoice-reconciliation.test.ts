@@ -357,20 +357,15 @@ it("reads one read-only snapshot and always ends the transaction", async () => {
     expect(result.value.asOf).toBe(asOf);
     expect(result.value.groups[1].receiptCents).toBe(1000);
   }
-  expect(f.queries[0]).toBe("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+  expect(f.queries[0]).toBe("BEGIN ISOLATION LEVEL REPEATABLE READ");
   expect(f.queries.at(-1)).toBe("ROLLBACK");
   expect(f.release).toHaveBeenCalledExactlyOnceWith(undefined);
 });
 
 it("decodes absent optional facts as false and null", async () => {
-  const {
-    sample: _s,
-    linked: _l,
-    voided: _v,
-    firstReceipt: _f,
-    ...rest
-  } = factRow;
-  (void _s, _l, _v, _f);
+  const rest: Record<string, unknown> = { ...factRow };
+  for (const key of ["sample", "linked", "voided", "firstReceipt"])
+    delete rest[key];
   const f = pool(
     respond({
       facts: [

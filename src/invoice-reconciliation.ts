@@ -352,8 +352,9 @@ export function invoiceReconciliationStore(
         result: InvoiceReconciliationResult;
       try {
         client = await pool.connect();
-        // One snapshot across every statement, so totals and checks agree.
-        await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+        // One snapshot across every statement, so totals and checks agree. It writes
+        // nothing and always rolls back; the staff-role view locks, so not READ ONLY.
+        await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
         await client.query("SET LOCAL statement_timeout='5s'");
         const admin = (
           await client.query(

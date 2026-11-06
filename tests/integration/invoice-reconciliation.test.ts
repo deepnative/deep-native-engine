@@ -153,7 +153,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await pool.query(
-    "TRUNCATE simple_invoice_payments,simple_invoices,simple_invoice_plans,simple_invoice_operations,billing_change_events",
+    "TRUNCATE simple_invoice_payments,simple_invoices,simple_invoice_plans,simple_invoice_operations,billing_change_events CASCADE",
   );
 });
 afterAll(async () => {
@@ -365,9 +365,10 @@ it("RECON-08 staff change history is compared per member without naming them", a
     [randomUUID(), extra.id],
   );
   const orphan = await issued();
-  await pool.query("UPDATE simple_invoices SET owner_id=NULL WHERE id=$1", [
-    orphan.invoiceId,
-  ]);
+  await pool.query(
+    "INSERT INTO simple_invoices(id,cycle,document,sample,total_cents) SELECT $1,0,document,sample,total_cents FROM simple_invoices WHERE id=$2",
+    [randomUUID(), orphan.invoiceId],
+  );
   const snapshot = value(await report.snapshot(admin));
   expect(snapshot.manual).toEqual({
     comparedMembers: 3,
