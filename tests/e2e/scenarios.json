@@ -2697,6 +2697,15 @@
     },
     {
       "id": "L303",
+      "actor": "Member using a monthly test practice session allowance",
+      "preconditions": "Dedicated synthetic PostgreSQL database, test-unit issuance and practice session units enabled, four published invented lessons, port0 server; desktop/mobile Chromium",
+      "steps": "MOCK-01/02/03/05/09: a member is refused a session with no claim, follows the link, ticks and claims; starts a session, returns to it, starts two more; is refused a fourth; reopens the first",
+      "expected": "The refusal creates nothing; the claim gives three practice sessions; each new session uses one and returning uses none; the fourth is refused while earlier sessions stay open; no sideways scrolling",
+      "issues": [199, 200],
+      "critical": true
+    },
+    {
+      "id": "L304",
       "actor": "Member, assigned operator and refused staff around an unmetered held request",
       "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, inspection enabled, invented source with an explicit started-request fixture and no provider; desktop/mobile Chromium",
       "steps": "STAFFHOLD-01, 02, 05, 08: an administrator assigns one operator to the exact held request; the member deletes the source and reads the permission page; the operator reads the assigned hold; the member, an unassigned operator and the administrator try to read it",

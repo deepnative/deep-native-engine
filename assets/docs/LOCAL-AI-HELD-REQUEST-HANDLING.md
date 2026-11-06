@@ -76,4 +76,4 @@ Source deletion is never blocked. A request that never started, succeeded or clo
 
 ## Rollback
 
-Migration 105 lets assignments link directly to the job and keeps held requests when a source is deleted. Pause inspection with `DNE_LOCAL_AI_HOLD_INSPECTION=disabled`. Do not reverse the migration while unmetered assignments or sourceless holds exist: the earlier foreign key cannot represent them, and the earlier trigger would go back to deleting the record of an unknown outcome.
+Migration 106 lets assignments link directly to the job and keeps held requests when a source is deleted. Pause inspection with `DNE_LOCAL_AI_HOLD_INSPECTION=disabled`. Do not reverse the migration while unmetered assignments or sourceless holds exist: the earlier foreign key cannot represent them, and the earlier trigger would go back to deleting the record of an unknown outcome.

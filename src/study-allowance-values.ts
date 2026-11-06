@@ -1,12 +1,13 @@
 import { sampleUuid } from "./sample-feedback-values.ts";
 
 export const STUDY_ALLOWANCE_PATH = "/member/study-allowance";
-const versionPattern = /^study-allowance-test-v[1-9][0-9]*$/;
+const versionPattern = /^(study|mock)-allowance-test-v[1-9][0-9]*$/;
 const instantPattern = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 
+export type StudyAllowanceCategory = "study_requests" | "mock_sessions";
 export interface StudyAllowancePolicy {
   version: string;
-  category: "study_requests";
+  category: StudyAllowanceCategory;
   periodLimit: number;
   period: "utc_calendar_month";
   eligibility: "current_member_explicit_claim";
@@ -39,6 +40,11 @@ export interface StudyAllowanceView {
   period: StudyAllowancePeriod;
   claim: StudyAllowanceClaim | null;
   creationEnabled: boolean;
+  /** Present only while practice sessions use units, or a claim is retained. */
+  practice?: {
+    policy: StudyAllowancePolicy | null;
+    claim: StudyAllowanceClaim | null;
+  } | null;
 }
 
 /** The one UTC calendar month containing an instant observed by PostgreSQL. */
@@ -50,8 +56,16 @@ export function studyAllowancePeriod(observed: Date): StudyAllowancePeriod {
     end: new Date(Date.UTC(year, month + 1, 1)),
   };
 }
-export const studyAllowanceLedgerKey = (memberId: string, start: Date) =>
-  `study-allowance:${memberId}:${start.toISOString().slice(0, 7)}`;
+export const studyAllowanceCategory = (
+  version: string,
+): StudyAllowanceCategory =>
+  version.startsWith("mock-") ? "mock_sessions" : "study_requests";
+export const studyAllowanceLedgerKey = (
+  memberId: string,
+  start: Date,
+  category: StudyAllowanceCategory = "study_requests",
+) =>
+  `${category === "mock_sessions" ? "mock" : "study"}-allowance:${memberId}:${start.toISOString().slice(0, 7)}`;
 export const studyAllowanceKey = sampleUuid;
 
 export function studyAllowanceInstruction(
