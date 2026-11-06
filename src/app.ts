@@ -976,8 +976,10 @@ export function app(
   });
   registerMetricsReportRoutes(app, metrics);
   app.get("/operator/metrics", async (_req, res) => {
-    const snapshot = await metrics.snapshot(res.locals.token as string);
-    if (!snapshot) {
+    const token = res.locals.token as string;
+    const snapshot = await metrics.snapshot(token);
+    // Logged before it leaves: a failed log write sends no data.
+    if (!snapshot || !(await metrics.logExport(token))) {
       res.status(403).json({ error: "forbidden" });
       return;
     }

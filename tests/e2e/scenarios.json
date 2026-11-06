@@ -2721,6 +2721,15 @@
       "expected": "The member still sees the hold and its reference with no run action or erasure claim; the operator sees it as not metered with no source, member, permission or grant details and no form; everyone else gets the same refusal",
       "issues": [187],
       "critical": true
+    },
+    {
+      "id": "L306",
+      "actor": "Member checking when a moderator read a workflow note they sent for private review",
+      "preconditions": "Dedicated synthetic PostgreSQL database, local staff entry and workflow review requests enabled, invented staff provisioned through the authorization store, port0 server; desktop/mobile Chromium",
+      "steps": "NOTEREAD-01, 08: a member saves an invented workflow note and requests private review; it is assigned to an invented moderator and the member checks the history; the moderator opens the note; the member checks again",
+      "expected": "Assignment alone adds no entry; after the moderator opens it the history says a moderator read the note for that workflow and version and when, and says readings are listed from November 2026 on; no note text or staff identity; no sideways scrolling",
+      "issues": [40],
+      "critical": false
     }
   ],
   "fullMvp": [
