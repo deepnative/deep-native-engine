@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
@@ -13,7 +14,8 @@ export interface RehearsalAttempt {
 }
 const base = "/operator/event-rehearsals";
 const integrity = (csrf: string) => hidden(escape(csrf));
-const notice = `<p class="eyebrow">INVENTED PRIVATE REHEARSAL</p><p>Schedule a local learning rehearsal using the trusted sample template. This is not a real clinic, expert service, recording, attendance record or paid booking. No member directory is shown.</p>`;
+const notice = () =>
+  `<p class="eyebrow">INVENTED PRIVATE REHEARSAL</p><p>Schedule a ${hostingText("local learning rehearsal", "learning rehearsal")} using the trusted sample template. This is not a real clinic, expert service, recording, attendance record or paid booking. No member directory is shown.</p>`;
 const nav = portalActions([
   [base, "Rehearsal scheduling"],
   ["/operator/event-cancellations", "Event cancellation"],
@@ -50,7 +52,7 @@ export function eventRehearsalHome(
   const example = upcomingExample(now);
   return page(
     "Schedule a private rehearsal",
-    `<section class="reading">${notice}<h1>Schedule a private rehearsal</h1><p>${enabled ? "Check a proposed schedule before deliberately confirming it." : "New scheduling is paused. Saved rehearsals and protected inspection remain available."}</p>${enabled ? `<form method="post" action="${base}/check">${integrity(csrf)}${instruction("", example)}<button type="submit">Check proposed schedule</button></form>` : ""}<h2>Inspect an original instruction</h2><p>Use the original template, UTC start and key. Inspection creates nothing and never retries a schedule.</p><form method="post" action="${base}/inspect">${integrity(csrf)}${instruction("", example)}<label>Original submission key<input name="key" required maxlength="36" autocomplete="off"></label><button type="submit">Inspect original instruction</button></form>${nav}</section>`,
+    `<section class="reading">${notice()}<h1>Schedule a private rehearsal</h1><p>${enabled ? "Check a proposed schedule before deliberately confirming it." : "New scheduling is paused. Saved rehearsals and protected inspection remain available."}</p>${enabled ? `<form method="post" action="${base}/check">${integrity(csrf)}${instruction("", example)}<button type="submit">Check proposed schedule</button></form>` : ""}<h2>Inspect an original instruction</h2><p>Use the original template, UTC start and key. Inspection creates nothing and never retries a schedule.</p><form method="post" action="${base}/inspect">${integrity(csrf)}${instruction("", example)}<label>Original submission key<input name="key" required maxlength="36" autocomplete="off"></label><button type="submit">Inspect original instruction</button></form>${nav}</section>`,
   );
 }
 export function eventRehearsalConfirm(
@@ -60,13 +62,13 @@ export function eventRehearsalConfirm(
 ) {
   return page(
     "Confirm private rehearsal",
-    `<section class="reading">${notice}<h1>Confirm private rehearsal</h1><p>These are the exact trusted content, dates and sample capacity you checked. A different schedule creates a separate event; it never changes or transfers an existing registration.</p>${enabled ? `<form method="post" action="${base}/schedule">${integrity(csrf)}${checkedFields(attempt)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I deliberately confirm this exact invented rehearsal schedule.</span></label><button type="submit">Schedule private rehearsal</button></form>` : `<p role="status">New scheduling is unavailable. Nothing was created.</p>`}${inspect(csrf, attempt)}${nav}</section>`,
+    `<section class="reading">${notice()}<h1>Confirm private rehearsal</h1><p>These are the exact trusted content, dates and sample capacity you checked. A different schedule creates a separate event; it never changes or transfers an existing registration.</p>${enabled ? `<form method="post" action="${base}/schedule">${integrity(csrf)}${checkedFields(attempt)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I deliberately confirm this exact invented rehearsal schedule.</span></label><button type="submit">Schedule private rehearsal</button></form>` : `<p role="status">New scheduling is unavailable. Nothing was created.</p>`}${inspect(csrf, attempt)}${nav}</section>`,
   );
 }
 export function eventRehearsalReceipt(receipt: RehearsalReceipt | null) {
   return page(
     "Private rehearsal receipt",
-    `<section class="reading">${notice}<h1>Private rehearsal receipt</h1>${receipt ? `<dl><dt>Canonical receipt</dt><dd>${escape(receipt.id)}</dd><dt>Exact event/version</dt><dd>${escape(receipt.eventId)} / ${receipt.eventVersion}</dd><dt>Title</dt><dd>${escape(receipt.title)}</dd><dt>Schedule (UTC)</dt><dd>${timeTag(receipt.startsAt)} to ${timeTag(receipt.endsAt)}</dd><dt>Scheduled (UTC)</dt><dd>${timeTag(receipt.scheduledAt)}</dd></dl><p role="status">This invented rehearsal is saved. Current cancellation state and registration availability are checked separately.</p><p><a href="/events/${escape(receipt.eventId)}/${receipt.eventVersion}">Open member event detail with your learner access</a></p>` : `<p role="status">No saved rehearsal is confirmed by this inspection. An earlier uncertain instruction could still complete; do not substitute a new key.</p>`}${nav}</section>`,
+    `<section class="reading">${notice()}<h1>Private rehearsal receipt</h1>${receipt ? `<dl><dt>Canonical receipt</dt><dd>${escape(receipt.id)}</dd><dt>Exact event/version</dt><dd>${escape(receipt.eventId)} / ${receipt.eventVersion}</dd><dt>Title</dt><dd>${escape(receipt.title)}</dd><dt>Schedule (UTC)</dt><dd>${timeTag(receipt.startsAt)} to ${timeTag(receipt.endsAt)}</dd><dt>Scheduled (UTC)</dt><dd>${timeTag(receipt.scheduledAt)}</dd></dl><p role="status">This invented rehearsal is saved. Current cancellation state and registration availability are checked separately.</p><p><a href="/events/${escape(receipt.eventId)}/${receipt.eventVersion}">Open member event detail with your learner access</a></p>` : `<p role="status">No saved rehearsal is confirmed by this inspection. An earlier uncertain instruction could still complete; do not substitute a new key.</p>`}${nav}</section>`,
   );
 }
 export function eventRehearsalNotice(
@@ -76,6 +78,6 @@ export function eventRehearsalNotice(
 ) {
   return page(
     "Rehearsal scheduling needs attention",
-    `<section class="reading">${notice}<h1>Rehearsal scheduling needs attention</h1><p role="alert">${escape(message)}</p>${attempt ? `${inspect(csrf, attempt)}<details><summary>Repeat the exact original instruction manually</summary><p>Inspect saved state first. No automatic retry, replacement key or compensation occurs.</p><form method="post" action="${base}/schedule">${integrity(csrf)}${checkedFields(attempt)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I confirm repeating the exact original instruction.</span></label><button type="submit">Repeat original schedule</button></form></details>` : ""}${nav}</section>`,
+    `<section class="reading">${notice()}<h1>Rehearsal scheduling needs attention</h1><p role="alert">${escape(message)}</p>${attempt ? `${inspect(csrf, attempt)}<details><summary>Repeat the exact original instruction manually</summary><p>Inspect saved state first. No automatic retry, replacement key or compensation occurs.</p><form method="post" action="${base}/schedule">${integrity(csrf)}${checkedFields(attempt)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>I confirm repeating the exact original instruction.</span></label><button type="submit">Repeat original schedule</button></form></details>` : ""}${nav}</section>`,
   );
 }

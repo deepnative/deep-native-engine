@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import type { ApplicationMode } from "./adapters.ts";
@@ -110,7 +111,10 @@ export function mountEventAttendanceRoutes(
         .send(
           attendanceNotice(
             "",
-            "Local rehearsal attendance is unavailable in this configuration.",
+            hostingText(
+              "Local rehearsal attendance is unavailable in this configuration.",
+              "Attendance is unavailable on this site.",
+            ),
           ),
         );
     if (!fields(req.query, [])) return failure(res, "invalid");
@@ -121,7 +125,13 @@ export function mountEventAttendanceRoutes(
       return res
         .status(404)
         .send(
-          attendanceNotice("", "Local attendance staff entry is unavailable."),
+          attendanceNotice(
+            "",
+            hostingText(
+              "Local attendance staff entry is unavailable.",
+              "Attendance staff entry is unavailable.",
+            ),
+          ),
         );
     const selected = staffCookie(req.headers.cookie);
     if (selected.kind !== "value" || !staffCredential(selected.value))
@@ -226,7 +236,10 @@ export function mountEventAttendanceRoutes(
           .send(
             attendanceNotice(
               "",
-              "Local rehearsal attendance is unavailable in this configuration.",
+              hostingText(
+                "Local rehearsal attendance is unavailable in this configuration.",
+                "Attendance is unavailable on this site.",
+              ),
             ),
           );
       if (!fields(req.query, ["after"])) return failure(res, "invalid");

@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { timeTag } from "./display-time.ts";
 import { CIRCLES } from "./circles.ts";
 import { defaultWindow } from "./staff-window.ts";
@@ -20,7 +21,8 @@ const navigation = portalActions([
   ["/moderate/circle-reference", "My moderation reference"],
   ["/staff", "Your staff tools"],
 ]);
-const notice = `<p class="eyebrow">PRIVATE LOCAL CIRCLES</p><p>Grant finite moderation access to one exact circle. This does not confer paid benefits, qualified coverage or access to other circles. Use invented information only.</p>`;
+const notice = () =>
+  `<p class="eyebrow">${hostingText("PRIVATE LOCAL CIRCLES", "PRIVATE CIRCLES")}</p><p>Grant finite moderation access to one exact circle. This does not confer paid benefits, qualified coverage or access to other circles. Use invented information only.</p>`;
 const field = (name: string, value: string) =>
   `<input type="hidden" name="${name}" value="${escape(value)}">`;
 const scopeFields = (scope: CircleGrantScope) =>
@@ -64,13 +66,13 @@ function record(
 export function circleGrantHomePage(csrf: string, admin: CircleGrantAdmin) {
   return page(
     "Circle moderation grants",
-    `<section class="reading">${notice}<h1>Circle moderation grants</h1><p>Your current administrator reference: <span data-circle-admin>${escape(admin.reference.staffId)}</span>. Credential expires at ${time(admin.reference.expiresAt)}.</p><p>Obtain the moderator's own reference directly. This page does not list staff, members or private circle content. A reference alone grants no access.</p>${admin.creationEnabled ? `<form method="post" action="${base}/check">${hidden(escape(csrf))}<label for="staffId">Exact staff reference</label><input id="staffId" name="staffId" type="text" maxlength="36" required>${circles()}<button type="submit">Check exact references</button></form><form method="post" action="${base}/check">${hidden(escape(csrf))}${field("staffId", "self")}${circles("selfCircleId")}<button type="submit">Check my own reference for this circle</button></form>` : "<p>Creating circle grants is paused. Protected inspection, history and exact revocation remain available.</p>"}<h2>Inspect an exact retained grant</h2><form method="post" action="${base}/inspect">${hidden(escape(csrf))}${scopeInputs("inspect")}<label for="lookupKind">Reference type</label><select id="lookupKind" name="lookupKind"><option value="key">My original submission key</option><option value="grant">Exact grant ID</option></select><label for="lookupValue">Exact reference to inspect</label><input id="lookupValue" name="lookupValue" maxlength="36" required><button type="submit">Inspect saved grant state</button></form><h2>Exact staff and circle history</h2><form method="post" action="${base}/history">${hidden(escape(csrf))}${scopeInputs("history")}<button type="submit">Inspect grant history</button></form>${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Circle moderation grants</h1><p>Your current administrator reference: <span data-circle-admin>${escape(admin.reference.staffId)}</span>. Credential expires at ${time(admin.reference.expiresAt)}.</p><p>Obtain the moderator's own reference directly. This page does not list staff, members or private circle content. A reference alone grants no access.</p>${admin.creationEnabled ? `<form method="post" action="${base}/check">${hidden(escape(csrf))}<label for="staffId">Exact staff reference</label><input id="staffId" name="staffId" type="text" maxlength="36" required>${circles()}<button type="submit">Check exact references</button></form><form method="post" action="${base}/check">${hidden(escape(csrf))}${field("staffId", "self")}${circles("selfCircleId")}<button type="submit">Check my own reference for this circle</button></form>` : "<p>Creating circle grants is paused. Protected inspection, history and exact revocation remain available.</p>"}<h2>Inspect an exact retained grant</h2><form method="post" action="${base}/inspect">${hidden(escape(csrf))}${scopeInputs("inspect")}<label for="lookupKind">Reference type</label><select id="lookupKind" name="lookupKind"><option value="key">My original submission key</option><option value="grant">Exact grant ID</option></select><label for="lookupValue">Exact reference to inspect</label><input id="lookupValue" name="lookupValue" maxlength="36" required><button type="submit">Inspect saved grant state</button></form><h2>Exact staff and circle history</h2><form method="post" action="${base}/history">${hidden(escape(csrf))}${scopeInputs("history")}<button type="submit">Inspect grant history</button></form>${navigation}</section>`,
   );
 }
 export function circleGrantReferencePage(reference: CircleGrantReference) {
   return page(
     "My moderation reference",
-    `<section class="reading"><h1>My moderation reference</h1><p>Share this exact reference with your trusted local administrator. It is not a sign-in credential and does not itself grant access.</p><dl><dt>My staff reference</dt><dd data-circle-reference>${escape(reference.staffId)}</dd><dt>Current role</dt><dd>${escape(reference.role)}</dd><dt>Credential expires at (UTC)</dt><dd>${time(reference.expiresAt)}</dd></dl><p>Moderation still requires a current credential and a finite grant for the exact circle and purpose.</p>${navigation}</section>`,
+    `<section class="reading"><h1>My moderation reference</h1><p>Share this exact reference with your ${hostingText("trusted local administrator", "trusted administrator")}. It is not a sign-in credential and does not itself grant access.</p><dl><dt>My staff reference</dt><dd data-circle-reference>${escape(reference.staffId)}</dd><dt>Current role</dt><dd>${escape(reference.role)}</dd><dt>Credential expires at (UTC)</dt><dd>${time(reference.expiresAt)}</dd></dl><p>Moderation still requires a current credential and a finite grant for the exact circle and purpose.</p>${navigation}</section>`,
   );
 }
 export function circleGrantConfirmPage(
@@ -88,7 +90,7 @@ export function circleGrantConfirmPage(
       : attempt;
   return page(
     "Confirm circle moderation grant",
-    `<section class="reading">${notice}<h1>Confirm circle moderation grant</h1><p>Checked target role: ${escape(check.role)}. Maximum target credential expiry: ${time(check.expiresAt)}.</p>${check.creationEnabled ? creationForm(csrf, window, false) : "<p>Creating grants is paused. This check does not create access.</p>"}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Confirm circle moderation grant</h1><p>Checked target role: ${escape(check.role)}. Maximum target credential expiry: ${time(check.expiresAt)}.</p>${check.creationEnabled ? creationForm(csrf, window, false) : "<p>Creating grants is paused. This check does not create access.</p>"}${navigation}</section>`,
   );
 }
 export function circleGrantReceiptPage(
@@ -99,13 +101,13 @@ export function circleGrantReceiptPage(
 ) {
   return page(
     "Circle grant receipt",
-    `<section class="reading">${notice}<h1>Circle grant receipt</h1>${value ? record(csrf, scope, value) : "<p>No retained grant was found on this observation. The outcome may be unknown or its source may have been erased; this does not prove that an earlier submission did not commit.</p>"}${key === undefined ? "" : `<p>Your original submission key: ${escape(key)}</p>${inspectForm(csrf, scope, "key", key)}`}<p>Inspection does not create or restore access. Current roles, credentials and exact grants still govern moderation.</p>${historyForm(csrf, scope)}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Circle grant receipt</h1>${value ? record(csrf, scope, value) : "<p>No retained grant was found on this observation. The outcome may be unknown or its source may have been erased; this does not prove that an earlier submission did not commit.</p>"}${key === undefined ? "" : `<p>Your original submission key: ${escape(key)}</p>${inspectForm(csrf, scope, "key", key)}`}<p>Inspection does not create or restore access. Current roles, credentials and exact grants still govern moderation.</p>${historyForm(csrf, scope)}${navigation}</section>`,
   );
 }
 export function circleGrantHistoryPage(csrf: string, history: CircleGrantPage) {
   return page(
     "Circle grant history",
-    `<section class="reading">${notice}<h1>Circle grant history</h1><p>Exact staff reference: ${escape(history.staffId)}. Exact circle: ${escape(history.circleId)}.</p><p>States observed at ${time(history.observedAt)}; they do not guarantee future access.</p>${history.items.length ? history.items.map((item) => record(csrf, history, item)).join("") : "<p>No retained grants or recorded audit events were found on this observation. An earlier unconfirmed submission may still have an unknown outcome.</p>"}<p>At most 20 grants per page. Revoking one preserves distinct overlapping grants. Expired or ineffective retained grants remain individually revocable. Reading history does not renew authority or restore deleted records.</p>${history.nextCursor === null ? "" : historyForm(csrf, history, history.nextCursor)}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Circle grant history</h1><p>Exact staff reference: ${escape(history.staffId)}. Exact circle: ${escape(history.circleId)}.</p><p>States observed at ${time(history.observedAt)}; they do not guarantee future access.</p>${history.items.length ? history.items.map((item) => record(csrf, history, item)).join("") : "<p>No retained grants or recorded audit events were found on this observation. An earlier unconfirmed submission may still have an unknown outcome.</p>"}<p>At most 20 grants per page. Revoking one preserves distinct overlapping grants. Expired or ineffective retained grants remain individually revocable. Reading history does not renew authority or restore deleted records.</p>${history.nextCursor === null ? "" : historyForm(csrf, history, history.nextCursor)}${navigation}</section>`,
   );
 }
 export function circleGrantNoticePage(
