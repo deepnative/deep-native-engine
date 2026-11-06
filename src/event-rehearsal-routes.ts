@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import type { ApplicationMode } from "./adapters.ts";
@@ -70,7 +71,10 @@ export function mountEventRehearsalRoutes(
         .send(
           eventRehearsalNotice(
             "",
-            "Local rehearsal scheduling is unavailable in this configuration.",
+            hostingText(
+              "Local rehearsal scheduling is unavailable in this configuration.",
+              "Rehearsal scheduling is unavailable on this site.",
+            ),
           ),
         );
     const selected = staffCookie(req.headers.cookie);

@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
@@ -130,7 +131,7 @@ export function reviewerSampleReference(
 ): string {
   return page(
     "Your reviewer reference",
-    `<section class="reading"><h1>Your reviewer reference</h1><p>Share this exact reference with your trusted local administrator for one private sample version. It is not a sign-in credential and does not itself grant access or establish qualification.</p><dl><dt>Your reviewer reference</dt><dd data-reviewer-reference>${escape(reference.reviewerId)}</dd><dt>Credential expires at (UTC)</dt><dd>${time(reference.expiresAt)}</dd></dl><p>An administrator must explicitly confirm a finite exact assignment. Current role, source permission and exact grants still govern later access.</p>${portalActions(
+    `<section class="reading"><h1>Your reviewer reference</h1><p>Share this exact reference with your ${hostingText("trusted local administrator", "trusted administrator")} for one private sample version. It is not a sign-in credential and does not itself grant access or establish qualification.</p><dl><dt>Your reviewer reference</dt><dd data-reviewer-reference>${escape(reference.reviewerId)}</dd><dt>Credential expires at (UTC)</dt><dd>${time(reference.expiresAt)}</dd></dl><p>An administrator must explicitly confirm a finite exact assignment. Current role, source permission and exact grants still govern later access.</p>${portalActions(
       [
         ["/staff", "Your staff tools"],
         ["/learn", "Your learning space"],
