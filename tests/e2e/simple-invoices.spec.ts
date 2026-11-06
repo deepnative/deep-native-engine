@@ -326,3 +326,96 @@ test("[L304] staff records offline funds and refunds that the member sees as man
     await f.close();
   }
 });
+
+test("[L306] administrator reconciles an invoice against recorded cash and a reversal, and other roles are refused", async ({
+  browser,
+}, info) => {
+  const f = await reviewedContentFixture(browser, info, {
+    sampleInvoices: true,
+  });
+  try {
+    const member = await f.member();
+    const { admin, date } = await offer(f, member);
+    const invoiceId = await accept(member);
+    const staffPage = admin.page;
+    await staffPage.goto(f.origin + "/operator/invoices/" + invoiceId);
+    await staffPage.getByLabel("Amount received (CAD)").fill("20.00");
+    await staffPage.getByLabel("Received on", { exact: true }).fill(date);
+    await staffPage
+      .getByLabel("Evidence reference")
+      .first()
+      .fill("Invented private reference");
+    await staffPage
+      .getByRole("checkbox", { name: /I verified these funds/ })
+      .check();
+    await staffPage
+      .getByRole("button", { name: "Record offline payment" })
+      .click();
+    await staffPage.getByLabel("Amount refunded (CAD)").fill("5.00");
+    await staffPage.getByLabel("Refunded on").fill(date);
+    await staffPage
+      .locator('form[action$="/refund"]')
+      .getByLabel("Evidence reference")
+      .fill("Invented private refund");
+    await staffPage
+      .getByRole("checkbox", { name: /I confirm this refund was sent/ })
+      .check();
+    await staffPage
+      .getByRole("button", { name: "Record offline refund" })
+      .click();
+    await staffPage.goto(f.origin + "/staff");
+    await staffPage
+      .getByRole("link", {
+        name: "Invoice and cash reconciliation",
+        exact: true,
+      })
+      .click();
+    await expect(
+      staffPage.getByRole("heading", {
+        name: "Invoice and cash reconciliation",
+      }),
+    ).toBeVisible();
+    const sample = staffPage.locator('[data-invoice-group="sample"]'),
+      field = (name: string) => sample.locator(`[data-field="${name}"]`);
+    await expect(
+      sample.getByRole("heading", { name: "Sample invoices · Test data" }),
+    ).toBeVisible();
+    await expect(field("invoiced")).toHaveText("CAD 30.00");
+    await expect(field("receipts")).toHaveText("CAD 20.00");
+    await expect(field("refunds")).toHaveText("CAD 5.00");
+    await expect(field("net")).toHaveText("CAD 15.00");
+    await expect(field("unpaid")).toHaveText("CAD 10.00");
+    await expect(field("mismatched")).toHaveText("0");
+    await expect(
+      staffPage
+        .locator('[data-invoice-group="configured"]')
+        .locator('[data-field="share"]'),
+    ).toHaveText("Not applicable: nothing invoiced");
+    const row = staffPage.locator(`[data-flagged-invoice="${invoiceId}"]`);
+    await expect(row).toContainText("Reversal: partly refunded");
+    await expect(staffPage.locator("body")).not.toContainText(
+      "Invented private",
+    );
+    expect(
+      await staffPage.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await staffPage.screenshot({
+      path: info.outputPath("invoice-reconciliation.png"),
+      fullPage: true,
+    });
+    await row.getByRole("link").click();
+    await expect(staffPage).toHaveURL(new RegExp(invoiceId));
+    const operator = await f.staff("operator");
+    for (const denied of [operator.page, member]) {
+      const response = await denied.goto(
+        f.origin + "/operator/invoice-reconciliation",
+      );
+      expect(response?.status()).toBe(403);
+      await expect(denied.locator("main")).not.toContainText("CAD");
+    }
+  } finally {
+    await f.close();
+  }
+});

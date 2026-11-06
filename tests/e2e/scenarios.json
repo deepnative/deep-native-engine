@@ -2712,6 +2712,15 @@
       "expected": "The member sees the receipt, reference and that it is not verified by a payment provider, never who recorded it; the administrator sees who recorded it; after refunds the payment stays, the status reads Partly refunded then Refunded, the balance stays zero and the refund form disappears; no sideways scrolling",
       "issues": [32],
       "critical": true
+    },
+    {
+      "id": "L306",
+      "actor": "Platform administrator reconciling sample invoices against recorded cash",
+      "preconditions": "Dedicated synthetic PostgreSQL database, sample invoices, port0 server; desktop/mobile Chromium; no provider, no real money",
+      "steps": "RECON-02/03/06/10: a member accepts one invented invoice; the administrator records a part payment and a partial refund, then opens the report from the staff page and follows a flagged invoice; an operator and the member request the report",
+      "expected": "Invoiced, receipts, refunds, net collected and unpaid balance read as separate amounts under a test-data heading; the empty group reads not applicable; the refund is flagged as a reversal; no evidence reference appears; the operator and member are refused with no amounts; no sideways scrolling",
+      "issues": [123],
+      "critical": true
     }
   ],
   "fullMvp": [
