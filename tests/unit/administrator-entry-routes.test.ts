@@ -839,6 +839,7 @@ it("DEFCOACH-04/ROLEADMIN-01 shows the selected learner's coaches control and th
         grant: vi.fn(),
         remove: vi.fn(),
         setCoaches: vi.fn(),
+        changes: vi.fn(),
       },
     },
   );

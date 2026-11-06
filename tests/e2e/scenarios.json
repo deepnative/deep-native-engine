@@ -2667,6 +2667,15 @@
       "expected": "Opening the page adds nothing; the claim gives exactly five study requests ending at the month's end and appears on the balance; repeating the form adds no second grant; the local request leaves four; no sideways scrolling",
       "issues": [199],
       "critical": true
+    },
+    {
+      "id": "L300",
+      "actor": "Administrator checking who changed roles and billing",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, verified owner and invented coach and learner; desktop/mobile Chromium",
+      "steps": "CHANGELOG-01, 02, 03, 04: an administrator opens Change history from the console with nothing recorded, gives a coach role, assigns the coach to a learner, sets the learner a coaching rate, removes the coach role, and opens the history again; a member then requests the page",
+      "expected": "First says no changes are recorded; then lists each change with who, whom and when, newest first, including the assignment lost with the role, with no email and no sideways scrolling; the member is refused",
+      "issues": [40],
+      "critical": false
     }
   ],
   "fullMvp": [
