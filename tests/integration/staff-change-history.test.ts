@@ -196,6 +196,9 @@ it("CHANGELOG-02 lists role and coach changes with who, whom and when, newest fi
   const coach = await account("Invented Coach", "coach-02@example.test"),
     ada = await account("Invented Ada");
   const coachHash = hash("coach-02@example.test");
+  // New learners start with the default coaches; start this learner from none.
+  await admin.setCoaches(tom.credential, { learnerId: ada.id, coaches: [] });
+  await pool.query("TRUNCATE account_role_events");
   expect(
     await admin.grant(tom.credential, {
       email: "coach-02@example.test",
@@ -447,8 +450,10 @@ it("CHANGELOG-06 what members and the scheduled run do isn't a staff change", as
   );
   await makeDue(m.id);
   await pool.query("TRUNCATE billing_change_events");
-  const scheduled = ready(await invoices.generateScheduled());
-  expect(scheduled.created).toBeGreaterThan(0);
+  // One cycle per run, so a backdated agreement needs running until caught up.
+  let created = ready(await invoices.generateScheduled()).created;
+  expect(created).toBeGreaterThan(0);
+  while (created) created = ready(await invoices.generateScheduled()).created;
   expect(await sentences()).toEqual([]);
 
   const other = await account("Invented Admin Run");
