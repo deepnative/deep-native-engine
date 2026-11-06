@@ -130,6 +130,7 @@ export function changeText(entry: ChangeEntry) {
     "billing:coaching_invoice_issued": `issued ${person} a coaching invoice${money(entry.amountCents)} for ${month}`,
     "billing:monthly_invoice_issued": `issued ${person} a monthly invoice${money(entry.amountCents)}`,
     "billing:payment_recorded": `recorded a payment${money(entry.amountCents)} from ${person}`,
+    "billing:payment_refunded": `recorded a refund${money(entry.amountCents)} to ${person}`,
     "billing:invoice_voided": `voided an invoice${money(entry.amountCents)} for ${person}`,
   };
   return `${who} ${change[`${entry.source}:${entry.action}`] ?? "made a change"}.`;
@@ -153,7 +154,7 @@ export function changeHistoryBody(history: ChangeHistory, first: boolean) {
     history.older
       ? `<p><a href="/operator/changes?before=${encodeURIComponent(history.older)}">Older entries</a></p>`
       : ""
-  }</section><section class="portal-card" aria-labelledby="change-covers"><h2 id="change-covers">What this covers</h2><p>Roles and coach assignments, offering plans, setting coaching rates, returning hours, issuing invoices, recording payments and voiding invoices.</p><p>It doesn't list what members do themselves, invoices the scheduled run creates, or invoices being emailed. It doesn't list time-limited staff access to a member's work. Members see that under When staff opened my work.</p><p>Issuing invoices, returning hours and setting rates are listed only from when this history began. Older records didn't say who did them.</p></section><div class="portal-footer">${portalActions(
+  }</section><section class="portal-card" aria-labelledby="change-covers"><h2 id="change-covers">What this covers</h2><p>Roles and coach assignments, offering plans, setting coaching rates, returning hours, issuing invoices, recording payments and refunds and voiding invoices.</p><p>It doesn't list what members do themselves, invoices the scheduled run creates, or invoices being emailed. It doesn't list time-limited staff access to a member's work. Members see that under When staff opened my work.</p><p>Issuing invoices, returning hours and setting rates are listed only from when this history began. Older records didn't say who did them.</p></section><div class="portal-footer">${portalActions(
     [
       ["/operator/roles", "Roles"],
       ["/operator", "Administration console"],

@@ -781,6 +781,9 @@ it("CHANGELOG-02/04 words every kind of change", () => {
   expect(said("payment_recorded")).toBe(
     "Ada recorded a payment of CAD 120.00 from Bo.",
   );
+  expect(said("payment_refunded")).toBe(
+    "Ada recorded a refund of CAD 120.00 to Bo.",
+  );
   expect(said("invoice_voided", { personName: null })).toBe(
     "Ada voided an invoice of CAD 120.00 for someone with no name set.",
   );

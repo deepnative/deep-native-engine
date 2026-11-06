@@ -38,6 +38,25 @@ export function invoiceText(value: unknown, limit: number): value is string {
     )
   );
 }
+/** MANPAY-02: one line of non-secret proof; long digit runs may be card numbers. */
+export const invoiceEvidence = (value: unknown): value is string =>
+  invoiceText(value, 200) &&
+  !/[\n\r\t]/.test(value) &&
+  !/(?:\d[ -]?){13,}/.test(value);
+/** MANPAY-04: refunds keep their own status and never read as unpaid. */
+export function invoicePaymentStatus(invoice: {
+  voidReason: string | null;
+  totalCents: number;
+  paidCents: number;
+  refundedCents?: number;
+}) {
+  const refunded = invoice.refundedCents ?? 0;
+  if (invoice.voidReason) return "Void";
+  if (refunded > 0)
+    return refunded === invoice.paidCents ? "Refunded" : "Partly refunded";
+  if (invoice.paidCents === invoice.totalCents) return "Paid";
+  return invoice.paidCents ? "Partially paid" : "Awaiting offline payment";
+}
 export function invoiceDate(value: unknown): value is string {
   return (
     typeof value === "string" &&

@@ -517,6 +517,7 @@ it("HOUR08 payment racing void cannot erase received funds; delivery uncertainty
       operationId: randomUUID(),
       amountCents: 100,
       receivedOn: today,
+      evidence: "Invented bank reference",
     }),
     invoices.voidInvoice(admin2, {
       invoiceId: i.invoiceId,
@@ -1054,6 +1055,7 @@ it("DASH-01/02 summarizes one month's contractor hours and invoices exactly", as
       operationId: randomUUID(),
       amountCents: 5000,
       receivedOn: "2003-03-05",
+      evidence: "Invented bank reference",
     }),
   );
   // Cy: only a February draft, which is not submitted hours.

@@ -750,6 +750,24 @@ it("HOURTABLE-01/02/03 lists saved months as a table with hours, amount, status 
       paidCents: "0",
       voided: true,
     },
+    {
+      month: "2026-04",
+      state: "invoiced",
+      minutes: 60,
+      invoiceId,
+      totalCents: "12000",
+      paidCents: "12000",
+      refundedCents: "12000",
+    },
+    {
+      month: "2026-03",
+      state: "invoiced",
+      minutes: 60,
+      invoiceId,
+      totalCents: "12000",
+      paidCents: "12000",
+      refundedCents: "2000",
+    },
     { month: "2025-01", state: "draft", minutes: 45, returned: false },
   ];
   f.service.coachingOverview.mockResolvedValue(ready({ ...value, months }));
@@ -777,6 +795,9 @@ it("HOURTABLE-01/02/03 lists saved months as a table with hours, amount, status 
   expect(row("August 2026")).toContain("CAD 240.00");
   expect(row("August 2026")).toContain("Awaiting review");
   expect(row("July 2026")).toContain("Invoiced · Paid");
+  // MANPAY-04: a refunded month reads as refunded, never as paid or due.
+  expect(row("April 2026")).toContain("Invoiced · Refunded");
+  expect(row("March 2026")).toContain("Invoiced · Partly refunded");
   expect(row("July 2026")).toContain(
     `href="/account/purchases/invoices/${invoiceId}"`,
   );
