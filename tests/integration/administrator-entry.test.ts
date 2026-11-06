@@ -542,28 +542,79 @@ it("ADMINCON04 denies learner, unbound, revoked, malformed and expired console a
   );
   expect(await entry.console!(second.credential)).toEqual({ kind: "denied" });
 });
-it("CONSOLECOACH-01 lists each learner's latest saved coaching month, or none", async () => {
+it("CONSOLEMONTHS-01..03 lists this month, last month and the latest earlier month in the one listing query", async () => {
   const admin = await consoleAdmin();
-  const [busy, idle] = await learners(2);
-  const save = (month: string, minutes: number, state = "draft") =>
+  const [busy, older, idle] = await learners(3);
+  const { current, previous } = (
+    await pool.query<{ current: string; previous: string }>(
+      `SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM') AS current,
+       to_char(date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')-interval '1 month','YYYY-MM') AS previous`,
+    )
+  ).rows[0]!;
+  const save = (
+    owner: string,
+    month: string,
+    minutes: number,
+    state = "draft",
+  ) =>
     pool.query(
       `INSERT INTO coaching_months(owner_id,month,minutes,name,email,state,revision,submitted_revision)
        VALUES($1,$2,$3,'Invented','invented@example.test',$4,1,$5)`,
-      [busy, month, minutes, state, state === "draft" ? null : 1],
+      [owner, month, minutes, state, state === "draft" ? null : 1],
     );
-  await save("2026-09", 600, "submitted");
-  await save("2026-10", 10320);
-  const listed = await view(admin.credential);
-  const row = (id: string | undefined) =>
-    listed.members.find((m) => m.id === id);
-  expect(row(busy)!.coaching).toEqual({
-    month: "2026-10",
-    minutes: 10320,
-    state: "draft",
+  const summary = (month: string, minutes: number, state = "draft") => ({
+    month,
+    minutes,
+    state,
     returned: false,
     totalCents: null,
     paidCents: null,
     voided: false,
   });
-  expect(row(idle)!.coaching).toBeNull();
+  await save(busy!, "2020-01", 60, "submitted");
+  await save(busy!, previous, 600, "submitted");
+  await save(busy!, current, 720);
+  await save(older!, "2020-03", 90);
+  await save(older!, "2020-02", 30);
+  // AC4: the three months come with the page of learners, not per row.
+  const statements: string[] = [];
+  const clients: Array<{ mockRestore(): void }> = [];
+  const connect = pool.connect.bind(pool);
+  const spy = vi.spyOn(pool, "connect").mockImplementation((async () => {
+    const client = await connect();
+    const query = client.query.bind(client);
+    const spied = vi.spyOn(client, "query");
+    clients.push(spied);
+    spied.mockImplementation(((text: unknown, ...rest: unknown[]) => {
+      if (typeof text === "string") statements.push(text);
+      return (query as (...a: unknown[]) => unknown)(text, ...rest);
+    }) as never);
+    return client;
+  }) as never);
+  const listed = await view(admin.credential);
+  spy.mockRestore();
+  for (const spied of clients) spied.mockRestore();
+  expect(
+    statements.filter((text) => text.includes("coaching_months")),
+  ).toHaveLength(1);
+  expect(listed.months).toEqual({ current, previous });
+  const row = (id: string | undefined) =>
+    listed.members.find((m) => m.id === id)!;
+  // CONSOLEMONTHS-01: this month and last month, each with its own hours.
+  expect(row(busy).thisMonth).toEqual(summary(current, 720));
+  expect(row(busy).lastMonth).toEqual(summary(previous, 600, "submitted"));
+  // CONSOLEMONTHS-03: earlier coaching skips the months shown beside it.
+  expect(row(busy).coaching).toEqual(summary("2020-01", 60, "submitted"));
+  expect(row(older).coaching).toEqual(summary("2020-03", 90));
+  // CONSOLEMONTHS-02: nothing saved for a month is empty, not zero.
+  expect(row(older).thisMonth).toBeNull();
+  expect(row(older).lastMonth).toBeNull();
+  for (const key of ["thisMonth", "lastMonth", "coaching"] as const)
+    expect(row(idle)[key]).toBeNull();
+  // CONSOLEMONTHS-04: search keeps the month columns for the matching rows.
+  const found = await view(admin.credential, undefined, {
+    search: "Invented learner 01",
+  });
+  expect(found.members).toHaveLength(1);
+  expect(found.members[0]!.thisMonth).toEqual(summary(current, 720));
 });

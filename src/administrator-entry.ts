@@ -12,7 +12,7 @@ export type AdministratorResult =
   | { kind: "ready"; credential?: string; expires?: Date }
   | { kind: "denied" | "unavailable" };
 export const LEARNERS_PER_PAGE = 25;
-/** A learner's most recent saved coaching month, as the console summarises it. */
+/** One saved coaching month, as the console summarises it. */
 export interface LatestCoaching {
   month: string;
   minutes: number;
@@ -29,8 +29,13 @@ export interface AdministratorConsole {
     background: string;
     goal: string;
     joined: Date;
+    /** CONSOLEMONTHS-03: the latest saved month before last month. */
     coaching?: LatestCoaching | null;
+    thisMonth?: LatestCoaching | null;
+    lastMonth?: LatestCoaching | null;
   }>;
+  /** Calendar months (UTC, from the database clock) for the month columns. */
+  months: { current: string; previous: string };
   /** Learners matching the search; `members` holds only the current page. */
   total: number;
   page: number;
@@ -191,33 +196,51 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
              WHERE p.revoked_at IS NULL AND w.deleting_at IS NULL`;
           const matching = `${learners} AND ($1::text IS NULL
                OR l.display_name ILIKE $1 OR l.id=$2::uuid)`;
-          const total = (
-            await tx.query<{ total: number }>(
-              `SELECT count(*)::int AS total ${matching}`,
+          // CONSOLEMONTHS-01: months follow the coaching pages' UTC clock.
+          const { total, ...months } = (
+            await tx.query<{
+              total: number;
+              current: string;
+              previous: string;
+            }>(
+              `SELECT count(*)::int AS total,
+                 to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM') AS current,
+                 to_char(date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')-interval '1 month','YYYY-MM') AS previous
+               ${matching}`,
               filter,
             )
-          ).rows[0]!.total;
+          ).rows[0]!;
           const page = Math.min(
             Math.max(view.page ?? 1, 1),
             Math.max(Math.ceil(total / LEARNERS_PER_PAGE), 1),
           );
           const columns = `l.id,l.display_name AS "displayName",l.background,l.goal,p.created_at AS joined`;
-          const members =
-            // CONSOLECOACH-01: each listed learner's latest saved coaching month.
-            (
-              await tx.query<AdministratorConsole["members"][number]>(
-                `SELECT ${columns},
-                 (SELECT json_build_object('month',m.month,'minutes',m.minutes,'state',m.state,
-                    'returned',m.return_reason IS NOT NULL,'totalCents',i.total_cents::text,
-                    'paidCents',i.paid_cents::text,'voided',i.voided_at IS NOT NULL)
-                  FROM coaching_months m LEFT JOIN simple_invoices i ON i.id=m.invoice_id
-                  WHERE m.owner_id=l.id ORDER BY m.month DESC LIMIT 1) AS coaching
+          // CONSOLEMONTHS-01..03: this month, last month and the latest
+          // earlier month come with the page of learners, in one statement.
+          const summary = (where: string) =>
+            `(SELECT json_build_object('month',m.month,'minutes',m.minutes,'state',m.state,
+                'returned',m.return_reason IS NOT NULL,'totalCents',i.total_cents::text,
+                'paidCents',i.paid_cents::text,'voided',i.voided_at IS NOT NULL)
+              FROM coaching_months m LEFT JOIN simple_invoices i ON i.id=m.invoice_id
+              WHERE m.owner_id=l.id AND ${where} ORDER BY m.month DESC LIMIT 1)`;
+          const members = (
+            await tx.query<AdministratorConsole["members"][number]>(
+              `SELECT ${columns},
+                 ${summary("m.month=$5")} AS "thisMonth",
+                 ${summary("m.month=$6")} AS "lastMonth",
+                 ${summary("m.month<$6")} AS coaching
                ${matching}
                ORDER BY lower(l.display_name) NULLS LAST,l.display_name,l.id
                LIMIT $3 OFFSET $4`,
-                [...filter, LEARNERS_PER_PAGE, (page - 1) * LEARNERS_PER_PAGE],
-              )
-            ).rows;
+              [
+                ...filter,
+                LEARNERS_PER_PAGE,
+                (page - 1) * LEARNERS_PER_PAGE,
+                months.current,
+                months.previous,
+              ],
+            )
+          ).rows;
           const chosen = ownerId
             ? (
                 await tx.query<AdministratorConsole["members"][number]>(
@@ -237,6 +260,7 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
           ).rows;
           const value: AdministratorConsole = {
             members,
+            months,
             total,
             page,
             pageSize: LEARNERS_PER_PAGE,
