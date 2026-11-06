@@ -33,6 +33,8 @@ export interface DraftContent {
   domains: string[];
   prerequisites: string;
   structuredPrerequisites?: PrerequisiteSpec | null;
+  /** Lesson titles for a member's view of the prerequisites; never stored. */
+  prerequisiteTitles?: ReadonlyMap<string, string>;
   minimumExperience?: Experience;
   rubric: string | null;
   rubricVersion: number | null;

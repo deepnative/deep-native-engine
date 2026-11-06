@@ -3,6 +3,12 @@ import request from "supertest";
 import type { Server } from "node:http";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 import { afterEach, expect, it, vi } from "vitest";
+import type { AdministratorDiagnostics } from "../../src/administrator-diagnostics.ts";
+import type { WorkWaiting } from "../../src/administrator-work-waiting.ts";
+import {
+  waitedFor,
+  workQueueTools,
+} from "../../src/administrator-work-waiting-views.ts";
 import { mountAdministratorEntry } from "../../src/administrator-entry-routes.ts";
 import type {
   AdministratorResult,
@@ -833,6 +839,7 @@ it("DEFCOACH-04/ROLEADMIN-01 shows the selected learner's coaches control and th
         grant: vi.fn(),
         remove: vi.fn(),
         setCoaches: vi.fn(),
+        changes: vi.fn(),
       },
     },
   );
@@ -854,4 +861,273 @@ it("DEFCOACH-04/ROLEADMIN-01 shows the selected learner's coaches control and th
   expect(admin.text).toContain(
     '<a href="/operator/roles" class="button secondary">Roles</a>',
   );
+});
+
+const consoleHtml = (res: { text: string }) => mainHtml(res.text);
+const emptyQueue = {
+  waiting: 0,
+  oldestWaitingMinutes: null,
+  assigned: 0,
+  oldestAssignedMinutes: null,
+  people: 1,
+};
+const invented: WorkWaiting = {
+  support: {
+    waiting: 2,
+    oldestWaitingMinutes: 200,
+    assigned: 1,
+    oldestAssignedMinutes: 45,
+    people: 0,
+  },
+  feedback: { ...emptyQueue, waiting: 1, oldestWaitingMinutes: 1, people: 3 },
+  workflow: {
+    ...emptyQueue,
+    waiting: 21,
+    oldestWaitingMinutes: 4320,
+    people: 0,
+    references: ["22222222-2222-4222-8222-222222222222"],
+  },
+  contributions: {
+    ...emptyQueue,
+    assigned: null,
+    waiting: 1,
+    oldestWaitingMinutes: 0,
+    people: 2,
+  },
+};
+const allQueues = {
+  support: true,
+  feedback: true,
+  workflow: true,
+  contributions: true,
+};
+async function consoleWith(
+  work: unknown,
+  queues: Partial<typeof allQueues> | undefined = allQueues,
+) {
+  const app = express();
+  mountAdministratorEntry(
+    app,
+    {
+      status: vi.fn(),
+      enter: vi.fn(),
+      end: vi.fn(),
+      console: async () => ({
+        kind: "ready" as const,
+        value: { members: [], courses: [], ...listing },
+      }),
+    },
+    {
+      origin,
+      secret,
+      localStaffEntry: true,
+      mode: "local",
+      administratorDiagnostics: {
+        work: work as AdministratorDiagnostics["work"],
+      },
+    },
+    queues && { ...allQueues, ...queues },
+  );
+  return (await http(app))
+    .get("/operator")
+    .set("Cookie", `dne_staff=${credential}`);
+}
+const row = (html: string, queue: string) =>
+  html.match(new RegExp(`<tr data-work-queue="${queue}">.*?</tr>`))?.[0] ?? "";
+
+it("WAITWORK-01 shows waiting work first, with ages and links to each queue", async () => {
+  const work = vi.fn(async () => ({
+    kind: "ready" as const,
+    value: invented,
+  }));
+  const res = await consoleWith(work);
+  expect(res.status).toBe(200);
+  expect(work).toHaveBeenCalledWith(credential);
+  const text = consoleHtml(res);
+  expect(text.indexOf('id="work-waiting"')).toBeLessThan(
+    text.indexOf('id="learners"'),
+  );
+  expect(text).toContain("not a response-time promise");
+  const support = row(text, "support");
+  expect(support).toContain(
+    '<a href="/operator/support-assignment/inbox">Support requests</a>',
+  );
+  expect(support).toContain("<td>2</td><td>3 hours</td>");
+  expect(support).toContain("<td>1 · oldest 45 minutes</td>");
+  const feedback = row(text, "feedback");
+  expect(feedback).toContain('href="/operator/sample-assignments/pending"');
+  expect(feedback).toContain("<td>1</td><td>1 minute</td><td>0</td><td>3</td>");
+  expect(row(text, "workflow")).toContain("<td>21</td><td>3 days</td>");
+  const contributions = row(text, "contributions");
+  expect(contributions).toContain('href="/moderate/proposals"');
+  expect(contributions).toContain(
+    "<td>1</td><td>Under a minute</td><td>—</td><td>2</td>",
+  );
+});
+
+it("WAITWORK-04 lists workflow references and says when the list is cut short", async () => {
+  const many = consoleHtml(
+    await consoleWith(async () => ({ kind: "ready", value: invented })),
+  );
+  expect(many).toContain("<code>22222222-2222-4222-8222-222222222222</code>");
+  expect(many).toContain("Showing the oldest 20 of 21.");
+  const few = consoleHtml(
+    await consoleWith(async () => ({
+      kind: "ready",
+      value: { ...invented, workflow: { ...invented.workflow, waiting: 1 } },
+    })),
+  );
+  expect(few).toContain("Oldest first.");
+  const none = consoleHtml(
+    await consoleWith(async () => ({
+      kind: "ready",
+      value: {
+        ...invented,
+        workflow: { ...invented.workflow, waiting: 0, references: [] },
+      },
+    })),
+  );
+  expect(none).not.toContain("Workflow review references");
+});
+
+it("WAITWORK-06 omits queues that are off on this site", async () => {
+  const value = { kind: "ready", value: invented };
+  const some = consoleHtml(
+    await consoleWith(async () => value, {
+      support: false,
+      workflow: false,
+    }),
+  );
+  expect(row(some, "support")).toBe("");
+  expect(row(some, "workflow")).toBe("");
+  expect(some).not.toContain("Workflow review references");
+  expect(row(some, "feedback")).not.toBe("");
+  const none = consoleHtml(
+    await consoleWith(async () => value, {
+      support: false,
+      feedback: false,
+      workflow: false,
+      contributions: false,
+    }),
+  );
+  expect(none).not.toContain("work-waiting");
+});
+
+it("WAITWORK-07 reads nothing for a request the console refuses", async () => {
+  const work = vi.fn();
+  const app = express();
+  mountAdministratorEntry(
+    app,
+    {
+      status: vi.fn(),
+      enter: vi.fn(),
+      end: vi.fn(),
+      console: async () => ({ kind: "denied" as const }),
+    },
+    {
+      origin,
+      secret,
+      localStaffEntry: true,
+      mode: "local",
+      administratorDiagnostics: { work },
+    },
+    allQueues,
+  );
+  const http_ = await http(app);
+  const refused = await http_
+    .get("/operator")
+    .set("Cookie", `dne_staff=${credential}`);
+  expect(refused.status).toBe(403);
+  expect((await http_.get("/operator")).status).toBe(403);
+  expect(work).not.toHaveBeenCalled();
+});
+
+it("WAITWORK-08 keeps the console and never shows zero when counts cannot be read", async () => {
+  for (const work of [
+    async () => ({ kind: "unavailable" }),
+    async () => {
+      throw Error("private database failure");
+    },
+  ]) {
+    const res = await consoleWith(work);
+    expect(res.status).toBe(200);
+    const text = consoleHtml(res);
+    expect(text).toContain('id="learners"');
+    expect(text).toContain("This does not mean nothing is waiting.");
+    expect(text).not.toContain("data-work-queue");
+    expect(text).not.toContain("private database failure");
+  }
+});
+
+it("WAITWORK-09 says when nobody is set up to take a queue, naming the role", async () => {
+  const text = consoleHtml(
+    await consoleWith(async () => ({ kind: "ready", value: invented })),
+  );
+  expect(row(text, "support")).toContain(
+    "0 · No support operator is set up on this site",
+  );
+  expect(row(text, "workflow")).toContain(
+    "0 · No moderator is set up on this site",
+  );
+  expect(row(text, "feedback")).not.toContain("set up");
+});
+
+it("WAITWORK ages read naturally at each boundary", () => {
+  expect(
+    [null, 0, 1, 59, 60, 119, 2879, 2880, 4319].map((m) => waitedFor(m)),
+  ).toEqual([
+    "—",
+    "Under a minute",
+    "1 minute",
+    "59 minutes",
+    "1 hour",
+    "1 hour",
+    "47 hours",
+    "2 days",
+    "2 days",
+  ]);
+});
+
+it("WAITWORK-06 turns a queue on only when its store and its site setting are both on", () => {
+  const none = {
+    support: false,
+    feedback: false,
+    workflow: false,
+    contributions: false,
+  };
+  expect(workQueueTools({})).toEqual(none);
+  // A store alone isn't enough: the site must also have the tool switched on.
+  expect(
+    workQueueTools({
+      supportAssignment: {},
+      sampleAssignments: {},
+      workflowReviewStaff: {},
+      localSupportAssignment: false,
+      sampleAssignmentAdministration: false,
+      workflowReviewRequests: false,
+    }),
+  ).toEqual(none);
+  expect(
+    workQueueTools({
+      localSupportAssignment: true,
+      sampleAssignmentAdministration: true,
+      workflowReviewRequests: true,
+    }),
+  ).toEqual(none);
+  expect(
+    workQueueTools({
+      supportAssignment: {},
+      localSupportAssignment: true,
+      sampleAssignments: {},
+      sampleAssignmentAdministration: true,
+      workflowReviewStaff: {},
+      workflowReviewRequests: true,
+      proposals: {},
+    }),
+  ).toEqual({
+    support: true,
+    feedback: true,
+    workflow: true,
+    contributions: true,
+  });
 });

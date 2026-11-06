@@ -92,6 +92,15 @@ function rangeEnds(start: Moment, end: Moment, timezone?: string | null) {
 }
 
 /** A readable time whose exact value stays available to machines. */
+/** PostgreSQL's text form of a UTC timestamp, in the ISO form Date always reads. */
+export function databaseMoment(value: string) {
+  const match =
+    /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(?:\.(\d+))?\+00$/.exec(value);
+  return match
+    ? `${match[1]}T${match[2]}.${(match[3] ?? "").padEnd(3, "0").slice(0, 3)}Z`
+    : value;
+}
+
 export function timeTag(value: Moment, timezone?: string | null) {
   const date = parsed(value);
   return date

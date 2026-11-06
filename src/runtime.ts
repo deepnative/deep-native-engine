@@ -40,6 +40,7 @@ import { app } from "./app.ts";
 import { authorizationStore } from "./authorization.ts";
 import { evidenceStore, fileObjectStorage } from "./evidence.ts";
 import { uploadAdmissionStore } from "./upload-admission.ts";
+import { anonymousWriteAdmissionStore } from "./anonymous-write-admission.ts";
 import { preparedObjectStorage } from "./prepared-sample-storage.ts";
 import { preparedSampleStore } from "./prepared-samples.ts";
 import { assignmentEvidenceStore } from "./assignment-evidence.ts";
@@ -63,6 +64,7 @@ import { ledgerReconciliationStore } from "./ledger-reconciliation.ts";
 import { localAiHoldInspectionStore } from "./local-ai-hold-inspection.ts";
 import { memberTestUnitsStore } from "./member-test-units.ts";
 import { studyUnitFixtureStore } from "./study-unit-fixtures.ts";
+import { studyAllowanceStore } from "./study-allowances.ts";
 import { attemptStore } from "./attempts.ts";
 import { practiceStore } from "./practice.ts";
 import { practiceSessionStore } from "./practice-sessions.ts";
@@ -177,6 +179,10 @@ export async function start(env: NodeJS.ProcessEnv) {
         hostedOrigin: settings.hosted?.origin,
       }),
       studyUnitFixtures: studyUnitFixtureStore(pool, {
+        mode: settings.mode,
+        enabled: settings.localTestUnitIssuance,
+      }),
+      studyAllowances: studyAllowanceStore(pool, {
         mode: settings.mode,
         enabled: settings.localTestUnitIssuance,
       }),
@@ -316,6 +322,10 @@ export async function start(env: NodeJS.ProcessEnv) {
       ),
       localAiControl: localAiControlStore(pool),
       uploadAdmission: uploadAdmissionStore(pool),
+      anonymousWrites: anonymousWriteAdmissionStore(pool, {
+        secret: settings.secret,
+        publicOnly: !settings.hosted,
+      }),
       evidence: evidenceStore(
         pool,
         objects,

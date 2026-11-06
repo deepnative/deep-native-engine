@@ -13,6 +13,11 @@ import {
   mountAccountRoleAdmin,
 } from "../../src/account-role-admin-routes.ts";
 import { emailHash } from "../../src/member-email-access.ts";
+import {
+  changeHistoryBody,
+  changeText,
+  type ChangeHistoryResult,
+} from "../../src/staff-change-history.ts";
 import { csrf } from "../../src/session.ts";
 
 const origin = "http://127.0.0.1:3000",
@@ -501,4 +506,243 @@ it("DEFCOACH-04 renders the console coaches card", () => {
     expect(coachAssignmentCard({ kind }, ada, anti)).toContain(
       "Coach assignment is unavailable right now.",
     );
+});
+
+const changeEntry = {
+  source: "role" as const,
+  action: "granted",
+  at: new Date("2026-11-06T12:34:56Z"),
+  actorFound: true,
+  actorName: "Ada <b>",
+  personFound: false,
+  personName: null,
+  holderFound: true,
+  holderName: "Bo",
+  role: "coach",
+  month: null,
+  amountCents: null,
+};
+
+it("CHANGELOG-01/09/10 turns each record into one escaped sentence", () => {
+  expect(changeText(changeEntry)).toBe("Ada &lt;b&gt; gave Bo the Coach role.");
+  expect(
+    changeText({ ...changeEntry, actorFound: false, holderFound: false }),
+  ).toBe(
+    "A former administrator gave an email not linked to an account the Coach role.",
+  );
+  expect(
+    changeText({ ...changeEntry, actorName: null, holderName: null }),
+  ).toBe(
+    "An administrator with no name set gave someone with no name set the Coach role.",
+  );
+  expect(
+    changeText({
+      ...changeEntry,
+      source: "billing",
+      action: "invoice_voided",
+      amountCents: 1234,
+    }),
+  ).toBe("Ada &lt;b&gt; voided an invoice of CAD 12.34 for a deleted account.");
+  // A later kind of record still shows rather than silently vanishing.
+  expect(changeText({ ...changeEntry, action: "invented" })).toBe(
+    "Ada &lt;b&gt; made a change.",
+  );
+  const first = changeHistoryBody({ entries: [], older: null }, true);
+  expect(first).toContain("No changes are recorded.");
+  expect(changeHistoryBody({ entries: [], older: null }, false)).toContain(
+    "There are no older entries.",
+  );
+  expect(
+    changeHistoryBody({ entries: [changeEntry], older: "a+b" }, true),
+  ).toContain('href="/operator/changes?before=a%2Bb"');
+});
+
+function historyServer(result: ChangeHistoryResult) {
+  const seen: (string | undefined)[] = [];
+  const application = express();
+  application.use((_req, res, next) => {
+    res.locals.token = staff;
+    next();
+  });
+  mountAccountRoleAdmin(
+    application,
+    {
+      changes: async (_token: string, before?: string) => {
+        seen.push(before);
+        return result;
+      },
+    } as unknown as AccountRoleAdmin,
+    { origin, secret },
+  );
+  const server = listenLoopback(application);
+  owned.push(server);
+  return { server, seen };
+}
+
+it("CHANGELOG-01/11/12 serves the page and says when it can't be read", async () => {
+  const { server, seen } = historyServer({
+    kind: "ready",
+    value: { entries: [changeEntry], older: null },
+  });
+  const open = await request(await server).get("/operator/changes");
+  expect(open.status).toBe(200);
+  expect(open.headers["cache-control"]).toBe("no-store");
+  expect(open.text).toContain("Ada &lt;b&gt; gave Bo the Coach role.");
+  await request(await server).get("/operator/changes?before=abc");
+  expect(seen).toEqual([undefined, "abc"]);
+  for (const bad of ["other=1", "before=a&before=b"])
+    expect(
+      (await request(await server).get(`/operator/changes?${bad}`)).status,
+    ).toBe(400);
+  expect(seen).toHaveLength(2);
+  for (const [kind, status, text] of [
+    ["denied", 403, "Enter administration"],
+    ["invalid", 400, "That link"],
+    ["unavailable", 503, "doesn't mean nothing changed"],
+  ] as const) {
+    const refused = await request(await historyServer({ kind }).server).get(
+      "/operator/changes",
+    );
+    expect(refused.status).toBe(status);
+    expect(refused.text).toContain(text);
+    expect(refused.text).not.toContain("No changes are recorded");
+  }
+});
+
+it("CHANGELOG-12 refuses a coach or a broken database through the store", async () => {
+  const none = fakePool({ "FROM principals p": [[]] });
+  expect(await accountRoleAdmin(none.pool).changes(staff)).toEqual({
+    kind: "denied",
+  });
+  expect(await accountRoleAdmin(none.pool).changes("short")).toEqual({
+    kind: "denied",
+  });
+  const broken = fakePool({
+    "FROM principals p": [actor()],
+    "FROM account_role_events": () => {
+      throw Error("private database failure");
+    },
+  });
+  expect(await accountRoleAdmin(broken.pool).changes(staff)).toEqual({
+    kind: "unavailable",
+  });
+});
+
+it("CHANGELOG-11 pages from the last entry shown and refuses a malformed position", async () => {
+  const row = (id: number) => ({
+    ...changeEntry,
+    id: String(id),
+    key: "2026-11-06T12:34:56.123456Z",
+  });
+  const { pool, calls } = fakePool({
+    "FROM principals p": [actor(), actor(), actor()],
+    "FROM account_role_events": [
+      Array.from({ length: 31 }, (_, n) => row(n + 1)),
+      [row(1)],
+    ],
+  });
+  const admin = accountRoleAdmin(pool);
+  const full = await admin.changes(staff);
+  if (full.kind !== "ready") throw Error(full.kind);
+  expect(full.value.entries).toHaveLength(30);
+  expect(full.value.entries[0]).not.toHaveProperty("id");
+  expect(full.value.entries[0]).not.toHaveProperty("key");
+  expect(Buffer.from(full.value.older!, "base64url").toString()).toBe(
+    "2026-11-06T12:34:56.123456Z|role|30",
+  );
+  const next = await admin.changes(staff, full.value.older!);
+  if (next.kind !== "ready") throw Error(next.kind);
+  expect(next.value.older).toBeNull();
+  expect(
+    calls.filter((c) => c.sql.includes("FROM account_role_events")).at(-1)
+      ?.values,
+  ).toEqual(["2026-11-06T12:34:56.123456Z", "role", "30", 31]);
+  expect(await admin.changes(staff, "nope")).toEqual({ kind: "invalid" });
+});
+
+it("CHANGELOG-03 logs each assignment lost with a coach role, in a stable order", async () => {
+  const { pool, calls } = fakePool({
+    "FROM principals p": [actor()],
+    "DELETE FROM coach_assignments": [[{ learner: "b" }, { learner: "a" }]],
+    "DELETE FROM account_roles": [[{}]],
+  });
+  expect(
+    await accountRoleAdmin(pool).remove(staff, {
+      emailHash: h("c"),
+      role: "coach",
+    }),
+  ).toEqual({ kind: "ready" });
+  expect(
+    calls
+      .filter((c) => c.sql.includes("INTO account_role_events"))
+      .map((c) => [c.values?.[1], c.values?.[4]]),
+  ).toEqual([
+    ["cleared", "a"],
+    ["cleared", "b"],
+    ["removed", null],
+  ]);
+});
+
+it("CHANGELOG-02/04 words every kind of change", () => {
+  const billing = {
+    ...changeEntry,
+    source: "billing" as const,
+    actorName: "Ada",
+    personFound: true,
+    personName: "Bo",
+    role: null,
+    month: "2026-11",
+    amountCents: 12000,
+  };
+  const said = (action: string, extra = {}) =>
+    changeText({ ...billing, action, ...extra });
+  expect(said("plan_offered")).toBe(
+    "Ada offered Bo a course plan of CAD 120.00.",
+  );
+  expect(said("plan_offered", { amountCents: null })).toBe(
+    "Ada offered Bo a course plan.",
+  );
+  expect(said("rate_set")).toBe(
+    "Ada set the coaching rate for Bo to CAD 120.00 per hour from 2026-11.",
+  );
+  expect(said("hours_returned", { amountCents: null })).toBe(
+    "Ada returned the coaching hours for Bo for 2026-11.",
+  );
+  expect(said("coaching_invoice_issued")).toBe(
+    "Ada issued Bo a coaching invoice of CAD 120.00 for 2026-11.",
+  );
+  expect(said("monthly_invoice_issued", { month: null })).toBe(
+    "Ada issued Bo a monthly invoice of CAD 120.00.",
+  );
+  expect(said("payment_recorded")).toBe(
+    "Ada recorded a payment of CAD 120.00 from Bo.",
+  );
+  expect(said("invoice_voided", { personName: null })).toBe(
+    "Ada voided an invoice of CAD 120.00 for someone with no name set.",
+  );
+  const role = { ...changeEntry, actorName: "Ada" };
+  const roleSaid = (action: string, extra = {}) =>
+    changeText({ ...role, action, ...extra });
+  expect(roleSaid("removed", { role: "admin" })).toBe(
+    "Ada removed the Admin role from Bo.",
+  );
+  expect(roleSaid("granted", { role: "later" })).toBe(
+    "Ada gave Bo the staff role.",
+  );
+  expect(roleSaid("assigned")).toBe(
+    "Ada made Bo a coach for a deleted account.",
+  );
+  expect(roleSaid("cleared")).toBe(
+    "Ada removed Bo as a coach for a deleted account.",
+  );
+});
+
+it("CHANGELOG-11 refuses a position with an impossible time", async () => {
+  const { pool } = fakePool({ "FROM principals p": [actor()] });
+  expect(
+    await accountRoleAdmin(pool).changes(
+      staff,
+      Buffer.from("2026-13-45T99:00:00.000000Z|role|1").toString("base64url"),
+    ),
+  ).toEqual({ kind: "invalid" });
 });

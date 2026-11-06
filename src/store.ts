@@ -246,6 +246,10 @@ export async function migrate(pool: Pool) {
       "096-administrator-email-lookups.sql",
       "097-default-coaches.sql",
       "098-member-email-notice-visitors.sql",
+      "099-study-allowances.sql",
+      "100-ai-usage-settlement.sql",
+      "101-anonymous-write-windows.sql",
+      "102-staff-change-log.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

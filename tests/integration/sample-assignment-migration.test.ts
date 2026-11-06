@@ -133,7 +133,7 @@ it("REVADM-08 upgrades populated migration059 without inventing receipts or rewr
     expect(exported).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v33",
+        version: "local-member-records-v35",
         records: { sampleAssignmentOperations: [] },
       },
     });

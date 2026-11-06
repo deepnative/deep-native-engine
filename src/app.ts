@@ -1,4 +1,5 @@
 import { mountAdministratorDiagnostics } from "./administrator-diagnostics-routes.ts";
+import { workQueueTools } from "./administrator-work-waiting-views.ts";
 import type { AdministratorDiagnostics } from "./administrator-diagnostics.ts";
 import {
   invoiceResumeTarget,
@@ -102,6 +103,12 @@ import {
 import { mountMemberEmailRoutes } from "./member-email-routes.ts";
 import { mountMemberPasswordRoutes } from "./member-password-routes.ts";
 import {
+  anonymousWriteRefusal,
+  type AnonymousWriteAdmissionStore,
+  type AnonymousWriteKind,
+} from "./anonymous-write-admission.ts";
+import { visitorAddress } from "./visitor-address.ts";
+import {
   acceptablePassword,
   type MemberPasswordAccess,
 } from "./member-password-access.ts";
@@ -128,6 +135,7 @@ import {
   memberExportPage,
   localAiConsentPage,
   localAiControlPage,
+  withPrerequisiteTitles,
   evidenceRevisionPage,
   lesson,
   readinessPage,
@@ -239,7 +247,10 @@ import {
 } from "./workflow-feedback.ts";
 import type { WorkflowReviewStore } from "./workflow-review.ts";
 import { mountWorkflowReviewRoutes } from "./workflow-review-routes.ts";
-import { registerCircleDiscussion } from "./circle-discussion-routes.ts";
+import {
+  circleReplySummaries,
+  registerCircleDiscussion,
+} from "./circle-discussion-routes.ts";
 import { disabledProgramStore, type ProgramStore } from "./program-values.ts";
 import { mountProgramRoutes } from "./program-routes.ts";
 import { programResumeTarget } from "./program-selection.ts";
@@ -280,6 +291,8 @@ import {
   type MemberTestUnitsStore,
 } from "./member-test-units.ts";
 import { registerMemberTestUnitsRoutes } from "./member-test-units-routes.ts";
+import { mountStudyAllowanceRoutes } from "./study-allowance-routes.ts";
+import type { StudyAllowanceStore } from "./study-allowances.ts";
 import type { StudyUnitFixtureStore } from "./study-unit-fixtures.ts";
 import { mountStudyUnitFixtureRoutes } from "./study-unit-fixture-routes.ts";
 import { disabledPracticeStore, type PracticeStore } from "./practice.ts";
@@ -439,6 +452,7 @@ export function app(
     localHoldInspection?: LocalAiHoldInspectionStore;
     memberTestUnits?: MemberTestUnitsStore;
     studyUnitFixtures?: StudyUnitFixtureStore;
+    studyAllowances?: StudyAllowanceStore;
     localTestUnitIssuance?: boolean;
     attempts?: AttemptStore;
     practice?: PracticeStore;
@@ -478,6 +492,7 @@ export function app(
     memberPassword?: MemberPasswordAccess;
     memberSignOut?: MemberEmailAccess["signOut"];
     uploadAdmission?: UploadAdmissionStore;
+    anonymousWrites?: AnonymousWriteAdmissionStore;
   },
 ) {
   const store = sharingHeaderSession(memberStore);
@@ -578,6 +593,21 @@ export function app(
     options,
     mode,
   );
+  // Signup and password sign-in spend scrypt and email for anyone; bound them
+  // per visitor and for the whole service before doing that work (#728).
+  const anonymousRefusal = async (
+    kind: AnonymousWriteKind,
+    req: express.Request,
+  ) => {
+    if (!options.anonymousWrites) return null;
+    const result = await options.anonymousWrites.admit(
+      kind,
+      visitorAddress(req.socket.remoteAddress, req.get("x-forwarded-for")),
+    );
+    return result.kind === "admitted"
+      ? null
+      : anonymousWriteRefusal(kind, result);
+  };
   // Admit evidence creation against the shared budget before reading its body.
   const uploadAdmission = options.uploadAdmission;
   if (uploadAdmission) {
@@ -681,7 +711,12 @@ export function app(
         () => next(),
       );
   });
-  mountAdministratorEntry(app, options.administratorEntry, options);
+  mountAdministratorEntry(
+    app,
+    options.administratorEntry,
+    options,
+    workQueueTools(options),
+  );
   mountAdministratorDiagnostics(app, options.administratorDiagnostics, options);
   mountStaffEntryRoutes(app, options.staffEntry, options, {
     library: Boolean(options.catalog),
@@ -743,7 +778,10 @@ export function app(
         .send(
           errorPage(
             "Staff access unavailable",
-            "Open staff sign-in to establish current local staff access. Your learning access is unchanged.",
+            hostingText(
+              "Open staff sign-in to establish current local staff access. Your learning access is unchanged.",
+              "Open staff sign-in to establish current staff access. Your learning access is unchanged.",
+            ),
           ),
         );
       return;
@@ -898,6 +936,7 @@ export function app(
         void options.memberEmail
           ?.requestAttach(memberToken, address)
           .catch(() => undefined),
+      (req) => anonymousRefusal("password_sign_in", req),
     );
   mountProgramRoutes(
     app,
@@ -921,7 +960,9 @@ export function app(
     options.memberTestUnits ?? disabledMemberTestUnitsStore(),
     mode,
     Boolean(options.studyUnitFixtures),
+    Boolean(options.studyAllowances) && options.localTestUnitIssuance === true,
   );
+  mountStudyAllowanceRoutes(app, options.studyAllowances, mode);
   mountStudyUnitFixtureRoutes(app, options.studyUnitFixtures, options);
   app.get("/operator/experts", async (_req, res) => {
     const records = await tracks.registry(res.locals.token as string);
@@ -982,7 +1023,10 @@ export function app(
         .send(
           errorPage(
             "Control unchanged",
-            "Choose and confirm an explicit local simulation state.",
+            hostingText(
+              "Choose and confirm an explicit local simulation state.",
+              "Choose and confirm an explicit simulation state.",
+            ),
           ),
         );
       return;
@@ -1042,7 +1086,10 @@ export function app(
         .send(
           errorPage(
             "Observation unchanged",
-            "Use invented SYN- evidence, a valid local member ID and positive integer CAD cents, then confirm the test-only action.",
+            hostingText(
+              "Use invented SYN- evidence, a valid local member ID and positive integer CAD cents, then confirm the test-only action.",
+              "Use invented SYN- evidence, a valid member ID and positive integer CAD cents, then confirm the test-only action.",
+            ),
           ),
         );
       return;
@@ -1068,7 +1115,10 @@ export function app(
         .send(
           errorPage(
             "Observation unchanged",
-            "The local member or invented observation details are unavailable.",
+            hostingText(
+              "The local member or invented observation details are unavailable.",
+              "The member or invented observation details are unavailable.",
+            ),
           ),
         );
       return;
@@ -1512,13 +1562,38 @@ export function app(
           field: "signup_password",
           message: "Password: use 12 to 128 characters.",
         });
-      if (!problems.length && !(await signup.emailAvailable(signupEmail)))
-        problems.push({
-          field: "signup_email",
-          message:
-            "Email address: this email is already used for sign-in. Sign in instead, or use another email.",
-        });
       start.errors.push(...(problems as typeof start.errors));
+    }
+    if (start.input && !start.errors.length) {
+      // A well-formed request is admitted before the address is looked up, so
+      // asking whether an email is registered is bounded like signing up.
+      const refused = await anonymousRefusal("signup", req);
+      if (refused) {
+        res
+          .status(refused.status)
+          .set("Cache-Control", "no-store")
+          .set("Retry-After", String(refused.retryAfterSeconds))
+          .send(
+            welcome(
+              res.locals.csrf as string,
+              [refused.message],
+              start,
+              Boolean(options.memberEmail),
+              signup ? { email: signupEmail } : undefined,
+            ),
+          );
+        return;
+      }
+      if (signup && !(await signup.emailAvailable(signupEmail)))
+        start.errors.push(
+          ...([
+            {
+              field: "signup_email",
+              message:
+                "Email address: this email is already used for sign-in. Sign in instead, or use another email.",
+            },
+          ] as { field: string; message: string }[] as typeof start.errors),
+        );
     }
     if (!start.input || start.errors.length) {
       res
@@ -2039,7 +2114,10 @@ export function app(
         .send(
           errorPage(
             "Confirmation needed",
-            "Choose the local-only permission before continuing.",
+            hostingText(
+              "Choose the local-only permission before continuing.",
+              "Choose the simulation permission before continuing.",
+            ),
           ),
         );
       return;
@@ -2053,7 +2131,10 @@ export function app(
         .status(403)
         .send(
           errorPage(
-            "Local simulation unavailable",
+            hostingText(
+              "Local simulation unavailable",
+              "Simulation unavailable",
+            ),
             "Refresh your evidence and check the current version and safety state.",
           ),
         );
@@ -2084,7 +2165,10 @@ export function app(
         .send(
           errorPage(
             "Permission unavailable",
-            "This local permission is no longer available.",
+            hostingText(
+              "This local permission is no longer available.",
+              "This simulation permission is no longer available.",
+            ),
           ),
         );
       return;
@@ -2104,9 +2188,15 @@ export function app(
         .status(outcome.kind === "conflict" ? 409 : 403)
         .send(
           errorPage(
-            "Local simulation unavailable",
+            hostingText(
+              "Local simulation unavailable",
+              "Simulation unavailable",
+            ),
             paused
-              ? "Local simulations are paused. No new local job was queued."
+              ? hostingText(
+                  "Local simulations are paused. No new local job was queued.",
+                  "Simulations are paused. No new simulation was queued.",
+                )
               : "Refresh the page and check the exact-source permission.",
           ),
         );
@@ -2122,7 +2212,10 @@ export function app(
         .send(
           errorPage(
             "Confirmation needed",
-            "Confirm use of one existing local test request before continuing.",
+            hostingText(
+              "Confirm use of one existing local test request before continuing.",
+              "Confirm use of one existing test request before continuing.",
+            ),
           ),
         );
       return;
@@ -2137,8 +2230,14 @@ export function app(
         .status(outcome.kind === "conflict" ? 409 : 403)
         .send(
           errorPage(
-            "Local test request unavailable",
-            "Check current permission, the local pause state and your existing test units. No allowance was granted and no live provider was contacted.",
+            hostingText(
+              "Local test request unavailable",
+              "Test request unavailable",
+            ),
+            hostingText(
+              "Check current permission, the local pause state and your existing test units. No allowance was granted and no live provider was contacted.",
+              "Check current permission, whether simulations are paused and your existing test units. No allowance was granted and no live provider was contacted.",
+            ),
           ),
         );
       return;
@@ -2156,9 +2255,15 @@ export function app(
         .status(outcome.kind === "unavailable" ? 409 : 403)
         .send(
           errorPage(
-            "Local simulation unavailable",
+            hostingText(
+              "Local simulation unavailable",
+              "Simulation unavailable",
+            ),
             paused
-              ? "Local simulations are paused. This attempt will not retry automatically."
+              ? hostingText(
+                  "Local simulations are paused. This attempt will not retry automatically.",
+                  "Simulations are paused. This attempt will not retry automatically.",
+                )
               : "Refresh the page. No live AI provider was contacted.",
           ),
         );
@@ -2341,7 +2446,10 @@ export function app(
             await evidence.owned(res.locals.token as string),
             res.locals.csrf as string,
             [
-              "This sample is not eligible for the local review queue. Refresh and check its current safety, consent and submission state.",
+              hostingText(
+                "This sample is not eligible for the local review queue. Refresh and check its current safety, consent and submission state.",
+                "This sample is not eligible for the review queue. Refresh and check its current safety, consent and submission state.",
+              ),
             ],
           ),
         );
@@ -2414,6 +2522,13 @@ export function app(
         (res.locals.learner as Learner).goal,
         res.locals.csrf as string,
         options.circleDiscussionEnabled ?? false,
+        await circleReplySummaries(
+          options.circleDiscussion ?? disabledCircleDiscussionStore(),
+          res.locals.token as string,
+          options.circleDiscussionEnabled
+            ? items.filter((item) => item.joined).map((item) => item.id)
+            : [],
+        ),
       ),
     );
   });
@@ -3205,7 +3320,16 @@ export function app(
               entry.contentVersion === item.version,
           )
         : undefined;
-    res.send(contentPreview(item, false, res.locals.csrf as string, activity));
+    res.send(
+      contentPreview(
+        item.structuredPrerequisites
+          ? withPrerequisiteTitles([item], await catalog.search({}))[0]!
+          : item,
+        false,
+        res.locals.csrf as string,
+        activity,
+      ),
+    );
   });
   app.get("/library/:id/practice-session", async (req, res) => {
     const source = await practiceSessions.source(
@@ -4062,7 +4186,10 @@ export function app(
       progress,
       res.locals.csrf as string,
       [],
-      eligibleAssignments(published, member, progress, activity),
+      withPrerequisiteTitles(
+        eligibleAssignments(published, member, progress, activity),
+        published,
+      ),
       choice,
       recommendLesson(published, member, progress, activity),
       undefined,
@@ -5268,7 +5395,10 @@ export function app(
             progress,
             res.locals.csrf as string,
             [],
-            eligibleAssignments(published, member, progress, activity),
+            withPrerequisiteTitles(
+              eligibleAssignments(published, member, progress, activity),
+              published,
+            ),
             choice,
             recommendLesson(published, member, progress, activity),
             edit,
@@ -5664,7 +5794,10 @@ export function app(
         .send(
           errorPage(
             "Deletion status unconfirmed",
-            "We could not confirm completion. If the request was accepted, local cleanup will retry; this page is not a deletion receipt.",
+            hostingText(
+              "We could not confirm completion. If the request was accepted, local cleanup will retry; this page is not a deletion receipt.",
+              "We could not confirm completion. If the request was accepted, cleanup will retry; this page is not a deletion receipt.",
+            ),
           ),
         );
       return;

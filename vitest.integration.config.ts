@@ -37,6 +37,7 @@ export default defineConfig({
     sequence: { sequencer: IntegrationSequencer },
     passWithNoTests: false,
     allowOnly: false,
+    setupFiles: ["tests/support/loopback-only.ts"],
     retry: 0,
     fileParallelism: false,
     reporters: ["default", "json", diagnostics],
