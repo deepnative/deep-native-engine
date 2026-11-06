@@ -149,6 +149,7 @@ import {
   practiceSessionHistoryPage,
   practiceSessionPage,
   practiceSessionRecoveryPage,
+  practiceSessionAllowanceNeededPage,
   staffLibraryPage,
   trackReadinessPage,
   tailoredReviewRequestPage,
@@ -450,6 +451,7 @@ export function app(
     attempts?: AttemptStore;
     practice?: PracticeStore;
     practiceSessions?: PracticeSessionStore;
+    practiceSessionAllowance?: boolean;
     supportRequests?: SupportRequestStore;
     privateSupportIntake?: boolean;
     supportAssignment?: SupportAssignmentStore;
@@ -3280,7 +3282,13 @@ export function app(
         );
       return;
     }
-    res.send(practiceSessionStartPage(source, res.locals.csrf as string));
+    res.send(
+      practiceSessionStartPage(
+        source,
+        res.locals.csrf as string,
+        options.practiceSessionAllowance === true,
+      ),
+    );
   });
   app.post("/library/:id/practice-session/start", async (req, res) => {
     const fields = (req.body ?? {}) as Fields;
@@ -3333,6 +3341,10 @@ export function app(
       goal: fields.goal as keyof typeof GOALS,
       promptVersion: fields.prompt_version,
     });
+    if (result.kind === "allowance-needed") {
+      res.status(409).send(practiceSessionAllowanceNeededPage());
+      return;
+    }
     if (!("sessionId" in result)) {
       res
         .status(409)

@@ -86,3 +86,63 @@ it.each([
 ] as const)("ALLOW-06 the %s notice explains the outcome", (kind, text) => {
   expect(studyAllowanceNotice(kind).replaceAll("'", "&#39;")).toContain(text);
 });
+const practicePolicy = {
+  ...policy,
+  version: "mock-allowance-test-v1",
+  category: "mock_sessions" as const,
+  periodLimit: 3,
+};
+it("MOCK-01 practice sessions have separate rules and a separate unticked claim", () => {
+  const html = studyAllowancePage("csrf", {
+    ...base,
+    practice: { policy: practicePolicy, claim: null },
+  });
+  expect(html).toContain("3 practice sessions, each calendar month (UTC)");
+  expect(html).toContain("mock-allowance-test-v1");
+  expect(html).toContain("I want this month's 3 practice sessions.");
+  expect(html).toContain("Claim this month's practice sessions");
+  expect(html).not.toMatch(/name="confirm"[^>]*checked/);
+});
+it("MOCK-01 a practice claim shows what's left, and retained claims stay readable", () => {
+  const html = studyAllowancePage("csrf", {
+    ...base,
+    creationEnabled: false,
+    practice: {
+      policy: null,
+      claim: {
+        id: "c",
+        policyVersion: "mock-allowance-test-v1",
+        quantity: 3,
+        periodStart: base.period.start,
+        periodEnd: base.period.end,
+        createdAt: base.period.start,
+        available: 2,
+        reserved: 0,
+        consumed: 1,
+        expired: 0,
+      },
+    },
+  });
+  expect(html).toContain('<span data-field="practice-available">2</span>');
+  expect(html).toContain('<span data-field="practice-consumed">1</span>');
+  expect(html).toContain("give its unit back");
+});
+it("MOCK-07 no practice section without units, and pause or no policy offers no form", () => {
+  expect(studyAllowancePage("csrf", { ...base, practice: null })).not.toContain(
+    "Practice sessions",
+  );
+  const paused = studyAllowancePage("csrf", {
+    ...base,
+    claim: null,
+    creationEnabled: false,
+    practice: { policy: practicePolicy, claim: null },
+  });
+  expect(paused).toContain("New practice session claims are paused");
+  expect(paused).not.toContain("<form");
+  expect(
+    studyAllowancePage("csrf", {
+      ...base,
+      practice: { policy: null, claim: null },
+    }),
+  ).toContain("No practice session allowance is set up");
+});

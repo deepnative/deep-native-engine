@@ -517,6 +517,13 @@ const sections = {
      WHERE c.member_id=$1 AND w.deleting_at IS NULL`,
     "c.id",
   ),
+  // v35 appends own practice session unit uses: no reservation reference.
+  practiceSessionAllowanceUses: section(
+    `u.session_id AS "sessionId",u.claim_id AS "claimId",u.created_at AS "createdAt"`,
+    `practice_session_allowance_uses u JOIN private_practice_sessions s ON s.id=u.session_id
+     WHERE u.member_id=$1 AND s.member_id=u.member_id`,
+    "u.session_id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -530,7 +537,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v34";
+  version: "local-member-records-v35";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -664,7 +671,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v34",
+          version: "local-member-records-v35",
           profile: owner.rows[0],
           records,
           testUnitHistory: {
