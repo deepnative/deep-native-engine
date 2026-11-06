@@ -11,5 +11,5 @@ CREATE TABLE IF NOT EXISTS anonymous_write_windows (
 );
 CREATE INDEX IF NOT EXISTS anonymous_write_windows_retention_idx
  ON anonymous_write_windows(window_start);
-INSERT INTO schema_migrations(version) VALUES(100) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(101) ON CONFLICT DO NOTHING;
 COMMIT;

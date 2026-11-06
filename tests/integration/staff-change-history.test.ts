@@ -514,7 +514,7 @@ it("CHANGELOG-07 earlier plan offers, payments and voids carry over when the log
     "DROP TRIGGER account_role_events_append_only ON account_role_events",
   );
   await pool.query("DROP INDEX account_role_events_time");
-  await pool.query("DELETE FROM schema_migrations WHERE version=101");
+  await pool.query("DELETE FROM schema_migrations WHERE version=102");
   await migrate(pool);
   const carried = await sentences();
   for (const line of [

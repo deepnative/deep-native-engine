@@ -3,7 +3,7 @@ BEGIN;
 -- outlives the member and the administrator it names. It holds no email, token
 -- or free text; a void or return reason stays on its own record.
 DO $$ BEGIN
-IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=101) THEN
+IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=102) THEN
 CREATE TABLE IF NOT EXISTS billing_change_events (
  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
  actor_id uuid NOT NULL,
@@ -30,7 +30,7 @@ CREATE TRIGGER billing_change_events_append_only BEFORE UPDATE OR DELETE ON bill
  FOR EACH ROW EXECUTE FUNCTION preserve_staff_change_event();
 CREATE TRIGGER account_role_events_append_only BEFORE UPDATE OR DELETE ON account_role_events
  FOR EACH ROW EXECUTE FUNCTION preserve_staff_change_event();
-INSERT INTO schema_migrations(version) VALUES(101) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(102) ON CONFLICT DO NOTHING;
 END IF;
 END $$;
 COMMIT;
