@@ -1080,7 +1080,7 @@ test("[L292] ROLEADMIN/COACHLINK/DEFCOACH an administrator grants a coach role, 
     await coachContext.close();
   }
 });
-test("[L300] CHANGELOG-01/02/03/04 an administrator reads who changed roles and billing", async ({
+test("[L301] CHANGELOG-01/02/03/04 an administrator reads who changed roles and billing", async ({
   page,
   browser,
 }) => {

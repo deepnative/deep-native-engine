@@ -102,6 +102,12 @@ import {
 import { mountMemberEmailRoutes } from "./member-email-routes.ts";
 import { mountMemberPasswordRoutes } from "./member-password-routes.ts";
 import {
+  anonymousWriteRefusal,
+  type AnonymousWriteAdmissionStore,
+  type AnonymousWriteKind,
+} from "./anonymous-write-admission.ts";
+import { visitorAddress } from "./visitor-address.ts";
+import {
   acceptablePassword,
   type MemberPasswordAccess,
 } from "./member-password-access.ts";
@@ -485,6 +491,7 @@ export function app(
     memberPassword?: MemberPasswordAccess;
     memberSignOut?: MemberEmailAccess["signOut"];
     uploadAdmission?: UploadAdmissionStore;
+    anonymousWrites?: AnonymousWriteAdmissionStore;
   },
 ) {
   const store = sharingHeaderSession(memberStore);
@@ -582,6 +589,21 @@ export function app(
     options,
     mode,
   );
+  // Signup and password sign-in spend scrypt and email for anyone; bound them
+  // per visitor and for the whole service before doing that work (#728).
+  const anonymousRefusal = async (
+    kind: AnonymousWriteKind,
+    req: express.Request,
+  ) => {
+    if (!options.anonymousWrites) return null;
+    const result = await options.anonymousWrites.admit(
+      kind,
+      visitorAddress(req.socket.remoteAddress, req.get("x-forwarded-for")),
+    );
+    return result.kind === "admitted"
+      ? null
+      : anonymousWriteRefusal(kind, result);
+  };
   // Admit evidence creation against the shared budget before reading its body.
   const uploadAdmission = options.uploadAdmission;
   if (uploadAdmission) {
@@ -910,6 +932,7 @@ export function app(
         void options.memberEmail
           ?.requestAttach(memberToken, address)
           .catch(() => undefined),
+      (req) => anonymousRefusal("password_sign_in", req),
     );
   mountProgramRoutes(
     app,
@@ -1535,13 +1558,38 @@ export function app(
           field: "signup_password",
           message: "Password: use 12 to 128 characters.",
         });
-      if (!problems.length && !(await signup.emailAvailable(signupEmail)))
-        problems.push({
-          field: "signup_email",
-          message:
-            "Email address: this email is already used for sign-in. Sign in instead, or use another email.",
-        });
       start.errors.push(...(problems as typeof start.errors));
+    }
+    if (start.input && !start.errors.length) {
+      // A well-formed request is admitted before the address is looked up, so
+      // asking whether an email is registered is bounded like signing up.
+      const refused = await anonymousRefusal("signup", req);
+      if (refused) {
+        res
+          .status(refused.status)
+          .set("Cache-Control", "no-store")
+          .set("Retry-After", String(refused.retryAfterSeconds))
+          .send(
+            welcome(
+              res.locals.csrf as string,
+              [refused.message],
+              start,
+              Boolean(options.memberEmail),
+              signup ? { email: signupEmail } : undefined,
+            ),
+          );
+        return;
+      }
+      if (signup && !(await signup.emailAvailable(signupEmail)))
+        start.errors.push(
+          ...([
+            {
+              field: "signup_email",
+              message:
+                "Email address: this email is already used for sign-in. Sign in instead, or use another email.",
+            },
+          ] as { field: string; message: string }[] as typeof start.errors),
+        );
     }
     if (!start.input || start.errors.length) {
       res

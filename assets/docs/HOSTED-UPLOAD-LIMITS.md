@@ -28,6 +28,29 @@ A refusal returns 429 with `Retry-After`, `Cache-Control: no-store` and fixed gu
 
 The operator diagnosis signal is `upload_admission_denials`: one count per hour and reason (`member_rate`, `member_concurrency`, `unauthenticated_rate`, `global_rate`, `global_concurrency`) and nothing else. Access is the existing database operator scope; there is no new page or export. The denial counts contain no IP address, member identity, cookie, filename or content. The member window rows and leases that enforce the per-member budget do reference the member for up to a day and are deleted with the member's account; no IP address, cookie, filename or content is stored anywhere in admission. Old rows are removed during later admissions, at most 100 of each kind per admission: denial counts older than 30 days, window rows older than 1 day and expired leases. Expired leases and past windows stop counting immediately; on an idle service, old rows stay until the next upload.
 
+## Anonymous signup and password sign-in
+
+Two routes do expensive or outward-facing work for anyone, so [#728](https://github.com/deepnative/deep-native-engine/issues/728) gives them their own counts, separate from the upload budget:
+
+| Route | Each visitor | Whole service |
+| --- | --- | --- |
+| `POST /start`, once the form is well formed and before the address is looked up | 30 per hour | 300 per hour |
+| `POST /password/sign-in`, before the address is looked up or the password is checked | 60 per 15 minutes | 1,200 per 15 minutes |
+
+A visitor is the address our ingress vouches for: the rightmost `X-Forwarded-For` entry behind the proxy, with an IPv6 customer's whole /64 counted as one. Windows are fixed periods on the database clock. `anonymous_write_windows` holds only a keyed hash of the visitor, or the literal `service`, and rows are removed within a day. The per-address email and password-failure limits still apply.
+
+A refusal returns 429 with `Retry-After`, `Cache-Control: no-store` and fixed guidance. Signup keeps what was typed except the password and creates nothing. Sign-in points to the email link. If the limiter can't answer, the route returns 503 with `Retry-After: 60` and does no work. The operator signal is one log line per refusal, `anonymous_write_refused` with the route, limit and address scope, and `anonymous_write_unavailable` for an outage. Neither carries an address.
+
+What this doesn't do:
+
+- Many addresses together are bounded by the service ceiling, not stopped. A distributed attack that reaches the ceiling also delays real signups and password sign-ins until the window ends; email sign-in links stay available.
+- 30 lookups per hour per address are still possible, so whether an email is registered can still be tested slowly.
+- The hash key is random per process, so a restart renews visitor allowances. The service ceiling carries across restarts.
+- A local process counts only public addresses, so local browser runs don't share one allowance. Hosted counts every visitor.
+- Azure ingress or WAF limits aren't part of this and stay with the hosted review in #42.
+
+Scenarios ANON-01..07 run against the real HTTP application and PostgreSQL in `tests/integration/anonymous-write-admission-http.test.ts`, with browser journey L300.
+
 ## Scope and remaining work
 
 [#315](https://github.com/deepnative/deep-native-engine/issues/315) covers the early 1 MiB body boundary and shared rate/concurrency admission for evidence uploads, and [#587](https://github.com/deepnative/deep-native-engine/issues/587) extends that admission to the two evidence copy routes. Every other API surface is outside this control and remains under [#42](https://github.com/deepnative/deep-native-engine/issues/42). This change adds no new service, provider, WAF or DDoS protection claim, and a fixed-window limit allows up to twice a budget across a window boundary. Source and local fixture evidence do not prove a live deployment or full hosted abuse protection.

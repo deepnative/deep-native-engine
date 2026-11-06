@@ -42,8 +42,13 @@ export function mountMemberPasswordRoutes(
   store: Store,
   access: MemberPasswordAccess,
   origin: string,
-  continuation?: (rawCookie: string | undefined) => string | null,
-  verify?: (memberToken: string, email: string) => void,
+  continuation: ((rawCookie: string | undefined) => string | null) | undefined,
+  verify: ((memberToken: string, email: string) => void) | undefined,
+  refuseSignIn: (req: Request) => Promise<{
+    status: number;
+    retryAfterSeconds: number;
+    message: string;
+  } | null>,
 ) {
   const token = (res: Response) => res.locals.token as string;
   const csrf = (res: Response) => res.locals.csrf as string;
@@ -166,6 +171,11 @@ export function mountMemberPasswordRoutes(
         );
     if (!onlyFields(req, ["csrf", "email", "password"]))
       return retry(400, "Open the sign-in form again.");
+    const refused = await refuseSignIn(req);
+    if (refused) {
+      res.set("Retry-After", String(refused.retryAfterSeconds));
+      return retry(refused.status, refused.message);
+    }
     const result = await access
       .signIn(String(req.body?.email ?? ""), String(req.body?.password ?? ""))
       .catch(() => undefined);
