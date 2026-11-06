@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { hostingText } from "./hosting-presentation.ts";
 import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
@@ -65,8 +66,8 @@ export function assignmentReferencePage(
   reference: AssignmentReference,
 ): string {
   return page(
-    "My local assignment ID",
-    `<section class="reading"><h1>My local assignment ID</h1><p>Share this exact reference with your trusted local administrator for a specific support request. It is not a sign-in credential and does not itself grant access.</p><dl><dt>My assignment ID</dt><dd data-assignment-id>${escape(reference.staffId)}</dd><dt>Credential expires at (UTC)</dt><dd>${time(reference.expiresAt)}</dd></dl><p>An administrator must confirm an exact finite assignment. Your current role, credential and that grant still govern access.</p>${portalActions(
+    hostingText("My local assignment ID", "My assignment ID"),
+    `<section class="reading"><h1>${hostingText("My local assignment ID", "My assignment ID")}</h1><p>Share this exact reference with your ${hostingText("trusted local administrator", "trusted administrator")} for a specific support request. It is not a sign-in credential and does not itself grant access.</p><dl><dt>My assignment ID</dt><dd data-assignment-id>${escape(reference.staffId)}</dd><dt>Credential expires at (UTC)</dt><dd>${time(reference.expiresAt)}</dd></dl><p>An administrator must confirm an exact finite assignment. Your current role, credential and that grant still govern access.</p>${portalActions(
       [
         ["/staff", "Your staff tools"],
         ["/learn", "Your learning space"],

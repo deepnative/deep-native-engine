@@ -181,6 +181,32 @@ it("fails when the browser command fails and still removes the generated databas
   expect(doubles.end).toHaveBeenCalledOnce();
 });
 
+it("LEFTOVER-09 removes its generated database when stopped between steps", async () => {
+  const earlier = process.listeners("SIGTERM");
+  const ordinary = doubles.spawn.getMockImplementation();
+  let delivered = 0;
+  doubles.spawn.mockImplementation((command, args, options) => {
+    if (command === "npm" && args[1] === "build")
+      for (const listener of process.listeners("SIGTERM"))
+        if (!earlier.includes(listener)) {
+          listener("SIGTERM");
+          delivered++;
+        }
+    return ordinary(command, args, options);
+  });
+  const result = await run();
+  expect(delivered).toBeGreaterThan(0);
+  expect(result.exitStatus).toBe(1);
+  expect(
+    doubles.spawn.mock.calls.some(
+      ([command, args]) => command === "npm" && args[1] === "test:e2e:full",
+    ),
+  ).toBe(false);
+  expect(
+    doubles.query.mock.calls.filter(([sql]) => /^DROP DATABASE/.test(sql)),
+  ).toHaveLength(1);
+  expect(process.listeners("SIGTERM")).toEqual(earlier);
+});
 it("fails after a complete browser command if the generated report is absent", async () => {
   doubles.read.mockImplementation((file) => {
     if (file === "artifacts/e2e-full-results.json") throw new Error("missing");

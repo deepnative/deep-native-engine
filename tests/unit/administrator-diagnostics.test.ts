@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { administratorDiagnostics } from "../../src/administrator-diagnostics.ts";
@@ -235,4 +235,43 @@ it("DIAG-03 reports unavailable when the database cannot be reached or read", as
   expect(await diagnostics.email("short", "not an email")).toEqual({
     kind: "denied",
   });
+});
+
+it("WAITWORK reads waiting work with a real administrator session, skipping retired workflow versions", async () => {
+  const credential = await admin2();
+  const empty = await diagnostics.work(credential);
+  expect(empty).toMatchObject({
+    kind: "ready",
+    value: {
+      support: { waiting: 0, assigned: 0, people: 0 },
+      feedback: { waiting: 0, assigned: 0, people: 0 },
+      workflow: { waiting: 0, assigned: 0, people: 0, references: [] },
+      contributions: { waiting: 0, assigned: null, people: 1 },
+    },
+  });
+
+  // Requests for the current (2) and a retired (1) version of one workflow.
+  const owner = await member();
+  const requests = [];
+  for (const version of [2, 1]) {
+    await pool.query(
+      "INSERT INTO workflow_feedback(member_id,workflow_id,workflow_version,note) VALUES($1,'WF-001',$2,'Invented note')",
+      [owner.id, version],
+    );
+    const id = randomUUID();
+    await pool.query(
+      `INSERT INTO workflow_review_requests(id,workspace_id,member_id,source_instance_id,workflow_id,workflow_version,source_revision,expires_at)
+       SELECT $1,$2,$2,instance_id,'WF-001',$3,1,clock_timestamp()+INTERVAL '1 hour'
+       FROM workflow_feedback WHERE member_id=$2 AND workflow_version=$3`,
+      [id, owner.id, version],
+    );
+    requests.push(id);
+  }
+  const value = await diagnostics.work(credential);
+  if (value.kind !== "ready") throw Error("Counts unavailable");
+  expect(value.value.workflow).toMatchObject({
+    waiting: 1,
+    references: [requests[0]],
+  });
+  expect(await diagnostics.work("short")).toEqual({ kind: "denied" });
 });

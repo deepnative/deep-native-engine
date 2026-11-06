@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import type { EventEnrollmentStore } from "./event-enrollments.ts";
@@ -109,7 +110,12 @@ export function mountEventEnrollmentRoutes(
         return res
           .status(404)
           .send(
-            eventEnrollmentRecovery("This event rehearsal is unavailable."),
+            eventEnrollmentRecovery(
+              hostingText(
+                "This event rehearsal is unavailable.",
+                "This practice registration is unavailable.",
+              ),
+            ),
           );
       res.send(
         eventEnrollmentPage(
@@ -133,7 +139,12 @@ export function mountEventEnrollmentRoutes(
         return res
           .status(404)
           .send(
-            eventEnrollmentRecovery("This event rehearsal is unavailable."),
+            eventEnrollmentRecovery(
+              hostingText(
+                "This event rehearsal is unavailable.",
+                "This practice registration is unavailable.",
+              ),
+            ),
           );
       if (
         !fields(req.body) ||
@@ -147,7 +158,10 @@ export function mountEventEnrollmentRoutes(
           .status(422)
           .send(
             eventEnrollmentRecovery(
-              "Confirm the local rehearsal and refresh its enrollment form.",
+              hostingText(
+                "Confirm the local rehearsal and refresh its enrollment form.",
+                "Confirm the practice registration and refresh its form.",
+              ),
             ),
           );
       const result = await store.enroll(token, id, v, req.body.operation_id!);
@@ -160,7 +174,10 @@ export function mountEventEnrollmentRoutes(
         .send(
           eventEnrollmentRecovery(
             result.kind === "full"
-              ? "This local rehearsal is full. No seat was reserved."
+              ? hostingText(
+                  "This local rehearsal is full. No seat was reserved.",
+                  "This practice registration is full. No seat was reserved.",
+                )
               : result.kind === "conflict"
                 ? "This attempt belongs to a different event version."
                 : "New registration is unavailable.",

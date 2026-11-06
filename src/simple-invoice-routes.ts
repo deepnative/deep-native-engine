@@ -184,9 +184,13 @@ export function mountSimpleInvoiceRoutes(
     );
   });
   app.get(adminPath, async (req, res) => {
-    if (!valid(req, res, [], ["ownerId"])) return;
-    const selected = req.query.ownerId;
-    if (selected !== undefined && !invoiceUuid(selected))
+    if (!valid(req, res, [], ["ownerId", "prepared"])) return;
+    const selected = req.query.ownerId,
+      prepared = req.query.prepared;
+    if (
+      (selected !== undefined && !invoiceUuid(selected)) ||
+      (prepared !== undefined && (prepared !== "1" || selected === undefined))
+    )
       return error(res, "invalid", undefined, true);
     if (!store) return error(res, "unavailable", undefined, true);
     const r = await store.adminOverview(token(res), selected);
@@ -195,7 +199,7 @@ export function mountSimpleInvoiceRoutes(
     return res.send(
       page(
         "Course billing administration",
-        `<section class="invoice-workspace portal-workspace"><h1>Course billing administration</h1><p>Prepare courses for a registered student. No invoice is issued until the student accepts the exact terms.</p>${portalActions(
+        `<section class="invoice-workspace portal-workspace"><h1>Course billing administration</h1>${prepared ? '<p role="status">Course billing proposal prepared. The learner can now review and accept it in Courses and invoices.</p>' : ""}<p>Prepare courses for a registered student. No invoice is issued until the student accepts the exact terms.</p>${portalActions(
           [
             ["/operator", "Administration console"],
             ["/operator/coaching", "Monthly coaching"],
@@ -227,7 +231,7 @@ export function mountSimpleInvoiceRoutes(
         return error(res, "invalid", undefined, admin);
       const r = await store.invoice(token(res), invoiceId, admin);
       if (r.kind !== "ready") return error(res, r.kind, undefined, admin);
-      let html = simpleInvoiceDocument(r.value.document);
+      let html = simpleInvoiceDocument(r.value.document, admin);
       if (admin) {
         const i = r.value,
           anti = csrf(token(res), options.secret);
@@ -297,7 +301,10 @@ export function mountSimpleInvoiceRoutes(
         taxCents,
       });
       return r.kind === "ready"
-        ? res.redirect(303, adminPath)
+        ? res.redirect(
+            303,
+            `${adminPath}?ownerId=${encodeURIComponent(req.body.ownerId)}&prepared=1`,
+          )
         : error(res, r.kind, req.body.operationId, true);
     } catch {
       return error(res, "invalid", undefined, true);

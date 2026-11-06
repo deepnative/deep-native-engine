@@ -269,7 +269,7 @@ test("[F-BUILD-01-D] demo reviewer roster entry does not change live service rea
       await page.goto("/readiness/tracks");
       const service = page
         .getByRole("listitem")
-        .filter({ hasText: "Education · formal-review" });
+        .filter({ hasText: "Education · formal review" });
       await expect(service).toContainText("in preparation");
       await expect(service).toContainText(
         "Qualified reviewer coverage not verified",
