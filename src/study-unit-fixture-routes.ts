@@ -125,7 +125,10 @@ export function mountStudyUnitFixtureRoutes(
         .send(
           studyFixtureNotice(
             "",
-            "Local test-unit issuance is unavailable in this configuration.",
+            hostingText(
+              "Local test-unit issuance is unavailable in this configuration.",
+              "Test-unit issuance is unavailable on this site.",
+            ),
           ),
         );
     if (!studyFixtureFields(req.query, [])) return failure(res, "invalid");
@@ -135,7 +138,15 @@ export function mountStudyUnitFixtureRoutes(
     if (!options.localStaffEntry)
       return res
         .status(404)
-        .send(studyFixtureNotice("", "Local staff entry is unavailable."));
+        .send(
+          studyFixtureNotice(
+            "",
+            hostingText(
+              "Local staff entry is unavailable.",
+              "Staff entry is unavailable.",
+            ),
+          ),
+        );
     const cookie = staffCookie(req.headers.cookie);
     if (cookie.kind !== "value" || !staffCredential(cookie.value))
       return failure(res, "denied");

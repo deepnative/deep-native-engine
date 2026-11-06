@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import type { Express, Request, Response } from "express";
 import type { Store } from "./store.ts";
 import { COOKIE, cookieOptions, csrf } from "./session.ts";
@@ -308,7 +309,10 @@ export function mountProgramRoutes(
           .status(result.kind === "denied" ? 403 : 503)
           .send(
             programProblemPage(
-              "Current local program administration is unavailable.",
+              hostingText(
+                "Current local program administration is unavailable.",
+                "Current program administration is unavailable.",
+              ),
             ),
           );
   });
