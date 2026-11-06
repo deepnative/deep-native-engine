@@ -1,4 +1,5 @@
 import { timeTag } from "./display-time.ts";
+import { hostingText } from "./hosting-presentation.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import {
@@ -18,8 +19,8 @@ const navigation = portalActions([
   [`${base}/history`, "Your permission history"],
   ["/staff", "Your staff tools"],
 ]);
-const notice =
-  '<p class="eyebrow">PRIVATE LOCAL SUPPORT MINUTES</p><p>One exact allocation-specific permission for invented local support. This creates no units, request-text assignment, staff identity or qualification. Request-text permission is independent: time permission alone reveals no request text or internal notes. Begin and settlement are separate explicit actions.</p>';
+const notice = () =>
+  `<p class="eyebrow">PRIVATE ${hostingText("LOCAL ", "")}SUPPORT MINUTES</p><p>One exact allocation-specific permission for invented ${hostingText("local ", "")}support. This creates no units, request-text assignment, staff identity or qualification. Request-text permission is independent: time permission alone reveals no request text or internal notes. Begin and settlement are separate explicit actions.</p>`;
 const field = (name: string, value: string) =>
   `<input type="hidden" name="${name}" value="${escape(value)}">`;
 function recoveryForm(csrf: string, revoke: boolean, key?: string) {
@@ -45,7 +46,7 @@ export function supportMinuteForm(
 ) {
   return page(
     "Private support-minute permissions",
-    `<section class="reading">${notice}<h1>Private support-minute permissions</h1>${creationEnabled ? `<p>Ask the member for their owned request and held-allocation references and ask the operator for their own reference. There is no member, operator or request directory here.</p><form method="post" action="${base}/check">${hidden(escape(csrf))}<label for="requestId">Request reference</label><input id="requestId" name="requestId" maxlength="36" required><label for="allocationId">Allocation reference</label><input id="allocationId" name="allocationId" maxlength="36" required><label for="operatorId">Operator reference</label><input id="operatorId" name="operatorId" maxlength="36" required><button type="submit">Check exact references</button></form>` : writesEnabled ? "<p>Recovery-only mode: new checks and permissions are paused. Your retained history, original operation inspection and exact revocation remain available.</p>" : "<p>Support writes are paused. Retained history and original operation inspection remain available; grant and revoke writes are unavailable.</p>"}<h2>Inspect an original operation</h2>${recoveryForm(csrf, false)}${recoveryForm(csrf, true)}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Private support-minute permissions</h1>${creationEnabled ? `<p>Ask the member for their owned request and held-allocation references and ask the operator for their own reference. There is no member, operator or request directory here.</p><form method="post" action="${base}/check">${hidden(escape(csrf))}<label for="requestId">Request reference</label><input id="requestId" name="requestId" maxlength="36" required><label for="allocationId">Allocation reference</label><input id="allocationId" name="allocationId" maxlength="36" required><label for="operatorId">Operator reference</label><input id="operatorId" name="operatorId" maxlength="36" required><button type="submit">Check exact references</button></form>` : writesEnabled ? "<p>Recovery-only mode: new checks and permissions are paused. Your retained history, original operation inspection and exact revocation remain available.</p>" : "<p>Support writes are paused. Retained history and original operation inspection remain available; grant and revoke writes are unavailable.</p>"}<h2>Inspect an original operation</h2>${recoveryForm(csrf, false)}${recoveryForm(csrf, true)}${navigation}</section>`,
   );
 }
 export function supportMinuteCheck(
@@ -55,7 +56,7 @@ export function supportMinuteCheck(
 ) {
   return page(
     "Confirm support-minute permission",
-    `<section class="reading">${notice}<h1>Confirm support-minute permission</h1><p>Checking references created no permission or allowance change.</p><dl><dt>Allocation state</dt><dd>${escape(check.allocationState)}</dd><dt>Reserved ceiling</dt><dd>${check.ceiling}</dd><dt>Maximum current authority expiry (UTC)</dt><dd>${timeTag(check.authorityExpiresAt)}</dd></dl>${grantForm(csrf, { requestId: check.requestId, allocationId: check.allocationId, operatorId: check.operatorId, operationId, startsAt: "", expiresAt: "" }, false)}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Confirm support-minute permission</h1><p>Checking references created no permission or allowance change.</p><dl><dt>Allocation state</dt><dd>${escape(check.allocationState)}</dd><dt>Reserved ceiling</dt><dd>${check.ceiling}</dd><dt>Maximum current authority expiry (UTC)</dt><dd>${timeTag(check.authorityExpiresAt)}</dd></dl>${grantForm(csrf, { requestId: check.requestId, allocationId: check.allocationId, operatorId: check.operatorId, operationId, startsAt: "", expiresAt: "" }, false)}${navigation}</section>`,
   );
 }
 export function supportMinuteReceipt(
@@ -68,7 +69,7 @@ export function supportMinuteReceipt(
 ) {
   return page(
     "Support-minute permission receipt",
-    `<section class="reading">${notice}<h1>Support-minute permission receipt</h1>${message === undefined ? "" : `<p role="alert">${escape(message)}</p>`}${revocation === undefined ? "" : `<p>Original revocation outcome: ${escape(revocation.outcome)}</p><p>Revocation receipt: <span data-support-time-revocation-reference>${escape(revocation.revocationReceiptId)}</span></p>`}${rowDetails(row)}<p>Reading this observation starts no effort and consumes nothing. Revocation changes only this exact permission; independent overlapping grants, request-text permissions and allocation accounting remain separate.</p><p><a href="${base}/${encodeURIComponent(row.grantId)}">Inspect this exact permission receipt</a></p>${row.canRevoke && writesEnabled ? revokeForm(csrf, { grantId: row.grantId, operationId }) : row.canRevoke ? "<p>Support permission writes are paused.</p>" : "<p>This permission has already been revoked.</p>"}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Support-minute permission receipt</h1>${message === undefined ? "" : `<p role="alert">${escape(message)}</p>`}${revocation === undefined ? "" : `<p>Original revocation outcome: ${escape(revocation.outcome)}</p><p>Revocation receipt: <span data-support-time-revocation-reference>${escape(revocation.revocationReceiptId)}</span></p>`}${rowDetails(row)}<p>Reading this observation starts no effort and consumes nothing. Revocation changes only this exact permission; independent overlapping grants, request-text permissions and allocation accounting remain separate.</p><p><a href="${base}/${encodeURIComponent(row.grantId)}">Inspect this exact permission receipt</a></p>${row.canRevoke && writesEnabled ? revokeForm(csrf, { grantId: row.grantId, operationId }) : row.canRevoke ? "<p>Support permission writes are paused.</p>" : "<p>This permission has already been revoked.</p>"}${navigation}</section>`,
   );
 }
 export function supportMinuteHistory(history: {
@@ -77,7 +78,7 @@ export function supportMinuteHistory(history: {
 }) {
   return page(
     "Your support-minute permission history",
-    `<section class="reading">${notice}<h1>Your support-minute permission history</h1><p>Only permissions created by your current administrator identity. At most ${SUPPORT_GRANT_PAGE_SIZE} retained rows per page; every page checks fresh authority.</p>${history.rows.length ? `<ul>${history.rows.map((row) => `<li data-support-time-history-grant="${escape(row.grantId)}">${rowDetails(row)}<a href="${base}/${encodeURIComponent(row.grantId)}">Inspect exact permission</a></li>`).join("")}</ul>` : "<p>No retained permissions were found. This does not establish that an earlier write failed; account erasure removes its recovery.</p>"}${history.next === null ? "" : `<p><a href="${base}/history?after=${encodeURIComponent(history.next)}">Next permissions</a></p>`}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Your support-minute permission history</h1><p>Only permissions created by your current administrator identity. At most ${SUPPORT_GRANT_PAGE_SIZE} retained rows per page; every page checks fresh authority.</p>${history.rows.length ? `<ul>${history.rows.map((row) => `<li data-support-time-history-grant="${escape(row.grantId)}">${rowDetails(row)}<a href="${base}/${encodeURIComponent(row.grantId)}">Inspect exact permission</a></li>`).join("")}</ul>` : "<p>No retained permissions were found. This does not establish that an earlier write failed; account erasure removes its recovery.</p>"}${history.next === null ? "" : `<p><a href="${base}/history?after=${encodeURIComponent(history.next)}">Next permissions</a></p>`}${navigation}</section>`,
   );
 }
 export function supportMinuteRecovery(

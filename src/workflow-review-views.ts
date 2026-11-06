@@ -1,4 +1,5 @@
 import { timeTag } from "./display-time.ts";
+import { hostingText } from "./hosting-presentation.ts";
 import { escape, hidden, page } from "./views.ts";
 import type {
   WorkflowReviewPreview,
@@ -8,7 +9,8 @@ import type {
 export const reviewMemberBase = "/workflow-feedback/review";
 const field = (name: string, value: string) =>
   `<input type="hidden" name="${name}" value="${escape(value)}">`;
-const notice = `<p class="eyebrow">PRIVATE LOCAL REVIEW REQUEST</p><p>This offers one private note to an individually assigned moderator. It is not qualified assessment or public publication. No moderator availability or response time is promised.</p>`;
+const notice = () =>
+  `<p class="eyebrow">PRIVATE ${hostingText("LOCAL ", "")}REVIEW REQUEST</p><p>This offers one private note to an individually assigned moderator. It is not qualified assessment or public publication. No moderator availability or response time is promised.</p>`;
 export function workflowReviewPreviewPage(
   value: WorkflowReviewPreview,
   csrf: string,
@@ -16,7 +18,7 @@ export function workflowReviewPreviewPage(
 ) {
   return page(
     "Request private review",
-    `${notice}<section class="reading"><h1>Request private review</h1><h2>${escape(value.title)}</h2><p>Workflow ${escape(value.workflowId)} · version ${value.workflowVersion} · exact note revision ${value.revision}</p><pre class="content-text">${escape(value.note)}</pre><p>Permission ends ${timeTag(value.expiresAt)}. Checking or submitting again does not extend this deadline.</p><form method="post" action="${reviewMemberBase}/request">${hidden(csrf)}${field("checked", value.checked)}${field("operationId", operationId)}<label><input type="checkbox" name="confirm" value="yes" required> Allow an individually assigned local moderator to read only this exact note until the shown deadline</label><button type="submit">Request private review</button></form><p><a href="/workflow-feedback/${escape(value.workflowId)}">Back to my private note</a></p></section>`,
+    `${notice()}<section class="reading"><h1>Request private review</h1><h2>${escape(value.title)}</h2><p>Workflow ${escape(value.workflowId)} · version ${value.workflowVersion} · exact note revision ${value.revision}</p><pre class="content-text">${escape(value.note)}</pre><p>Permission ends ${timeTag(value.expiresAt)}. Checking or submitting again does not extend this deadline.</p><form method="post" action="${reviewMemberBase}/request">${hidden(csrf)}${field("checked", value.checked)}${field("operationId", operationId)}<label><input type="checkbox" name="confirm" value="yes" required> Allow an individually assigned ${hostingText("local ", "")}moderator to read only this exact note until the shown deadline</label><button type="submit">Request private review</button></form><p><a href="/workflow-feedback/${escape(value.workflowId)}">Back to my private note</a></p></section>`,
   );
 }
 export function workflowReviewReceiptPage(
@@ -26,7 +28,7 @@ export function workflowReviewReceiptPage(
 ) {
   return page(
     "Private review request receipt",
-    `${notice}<section class="reading"><h1>Private review request receipt</h1><p data-request-id="${escape(value.requestId)}">Request ${escape(value.requestId)}</p><dl><dt>Workflow</dt><dd>${escape(value.workflowId)} · version ${value.workflowVersion} · note revision ${value.revision}</dd><dt>Permission status</dt><dd>${escape(value.state)}</dd><dt>Permission ends</dt><dd>${timeTag(value.expiresAt)}</dd></dl><p>Pending means permission is waiting for an exact assignment. Assigned means an unrevoked finite assignment is recorded; current staff authority is checked separately before every read. Neither state means the note has been read.</p>${value.withdrawnAt ? "<p>Your permission is withdrawn; your own original note remains available.</p>" : `<form method="post" action="${reviewMemberBase}/withdraw">${hidden(csrf)}${field("requestId", value.requestId)}${field("operationId", operationId)}<label><input type="checkbox" name="confirm" value="yes" required> Withdraw this review permission while keeping my own note</label><button class="secondary" type="submit">Withdraw review permission</button></form>`}<p><a href="${reviewMemberBase}/receipts/${escape(value.requestId)}">Reload this request receipt</a> · <a href="${reviewMemberBase}/history">My private review history</a> · <a href="/workflow-feedback/${escape(value.workflowId)}">My private note</a> · <a href="/member/export">Export my private records</a></p></section>`,
+    `${notice()}<section class="reading"><h1>Private review request receipt</h1><p data-request-id="${escape(value.requestId)}">Request ${escape(value.requestId)}</p><dl><dt>Workflow</dt><dd>${escape(value.workflowId)} · version ${value.workflowVersion} · note revision ${value.revision}</dd><dt>Permission status</dt><dd>${escape(value.state)}</dd><dt>Permission ends</dt><dd>${timeTag(value.expiresAt)}</dd></dl><p>Pending means permission is waiting for an exact assignment. Assigned means an unrevoked finite assignment is recorded; current staff authority is checked separately before every read. Neither state means the note has been read.</p>${value.withdrawnAt ? "<p>Your permission is withdrawn; your own original note remains available.</p>" : `<form method="post" action="${reviewMemberBase}/withdraw">${hidden(csrf)}${field("requestId", value.requestId)}${field("operationId", operationId)}<label><input type="checkbox" name="confirm" value="yes" required> Withdraw this review permission while keeping my own note</label><button class="secondary" type="submit">Withdraw review permission</button></form>`}<p><a href="${reviewMemberBase}/receipts/${escape(value.requestId)}">Reload this request receipt</a> · <a href="${reviewMemberBase}/history">My private review history</a> · <a href="/workflow-feedback/${escape(value.workflowId)}">My private note</a> · <a href="/member/export">Export my private records</a></p></section>`,
   );
 }
 export function workflowReviewRecoveryPage(
@@ -44,7 +46,7 @@ export function workflowReviewRecoveryPage(
       : "";
   return page(
     "Private review request unavailable",
-    `${notice}<section class="reading"><h1>Private review request unavailable</h1><p role="alert">${escape(message)}</p><p>A failed write response may follow a committed change. Inspect the original operation before deciding on any manual repeat. Inspection does not create permission; no automatic retry or replacement key is used.</p>${inspect}${repeat}<p><a href="/workflows">Workflow demonstrations</a></p></section>`,
+    `${notice()}<section class="reading"><h1>Private review request unavailable</h1><p role="alert">${escape(message)}</p><p>A failed write response may follow a committed change. Inspect the original operation before deciding on any manual repeat. Inspection does not create permission; no automatic retry or replacement key is used.</p>${inspect}${repeat}<p><a href="/workflows">Workflow demonstrations</a></p></section>`,
   );
 }
 
@@ -54,6 +56,6 @@ export function workflowReviewHistoryPage(
 ) {
   return page(
     "My private workflow review history",
-    `${notice}<section class="reading"><h1>My private workflow review history</h1><p>Request and permission metadata only. Your notes stay in their original private records.</p>${receipts.length ? `<ul>${receipts.map((r) => `<li><a href="${reviewMemberBase}/receipts/${escape(r.requestId)}">${escape(r.workflowId)} · version ${r.workflowVersion} · note revision ${r.revision}</a> · ${escape(r.state)} · permission ends ${timeTag(r.expiresAt)}</li>`).join("")}</ul>` : "<p>No private review requests on this page.</p>"}${next ? `<a href="${reviewMemberBase}/history?cursor=${encodeURIComponent(next)}">Next private review requests</a>` : ""}<p><a href="/workflows">Workflow demonstrations</a> · <a href="/member/export">Export my private records</a></p></section>`,
+    `${notice()}<section class="reading"><h1>My private workflow review history</h1><p>Request and permission metadata only. Your notes stay in their original private records.</p>${receipts.length ? `<ul>${receipts.map((r) => `<li><a href="${reviewMemberBase}/receipts/${escape(r.requestId)}">${escape(r.workflowId)} · version ${r.workflowVersion} · note revision ${r.revision}</a> · ${escape(r.state)} · permission ends ${timeTag(r.expiresAt)}</li>`).join("")}</ul>` : "<p>No private review requests on this page.</p>"}${next ? `<a href="${reviewMemberBase}/history?cursor=${encodeURIComponent(next)}">Next private review requests</a>` : ""}<p><a href="/workflows">Workflow demonstrations</a> · <a href="/member/export">Export my private records</a></p></section>`,
   );
 }

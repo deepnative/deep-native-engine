@@ -49,7 +49,7 @@ export function activityItems(
           ? "Self-reported complete; text withdrawn"
           : "Self-reported complete"
         : "Draft saved",
-      availability: `Recorded goal: ${row.goalAtStart ? GOALS[row.goalAtStart] : "Unattributed historical goal"}. Local foundation preview; no qualified review`,
+      availability: `Recorded goal: ${row.goalAtStart ? GOALS[row.goalAtStart] : "Unattributed historical goal"}. ${hostingText("Local foundation preview", "Foundation exercise")}; no qualified review`,
       href: `/lesson?version=${row.version}&goal=${goal}#starter-version-${row.version}-${goal}`,
     });
   }
