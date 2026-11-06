@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import type { ApplicationMode } from "./adapters.ts";
@@ -93,7 +94,10 @@ export function mountSupportAssignmentRoutes(
         .status(404)
         .send(
           assignmentNoticePage(
-            "Local support assignment administration is unavailable in this configuration.",
+            hostingText(
+              "Local support assignment administration is unavailable in this configuration.",
+              "Support assignment administration is unavailable on this site.",
+            ),
           ),
         );
     const selected = staffCookie(req.headers.cookie);

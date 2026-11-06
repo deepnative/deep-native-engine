@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import type { ApplicationMode } from "./adapters.ts";
@@ -65,7 +66,10 @@ export function mountEventCancellationRoutes(
         .send(
           eventCancellationNotice(
             "",
-            "Local event cancellation is unavailable in this configuration.",
+            hostingText(
+              "Local event cancellation is unavailable in this configuration.",
+              "Event cancellation is unavailable on this site.",
+            ),
           ),
         );
     const selected = staffCookie(req.headers.cookie);

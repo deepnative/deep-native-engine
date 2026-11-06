@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import type { ApplicationMode } from "./adapters.ts";
@@ -84,7 +85,10 @@ export function mountCircleGrantRoutes(
         .send(
           circleGrantNoticePage(
             "",
-            "Local circle grant administration is unavailable in this configuration.",
+            hostingText(
+              "Local circle grant administration is unavailable in this configuration.",
+              "Circle grant administration is unavailable on this site.",
+            ),
           ),
         );
     const selected = staffCookie(req.headers.cookie);
