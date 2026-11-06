@@ -282,6 +282,11 @@ import {
 } from "./ledger-reconciliation.ts";
 import { registerLedgerReconciliationRoutes } from "./ledger-reconciliation-routes.ts";
 import {
+  disabledInvoiceReconciliationStore,
+  type InvoiceReconciliationStore,
+} from "./invoice-reconciliation.ts";
+import { registerInvoiceReconciliationRoutes } from "./invoice-reconciliation-routes.ts";
+import {
   disabledLocalAiHoldInspectionStore,
   type LocalAiHoldInspectionStore,
 } from "./local-ai-hold-inspection.ts";
@@ -449,6 +454,7 @@ export function app(
     localCircleAdmin?: boolean;
     metrics?: MetricsStore;
     ledgerReconciliation?: LedgerReconciliationStore;
+    invoiceReconciliation?: InvoiceReconciliationStore;
     localHoldInspection?: LocalAiHoldInspectionStore;
     memberTestUnits?: MemberTestUnitsStore;
     studyUnitFixtures?: StudyUnitFixtureStore;
@@ -922,6 +928,7 @@ export function app(
     signInLanding,
     options.memberSignOut,
     options.memberPassword,
+    anonymousRefusal,
   );
   if (options.memberPassword)
     mountMemberPasswordRoutes(
@@ -935,6 +942,7 @@ export function app(
           ?.requestAttach(memberToken, address)
           .catch(() => undefined),
       (req) => anonymousRefusal("password_sign_in", req),
+      (req) => anonymousRefusal("password_change", req),
     );
   mountProgramRoutes(
     app,
@@ -948,6 +956,11 @@ export function app(
     res.send(trackReadinessPage(await tracks.snapshot())),
   );
   registerLedgerReconciliationRoutes(app, ledgerReconciliation, mode);
+  registerInvoiceReconciliationRoutes(
+    app,
+    options.invoiceReconciliation ?? disabledInvoiceReconciliationStore(),
+    mode,
+  );
   registerLocalAiHoldInspectionRoutes(
     app,
     options.localHoldInspection ?? disabledLocalAiHoldInspectionStore(),
@@ -976,8 +989,10 @@ export function app(
   });
   registerMetricsReportRoutes(app, metrics);
   app.get("/operator/metrics", async (_req, res) => {
-    const snapshot = await metrics.snapshot(res.locals.token as string);
-    if (!snapshot) {
+    const token = res.locals.token as string;
+    const snapshot = await metrics.snapshot(token);
+    // Logged before it leaves: a failed log write sends no data.
+    if (!snapshot || !(await metrics.logExport(token))) {
       res.status(403).json({ error: "forbidden" });
       return;
     }

@@ -2721,6 +2721,33 @@
       "expected": "The member still sees the hold and its reference with no run action or erasure claim; the operator sees it as not metered with no source, member, permission or grant details and no form; everyone else gets the same refusal",
       "issues": [187],
       "critical": true
+    },
+    {
+      "id": "L306",
+      "actor": "Member checking when a moderator read a workflow note they sent for private review",
+      "preconditions": "Dedicated synthetic PostgreSQL database, local staff entry and workflow review requests enabled, invented staff provisioned through the authorization store, port0 server; desktop/mobile Chromium",
+      "steps": "NOTEREAD-01, 08: a member saves an invented workflow note and requests private review; it is assigned to an invented moderator and the member checks the history; the moderator opens the note; the member checks again",
+      "expected": "Assignment alone adds no entry; after the moderator opens it the history says a moderator read the note for that workflow and version and when, and says readings are listed from November 2026 on; no note text or staff identity; no sideways scrolling",
+      "issues": [40],
+      "critical": false
+    },
+    {
+      "id": "L307",
+      "actor": "Visitor asking for an email sign-in link from an address past its allowance",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server with an invented email sender and a small allowance, a documentation-range forwarded address; desktop/mobile Chromium",
+      "steps": "OUTWARD-03/08: earlier requests use the address's email-link allowance; the visitor types an address on the email sign-in page and submits; the window ends; the visitor submits the same form again",
+      "expected": "The refused request returns 429 with Retry-After and a plain wait message, sends nothing, keeps the typed address and still offers password sign-in; the same form then gets the ordinary check-your-email page; no sideways scrolling",
+      "issues": [42],
+      "critical": true
+    },
+    {
+      "id": "L308",
+      "actor": "Platform administrator reconciling sample invoices against recorded cash",
+      "preconditions": "Dedicated synthetic PostgreSQL database, sample invoices, port0 server; desktop/mobile Chromium; no provider, no real money",
+      "steps": "RECON-02/03/06/10: a member accepts one invented invoice; the administrator records a part payment and a partial refund, then opens the report from the staff page and follows a flagged invoice; an operator and the member request the report",
+      "expected": "Invoiced, receipts, refunds, net collected and unpaid balance read as separate amounts under a test-data heading; the empty group reads not applicable; the refund is flagged as a reversal; no evidence reference appears; the operator and member are refused with no amounts; no sideways scrolling",
+      "issues": [123],
+      "critical": true
     }
   ],
   "fullMvp": [

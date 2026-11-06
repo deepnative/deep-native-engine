@@ -255,6 +255,8 @@ export async function migrate(pool: Pool) {
       "105-mock-session-allowances.sql",
       "106-manual-invoice-events.sql",
       "107-retain-held-unmetered-local-ai.sql",
+      "108-staff-read-and-export-log.sql",
+      "109-outward-email-admission.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
