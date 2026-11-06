@@ -58,11 +58,7 @@ function fixture() {
   };
   tx.query.mockImplementation(async (sql: string, values: unknown[]) => {
     let rows: unknown[] = [];
-    if (
-      sql.startsWith(
-        'SELECT member_id AS "memberId" FROM local_ai_test_unit_jobs',
-      )
-    )
+    if (sql.startsWith('SELECT member_id AS "memberId" FROM adapter_jobs'))
       rows = state.target ? [{ memberId: member }] : [];
     else if (sql.startsWith('SELECT member_id AS "memberId",job_id'))
       rows = state.revocationTarget ? [{ memberId: member, jobId: job }] : [];

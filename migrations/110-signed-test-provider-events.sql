@@ -38,5 +38,5 @@ ALTER TABLE IF EXISTS billing_change_events ALTER COLUMN actor_id DROP NOT NULL;
 ALTER TABLE IF EXISTS billing_change_events DROP CONSTRAINT IF EXISTS billing_change_events_actor;
 ALTER TABLE IF EXISTS billing_change_events ADD CONSTRAINT billing_change_events_actor
  CHECK((actor_id IS NULL)=(action IN ('test_payment_received','test_payment_failed','test_refund_recorded')));
-INSERT INTO schema_migrations(version) VALUES(107) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(110) ON CONFLICT DO NOTHING;
 COMMIT;

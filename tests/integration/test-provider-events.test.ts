@@ -6,6 +6,7 @@ import { catalogStore, seedDraftPack } from "../../src/catalog.ts";
 import { foundationImportStore } from "../../src/foundation-import.ts";
 import { reviewedFoundation } from "../../src/foundation-pack.ts";
 import { memberExportStore } from "../../src/member-export.ts";
+import { readInvoiceReconciliation } from "../../src/invoice-reconciliation.ts";
 import { readChangeHistory } from "../../src/staff-change-history.ts";
 import {
   simpleInvoiceStore,
@@ -588,4 +589,23 @@ it("TESTPAY-12 exports the member's own signed test events without an actor or d
   expect(JSON.stringify(records.invoicePayments)).not.toMatch(
     /actor|provider_event_digest/,
   );
+});
+it("TESTPAY-13 reports only applied test events as simulated, never failed or held ones as cash or late", async () => {
+  const before = (await readInvoiceReconciliation(pool)).groups[1];
+  const { invoiceId } = await issued();
+  const lastYear = "2025-01-15T12:00:00.000Z";
+  for (const change of [
+    { type: "payment.failed", amountCents: 500, occurredAt: lastYear },
+    { type: "refund.succeeded", amountCents: 100, occurredAt: lastYear },
+    { type: "payment.succeeded", amountCents: 900, paymentRef: "pay-paid" },
+  ])
+    await deliver(event(invoiceId, change));
+  const row = (await readInvoiceReconciliation(pool)).groups[1];
+  expect(row.simulatedReceiptCents - before.simulatedReceiptCents).toBe(900);
+  expect(row.simulatedRefundCents - before.simulatedRefundCents).toBe(0);
+  expect(row.receiptCents - before.receiptCents).toBe(0);
+  expect(row.refundCents - before.refundCents).toBe(0);
+  expect(row.lateEvents - before.lateEvents).toBe(0);
+  expect(row.lateCents - before.lateCents).toBe(0);
+  expect(row.mismatchedInvoices - before.mismatchedInvoices).toBe(0);
 });

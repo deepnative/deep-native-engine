@@ -23,7 +23,7 @@ export type SharingResult =
   { kind: "ready"; value: SharingSummary } | { kind: "denied" | "unavailable" };
 /** No staff identity, grant ID or purpose text is ever selected for this. */
 export type StaffAccessEntry = {
-  source: "access" | "feedback" | "proposal";
+  source: "access" | "feedback" | "proposal" | "workflow";
   action: string;
   via: string | null;
   file: string | null;
@@ -119,13 +119,17 @@ const HISTORY = `SELECT source,id,action,via,file,occurred_at AS at,
    UNION ALL
    SELECT 'proposal',x.id::text,x.action,x.actor_role,NULL,x.occurred_at
    FROM proposal_audit x WHERE x.workspace_id=$1
+   UNION ALL
+   SELECT 'workflow',x.id::text,'note_read',NULL,
+     x.workflow_id||', version '||x.workflow_version,x.occurred_at
+   FROM workflow_review_read_audit x WHERE x.workspace_id=$1
  ) h
  WHERE $2::timestamptz IS NULL OR (occurred_at,source,id)<($2::timestamptz,$3::text,$4::text)
  ORDER BY occurred_at DESC,source DESC,id DESC LIMIT $5`;
 
 export const STAFF_ACCESS_PAGE = 30;
 const CURSOR =
-  /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z)\|(access|feedback|proposal)\|([0-9a-f-]{1,36})$/;
+  /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z)\|(access|feedback|proposal|workflow)\|([0-9a-f-]{1,36})$/;
 
 /** A position in the member's own history; it can reach nothing else, so no signature. */
 function readCursor(value: string) {

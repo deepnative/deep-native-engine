@@ -2,13 +2,14 @@ import { test, expect, type Page } from "@playwright/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { start } from "../../src/runtime.ts";
 import { COOKIE } from "../../src/session.ts";
 import { store } from "../../src/store.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { testPool } from "../support/database.ts";
+import { workflowReviewStaffStore } from "../../src/workflow-review-staff.ts";
 
 const pool = testPool(),
   members = store(pool),
@@ -115,6 +116,135 @@ test("[L298] STAFFSEE-01, 02, 05 a member sees when staff were given access and 
     await expect(rows.nth(0)).toContainText(
       "Access to your learning workspace was taken away from assigned staff.",
     );
+  } finally {
+    await page.context().close();
+    try {
+      if (running) await running.close();
+    } finally {
+      if (owner) await members.remove(owner);
+      await rm(storage, { recursive: true, force: true });
+    }
+  }
+});
+
+test("[L306] NOTEREAD-01, 08 a member sees when a moderator read a workflow note they sent for private review", async ({
+  page,
+  browser,
+}) => {
+  const storage = await mkdtemp(join(tmpdir(), "dne-note-read-"));
+  const note = "Invented private workflow note for reading history";
+  let running: Awaited<ReturnType<typeof start>> | undefined;
+  let owner: string | undefined;
+  const staffIds: string[] = [];
+  try {
+    running = await start({
+      ...process.env,
+      DNE_DATABASE_URL: process.env.DNE_TEST_DATABASE_URL,
+      DNE_APP_MODE: "test",
+      DNE_PORT: "0",
+      DNE_LOCAL_STAFF_ENTRY: "enabled",
+      DNE_WORKFLOW_REVIEW_REQUESTS: "enabled",
+      DNE_PRIVATE_STORAGE_ROOT: storage,
+    });
+    const origin = running.origin;
+    await page.goto(origin);
+    await page.getByLabel("Display name").fill("Invented learner");
+    await page.getByLabel("Your starting point").selectOption("explorer");
+    await chooseLearningGoal(page, "everyday");
+    await page.getByRole("button", { name: "Start my learning path" }).click();
+    const token = (await page.context().cookies()).find(
+      (c) => c.name === COOKIE,
+    )!.value;
+    const session = await members.session(token);
+    if (session.kind !== "active") throw Error("Invented member unavailable");
+    owner = session.learner.id;
+
+    await page.goto(`${origin}/workflow-feedback/WF-001`);
+    await page.getByLabel("Your private feedback on version 2").fill(note);
+    await page.getByLabel("I choose to save this note privately.").check();
+    await page
+      .getByRole("button", { name: "Save private feedback", exact: true })
+      .click();
+    await expect(page.getByRole("status")).toContainText("saved privately");
+    await page.reload();
+    await page
+      .getByRole("link", { name: "Request private review of this exact note" })
+      .click();
+    await page
+      .getByLabel(
+        "Allow an individually assigned local moderator to read only this exact note until the shown deadline",
+      )
+      .check();
+    await page
+      .getByRole("button", { name: "Request private review", exact: true })
+      .click();
+    const requestId = await page
+      .locator("[data-request-id]")
+      .getAttribute("data-request-id");
+
+    // Assigned through the store: L192-194 cover the administrator's pages.
+    const expires = new Date(Date.now() + 3_600_000);
+    const adminToken = randomBytes(32).toString("hex"),
+      moderatorToken = randomBytes(32).toString("hex");
+    staffIds.push(
+      await access.provisionStaff(adminToken, "platform_admin", expires),
+      await access.provisionStaff(moderatorToken, "moderator", expires),
+    );
+    const moderatorId = staffIds[1]!;
+    const assigning = workflowReviewStaffStore(
+      pool,
+      { enabled: true, mode: "test" },
+      "invented-note-read-secret",
+    );
+    const checked = await assigning.check(adminToken, requestId!, moderatorId);
+    if (checked.kind !== "ready") throw Error("Assignment check failed");
+    const grant = await assigning.assign(
+      adminToken,
+      checked.checked,
+      randomUUID(),
+      "yes",
+    );
+    if (grant.kind !== "applied") throw Error("Assignment failed");
+
+    // Being assigned isn't a reading.
+    await page.goto(`${origin}/account/sharing/staff-access`);
+    await expect(page.getByRole("status")).toContainText(
+      "No staff access to your private work is recorded.",
+    );
+
+    const context = await browser.newContext();
+    try {
+      const moderator = await context.newPage();
+      await moderator.goto(`${origin}/staff/sign-in`);
+      await moderator
+        .getByLabel("Trusted local staff credential")
+        .fill(moderatorToken);
+      await moderator
+        .getByRole("button", { name: "Sign in to staff tools", exact: true })
+        .click();
+      await moderator.goto(`${origin}/moderate/workflow-reviews`);
+      await moderator
+        .getByRole("link", {
+          name: "WF-001 · version 2 · revision 1",
+          exact: true,
+        })
+        .click();
+      await expect(moderator.locator("pre")).toHaveText(note);
+    } finally {
+      await context.close();
+    }
+
+    await page.reload();
+    await expect(page.locator("main li").nth(0)).toContainText(
+      "A moderator read your workflow note for WF-001, version 2.",
+    );
+    const body = page.locator("body");
+    await expect(body).toContainText(
+      "Readings of workflow notes are listed from November 2026 on; earlier ones weren't recorded.",
+    );
+    await expect(body).not.toContainText(note);
+    await expect(body).not.toContainText(moderatorId);
+    expect(await noSidewaysScroll(page)).toBe(true);
   } finally {
     await page.context().close();
     try {

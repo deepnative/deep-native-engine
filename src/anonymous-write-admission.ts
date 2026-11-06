@@ -2,7 +2,12 @@ import { createHmac } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type { VisitorAddress } from "./visitor-address.ts";
 
-export type AnonymousWriteKind = "signup" | "password_sign_in";
+export type AnonymousWriteKind =
+  | "signup"
+  | "password_sign_in"
+  | "email_attach"
+  | "email_sign_in"
+  | "password_change";
 export interface AnonymousWriteLimit {
   windowSeconds: number;
   perVisitor: number;
@@ -17,6 +22,11 @@ export type AnonymousWriteLimits = Record<
 export const ANONYMOUS_WRITE_LIMITS: AnonymousWriteLimits = {
   signup: { windowSeconds: 3600, perVisitor: 30, service: 300 },
   password_sign_in: { windowSeconds: 900, perVisitor: 60, service: 1200 },
+  // #42: mail to an address the caller names, and a costly hash for a member.
+  // Counted by address like the others: free accounts must not multiply them.
+  email_attach: { windowSeconds: 3600, perVisitor: 20, service: 200 },
+  email_sign_in: { windowSeconds: 3600, perVisitor: 60, service: 1000 },
+  password_change: { windowSeconds: 900, perVisitor: 30, service: 300 },
 };
 const UNAVAILABLE_RETRY_SECONDS = 60;
 const RETENTION = "1 day";
@@ -34,39 +44,70 @@ export interface AnonymousWriteAdmissionStore {
   ): Promise<AnonymousWriteAdmission>;
 }
 
+const EMAIL_REFUSAL = {
+  visitor: "Too many email links have been requested from this network.",
+  service: "Email links are busy right now.",
+  retry: (wait: string) =>
+    `${wait}, then request the link again. Nothing was sent.`,
+  unavailable:
+    "Email links are unavailable right now. Try again in a minute. Nothing was sent.",
+};
 const waiting = (seconds: number) => {
   const minutes = Math.max(1, Math.ceil(seconds / 60));
   return `Wait ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
 };
 
-// Fixed visitor-facing refusals; they never include request or member data.
+// Fixed visitor-facing refusals; they never include request or member data, so
+// a refused request can't tell whether an address is registered.
+const REFUSALS: Record<
+  AnonymousWriteKind,
+  {
+    visitor: string;
+    service: string;
+    retry: (wait: string) => string;
+    unavailable: string;
+  }
+> = {
+  signup: {
+    visitor: "Too many new accounts have been started from this network.",
+    service: "New accounts are busy right now.",
+    retry: (wait) => `${wait}, then submit this form again. Nothing was saved.`,
+    unavailable:
+      "Starting a new account is unavailable right now. Try again in a minute. Nothing was saved.",
+  },
+  password_sign_in: {
+    visitor: "Too many sign-in attempts from this network.",
+    service: "Sign-in is busy right now.",
+    retry: (wait) => `${wait}, or use an email sign-in link.`,
+    unavailable:
+      "Sign-in is unavailable right now. Your saved work is unchanged.",
+  },
+  email_attach: EMAIL_REFUSAL,
+  email_sign_in: EMAIL_REFUSAL,
+  password_change: {
+    visitor: "Too many password changes from this network.",
+    service: "Password changes are busy right now.",
+    retry: (wait) => `${wait}, then try again. Your password has not changed.`,
+    unavailable:
+      "Password changes are unavailable right now. Try again in a minute. Your password has not changed.",
+  },
+};
+
 export function anonymousWriteRefusal(
   kind: AnonymousWriteKind,
   result: Exclude<AnonymousWriteAdmission, { kind: "admitted" }>,
 ) {
-  const signup = kind === "signup";
+  const wording = REFUSALS[kind];
   if (result.kind === "unavailable")
     return {
       status: 503,
       retryAfterSeconds: UNAVAILABLE_RETRY_SECONDS,
-      message: signup
-        ? "Starting a new account is unavailable right now. Try again in a minute. Nothing was saved."
-        : "Sign-in is unavailable right now. Your saved work is unchanged.",
+      message: wording.unavailable,
     };
-  const wait = waiting(result.retryAfterSeconds);
-  const opening = signup
-    ? result.limit === "visitor"
-      ? "Too many new accounts have been started from this network."
-      : "New accounts are busy right now."
-    : result.limit === "visitor"
-      ? "Too many sign-in attempts from this network."
-      : "Sign-in is busy right now.";
   return {
     status: 429,
     retryAfterSeconds: result.retryAfterSeconds,
-    message: signup
-      ? `${opening} ${wait}, then submit this form again. Nothing was saved.`
-      : `${opening} ${wait}, or use an email sign-in link.`,
+    message: `${wording[result.limit]} ${wording.retry(waiting(result.retryAfterSeconds))}`,
   };
 }
 

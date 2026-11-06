@@ -16,11 +16,11 @@ Five evidence-creating routes are admitted against one shared budget before anyt
 
 A copy uses the same member, signed-out and whole-service windows and concurrency slots as an upload; it does not get a separate allowance. Read-only inspection (`POST /evidence/prepared/inspect`, `/assignment-feedback/inspect` and the handoff preview) is never admitted, so a member over budget can still check whether an earlier copy saved. Repeating the same copy instruction is admitted like any other request; after the window it replays the original receipt without creating a second copy. The team chose these bounds under the 27 October #315 disposition:
 
-| Budget | Limit |
-| --- | --- |
-| Each member | 10 uploads per 10-minute window, 2 at once |
-| All signed-out or invalid-session callers together | 20 per window |
-| Whole service | 200 per window, 6 at once |
+| Budget                                             | Limit                                      |
+| -------------------------------------------------- | ------------------------------------------ |
+| Each member                                        | 10 uploads per 10-minute window, 2 at once |
+| All signed-out or invalid-session callers together | 20 per window                              |
+| Whole service                                      | 200 per window, 6 at once                  |
 
 Windows are fixed 10-minute periods on the database clock. An in-progress upload holds a lease until its upload work finishes, or until the connection closes if the work never started. A lease also stops counting after 60 seconds, so a stopped process cannot block a member for long. State lives in the existing PostgreSQL database, so a restart or a second application instance shares the same counts. Forwarding headers (`X-Forwarded-For`, `Forwarded`, `X-Real-IP`) and workspace headers never change who is counted. Free account creation can spread uploads across new members; the whole-service budget is the ceiling for that case, and legitimate members may then be refused until the window ends.
 
@@ -32,9 +32,9 @@ The operator diagnosis signal is `upload_admission_denials`: one count per hour 
 
 Two routes do expensive or outward-facing work for anyone, so [#728](https://github.com/deepnative/deep-native-engine/issues/728) gives them their own counts, separate from the upload budget:
 
-| Route | Each visitor | Whole service |
-| --- | --- | --- |
-| `POST /start`, once the form is well formed and before the address is looked up | 30 per hour | 300 per hour |
+| Route                                                                                | Each visitor      | Whole service        |
+| ------------------------------------------------------------------------------------ | ----------------- | -------------------- |
+| `POST /start`, once the form is well formed and before the address is looked up      | 30 per hour       | 300 per hour         |
 | `POST /password/sign-in`, before the address is looked up or the password is checked | 60 per 15 minutes | 1,200 per 15 minutes |
 
 A visitor is the address our ingress vouches for: the rightmost `X-Forwarded-For` entry behind the proxy, with an IPv6 customer's whole /64 counted as one. Windows are fixed periods on the database clock. `anonymous_write_windows` holds only a keyed hash of the visitor, or the literal `service`, and rows are removed within a day. The per-address email and password-failure limits still apply.
@@ -43,13 +43,36 @@ A refusal returns 429 with `Retry-After`, `Cache-Control: no-store` and fixed gu
 
 What this doesn't do:
 
-- Many addresses together are bounded by the service ceiling, not stopped. A distributed attack that reaches the ceiling also delays real signups and password sign-ins until the window ends; email sign-in links stay available.
+- Many addresses together are bounded by the service ceiling, not stopped. A distributed attack that reaches the ceiling also delays real signups and password sign-ins until the window ends; email sign-in links have their own count, below, so they stay available unless that one is reached too.
 - 30 lookups per hour per address are still possible, so whether an email is registered can still be tested slowly.
 - The hash key is random per process, so a restart renews visitor allowances. The service ceiling carries across restarts.
 - A local process counts only public addresses, so local browser runs don't share one allowance. Hosted counts every visitor.
 - Azure ingress or WAF limits aren't part of this and stay with the hosted review in #42.
 
 Scenarios ANON-01..07 run against the real HTTP application and PostgreSQL in `tests/integration/anonymous-write-admission-http.test.ts`, with browser journey L300.
+
+## Email links and password changes
+
+Three more routes send real email to an address the caller names, or run the same costly hash. Before [#42](https://github.com/deepnative/deep-native-engine/issues/42) added these counts, the only limit on the emails was per member or address, so what one visitor could send grew with the free accounts they kept. Password changes had no limit.
+
+| Route                                                                                        | Window     | Each visitor | Whole service |
+| -------------------------------------------------------------------------------------------- | ---------- | ------------ | ------------- |
+| `POST /email/attach`, once the address is well formed                                        | 1 hour     | 20           | 200           |
+| `POST /email/sign-in`, once the address is well formed and before it is looked up            | 1 hour     | 60           | 1,000         |
+| `POST /account/password`, once the password is acceptable and confirmed, before it is hashed | 15 minutes | 30           | 300           |
+
+They use the same `anonymous_write_windows` table, keyed hash, ingress address, 429 and `Retry-After`, 503 when the limiter can't answer, and log lines as signup and sign-in, under the kinds `email_attach`, `email_sign_in` and `password_change`. The table's name predates these routes; two of them need a signed-in member, and they are still counted by address so free accounts can't multiply them. The existing limits of five emails an hour per member or address, and of 20 notices an hour to unused addresses, still apply.
+
+A refused link request keeps the typed address and sends nothing. The refusal is decided before the address is looked up and reads the same either way, so it doesn't reveal whether an address is registered. A refused password change leaves the password as it was and never echoes it. A signup's own verification email is covered by the signup count, not these.
+
+What this doesn't do:
+
+- Many addresses together can still send up to the service ceilings. Reaching the sign-in link ceiling also delays real sign-in links until the window ends; password sign-in is counted separately and the refusal page offers it.
+- A member who has lost their password and shares an address with an attacker may have to wait for a link.
+- One inbox can still receive the existing five emails an hour.
+- Invoice email is staff-only and isn't counted here.
+
+Scenarios OUTWARD-01..08 run against the real HTTP application and PostgreSQL in `tests/integration/outward-email-admission-http.test.ts`, with browser journey L307. Before the change, a visitor's request past each allowance got 200 and its email or hash, against an expected 429.
 
 ## Scope and remaining work
 
