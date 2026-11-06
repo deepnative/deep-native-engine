@@ -686,6 +686,11 @@ it("MANPAY-05 records a refund only within unrefunded funds and valid dates, onc
   expect(
     f.query.mock.calls.some(([sql]) => sql.includes("refunded_cents+$2")),
   ).toBe(true);
+  expect(
+    f.query.mock.calls.find(([sql]) =>
+      sql.startsWith("INSERT INTO billing_change_events"),
+    )![1],
+  ).toEqual([ownerId, "payment_refunded", 100, invoiceId]);
   for (const options of [
     { invoice: { ...paidInvoice, revision: 2 } },
     { invoice: { ...paidInvoice, refundedCents: 1100 } },

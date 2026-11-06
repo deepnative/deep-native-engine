@@ -139,7 +139,9 @@ it.each([
     };
     const copy = await m.post("/evidence/prepared", input).expect(200);
     const id = copy.text.match(/data-prepared-evidence="([a-f0-9-]+)"/)![1]!;
-    expect(copy.text).toContain(PROVIDED_SAMPLE_LABEL);
+    // #730: the record keeps its saved label; a hosted page shows the plain one.
+    expect(copy.text).toContain("Provided invented example · unreviewed");
+    expect(copy.text).not.toContain(PROVIDED_SAMPLE_LABEL);
     const replay = await m.post("/evidence/prepared", input).expect(200);
     expect(replay.text).toContain(`data-prepared-evidence="${id}"`);
     const reopened = await m.get("/evidence").expect(200);

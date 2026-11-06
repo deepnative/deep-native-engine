@@ -164,7 +164,9 @@ it("ROLEADMIN-03/04 removes roles but never the acting administrator's own admin
   expect(
     await admin.remove(tom.credential, { emailHash: "nope", role: "admin" }),
   ).toEqual({ kind: "invalid" });
+  // CHANGELOG-03: Tom's own default assignment goes with his coach role.
   expect(await events()).toEqual([
+    { action: "cleared", role: null },
     { action: "removed", role: "coach" },
     { action: "removed", role: "admin" },
   ]);
@@ -289,6 +291,11 @@ it("DEFCOACH-01/04 an administrator sets each learner's coaches; each coach sees
     { action: "cleared", role: null },
     { action: "assigned", role: null },
     { action: "assigned", role: null },
+    // CHANGELOG-03: each learner Tom still coached is logged as lost.
+    { action: "cleared", role: null },
+    { action: "cleared", role: null },
+    { action: "cleared", role: null },
+    { action: "cleared", role: null },
     { action: "removed", role: "coach" },
   ]);
 });

@@ -5,6 +5,10 @@ import {
   transaction,
 } from "./member-email-access.ts";
 import { invoiceUuid } from "./simple-invoice-values.ts";
+import {
+  readChangeHistory,
+  type ChangeHistoryResult,
+} from "./staff-change-history.ts";
 import { hash } from "./store.ts";
 
 /** The roles an administrator can grant; every account is already a student. */
@@ -58,6 +62,8 @@ export interface AccountRoleAdmin {
     staffToken: string,
     input: { learnerId: string; coaches: string[] },
   ): Promise<ChangeResult>;
+  /** #40 CHANGELOG: billing and role changes, newest first. */
+  changes(staffToken: string, before?: string): Promise<ChangeHistoryResult>;
 }
 
 class Refused extends Error {
@@ -205,11 +211,27 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
           // so at least one administrator always remains.
           if (input.role === "admin" && actor.own.includes(input.emailHash))
             throw new Refused("self");
+          // CHANGELOG-03: the role's removal would cascade to these assignments unlogged.
+          const lost =
+            input.role === "coach"
+              ? await tx.query<{ learner: string }>(
+                  `DELETE FROM coach_assignments WHERE coach_email_hash=$1
+                   RETURNING learner_id AS learner`,
+                  [input.emailHash],
+                )
+              : { rows: [] };
           const removed = await tx.query(
             "DELETE FROM account_roles WHERE email_hash=$1 AND role=$2",
             [input.emailHash, input.role],
           );
           if (!removed.rowCount) throw new Refused("not-found");
+          for (const { learner } of [...lost.rows].sort((a, b) =>
+            a.learner.localeCompare(b.learner),
+          ))
+            await record(tx, actor.id, "cleared", {
+              emailHash: input.emailHash,
+              learnerId: learner,
+            });
           await record(tx, actor.id, "removed", input);
           return { kind: "ready" as const };
         },
@@ -303,5 +325,11 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
         },
       );
     },
+
+    changes: (staffToken, before) =>
+      run<Extract<ChangeHistoryResult, { kind: "ready" | "invalid" }>>(
+        staffToken,
+        (tx) => readChangeHistory(tx, before),
+      ),
   };
 }

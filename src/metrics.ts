@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import { hostingText } from "./hosting-presentation.ts";
 import { hash } from "./store.ts";
 import {
   contributionMetrics,
@@ -265,6 +266,38 @@ export async function exactMetrics(pool: Pool, token: string) {
   return result.rows[0] ?? null;
 }
 
+/** #730 The report shows this text, so hosted pages get plain wording here. */
+export function metricDefinitions(): PreviewMetrics["definitions"] {
+  return {
+    denominator: `Current retained ${hostingText("local-preview ", "")}member records at asOf; deleted members cannot be reconstructed. Expired and revoked sessions remain included.`,
+    activated:
+      "Distinct members with at least one versioned lesson open, divided by members. Opening does not establish learning.",
+    selfAssessed:
+      "Distinct members with at least one self-assessed lesson completion, divided by members. This is not observed skill or formal assessment.",
+    participated: `Distinct members who ever joined a ${hostingText("local ", "")}circle, divided by members. Leaving does not remove them from this numerator.`,
+    activeCircle: `Distinct members with a ${hostingText("local ", "")}circle membership whose left_at is empty, divided by members. No shared community or clinic is implied.`,
+    submittedAssignment:
+      "Distinct retained members with at least one private assignment submission snapshot, divided by members. This is observed submission, not reviewed project quality or verified skill; revision counts once.",
+    returnEligible:
+      "Distinct retained members whose first recorded versioned lesson open is at least 14 full days old at asOf. Deleted records are unavailable; this is not an enrollment or acquisition cohort.",
+    crossContentReturned:
+      "Of returnEligible, distinct members with a different lesson content ID first opened or an assignment submitted at or after 7 full days and before 14 full days from their first lesson open. This is an observed cross-content return proxy, not general learning retention; the same lesson or a newer version alone is not a return. Zero eligible means the rate is undefined.",
+    usefulness: `Member self-reported usefulness ${hostingText("in this synthetic local preview", "on this site")}, not observed skill, qualified review or current curriculum quality. Each retained member contributes only their latest corrected exact-version answer; historical versions remain historical. The denominator is respondents, not all members or an enrollment cohort. No exact respondent or choice counts are exposed. The whole block is suppressed below 20 respondents or when either choice has fewer than five; otherwise only a coarse helpful-share band is shown. Repeated snapshots can still permit inference, so this is not approved live analytics.`,
+    segments:
+      "The same measures for each current starting point, current goal and interest tag. Interest tags overlap, so segment rows can add up to more than the total. A segment is suppressed below 20 members or when fewer than five members lie outside it; every segment is always listed, so a suppressed row may be zero or not. A segment is a member's own current choice; it never implies a paid tier, career path or staff right.",
+    cohorts:
+      "Retained members grouped by the UTC calendar month they joined, latest 12 months, each measured over fixed windows from their own join time. Later events do not count. A cohort shows no values until 30 days after its month ends. Deleting an account removes it from its cohort, so denominators shrink and earlier months can change; historical deleted accounts cannot be reconstructed.",
+    cohortActivated:
+      "Observed: opened a versioned lesson within 14 days of joining.",
+    cohortSelfAssessed:
+      "Self-reported: completed a lesson self-assessment within 14 days of joining. This is not observed skill.",
+    cohortSubmittedAssignment:
+      "Observed: submitted an assignment within 30 days of joining. This is not reviewed project quality.",
+    cohortContinued:
+      "Observed: opened a lesson or submitted an assignment from day 7 up to day 30 after joining.",
+  };
+}
+
 export function metricsStore(pool: Pool): MetricsStore {
   return {
     async snapshot(token) {
@@ -273,38 +306,7 @@ export function metricsStore(pool: Pool): MetricsStore {
       return {
         scope: "synthetic-local-preview",
         asOf: row.asOf,
-        definitions: {
-          denominator:
-            "Current retained local-preview member records at asOf; deleted members cannot be reconstructed. Expired and revoked sessions remain included.",
-          activated:
-            "Distinct members with at least one versioned lesson open, divided by members. Opening does not establish learning.",
-          selfAssessed:
-            "Distinct members with at least one self-assessed lesson completion, divided by members. This is not observed skill or formal assessment.",
-          participated:
-            "Distinct members who ever joined a local circle, divided by members. Leaving does not remove them from this numerator.",
-          activeCircle:
-            "Distinct members with a local circle membership whose left_at is empty, divided by members. No shared community or clinic is implied.",
-          submittedAssignment:
-            "Distinct retained members with at least one private assignment submission snapshot, divided by members. This is observed submission, not reviewed project quality or verified skill; revision counts once.",
-          returnEligible:
-            "Distinct retained members whose first recorded versioned lesson open is at least 14 full days old at asOf. Deleted records are unavailable; this is not an enrollment or acquisition cohort.",
-          crossContentReturned:
-            "Of returnEligible, distinct members with a different lesson content ID first opened or an assignment submitted at or after 7 full days and before 14 full days from their first lesson open. This is an observed cross-content return proxy, not general learning retention; the same lesson or a newer version alone is not a return. Zero eligible means the rate is undefined.",
-          usefulness:
-            "Member self-reported usefulness in this synthetic local preview, not observed skill, qualified review or current curriculum quality. Each retained member contributes only their latest corrected exact-version answer; historical versions remain historical. The denominator is respondents, not all members or an enrollment cohort. No exact respondent or choice counts are exposed. The whole block is suppressed below 20 respondents or when either choice has fewer than five; otherwise only a coarse helpful-share band is shown. Repeated snapshots can still permit inference, so this is not approved live analytics.",
-          segments:
-            "The same measures for each current starting point, current goal and interest tag. Interest tags overlap, so segment rows can add up to more than the total. A segment is suppressed below 20 members or when fewer than five members lie outside it; every segment is always listed, so a suppressed row may be zero or not. A segment is a member's own current choice; it never implies a paid tier, career path or staff right.",
-          cohorts:
-            "Retained members grouped by the UTC calendar month they joined, latest 12 months, each measured over fixed windows from their own join time. Later events do not count. A cohort shows no values until 30 days after its month ends. Deleting an account removes it from its cohort, so denominators shrink and earlier months can change; historical deleted accounts cannot be reconstructed.",
-          cohortActivated:
-            "Observed: opened a versioned lesson within 14 days of joining.",
-          cohortSelfAssessed:
-            "Self-reported: completed a lesson self-assessment within 14 days of joining. This is not observed skill.",
-          cohortSubmittedAssignment:
-            "Observed: submitted an assignment within 30 days of joining. This is not reviewed project quality.",
-          cohortContinued:
-            "Observed: opened a lesson or submitted an assignment from day 7 up to day 30 after joining.",
-        },
+        definitions: metricDefinitions(),
         learning: learningDisclosure(row),
         segments: learningSegments(row.segments, row.members),
         cohorts: learningCohorts(row.cohorts),

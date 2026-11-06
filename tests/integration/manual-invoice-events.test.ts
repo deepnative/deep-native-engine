@@ -407,6 +407,21 @@ it("MANPAY-07 database refuses rewriting events, claiming provider proof, missin
   expect(await events(i.invoiceId)).toHaveLength(2);
 });
 
+it("MANPAY-09 logs a refund in staff change history with no evidence reference", async () => {
+  const i = await paid();
+  ready(await refund(i, { amountCents: 1234 }));
+  const logged = await pool.query(
+    "SELECT to_jsonb(e) AS row FROM billing_change_events e WHERE member_id=$1 AND action='payment_refunded'",
+    [i.id],
+  );
+  expect(logged.rows).toEqual([
+    {
+      row: expect.objectContaining({ member_id: i.id, amount_cents: 1234 }),
+    },
+  ]);
+  expect(JSON.stringify(logged.rows)).not.toContain("Invented refund");
+});
+
 it("MANPAY-08 exports the member's own events and refund total without the staff actor", async () => {
   const i = await paid();
   ready(await refund(i));

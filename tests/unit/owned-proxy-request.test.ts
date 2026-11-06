@@ -64,11 +64,9 @@ it("HOSTED-STALL-03 an answer on the first connection is never retried", async (
 
 it("HOSTED-STALL-04 a refused connection is not treated as a stall", async () => {
   const warn = vi.spyOn(console, "warn");
-  const proxy = await listen(1);
-  await new Promise((done) => server!.close(done));
-  server = undefined;
-  await expect(ownedProxyRequest(proxy.url, {}, 1000)).rejects.toMatchObject({
-    code: "ECONNREFUSED",
-  });
+  // A reserved port: a just-closed one can be taken by a parallel test's server.
+  await expect(
+    ownedProxyRequest("http://127.0.0.1:1/", {}, 1000),
+  ).rejects.toMatchObject({ code: "ECONNREFUSED" });
   expect(warn).not.toHaveBeenCalled();
 });

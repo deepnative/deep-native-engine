@@ -31,5 +31,9 @@ END $$;
 DROP TRIGGER IF EXISTS simple_invoice_money_preserved ON simple_invoices;
 CREATE TRIGGER simple_invoice_money_preserved BEFORE UPDATE OF paid_cents,refunded_cents ON simple_invoices
  FOR EACH ROW EXECUTE FUNCTION preserve_simple_invoice_money();
-INSERT INTO schema_migrations(version) VALUES(101) ON CONFLICT DO NOTHING;
+-- MANPAY-09: refunds join staff change history; the table may be absent on repair paths.
+ALTER TABLE IF EXISTS billing_change_events DROP CONSTRAINT IF EXISTS billing_change_events_action_check;
+ALTER TABLE IF EXISTS billing_change_events ADD CONSTRAINT billing_change_events_action_check
+ CHECK(action IN ('plan_offered','rate_set','hours_returned','coaching_invoice_issued','monthly_invoice_issued','payment_recorded','payment_refunded','invoice_voided'));
+INSERT INTO schema_migrations(version) VALUES(103) ON CONFLICT DO NOTHING;
 COMMIT;

@@ -219,7 +219,7 @@ test("[L268] private invoices deny outsiders and unpaid corrections retain the o
   }
 });
 
-test("[L300] staff records offline funds and refunds that the member sees as manual and unverified", async ({
+test("[L302] staff records offline funds and refunds that the member sees as manual and unverified", async ({
   browser,
 }, info) => {
   const f = await reviewedContentFixture(browser, info, {
