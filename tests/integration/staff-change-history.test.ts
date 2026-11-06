@@ -271,6 +271,7 @@ it("CHANGELOG-04 logs each staff billing change once, with its amount", async ()
       operationId: randomUUID(),
       amountCents: 400,
       receivedOn: today,
+      evidence: "Invented bank reference",
     }),
   );
   const second = await account("Invented Voided");
@@ -363,6 +364,7 @@ it("CHANGELOG-05 a replay or refusal logs nothing extra, and a failed log write 
     operationId: randomUUID(),
     amountCents: 100,
     receivedOn: today,
+    evidence: "Invented bank reference",
   };
   ready(await invoices.pay(tom.credential, pay));
   ready(await invoices.pay(tom.credential, pay));
@@ -496,6 +498,7 @@ it("CHANGELOG-07 earlier plan offers, payments and voids carry over when the log
       operationId: randomUUID(),
       amountCents: 500,
       receivedOn: today,
+      evidence: "Invented bank reference",
     }),
   );
   const v = await account("Invented Earlier Void");
