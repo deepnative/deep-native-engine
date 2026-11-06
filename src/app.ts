@@ -754,7 +754,10 @@ export function app(
         .send(
           errorPage(
             "Staff access unavailable",
-            "Open staff sign-in to establish current local staff access. Your learning access is unchanged.",
+            hostingText(
+              "Open staff sign-in to establish current local staff access. Your learning access is unchanged.",
+              "Open staff sign-in to establish current staff access. Your learning access is unchanged.",
+            ),
           ),
         );
       return;
@@ -995,7 +998,10 @@ export function app(
         .send(
           errorPage(
             "Control unchanged",
-            "Choose and confirm an explicit local simulation state.",
+            hostingText(
+              "Choose and confirm an explicit local simulation state.",
+              "Choose and confirm an explicit simulation state.",
+            ),
           ),
         );
       return;
@@ -1055,7 +1061,10 @@ export function app(
         .send(
           errorPage(
             "Observation unchanged",
-            "Use invented SYN- evidence, a valid local member ID and positive integer CAD cents, then confirm the test-only action.",
+            hostingText(
+              "Use invented SYN- evidence, a valid local member ID and positive integer CAD cents, then confirm the test-only action.",
+              "Use invented SYN- evidence, a valid member ID and positive integer CAD cents, then confirm the test-only action.",
+            ),
           ),
         );
       return;
@@ -1081,7 +1090,10 @@ export function app(
         .send(
           errorPage(
             "Observation unchanged",
-            "The local member or invented observation details are unavailable.",
+            hostingText(
+              "The local member or invented observation details are unavailable.",
+              "The member or invented observation details are unavailable.",
+            ),
           ),
         );
       return;

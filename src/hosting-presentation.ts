@@ -28,6 +28,7 @@ export function demoBanner(): string {
 const HOSTED_EVENT_TEXT = new Map([
   ["Read a synthetic example", "Read an invented example"],
   ["Local event registration rehearsal", "Event registration practice"],
+  ["Local platform administrator", "Platform administrator"],
 ]);
 export function eventText(text: string): string {
   return hostingText(text, HOSTED_EVENT_TEXT.get(text) ?? text);
