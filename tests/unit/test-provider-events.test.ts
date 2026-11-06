@@ -175,7 +175,7 @@ function harness(state: { invoice?: Row; previous?: Row; stored?: Row[] }) {
     return { rows: [] };
   });
   vi.mocked(practiceTransaction).mockImplementation(async (_pool, use) =>
-    use({ query } as unknown as PracticeTransaction),
+    use({ query, observe: vi.fn() } as unknown as PracticeTransaction),
   );
   return { query, stored };
 }

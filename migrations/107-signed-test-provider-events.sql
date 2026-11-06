@@ -7,6 +7,7 @@ ALTER TABLE simple_invoice_payments ADD COLUMN IF NOT EXISTS provider_event_type
 ALTER TABLE simple_invoice_payments ADD COLUMN IF NOT EXISTS provider_event_digest text;
 ALTER TABLE simple_invoice_payments ADD COLUMN IF NOT EXISTS provider_occurred_at timestamptz;
 ALTER TABLE simple_invoice_payments DROP CONSTRAINT IF EXISTS simple_invoice_payments_kind;
+ALTER TABLE simple_invoice_payments ADD CONSTRAINT simple_invoice_payments_kind CHECK(kind IN ('receipt','refund','failure','held'));
 ALTER TABLE simple_invoice_payments DROP CONSTRAINT IF EXISTS simple_invoice_payments_unverified;
 ALTER TABLE simple_invoice_payments DROP CONSTRAINT IF EXISTS simple_invoice_payments_verification;
 ALTER TABLE simple_invoice_payments ADD CONSTRAINT simple_invoice_payments_verification CHECK(

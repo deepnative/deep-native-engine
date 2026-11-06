@@ -88,8 +88,9 @@ async function issued(source = invoices) {
     );
   return { ...m, planId: p.planId, invoiceId };
 }
+let eventNumber = 0;
 const event = (invoiceId: string, change: Record<string, unknown> = {}) => ({
-  id: "evt-" + randomUUID(),
+  id: `evt-${++eventNumber}`,
   type: "payment.succeeded",
   invoiceId,
   paymentRef: "pay-1",
@@ -530,6 +531,8 @@ it("TESTPAY-10 reads as simulated to member and staff and is labelled in change 
 it("TESTPAY-11 keeps signed event rows immutable and refuses a claim of provider verification", async () => {
   const i = await issued();
   await deliver(event(i.invoiceId));
+  await deliver(event(i.invoiceId, { type: "payment.failed" }));
+  await deliver(event(i.invoiceId, { amountCents: 1 }));
   await expect(
     pool.query(
       "UPDATE simple_invoice_payments SET amount_cents=1 WHERE invoice_id=$1",
@@ -557,7 +560,8 @@ it("TESTPAY-11 keeps signed event rows immutable and refuses a claim of provider
     ),
   ).rejects.toThrow("simple_invoice_payments_verification");
   await migrate(pool);
-  expect(await rows(i.invoiceId)).toHaveLength(1);
+  // Every migration re-runs at each start and must accept these rows.
+  expect(await rows(i.invoiceId)).toHaveLength(3);
 });
 
 it("TESTPAY-12 exports the member's own signed test events without an actor or digest", async () => {
@@ -578,7 +582,7 @@ it("TESTPAY-12 exports the member's own signed test events without an actor or d
       kind: "receipt",
       verification: "signed_test_event",
       evidence: `Test event ${e.id}`,
-      amountCents: 3000,
+      amountCents: "3000",
     }),
   ]);
   expect(JSON.stringify(records.invoicePayments)).not.toMatch(

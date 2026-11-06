@@ -384,7 +384,7 @@ it("MANPAY-07 database refuses rewriting events, claiming provider proof, missin
   await expect(insert("", "")).rejects.toThrow("evidence reference");
   await expect(
     insert(",evidence_reference,verification", ",'proof','provider_verified'"),
-  ).rejects.toThrow("simple_invoice_payments_unverified");
+  ).rejects.toThrow("simple_invoice_payments_verification");
   await expect(
     insert(",evidence_reference,kind", ",'proof','chargeback'"),
   ).rejects.toThrow("simple_invoice_payments_kind");

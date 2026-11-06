@@ -215,6 +215,8 @@ export function testProviderEventStore(pool: Pool) {
       const digest = invoiceDigest(event);
       try {
         return await practiceTransaction(pool, async (tx) => {
+          // No session limits this write, so its authority is the transaction's own deadline.
+          await tx.observe([new Date(Date.now() + 10_000)]);
           // Serializes one event ID across invoices; each transaction takes only one.
           await tx.query(
             "SELECT pg_advisory_xact_lock(hashtextextended($1,32))",
