@@ -563,6 +563,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await o
       .getByLabel("Received on", { exact: true })
       .fill(new Date().toISOString().slice(0, 10));
+    await o.getByLabel("Evidence reference").first().fill("Invented reference");
     await o
       .getByRole("checkbox", {
         name: "I verified these funds were received for this exact invoice.",
@@ -660,6 +661,10 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
     await admin
       .getByLabel("Received on")
       .fill(new Date().toISOString().slice(0, 10));
+    await admin
+      .getByLabel("Evidence reference")
+      .first()
+      .fill("Invented reference");
     await admin
       .getByRole("checkbox", { name: /I verified these funds/ })
       .check();

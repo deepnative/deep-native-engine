@@ -14,6 +14,12 @@ The running application processes due accepted agreements in its existing bounde
 
 A finite current platform administrator can also explicitly generate due invoices. Unique agreement/period records and original-operation receipts prevent duplicate invoices and offline payments. If an operation is unconfirmed, inspect its original receipt and current invoice before another action; do not replace its operation key or treat a missing receipt as proof of rollback.
 
+## Manual receipts and refunds
+
+Offline funds and refunds are separate, append-only events with server actor and time, event date, a required evidence reference and the fixed status `manual_unverified`. The invoice shows them as a **Payment record** labelled "Recorded manually by staff. Not verified by a payment provider." The member sees amount, date and reference, and the export adds them as `invoicePayments` (section 60, `local-member-records-v37`); only staff see who recorded each entry. The reference rejects card-like digit runs, and it must not hold bank credentials.
+
+**Record offline refund** records money already returned. It moves no money. The recorded payment stays, the status reads **Partly refunded** or **Refunded**, the balance does not reopen and the course agreement is unchanged. A mistyped receipt has no correction path yet. Signed provider events and provider reconciliation are not implemented: see [#32](https://github.com/deepnative/deep-native-engine/issues/32).
+
 ## Corrections and correspondence
 
 For an unpaid incorrect invoice, staff records a reason and chooses **Void unpaid invoice**, then prepares a corrected proposal. The original document remains visible as void, with no payment due. Voiding does not cancel the underlying course agreement. Invoices with recorded money or an uncertain in-flight email cannot be voided through this flow; refunds and paid-accounting adjustments are not implemented.

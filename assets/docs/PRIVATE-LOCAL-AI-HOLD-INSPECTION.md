@@ -35,7 +35,7 @@ Source withdrawal, revision and deletion do not turn a previously started unknow
 
 ## Additive migration and rollback
 
-Migration059 adds exact-purpose grants and immutable grant/revoke events, with owned job/member linkage and purpose/current staff constraints. Migration106 moved that linkage from the test-unit link to the job, so unmetered holds can be assigned. No legacy job or staff principal receives an inferred grant. Reapplying migrations preserves history. Index/constraint/trigger setup can take table locks: stop affected local workers and inspect the actual environment before applying. No production migration performance claim is made.
+Migration059 adds exact-purpose grants and immutable grant/revoke events, with owned job/member linkage and purpose/current staff constraints. Migration107 moved that linkage from the test-unit link to the job, so unmetered holds can be assigned. No legacy job or staff principal receives an inferred grant. Reapplying migrations preserves history. Index/constraint/trigger setup can take table locks: stop affected local workers and inspect the actual environment before applying. No production migration performance claim is made.
 
 To pause, set `DNE_LOCAL_AI_HOLD_INSPECTION=disabled` and restart the compatible process. New reads/grants become unavailable; authorized private revocation still works. Keep migration059 and retained grants/events in place. Disable inspection before an application downgrade; retain compatible revocation tooling and metered-job safety constraints. Do not drop populated tables, delete audit history, reset claims, infer refunds or redispatch unknown jobs. Inspection pause is separate from the existing local queue/dispatch pause control.
 

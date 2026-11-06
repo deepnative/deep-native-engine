@@ -35,7 +35,7 @@ async function signIn(page: Page, token: string) {
     },
   ]);
 }
-test("[L304] an unmetered held request stays visible to its member and assigned operator after its source is deleted", async ({
+test("[L305] an unmetered held request stays visible to its member and assigned operator after its source is deleted", async ({
   page,
 }) => {
   const token = randomBytes(32).toString("hex"),

@@ -184,7 +184,13 @@ beforeAll(async () => {
 beforeEach(() =>
   pool.query("TRUNCATE account_role_events, billing_change_events"),
 );
-afterAll(() => pool.end());
+// Integration files share a lane's database: leave only the seeded owner roles.
+afterAll(async () => {
+  await pool.query("DELETE FROM account_roles WHERE NOT email_hash=ANY($1)", [
+    ["shi@deepnative.io", "tom@deepnative.io"].map(hash),
+  ]);
+  await pool.end();
+});
 
 it("CHANGELOG-01 says nothing is recorded when nothing changed", async () => {
   const value = await history();
@@ -271,6 +277,7 @@ it("CHANGELOG-04 logs each staff billing change once, with its amount", async ()
       operationId: randomUUID(),
       amountCents: 400,
       receivedOn: today,
+      evidence: "Invented bank reference",
     }),
   );
   const second = await account("Invented Voided");
@@ -363,6 +370,7 @@ it("CHANGELOG-05 a replay or refusal logs nothing extra, and a failed log write 
     operationId: randomUUID(),
     amountCents: 100,
     receivedOn: today,
+    evidence: "Invented bank reference",
   };
   ready(await invoices.pay(tom.credential, pay));
   ready(await invoices.pay(tom.credential, pay));
@@ -496,6 +504,7 @@ it("CHANGELOG-07 earlier plan offers, payments and voids carry over when the log
       operationId: randomUUID(),
       amountCents: 500,
       receivedOn: today,
+      evidence: "Invented bank reference",
     }),
   );
   const v = await account("Invented Earlier Void");
