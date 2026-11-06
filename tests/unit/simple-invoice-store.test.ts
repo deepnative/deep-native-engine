@@ -90,8 +90,14 @@ const payment = {
   expectedRevision: 1,
   amountCents: 100,
   receivedOn: "2026-10-31",
+  evidence: "Invented bank reference",
 };
 const action = { invoiceId, operationId, expectedRevision: 1 };
+const decoded = {
+  ...invoice,
+  refundedCents: 0,
+  document: { ...invoice.document, refundedCents: 0 },
+};
 function fixture(
   options: {
     actor?: boolean;
@@ -112,6 +118,8 @@ function fixture(
     due?: boolean;
     lease?: boolean;
     activeAgreement?: boolean;
+    first?: string | null;
+    payments?: unknown[];
   } = {},
 ) {
   const result = (rows: unknown[], rowCount = rows.length) => ({
@@ -164,7 +172,14 @@ function fixture(
           : [{ id: "FND-001", version: 2, title: "Checking claims" }],
       );
     if (sql.includes("AS today"))
-      return result([{ today: options.today ?? "2026-10-31" }]);
+      return result([
+        {
+          today: options.today ?? "2026-10-31",
+          first: options.first === undefined ? "2026-10-01" : options.first,
+        },
+      ]);
+    if (sql.includes("FROM simple_invoice_payments p"))
+      return result(options.payments ?? []);
     if (sql.includes("FROM simple_invoice_plans b"))
       return result(options.due ? [{ id: planId, owner_id: ownerId }] : []);
     if (sql.startsWith("SELECT 1 FROM simple_invoice_plans"))
@@ -407,7 +422,12 @@ it("OFFPUR-02/05 returns only the available owned invoice and operation referenc
   const f = fixture();
   expect(await f.service.invoice(member, invoiceId)).toEqual({
     kind: "ready",
-    value: invoice,
+    value: {
+      ...invoice,
+      refundedCents: 0,
+      document: { ...invoice.document, refundedCents: 0 },
+      payments: [],
+    },
   });
   expect((await f.service.invoice(admin, invoiceId, true)).kind).toBe("ready");
   expect(
@@ -433,7 +453,14 @@ it("OFFPUR-04 only records bounded actual received funds against the exact curre
         sql.startsWith("INSERT INTO simple_invoice_payments"),
       )![1]!
       .slice(1),
-  ).toEqual([invoiceId, ownerId, 100, "2026-10-31"]);
+  ).toEqual([
+    invoiceId,
+    ownerId,
+    100,
+    "2026-10-31",
+    "receipt",
+    "Invented bank reference",
+  ]);
   for (const options of [
     { invoice: null },
     { invoice: { ...invoice, revision: 2 } },
@@ -508,7 +535,7 @@ it("OFFPUR-02/03 claims an email once and records confirmed versus unknown provi
   const f = fixture();
   expect(await f.service.claimEmail(admin, action)).toEqual({
     kind: "ready",
-    value: { send: true, invoice },
+    value: { send: true, invoice: decoded },
   });
   const receipt = {
     digest: invoiceDigest({ action: "email", input: action }),
@@ -516,7 +543,7 @@ it("OFFPUR-02/03 claims an email once and records confirmed versus unknown provi
   };
   expect(await fixture({ receipt }).service.claimEmail(admin, action)).toEqual({
     kind: "ready",
-    value: { send: false, invoice },
+    value: { send: false, invoice: decoded },
   });
   expect(
     (
@@ -630,4 +657,120 @@ it("ADMINCON02 restricts the proposal account picker to the exact valid learner"
         values?.[0] === ownerId,
     ),
   ).toBe(true);
+});
+
+const refundInput = {
+  invoiceId,
+  operationId,
+  expectedRevision: 1,
+  amountCents: 100,
+  refundedOn: "2026-10-31",
+  evidence: "Invented refund reference",
+};
+const paidInvoice = { ...invoice, paidCents: 1100, refundedCents: 100 };
+it("MANPAY-05 records a refund only within unrefunded funds and valid dates, once per operation", async () => {
+  const f = fixture({ invoice: paidInvoice });
+  expect((await f.service.refund(admin, refundInput)).kind).toBe("ready");
+  expect(
+    f.query.mock.calls
+      .find(([sql]) =>
+        sql.startsWith("INSERT INTO simple_invoice_payments"),
+      )![1]!
+      .slice(1),
+  ).toEqual([
+    invoiceId,
+    ownerId,
+    100,
+    "2026-10-31",
+    "refund",
+    "Invented refund reference",
+  ]);
+  expect(
+    f.query.mock.calls.some(([sql]) => sql.includes("refunded_cents+$2")),
+  ).toBe(true);
+  for (const options of [
+    { invoice: { ...paidInvoice, revision: 2 } },
+    { invoice: { ...paidInvoice, refundedCents: 1100 } },
+    { invoice },
+    { invoice: paidInvoice, today: "2026-10-30" },
+    { invoice: paidInvoice, first: "2026-11-01" },
+  ])
+    expect(
+      (await fixture(options).service.refund(admin, refundInput)).kind,
+    ).toBe("conflict");
+  expect(
+    (await fixture({ invoice: null }).service.refund(admin, refundInput)).kind,
+  ).toBe("not-found");
+  const receipt = {
+    digest: invoiceDigest({ action: "refund", input: refundInput }),
+    result: { invoiceId },
+  };
+  const repeated = fixture({ receipt });
+  expect((await repeated.service.refund(admin, refundInput)).kind).toBe(
+    "ready",
+  );
+  expect(
+    repeated.query.mock.calls.some(([sql]) => sql.startsWith("INSERT")),
+  ).toBe(false);
+});
+it("MANPAY-02 rejects malformed refund input before opening a transaction", async () => {
+  const f = fixture();
+  for (const change of [
+    { invoiceId: "bad" },
+    { operationId: "bad" },
+    { expectedRevision: -1 },
+    { amountCents: 0 },
+    { amountCents: 1.5 },
+    { refundedOn: "2026-02-31" },
+    { evidence: "" },
+    { evidence: "4242-4242-4242-4242" },
+    { evidence: "two\nlines" },
+  ])
+    expect(
+      (await f.service.refund(admin, { ...refundInput, ...change })).kind,
+    ).toBe("invalid");
+  expect(
+    (await f.service.refund(admin, null as unknown as typeof refundInput)).kind,
+  ).toBe("invalid");
+  expect(f.query).not.toHaveBeenCalled();
+});
+it("MANPAY-01/03 reads the record with numeric amounts and drops the actor unless staff asks", async () => {
+  const f = fixture({
+    payments: [
+      {
+        kind: "receipt",
+        amountCents: "100",
+        on: "2026-10-31",
+        evidence: "Invented",
+        verification: "manual_unverified",
+        recordedBy: null,
+      },
+    ],
+  });
+  const r = await f.service.invoice(member, invoiceId);
+  expect(r.kind === "ready" && r.value.payments).toEqual([
+    {
+      kind: "receipt",
+      amountCents: 100,
+      on: "2026-10-31",
+      evidence: "Invented",
+      verification: "manual_unverified",
+    },
+  ]);
+  const staffRead = fixture({
+    payments: [
+      {
+        kind: "refund",
+        amountCents: "5",
+        on: "2026-10-31",
+        evidence: null,
+        verification: "manual_unverified",
+        recordedBy: "Removed staff account",
+      },
+    ],
+  });
+  const seen = await staffRead.service.invoice(admin, invoiceId, true);
+  expect(seen.kind === "ready" && seen.value.payments?.[0]?.recordedBy).toBe(
+    "Removed staff account",
+  );
 });

@@ -1284,6 +1284,9 @@ footer {
 .invoice-controls input {
   caret-color: var(--accent);
 }
+.invoice-payment-record td {
+  overflow-wrap: anywhere;
+}
 .invoice-document table {
   width: 100%;
   border-collapse: collapse;

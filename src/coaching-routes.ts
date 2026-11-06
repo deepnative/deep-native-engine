@@ -61,18 +61,24 @@ export function coachingStatus(m: {
   returned?: boolean;
   totalCents?: string | number | null;
   paidCents?: string | number | null;
+  refundedCents?: string | number | null;
   voided?: boolean | null;
 }) {
   const total = m.totalCents == null ? null : Number(m.totalCents);
-  const paid = Number(m.paidCents ?? 0);
+  const paid = Number(m.paidCents ?? 0),
+    refunded = Number(m.refundedCents ?? 0);
   if (m.state === "invoiced")
     return m.voided
       ? "Void"
       : total === null
         ? "Invoiced"
-        : paid >= total
-          ? "Invoiced · Paid"
-          : `Invoiced · ${money(total - paid)} due`;
+        : refunded > 0
+          ? refunded === paid
+            ? "Invoiced · Refunded"
+            : "Invoiced · Partly refunded"
+          : paid >= total
+            ? "Invoiced · Paid"
+            : `Invoiced · ${money(total - paid)} due`;
   if (m.state === "submitted") return "Awaiting review";
   return m.returned ? "Returned for correction" : "Draft";
 }

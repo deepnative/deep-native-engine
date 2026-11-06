@@ -2667,6 +2667,15 @@
       "expected": "Opening the page adds nothing; the claim gives exactly five study requests ending at the month's end and appears on the balance; repeating the form adds no second grant; the local request leaves four; no sideways scrolling",
       "issues": [199],
       "critical": true
+    },
+    {
+      "id": "L300",
+      "actor": "Billing administrator and member with a manually recorded payment and refund",
+      "preconditions": "Dedicated synthetic PostgreSQL database, sample invoices, port0 server; desktop/mobile Chromium; no provider, no real money",
+      "steps": "MANPAY-01/03/04: a member accepts one invented invoice; the administrator records offline funds with an evidence reference; the member reloads; the administrator records a partial then remaining refund; the member reloads",
+      "expected": "The member sees the receipt, reference and that it is not verified by a payment provider, never who recorded it; the administrator sees who recorded it; after refunds the payment stays, the status reads Partly refunded then Refunded, the balance stays zero and the refund form disappears; no sideways scrolling",
+      "issues": [32],
+      "critical": true
     }
   ],
   "fullMvp": [

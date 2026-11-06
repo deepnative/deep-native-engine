@@ -102,6 +102,10 @@ test("[L266] registered student accepts two courses on one printable individual 
       await admin.page.getByLabel("Amount received (CAD)").fill(amount);
       await admin.page.getByLabel("Received on", { exact: true }).fill(date);
       await admin.page
+        .getByLabel("Evidence reference")
+        .first()
+        .fill("Invented bank reference");
+      await admin.page
         .getByRole("checkbox", {
           name: "I verified these funds were received for this exact invoice.",
         })
@@ -210,6 +214,102 @@ test("[L268] private invoices deny outsiders and unpaid corrections retain the o
     await expect(
       member.getByRole("table", { name: "Included courses" }),
     ).toContainText("FND-001 version 2");
+  } finally {
+    await f.close();
+  }
+});
+
+test("[L300] staff records offline funds and refunds that the member sees as manual and unverified", async ({
+  browser,
+}, info) => {
+  const f = await reviewedContentFixture(browser, info, {
+    sampleInvoices: true,
+  });
+  try {
+    const member = await f.member();
+    const { admin, date } = await offer(f, member);
+    const invoiceId = await accept(member);
+    const staffPage = admin.page;
+    await staffPage.goto(f.origin + "/operator/invoices/" + invoiceId);
+    await expect(
+      staffPage.getByRole("button", { name: "Record offline refund" }),
+    ).toHaveCount(0);
+    await staffPage.getByLabel("Amount received (CAD)").fill("30.00");
+    await staffPage.getByLabel("Received on", { exact: true }).fill(date);
+    await staffPage
+      .getByLabel("Evidence reference")
+      .fill("Invented transfer reference");
+    await staffPage
+      .getByRole("checkbox", { name: /I verified these funds/ })
+      .check();
+    await staffPage
+      .getByRole("button", { name: "Record offline payment" })
+      .click();
+    await member.reload();
+    const record = member.getByRole("table", {
+      name: "Recorded receipts and refunds",
+    });
+    await expect(record).toContainText("Invented transfer reference");
+    await expect(
+      member.getByText("Not verified by a payment provider."),
+    ).toBeVisible();
+    await expect(member.getByText("Recorded by")).toHaveCount(0);
+    await expect(
+      staffPage.getByRole("table", {
+        name: "Recorded receipts and refunds",
+      }),
+    ).toContainText("Staff account");
+    for (const [amount, status] of [
+      ["10.00", "Partly refunded"],
+      ["20.00", "Refunded"],
+    ] as const) {
+      await staffPage.getByLabel("Amount refunded (CAD)").fill(amount);
+      await staffPage.getByLabel("Refunded on").fill(date);
+      await staffPage
+        .locator('form[action$="/refund"]')
+        .getByLabel("Evidence reference")
+        .fill("Invented refund " + amount);
+      await staffPage
+        .getByRole("checkbox", { name: /I confirm this refund was sent/ })
+        .check();
+      await staffPage
+        .getByRole("button", { name: "Record offline refund" })
+        .click();
+      await member.goto(f.origin + "/account/purchases");
+      await expect(
+        member.getByRole("listitem").filter({ hasText: status }),
+      ).toBeVisible();
+      await member.goto(f.origin + "/account/purchases/invoices/" + invoiceId);
+      await expect(
+        member
+          .locator("dt")
+          .filter({ hasText: "Recorded payment" })
+          .locator("+ dd"),
+      ).toHaveText("CAD 30.00");
+      await expect(
+        member.locator("dt").filter({ hasText: "Balance" }).locator("+ dd"),
+      ).toHaveText("CAD 0.00");
+    }
+    await expect(
+      member
+        .locator("dt")
+        .filter({ hasText: "Recorded refund" })
+        .locator("+ dd"),
+    ).toHaveText("CAD 30.00");
+    await expect(
+      staffPage.getByRole("button", { name: "Record offline refund" }),
+    ).toHaveCount(0);
+    expect(
+      await member.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+    await member.screenshot({
+      path: info.outputPath("manual-refund-invoice.png"),
+      fullPage: true,
+    });
   } finally {
     await f.close();
   }
