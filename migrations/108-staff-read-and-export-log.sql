@@ -5,7 +5,7 @@ BEGIN;
 -- Only deletion of the owning workspace removes its entries. No earlier reads
 -- are inferred: nothing recorded them.
 DO $$ BEGIN
-IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=107) THEN
+IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=108) THEN
 CREATE TABLE workflow_review_read_audit (
  id uuid PRIMARY KEY,
  workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -31,7 +31,7 @@ CREATE TABLE staff_export_events (
 );
 CREATE TRIGGER staff_export_events_append_only BEFORE UPDATE OR DELETE ON staff_export_events
  FOR EACH ROW EXECUTE FUNCTION preserve_staff_change_event();
-INSERT INTO schema_migrations(version) VALUES(107) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(108) ON CONFLICT DO NOTHING;
 END IF;
 END $$;
 COMMIT;

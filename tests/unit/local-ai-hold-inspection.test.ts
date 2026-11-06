@@ -194,6 +194,54 @@ it.each([
     expect(await make().detail(token, id(1))).toEqual({ kind: "unavailable" });
   },
 );
+const unmeteredRow = {
+  unitState: null,
+  quantity: null,
+  policy: null,
+  maxAttempts: 3,
+};
+it.each([
+  ["needs_reconciliation", 1, "needs-reconciliation"],
+  ["needs_reconciliation", 3, "needs-reconciliation"],
+  ["succeeded", 2, "not-unconfirmed"],
+  ["failed", 1, "not-unconfirmed"],
+  ["exhausted", 0, "not-unconfirmed"],
+  ["exhausted", 3, "not-unconfirmed"],
+  ["pending", 0, "not-unconfirmed"],
+])(
+  "STAFFHOLD-01 reads an unmetered %s row with %i attempts as not metered",
+  async (status, attemptCount, state) => {
+    const f = fixture();
+    Object.assign(f.rows[0]!, unmeteredRow, { status, attemptCount });
+    expect(await make().detail(token, id(1))).toMatchObject({
+      kind: "ready",
+      value: { status, state, unitState: null, policy: null },
+    });
+  },
+);
+it.each([
+  ["a test unit state", { unitState: "reserved" }],
+  ["a quantity", { quantity: 1 }],
+  ["an unknown status", { status: "cancelled" }],
+  ["too many attempts", { attemptCount: 4 }],
+  ["a started pending request", { status: "pending", attemptCount: 1 }],
+  ["a started request with no attempt", { attemptCount: 0 }],
+])(
+  "STAFFHOLD-01 withholds an unmetered row with %s",
+  async (_label, change) => {
+    const f = fixture();
+    Object.assign(f.rows[0]!, unmeteredRow, { attemptCount: 1 }, change);
+    expect(await make().detail(token, id(1))).toEqual({ kind: "unavailable" });
+  },
+);
+it.each(["failed", "toString"])(
+  "withholds a metered row with status %s",
+  async (status) => {
+    const f = fixture();
+    f.rows[0]!.status = status;
+    expect(await make().detail(token, id(1))).toEqual({ kind: "unavailable" });
+  },
+);
 it("withholds a running claim with no lease", async () => {
   const f = fixture();
   f.rows[0]!.status = "running";

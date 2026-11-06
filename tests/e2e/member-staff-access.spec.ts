@@ -127,7 +127,7 @@ test("[L298] STAFFSEE-01, 02, 05 a member sees when staff were given access and 
   }
 });
 
-test("[L305] NOTEREAD-01, 08 a member sees when a moderator read a workflow note they sent for private review", async ({
+test("[L306] NOTEREAD-01, 08 a member sees when a moderator read a workflow note they sent for private review", async ({
   page,
   browser,
 }) => {

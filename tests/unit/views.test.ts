@@ -2132,6 +2132,41 @@ it("AIHOLD-06/07 shows a held request as unknown, unrunnable and never as erased
   expect(cancelled).not.toContain("its outcome is unknown");
 });
 
+it("STAFFHOLD-08 keeps a hold visible after its source is deleted, with no source action or erasure claim", () => {
+  const html = localAiConsentPage(
+    [
+      {
+        evidenceId: "",
+        name: "A source you deleted",
+        revisionNumber: 0,
+        receiptId: null,
+        grantedAt: null,
+        withdrawnAt: null,
+        retired: true,
+        sourceDeleted: true,
+        estimate: {
+          inputTokens: 0,
+          outputTokens: 256,
+          costPoints: 128,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
+        jobs: [{ id: "held-reference", status: "needs_reconciliation" }],
+      },
+    ],
+    "csrf",
+  );
+  expect(html).toContain("A source you deleted");
+  expect(html).toContain("its text and permission are gone");
+  expect(html).toContain("Deleting your account removes it");
+  expect(html).toContain("Request reference: held-reference");
+  expect(html).toContain("or confirm that anything was erased");
+  expect(html).not.toContain("Private version");
+  expect(html).not.toContain("so it cannot be used again");
+  expect(html).not.toContain("/run");
+  expect(html).not.toContain("/grant");
+  expect(html).not.toContain("<form");
+});
 it("distinguishes metered local test units and blocks repeat dispatch of terminal receipts", () => {
   const choices = [
     {
