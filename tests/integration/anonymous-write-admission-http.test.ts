@@ -64,7 +64,8 @@ beforeAll(async () => {
   await admin.query(`CREATE DATABASE "${name}"`);
   await migrate(pool);
   server = await listenLoopback(application());
-});
+  // Migrating a whole new database takes longer than the default under a full gate.
+}, 120_000);
 beforeEach(async () => {
   delivered.length = 0;
   vi.restoreAllMocks();
@@ -77,7 +78,7 @@ afterAll(async () => {
   await pool.end();
   await admin.query(`DROP DATABASE "${name}"`);
   await admin.end();
-});
+}, 60_000);
 
 function post(
   path: string,
