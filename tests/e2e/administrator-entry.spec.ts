@@ -1010,6 +1010,10 @@ test("[L292] ROLEADMIN/COACHLINK/DEFCOACH an administrator grants a coach role, 
         name: "Remove coach role from Invented Coach",
       }),
     ).toBeVisible();
+    // #696 ROLE-LABEL-01: Tom has not signed up here, so his row shows a hint.
+    await expect(
+      page.getByRole("row", { name: /to…@deepnative\.io · not signed up yet/ }),
+    ).toBeVisible();
     // #659: at phone width each Remove button stays one whole word.
     const roomy = page.viewportSize()!;
     await page.setViewportSize({ width: 375, height: 812 });
@@ -1027,6 +1031,10 @@ test("[L292] ROLEADMIN/COACHLINK/DEFCOACH an administrator grants a coach role, 
     });
     await expect(coaches.getByLabel("Invented Owner")).toBeChecked();
     await expect(coaches.getByLabel("Invented Coach")).not.toBeChecked();
+    // ROLE-LABEL-02: the unlinked default coach carries the same hint.
+    await expect(
+      coaches.getByLabel("to…@deepnative.io (not signed up yet)"),
+    ).toBeChecked();
     await coaches.getByLabel("Invented Owner").uncheck();
     await coaches.getByLabel("Invented Coach").check();
     await page.getByRole("button", { name: "Save coaches" }).click();
@@ -1073,7 +1081,110 @@ test("[L292] ROLEADMIN/COACHLINK/DEFCOACH an administrator grants a coach role, 
           "SELECT action FROM account_role_events ORDER BY id",
         )
       ).rows.map((r) => r.action),
-    ).toEqual(["granted", "cleared", "assigned", "removed"]);
+    ).toEqual(["granted", "cleared", "assigned", "cleared", "removed"]);
+  } finally {
+    await closeLoopback(owner.server);
+    await closeLoopback(coach.server);
+    await coachContext.close();
+  }
+});
+test("[L301] CHANGELOG-01/02/03/04 an administrator reads who changed roles and billing", async ({
+  page,
+  browser,
+}) => {
+  const coachContext = await browser.newContext();
+  const coachPage = await coachContext.newPage();
+  const coach = await fixture(coachPage, "coach@example.test");
+  const owner = await fixture(page);
+  try {
+    await coach.verify();
+    await owner.verify();
+    await pool.query(
+      "UPDATE learners SET display_name=CASE id WHEN $1 THEN 'Invented Coach' ELSE 'Invented Owner' END WHERE id=ANY($2::uuid[])",
+      [coach.id, [coach.id, owner.id]],
+    );
+    const ada = randomBytes(32).toString("hex");
+    await owner.members.create(ada, {
+      background: "explorer",
+      goal: "everyday",
+    });
+    const adaSession = await owner.members.session(ada);
+    if (adaSession.kind !== "active") throw Error("No invented learner");
+    const adaId = adaSession.learner.id;
+    await pool.query(
+      "UPDATE learners SET display_name='Invented Ada' WHERE id=$1",
+      [adaId],
+    );
+    await page.goto(owner.origin + "/admin");
+    await page.getByRole("button", { name: "Enter administration" }).click();
+
+    // CHANGELOG-01: reached from the console, nothing recorded yet.
+    await page.goto(owner.origin + "/operator");
+    await page.getByRole("link", { name: "Change history" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Change history", level: 1 }),
+    ).toBeVisible();
+    await expect(page.getByText("No changes are recorded.")).toBeVisible();
+
+    // CHANGELOG-02: give the role and assign the coach.
+    await page.goto(owner.origin + "/operator/roles");
+    await page.getByLabel("Verified email").fill("coach@example.test");
+    await page.getByLabel("Coach", { exact: true }).check();
+    await page.getByRole("button", { name: "Give role" }).click();
+    await page.goto(`${owner.origin}/operator?ownerId=${adaId}`);
+    const coaches = page.getByRole("group", {
+      name: "Coaches for this learner",
+    });
+    await coaches.getByLabel("Invented Coach").check();
+    await page.getByRole("button", { name: "Save coaches" }).click();
+    // CHANGELOG-04: a billing change through its own form.
+    await page.goto(`${owner.origin}/operator/coaching/${adaId}`);
+    await page.getByLabel("Hourly rate (CAD)").fill("120");
+    await page.getByRole("button", { name: "Save hourly rate" }).click();
+    // CHANGELOG-03: removing the role also ends the assignment.
+    await page.goto(owner.origin + "/operator/roles");
+    await page
+      .getByRole("button", { name: "Remove coach role from Invented Coach" })
+      .click();
+
+    await page.goto(owner.origin + "/operator/changes");
+    const items = page
+      .getByRole("region", { name: "Changes" })
+      .getByRole("listitem");
+    await expect(items).toHaveCount(5);
+    await expect(items.nth(0)).toContainText(
+      "Invented Owner removed the Coach role from Invented Coach.",
+    );
+    await expect(items.nth(1)).toContainText(
+      "Invented Owner removed Invented Coach as a coach for Invented Ada.",
+    );
+    await expect(items.nth(2)).toContainText(
+      /Invented Owner set the coaching rate for Invented Ada to CAD 120\.00 per hour from \d{4}-\d{2}\./,
+    );
+    await expect(items.nth(3)).toContainText(
+      "Invented Owner made Invented Coach a coach for Invented Ada.",
+    );
+    await expect(items.nth(4)).toContainText(
+      "Invented Owner gave Invented Coach the Coach role.",
+    );
+    await expect(items.first().locator("time")).toHaveAttribute(
+      "datetime",
+      /^20\d\d-/,
+    );
+    const text = await page.locator("body").innerText();
+    expect(text).not.toContain("coach@example.test");
+    expect(text).not.toContain(hash("coach@example.test"));
+    await page.setViewportSize({ width: 375, height: 812 });
+    await expectReadableAtNarrowWidth(page, "/operator/changes");
+    await page.screenshot({
+      path: test.info().outputPath("change-history.png"),
+      fullPage: true,
+    });
+
+    // CHANGELOG-12: a member with no administrator session is refused.
+    const refused = await coachPage.goto(coach.origin + "/operator/changes");
+    expect(refused?.status()).toBeGreaterThanOrEqual(400);
+    await expect(coachPage.locator("body")).not.toContainText("Invented Ada");
   } finally {
     await closeLoopback(owner.server);
     await closeLoopback(coach.server);

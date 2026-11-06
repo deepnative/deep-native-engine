@@ -1,4 +1,5 @@
 import { timeTag } from "./display-time.ts";
+import { hostingText } from "./hosting-presentation.ts";
 import { escape, hidden, page } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import {
@@ -18,8 +19,8 @@ const navigation = portalActions([
   [`${base}/history`, "Your permission history"],
   ["/staff", "Your staff tools"],
 ]);
-const notice =
-  '<p class="eyebrow">PRIVATE LOCAL REVIEW MINUTES</p><p>One exact allocation-specific permission for invented local review. This creates no units, sample assignment, staff identity or qualification. Separate current workspace and sample permissions are still required to begin or publish review.</p>';
+const notice = () =>
+  `<p class="eyebrow">PRIVATE ${hostingText("LOCAL ", "")}REVIEW MINUTES</p><p>One exact allocation-specific permission for invented ${hostingText("local ", "")}review. This creates no units, sample assignment, staff identity or qualification. Separate current workspace and sample permissions are still required to begin or publish review.</p>`;
 const field = (name: string, value: string) =>
   `<input type="hidden" name="${name}" value="${escape(value)}">`;
 function recoveryForm(csrf: string, revoke: boolean, key?: string) {
@@ -41,7 +42,7 @@ function rowDetails(row: ReviewGrantRow) {
 export function reviewGrantForm(csrf: string, creationEnabled: boolean) {
   return page(
     "Private review-minute permissions",
-    `<section class="reading">${notice}<h1>Private review-minute permissions</h1>${creationEnabled ? `<p>Ask the member for the allocation reference on their own review-minute receipt and ask the reviewer for their own reference. There is no member, reviewer or source directory here.</p><form method="post" action="${base}/check">${hidden(escape(csrf))}<label for="allocationId">Allocation reference</label><input id="allocationId" name="allocationId" maxlength="36" required><label for="reviewerId">Reviewer reference</label><input id="reviewerId" name="reviewerId" maxlength="36" required><button type="submit">Check exact references</button></form>` : "<p>Recovery-only mode: new checks and permissions are paused. Your retained history, original operation inspection and exact revocation remain available.</p>"}<h2>Inspect an original operation</h2>${recoveryForm(csrf, false)}${recoveryForm(csrf, true)}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Private review-minute permissions</h1>${creationEnabled ? `<p>Ask the member for the allocation reference on their own review-minute receipt and ask the reviewer for their own reference. There is no member, reviewer or source directory here.</p><form method="post" action="${base}/check">${hidden(escape(csrf))}<label for="allocationId">Allocation reference</label><input id="allocationId" name="allocationId" maxlength="36" required><label for="reviewerId">Reviewer reference</label><input id="reviewerId" name="reviewerId" maxlength="36" required><button type="submit">Check exact references</button></form>` : "<p>Recovery-only mode: new checks and permissions are paused. Your retained history, original operation inspection and exact revocation remain available.</p>"}<h2>Inspect an original operation</h2>${recoveryForm(csrf, false)}${recoveryForm(csrf, true)}${navigation}</section>`,
   );
 }
 export function reviewGrantCheck(
@@ -51,7 +52,7 @@ export function reviewGrantCheck(
 ) {
   return page(
     "Confirm review-minute permission",
-    `<section class="reading">${notice}<h1>Confirm review-minute permission</h1><p>Checking references created no permission or allowance change.</p><dl><dt>Source version</dt><dd>${check.sourceRevision}</dd><dt>Allocation state</dt><dd>${escape(check.allocationState)}</dd><dt>Reserved ceiling</dt><dd>${check.ceiling}</dd><dt>Maximum current authority expiry (UTC)</dt><dd>${timeTag(check.authorityExpiresAt)}</dd></dl>${grantForm(csrf, { allocationId: check.allocationId, reviewerId: check.reviewerId, operationId, startsAt: "", expiresAt: "" }, false)}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Confirm review-minute permission</h1><p>Checking references created no permission or allowance change.</p><dl><dt>Source version</dt><dd>${check.sourceRevision}</dd><dt>Allocation state</dt><dd>${escape(check.allocationState)}</dd><dt>Reserved ceiling</dt><dd>${check.ceiling}</dd><dt>Maximum current authority expiry (UTC)</dt><dd>${timeTag(check.authorityExpiresAt)}</dd></dl>${grantForm(csrf, { allocationId: check.allocationId, reviewerId: check.reviewerId, operationId, startsAt: "", expiresAt: "" }, false)}${navigation}</section>`,
   );
 }
 export function reviewGrantReceipt(
@@ -63,7 +64,7 @@ export function reviewGrantReceipt(
 ) {
   return page(
     "Review-minute permission receipt",
-    `<section class="reading">${notice}<h1>Review-minute permission receipt</h1>${message === undefined ? "" : `<p role="alert">${escape(message)}</p>`}${revocation === undefined ? "" : `<p>Original revocation outcome: ${escape(revocation.outcome)}</p><p>Revocation receipt: <span data-review-time-revocation-reference>${escape(revocation.revocationReceiptId)}</span></p>`}${rowDetails(row)}<p>Reading this observation starts no review and consumes nothing. Revocation changes only this exact permission; independent overlapping grants, sample feedback permissions and allocation accounting remain separate.</p><p><a href="${base}/${encodeURIComponent(row.grantId)}">Inspect this exact permission receipt</a></p>${row.canRevoke ? revokeForm(csrf, { grantId: row.grantId, operationId }) : "<p>This permission has already been revoked.</p>"}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Review-minute permission receipt</h1>${message === undefined ? "" : `<p role="alert">${escape(message)}</p>`}${revocation === undefined ? "" : `<p>Original revocation outcome: ${escape(revocation.outcome)}</p><p>Revocation receipt: <span data-review-time-revocation-reference>${escape(revocation.revocationReceiptId)}</span></p>`}${rowDetails(row)}<p>Reading this observation starts no review and consumes nothing. Revocation changes only this exact permission; independent overlapping grants, sample feedback permissions and allocation accounting remain separate.</p><p><a href="${base}/${encodeURIComponent(row.grantId)}">Inspect this exact permission receipt</a></p>${row.canRevoke ? revokeForm(csrf, { grantId: row.grantId, operationId }) : "<p>This permission has already been revoked.</p>"}${navigation}</section>`,
   );
 }
 export function reviewGrantHistory(history: {
@@ -72,7 +73,7 @@ export function reviewGrantHistory(history: {
 }) {
   return page(
     "Your review-minute permission history",
-    `<section class="reading">${notice}<h1>Your review-minute permission history</h1><p>Only permissions created by your current administrator identity. At most ${REVIEW_GRANT_PAGE_SIZE} retained rows per page; every page checks fresh authority.</p>${history.rows.length ? `<ul>${history.rows.map((row) => `<li data-review-time-history-grant="${escape(row.grantId)}">${rowDetails(row)}<a href="${base}/${encodeURIComponent(row.grantId)}">Inspect exact permission</a></li>`).join("")}</ul>` : "<p>No retained permissions were found. This does not establish that an earlier write failed; account erasure removes its recovery.</p>"}${history.next === null ? "" : `<p><a href="${base}/history?after=${encodeURIComponent(history.next)}">Next permissions</a></p>`}${navigation}</section>`,
+    `<section class="reading">${notice()}<h1>Your review-minute permission history</h1><p>Only permissions created by your current administrator identity. At most ${REVIEW_GRANT_PAGE_SIZE} retained rows per page; every page checks fresh authority.</p>${history.rows.length ? `<ul>${history.rows.map((row) => `<li data-review-time-history-grant="${escape(row.grantId)}">${rowDetails(row)}<a href="${base}/${encodeURIComponent(row.grantId)}">Inspect exact permission</a></li>`).join("")}</ul>` : "<p>No retained permissions were found. This does not establish that an earlier write failed; account erasure removes its recovery.</p>"}${history.next === null ? "" : `<p><a href="${base}/history?after=${encodeURIComponent(history.next)}">Next permissions</a></p>`}${navigation}</section>`,
   );
 }
 export function reviewGrantRecovery(

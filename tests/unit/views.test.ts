@@ -2093,6 +2093,45 @@ it("keeps an unattributed historical draft read-only beside fresh current-goal p
   expect(html).not.toContain('value="unattributed"');
 });
 
+it("AIHOLD-06/07 shows a held request as unknown, unrunnable and never as erased", () => {
+  const estimate = {
+    inputTokens: 11,
+    outputTokens: 256,
+    costPoints: 157,
+    modelVersion: "simulated-model-v1",
+    rateVersion: "simulated-rates-v1",
+  };
+  const base = {
+    evidenceId: "sample",
+    name: "Invented.txt",
+    revisionNumber: 1,
+    receiptId: null,
+    grantedAt: null,
+    withdrawnAt: null,
+    estimate,
+    jobs: [{ id: "held", status: "needs_reconciliation" }],
+  };
+  const retired = localAiConsentPage([{ ...base, retired: true }], "csrf");
+  expect(retired).toContain("so it cannot be used again");
+  expect(retired).toContain("its outcome is unknown and it stays held");
+  expect(retired).toContain("or confirm that anything was erased");
+  expect(retired).not.toContain("/grant");
+  expect(retired).not.toContain("/withdraw");
+  expect(retired).not.toContain("/evidence/local-ai/held/run");
+  const withdrawn = localAiConsentPage(
+    [{ ...base, withdrawnAt: new Date() }],
+    "csrf",
+  );
+  expect(withdrawn).toContain("/evidence/local-ai/sample/grant");
+  expect(withdrawn).toContain("its outcome is unknown and it stays held");
+  expect(withdrawn).not.toContain("/evidence/local-ai/held/run");
+  const cancelled = localAiConsentPage(
+    [{ ...base, jobs: [{ id: "closed", status: "exhausted" }] }],
+    "csrf",
+  );
+  expect(cancelled).not.toContain("its outcome is unknown");
+});
+
 it("distinguishes metered local test units and blocks repeat dispatch of terminal receipts", () => {
   const choices = [
     {

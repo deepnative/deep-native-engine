@@ -56,7 +56,7 @@ async function publishLessons(pool: Pool, ids: string[]) {
     expect(await catalog.publish(editor, id, 1)).toBe(true);
   }
 }
-test("[L300] MOCK-01/02/03/05/09 a member claims monthly practice sessions, uses them and is refused one more", async ({
+test("[L303] MOCK-01/02/03/05/09 a member claims monthly practice sessions, uses them and is refused one more", async ({
   browser,
 }, info) => {
   test.setTimeout(90000);

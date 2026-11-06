@@ -40,6 +40,7 @@ import { app } from "./app.ts";
 import { authorizationStore } from "./authorization.ts";
 import { evidenceStore, fileObjectStorage } from "./evidence.ts";
 import { uploadAdmissionStore } from "./upload-admission.ts";
+import { anonymousWriteAdmissionStore } from "./anonymous-write-admission.ts";
 import { preparedObjectStorage } from "./prepared-sample-storage.ts";
 import { preparedSampleStore } from "./prepared-samples.ts";
 import { assignmentEvidenceStore } from "./assignment-evidence.ts";
@@ -325,6 +326,10 @@ export async function start(env: NodeJS.ProcessEnv) {
       ),
       localAiControl: localAiControlStore(pool),
       uploadAdmission: uploadAdmissionStore(pool),
+      anonymousWrites: anonymousWriteAdmissionStore(pool, {
+        secret: settings.secret,
+        publicOnly: !settings.hosted,
+      }),
       evidence: evidenceStore(
         pool,
         objects,

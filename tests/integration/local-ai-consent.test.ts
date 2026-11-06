@@ -710,7 +710,7 @@ it("denies live mode even when a registry is forged", async () => {
   expect(execute).not.toHaveBeenCalled();
 });
 
-it("withdrawal between durable claim and dispatch terminates the claim with zero adapter calls", async () => {
+it("withdrawal between durable claim and dispatch holds the claim with zero adapter calls", async () => {
   const own = await queued();
   const entered = latch(),
     release = latch();
@@ -755,7 +755,7 @@ it("withdrawal between durable claim and dispatch terminates the claim with zero
         [own.jobId],
       )
     ).rows[0],
-  ).toEqual({ status: "exhausted", attempt_token: null });
+  ).toEqual({ status: "needs_reconciliation", attempt_token: null });
   expect(execute).not.toHaveBeenCalled();
 });
 it("expiry while waiting for exact-source bytes prevents adapter access", async () => {
@@ -1327,4 +1327,130 @@ it("database constraints reject malformed and duplicate switch state", async () 
     pool.query("INSERT INTO local_ai_control VALUES(true,true)"),
   ).rejects.toMatchObject({ code: "23505" });
   expect(await control.current()).toBe("enabled");
+});
+
+// #187 AC3: a request that may already have been dispatched is held, never closed.
+async function startedRequest(state: "running" | "failed") {
+  const own = await queued();
+  if (state === "failed") {
+    execute.mockResolvedValueOnce({ private: "invented invalid" } as never);
+    expect(await local.run(own.token, own.jobId)).toMatchObject({
+      status: "failed",
+    });
+  } else {
+    await pool.query(
+      "UPDATE adapter_jobs SET status='running',attempt_count=1,attempt_token=$2,lease_until=clock_timestamp()+interval '5 minutes' WHERE id=$1",
+      [own.jobId, randomUUID()],
+    );
+  }
+  execute.mockClear();
+  return own;
+}
+async function requestState(jobId: string) {
+  return (
+    await pool.query(
+      "SELECT status,safe_error,attempt_token,lease_until,provider_operation_reference,attempt_count FROM adapter_jobs WHERE id=$1",
+      [jobId],
+    )
+  ).rows[0];
+}
+const held = (attemptCount = 1) => ({
+  status: "needs_reconciliation",
+  safe_error: "provider_outcome_unknown",
+  attempt_token: null,
+  lease_until: null,
+  provider_operation_reference: null,
+  attempt_count: attemptCount,
+});
+it.each(["running", "failed"] as const)(
+  "AIHOLD-01/02 withdrawing permission holds a started %s request and never runs it",
+  async (state) => {
+    const own = await startedRequest(state);
+    expect(await local.withdraw(own.token, own.receiptId)).toBe(true);
+    expect(await requestState(own.jobId)).toEqual(held());
+    expect(await local.run(own.token, own.jobId)).toEqual({ kind: "denied" });
+    expect(await requestState(own.jobId)).toEqual(held());
+    expect(execute).not.toHaveBeenCalled();
+  },
+);
+it.each(["running", "failed"] as const)(
+  "AIHOLD-03 revising the source holds a started %s request, even if the revision is deleted",
+  async (state) => {
+    const own = await startedRequest(state);
+    await evidence.submitForReview(own.token, own.evidenceId);
+    const next = await fixture(own, own.evidenceId, "Invented newer text");
+    expect(await requestState(own.jobId)).toEqual(held());
+    await evidence.remove(own.token, next.evidenceId);
+    expect(await local.run(own.token, own.jobId)).toEqual({ kind: "denied" });
+    expect(await requestState(own.jobId)).toEqual(held());
+    expect(execute).not.toHaveBeenCalled();
+  },
+);
+it.each(["withdraw", "revise"] as const)(
+  "AIHOLD-04 a never-started request closes when the member chooses to %s",
+  async (action) => {
+    const own = await queued();
+    if (action === "withdraw") {
+      expect(await local.withdraw(own.token, own.receiptId)).toBe(true);
+    } else {
+      await evidence.submitForReview(own.token, own.evidenceId);
+      await fixture(own, own.evidenceId, "Invented newer text");
+    }
+    expect(await requestState(own.jobId)).toEqual({
+      status: "exhausted",
+      safe_error: "provider_unavailable",
+      attempt_token: null,
+      lease_until: null,
+      provider_operation_reference: null,
+      attempt_count: 0,
+    });
+    expect(execute).not.toHaveBeenCalled();
+  },
+);
+it("AIHOLD-06 a hold stays visible and unreleased after a new grant", async () => {
+  const own = await startedRequest("failed");
+  expect(await local.withdraw(own.token, own.receiptId)).toBe(true);
+  const again = await local.grant(own.token, own.evidenceId);
+  if (again.kind !== "granted") throw Error("No new synthetic receipt");
+  expect(again.receiptId).not.toBe(own.receiptId);
+  const [choice] = await local.list(own.token);
+  expect(choice).toMatchObject({
+    evidenceId: own.evidenceId,
+    receiptId: again.receiptId,
+    jobs: [{ id: own.jobId, status: "needs_reconciliation" }],
+  });
+  expect(choice).not.toHaveProperty("retired");
+  expect(await requestState(own.jobId)).toEqual(held());
+  expect(execute).not.toHaveBeenCalled();
+});
+it("AIHOLD-06 a hold on a revised source stays visible without any way to use that source", async () => {
+  const own = await startedRequest("running");
+  await evidence.submitForReview(own.token, own.evidenceId);
+  const next = await fixture(own, own.evidenceId, "Invented newer text");
+  const choices = await local.list(own.token);
+  expect(choices).toHaveLength(2);
+  expect(choices.find((c) => c.evidenceId === own.evidenceId)).toMatchObject({
+    retired: true,
+    receiptId: null,
+    jobs: [{ id: own.jobId, status: "needs_reconciliation" }],
+  });
+  const current = choices.find((c) => c.evidenceId === next.evidenceId);
+  expect(current?.jobs).toEqual([]);
+  expect(current).not.toHaveProperty("retired");
+  expect(await local.grant(own.token, own.evidenceId)).toEqual({
+    kind: "denied",
+  });
+});
+it("AIHOLD-06 closed requests on a revised source and another member's holds stay off the list", async () => {
+  const own = await queued();
+  await evidence.submitForReview(own.token, own.evidenceId);
+  const next = await fixture(own, own.evidenceId, "Invented newer text");
+  expect((await local.list(own.token)).map((c) => c.evidenceId)).toEqual([
+    next.evidenceId,
+  ]);
+  const other = await startedRequest("failed");
+  await local.withdraw(other.token, other.receiptId);
+  expect(
+    (await local.list(own.token)).flatMap((c) => c.jobs.map((j) => j.id)),
+  ).not.toContain(other.jobId);
 });
