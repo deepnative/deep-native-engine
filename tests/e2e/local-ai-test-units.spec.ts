@@ -1,5 +1,5 @@
 import { browserOrigin } from "../support/browser-origin.js";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { store } from "../../src/store.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
@@ -59,6 +59,90 @@ async function source(page: Page, token: string, title: string) {
       .filter({ has: page.getByRole("heading", { name: title, exact: true }) }),
   };
 }
+// Explicit durable started-attempt fixture, not evidence of provider execution.
+async function startedRequest(page: Page, memberId: string) {
+  await pool.query(
+    "UPDATE adapter_jobs SET status='running',attempt_count=1,attempt_token=$2,lease_until=clock_timestamp()+interval '5 minutes' WHERE member_id=$1 AND status='pending'",
+    [memberId, randomUUID()],
+  );
+  await page.reload();
+}
+test("[L300] started requests stay held with an unknown outcome after withdrawal or a new version", async ({
+  page,
+}) => {
+  const token = randomBytes(32).toString("hex");
+  await members.create(token, { background: "explorer", goal: "everyday" });
+  const session = await members.session(token);
+  if (session.kind !== "active") throw Error("Synthetic member unavailable");
+  const memberId = session.learner.id;
+  const expectHeld = async (item: Locator) => {
+    await expect(
+      item.getByText("its outcome is unknown and it stays held"),
+    ).toBeVisible();
+    await expect(
+      item.getByText("confirm that anything was erased"),
+    ).toBeVisible();
+    await expect(
+      item.getByRole("button", { name: "Run local simulation" }),
+    ).toHaveCount(0);
+  };
+  const withdrawnTitle = `Invented withdrawn ${randomUUID()}`;
+  const withdrawn = await source(page, token, withdrawnTitle);
+  await withdrawn.item
+    .getByRole("button", { name: "Queue local simulation" })
+    .click();
+  await startedRequest(page, memberId);
+  await withdrawn.item
+    .getByLabel(`Withdraw local AI permission for ${withdrawnTitle}`)
+    .check();
+  await withdrawn.item
+    .getByRole("button", { name: "Withdraw permission" })
+    .click();
+  await expectHeld(withdrawn.item);
+  await withdrawn.item
+    .getByLabel("I permit this exact invented sample version")
+    .check();
+  await withdrawn.item
+    .getByRole("button", { name: "Grant local simulation permission" })
+    .click();
+  await expect(
+    withdrawn.item.getByText("permission granted for this exact version"),
+  ).toBeVisible();
+  await expectHeld(withdrawn.item);
+
+  const revisedTitle = `Invented revised ${randomUUID()}`;
+  const revised = await source(page, token, revisedTitle);
+  await revised.item
+    .getByRole("button", { name: "Queue local simulation" })
+    .click();
+  await startedRequest(page, memberId);
+  await evidence.submitForReview(token, revised.id);
+  const next = await evidence.upload(token, {
+    name: `Invented newer ${randomUUID()}`,
+    mediaType: "text/plain",
+    data: Buffer.from("Invented newer private source"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+    revisesId: revised.id,
+  });
+  expect(next.kind).toBe("created");
+  await page.reload();
+  await expect(
+    revised.item.getByText("so it cannot be used again"),
+  ).toBeVisible();
+  await expectHeld(revised.item);
+  await expect(
+    revised.item.getByRole("button", {
+      name: "Grant local simulation permission",
+    }),
+  ).toHaveCount(0);
+  await expect(
+    revised.item.getByRole("button", { name: "Withdraw permission" }),
+  ).toHaveCount(0);
+});
 const audiences = [
   ["explorer", "everyday"],
   ["professional", "work"],
