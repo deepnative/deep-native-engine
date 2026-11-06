@@ -51,13 +51,15 @@ export function grantStudyRequests(
   );
 }
 
-export async function savedSample(pool: Pool, page: Page) {
+export async function savedSample(
+  pool: Pool,
+  page: Page,
+  text = "Invented private source for a simulated study request",
+) {
   const title = `Invented-${randomUUID()}.txt`;
   await page.goto("/evidence");
   await page.getByLabel("Sample title").fill(title);
-  await page
-    .getByLabel("Invented text sample")
-    .fill("Invented private source for a simulated study request");
+  await page.getByLabel("Invented text sample").fill(text);
   await page.getByLabel("I created this invented sample").check();
   await page.getByLabel("I explicitly allow this sample").check();
   await page.getByRole("button", { name: "Save private text sample" }).click();
@@ -80,8 +82,8 @@ export async function savedSample(pool: Pool, page: Page) {
   };
 }
 
-export async function permitSample(pool: Pool, page: Page) {
-  const sample = await savedSample(pool, page);
+export async function permitSample(pool: Pool, page: Page, text?: string) {
+  const sample = await savedSample(pool, page, text);
   await sample.item
     .getByLabel("I permit this exact invented sample version")
     .check();
