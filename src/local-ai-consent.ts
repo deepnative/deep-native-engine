@@ -33,6 +33,8 @@ export interface LocalAiChoice {
   withdrawnAt: Date | null;
   // This version can no longer be used; it is listed only for its held requests.
   retired?: true;
+  // The source and its permission were deleted; only its held requests remain.
+  sourceDeleted?: true;
   estimate: AiUsageEstimate;
   jobs: Array<{
     id: string;
@@ -121,6 +123,15 @@ type Job = {
   model_contract_version: string;
 };
 
+const JOB_COLUMNS =
+  "SELECT j.id,j.status,b.policy,r.state AS test_unit_state,e.rate_version,e.model_version,e.input_tokens AS estimated_input_tokens,e.output_tokens AS estimated_output_tokens,e.cost_points AS estimated_cost_points,s.input_tokens AS actual_input_tokens,s.output_tokens AS actual_output_tokens,s.cost_points AS actual_cost_points FROM adapter_jobs j ";
+const JOB_DETAILS =
+  "LEFT JOIN local_ai_test_unit_jobs b ON b.job_id=j.id LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id LEFT JOIN ai_usage_estimates e ON e.job_id=j.id AND e.member_id=j.member_id LEFT JOIN ai_usage_settlements s ON s.job_id=j.id AND s.member_id=j.member_id ";
+const JOBS = JOB_COLUMNS + JOB_DETAILS;
+const JOBS_WITH_RECEIPT =
+  JOB_COLUMNS +
+  "JOIN local_ai_receipts p ON p.id=j.local_ai_receipt_id " +
+  JOB_DETAILS;
 type ListedJob = {
   id: string;
   status: string;
@@ -394,11 +405,26 @@ export function localAiConsentStore(
   ) {
     const jobs = (
       await client.query<ListedJob>(
-        "SELECT j.id,j.status,b.policy,r.state AS test_unit_state,e.rate_version,e.model_version,e.input_tokens AS estimated_input_tokens,e.output_tokens AS estimated_output_tokens,e.cost_points AS estimated_cost_points,s.input_tokens AS actual_input_tokens,s.output_tokens AS actual_output_tokens,s.cost_points AS actual_cost_points FROM adapter_jobs j JOIN local_ai_receipts p ON p.id=j.local_ai_receipt_id LEFT JOIN local_ai_test_unit_jobs b ON b.job_id=j.id LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id LEFT JOIN ai_usage_estimates e ON e.job_id=j.id AND e.member_id=j.member_id LEFT JOIN ai_usage_settlements s ON s.job_id=j.id AND s.member_id=j.member_id WHERE p.evidence_id=$1 AND j.member_id=$2 AND (j.local_ai_receipt_id=$3::uuid OR j.status='needs_reconciliation') ORDER BY j.created_at,j.id",
+        JOBS_WITH_RECEIPT +
+          "WHERE p.evidence_id=$1 AND j.member_id=$2 AND (j.local_ai_receipt_id=$3::uuid OR j.status='needs_reconciliation') ORDER BY j.created_at,j.id",
         [row.id, row.owner_principal_id, current],
       )
     ).rows;
-    return jobs.map((job) => ({
+    return jobs.map(listedJob);
+  }
+  // A held request outlives a deleted source. Nothing here can reach the source.
+  async function heldWithoutSource(client: PoolClient, token: string) {
+    const jobs = (
+      await client.query<ListedJob>(
+        JOBS +
+          "WHERE j.local_ai_receipt_id IS NULL AND j.status='needs_reconciliation' AND j.operation=$2 AND j.member_id=(SELECT id FROM principals WHERE token_hash=$1 AND kind='member') ORDER BY j.created_at,j.id",
+        [hash(token), LOCAL_AI_PURPOSE],
+      )
+    ).rows;
+    return jobs.map(listedJob);
+  }
+  function listedJob(job: ListedJob) {
+    return {
       id: job.id,
       status: job.status,
       ...(job.policy === LOCAL_AI_TEST_UNIT_POLICY &&
@@ -409,7 +435,7 @@ export function localAiConsentStore(
           }
         : {}),
       ...jobBudget(job),
-    }));
+    };
   }
   async function currentTestReservation(
     client: PoolClient,
@@ -634,6 +660,22 @@ export function localAiConsentStore(
             estimate: estimateAiRequest(row.byte_size),
             jobs: await listedJobs(client, row, permission?.id ?? null),
           });
+        }
+        if (await active(client, token)) {
+          const held = await heldWithoutSource(client, token);
+          if (held.length)
+            result.push({
+              evidenceId: "",
+              name: "A source you deleted",
+              revisionNumber: 0,
+              receiptId: null,
+              grantedAt: null,
+              withdrawnAt: null,
+              retired: true,
+              sourceDeleted: true,
+              estimate: estimateAiRequest(0),
+              jobs: held,
+            });
         }
         return (await active(client, token)) ? result : [];
       });

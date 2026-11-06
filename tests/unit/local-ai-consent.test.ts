@@ -91,6 +91,7 @@ function setup(
     listenerFailure?: boolean;
     connectionError?: boolean;
     listedJobs?: Array<Record<string, unknown>>;
+    heldWithoutSource?: Array<Record<string, unknown>>;
     source?: Record<string, unknown>;
     receipt?: Record<string, unknown>;
     job?: Record<string, unknown>;
@@ -235,6 +236,8 @@ function setup(
           },
         ],
       };
+    if (sql.includes("j.local_ai_receipt_id IS NULL"))
+      return { rows: options.heldWithoutSource ?? [] };
     if (sql.includes("SELECT e.id FROM evidence_objects"))
       return { rows: [{ id }] };
     if (sql.includes("SELECT id FROM principals"))
@@ -456,6 +459,20 @@ it("AIHOLD-06 lists a held request on a source that can no longer be used", asyn
     ]);
     expect(f.execute).not.toHaveBeenCalled();
   }
+});
+it("STAFFHOLD-08 lists a hold whose source was deleted, without any source identity", async () => {
+  const heldWithoutSource = [{ id: jid, status: "needs_reconciliation" }];
+  const listed = await setup({ heldWithoutSource }).service.list("member");
+  expect(listed.at(-1)).toMatchObject({
+    evidenceId: "",
+    sourceDeleted: true,
+    retired: true,
+    receiptId: null,
+    jobs: heldWithoutSource,
+  });
+  expect(
+    await setup({ heldWithoutSource, active: false }).service.list("member"),
+  ).toEqual([]);
 });
 it("returns only owner-safe source summaries, current receipt state and job statuses", async () => {
   expect(await setup().service.list("member")).toMatchObject([

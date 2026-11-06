@@ -137,7 +137,7 @@ export function localAiHoldInspectionGrants(pool: Pool, available: boolean) {
         return await sampleFeedbackTransaction(pool, true, async (tx) => {
           const target = (
             await tx.query<{ memberId: string }>(
-              'SELECT member_id AS "memberId" FROM local_ai_test_unit_jobs WHERE job_id=$1',
+              'SELECT member_id AS "memberId" FROM adapter_jobs WHERE id=$1 AND member_id IS NOT NULL',
               [jobId],
             )
           ).rows[0];
@@ -152,13 +152,17 @@ export function localAiHoldInspectionGrants(pool: Pool, available: boolean) {
           await holdInspectionWorkspaces(tx, [target.memberId]);
           const job = (
             await tx.query(
-              `SELECT j.id FROM adapter_jobs j JOIN local_ai_test_unit_jobs b ON b.job_id=j.id AND b.member_id=j.member_id
-             JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id
-             JOIN synthetic_entitlement_grants g ON g.id=r.grant_id AND g.member_id=b.member_id
+              // A metered job is always retained. An unmetered one qualifies only
+              // while its outcome is unknown, the only state kept for this purpose.
+              `SELECT j.id FROM adapter_jobs j LEFT JOIN local_ai_test_unit_jobs b ON b.job_id=j.id
+             LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id
+             LEFT JOIN synthetic_entitlement_grants g ON g.id=r.grant_id
              WHERE j.id=$1 AND j.member_id=$2 AND j.adapter='ai' AND j.mode IN ('demo','test')
-              AND j.operation='evidence-summary-local-v1' AND b.policy='deterministic-request-test-v1'
+              AND j.operation='evidence-summary-local-v1'
               AND j.prompt_template_version='local-simulation-v1' AND j.model_contract_version='deterministic-local-v1'
-              AND r.quantity=1 AND g.category='study_requests' FOR SHARE OF j`,
+              AND ((b.job_id IS NULL AND (j.status='needs_reconciliation' OR (j.status='running' AND j.lease_until<=clock_timestamp())))
+               OR (b.member_id=j.member_id AND b.policy='deterministic-request-test-v1' AND r.quantity=1
+                AND g.member_id=j.member_id AND g.category='study_requests')) FOR SHARE OF j`,
               [jobId, target.memberId],
             )
           ).rows[0];
