@@ -327,7 +327,7 @@ test("[L304] staff records offline funds and refunds that the member sees as man
   }
 });
 
-test("[L306] administrator reconciles an invoice against recorded cash and a reversal, and other roles are refused", async ({
+test("[L308] administrator reconciles an invoice against recorded cash and a reversal, and other roles are refused", async ({
   browser,
 }, info) => {
   const f = await reviewedContentFixture(browser, info, {

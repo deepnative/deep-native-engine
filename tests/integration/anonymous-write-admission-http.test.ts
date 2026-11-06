@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import request from "supertest";
 import { closeLoopback, listenLoopback } from "../support/loopback-server.ts";
 import {
+  ANONYMOUS_WRITE_LIMITS,
   anonymousWriteAdmissionStore,
   anonymousWriteSubject,
   type AnonymousWriteLimits,
@@ -39,6 +40,7 @@ const PASSWORD = "synthetic signup phrase 31";
 // Small allowances keep real scrypt work short; the shipped values are in the
 // unit test and the limits document.
 const limits: AnonymousWriteLimits = {
+  ...ANONYMOUS_WRITE_LIMITS,
   signup: { windowSeconds: 3600, perVisitor: 3, service: 5 },
   password_sign_in: { windowSeconds: 900, perVisitor: 3, service: 5 },
 };

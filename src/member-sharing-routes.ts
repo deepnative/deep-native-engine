@@ -40,7 +40,7 @@ function reviewItems(v: SharingSummary) {
     v.evidence &&
       `<li><strong>${plural(v.evidence, "file or sample", "files or samples")} allowed for private review.</strong> A reviewer an administrator assigns can read one after you ask for review. ${link("/evidence", "Manage private evidence")}</li>`,
     v.workflowReviews &&
-      `<li><strong>${plural(v.workflowReviews, "workflow note", "workflow notes")} waiting for private review.</strong> A moderator an administrator assigns can read the exact version you sent. ${link("/workflow-feedback/review", "See or withdraw requests")}</li>`,
+      `<li><strong>${plural(v.workflowReviews, "workflow note", "workflow notes")} waiting for private review.</strong> A moderator an administrator assigns can read the exact version you sent. Each reading is listed in When staff opened my work. ${link("/workflow-feedback/review", "See or withdraw requests")}</li>`,
     v.eventPermissions &&
       `<li><strong>${plural(v.eventPermissions, "event attendance permission", "event attendance permissions")}.</strong> An administrator can record whether you attended. ${link("/events/attendance", "See or withdraw permissions")}</li>`,
     v.openSupport &&
@@ -147,6 +147,8 @@ function staffAccessText(entry: StaffAccessEntry) {
         return `${who} asked for changes to a proposal you sent.`;
     }
   }
+  if (source === "workflow")
+    return `A moderator read your workflow note for ${file}.`;
   // A later kind of record still shows rather than silently vanishing.
   return "Staff accessed your private work.";
 }
@@ -170,7 +172,7 @@ function staffAccessPage(
       ? `<p>${link(`${HISTORY_PATH}?before=${encodeURIComponent(older)}`, "Older entries")}</p>`
       : ""
   }</section>
-<section class="reading" aria-labelledby="staff-access-covers"><h2 id="staff-access-covers">What this covers</h2><p>Your learning workspace, the files and samples you sent for review, and proposals you submitted.</p><p>It doesn't list workflow notes you sent for private review, support requests or circle post moderation, because opening those isn't recorded here. It also doesn't list access that ended on its own at its set time.</p><p>This history is deleted with your account. It isn't part of ${link("/member/export", "Download my records")}.</p><p>${link(PATH, "Who can see my work")}</p></section>`;
+<section class="reading" aria-labelledby="staff-access-covers"><h2 id="staff-access-covers">What this covers</h2><p>Your learning workspace, the files and samples you sent for review, proposals you submitted, and workflow notes you sent for private review.</p><p>Readings of workflow notes are listed from November 2026 on; earlier ones weren't recorded.</p><p>It doesn't list support requests or circle post moderation, because opening those isn't recorded here. It also doesn't list a moderator being assigned to a workflow note, or access that ended on its own at its set time.</p><p>This history is deleted with your account. It isn't part of ${link("/member/export", "Download my records")}.</p><p>${link(PATH, "Who can see my work")}</p></section>`;
 }
 
 /** #40 WHOSEES-01..08: read-only; every change happens on the linked page. */

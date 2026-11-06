@@ -676,6 +676,9 @@ export function workflowReviewStaffStore(
     async read(token: string, grantId: string) {
       if (!allowed) return { kind: "unavailable" as const };
       if (!sampleUuid(grantId)) return { kind: "invalid" as const };
+      // Not "writing": expiry during commit stays a plain refusal for a read.
+      // The #40 NOTEREAD row below is in the transaction that releases the note,
+      // so a read that wasn't logged is never handed back.
       return reviewExecute(pool, token, false, async (c) => {
         const discovery = (
           await c.tx.query<{
@@ -690,7 +693,7 @@ export function workflowReviewStaffStore(
         if (!discovery || discovery.moderatorId !== c.actorId)
           return reviewDeny();
         const discovered = await discover(c, discovery.requestId);
-        await authorities(
+        const workspace = await authorities(
           c,
           discovered.memberId,
           c.actorId,
@@ -734,6 +737,19 @@ export function workflowReviewStaffStore(
           )
         ).rows[0];
         if (!note) return reviewDeny();
+        await c.tx.query(
+          `INSERT INTO workflow_review_read_audit(id,workspace_id,actor_id,grant_id,request_id,workflow_id,workflow_version,revision) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            randomUUID(),
+            workspace,
+            c.actorId,
+            grantId,
+            row.id,
+            row.workflowId,
+            row.workflowVersion,
+            row.revision,
+          ],
+        );
         return {
           kind: "ready" as const,
           workflowId: row.workflowId,

@@ -9,6 +9,7 @@ import {
   anonymousWriteSubject,
   type AnonymousWriteAdmission,
 } from "../../src/anonymous-write-admission.ts";
+import type { MemberEmailAccess } from "../../src/member-email-access.ts";
 import type { MemberPasswordAccess } from "../../src/member-password-access.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
 import type { Store } from "../../src/store.ts";
@@ -50,6 +51,9 @@ it("ANON-01/02/03 ships the agreed limits", () => {
   expect(ANONYMOUS_WRITE_LIMITS).toEqual({
     signup: { windowSeconds: 3600, perVisitor: 30, service: 300 },
     password_sign_in: { windowSeconds: 900, perVisitor: 60, service: 1200 },
+    email_attach: { windowSeconds: 3600, perVisitor: 20, service: 200 },
+    email_sign_in: { windowSeconds: 3600, perVisitor: 60, service: 1000 },
+    password_change: { windowSeconds: 900, perVisitor: 30, service: 300 },
   });
 });
 
@@ -317,4 +321,190 @@ it("ANON-02/05 refuses sign-in before the password is checked", async () => {
   });
   expect(ordinary.status).toBe(401);
   expect(open.access.signIn).toHaveBeenCalledTimes(1);
+});
+
+function outward(result: AnonymousWriteAdmission) {
+  const admit = vi.fn().mockResolvedValue(result);
+  const email = {
+    ownedStatus: vi.fn().mockResolvedValue("unlinked"),
+    requestAttach: vi.fn().mockResolvedValue("sent"),
+    requestSignIn: vi.fn().mockResolvedValue(undefined),
+    signOut: vi.fn(),
+  };
+  const password = {
+    status: vi.fn().mockResolvedValue("email_required"),
+    setPassword: vi.fn().mockResolvedValue("saved"),
+    register: vi.fn().mockResolvedValue("saved"),
+    signIn: vi.fn(),
+    emailAvailable: vi.fn(),
+  };
+  const application = app(
+    {
+      session: vi.fn().mockResolvedValue({ kind: "active" }),
+    } as unknown as Store,
+    {
+      origin,
+      secret,
+      anonymousWrites: { admit },
+      memberEmail: email as unknown as MemberEmailAccess,
+      memberPassword: password as unknown as MemberPasswordAccess,
+    },
+  );
+  return {
+    admit,
+    email,
+    password,
+    post: (path: string, form: Record<string, string>) =>
+      withLoopback(application, (server) =>
+        request(server)
+          .post(path)
+          .set("Host", "127.0.0.1:3000")
+          .set("Origin", origin)
+          .set("Cookie", `${COOKIE}=${token}`)
+          .set("X-Forwarded-For", "203.0.113.5")
+          .type("form")
+          .send({ ...form, csrf: csrf(token, secret) }),
+      ),
+  };
+}
+const CHANGE = "synthetic changed phrase";
+
+it("OUTWARD-01/03/05 gives each new refusal fixed guidance", () => {
+  const refused = (limit: "visitor" | "service") =>
+    ({ kind: "refused", limit, retryAfterSeconds: 600 }) as const;
+  for (const kind of ["email_attach", "email_sign_in"] as const) {
+    expect(anonymousWriteRefusal(kind, refused("visitor")).message).toBe(
+      "Too many email links have been requested from this network. Wait 10 minutes, then request the link again. Nothing was sent.",
+    );
+    expect(anonymousWriteRefusal(kind, refused("service")).message).toBe(
+      "Email links are busy right now. Wait 10 minutes, then request the link again. Nothing was sent.",
+    );
+    expect(anonymousWriteRefusal(kind, { kind: "unavailable" })).toEqual({
+      status: 503,
+      retryAfterSeconds: 60,
+      message:
+        "Email links are unavailable right now. Try again in a minute. Nothing was sent.",
+    });
+  }
+  expect(
+    anonymousWriteRefusal("password_change", refused("visitor")).message,
+  ).toBe(
+    "Too many password changes from this network. Wait 10 minutes, then try again. Your password has not changed.",
+  );
+  expect(
+    anonymousWriteRefusal("password_change", refused("service")).message,
+  ).toBe(
+    "Password changes are busy right now. Wait 10 minutes, then try again. Your password has not changed.",
+  );
+  expect(
+    anonymousWriteRefusal("password_change", { kind: "unavailable" }).message,
+  ).toBe(
+    "Password changes are unavailable right now. Try again in a minute. Your password has not changed.",
+  );
+});
+
+it("OUTWARD-01 refuses a verification email before it is requested and keeps the escaped address", async () => {
+  const route = outward({
+    kind: "refused",
+    limit: "visitor",
+    retryAfterSeconds: 120,
+  });
+  const response = await route.post("/email/attach", {
+    email: "a&b@example.invalid",
+  });
+  expect(response.status).toBe(429);
+  expect(response.headers["retry-after"]).toBe("120");
+  expect(response.text).toContain('value="a&amp;b@example.invalid"');
+  expect(route.email.requestAttach).not.toHaveBeenCalled();
+  expect(route.admit).toHaveBeenCalledWith("email_attach", visitor);
+
+  const open = outward({ kind: "admitted" });
+  expect(
+    (await open.post("/email/attach", { email: "ok@example.invalid" })).status,
+  ).toBe(200);
+  await vi.waitFor(() =>
+    expect(open.email.requestAttach).toHaveBeenCalledTimes(1),
+  );
+  // A malformed address sends nothing, so it isn't counted.
+  const malformed = outward({ kind: "admitted" });
+  expect(
+    (await malformed.post("/email/attach", { email: "not-an-address" })).status,
+  ).toBe(200);
+  expect(malformed.admit).not.toHaveBeenCalled();
+});
+
+it("OUTWARD-03 refuses a sign-in link before it is requested, offering password sign-in", async () => {
+  const route = outward({
+    kind: "refused",
+    limit: "service",
+    retryAfterSeconds: 120,
+  });
+  const response = await route.post("/email/sign-in", {
+    email: "member@example.invalid",
+  });
+  expect(response.status).toBe(429);
+  expect(response.headers["retry-after"]).toBe("120");
+  expect(response.text).toContain("Email links are busy right now.");
+  expect(response.text).toContain('value="member@example.invalid"');
+  expect(response.text).toContain('action="/password/sign-in"');
+  expect(route.email.requestSignIn).not.toHaveBeenCalled();
+  expect(route.admit).toHaveBeenCalledWith("email_sign_in", visitor);
+
+  const down = outward({ kind: "unavailable" });
+  expect(
+    (await down.post("/email/sign-in", { email: "member@example.invalid" }))
+      .status,
+  ).toBe(503);
+  expect(down.email.requestSignIn).not.toHaveBeenCalled();
+
+  const malformed = outward({ kind: "admitted" });
+  expect(
+    (await malformed.post("/email/sign-in", { email: "not-an-address" }))
+      .status,
+  ).toBe(200);
+  expect(malformed.admit).not.toHaveBeenCalled();
+});
+
+it("OUTWARD-05/07 refuses a password change before hashing, only once it is well formed", async () => {
+  const route = outward({
+    kind: "refused",
+    limit: "visitor",
+    retryAfterSeconds: 120,
+  });
+  const added = await route.post("/account/password", {
+    email: "added@example.invalid",
+    password: CHANGE,
+    confirm: CHANGE,
+  });
+  expect(added.status).toBe(429);
+  expect(added.headers["retry-after"]).toBe("120");
+  expect(added.text).toContain("Your password has not changed.");
+  expect(added.text).toContain('value="added@example.invalid"');
+  expect(added.text).not.toContain(CHANGE);
+  expect(route.password.register).not.toHaveBeenCalled();
+  const changed = await route.post("/account/password", {
+    password: CHANGE,
+    confirm: CHANGE,
+  });
+  expect(changed.status).toBe(429);
+  const long = await route.post("/account/password", {
+    email: `${"x".repeat(250)}@example.invalid`,
+    password: CHANGE,
+    confirm: CHANGE,
+  });
+  expect(long.status).toBe(429);
+  expect(long.text).not.toContain("x".repeat(250));
+  expect(route.password.setPassword).not.toHaveBeenCalled();
+  expect(route.admit).toHaveBeenCalledWith("password_change", visitor);
+
+  const malformed = outward({ kind: "admitted" });
+  await malformed.post("/account/password", {
+    password: "short",
+    confirm: "short",
+  });
+  await malformed.post("/account/password", {
+    password: CHANGE,
+    confirm: "does not match this one",
+  });
+  expect(malformed.admit).not.toHaveBeenCalled();
 });

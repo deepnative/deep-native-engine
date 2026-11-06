@@ -551,6 +551,7 @@ it("denies an unconfigured operator metrics route and returns only a configured 
   );
   await denied.get("/operator/metrics").set("Host", host).expect(403);
   const metrics = {
+    logExport: vi.fn<MetricsStore["logExport"]>().mockResolvedValue(true),
     snapshot: vi.fn<MetricsStore["snapshot"]>().mockResolvedValue({
       scope: "synthetic-local-preview",
       asOf: new Date("2026-09-24T00:00:00Z"),
@@ -594,6 +595,14 @@ it("denies an unconfigured operator metrics route and returns only a configured 
     .get("/operator/metrics")
     .set("Host", host)
     .expect(200);
+  expect(metrics.logExport).toHaveBeenCalledTimes(1);
+  // EXPORTLOG: no log entry, no data.
+  metrics.logExport.mockResolvedValueOnce(false);
+  const unlogged = await allowed
+    .get("/operator/metrics")
+    .set("Host", host)
+    .expect(403);
+  expect(unlogged.body).toEqual({ error: "forbidden" });
   expect(response.body.counts).toBeUndefined();
   expect(response.body.learning).toEqual({
     disclosure: "coarse-band",
