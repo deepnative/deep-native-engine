@@ -2667,6 +2667,24 @@
       "expected": "Opening the page adds nothing; the claim gives exactly five study requests ending at the month's end and appears on the balance; repeating the form adds no second grant; the local request leaves four; no sideways scrolling",
       "issues": [199],
       "critical": true
+    },
+    {
+      "id": "L300",
+      "actor": "Visitor starting an account from an address past its signup allowance",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, a documentation-range forwarded address; desktop/mobile Chromium",
+      "steps": "ANON-01/07: thirty earlier starts use the address's hourly allowance; the visitor fills the start form and submits; the window ends; the visitor submits the same form again",
+      "expected": "The refused start returns 429 with Retry-After and a plain wait message, creates nothing and keeps the visitor's answers on the page; the same form then starts normally; no sideways scrolling",
+      "issues": [728],
+      "critical": true
+    },
+    {
+      "id": "L301",
+      "actor": "Administrator checking who changed roles and billing",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, verified owner and invented coach and learner; desktop/mobile Chromium",
+      "steps": "CHANGELOG-01, 02, 03, 04: an administrator opens Change history from the console with nothing recorded, gives a coach role, assigns the coach to a learner, sets the learner a coaching rate, removes the coach role, and opens the history again; a member then requests the page",
+      "expected": "First says no changes are recorded; then lists each change with who, whom and when, newest first, including the assignment lost with the role, with no email and no sideways scrolling; the member is refused",
+      "issues": [40],
+      "critical": false
     }
   ],
   "fullMvp": [

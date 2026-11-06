@@ -26,7 +26,7 @@ async function reset() {
      ON CONFLICT DO NOTHING`,
     [SEEDED],
   );
-  // As migration 101 leaves them: a hint, and no known grant date.
+  // As migration 103 leaves them: a hint, and no known grant date.
   await pool.query(
     `UPDATE account_roles r SET granted_at=NULL,email_hint=s.hint
        FROM (VALUES ($1,'sh…@deepnative.io'),($2,'to…@deepnative.io')) s(h,hint)
@@ -97,7 +97,7 @@ it("ROLEADMIN-01/02/05 lists role holders and grants roles to a typed email", as
       emailHash: hash("shi@deepnative.io"),
       roles: ["coach", "admin"],
       people: [],
-      // ROLE-LABEL-01: the seeded owners carry a hint from migration 101.
+      // ROLE-LABEL-01: the seeded owners carry a hint from migration 103.
       hint: "sh…@deepnative.io",
       grantedAt: null,
       self: false,
@@ -196,7 +196,9 @@ it("ROLEADMIN-03/04 removes roles but never the acting administrator's own admin
   expect(
     await admin.remove(tom.credential, { emailHash: "nope", role: "admin" }),
   ).toEqual({ kind: "invalid" });
+  // CHANGELOG-03: Tom's own default assignment goes with his coach role.
   expect(await events()).toEqual([
+    { action: "cleared", role: null },
     { action: "removed", role: "coach" },
     { action: "removed", role: "admin" },
   ]);
@@ -321,6 +323,11 @@ it("DEFCOACH-01/04 an administrator sets each learner's coaches; each coach sees
     { action: "cleared", role: null },
     { action: "assigned", role: null },
     { action: "assigned", role: null },
+    // CHANGELOG-03: each learner Tom still coached is logged as lost.
+    { action: "cleared", role: null },
+    { action: "cleared", role: null },
+    { action: "cleared", role: null },
+    { action: "cleared", role: null },
     { action: "removed", role: "coach" },
   ]);
 });

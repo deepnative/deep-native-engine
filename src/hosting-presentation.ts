@@ -33,6 +33,28 @@ const HOSTED_EVENT_TEXT = new Map([
 export function eventText(text: string): string {
   return hostingText(text, HOSTED_EVENT_TEXT.get(text) ?? text);
 }
+/**
+ * #730 Provided-sample labels and practice comparisons are saved or exported as
+ * written, so hosted pages reword them when shown. Only the fixed start and end
+ * of a comparison change, never the member's or the source's words between them.
+ */
+export function providedSampleLabel(label: string): string {
+  return hostingText(label, "Provided invented example · unreviewed");
+}
+export function practiceComparison(saved: string): string {
+  return hostingText(
+    saved,
+    saved
+      .replace(
+        /^Simulation — unreviewed local comparison\./,
+        "Simulation — unreviewed comparison.",
+      )
+      .replace(
+        /This deterministic comparison (does not verify accuracy and cannot judge competence\. Uncertainty remains; no qualified review has occurred\.)$/,
+        "This comparison $1",
+      ),
+  );
+}
 export function privateRecordsLabel(): string {
   return hostingText(
     "Download private preview records",
