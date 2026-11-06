@@ -529,7 +529,14 @@ const sections = {
      WHERE e.member_id=$1`,
     "e.job_id",
   ),
-  // v36 appends MANPAY-08: the member's own manual invoice events, without the staff actor.
+  // v36 appends own practice session unit uses: no reservation reference.
+  practiceSessionAllowanceUses: section(
+    `u.session_id AS "sessionId",u.claim_id AS "claimId",u.created_at AS "createdAt"`,
+    `practice_session_allowance_uses u JOIN private_practice_sessions s ON s.id=u.session_id
+     WHERE u.member_id=$1 AND s.member_id=u.member_id`,
+    "u.session_id",
+  ),
+  // v37 appends MANPAY-08: the member's own manual invoice events, without the staff actor.
   invoicePayments: section(
     `p.id,p.invoice_id AS "invoiceId",p.kind,p.amount_cents AS "amountCents",
     to_char(p.received_on,'YYYY-MM-DD') AS "on",p.evidence_reference AS evidence,
@@ -551,7 +558,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v36";
+  version: "local-member-records-v37";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -685,7 +692,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v36",
+          version: "local-member-records-v37",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

@@ -65,7 +65,9 @@ export function mountCoachView(app: Express, store: CoachView | undefined) {
       .join("");
     const table = rows
       ? `<div class="table-scroll" tabindex="0" role="region" aria-label="Coaching hours"><table class="member-table coach-hours"><thead><tr><th scope="col">Name</th><th scope="col">Hours</th><th scope="col">Status</th></tr></thead><tbody>${rows}</tbody></table></div>`
-      : '<p role="status">No coaching hours saved for this month.</p>';
+      : v.assigned
+        ? '<p role="status">No coaching hours saved for this month.</p>'
+        : '<p role="status">No learners are assigned to you yet. Ask an administrator to assign learners to you in the Administration console.</p>';
     res.send(
       page(
         "Coaching",

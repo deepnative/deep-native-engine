@@ -16,7 +16,7 @@ A finite current platform administrator can also explicitly generate due invoice
 
 ## Manual receipts and refunds
 
-Offline funds and refunds are separate, append-only events with server actor and time, event date, a required evidence reference and the fixed status `manual_unverified`. The invoice shows them as a **Payment record** labelled "Recorded manually by staff. Not verified by a payment provider." The member sees amount, date and reference, and the export adds them as `invoicePayments` (section 59, `local-member-records-v36`); only staff see who recorded each entry. The reference rejects card-like digit runs, and it must not hold bank credentials.
+Offline funds and refunds are separate, append-only events with server actor and time, event date, a required evidence reference and the fixed status `manual_unverified`. The invoice shows them as a **Payment record** labelled "Recorded manually by staff. Not verified by a payment provider." The member sees amount, date and reference, and the export adds them as `invoicePayments` (section 60, `local-member-records-v37`); only staff see who recorded each entry. The reference rejects card-like digit runs, and it must not hold bank credentials.
 
 **Record offline refund** records money already returned. It moves no money. The recorded payment stays, the status reads **Partly refunded** or **Refunded**, the balance does not reopen and the course agreement is unchanged. A mistyped receipt has no correction path yet. Signed provider events and provider reconciliation are not implemented: see [#32](https://github.com/deepnative/deep-native-engine/issues/32).
 

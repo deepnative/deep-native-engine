@@ -35,5 +35,5 @@ CREATE TRIGGER simple_invoice_money_preserved BEFORE UPDATE OF paid_cents,refund
 ALTER TABLE IF EXISTS billing_change_events DROP CONSTRAINT IF EXISTS billing_change_events_action_check;
 ALTER TABLE IF EXISTS billing_change_events ADD CONSTRAINT billing_change_events_action_check
  CHECK(action IN ('plan_offered','rate_set','hours_returned','coaching_invoice_issued','monthly_invoice_issued','payment_recorded','payment_refunded','invoice_voided'));
-INSERT INTO schema_migrations(version) VALUES(103) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(106) ON CONFLICT DO NOTHING;
 COMMIT;

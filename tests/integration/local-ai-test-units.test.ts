@@ -854,6 +854,50 @@ it("a new source revision releases a never-dispatched request without inheriting
   ).toEqual({ kind: "denied" });
   expect(execute).not.toHaveBeenCalled();
 });
+it("AIHOLD-05 a new source revision keeps a started request and its unit held", async () => {
+  const owner = await fixture();
+  const grantId = await grant(owner);
+  const queued = await local.enqueueMetered(
+    owner.token,
+    owner.receiptId,
+    randomUUID(),
+  );
+  if (queued.kind !== "queued") throw Error("Expected metered queue");
+  execute.mockRejectedValue(new Error("Invented ambiguous provider outcome"));
+  expect((await local.run(owner.token, queued.jobId)).kind).toBe("unavailable");
+  await evidence.submitForReview(owner.token, owner.evidenceId);
+  const revised = await evidence.upload(owner.token, {
+    name: "Invented-revision.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Invented revised private source"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+    revisesId: owner.evidenceId,
+  });
+  expect(revised.kind).toBe("created");
+  expect(await balance(grantId)).toEqual({
+    available: 0,
+    reserved: 1,
+    consumed: 0,
+    expired: 0,
+  });
+  expect(
+    (
+      await pool.query(
+        "SELECT status,safe_error FROM adapter_jobs WHERE id=$1",
+        [queued.jobId],
+      )
+    ).rows[0],
+  ).toEqual({
+    status: "needs_reconciliation",
+    safe_error: "provider_outcome_unknown",
+  });
+  expect((await local.run(owner.token, queued.jobId)).kind).toBe("denied");
+  expect(execute).toHaveBeenCalledTimes(1);
+});
 it("selects the earliest-expiring eligible study grant and leaves other categories untouched", async () => {
   const owner = await fixture();
   const later = await grant(owner);

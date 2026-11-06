@@ -31,6 +31,8 @@ export interface LocalAiChoice {
   receiptId: string | null;
   grantedAt: Date | null;
   withdrawnAt: Date | null;
+  // This version can no longer be used; it is listed only for its held requests.
+  retired?: true;
   estimate: AiUsageEstimate;
   jobs: Array<{
     id: string;
@@ -383,6 +385,32 @@ export function localAiConsentStore(
       return;
     return { ...authorization, job };
   }
+  // A hold outlives the permission it started under, so a held request stays
+  // listed after a new grant or revision. Other jobs follow only `current`.
+  async function listedJobs(
+    client: PoolClient,
+    row: Source,
+    current: string | null,
+  ) {
+    const jobs = (
+      await client.query<ListedJob>(
+        "SELECT j.id,j.status,b.policy,r.state AS test_unit_state,e.rate_version,e.model_version,e.input_tokens AS estimated_input_tokens,e.output_tokens AS estimated_output_tokens,e.cost_points AS estimated_cost_points,s.input_tokens AS actual_input_tokens,s.output_tokens AS actual_output_tokens,s.cost_points AS actual_cost_points FROM adapter_jobs j JOIN local_ai_receipts p ON p.id=j.local_ai_receipt_id LEFT JOIN local_ai_test_unit_jobs b ON b.job_id=j.id LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id LEFT JOIN ai_usage_estimates e ON e.job_id=j.id AND e.member_id=j.member_id LEFT JOIN ai_usage_settlements s ON s.job_id=j.id AND s.member_id=j.member_id WHERE p.evidence_id=$1 AND j.member_id=$2 AND (j.local_ai_receipt_id=$3::uuid OR j.status='needs_reconciliation') ORDER BY j.created_at,j.id",
+        [row.id, row.owner_principal_id, current],
+      )
+    ).rows;
+    return jobs.map((job) => ({
+      id: job.id,
+      status: job.status,
+      ...(job.policy === LOCAL_AI_TEST_UNIT_POLICY &&
+      ["reserved", "consumed", "released"].includes(job.test_unit_state ?? "")
+        ? {
+            testUnitState: job.test_unit_state as
+              "reserved" | "consumed" | "released",
+          }
+        : {}),
+      ...jobBudget(job),
+    }));
+  }
   async function currentTestReservation(
     client: PoolClient,
     job: Job,
@@ -570,21 +598,31 @@ export function localAiConsentStore(
         const result: LocalAiChoice[] = [];
         for (const candidate of candidates) {
           const row = await source(client, token, candidate.id);
-          if (!row || !(await bytes(client, row))) continue;
+          if (!row || !(await bytes(client, row))) {
+            const retired =
+              row ?? (await source(client, token, candidate.id, true));
+            if (!retired) continue;
+            const jobs = await listedJobs(client, retired, null);
+            if (jobs.length)
+              result.push({
+                evidenceId: retired.id,
+                name: retired.original_name,
+                revisionNumber: retired.revision_number,
+                receiptId: null,
+                grantedAt: null,
+                withdrawnAt: null,
+                retired: true,
+                estimate: estimateAiRequest(retired.byte_size),
+                jobs,
+              });
+            continue;
+          }
           const permission = (
             await client.query<Receipt>(
               "SELECT * FROM local_ai_receipts WHERE evidence_id=$1 ORDER BY granted_at DESC,id DESC LIMIT 1",
               [row.id],
             )
           ).rows[0];
-          const jobs = permission
-            ? (
-                await client.query<ListedJob>(
-                  "SELECT j.id,j.status,b.policy,r.state AS test_unit_state,e.rate_version,e.model_version,e.input_tokens AS estimated_input_tokens,e.output_tokens AS estimated_output_tokens,e.cost_points AS estimated_cost_points,s.input_tokens AS actual_input_tokens,s.output_tokens AS actual_output_tokens,s.cost_points AS actual_cost_points FROM adapter_jobs j LEFT JOIN local_ai_test_unit_jobs b ON b.job_id=j.id LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id LEFT JOIN ai_usage_estimates e ON e.job_id=j.id AND e.member_id=j.member_id LEFT JOIN ai_usage_settlements s ON s.job_id=j.id AND s.member_id=j.member_id WHERE j.local_ai_receipt_id=$1 AND j.member_id=$2 ORDER BY j.created_at,j.id",
-                  [permission.id, row.owner_principal_id],
-                )
-              ).rows
-            : [];
           result.push({
             evidenceId: row.id,
             name: row.original_name,
@@ -594,20 +632,7 @@ export function localAiConsentStore(
             grantedAt: permission?.granted_at ?? null,
             withdrawnAt: permission?.withdrawn_at ?? null,
             estimate: estimateAiRequest(row.byte_size),
-            jobs: jobs.map((job) => ({
-              id: job.id,
-              status: job.status,
-              ...(job.policy === LOCAL_AI_TEST_UNIT_POLICY &&
-              ["reserved", "consumed", "released"].includes(
-                job.test_unit_state ?? "",
-              )
-                ? {
-                    testUnitState: job.test_unit_state as
-                      "reserved" | "consumed" | "released",
-                  }
-                : {}),
-              ...jobBudget(job),
-            })),
+            jobs: await listedJobs(client, row, permission?.id ?? null),
           });
         }
         return (await active(client, token)) ? result : [];
@@ -664,7 +689,9 @@ export function localAiConsentStore(
           [id],
         );
         await client.query(
-          "UPDATE adapter_jobs SET status='exhausted',attempt_token=NULL,lease_until=NULL,safe_error='provider_unavailable',updated_at=clock_timestamp() WHERE local_ai_receipt_id=$1 AND status IN ('pending','failed','running')",
+          // A started attempt may have reached the AI boundary: hold its unknown
+          // outcome. Only a request that never started can be cancelled.
+          "UPDATE adapter_jobs SET status=CASE WHEN attempt_count>0 THEN 'needs_reconciliation' ELSE 'exhausted' END,safe_error=CASE WHEN attempt_count>0 THEN 'provider_outcome_unknown' ELSE 'provider_unavailable' END,attempt_token=NULL,lease_until=NULL,provider_operation_reference=NULL,updated_at=clock_timestamp() WHERE local_ai_receipt_id=$1 AND status IN ('pending','failed','running')",
           [id],
         );
         return true;
