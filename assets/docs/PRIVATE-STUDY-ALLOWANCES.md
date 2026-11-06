@@ -22,7 +22,7 @@ New claims need `DNE_LOCAL_TEST_UNIT_ISSUANCE=enabled` in demo or test mode, the
 
 ## Privacy
 
-The structured export appends `studyAllowanceClaims` as section 57 in `local-member-records-v34`. It lists the claim, version, category, quantity, period and grant reference, and leaves out the operation key and workspace. Erasing the account removes claims and grants. Policy rows contain no member data and remain.
+The structured export appends `studyAllowanceClaims` as section 57 in `local-member-records-v34` and later. It lists the claim, version, category, quantity, period and grant reference, and leaves out the operation key and workspace. Erasing the account removes claims and grants. Policy rows contain no member data and remain.
 
 ## Practice sessions
 
@@ -34,7 +34,7 @@ Delivered for part of #199 and #200. `mock-allowance-test-v1` is 3 practice sess
 
 The sessions are the deterministic local comparison, not generated feedback or an interview mode. No provider is called, so "uses a unit" spends nothing. In the staff reconciliation report these units appear as consumed without an attachment, because there's no completion record for this category yet.
 
-The export appends `practiceSessionAllowanceUses` as section 58 in `local-member-records-v35`: session, claim and time, without the reservation. Account erasure removes uses, claims and grants.
+The export appends `practiceSessionAllowanceUses` as section 59 in `local-member-records-v36`: session, claim and time, without the reservation. Account erasure removes uses, claims and grants.
 
 Rollback: unset the setting. Starts go back to free. Keep the additive table and ledger facts.
 

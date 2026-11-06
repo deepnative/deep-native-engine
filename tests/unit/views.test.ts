@@ -698,6 +698,13 @@ it("describes local AI permission and every job state without leaking sample tex
         receiptId: null,
         grantedAt: null,
         withdrawnAt: null,
+        estimate: {
+          inputTokens: 11,
+          outputTokens: 256,
+          costPoints: 157,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
         jobs: [],
       },
     ],
@@ -717,6 +724,13 @@ it("describes local AI permission and every job state without leaking sample tex
         receiptId: "receipt-id",
         grantedAt: new Date(),
         withdrawnAt: null,
+        estimate: {
+          inputTokens: 11,
+          outputTokens: 256,
+          costPoints: 157,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
         jobs: [
           { id: "pending", status: "pending" },
           { id: "done", status: "succeeded" },
@@ -743,6 +757,13 @@ it("describes local AI permission and every job state without leaking sample tex
         receiptId: "receipt-id",
         grantedAt: new Date(),
         withdrawnAt: null,
+        estimate: {
+          inputTokens: 11,
+          outputTokens: 256,
+          costPoints: 157,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
         jobs: [{ id: "pending", status: "pending" }],
       },
     ],
@@ -1954,7 +1975,7 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v35" as const,
+    version: "local-member-records-v36" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2081,6 +2102,13 @@ it("distinguishes metered local test units and blocks repeat dispatch of termina
       receiptId: "receipt",
       grantedAt: new Date(),
       withdrawnAt: null,
+      estimate: {
+        inputTokens: 11,
+        outputTokens: 256,
+        costPoints: 157,
+        modelVersion: "simulated-model-v1",
+        rateVersion: "simulated-rates-v1",
+      },
       jobs: [
         {
           id: "pending",
@@ -2107,6 +2135,49 @@ it("distinguishes metered local test units and blocks repeat dispatch of termina
   expect(html).toContain("released");
   expect(html).not.toContain('action="/evidence/local-ai/consumed/run"');
   expect(html).not.toContain('action="/evidence/local-ai/released/run"');
+  expect(html).toContain(
+    "This request has no cost estimate, so it cannot run.",
+  );
+  expect(html).toContain(
+    "Estimate only: about 267 tokens and 157 simulated cost points (model simulated-model-v1, test rates simulated-rates-v1).",
+  );
+  const estimate = choices[0]!.estimate;
+  const budgeted = (costPoints: number) =>
+    localAiConsentPage(
+      [
+        {
+          ...choices[0]!,
+          jobs: [
+            {
+              id: "settled",
+              status: "succeeded",
+              testUnitState: "consumed" as const,
+              budget: {
+                estimate,
+                actual: { inputTokens: 11, outputTokens: 64, costPoints },
+              },
+            },
+            {
+              id: "held",
+              status: "needs_reconciliation",
+              testUnitState: "reserved" as const,
+              budget: { estimate },
+            },
+          ],
+        },
+      ],
+      "csrf",
+    );
+  const within = budgeted(42);
+  expect(within).toContain(
+    "Actual simulated use: 75 tokens and 42 cost points. Within the estimate.",
+  );
+  expect(within.match(/Actual simulated use/g)).toHaveLength(1);
+  expect(budgeted(158)).toContain(
+    "Over the estimate. You are still charged only one test request.",
+  );
+  expect(budgeted(157)).toContain("Within the estimate.");
+  expect(within).not.toContain("no cost estimate");
   const paused = localAiConsentPage(choices, "csrf", [], "paused");
   expect(paused).not.toContain("Use one local test request</button>");
   expect(paused).not.toContain("Run local test request</button>");

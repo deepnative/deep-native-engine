@@ -2,13 +2,31 @@
 
 On **Private evidence → Choose an invented sample for local AI simulation**, save an invented text sample, complete its local safety check, and grant permission for that exact version. **Use one local test request** is a separate confirmed action that holds one already seeded study request. **Run local test request** completes the deterministic simulation and consumes that unit once. The original **Queue local simulation** remains unmetered.
 
-The server selects the earliest-expiring eligible owned study grant, breaking ties by grant ID. An empty or wrong-category balance denies the action without creating a job, reservation or allowance. The fixed policy is `deterministic-request-test-v1`: one study request per job, one dispatch claim. It is not a price, token estimate, membership quota, purchased service or live provider integration.
+The server selects the earliest-expiring eligible owned study grant, breaking ties by grant ID. An empty or wrong-category balance denies the action without creating a job, reservation or allowance. The fixed policy is `deterministic-request-test-v1`: one study request per job, one dispatch claim. It is not a price, membership quota, purchased service or live provider integration.
 
 Reloading a receipt shows a held, consumed or released test unit. Replaying the same request key returns its same job without another hold. Changing the source contract or switching between metered and unmetered requests conflicts. One unresolved job per exact receipt/purpose fences new requests across both paths.
 
 Withdraw exact-source permission before dispatch to release a held unit once. Creating a source revision or deleting the source does the same for never-claimed requests. After the grant deadline, release records expiry rather than restoring usable units. A committed dispatch claim with an unknown outcome remains held and cannot retry or refund automatically, even after withdrawal or source deletion. An explicitly assigned current operator can use [read-only hold inspection](PRIVATE-LOCAL-AI-HOLD-INSPECTION.md) to see content-free local metadata; this does not resolve the hold. The broader reconciliation decision is separate work on #189.
 
 Open **See your local test units** to inspect the current owned balance and download its summary. The summary contains quantities rather than raw event/reservation IDs. The existing v15 private record export retains its safe owned job whitelist; this change adds no raw ledger export or provider output. Source deletion removes receipt/source bytes and retains content-free accounting linkage. Full member deletion erases all owned jobs, links, grants, reservations and events while preserving other members.
+
+## Estimates and actual use
+
+Before a member holds a request, the page shows an estimate labelled with its model and rate version. These are invented test values in `src/ai-budget-policy.ts`: `simulated-model-v1` and `simulated-rates-v1`, priced in simulated points rather than money.
+
+| Case                                         | What happens                                                                                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Request queued                               | The estimate is stored with the hold in the same transaction.                                                                               |
+| Provider reports usable usage                | The unit is consumed once. One settlement holds actual tokens and points, and commits with the consumption.                                 |
+| Actual cost is over the estimate             | The member still pays one unit. The page says it went over. There is no ceiling or automatic pause yet.                                     |
+| Usage is missing or malformed                | The outcome is treated as unknown. The unit stays held, with no refund and no second call.                                                  |
+| Settlement fails after the provider answered | Result and consumption roll back. The attempt stays held after its lease and is not called again.                                           |
+| No estimate or a retired rate version        | The provider is not called. Withdrawing permission releases the never-started hold. Requests queued before migration 100 are in this group. |
+| Simulations are paused                       | No estimate is created and no provider is called.                                                                                           |
+
+Stored figures are integers and version names only. Provider usage is read as two bounded integers, so no other provider text can reach these records. They are immutable, appear in the member's export as `aiUsage`, and are removed only by member erasure.
+
+This does not set a real rate, currency, spending ceiling or grant. Those remain inputs for a real provider under #188. Resolving held requests is #189.
 
 ## Transactions and migration
 

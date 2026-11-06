@@ -74,5 +74,5 @@ END $$;
 DROP TRIGGER IF EXISTS practice_session_allowance_use_guard ON practice_session_allowance_uses;
 CREATE TRIGGER practice_session_allowance_use_guard BEFORE INSERT OR UPDATE OR DELETE ON practice_session_allowance_uses
  FOR EACH ROW EXECUTE FUNCTION guard_practice_session_allowance_use();
-INSERT INTO schema_migrations(version) VALUES(100) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(101) ON CONFLICT DO NOTHING;
 COMMIT;

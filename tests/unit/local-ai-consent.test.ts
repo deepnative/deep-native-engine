@@ -72,12 +72,15 @@ const adapterResult = {
   state: "simulated",
   reference: "test_reference",
   message: "Simulated computation",
+  usage: { inputTokens: 11, outputTokens: 64 },
 };
 function setup(
   options: {
     metered?: boolean;
     metering?: Record<string, unknown>;
     noGrant?: boolean;
+    noEstimate?: boolean;
+    usage?: unknown;
     budgetDeadline?: "claim" | "before" | "after";
     queueDeadline?: "session" | "grant";
     beforeSettlement?: "session" | "lease";
@@ -186,6 +189,8 @@ function setup(
             ]
           : [],
       };
+    if (sql.includes("SELECT 1 FROM ai_usage_estimates"))
+      return { rows: options.noEstimate ? [] : [{}] };
     if (sql.includes("SELECT r.grant_id,r.quantity"))
       return {
         rows: [
@@ -322,7 +327,9 @@ function setup(
   const get = vi.fn(async () => options.bytes ?? data);
   const execute = vi.fn(async () => {
     outputReady = true;
-    return adapterResult;
+    return "usage" in options
+      ? { ...adapterResult, usage: options.usage }
+      : adapterResult;
   });
   const registry = {
     mode: "test",
@@ -969,3 +976,65 @@ it.each(["claim", "before", "after"] as const)(
       expect(f.query.mock.calls.some(([sql]) => sql === "ROLLBACK")).toBe(true);
   },
 );
+
+it("calls no provider for a metered request without a usable estimate", async () => {
+  const { service, execute } = setup({ metered: true, noEstimate: true });
+  expect((await service.run("member", jid)).kind).toBe("denied");
+  expect(execute).not.toHaveBeenCalled();
+});
+
+it("holds a metered request when the provider usage is unusable", async () => {
+  const { service, query } = setup({
+    metered: true,
+    usage: { inputTokens: 0 },
+  });
+  expect(await service.run("member", jid)).toEqual({
+    kind: "unavailable",
+    jobId: jid,
+    status: "needs_reconciliation",
+  });
+  const statements = query.mock.calls.map(([sql]) => sql as string);
+  expect(statements.some((sql) => sql.includes("ai_usage_settlements"))).toBe(
+    false,
+  );
+});
+
+it("lists stored estimates and actual figures without other fields", async () => {
+  const stored = {
+    id: jid,
+    status: "succeeded",
+    rate_version: "simulated-rates-v1",
+    model_version: "simulated-model-v1",
+    estimated_input_tokens: 11,
+    estimated_output_tokens: 256,
+    estimated_cost_points: 157,
+  };
+  const estimate = {
+    inputTokens: 11,
+    outputTokens: 256,
+    costPoints: 157,
+    modelVersion: "simulated-model-v1",
+    rateVersion: "simulated-rates-v1",
+  };
+  const { service } = setup({
+    listedJobs: [
+      { ...stored, actual_cost_points: null },
+      {
+        ...stored,
+        actual_input_tokens: 11,
+        actual_output_tokens: 64,
+        actual_cost_points: 42,
+      },
+      stored,
+    ],
+  });
+  const [choice] = await service.list("member");
+  expect(choice!.jobs.map((job) => job.budget)).toEqual([
+    { estimate },
+    {
+      estimate,
+      actual: { inputTokens: 11, outputTokens: 64, costPoints: 42 },
+    },
+    { estimate },
+  ]);
+});
