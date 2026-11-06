@@ -21,7 +21,7 @@ After **Enter administration**, an administrator opens **Roles** from Administra
 - **Set coaches:** on the console's selected learner, the **Coaches** checkboxes pick any coach-role holders; saving with none ticked leaves the learner without a coach. `/coach` shows a coach only the learners assigned to them; an unassigned learner appears to no coach. Removing someone's coach role removes their assignments (`coach_assignments` foreign key, migration095).
 - **Default coaches ([#689](https://github.com/deepnative/deep-native-engine/issues/689)):** migration097 lets a learner have several coaches and seeds `default_coaches` with shi@ and tom@deepnative.io. Every learner that existed when it first ran was assigned to both, and a database trigger assigns each new learner to every default coach who still holds the coach role. Automatic assignments have no `assigned_by`. An assignment an administrator removes is not restored on restart.
 
-Every grant, removal, assignment and clear is recorded in `account_role_events` with the administrator and time. Writes require the current administrator session, the same origin and the CSRF token.
+Every grant, removal, assignment and clear is recorded in `account_role_events` with the administrator and time. That includes each assignment lost when a coach's role is removed. Administrators read these entries, with billing changes from `billing_change_events`, on Change history (`/operator/changes`). Entries are append-only, hold no email or reason, and stay when an account is deleted; a deleted member shows as "a deleted account". Writes require the current administrator session, the same origin and the CSRF token.
 
 ## BDD mapping
 

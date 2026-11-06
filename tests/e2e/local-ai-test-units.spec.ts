@@ -67,7 +67,7 @@ async function startedRequest(page: Page, memberId: string) {
   );
   await page.reload();
 }
-test("[L300] started requests stay held with an unknown outcome after withdrawal or a new version", async ({
+test("[L302] started requests stay held with an unknown outcome after withdrawal or a new version", async ({
   page,
 }) => {
   const token = randomBytes(32).toString("hex");
