@@ -28,10 +28,15 @@ const saved = {
   consumed: 0,
   expired: 0,
 };
-function fixture(enabled = true, mode: "test" | "demo" | "live" = "test") {
+function fixture(
+  enabled = true,
+  mode: "test" | "demo" | "live" = "test",
+  practiceUnits?: boolean,
+) {
   const state = {
     actor: true,
     claim: null as typeof saved | null,
+    mockClaim: null as typeof saved | null,
     claimByKey: null as typeof saved | null,
     policy: { version, periodLimit: 5 } as {
       version: string;
@@ -60,6 +65,8 @@ function fixture(enabled = true, mode: "test" | "demo" | "live" = "test") {
       rows = state.policy ? [state.policy] : [];
     else if (sql.includes("c.operation_key=$2"))
       rows = state.claimByKey ? [state.claimByKey] : [];
+    else if (sql.includes("c.category='mock_sessions' AND c.period_start=$2"))
+      rows = state.mockClaim ? [state.mockClaim] : [];
     else if (sql.includes("c.period_start=$2"))
       rows = state.claim ? [state.claim] : [];
     else if (sql.includes("FROM learners l JOIN principals")) rows = [{}];
@@ -67,7 +74,8 @@ function fixture(enabled = true, mode: "test" | "demo" | "live" = "test") {
       state.grants.push(values);
     else if (sql.startsWith("INSERT INTO study_allowance_claims")) {
       state.inserted.push(values);
-      state.claim = saved;
+      if (values[9] === "mock_sessions") state.mockClaim = saved;
+      else state.claim = saved;
     }
     return { rows, rowCount: rows.length };
   });
@@ -78,7 +86,11 @@ function fixture(enabled = true, mode: "test" | "demo" | "live" = "test") {
     removeListener: vi.fn(),
   } as unknown as PoolClient;
   const pool = { connect: vi.fn(async () => client) } as unknown as Pool;
-  return { state, query, store: studyAllowanceStore(pool, { mode, enabled }) };
+  return {
+    state,
+    query,
+    store: studyAllowanceStore(pool, { mode, enabled, practiceUnits }),
+  };
 }
 
 it("ALLOW-01 reads the policy, month and absence of a claim without writing", async () => {
@@ -207,4 +219,40 @@ it("ALLOW-03 a failed grant or claim write reports unavailable, never success", 
       "unavailable",
     );
   }
+});
+const mockInstruction = {
+  policyVersion: "mock-allowance-test-v1",
+  periodStart: start.toISOString(),
+};
+it("MOCK-07 practice claims are refused and hidden unless practice units are on", async () => {
+  const f = fixture();
+  await expect(f.store.claim(owner, key, mockInstruction)).resolves.toEqual({
+    kind: "denied",
+  });
+  expect(await f.store.member(owner)).toMatchObject({
+    value: { practice: null },
+  });
+  f.state.mockClaim = saved;
+  expect(await f.store.member(owner)).toMatchObject({
+    value: { practice: { claim: saved } },
+  });
+});
+it("MOCK-01 a practice claim uses its own category, key and slot", async () => {
+  const f = fixture(true, "test", true);
+  f.state.policy = { version: "mock-allowance-test-v1", periodLimit: 3 };
+  f.state.claim = saved;
+  const claimed = await f.store.claim(owner, key, mockInstruction);
+  expect(claimed.kind).toBe("ready");
+  expect(f.state.inserted[0]?.[9]).toBe("mock_sessions");
+  expect(f.state.grants[0]).toEqual(
+    expect.arrayContaining(["mock_sessions", 3]),
+  );
+  expect(
+    f.query.mock.calls.some(
+      ([, values]) => values?.[0] === `mock-allowance:${memberId}:2030-01`,
+    ),
+  ).toBe(true);
+  expect(await f.store.member(owner)).toMatchObject({
+    value: { practice: { policy: { periodLimit: 3 }, claim: saved } },
+  });
 });

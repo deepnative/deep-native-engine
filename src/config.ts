@@ -98,6 +98,10 @@ export function config(env: NodeJS.ProcessEnv) {
   const localTestUnitIssuance = env.DNE_LOCAL_TEST_UNIT_ISSUANCE ?? "disabled";
   if (!["enabled", "disabled"].includes(localTestUnitIssuance))
     throw Error("DNE_LOCAL_TEST_UNIT_ISSUANCE must be enabled or disabled.");
+  const practiceSessionAllowance =
+    env.DNE_PRACTICE_SESSION_ALLOWANCE ?? "disabled";
+  if (!["enabled", "disabled"].includes(practiceSessionAllowance))
+    throw Error("DNE_PRACTICE_SESSION_ALLOWANCE must be enabled or disabled.");
   const localSupportAssignment = env.DNE_LOCAL_SUPPORT_ASSIGNMENT ?? "disabled";
   const privateSupportIntake = env.DNE_PRIVATE_SUPPORT_INTAKE ?? "disabled";
   if (!["enabled", "disabled"].includes(privateSupportIntake))
@@ -170,6 +174,7 @@ export function config(env: NodeJS.ProcessEnv) {
     preparedReviewSamples: preparedReviewSamples === "enabled",
     localStaffEntry: localStaffEntry === "enabled",
     localTestUnitIssuance: localTestUnitIssuance === "enabled",
+    practiceSessionAllowance: practiceSessionAllowance === "enabled",
     workflowReviewRequests: workflowReviewRequests === "enabled",
     localSupportAssignment: localSupportAssignment === "enabled",
     privateSupportIntake: privateSupportIntake === "enabled",

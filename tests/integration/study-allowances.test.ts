@@ -87,7 +87,7 @@ async function removeLaterPolicies() {
       "ALTER TABLE study_allowance_policies DISABLE TRIGGER study_allowance_policy_guard",
     );
     await client.query(
-      "DELETE FROM study_allowance_policies WHERE version<>$1",
+      "DELETE FROM study_allowance_policies WHERE version<>$1 AND version<>'mock-allowance-test-v1'",
       [V1],
     );
     await client.query(

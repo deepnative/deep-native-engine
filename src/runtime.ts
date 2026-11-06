@@ -185,6 +185,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       studyAllowances: studyAllowanceStore(pool, {
         mode: settings.mode,
         enabled: settings.localTestUnitIssuance,
+        practiceUnits: settings.practiceSessionAllowance,
       }),
       staffEntry: staffEntryStore(pool),
       administratorEntry: administratorEntry(pool),
@@ -261,7 +262,10 @@ export async function start(env: NodeJS.ProcessEnv) {
       memberTestUnits: memberTestUnitsStore(pool),
       attempts: attemptStore(pool),
       practice: practiceStore(pool),
-      practiceSessions: practiceSessionStore(pool),
+      practiceSessions: practiceSessionStore(pool, {
+        allowance: settings.practiceSessionAllowance,
+      }),
+      practiceSessionAllowance: settings.practiceSessionAllowance,
       reviewTimeGrantAdmin: reviewTimeGrantAdminStore(
         pool,
         {
