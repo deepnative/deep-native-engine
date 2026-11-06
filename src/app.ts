@@ -922,6 +922,7 @@ export function app(
     signInLanding,
     options.memberSignOut,
     options.memberPassword,
+    anonymousRefusal,
   );
   if (options.memberPassword)
     mountMemberPasswordRoutes(
@@ -935,6 +936,7 @@ export function app(
           ?.requestAttach(memberToken, address)
           .catch(() => undefined),
       (req) => anonymousRefusal("password_sign_in", req),
+      (req) => anonymousRefusal("password_change", req),
     );
   mountProgramRoutes(
     app,
