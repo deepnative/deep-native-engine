@@ -184,7 +184,13 @@ beforeAll(async () => {
 beforeEach(() =>
   pool.query("TRUNCATE account_role_events, billing_change_events"),
 );
-afterAll(() => pool.end());
+// Integration files share a lane's database: leave only the seeded owner roles.
+afterAll(async () => {
+  await pool.query("DELETE FROM account_roles WHERE NOT email_hash=ANY($1)", [
+    ["shi@deepnative.io", "tom@deepnative.io"].map(hash),
+  ]);
+  await pool.end();
+});
 
 it("CHANGELOG-01 says nothing is recorded when nothing changed", async () => {
   const value = await history();
