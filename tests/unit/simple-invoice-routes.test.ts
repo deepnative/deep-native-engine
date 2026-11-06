@@ -145,6 +145,7 @@ it("OFFPUR-07 exposes an honest unconfigured account entry without issuing anyth
     `${admin}/plans`,
     `${admin}/due`,
     `${admin}/${id}/payment`,
+    `${admin}/${id}/refund`,
     `${admin}/${id}/void`,
     `${admin}/${id}/email`,
   ])
@@ -814,4 +815,30 @@ it("MANPAY-01/03/04 shows payment history, statuses and the refund form only whe
   const plain = await f.get(`${admin}/${id}`);
   expect(plain.text).not.toContain("Payment record");
   expect(plain.text).not.toContain(">Record offline refund</button>");
+});
+it("MANPAY-03 shows the member a receipt-only record with no staff column or refund note", async () => {
+  const f = fixture();
+  f.service.invoice.mockResolvedValueOnce(
+    ready({
+      ...invoice,
+      paidCents: 300,
+      document: { ...doc, paidCents: 300 },
+      payments: [
+        {
+          kind: "receipt",
+          amountCents: 300,
+          on: "2026-10-30",
+          evidence: "Invented reference",
+          verification: "manual_unverified",
+        },
+      ],
+    }),
+  );
+  const page = await f.get(`${base}/invoices/${id}`);
+  expect(page.text).toContain("Invented reference");
+  expect(page.text).toContain("Not verified by a payment provider");
+  expect(page.text).not.toContain("Recorded by");
+  expect(page.text).not.toContain("does not reopen this balance");
+  expect(page.text).not.toContain("Recorded refund");
+  expect(page.text).not.toContain("Record offline refund");
 });
