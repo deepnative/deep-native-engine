@@ -385,6 +385,13 @@ const aiChoices = (jobStatus: string): LocalAiChoice[] => [
     receiptId: "99999999-9999-4999-8999-999999999999",
     grantedAt: new Date("2026-09-24T00:00:00Z"),
     withdrawnAt: null,
+    estimate: {
+      inputTokens: 11,
+      outputTokens: 256,
+      costPoints: 157,
+      modelVersion: "simulated-model-v1",
+      rateVersion: "simulated-rates-v1",
+    },
     jobs: [
       {
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -602,7 +609,7 @@ it("READABLE-13 hosted AI simulation pages keep every limit without local wordin
         "gives no qualified feedback",
         "does not establish production consent",
         "Do not put personal, client or confidential information here.",
-        "No money or token estimate is involved.",
+        "Token and cost figures are estimates or simulated test amounts in points. No money is charged.",
       ])
         expect(html).toContain(limit);
     }

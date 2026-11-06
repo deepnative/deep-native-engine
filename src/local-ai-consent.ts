@@ -6,6 +6,16 @@ import { validateAdapterResult, type AdapterRegistry } from "./adapters.ts";
 import { requestFingerprint } from "./jobs.ts";
 import { syntheticLedgerOnConnection } from "./ledger.ts";
 import { localAiEnabled } from "./local-ai-control.ts";
+import {
+  AI_TEST_MODEL_VERSION,
+  AI_TEST_RATE_VERSION,
+  aiCostPoints,
+  estimateAiRequest,
+  readAiUsage,
+  type AiUsage,
+  type AiUsageAmount,
+  type AiUsageEstimate,
+} from "./ai-budget-policy.ts";
 
 export const LOCAL_AI_PURPOSE = "evidence-summary-local-v1";
 export const LOCAL_AI_STATEMENT_VERSION = "local-simulation-v1";
@@ -21,10 +31,12 @@ export interface LocalAiChoice {
   receiptId: string | null;
   grantedAt: Date | null;
   withdrawnAt: Date | null;
+  estimate: AiUsageEstimate;
   jobs: Array<{
     id: string;
     status: string;
     testUnitState?: "reserved" | "consumed" | "released";
+    budget?: { estimate: AiUsageEstimate; actual?: AiUsageAmount };
   }>;
 }
 export interface LocalAiConsentStore {
@@ -106,6 +118,45 @@ type Job = {
   prompt_template_version: string;
   model_contract_version: string;
 };
+
+type ListedJob = {
+  id: string;
+  status: string;
+  policy?: string;
+  test_unit_state?: string;
+  rate_version?: string | null;
+  model_version?: string | null;
+  estimated_input_tokens?: number | null;
+  estimated_output_tokens?: number | null;
+  estimated_cost_points?: number | null;
+  actual_input_tokens?: number | null;
+  actual_output_tokens?: number | null;
+  actual_cost_points?: number | null;
+};
+function jobBudget(job: ListedJob) {
+  if (!job.rate_version) return {};
+  return {
+    budget: {
+      estimate: {
+        inputTokens: job.estimated_input_tokens!,
+        outputTokens: job.estimated_output_tokens!,
+        costPoints: job.estimated_cost_points!,
+        modelVersion: job.model_version!,
+        rateVersion: job.rate_version,
+      },
+      ...(job.actual_cost_points === null ||
+      job.actual_cost_points === undefined
+        ? {}
+        : {
+            actual: {
+              inputTokens: job.actual_input_tokens!,
+              outputTokens: job.actual_output_tokens!,
+              costPoints: job.actual_cost_points,
+            },
+          }),
+    },
+  };
+}
 
 export function localAiConsentStore(
   pool: Pool,
@@ -360,6 +411,19 @@ export function localAiConsentStore(
       ).rows[0],
     );
   }
+  // Checked before a dispatch claim: no usable estimate means no provider call,
+  // and the never-started hold stays releasable by withdrawing permission.
+  async function currentUsageEstimate(client: PoolClient, job: Job) {
+    if (!job.test_unit_policy) return true;
+    return Boolean(
+      (
+        await client.query(
+          "SELECT 1 FROM ai_usage_estimates WHERE job_id=$1 AND member_id=$2 AND rate_version=$3 AND model_version=$4",
+          [job.id, job.member_id, AI_TEST_RATE_VERSION, AI_TEST_MODEL_VERSION],
+        )
+      ).rows[0],
+    );
+  }
   async function enqueue(
     token: string,
     id: string,
@@ -451,6 +515,19 @@ export function localAiConsentStore(
                 LOCAL_AI_TEST_UNIT_POLICY,
               ],
             );
+            const estimate = estimateAiRequest(authorization.row.byte_size);
+            await client.query(
+              "INSERT INTO ai_usage_estimates(job_id,member_id,rate_version,model_version,input_tokens,output_tokens,cost_points) VALUES($1,$2,$3,$4,$5,$6,$7)",
+              [
+                jobId,
+                authorization.row.owner_principal_id,
+                estimate.rateVersion,
+                estimate.modelVersion,
+                estimate.inputTokens,
+                estimate.outputTokens,
+                estimate.costPoints,
+              ],
+            );
             if (
               !(await active(client, token)) ||
               !(
@@ -502,13 +579,8 @@ export function localAiConsentStore(
           ).rows[0];
           const jobs = permission
             ? (
-                await client.query<{
-                  id: string;
-                  status: string;
-                  policy?: string;
-                  test_unit_state?: string;
-                }>(
-                  "SELECT j.id,j.status,b.policy,r.state AS test_unit_state FROM adapter_jobs j LEFT JOIN local_ai_test_unit_jobs b ON b.job_id=j.id LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id WHERE j.local_ai_receipt_id=$1 AND j.member_id=$2 ORDER BY j.created_at,j.id",
+                await client.query<ListedJob>(
+                  "SELECT j.id,j.status,b.policy,r.state AS test_unit_state,e.rate_version,e.model_version,e.input_tokens AS estimated_input_tokens,e.output_tokens AS estimated_output_tokens,e.cost_points AS estimated_cost_points,s.input_tokens AS actual_input_tokens,s.output_tokens AS actual_output_tokens,s.cost_points AS actual_cost_points FROM adapter_jobs j LEFT JOIN local_ai_test_unit_jobs b ON b.job_id=j.id LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id LEFT JOIN ai_usage_estimates e ON e.job_id=j.id AND e.member_id=j.member_id LEFT JOIN ai_usage_settlements s ON s.job_id=j.id AND s.member_id=j.member_id WHERE j.local_ai_receipt_id=$1 AND j.member_id=$2 ORDER BY j.created_at,j.id",
                   [permission.id, row.owner_principal_id],
                 )
               ).rows
@@ -521,6 +593,7 @@ export function localAiConsentStore(
               permission && !permission.withdrawn_at ? permission.id : null,
             grantedAt: permission?.granted_at ?? null,
             withdrawnAt: permission?.withdrawn_at ?? null,
+            estimate: estimateAiRequest(row.byte_size),
             jobs: jobs.map((job) => ({
               id: job.id,
               status: job.status,
@@ -533,6 +606,7 @@ export function localAiConsentStore(
                       "reserved" | "consumed" | "released",
                   }
                 : {}),
+              ...jobBudget(job),
             })),
           });
         }
@@ -625,7 +699,10 @@ export function localAiConsentStore(
           );
           return { status: "exhausted" };
         }
-        if (!(await currentTestReservation(client, job, "reserved")))
+        if (
+          !(await currentTestReservation(client, job, "reserved")) ||
+          !(await currentUsageEstimate(client, job))
+        )
           return null;
         const attempt = randomUUID();
         await client.query(
@@ -673,6 +750,7 @@ export function localAiConsentStore(
           return { kind: "denied" };
         }
         let result;
+        let usage: AiUsage | null;
         try {
           const adapter = registry.adapter("ai", registry.mode);
           if (adapter.kind !== "ai" || adapter.mode !== registry.mode) {
@@ -682,11 +760,9 @@ export function localAiConsentStore(
             );
             return { kind: "denied" };
           }
-          result = validateAdapterResult(
-            await adapter.execute(LOCAL_AI_PURPOSE, { text }),
-            "ai",
-            registry.mode,
-          );
+          const output = await adapter.execute(LOCAL_AI_PURPOSE, { text });
+          result = validateAdapterResult(output, "ai", registry.mode);
+          usage = readAiUsage(output);
         } catch {
           await client.query(
             "UPDATE adapter_jobs SET status='needs_reconciliation',attempt_token=NULL,lease_until=NULL,safe_error='provider_outcome_unknown' WHERE id=$1",
@@ -706,7 +782,10 @@ export function localAiConsentStore(
               [id, claim.attempt],
             )
           ).rows[0];
+          // Missing or malformed usage leaves the outcome unknown: the unit stays
+          // held, with no refund and no second call.
           if (
+            !usage ||
             !current ||
             !(await active(client, token)) ||
             !(await currentTestReservation(client, authorized.job, "reserved"))
@@ -725,6 +804,18 @@ export function localAiConsentStore(
             authorized.permission.member_id,
             authorized.job.test_unit_reservation!,
             `local-ai-budget:${id}:consume`,
+          );
+          // Same transaction as consumption, so a failure rolls both back. The
+          // member still pays one unit when actual cost exceeds the estimate.
+          await client.query(
+            "INSERT INTO ai_usage_settlements(job_id,member_id,input_tokens,output_tokens,cost_points) VALUES($1,$2,$3,$4,$5)",
+            [
+              id,
+              authorized.permission.member_id,
+              usage.inputTokens,
+              usage.outputTokens,
+              aiCostPoints(usage),
+            ],
           );
           // Ledger key/grant waits can outlive the last authorization read.
           // Roll back result and consumption together; the durable claim stays
