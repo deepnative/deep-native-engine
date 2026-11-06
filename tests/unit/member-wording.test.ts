@@ -1,13 +1,50 @@
-import express from "express";
+import express, { type Express } from "express";
 import request from "supertest";
 import { expect, it, vi } from "vitest";
+import { withLoopback } from "../support/loopback-server.ts";
 import { adapterReadiness } from "../../src/adapters.ts";
+import { app } from "../../src/app.ts";
+import { disabledCatalogStore } from "../../src/catalog.ts";
+import type { Store } from "../../src/store.ts";
 import { registerCircleDiscussion } from "../../src/circle-discussion-routes.ts";
 import {
   disabledCircleDiscussionStore,
   type CircleDiscussionStore,
 } from "../../src/circle-discussion.ts";
-import { attendanceHistoryPage } from "../../src/event-attendance-views.ts";
+import { mountCircleGrantRoutes } from "../../src/circle-grant-routes.ts";
+import {
+  circleGrantHistoryPage,
+  circleGrantNoticePage,
+  circleGrantReferencePage,
+} from "../../src/circle-grant-views.ts";
+import { mountEventAttendanceRoutes } from "../../src/event-attendance-routes.ts";
+import {
+  attendanceHistoryPage,
+  attendanceMemberPage,
+  attendanceObservationConfirm,
+  attendanceSavedPage,
+  attendanceStaffHome,
+} from "../../src/event-attendance-views.ts";
+import { mountEventCancellationRoutes } from "../../src/event-cancellation-routes.ts";
+import {
+  eventCancellationConfirm,
+  eventCancellationHome,
+} from "../../src/event-cancellation-views.ts";
+import { mountEventRehearsalRoutes } from "../../src/event-rehearsal-routes.ts";
+import {
+  eventRehearsalHome,
+  eventRehearsalNotice,
+} from "../../src/event-rehearsal-views.ts";
+import {
+  localAiHoldDetailPage,
+  localAiHoldListPage,
+  localAiHoldUnavailablePage,
+} from "../../src/local-ai-hold-inspection-views.ts";
+import { reviewerSampleReference } from "../../src/sample-assignment-views.ts";
+import { mountStudyUnitFixtureRoutes } from "../../src/study-unit-fixture-routes.ts";
+import { STUDY_STAFF_PATH } from "../../src/study-unit-fixture-views.ts";
+import { mountSupportAssignmentRoutes } from "../../src/support-assignment-routes.ts";
+import { assignmentReferencePage } from "../../src/support-assignment-views.ts";
 import {
   eventEnrollmentHistoryPage,
   eventEnrollmentPage,
@@ -29,6 +66,7 @@ import { COACHING_OFFERS, FOUNDATION_ACCESS } from "../../src/offers.ts";
 import {
   myCoursesPage,
   programAccountPage,
+  programAdminPage,
   programConfirmPage,
   programOverviewPage,
   programProblemPage,
@@ -63,8 +101,11 @@ import {
   contentPreview,
   libraryPage,
   localAiConsentPage,
+  localAiControlPage,
+  manualObservationPage,
   offerHypothesesPage,
   readinessPage,
+  staffLibraryPage,
   withPrerequisiteTitles,
   trackReadinessPage,
   welcome,
@@ -384,6 +425,13 @@ const aiChoices = (jobStatus: string): LocalAiChoice[] => [
     receiptId: "99999999-9999-4999-8999-999999999999",
     grantedAt: new Date("2026-09-24T00:00:00Z"),
     withdrawnAt: null,
+    estimate: {
+      inputTokens: 11,
+      outputTokens: 256,
+      costPoints: 157,
+      modelVersion: "simulated-model-v1",
+      rateVersion: "simulated-rates-v1",
+    },
     jobs: [
       {
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -554,8 +602,8 @@ it("READABLE-11 hosted circle discussion keeps invented examples only", async ()
     ]),
   ) as unknown as CircleDiscussionStore;
   registerCircleDiscussion(application, store);
-  const { text } = await request(application).get(
-    "/circles/everyday-ai/discussion/choice",
+  const { text } = await withLoopback(application, (listener) =>
+    request(listener).get("/circles/everyday-ai/discussion/choice"),
   );
   expect(visibleText(text)).not.toMatch(LOCAL_ON_HOSTED);
   expect(text).toContain('<a href="/circles">Learning circles</a>');
@@ -601,7 +649,7 @@ it("READABLE-13 hosted AI simulation pages keep every limit without local wordin
         "gives no qualified feedback",
         "does not establish production consent",
         "Do not put personal, client or confidential information here.",
-        "No money or token estimate is involved.",
+        "Token and cost figures are estimates or simulated test amounts in points. No money is charged.",
       ])
         expect(html).toContain(limit);
     }
@@ -766,7 +814,9 @@ it("READABLE-17 hosted test-unit download has a plain file name and keeps its ma
       { snapshot: vi.fn().mockResolvedValue({ kind: "ready", value: units }) },
       "demo",
     );
-    return request(application).get("/member/test-units/download");
+    return withLoopback(application, (listener) =>
+      request(listener).get("/member/test-units/download"),
+    );
   };
   const online = await download(true);
   expect(online.headers["content-disposition"]).toBe(
@@ -802,4 +852,325 @@ it("READABLE-18 hosted study-unit staff titles drop local wording and local keep
   expect(staffPage()).toContain("<h1>Local study-unit issuance</h1>");
   expect(confirm()).toContain("Confirm three local study units");
   expect(receipt()).toContain(">Local issuance work</a>");
+});
+
+// #725: staff tools follow READABLE-18. Limits and machine values stay as they are.
+const LOCAL_WORD = /\blocal\b/i;
+const staffReference = {
+  staffId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  reviewerId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  role: "moderator",
+  expiresAt: new Date("2026-09-24T00:30:00Z"),
+} as never;
+const inventory = {
+  ...(program as object),
+  state: "closed",
+  availability: "unavailable",
+} as unknown as ProgramOverview;
+const hold = {
+  jobId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  status: "running",
+  unitState: "reserved",
+  createdAt: new Date("2026-09-24T00:00:00Z"),
+  updatedAt: new Date("2026-09-24T00:00:00Z"),
+  leaseUntil: null,
+  policy: "invented-policy",
+  promptTemplateVersion: "invented-prompt",
+  modelContractVersion: "invented-model",
+  state: "needs-reconciliation",
+} as never;
+const cancellationAttempt = {
+  eventId: "invented",
+  eventVersion: 1,
+  title: "Invented event",
+  startsAt: "2026-09-24T00:00:00.000Z",
+  endsAt: "2026-09-24T01:00:00.000Z",
+  key: "key",
+} as never;
+const staffPages = {
+  aiControl: () => localAiControlPage(false, "csrf"),
+  aiControlPaused: () => localAiControlPage(true, "csrf"),
+  manualObservations: () => manualObservationPage([], "csrf", "key"),
+  staffLibrary: () => staffLibraryPage([], "csrf"),
+  programs: () => programAdminPage({ ...program, state: "not_open" }, "csrf"),
+  closedProgram: () => programAdminPage(inventory, "csrf"),
+  holds: () => localAiHoldListPage([hold], null),
+  hold: () => localAiHoldDetailPage(hold),
+  holdsLive: () => localAiHoldUnavailablePage("live"),
+  circleReference: () => circleGrantReferencePage(staffReference),
+  circleNotice: () => circleGrantNoticePage("csrf", "Invented message"),
+  circleHistory: () =>
+    circleGrantHistoryPage("csrf", {
+      staffId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      circleId: "invented-circle",
+      observedAt: new Date("2026-09-24T00:00:00Z"),
+      items: [],
+      nextCursor: null,
+    } as never),
+  supportReference: () => assignmentReferencePage(staffReference),
+  reviewerReference: () => reviewerSampleReference(staffReference),
+  cancellation: () => eventCancellationHome("csrf", true),
+  cancellationConfirm: () =>
+    eventCancellationConfirm(
+      "csrf",
+      { creationEnabled: true, receipt: null } as never,
+      cancellationAttempt,
+    ),
+  rehearsal: () => eventRehearsalHome("csrf", true),
+  rehearsalNotice: () => eventRehearsalNotice("csrf", "Invented message"),
+  attendance: () => attendanceStaffHome("csrf", "reference", true),
+};
+
+it("READABLE-19 hosted staff pages drop local wording and the local preview keeps it", () => {
+  for (const [name, render] of Object.entries(staffPages))
+    expect(visibleText(hosted(render)), name).not.toMatch(LOCAL_WORD);
+  for (const [render, heading] of [
+    [staffPages.aiControl, "AI simulation control"],
+    [staffPages.programs, "Program inventory"],
+    [staffPages.holds, "Assigned test request holds"],
+    [staffPages.hold, "Assigned test request snapshot"],
+    [staffPages.holdsLive, "Test request inspection unavailable"],
+    [staffPages.supportReference, "My assignment ID"],
+  ] as const) {
+    expect(hosted(render)).toContain(`<h1>${heading}</h1>`);
+    expect(hosted(render)).toContain(`<title>${heading}`);
+  }
+  for (const [render, heading] of [
+    [staffPages.aiControl, "Local AI simulation control"],
+    [staffPages.programs, "Local program inventory"],
+    [staffPages.holds, "Assigned local request holds"],
+    [staffPages.holdsLive, "Local request inspection unavailable"],
+    [staffPages.supportReference, "My local assignment ID"],
+  ] as const)
+    expect(render()).toContain(`<h1>${heading}</h1>`);
+  expect(staffPages.aiControl()).toContain("LOCAL SIMULATION ONLY");
+  expect(staffPages.staffLibrary()).toContain("LOCAL STAFF PREVIEW");
+  expect(staffPages.circleReference()).toContain("trusted local administrator");
+  expect(staffPages.reviewerReference()).toContain(
+    "trusted local administrator",
+  );
+  expect(staffPages.cancellation()).toContain("PRIVATE LOCAL EVENT REHEARSAL");
+  expect(staffPages.rehearsal()).toContain("local learning rehearsal");
+  expect(staffPages.manualObservations()).toContain("Existing local member ID");
+});
+
+it("READABLE-19 hosted staff pages keep every statement about simulation, invented data and payment", () => {
+  const control = hosted(staffPages.aiControl);
+  expect(control).toContain("SIMULATION ONLY");
+  expect(control).toContain("simulated demo and test requests");
+  expect(control).toContain(
+    "It grants no permission, credits, provider access or paid service.",
+  );
+  const holds = hosted(staffPages.holds);
+  expect(holds).toContain("INVENTED TESTS");
+  expect(holds).toContain(
+    "not evidence of external provider execution, staffed coverage or an approved resolution. Nothing here charges, refunds, releases a unit or retries a request.",
+  );
+  const observations = hosted(staffPages.manualObservations);
+  expect(observations).toContain("NO LIVE PAYMENT");
+  expect(observations).toContain(
+    "These invented records are not provider verification, a paid invoice, a charge, service delivery or a grant of access.",
+  );
+  expect(hosted(staffPages.programs)).toContain(
+    "This operation does not publish content or provision teaching staff.",
+  );
+  expect(hosted(staffPages.rehearsal)).toContain(
+    "This is not a real clinic, expert service, recording, attendance record or paid booking.",
+  );
+  expect(hosted(staffPages.cancellation)).toContain(
+    "This does not cancel a real appointment, notify attendees, issue refunds or record attendance.",
+  );
+  expect(hosted(staffPages.circleHistory)).toContain(
+    "Use invented information only.",
+  );
+});
+
+it("READABLE-20 the attendance notice and attribution read plainly when hosted, and stored values stay", () => {
+  const observation = {
+    id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    recordedAt: new Date("2026-09-24T00:00:00Z"),
+    attribution: "Local platform administrator",
+  } as const;
+  const receipt = {
+    kind: "observe",
+    observation: { ...observation, registrationId: registration.id },
+  } as never;
+  const member = () =>
+    attendanceMemberPage(
+      "csrf",
+      {
+        registrationId: registration.id,
+        title: practiceEvent.title,
+        eventVersion: practiceEvent.version,
+        eventStartsAt: registration.startsAt,
+        eventEndsAt: registration.endsAt,
+        registrationWithdrawnAt: null,
+        cancelledAt: null,
+        observation,
+        permission: null,
+        creationEnabled: false,
+      } as never,
+      new Date("2026-09-24"),
+      "key",
+    );
+  const saved = () => attendanceSavedPage(receipt, "key");
+  const history = () =>
+    attendanceHistoryPage(
+      { items: [], nextCursor: null },
+      new Date("2026-09-24"),
+    );
+  for (const [name, render] of Object.entries({ member, saved, history })) {
+    const html = hosted(render);
+    expect(visibleText(html), name).not.toMatch(LOCAL_WORD);
+    expect(html, name).toContain("PRIVATE PRACTICE EVENT · INVENTED DATA ONLY");
+    expect(html, name).toContain(
+      "This is not a qualified assessment, course completion, credential or proof of real clinic service.",
+    );
+    expect(render(), name).toContain("PRIVATE LOCAL REHEARSAL");
+  }
+  expect(hosted(member)).toContain("· Platform administrator.");
+  expect(hosted(saved)).toContain("by Platform administrator.");
+  expect(member()).toContain("· Local platform administrator.");
+  expect(saved()).toContain("by Local platform administrator.");
+  const checked = {
+    eventId: "invented",
+    eventVersion: 1,
+    permissionId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    registrationId: registration.id,
+    startsAt: new Date("2026-09-24"),
+    expiresAt: new Date("2026-09-25"),
+  } as never;
+  const confirm = () => attendanceObservationConfirm("csrf", checked, "key");
+  expect(hosted(confirm)).toContain(
+    "this exact invented practice event. This is not a qualified assessment.",
+  );
+  expect(confirm()).toContain("this exact invented local rehearsal.");
+});
+
+it("READABLE-21 hosted staff notices name the tool plainly and the local preview keeps its words", async () => {
+  const off = { mode: "test", localStaffEntry: false } as const;
+  const cases: [string, (application: Express) => void, string, string][] = [
+    [
+      "/operator/circle-grants",
+      (a) => mountCircleGrantRoutes(a, undefined, off as never),
+      "Circle grant administration is unavailable on this site.",
+      "Local circle grant administration is unavailable in this configuration.",
+    ],
+    [
+      "/operator/event-attendance",
+      (a) => mountEventAttendanceRoutes(a, undefined, off),
+      "Attendance is unavailable on this site.",
+      "Local rehearsal attendance is unavailable in this configuration.",
+    ],
+    [
+      "/events/attendance",
+      (a) => mountEventAttendanceRoutes(a, undefined, off),
+      "Attendance is unavailable on this site.",
+      "Local rehearsal attendance is unavailable in this configuration.",
+    ],
+    [
+      "/operator/event-cancellations",
+      (a) => mountEventCancellationRoutes(a, undefined, off),
+      "Event cancellation is unavailable on this site.",
+      "Local event cancellation is unavailable in this configuration.",
+    ],
+    [
+      "/operator/event-rehearsals",
+      (a) => mountEventRehearsalRoutes(a, undefined, off),
+      "Rehearsal scheduling is unavailable on this site.",
+      "Local rehearsal scheduling is unavailable in this configuration.",
+    ],
+    [
+      "/operator/support-assignment",
+      (a) => mountSupportAssignmentRoutes(a, undefined, off as never),
+      "Support assignment administration is unavailable on this site.",
+      "Local support assignment administration is unavailable in this configuration.",
+    ],
+    [
+      STUDY_STAFF_PATH,
+      (a) => mountStudyUnitFixtureRoutes(a, undefined, off),
+      "Test-unit issuance is unavailable on this site.",
+      "Local test-unit issuance is unavailable in this configuration.",
+    ],
+  ];
+  const read = (
+    path: string,
+    mount: (application: Express) => void,
+    isHosted: boolean,
+  ) => {
+    const application = express();
+    application.use((_req, res, next) => {
+      res.locals.csrf = "invented-csrf";
+      withHosting(isHosted, next);
+    });
+    mount(application);
+    return withLoopback(application, (listener) => request(listener).get(path));
+  };
+  for (const [path, mount, plain, original] of cases) {
+    const online = await read(path, mount, true);
+    expect(online.status, path).toBe(404);
+    expect(online.text, path).toContain(plain);
+    expect(visibleText(online.text), path).not.toMatch(LOCAL_WORD);
+    expect((await read(path, mount, false)).text, path).toContain(original);
+  }
+});
+
+it("READABLE-22 hosted staff sign-in and tools drop local wording, and the local preview keeps it", async () => {
+  const read = async (hosted: boolean, role = "operator") => {
+    const origin = hosted ? "https://engine.example" : "http://127.0.0.1:3000";
+    const admit = vi.fn().mockResolvedValue({
+      kind: "ready",
+      role,
+      deadline: performance.now() + 60000,
+      expiresAt: new Date(Date.now() + 60000),
+    });
+    const application = app(
+      {
+        create: vi.fn(),
+        session: vi.fn().mockResolvedValue({ kind: "missing" }),
+      } as unknown as Store,
+      {
+        origin,
+        ...(hosted ? { hostedOrigin: origin } : {}),
+        secret: "invented-staff-test",
+        localStaffEntry: true,
+        staffEntry: { admit },
+        catalog: disabledCatalogStore(),
+        localAiControl: {
+          current: vi.fn().mockResolvedValue("enabled"),
+          read: vi.fn().mockResolvedValue({ paused: false }),
+          set: vi.fn(),
+        },
+      },
+    );
+    const requestHost = new URL(origin).host;
+    return withLoopback(application, async (listener) => ({
+      signIn: await request(listener)
+        .get("/staff/sign-in")
+        .set("Host", requestHost),
+      tools: await request(listener)
+        .get("/staff")
+        .set("Host", requestHost)
+        .set("Cookie", `dne_staff=${"b".repeat(64)}`),
+    }));
+  };
+  const online = await read(true);
+  expect(online.signIn.text).toContain("<h1>Sign in to staff tools</h1>");
+  expect(online.signIn.text).toContain("Trusted staff credential");
+  expect(visibleText(online.signIn.text)).not.toMatch(/\blocal\b/i);
+  expect(online.tools.text).toContain("<h1>Your staff tools</h1>");
+  expect(online.tools.text).toContain("Current role: Operator.");
+  expect(visibleText(online.tools.text)).not.toMatch(/\blocal\b/i);
+  expect(online.tools.text).not.toContain("hosted service");
+  expect((await read(true, "moderator")).tools.text).toContain(
+    "Current role: Moderator.",
+  );
+  const platform = await read(true, "platform_admin");
+  expect(platform.tools.text).toContain(">AI simulation control</a>");
+  expect(visibleText(platform.tools.text)).not.toMatch(/\blocal\b/i);
+  const local = await read(false);
+  expect(local.signIn.text).toContain("<h1>Sign in to local staff tools</h1>");
+  expect(local.signIn.text).toContain("Trusted local staff credential");
+  expect(local.tools.text).toContain("<h1>Your local staff tools</h1>");
+  expect(local.tools.text).toContain("Current role: Local operator.");
 });

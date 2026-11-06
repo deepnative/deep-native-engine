@@ -26,7 +26,7 @@ async function reset() {
      ON CONFLICT DO NOTHING`,
     [SEEDED],
   );
-  // As migration 100 leaves them: a hint, and no known grant date.
+  // As migration 101 leaves them: a hint, and no known grant date.
   await pool.query(
     `UPDATE account_roles r SET granted_at=NULL,email_hint=s.hint
        FROM (VALUES ($1,'sh…@deepnative.io'),($2,'to…@deepnative.io')) s(h,hint)
@@ -97,7 +97,7 @@ it("ROLEADMIN-01/02/05 lists role holders and grants roles to a typed email", as
       emailHash: hash("shi@deepnative.io"),
       roles: ["coach", "admin"],
       people: [],
-      // ROLE-LABEL-01: the seeded owners carry a hint from migration 100.
+      // ROLE-LABEL-01: the seeded owners carry a hint from migration 101.
       hint: "sh…@deepnative.io",
       grantedAt: null,
       self: false,

@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { withLoopback } from "../support/loopback-server.ts";
 import { mountAdministratorEntry } from "../../src/administrator-entry-routes.ts";
 import { withHosting } from "../../src/hosting-presentation.ts";
 import { accountPage, dashboard, lesson } from "../../src/views.ts";
@@ -90,7 +91,11 @@ describe("#699 wording that ignores accounts", () => {
         secret: "s",
         localStaffEntry: false,
       });
-      return (await request(site).get("/operator")).text;
+      return (
+        await withLoopback(site, (listener) =>
+          request(listener).get("/operator"),
+        )
+      ).text;
     };
     const hosted = await denied(true);
     expect(hosted).toContain("open the verification link we emailed you");

@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import {
+  AI_SIMULATED_OUTPUT_TOKENS,
+  aiInputTokens,
+  type AiUsage,
+} from "./ai-budget-policy.ts";
 
 export const ADAPTER_KINDS = [
   "ai",
@@ -27,6 +32,8 @@ export interface AdapterResult {
   state: "simulated";
   reference: string;
   message: string;
+  // Untrusted AI usage. Only readAiUsage may read it; validation discards it.
+  usage?: AiUsage;
 }
 
 // The runtime boundary accepts only data fields from the internal demo/test
@@ -189,6 +196,18 @@ export function adapterReadiness(
   });
 }
 
+function simulatedAiUsage(kind: AdapterKind, input: unknown) {
+  if (kind !== "ai" || typeof input !== "object" || input === null) return {};
+  const text = (input as { text?: unknown }).text;
+  if (typeof text !== "string") return {};
+  return {
+    usage: {
+      inputTokens: aiInputTokens(Buffer.byteLength(text)),
+      outputTokens: AI_SIMULATED_OUTPUT_TOKENS,
+    },
+  };
+}
+
 export function deterministicAdapter(
   kind: AdapterKind,
   mode: "demo" | "test",
@@ -212,6 +231,7 @@ export function deterministicAdapter(
         state: "simulated",
         reference: `${mode}_${reference}`,
         message: `Simulated ${kind} ${normalized}; no external side effect occurred.`,
+        ...simulatedAiUsage(kind, input),
       };
     },
   };

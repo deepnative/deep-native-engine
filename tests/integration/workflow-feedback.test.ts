@@ -57,16 +57,18 @@ it("withholds retained private feedback over HTTP when workspace deletion is pen
     "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE owner_principal_id=$1",
     [owner.id],
   );
-  const response = await request(
+  const response = await withLoopback(
     app(db, {
       origin: "http://localhost",
       secret: "test-secret",
       workflowFeedback: feedback,
     }),
-  )
-    .get("/workflow-feedback/WF-001")
-    .set("Host", "localhost")
-    .set("Cookie", `dne_preview=${owner.token}`);
+    (server) =>
+      request(server)
+        .get("/workflow-feedback/WF-001")
+        .set("Host", "localhost")
+        .set("Cookie", `dne_preview=${owner.token}`),
+  );
   expect({
     status: response.status,
     disclosed: response.text.includes("Invented retained private note"),
@@ -149,7 +151,7 @@ it("rejects unknown versions and staff, revocation and expiry while retaining on
   expect(own).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v34",
+      version: "local-member-records-v35",
       records: {
         workflowFeedback: [
           { workflowId: "WF-001", workflowVersion: 2, note: "Invented" },
