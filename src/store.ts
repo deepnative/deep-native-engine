@@ -251,6 +251,7 @@ export async function migrate(pool: Pool) {
       "101-anonymous-write-windows.sql",
       "102-staff-change-log.sql",
       "103-role-email-hints.sql",
+      "104-hold-started-local-ai-requests.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
