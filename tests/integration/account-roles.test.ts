@@ -130,6 +130,14 @@ it("ROLES-03/04 a coach reads each person's saved hours for a month; a student i
   ]);
   const unassigned = await coach.summary(owner.token);
   expect(unassigned.kind === "ready" && unassigned.value.rows).toEqual([]);
+  // #696 ROLE-LABEL-03: the summary knows nobody else is assigned to this coach.
+  const own = await pool.query<{ count: number }>(
+    "SELECT count(*)::integer AS count FROM coach_assignments WHERE coach_email_hash=$1",
+    [hash("tom@deepnative.io")],
+  );
+  expect(unassigned.kind === "ready" && unassigned.value.assigned).toBe(
+    own.rows[0]!.count,
+  );
   await pool.query(
     "INSERT INTO coach_assignments(learner_id,coach_email_hash,assigned_by) VALUES($1,$2,$1)",
     [learner.id, hash("tom@deepnative.io")],
@@ -140,6 +148,7 @@ it("ROLES-03/04 a coach reads each person's saved hours for a month; a student i
     value: {
       month: today,
       today,
+      assigned: own.rows[0]!.count + 1,
       rows: [{ name: "Invented Ada", minutes: 90, status: "Submitted" }],
     },
   });
@@ -150,6 +159,11 @@ it("ROLES-03/04 a coach reads each person's saved hours for a month; a student i
   const earlier = await coach.summary(owner.token, "2020-01");
   expect(earlier).toEqual({
     kind: "ready",
-    value: { month: "2020-01", today, rows: [] },
+    value: {
+      month: "2020-01",
+      today,
+      assigned: own.rows[0]!.count + 1,
+      rows: [],
+    },
   });
 });

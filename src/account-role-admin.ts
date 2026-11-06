@@ -24,9 +24,20 @@ export type RoleHolder = {
   roles: GrantedRole[];
   /** Accounts verified with this email; empty until the person signs up. */
   people: { id: string; name: string | null }[];
+  /** A masked address such as `co…@example.test`, saved at grant time (#696). */
+  hint: string | null;
+  /** The UTC date (YYYY-MM-DD) the earliest role was granted, when known. */
+  grantedAt: string | null;
   /** True when the email belongs to the acting administrator. */
   self: boolean;
 };
+
+/** #696 ROLE-LABEL-01: the first letters and the domain, never the full address. */
+export function maskedEmail(email: string) {
+  const at = email.lastIndexOf("@");
+  const local = email.slice(0, at);
+  return `${local.slice(0, local.length > 2 ? 2 : 1)}…${email.slice(at)}`;
+}
 export type CoachChoice = { emailHash: string; label: string };
 type Refusal<K extends string> = { kind: K };
 type Failure = Refusal<"denied" | "unavailable">;
@@ -73,10 +84,12 @@ class Refused extends Error {
     this.kind = kind;
   }
 }
-const label = (names: (string | null)[]) =>
+const label = (names: (string | null)[], hint: string | null) =>
   names.length
     ? names.map((name) => name ?? "Name needed").join(", ")
-    : "Email not linked to an account yet";
+    : hint
+      ? `${hint} (not signed up yet)`
+      : "Email not linked to an account yet";
 
 /**
  * #684 ROLEADMIN / COACHLINK: administrators manage coach and admin roles
@@ -133,6 +146,8 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
   // Names of the live accounts verified with each email hash.
   const holders = `SELECT r.email_hash AS "emailHash",
         array_agg(DISTINCT r.role) AS roles,
+        max(r.email_hint) AS hint,
+        to_char(min(r.granted_at) AT TIME ZONE 'UTC','YYYY-MM-DD') AS "grantedAt",
         COALESCE(json_agg(DISTINCT jsonb_build_object('id',l.id,'name',l.display_name))
           FILTER (WHERE l.id IS NOT NULL),'[]') AS people
      FROM account_roles r
@@ -150,6 +165,8 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
             emailHash: string;
             roles: GrantedRole[];
             people: { id: string; name: string | null }[];
+            hint: string | null;
+            grantedAt: string | null;
           }>(
             `${holders} GROUP BY r.email_hash
            ORDER BY min(l.display_name) NULLS LAST, r.email_hash LIMIT 500`,
@@ -161,6 +178,8 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
                 emailHash: h.emailHash,
                 roles: GRANTED_ROLES.filter((r) => h.roles.includes(r)),
                 people: h.people,
+                hint: h.hint,
+                grantedAt: h.grantedAt,
                 self: actor.own.includes(h.emailHash),
               })),
             },
@@ -177,7 +196,8 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
         new Set(input.roles).size !== input.roles.length
       )
         return { kind: "invalid" };
-      const target = emailHash(email);
+      const target = emailHash(email),
+        hint = maskedEmail(email);
       return run<{ kind: "ready" }, "invalid" | "not-found" | "self">(
         staffToken,
         async (tx, actor) => {
@@ -187,8 +207,8 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
             if (
               (
                 await tx.query(
-                  "INSERT INTO account_roles(email_hash,role) VALUES($1,$2) ON CONFLICT DO NOTHING",
-                  [target, role],
+                  "INSERT INTO account_roles(email_hash,role,email_hint) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
+                  [target, role, hint],
                 )
               ).rowCount
             )
@@ -196,6 +216,11 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
                 emailHash: target,
                 role,
               });
+          // ROLE-LABEL-01: roles granted before hints existed gain one.
+          await tx.query(
+            "UPDATE account_roles SET email_hint=$2 WHERE email_hash=$1 AND email_hint IS NULL",
+            [target, hint],
+          );
           return { kind: "ready" as const };
         },
       );
@@ -255,6 +280,7 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
           const coaches = await tx.query<{
             emailHash: string;
             people: { name: string | null }[];
+            hint?: string | null;
           }>(`${holders} WHERE r.role='coach' GROUP BY r.email_hash`);
           return {
             kind: "ready" as const,
@@ -263,7 +289,10 @@ export function accountRoleAdmin(pool: Pool): AccountRoleAdmin {
               coaches: coaches.rows
                 .map((c) => ({
                   emailHash: c.emailHash,
-                  label: label(c.people.map((p) => p.name)),
+                  label: label(
+                    c.people.map((p) => p.name),
+                    c.hint ?? null,
+                  ),
                 }))
                 .sort(
                   (a, b) =>
