@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { testPool } from "../support/database.ts";
 import { migrate, store } from "../../src/store.ts";
@@ -459,4 +460,28 @@ it("STAFFHOLD-09 erasing an account with an undeleted held source removes everyt
   expect(await row(f.jobId)).toBeUndefined();
   expect(await count("local_ai_hold_inspection_grants")).toBe(0);
   expect(await count("local_ai_hold_inspection_events")).toBe(0);
+});
+it("STAFFHOLD-10 the handling process names who can act, what is kept and that erasure cannot be confirmed", () => {
+  const doc = readFileSync(
+    new URL(
+      "../../assets/docs/LOCAL-AI-HELD-REQUEST-HANDLING.md",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  for (const section of [
+    "## We cannot confirm erasure",
+    "## Who can do what",
+    "## Process for a held request",
+    "## What is kept and what is removed",
+    "### Why deleting a source keeps a hold",
+    "## Known limits",
+    "## Rollback",
+  ])
+    expect(doc).toContain(section);
+  expect(doc).toContain(
+    "Nothing in this system can confirm that a provider erased",
+  );
+  expect(doc).toContain("**No AI provider is connected.**");
+  expect(doc).not.toMatch(/\b(?:has|have|was|were|is|are) (?:been )?erased\b/i);
 });
