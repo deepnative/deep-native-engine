@@ -132,8 +132,8 @@ async function coachingInvoice(ownerToken: string, ownerId: string) {
 
 beforeAll(async () => {
   await migrate(pool);
-  // The foundation import must start fresh whichever lane file ran before.
-  await pool.query("TRUNCATE principals,cohorts,content_versions CASCADE");
+  // A lane shares one database; an earlier file may already have imported it.
+  await pool.query("TRUNCATE content_versions CASCADE");
   await seedDraftPack(pool);
   const token = randomBytes(32).toString("hex");
   const editor = randomBytes(32).toString("hex"),

@@ -41,7 +41,13 @@ const origin = "http://127.0.0.1:3000",
   token = "a".repeat(64),
   credential = "b".repeat(64);
 const joined = new Date("2026-11-02T12:00:00Z");
-const listing = { total: 1, page: 1, pageSize: 25, search: "" };
+const listing = {
+  total: 1,
+  page: 1,
+  pageSize: 25,
+  search: "",
+  months: { current: "2026-11", previous: "2026-10" },
+};
 function fixture(
   options: {
     disabled?: boolean;
@@ -430,7 +436,7 @@ it("ADMINTABLE-01/02/03/04 renders a paged table that keeps the search and selec
   const ready = (page: number, total: number, search = "") => {
     f.state.directory = {
       kind: "ready",
-      value: { members, courses: [], total, page, pageSize: 25, search },
+      value: { ...listing, members, courses: [], total, page, search },
     };
   };
   ready(1, 60);
@@ -498,12 +504,11 @@ it("ADMINTABLE-01/02/03/04 renders a paged table that keeps the search and selec
   f.state.directory = {
     kind: "ready",
     value: {
+      ...listing,
       members,
       courses: [],
       total: 60,
       page: 2,
-      pageSize: 25,
-      search: "",
       selected: {
         member: members[0]!,
         enrollments: [],
@@ -525,11 +530,10 @@ it("ADMINTABLE-01/02/03/04 renders a paged table that keeps the search and selec
   f.state.directory = {
     kind: "ready",
     value: {
+      ...listing,
       members: [],
       courses: [],
       total: 0,
-      page: 1,
-      pageSize: 25,
       search: "nobody",
     },
   };
@@ -686,7 +690,7 @@ it("ADMIN-LAYOUT-02 separates console areas into cards with button actions and w
   expect(plain.match(/<section class="portal-card"/g)).toHaveLength(3);
 });
 
-it("CONSOLECOACH-01/02 shows each learner's latest coaching month and jumps to the selection", async () => {
+it("CONSOLEMONTHS-01..03/CONSOLECOACH-02 shows this month, last month and earlier coaching, and jumps to the selection", async () => {
   const f = fixture();
   const base = {
     background: "professional",
@@ -706,7 +710,14 @@ it("CONSOLECOACH-01/02 shows each learner's latest coaching month and jumps to t
   const id = (n: number) =>
     `${String(n).padStart(8, "0")}-1111-4111-8111-111111111111`;
   const members = [
-    { id: id(1), displayName: "Draft", ...base, coaching: coaching("draft") },
+    {
+      id: id(1),
+      displayName: "Draft",
+      ...base,
+      coaching: coaching("draft"),
+      thisMonth: coaching("draft", { month: "2026-11", minutes: 720 }),
+      lastMonth: coaching("submitted", { month: "2026-10", minutes: 90 }),
+    },
     {
       id: id(2),
       displayName: "Review",
@@ -750,6 +761,7 @@ it("CONSOLECOACH-01/02 shows each learner's latest coaching month and jumps to t
         kind: "ready" as const,
         value: {
           members,
+          months: { current: "2026-11", previous: "2026-10" },
           courses: [],
           total: 7,
           page: 1,
@@ -772,7 +784,15 @@ it("CONSOLECOACH-01/02 shows each learner's latest coaching month and jumps to t
     .get("/operator")
     .set("Cookie", `dne_staff=${credential}`);
   expect(res.status).toBe(200);
-  expect(res.text).toContain('<th scope="col">Latest coaching</th>');
+  // CONSOLEMONTHS-01: each month column names its month and links to it.
+  expect(res.text).toContain(
+    '<th scope="col">This month<span>November 2026</span></th><th scope="col">Last month<span>October 2026</span></th><th scope="col">Earlier coaching</th>',
+  );
+  expect(res.text).not.toContain("Latest coaching");
+  expect(res.text).toContain(
+    `<td class="member-coaching"><a href="/operator/coaching/${id(1)}?month=2026-11">12h</a><span>Draft</span></td><td class="member-coaching"><a href="/operator/coaching/${id(1)}?month=2026-10">1h 30m</a><span>Awaiting review</span></td>`,
+  );
+  // CONSOLEMONTHS-03: an earlier month keeps its name beside the hours.
   expect(res.text).toContain(
     `<a href="/operator/coaching/${id(1)}?month=2026-10">October 2026</a><span>172h · Draft</span>`,
   );
@@ -784,7 +804,10 @@ it("CONSOLECOACH-01/02 shows each learner's latest coaching month and jumps to t
     "1h 30m · Returned for correction",
   ])
     expect(res.text).toContain(`<span>${label}</span>`);
-  expect(res.text).toContain('<td class="member-coaching">—</td>');
+  // CONSOLEMONTHS-02: a month with nothing saved reads as empty.
+  expect(res.text.match(/<td class="member-coaching">—<\/td>/g)).toHaveLength(
+    13,
+  );
   // CONSOLECOACH-02: a learner's name jumps to their summary below the table.
   expect(res.text).toContain(
     `href="/operator?ownerId=${id(1)}&amp;page=1#selected-member"`,

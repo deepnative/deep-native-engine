@@ -16,6 +16,10 @@ import {
 } from "../../src/simple-invoice-store.ts";
 import { COOKIE } from "../../src/session.ts";
 import { migrate, store } from "../../src/store.ts";
+import {
+  testProviderEventStore,
+  type TestProviderEvent,
+} from "../../src/test-provider-events.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { testPool } from "../support/database.ts";
 import { withLoopback } from "../support/loopback-server.ts";
@@ -31,6 +35,7 @@ const pool = testPool(),
   invoices = simpleInvoiceStore(pool, { sample: true, ...settings }),
   configured = simpleInvoiceStore(pool, { sample: false, ...settings }),
   report = invoiceReconciliationStore(pool),
+  testEvents = testProviderEventStore(pool),
   origin = "http://127.0.0.1:3000",
   secret = "native-invoice-reconciliation-test",
   application = app(members, {
@@ -450,4 +455,94 @@ it("RECON-11 reading changes nothing and shows no private text", async () => {
   expect(page.text).not.toContain("Invented Private Name");
   expect(page.text).not.toContain("invented-private@example.invalid");
   expect(page.text).not.toContain("Invented private evidence");
+});
+
+const signed = async (
+  invoiceId: string,
+  type: TestProviderEvent["type"],
+  amountCents: number,
+  paymentRef = "pay-recon",
+) =>
+  ready(
+    await testEvents.apply({
+      id: `evt-${randomUUID()}`,
+      type,
+      invoiceId,
+      paymentRef,
+      amountCents,
+      occurredAt: "2026-11-01T12:00:00.000Z",
+    }),
+  ).outcome;
+
+it("RECON-15 no signed test events gives an empty section", async () => {
+  expect(value(await report.snapshot(admin)).testEvents).toEqual({
+    status: "empty",
+    receipts: 0,
+    receiptCents: 0,
+    refunds: 0,
+    refundCents: 0,
+    failures: 0,
+    failureCents: 0,
+    waiting: 0,
+    waitingCents: 0,
+    appliedAfterHold: 0,
+  });
+  const page = await get(path, admin);
+  expect(page.text).toContain("Signed test events · Test data");
+  expect(page.text).toContain("No signed test events to compare.");
+});
+
+it("RECON-13 each kind of signed test event is shown apart and none is collected cash", async () => {
+  const i = await issued();
+  expect(await signed(i.invoiceId, "payment.succeeded", 3000)).toBe("receipt");
+  expect(await signed(i.invoiceId, "refund.succeeded", 500)).toBe("refund");
+  expect(await signed(i.invoiceId, "payment.failed", 3000, "pay-other")).toBe(
+    "failure",
+  );
+  const snapshot = value(await report.snapshot(admin));
+  expect(snapshot.testEvents).toMatchObject({
+    status: "applied",
+    receipts: 1,
+    receiptCents: 3000,
+    refunds: 1,
+    refundCents: 500,
+    failures: 1,
+    failureCents: 3000,
+    waiting: 0,
+  });
+  expect(snapshot.groups[1]).toMatchObject({
+    receiptCents: 0,
+    netCollectedCents: 0,
+    simulatedReceiptCents: 3000,
+    status: "consistent",
+  });
+  const page = await get(path, admin);
+  expect(page.text).toContain("Failed test payments, no money moved");
+});
+
+it("RECON-14 a held event later applied counts once; one never applied is still waiting", async () => {
+  const early = await issued();
+  expect(await signed(early.invoiceId, "refund.succeeded", 1000)).toBe("held");
+  expect(value(await report.snapshot(admin)).testEvents).toMatchObject({
+    status: "waiting",
+    waiting: 1,
+    waitingCents: 1000,
+  });
+  expect(await signed(early.invoiceId, "payment.succeeded", 3000)).toBe(
+    "receipt",
+  );
+  const over = await issued();
+  expect(await signed(over.invoiceId, "payment.succeeded", 9000)).toBe("held");
+  expect(value(await report.snapshot(admin)).testEvents).toMatchObject({
+    status: "waiting",
+    receipts: 1,
+    refunds: 1,
+    refundCents: 1000,
+    waiting: 1,
+    waitingCents: 9000,
+    appliedAfterHold: 1,
+  });
+  const page = await get(path, admin);
+  expect(page.text).toContain("Held and not applied");
+  expect(page.text).not.toContain("evt-");
 });

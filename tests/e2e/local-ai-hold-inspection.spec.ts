@@ -167,7 +167,7 @@ test("[L305] an unmetered held request stays visible to its member and assigned 
     ]);
   }
 });
-test("[L310] an assigned operator records a labelled test outcome on a held request, and it cannot be changed", async ({
+test("[L312] an assigned operator records a labelled test outcome on a held request, and it cannot be changed", async ({
   page,
 }) => {
   const token = randomBytes(32).toString("hex"),

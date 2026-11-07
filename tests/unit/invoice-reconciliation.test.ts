@@ -14,6 +14,10 @@ import {
   invoiceReconciliationUnavailablePage,
 } from "../../src/invoice-reconciliation-views.ts";
 import { withHosting } from "../../src/hosting-presentation.ts";
+import {
+  emptyAiRequests,
+  emptyTestEvents,
+} from "../../src/request-reconciliation.ts";
 
 const asOf = new Date("2026-11-06T12:00:00Z"),
   token = "a".repeat(64),
@@ -315,6 +319,16 @@ const manualRow = {
   mismatchCents: "0",
   notComparableInvoices: 0,
 };
+const eventRow = Object.fromEntries(
+  Object.keys(emptyTestEvents)
+    .filter((key) => key !== "status")
+    .map((key) => [key, 0]),
+);
+const requestRow = Object.fromEntries(
+  Object.keys(emptyAiRequests)
+    .filter((key) => key !== "status" && key !== "mismatches")
+    .map((key) => [key, 0]),
+);
 function pool(
   respond: (sql: string) => { rows: unknown[] } | Promise<never>,
   release = vi.fn(),
@@ -344,6 +358,9 @@ const respond =
       return { rows: rows.facts ?? [factRow] };
     if (sql.startsWith("WITH recorded"))
       return { rows: rows.manual ?? [manualRow] };
+    if (sql.includes("verification='signed_test_event'"))
+      return { rows: [eventRow] };
+    if (sql.includes("local_ai_test_unit_jobs")) return { rows: [requestRow] };
     if (sql.includes('now() AS "asOf"'))
       return { rows: rows.asOf ?? [{ asOf }] };
     return { rows: [] };
