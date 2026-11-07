@@ -54,6 +54,31 @@ it("ANON-01/02/03 ships the agreed limits", () => {
     email_attach: { windowSeconds: 3600, perVisitor: 20, service: 200 },
     email_sign_in: { windowSeconds: 3600, perVisitor: 60, service: 1000 },
     password_change: { windowSeconds: 900, perVisitor: 30, service: 300 },
+    member_record: { windowSeconds: 3600, perVisitor: 120, service: 2000 },
+  });
+});
+
+it("RECORD-01/02/03 gives a refused new record fixed guidance", () => {
+  const refused = (limit: "visitor" | "service") =>
+    ({ kind: "refused", limit, retryAfterSeconds: 600 }) as const;
+  expect(anonymousWriteRefusal("member_record", refused("visitor"))).toEqual({
+    status: 429,
+    retryAfterSeconds: 600,
+    message:
+      "Too many new records have been saved from this network. Wait 10 minutes, then save again. Nothing was saved.",
+  });
+  expect(
+    anonymousWriteRefusal("member_record", refused("service")).message,
+  ).toBe(
+    "Saving new records is busy right now. Wait 10 minutes, then save again. Nothing was saved.",
+  );
+  expect(
+    anonymousWriteRefusal("member_record", { kind: "unavailable" }),
+  ).toEqual({
+    status: 503,
+    retryAfterSeconds: 60,
+    message:
+      "Saving new records is unavailable right now. Try again in a minute. Nothing was saved.",
   });
 });
 

@@ -74,6 +74,24 @@ What this doesn't do:
 
 Scenarios OUTWARD-01..08 run against the real HTTP application and PostgreSQL in `tests/integration/outward-email-admission-http.test.ts`, with browser journey L307. Before the change, a visitor's request past each allowance got 200 and its email or hash, against an expected 429.
 
+## New private records
+
+Four routes let a signed-in member create a new private text record. Before [#42](https://github.com/deepnative/deep-native-engine/issues/42) added this count, each request was size-limited but nothing limited how many, so one visitor could fill the shared database with as many rows as they liked across the free accounts they kept.
+
+| Route                                                                                                                  | Window | Each visitor | Whole service  |
+| ---------------------------------------------------------------------------------------------------------------------- | ------ | ------------ | -------------- |
+| `POST /milestones`, `POST /career/entries`, `POST /career/drafts` and `POST /contribute`, once the form is well formed | 1 hour | 120 together | 2,000 together |
+
+They share one count under the kind `member_record`, with the same table, keyed hash, ingress address, 429 and `Retry-After`, 503 when the limiter can't answer, and log lines as the routes above. A refused or unanswered request saves nothing and shows the form again with what was typed. Edits, deletes, reads and invalid forms aren't counted.
+
+What this doesn't do:
+
+- A member's total still grows by up to the allowance every hour, and the milestone and career lists still read every row without a page limit.
+- A class or office behind one address shares the 120.
+- Other member writes, such as notebooks, reflections and support requests, aren't counted here. Support intake isn't enabled on the hosted site, and circle posts have their own cap.
+
+Scenarios RECORD-01..06 run against the real HTTP application and PostgreSQL in `tests/integration/member-record-admission-http.test.ts`, with browser journey L310. Before the change, every creation past the allowance was saved, with 303 where 429 was expected. Every migration re-runs at each start, so migration 109 now re-adds its narrower kind check only before 111 exists. Without that, RECORD-06 showed the service would refuse to start once a `member_record` row existed.
+
 ## Scope and remaining work
 
 [#315](https://github.com/deepnative/deep-native-engine/issues/315) covers the early 1 MiB body boundary and shared rate/concurrency admission for evidence uploads, and [#587](https://github.com/deepnative/deep-native-engine/issues/587) extends that admission to the two evidence copy routes. Every other API surface is outside this control and remains under [#42](https://github.com/deepnative/deep-native-engine/issues/42). This change adds no new service, provider, WAF or DDoS protection claim, and a fixed-window limit allows up to twice a budget across a window boundary. Source and local fixture evidence do not prove a live deployment or full hosted abuse protection.

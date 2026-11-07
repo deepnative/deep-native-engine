@@ -7,7 +7,8 @@ export type AnonymousWriteKind =
   | "password_sign_in"
   | "email_attach"
   | "email_sign_in"
-  | "password_change";
+  | "password_change"
+  | "member_record";
 export interface AnonymousWriteLimit {
   windowSeconds: number;
   perVisitor: number;
@@ -27,6 +28,9 @@ export const ANONYMOUS_WRITE_LIMITS: AnonymousWriteLimits = {
   email_attach: { windowSeconds: 3600, perVisitor: 20, service: 200 },
   email_sign_in: { windowSeconds: 3600, perVisitor: 60, service: 1000 },
   password_change: { windowSeconds: 900, perVisitor: 30, service: 300 },
+  // #42: a new milestone, career entry, career draft or contribution proposal.
+  // Members are free and keep their accounts, so this is counted by address too.
+  member_record: { windowSeconds: 3600, perVisitor: 120, service: 2000 },
 };
 const UNAVAILABLE_RETRY_SECONDS = 60;
 const RETENTION = "1 day";
@@ -90,6 +94,13 @@ const REFUSALS: Record<
     retry: (wait) => `${wait}, then try again. Your password has not changed.`,
     unavailable:
       "Password changes are unavailable right now. Try again in a minute. Your password has not changed.",
+  },
+  member_record: {
+    visitor: "Too many new records have been saved from this network.",
+    service: "Saving new records is busy right now.",
+    retry: (wait) => `${wait}, then save again. Nothing was saved.`,
+    unavailable:
+      "Saving new records is unavailable right now. Try again in a minute. Nothing was saved.",
   },
 };
 
