@@ -17,9 +17,7 @@ import { supportAssignmentStore } from "../../src/support-assignment.ts";
 // Administrator entry sets a protected staff cookie; keep no network traces.
 test.use({ trace: "off" });
 const control = testPool();
-let pool: Pool,
-  name: string | undefined,
-  failed = false;
+let pool: Pool, name: string | undefined;
 // shi@deepnative.io holds the seeded admin role, so this file owns its database.
 // Setup runs in beforeAll, outside the journey's own time budget.
 test.beforeAll(async () => {
@@ -30,13 +28,9 @@ test.beforeAll(async () => {
   pool = new Pool({ connectionString: url.href });
   await migrate(pool);
 });
-test.afterEach(() => {
-  if (test.info().status !== test.info().expectedStatus) failed = true;
-});
 test.afterAll(async () => {
   await pool?.end();
-  // A failed case keeps its database for diagnosis.
-  if (name && !failed) await dropAttendanceBrowserDatabase(control, name);
+  if (name) await dropAttendanceBrowserDatabase(control, name);
   await control.end();
 });
 
