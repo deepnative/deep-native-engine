@@ -47,11 +47,14 @@ afterAll(async () => {
 
 async function staff() {
   const editor = randomBytes(32).toString("hex"),
-    reviewer = randomBytes(32).toString("hex"),
-    admin = randomBytes(32).toString("hex");
+    reviewer = randomBytes(32).toString("hex");
   await auth.provisionStaff(editor, "editor", end());
   const reviewerId = await auth.provisionStaff(reviewer, "reviewer", end());
-  await auth.provisionStaff(admin, "platform_admin", end());
+  const admin = await auth.provisionStaff(
+    randomBytes(32).toString("hex"),
+    "platform_admin",
+    end(),
+  );
   return { editor, reviewer, reviewerId, admin };
 }
 type Staff = Awaited<ReturnType<typeof staff>>;
