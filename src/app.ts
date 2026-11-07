@@ -297,6 +297,11 @@ import {
 } from "./local-ai-hold-inspection.ts";
 import { registerLocalAiHoldInspectionRoutes } from "./local-ai-hold-inspection-routes.ts";
 import {
+  disabledLocalAiHoldDecisionStore,
+  type LocalAiHoldDecisionStore,
+} from "./local-ai-hold-decisions.ts";
+import { registerLocalAiHoldDecisionRoutes } from "./local-ai-hold-decision-routes.ts";
+import {
   disabledMemberTestUnitsStore,
   type MemberTestUnitsStore,
 } from "./member-test-units.ts";
@@ -462,6 +467,7 @@ export function app(
     ledgerReconciliation?: LedgerReconciliationStore;
     invoiceReconciliation?: InvoiceReconciliationStore;
     localHoldInspection?: LocalAiHoldInspectionStore;
+    localHoldDecisions?: LocalAiHoldDecisionStore;
     memberTestUnits?: MemberTestUnitsStore;
     studyUnitFixtures?: StudyUnitFixtureStore;
     studyAllowances?: StudyAllowanceStore;
@@ -975,6 +981,11 @@ export function app(
   registerLocalAiHoldInspectionRoutes(
     app,
     options.localHoldInspection ?? disabledLocalAiHoldInspectionStore(),
+    mode,
+  );
+  registerLocalAiHoldDecisionRoutes(
+    app,
+    options.localHoldDecisions ?? disabledLocalAiHoldDecisionStore(),
     mode,
   );
   registerMemberTestUnitsRoutes(

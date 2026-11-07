@@ -2775,6 +2775,15 @@
       "expected": "Test receipts, refunds and the held payment show as separate amounts; the early refund counts once as applied after a hold; net collected stays zero; the AI request section says there is nothing to compare and that points are not money; no event or member identifier appears; no sideways scrolling; the operator is refused",
       "issues": [123],
       "critical": true
+    },
+    {
+      "id": "L312",
+      "actor": "Assigned operator and refused member and staff around a test outcome on an unmetered held request",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, inspection enabled, invented source with an explicit started-request fixture and no provider; desktop/mobile Chromium",
+      "steps": "HOLDDEC-01, 05, 12: an administrator assigns one operator to the exact held request; the operator opens its snapshot, follows the test outcome link, records 'did not run' with a reason and a test- reference, reloads and reads it again; the member, an unassigned operator and the administrator try to read it",
+      "expected": "The page says the outcome is a test label no AI provider confirmed; it is recorded once and then shown with no form; the job's status and attempts are unchanged; no source, member, permission or grant details appear; everyone else is refused; no sideways scrolling",
+      "issues": [189],
+      "critical": true
     }
   ],
   "fullMvp": [

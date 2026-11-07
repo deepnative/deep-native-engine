@@ -67,6 +67,7 @@ import { metricsStore } from "./metrics.ts";
 import { ledgerReconciliationStore } from "./ledger-reconciliation.ts";
 import { invoiceReconciliationStore } from "./invoice-reconciliation.ts";
 import { localAiHoldInspectionStore } from "./local-ai-hold-inspection.ts";
+import { localAiHoldDecisionStore } from "./local-ai-hold-decisions.ts";
 import { memberTestUnitsStore } from "./member-test-units.ts";
 import { studyUnitFixtureStore } from "./study-unit-fixtures.ts";
 import { studyAllowanceStore } from "./study-allowances.ts";
@@ -272,6 +273,11 @@ export async function start(env: NodeJS.ProcessEnv) {
         mode: settings.mode,
         enabled: settings.localHoldInspectionReads,
         secret: Buffer.from(settings.secret, "hex"),
+      }),
+      // HOLDDEC-11: decisions share the inspection switch, off by default.
+      localHoldDecisions: localAiHoldDecisionStore(pool, {
+        mode: settings.mode,
+        enabled: settings.localHoldInspectionReads,
       }),
       memberTestUnits: memberTestUnitsStore(pool),
       attempts: attemptStore(pool),
