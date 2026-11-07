@@ -167,6 +167,144 @@ test("[L305] an unmetered held request stays visible to its member and assigned 
     ]);
   }
 });
+test("[L312] an assigned operator records a labelled test outcome on a held request, and it cannot be changed", async ({
+  page,
+}) => {
+  const token = randomBytes(32).toString("hex"),
+    adminToken = randomBytes(32).toString("hex"),
+    operatorToken = randomBytes(32).toString("hex"),
+    outsiderToken = randomBytes(32).toString("hex");
+  await members.create(token, { background: "professional", goal: "work" });
+  const session = await members.session(token);
+  if (session.kind !== "active") throw Error("Invented owner unavailable");
+  const memberId = session.learner.id,
+    expires = new Date(Date.now() + 3600000),
+    starts = new Date(Date.now() - 60000),
+    staffIds: string[] = [];
+  try {
+    staffIds.push(
+      await auth.provisionStaff(adminToken, "platform_admin", expires),
+      await auth.provisionStaff(outsiderToken, "operator", expires),
+    );
+    const operatorId = await auth.provisionStaff(
+      operatorToken,
+      "operator",
+      expires,
+    );
+    staffIds.push(operatorId);
+    const text = "Invented private source must not reach the decision";
+    const uploaded = await evidence.upload(token, {
+      name: `Invented-private-${randomUUID()}`,
+      mediaType: "text/plain",
+      data: Buffer.from(text),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    });
+    if (uploaded.kind !== "created") throw Error("Invented source unavailable");
+    await evidence.transitionQuarantine(uploaded.id, "clean");
+    const permission = await local.grant(token, uploaded.id);
+    if (permission.kind !== "granted")
+      throw Error("Invented permission unavailable");
+    const queued = await local.enqueue(
+      token,
+      permission.receiptId,
+      randomUUID(),
+    );
+    if (queued.kind !== "queued") throw Error("Invented request unavailable");
+    // Explicit durable started-attempt fixture, not evidence of provider execution.
+    await pool.query(
+      "UPDATE adapter_jobs SET status='needs_reconciliation',attempt_count=1,safe_error='provider_outcome_unknown' WHERE id=$1",
+      [queued.jobId],
+    );
+    const granted = await inspection.grant(
+      adminToken,
+      queued.jobId,
+      operatorId,
+      starts,
+      expires,
+      randomUUID(),
+    );
+    if (!("grantId" in granted)) throw Error("Exact assignment unavailable");
+    const job = async () =>
+      (
+        await pool.query(
+          "SELECT status,attempt_count,safe_error FROM adapter_jobs WHERE id=$1",
+          [queued.jobId],
+        )
+      ).rows[0];
+    const before = await job();
+
+    await signIn(page, operatorToken);
+    await page.goto(`/operator/local-ai-holds/${queued.jobId}`);
+    await page
+      .getByRole("link", { name: "Record or read its test outcome" })
+      .click();
+    await expect(page.getByText("NOT PROVIDER-CONFIRMED")).toBeVisible();
+    await page.getByLabel("Test outcome: the request did not run").check();
+    await page
+      .getByLabel("Recorded as part of an operator test exercise")
+      .check();
+    await page
+      .getByLabel("Invented test record reference")
+      .fill("test-browser-record-1");
+    await page.getByRole("button", { name: "Record test outcome" }).click();
+    await expect(page.getByRole("status")).toHaveText("Test outcome recorded.");
+    await expect(
+      page.getByRole("heading", {
+        name: "Test outcome: the request did not run",
+      }),
+    ).toBeVisible();
+    await expect(page.getByText("No AI provider confirmed it")).toBeVisible();
+    await expect(page.getByText("The request stays held.")).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+
+    await page.reload();
+    await expect(page.locator("form")).toHaveCount(0);
+    await page.goto(`/operator/local-ai-holds/${queued.jobId}/test-outcome`);
+    await expect(page.locator("form")).toHaveCount(0);
+    await expect(page.getByText("test-browser-record-1")).toBeVisible();
+    await expect(page.locator("dd").filter({ hasText: "You" })).toBeVisible();
+    const markup = await page.content();
+    for (const secret of [
+      token,
+      adminToken,
+      operatorToken,
+      memberId,
+      uploaded.id,
+      permission.receiptId,
+      operatorId,
+      granted.grantId,
+      text,
+    ])
+      expect(markup).not.toContain(secret);
+    expect(await job()).toEqual(before);
+
+    for (const denied of [token, outsiderToken, adminToken]) {
+      await signIn(page, denied);
+      expect(
+        (
+          await page.goto(
+            `/operator/local-ai-holds/${queued.jobId}/test-outcome`,
+          )
+        )?.status(),
+      ).toBe(403);
+      expect(await page.content()).not.toContain("test-browser-record-1");
+    }
+  } finally {
+    await evidence.removeWorkspace(token);
+    await members.remove(memberId);
+    await pool.query("DELETE FROM principals WHERE id=ANY($1::uuid[])", [
+      staffIds,
+    ]);
+  }
+});
 const audiences = [
   ["explorer", "everyday"],
   ["professional", "work"],

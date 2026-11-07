@@ -90,7 +90,7 @@ What this doesn't do:
 - A class or office behind one address shares the 120.
 - Other member writes, such as notebooks, reflections and support requests, aren't counted here. Support intake isn't enabled on the hosted site, and circle posts have their own cap.
 
-Scenarios RECORD-01..06 run against the real HTTP application and PostgreSQL in `tests/integration/member-record-admission-http.test.ts`, with browser journey L310. Before the change, every creation past the allowance was saved, with 303 where 429 was expected. Every migration re-runs at each start, so migration 109 now re-adds its narrower kind check only before 111 exists. Without that, RECORD-06 showed the service would refuse to start once a `member_record` row existed.
+Scenarios RECORD-01..06 run against the real HTTP application and PostgreSQL in `tests/integration/member-record-admission-http.test.ts`, with browser journey L313. Before the change, every creation past the allowance was saved, with 303 where 429 was expected. Every migration re-runs at each start, so migration 109 now re-adds its narrower kind check only before 112 exists. Without that, RECORD-06 showed the service would refuse to start once a `member_record` row existed.
 
 ## Scope and remaining work
 

@@ -635,3 +635,97 @@ it("SUPADM-07-RECOVERY sanitizes acquisition/query/audit/commit/rollback/release
   rollback.state.failure = "ROLLBACK";
   expect(await rollback.store.admin(token)).toEqual({ kind: "unavailable" });
 });
+// ADMSUP-01/03 (#39): the administrator answers one request themselves.
+function takeFixture(resolved = false, actor = admin) {
+  const now = new Date("2026-06-01T00:00:00Z");
+  return {
+    now,
+    ...fixture({
+      actor,
+      override(sql) {
+        if (sql.startsWith('SELECT resolved_at AS "resolvedAt"'))
+          return [{ resolvedAt: resolved ? past : null, now }];
+        return undefined;
+      },
+    }),
+  };
+}
+it("ADMSUP-01 take grants the acting administrator from now until their session ends, then replays the same key", async () => {
+  const f = takeFixture();
+  const created = ready(await f.store.take(token, requestId, key));
+  expect(created.disposition).toBe("created");
+  expect(f.state.grants).toHaveLength(1);
+  expect(f.state.grants[0]).toMatchObject({
+    requestId,
+    staffId: admin,
+    role: "platform_admin",
+    startsAt: f.now,
+    expiresAt: future,
+    grantedBy: admin,
+    idempotencyKey: key,
+  });
+  expect(
+    f.query.mock.calls.some(([sql]) =>
+      String(sql).startsWith("INSERT INTO support_request_events"),
+    ),
+  ).toBe(true);
+  expect(ready(await f.store.take(token, requestId, key))).toEqual({
+    requestId,
+    grantId: created.grantId,
+    disposition: "replayed",
+  });
+  expect(f.state.grants).toHaveLength(1);
+});
+it("ADMSUP-03 take conflicts on a reused key for another request, staff, role or a revoked grant", async () => {
+  for (const change of [
+    { requestId: id(40) },
+    { staffId: operator },
+    { role: "operator" },
+    { revokedAt: past },
+  ]) {
+    const f = takeFixture();
+    f.state.grants.push({
+      ...grant(),
+      staffId: admin,
+      role: "platform_admin",
+      ...change,
+    });
+    expect(await f.store.take(token, requestId, key)).toEqual({
+      kind: "conflict",
+    });
+    expect(f.state.grants).toHaveLength(1);
+  }
+});
+it("ADMSUP-03 take refuses malformed references, non-administrators, closed requests and departed members without writing", async () => {
+  expect(await takeFixture().store.take(token, "nope", key)).toEqual({
+    kind: "denied",
+  });
+  expect(await takeFixture().store.take(token, requestId, "nope")).toEqual({
+    kind: "denied",
+  });
+  const operatorActor = takeFixture(false, operator);
+  expect(await operatorActor.store.take(token, requestId, key)).toEqual({
+    kind: "denied",
+  });
+  const resolved = takeFixture(true);
+  expect(await resolved.store.take(token, requestId, key)).toEqual({
+    kind: "denied",
+  });
+  const withdrawn = takeFixture();
+  withdrawn.state.withdrawn = true;
+  expect(await withdrawn.store.take(token, requestId, key)).toEqual({
+    kind: "denied",
+  });
+  const departed = takeFixture();
+  departed.state.people.find((p) => p.id === owner)!.active = false;
+  expect(await departed.store.take(token, requestId, key)).toEqual({
+    kind: "denied",
+  });
+  const failing = takeFixture();
+  failing.state.failure = "INSERT INTO support_request_grants";
+  expect(await failing.store.take(token, requestId, key)).toEqual({
+    kind: "unavailable",
+  });
+  for (const f of [operatorActor, resolved, withdrawn, departed])
+    expect(f.state.grants).toEqual([]);
+});

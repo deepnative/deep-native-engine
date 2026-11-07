@@ -181,7 +181,7 @@ test("[L307] OUTWARD-03/08 a visitor past the email-link allowance keeps the add
   }
 });
 
-test("[L310] RECORD-01/05 a member past the new-record allowance keeps the typed milestone and saves it after waiting", async ({
+test("[L313] RECORD-01/05 a member past the new-record allowance keeps the typed milestone and saves it after waiting", async ({
   page,
 }) => {
   test.setTimeout(120_000);

@@ -2555,9 +2555,9 @@
       "id": "L287",
       "actor": "Platform administrator with 60 learner accounts",
       "preconditions": "Dedicated synthetic PostgreSQL database with 60 invented named learners, verified owner identity, port0 server; desktop/mobile Chromium",
-      "steps": "ADMINTABLE-01..05: enter administration, read the first 25 learners, page forward, select a learner from page 2, page to the last rows, search part of a name and clear the search; CONSOLECOACH-01/02: read each learner's latest coaching month and jump to the chosen learner's summary",
+      "steps": "ADMINTABLE-01..05: enter administration, read the first 25 learners, page forward, select a learner from page 2, page to the last rows, search part of a name and clear the search; CONSOLEMONTHS-01..03: read each learner's coaching hours and status for this month, last month and the latest earlier month, and open a month's coaching page; CONSOLECOACH-02: jump to the chosen learner's summary",
       "expected": "The table is sorted by name with an exact count and Previous/Next, the selection stays through paging, search filters and counts only matches, private work is not shown, and the page avoids sideways scrolling and controls under 40px on desktop and mobile",
-      "issues": [641, 654],
+      "issues": [641, 654, 732],
       "critical": true
     },
     {
@@ -2760,6 +2760,33 @@
     },
     {
       "id": "L310",
+      "actor": "Hosted administrator and member",
+      "preconditions": "Dedicated synthetic PostgreSQL database; support assignment and staff entry enabled; administrator entered through a verified admin email; no operator account; desktop/mobile Chromium",
+      "steps": "ADMSUP-01..04: a member sends a support request; the administrator enters administration, opens the support intake inbox, confirms Answer this request myself, opens the request, saves an internal note, acknowledges and replies; the member reads it; the administrator revokes that grant from history and reopens the request",
+      "expected": "One grant to the administrator's own session, shown as platform_admin in history; the member sees the reply and acknowledgement but not the internal note; after revoking, the request is refused (403) without its text, and the member still sees the reply",
+      "issues": [39],
+      "critical": true
+    },
+    {
+      "id": "L311",
+      "actor": "Billing administrator reconciling signed test events and metered test AI requests",
+      "preconditions": "Dedicated synthetic PostgreSQL database, sample invoices, signed test events enabled with an invented key, port0 server; desktop/mobile Chromium; no provider, no real money",
+      "steps": "RECON-13/14/15/19: a member accepts one invented invoice; signed events arrive as a refund before its payment, the payment, and a second payment that is held; the administrator opens the invoice and cash reconciliation report; an operator requests it",
+      "expected": "Test receipts, refunds and the held payment show as separate amounts; the early refund counts once as applied after a hold; net collected stays zero; the AI request section says there is nothing to compare and that points are not money; no event or member identifier appears; no sideways scrolling; the operator is refused",
+      "issues": [123],
+      "critical": true
+    },
+    {
+      "id": "L312",
+      "actor": "Assigned operator and refused member and staff around a test outcome on an unmetered held request",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, inspection enabled, invented source with an explicit started-request fixture and no provider; desktop/mobile Chromium",
+      "steps": "HOLDDEC-01, 05, 12: an administrator assigns one operator to the exact held request; the operator opens its snapshot, follows the test outcome link, records 'did not run' with a reason and a test- reference, reloads and reads it again; the member, an unassigned operator and the administrator try to read it",
+      "expected": "The page says the outcome is a test label no AI provider confirmed; it is recorded once and then shown with no form; the job's status and attempts are unchanged; no source, member, permission or grant details appear; everyone else is refused; no sideways scrolling",
+      "issues": [189],
+      "critical": true
+    },
+    {
+      "id": "L313",
       "actor": "Member saving a milestone from an address past its new-record allowance",
       "preconditions": "Dedicated synthetic PostgreSQL database, port0 server with a one-record allowance, invented member, a documentation-range forwarded address; desktop/mobile Chromium",
       "steps": "RECORD-01/05: the member saves one milestone; fills the form again and saves; the window ends; the member saves the same kept form",

@@ -33,7 +33,7 @@ export function localAiHoldListPage(
 export function localAiHoldDetailPage(value: LocalAiHoldItem) {
   return page(
     snapshotTitle(),
-    `<section class="reading"><nav class="breadcrumb"><a href="${base}">${holdsTitle()}</a></nav><h1>${snapshotTitle()}</h1><p>${warning()}</p>${row(value)}</section>`,
+    `<section class="reading"><nav class="breadcrumb"><a href="${base}">${holdsTitle()}</a></nav><h1>${snapshotTitle()}</h1><p>${warning()}</p>${row(value)}<p><a href="${base}/${encodeURIComponent(value.jobId)}/test-outcome">Record or read its test outcome</a></p></section>`,
   );
 }
 export function localAiHoldUnavailablePage(
