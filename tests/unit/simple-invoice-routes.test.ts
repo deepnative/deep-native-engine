@@ -842,3 +842,41 @@ it("MANPAY-03 shows the member a receipt-only record with no staff column or ref
   expect(page.text).not.toContain("Recorded refund");
   expect(page.text).not.toContain("Record offline refund");
 });
+it("WALK-04 offers only the invoice actions the record can still accept", async () => {
+  const f = fixture();
+  const page = async (value: unknown) => {
+    f.service.invoice.mockResolvedValueOnce(ready(value));
+    return (await f.get(`${admin}/${id}`)).text;
+  };
+  const unpaid = await page(invoice);
+  expect(unpaid).toContain(">Record offline payment</button>");
+  expect(unpaid).toContain("Balance still due: CAD 11.00.");
+  expect(unpaid).toContain(">Void unpaid invoice</button>");
+
+  const part = await page({
+    ...invoice,
+    paidCents: 500,
+    document: { ...doc, paidCents: 500 },
+  });
+  expect(part).toContain(">Record offline payment</button>");
+  expect(part).toContain("Balance still due: CAD 6.00.");
+  expect(part).not.toContain(">Void unpaid invoice</button>");
+
+  const paid = await page({
+    ...invoice,
+    paidCents: 1100,
+    document: { ...doc, paidCents: 1100 },
+  });
+  expect(paid).not.toContain(">Record offline payment</button>");
+  expect(paid).not.toContain(">Void unpaid invoice</button>");
+  expect(paid).toContain("Nothing is left to receive on this invoice.");
+  expect(paid).toContain(">Record offline refund</button>");
+
+  const voided = await page({
+    ...invoice,
+    voidReason: "Invented wrong bundle",
+    document: { ...doc, voidReason: "Invented wrong bundle" },
+  });
+  expect(voided).not.toContain(">Record offline payment</button>");
+  expect(voided).not.toContain(">Void unpaid invoice</button>");
+});

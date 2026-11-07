@@ -708,6 +708,10 @@ progress {
 .reading h2 {
   font-size: 22px;
 }
+/* WALK-01: study requests and practice sessions are separate allowances. */
+.reading [data-allowance] {
+  margin-bottom: 35px;
+}
 .number {
   position: absolute;
   left: 0;
