@@ -37,7 +37,7 @@ export function memberTestUnitsPage(
         )
           .map(
             ([key, label, quantity]) =>
-              `<dt>${label}</dt><dd><span data-field="${key}">${quantity}</span> ${row.unit}</dd>`,
+              `<dt>${label}</dt><dd><span data-field="${key}">${quantity}</span> ${quantity === 1 ? row.unit.slice(0, -1) : row.unit}</dd>`,
           )
           .join(
             "",
