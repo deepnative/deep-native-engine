@@ -661,6 +661,7 @@ it("TESTISSUE-07 append-only owned fixture export discloses no administrator ide
     "aiUsage",
     "practiceSessionAllowanceUses",
     "invoicePayments",
+    "staffAccess",
   ]);
   expect(result.payload.records.assignmentEvidenceOrigins).toEqual([]);
   expect(result.payload.records.assignmentCopyReceipts).toEqual([]);

@@ -545,6 +545,31 @@ const sections = {
     "p.id",
     true,
   ),
+  // v38 appends #40 STAFFEXPORT: the entries When staff opened my work lists.
+  // What happened, which kind of staff and when; never who, which grant,
+  // request or assignment, purpose text, file name or note text.
+  staffAccess: section(
+    `h.source,h.action,h.via,h."evidenceId",h."proposalId",h."workflowId",
+     h."workflowVersion",h."occurredAt"`,
+    `(SELECT 'access' AS source,x.id::text AS id,x.action,x.grant_type AS via,
+        x.evidence_id AS "evidenceId",NULL::uuid AS "proposalId",NULL::text AS "workflowId",
+        NULL::integer AS "workflowVersion",x.occurred_at AS "occurredAt"
+      FROM authorization_audit x JOIN workspaces w ON w.id=x.workspace_id
+      WHERE w.owner_principal_id=$1 AND w.deleting_at IS NULL
+     UNION ALL
+     SELECT 'feedback',x.id::text,x.action,NULL,x.evidence_id,NULL,NULL,NULL,x.occurred_at
+      FROM private_sample_feedback_audit x JOIN workspaces w ON w.id=x.workspace_id
+      WHERE w.owner_principal_id=$1 AND w.deleting_at IS NULL
+     UNION ALL
+     SELECT 'proposal',x.id::text,x.action,x.actor_role,NULL,x.proposal_id,NULL,NULL,x.occurred_at
+      FROM proposal_audit x JOIN workspaces w ON w.id=x.workspace_id
+      WHERE w.owner_principal_id=$1 AND w.deleting_at IS NULL
+     UNION ALL
+     SELECT 'workflow',x.id::text,'note_read',NULL,NULL,NULL,x.workflow_id,x.workflow_version,x.occurred_at
+      FROM workflow_review_read_audit x JOIN workspaces w ON w.id=x.workspace_id
+      WHERE w.owner_principal_id=$1 AND w.deleting_at IS NULL) h WHERE TRUE`,
+    "h.source,h.id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -558,7 +583,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v37";
+  version: "local-member-records-v38";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -692,7 +717,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v37",
+          version: "local-member-records-v38",
           profile: owner.rows[0],
           records,
           testUnitHistory: {
