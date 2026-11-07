@@ -1511,7 +1511,7 @@ export function practiceSessionRecoveryPage(title: string, message: string) {
 export function practiceSessionAllowanceNeededPage() {
   return page(
     "Session not started",
-    `<section class="reading"><h1>Session not started</h1><p role="status">You have no practice session units left this month, so no new session was created. Sessions you've already started stay open.</p><p><a href="/member/study-allowance">Check your monthly allowance</a> · <a href="/practice-sessions">Inspect private session history</a></p></section>`,
+    `<section class="reading"><h1>Session not started</h1><p role="status">Starting a new session uses one of this month's practice sessions. You haven't claimed this month's practice sessions, or you've used them all, so no new session was created. Sessions you've already started stay open.</p><p><a href="/member/study-allowance">Check your monthly allowance</a> · <a href="/practice-sessions">Inspect private session history</a></p></section>`,
   );
 }
 export function practiceSessionStartPage(

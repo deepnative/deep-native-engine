@@ -146,3 +146,13 @@ it("MOCK-07 no practice section without units, and pause or no policy offers no 
     }),
   ).toContain("No practice session allowance is set up");
 });
+it("WALK-01 names each allowance and lays them out as peers", () => {
+  const html = studyAllowancePage("csrf", {
+    ...base,
+    practice: { policy: null, claim: null },
+  });
+  expect(html).toContain("<h2>Study requests</h2>");
+  expect(html).toContain("<h2>Practice sessions</h2>");
+  // `.reading section` indents numbered lesson steps; allowances are not steps.
+  expect(html).not.toMatch(/<section[^>]*>/);
+});
