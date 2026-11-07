@@ -12,6 +12,7 @@ import {
   readInvoiceReconciliation,
   type InvoiceReconciliationResult,
 } from "../../src/invoice-reconciliation.ts";
+import { invoiceReconciliationPage } from "../../src/invoice-reconciliation-views.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { localAiConsentStore } from "../../src/local-ai-consent.ts";
 import { COOKIE } from "../../src/session.ts";
@@ -188,7 +189,7 @@ it("RECON-17 requests above and below their estimate are counted apart, never ne
   });
 });
 
-it("RECON-18 held and released units are not mismatches; a unit consumed without a cost is", async () => {
+it("RECON-18 held and released units are not mismatches", async () => {
   const held = await permitted();
   stubUsage(undefined);
   expect((await local.run(held.token, held.jobId)).kind).toBe("unavailable");
@@ -203,47 +204,46 @@ it("RECON-18 held and released units are not mismatches; a unit consumed without
     consumedUnits: 0,
     mismatches: 0,
   });
-
-  const stray = await permitted();
+  // The ledger itself refuses to use a request's unit from anywhere else.
   const { reservation } = (
     await pool.query<{ reservation: string }>(
       "SELECT reservation_id AS reservation FROM local_ai_test_unit_jobs WHERE job_id=$1",
-      [stray.jobId],
+      [held.jobId],
     )
   ).rows[0]!;
-  await ledger.consume(stray.id, reservation, `recon-18:${randomUUID()}`);
-  expect(await requests()).toMatchObject({
-    status: "discrepancies",
-    consumedWithoutActual: 1,
-    actualWithoutConsumed: 0,
-    mismatches: 1,
-  });
-  const page = await get(path, admin);
-  expect(page.text).toContain("Unit used with no settled cost");
+  await expect(
+    ledger.consume(held.id, reservation, `recon-18:${randomUUID()}`),
+  ).rejects.toThrow(/unavailable/);
 });
 
-it("RECON-18 a settled cost whose unit is not consumed is a mismatch", async () => {
-  const owner = await settled();
+it("RECON-18 a unit used with no cost, or a cost with no used unit, is a mismatch", async () => {
+  const done = await settled(),
+    open = await permitted();
   const client = await pool.connect();
   try {
-    // Models a faulty repair: the guard that keeps these in step is bypassed
+    // Models a faulty repair: the guards that keep these in step are bypassed
     // only inside this rolled-back transaction.
     await client.query("BEGIN");
     await client.query(
       "ALTER TABLE synthetic_entitlement_reservations DISABLE TRIGGER USER",
     );
-    await client.query(
-      "UPDATE synthetic_entitlement_reservations SET state='reserved' WHERE id=(SELECT reservation_id FROM local_ai_test_unit_jobs WHERE job_id=$1)",
-      [owner.jobId],
-    );
-    expect((await readInvoiceReconciliation(client)).aiRequests).toMatchObject(
-      {
-        status: "discrepancies",
-        actualWithoutConsumed: 1,
-        consumedWithoutActual: 0,
-        mismatches: 1,
-      },
-    );
+    const unit = (state: string, jobId: string) =>
+      client.query(
+        "UPDATE synthetic_entitlement_reservations SET state=$1 WHERE id=(SELECT reservation_id FROM local_ai_test_unit_jobs WHERE job_id=$2)",
+        [state, jobId],
+      );
+    await unit("reserved", done.jobId);
+    await unit("consumed", open.jobId);
+    const snapshot = await readInvoiceReconciliation(client);
+    expect(snapshot.aiRequests).toMatchObject({
+      status: "discrepancies",
+      actualWithoutConsumed: 1,
+      consumedWithoutActual: 1,
+      mismatches: 2,
+    });
+    const html = invoiceReconciliationPage(snapshot);
+    expect(html).toContain('data-field="ai.consumedWithoutActual">1<');
+    expect(html).toContain('data-field="ai.actualWithoutConsumed">1<');
   } finally {
     await client.query("ROLLBACK");
     client.release();

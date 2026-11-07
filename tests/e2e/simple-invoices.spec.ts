@@ -521,3 +521,117 @@ test("[L309] signed test events reconcile out of order and read as simulated to 
     await f.close();
   }
 });
+test("[L310] administrator reconciles signed test events and metered test AI requests apart from collected cash", async ({
+  browser,
+}, info) => {
+  const key = "invented-browser-reconciliation-key-01";
+  const f = await reviewedContentFixture(browser, info, {
+    sampleInvoices: true,
+    testProviderKey: key,
+  });
+  try {
+    const member = await f.member();
+    const { admin } = await offer(f, member);
+    const invoiceId = await accept(member);
+    const deliver = async (id: string, change: Record<string, unknown>) => {
+      const body = JSON.stringify({
+        id,
+        invoiceId,
+        paymentRef: "pay-recon",
+        occurredAt: "2026-11-01T12:00:00.000Z",
+        ...change,
+      });
+      const response = await member.request.post(
+        f.origin + TEST_PROVIDER_PATH,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            [TEST_PROVIDER_SIGNATURE]: signTestProviderEvent(key, body),
+          },
+          data: body,
+        },
+      );
+      return (await response.json()).outcome;
+    };
+    // RECON-14: a refund held before its payment, then applied once it arrives.
+    expect(
+      await deliver("evt-recon-refund", {
+        type: "refund.succeeded",
+        amountCents: 1000,
+      }),
+    ).toBe("held");
+    expect(
+      await deliver("evt-recon-payment", {
+        type: "payment.succeeded",
+        amountCents: 3000,
+      }),
+    ).toBe("receipt");
+    // A second payment on a paid invoice is held and never applied.
+    expect(
+      await deliver("evt-recon-extra", {
+        type: "payment.succeeded",
+        amountCents: 3000,
+        paymentRef: "pay-extra",
+      }),
+    ).toBe("held");
+    const page = admin.page;
+    await page.goto(f.origin + "/operator/invoice-reconciliation");
+    const events = page.locator("[data-test-events]");
+    await expect(
+      events.getByRole("heading", { name: "Signed test events · Test data" }),
+    ).toBeVisible();
+    await expect(events.getByRole("status")).toContainText(
+      "Some signed test events are held and not applied.",
+    );
+    await expect(events.locator('[data-field="test.receipts"]')).toHaveText(
+      "CAD 30.00",
+    );
+    await expect(events.locator('[data-field="test.refunds"]')).toHaveText(
+      "CAD 10.00",
+    );
+    await expect(events.locator('[data-field="test.waiting"]')).toHaveText(
+      "CAD 30.00",
+    );
+    await expect(
+      events.locator('[data-field="test.appliedAfterHold"]'),
+    ).toHaveText("1");
+    // RECON-13: none of it is collected cash.
+    const sample = page.locator('[data-invoice-group="sample"]');
+    await expect(sample.locator('[data-field="net"]')).toHaveText("CAD 0.00");
+    await expect(sample.locator('[data-field="simulatedReceipts"]')).toHaveText(
+      "CAD 30.00",
+    );
+    // RECON-15: no metered test AI requests in this fixture.
+    const requests = page.locator("[data-ai-requests]");
+    await expect(requests.getByRole("status")).toHaveText(
+      "No metered test AI requests to compare.",
+    );
+    await expect(requests).toContainText(
+      "Simulated points at invented rates, not money",
+    );
+    // RECON-19: no event or member identifier, and nothing private, is shown.
+    const text = (await page.locator("main").textContent()) ?? "";
+    expect(text).not.toContain("evt-recon");
+    expect(text).not.toContain("pay-recon");
+    expect(text).not.toContain("Invented private");
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: info.outputPath("request-reconciliation.png"),
+      fullPage: true,
+    });
+    const operator = await f.staff("operator");
+    const denied = await operator.page.goto(
+      f.origin + "/operator/invoice-reconciliation",
+    );
+    expect(denied?.status()).toBe(403);
+    await expect(operator.page.locator("main")).not.toContainText("points");
+  } finally {
+    await f.close();
+  }
+});

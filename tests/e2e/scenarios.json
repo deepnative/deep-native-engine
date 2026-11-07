@@ -2757,6 +2757,15 @@
       "expected": "The bad signature changes nothing; the held refund applies once its payment arrives; the stale failure leaves the invoice paid; both readers see test entries saying no payment provider checked them and no money moved; change history lists a signed test event, not a staff member; no sideways scrolling",
       "issues": [32],
       "critical": true
+    },
+    {
+      "id": "L310",
+      "actor": "Billing administrator reconciling signed test events and metered test AI requests",
+      "preconditions": "Dedicated synthetic PostgreSQL database, sample invoices, signed test events enabled with an invented key, port0 server; desktop/mobile Chromium; no provider, no real money",
+      "steps": "RECON-13/14/15/19: a member accepts one invented invoice; signed events arrive as a refund before its payment, the payment, and a second payment that is held; the administrator opens the invoice and cash reconciliation report; an operator requests it",
+      "expected": "Test receipts, refunds and the held payment show as separate amounts; the early refund counts once as applied after a hold; net collected stays zero; the AI request section says there is nothing to compare and that points are not money; no event or member identifier appears; no sideways scrolling; the operator is refused",
+      "issues": [123],
+      "critical": true
     }
   ],
   "fullMvp": [

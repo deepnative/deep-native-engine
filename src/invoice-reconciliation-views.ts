@@ -7,6 +7,10 @@ import type {
   InvoiceReconciliationSnapshot,
 } from "./invoice-reconciliation.ts";
 import { FLAGGED_LIMIT } from "./invoice-reconciliation.ts";
+import type {
+  AiRequestSummary,
+  TestEventSummary,
+} from "./request-reconciliation.ts";
 import { escape, page } from "./views.ts";
 
 const money = (cents: number) =>
@@ -103,6 +107,113 @@ function groupSection(row: InvoiceCashGroup) {
     ["unlinked", "Invoices no longer linked to a member", String(row.unlinked)],
   ])}</section>`;
 }
+const points = (value: number) => `${value} points`;
+function testEventSection(row: TestEventSummary) {
+  const statusText = {
+    empty: "No signed test events to compare.",
+    applied:
+      "Every signed test event was applied or recorded as a failed payment.",
+    waiting:
+      "Some signed test events are held and not applied. They stay listed so none is lost. This report applies nothing.",
+  }[row.status];
+  return `<section class="portal-card" data-test-events><h2>Signed test events · Test data</h2><p>Invented events from the local test handler, on sample invoices only. No payment provider sent or checked them and no money moved. They are never counted as collected cash.</p><p role="status" data-reconciliation-status="${row.status}">${statusText}</p>${fields(
+    [
+      [
+        "test.receipts",
+        `Test receipts applied (${row.receipts})`,
+        money(row.receiptCents),
+      ],
+      [
+        "test.refunds",
+        `Test refunds applied (${row.refunds})`,
+        money(row.refundCents),
+      ],
+      [
+        "test.failures",
+        `Failed test payments, no money moved (${row.failures})`,
+        money(row.failureCents),
+      ],
+      [
+        "test.waiting",
+        `Held and not applied (${row.waiting})`,
+        money(row.waitingCents),
+      ],
+      [
+        "test.appliedAfterHold",
+        "Held at first, applied later and counted once",
+        String(row.appliedAfterHold),
+      ],
+    ],
+  )}</section>`;
+}
+function aiRequestSection(row: AiRequestSummary) {
+  const statusText = {
+    empty: "No metered test AI requests to compare.",
+    consistent:
+      "Every settled cost has a used unit, and every used unit has a settled cost.",
+    discrepancies:
+      "Mismatches between costs and units remain visible below. This report corrects nothing.",
+  }[row.status];
+  return `<section class="portal-card" data-ai-requests><h2>Metered test AI requests · Test data</h2><p>Local test AI requests, each using one study-request unit. Simulated points at invented rates, not money. Points are never set against any invoice amount.</p><p role="status" data-reconciliation-status="${row.status}">${statusText}</p><h3>Estimated and actual cost</h3>${fields(
+    [
+      ["ai.requests", "Requests", String(row.requests)],
+      [
+        "ai.noEstimate",
+        "Requests with no estimate, not comparable",
+        String(row.noEstimate),
+      ],
+      [
+        "ai.estimated",
+        `Estimated, all requests (${row.estimated})`,
+        points(row.estimatedPoints),
+      ],
+      [
+        "ai.settledEstimate",
+        `Estimated, settled requests (${row.settled})`,
+        points(row.settledEstimatePoints),
+      ],
+      [
+        "ai.actual",
+        `Actual, settled requests (${row.settled})`,
+        points(row.actualPoints),
+      ],
+      [
+        "ai.openEstimate",
+        "Estimated for requests with no settled cost, not an actual",
+        points(row.openEstimatePoints),
+      ],
+      [
+        "ai.above",
+        `Actual above estimate, never netted (${row.aboveEstimate})`,
+        points(row.abovePoints),
+      ],
+      [
+        "ai.below",
+        `Actual below estimate, never netted (${row.belowEstimate})`,
+        points(row.belowPoints),
+      ],
+    ],
+  )}<h3>Study-request units</h3>${fields([
+    ["ai.reserved", "Still reserved", String(row.reservedUnits)],
+    ["ai.consumed", "Used", String(row.consumedUnits)],
+    ["ai.released", "Released", String(row.releasedUnits)],
+    [
+      "ai.heldUnknown",
+      "Held with an unknown outcome, unit kept reserved",
+      String(row.heldUnknown),
+    ],
+    [
+      "ai.consumedWithoutActual",
+      "Unit used with no settled cost",
+      String(row.consumedWithoutActual),
+    ],
+    [
+      "ai.actualWithoutConsumed",
+      "Settled cost with no used unit",
+      String(row.actualWithoutConsumed),
+    ],
+  ])}</section>`;
+}
 export function invoiceReconciliationPage(
   snapshot: InvoiceReconciliationSnapshot,
 ) {
@@ -143,7 +254,7 @@ export function invoiceReconciliationPage(
           String(manual.notComparableInvoices),
         ],
       ],
-    )}</section><h2>Flagged invoices</h2>${flaggedSection}<h2>What this report cannot establish</h2><ul><li>Collected cash here is what staff recorded. No bank or payment provider record is compared.</li><li>Provider, job, cost and capacity records are not compared, because none exist to compare.</li><li>This is not revenue, conversion, renewal or cancellation. Those need decisions that have not been made.</li><li>No member names, emails or evidence references are shown. Nothing is corrected or stored.</li></ul><p><a href="/operator/invoice-reconciliation">Read a fresh snapshot</a></p></article>`,
+    )}</section>${testEventSection(snapshot.testEvents)}${aiRequestSection(snapshot.aiRequests)}<h2>Flagged invoices</h2>${flaggedSection}<h2>What this report cannot establish</h2><ul><li>Collected cash here is what staff recorded. No bank or payment provider record is compared.</li><li>Signed test events are invented, and AI request costs are simulated points. Neither is money, and no payment provider record is compared.</li><li>No staff cost, forecast or capacity records are compared, because none exist to compare.</li><li>This is not revenue, conversion, renewal or cancellation. Those need decisions that have not been made.</li><li>No member names, emails or evidence references are shown. Nothing is corrected or stored.</li></ul><p><a href="/operator/invoice-reconciliation">Read a fresh snapshot</a></p></article>`,
   );
 }
 export function invoiceReconciliationUnavailablePage(
