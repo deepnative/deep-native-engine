@@ -345,11 +345,13 @@ it("PREPARED-04 concurrent original actions retain exactly one source and change
       templateDigest: other.digest,
     })
     .expect(409);
+  // OPKEY-01: another member's key reads exactly like an unused one.
   const stranger = await member();
-  const denied = await stranger
+  const foreign = await stranger
     .post("/evidence/prepared/inspect", { operationId: m.input.operationId })
-    .expect(403);
-  expect(denied.text).not.toContain(ids[0]);
+    .expect(200);
+  expect(foreign.text).not.toContain(ids[0]);
+  expect(foreign.text).toContain("No owned retained receipt was found.");
   expect(
     (
       await pool.query(
@@ -724,4 +726,58 @@ it("PREPARED-05 a creation blocked on the original instruction cannot outlive ac
     blocker.release();
     await response;
   }
+});
+
+it("OPKEY-01/02 another member's original key reads and acts like an unused key", async () => {
+  const owner = await member(),
+    other = await member();
+  const created = await owner
+    .post("/evidence/prepared", owner.input)
+    .expect(200);
+  const ownerId = created.text.match(
+    /data-prepared-evidence="([a-f0-9-]+)"/,
+  )![1]!;
+  const blank = (text: string) =>
+    text.replace(/name="csrf" value="[a-f0-9]+"/g, 'name="csrf" value=""');
+  const unused = await other
+    .post("/evidence/prepared/inspect", { operationId: randomUUID() })
+    .expect(200);
+  const foreign = await other
+    .post("/evidence/prepared/inspect", {
+      operationId: owner.input.operationId,
+    })
+    .expect(200);
+  expect(blank(foreign.text)).toBe(blank(unused.text));
+  expect(foreign.text).not.toContain(ownerId);
+  // OPKEY-02: the other member's own copy under that key is theirs alone.
+  const own = await other
+    .post("/evidence/prepared", {
+      ...other.input,
+      operationId: owner.input.operationId,
+    })
+    .expect(200);
+  const otherId = own.text.match(/data-prepared-evidence="([a-f0-9-]+)"/)![1]!;
+  expect(otherId).not.toBe(ownerId);
+  const ownerAgain = await owner
+    .post("/evidence/prepared/inspect", {
+      operationId: owner.input.operationId,
+    })
+    .expect(200);
+  expect(ownerAgain.text).toContain(ownerId);
+  expect(ownerAgain.text).not.toContain(otherId);
+  const otherAgain = await other
+    .post("/evidence/prepared/inspect", {
+      operationId: owner.input.operationId,
+    })
+    .expect(200);
+  expect(otherAgain.text).toContain(otherId);
+  expect(otherAgain.text).not.toContain(ownerId);
+  expect(
+    (
+      await pool.query(
+        "SELECT count(DISTINCT member_id)::int members,count(*)::int n FROM provided_evidence_operations WHERE operation_id=$1",
+        [owner.input.operationId],
+      )
+    ).rows[0],
+  ).toEqual({ members: 2, n: 2 });
 });

@@ -75,7 +75,13 @@ function fixture() {
         state.operation.evidenceId = randomUUID();
       if (state.changeOwner && state.operationReads === 2 && state.operation)
         state.operation.memberId = randomUUID();
-      rows = state.operation ? [{ ...state.operation }] : [];
+      // The store filters by the signed-in member and workspace (#42).
+      rows =
+        state.operation &&
+        state.operation.memberId === values![1] &&
+        state.operation.workspaceId === values![2]
+          ? [{ ...state.operation }]
+          : [];
     } else if (
       sql.includes("FROM evidence_objects e JOIN provided_evidence_origins")
     )
@@ -234,9 +240,10 @@ it.each([
     if (reason === "invalid origin")
       f.state.source!.templateDigest = "a".repeat(64);
     if (reason === "source changed") f.state.changeSource = true;
-    expect(await f.store.inspect(token, instruction.operationId)).toEqual({
-      kind: reason.startsWith("foreign") ? "denied" : "unavailable",
-    });
+    // Another member's or workspace's key reads exactly like an unused one.
+    expect(await f.store.inspect(token, instruction.operationId)).toMatchObject(
+      { kind: reason.startsWith("foreign") ? "absent" : "unavailable" },
+    );
   },
 );
 it.each(["withdrawn", "deleting", "removed"])(
@@ -281,12 +288,12 @@ it("PREPARED-05 authority expiring at the database observation withholds creatio
   );
   expect(f.release).toHaveBeenCalledTimes(1);
 });
-it("PREPARED-05 a corrupt receipt returned after the source wait cannot disclose another owner's source", async () => {
+it("PREPARED-05 a receipt that changes owner during the source wait reads as absent, never another owner's source", async () => {
   const f = fixture(),
     instruction = input();
   retained(f, instruction);
   f.state.changeOwner = true;
-  expect(await f.store.inspect(token, instruction.operationId)).toEqual({
-    kind: "denied",
+  expect(await f.store.inspect(token, instruction.operationId)).toMatchObject({
+    kind: "absent",
   });
 });
