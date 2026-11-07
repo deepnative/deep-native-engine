@@ -1,4 +1,10 @@
 import type { Pool, PoolClient } from "pg";
+import {
+  emptyAiRequests,
+  emptyTestEvents,
+  readRequestSources,
+  type RequestSources,
+} from "./request-reconciliation.ts";
 import { hash } from "./store.ts";
 
 /** #123 RECON: read-only comparison of invoices with their recorded money events. */
@@ -77,7 +83,7 @@ export interface ManualRecordCheck {
   comparedMembers: number;
   notComparableInvoices: number;
 }
-export interface InvoiceReconciliationSnapshot {
+export interface InvoiceReconciliationSnapshot extends RequestSources {
   asOf: Date;
   groups: [InvoiceCashGroup, InvoiceCashGroup];
   flagged: FlaggedInvoice[];
@@ -211,6 +217,10 @@ export function reconcileInvoices(
   facts: readonly InvoiceFact[],
   manual: ManualRecordCheck,
   asOf: Date,
+  sources: RequestSources = {
+    testEvents: emptyTestEvents,
+    aiRequests: emptyAiRequests,
+  },
 ): InvoiceReconciliationSnapshot {
   const flagged = facts
     .map((fact) => ({
@@ -232,6 +242,7 @@ export function reconcileInvoices(
     flagged: flagged.slice(0, FLAGGED_LIMIT),
     flaggedTotal: flagged.length,
     manual,
+    ...sources,
   };
 }
 
@@ -325,6 +336,7 @@ export async function readInvoiceReconciliation(
 ): Promise<InvoiceReconciliationSnapshot> {
   const facts = await client.query<Record<string, unknown>>(factsSql),
     manual = (await client.query<Record<string, unknown>>(manualSql)).rows[0],
+    sources = await readRequestSources(client),
     asOf = (await client.query<{ asOf: Date }>('SELECT now() AS "asOf"'))
       .rows[0];
   if (!manual || !asOf) throw new Error("Invoice report row missing");
@@ -337,6 +349,7 @@ export async function readInvoiceReconciliation(
       notComparableInvoices: whole(manual.notComparableInvoices),
     },
     asOf.asOf,
+    sources,
   );
 }
 class AccessDenied extends Error {}
