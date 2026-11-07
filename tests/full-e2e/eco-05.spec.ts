@@ -151,6 +151,8 @@ test("[F-ECO-05-A] a proposed resource records its rights and stays private unti
         owner.getByText("Editorial acceptance is needed before sharing."),
       ).toBeVisible();
       await expect(owner.getByLabel("Sharing audience")).toHaveCount(0);
+      // The page has no form yet, so take the session's form token elsewhere.
+      await owner.goto(f.origin + "/contribute");
       const csrf = await owner
         .locator('input[name="csrf"]')
         .first()
@@ -242,7 +244,8 @@ test("[F-ECO-05-B] only an editor's accepted revision is shared, and only with t
       // Its agreed scope is signed-in members, so a visitor reads nothing.
       const visitor = await f.page();
       const response = await visitor.goto(shared);
-      expect(response?.status()).not.toBe(200);
+      // A visitor is refused or sent home; either way the page is not shown.
+      expect(response?.status() !== 200 || visitor.url() !== shared).toBe(true);
       await expect(visitor.getByText(corrected)).toHaveCount(0);
     });
     await requiredCheck(2, async () => {
