@@ -2091,10 +2091,12 @@ footer {
   margin: 12px 0 20px;
 }
 
-/* CONSOLECOACH-01: latest coaching month in the learner table. */
+/* CONSOLEMONTHS-01..03: coaching months in the learner table; each month
+   header names its month on a second line. */
 .member-table td.member-coaching {
   white-space: nowrap;
 }
+.member-table thead th span,
 .member-table td.member-coaching span {
   display: block;
   color: var(--muted);

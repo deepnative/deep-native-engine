@@ -2555,9 +2555,9 @@
       "id": "L287",
       "actor": "Platform administrator with 60 learner accounts",
       "preconditions": "Dedicated synthetic PostgreSQL database with 60 invented named learners, verified owner identity, port0 server; desktop/mobile Chromium",
-      "steps": "ADMINTABLE-01..05: enter administration, read the first 25 learners, page forward, select a learner from page 2, page to the last rows, search part of a name and clear the search; CONSOLECOACH-01/02: read each learner's latest coaching month and jump to the chosen learner's summary",
+      "steps": "ADMINTABLE-01..05: enter administration, read the first 25 learners, page forward, select a learner from page 2, page to the last rows, search part of a name and clear the search; CONSOLEMONTHS-01..03: read each learner's coaching hours and status for this month, last month and the latest earlier month, and open a month's coaching page; CONSOLECOACH-02: jump to the chosen learner's summary",
       "expected": "The table is sorted by name with an exact count and Previous/Next, the selection stays through paging, search filters and counts only matches, private work is not shown, and the page avoids sideways scrolling and controls under 40px on desktop and mobile",
-      "issues": [641, 654],
+      "issues": [641, 654, 732],
       "critical": true
     },
     {
