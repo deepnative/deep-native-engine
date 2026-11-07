@@ -387,11 +387,10 @@ it("RECON-09 simulated events reconcile but are not collected cash", async () =>
   try {
     await client.query("BEGIN");
     await client.query(
-      "ALTER TABLE simple_invoice_payments DROP CONSTRAINT IF EXISTS simple_invoice_payments_unverified",
-    );
-    await client.query(
-      "INSERT INTO simple_invoice_payments(id,invoice_id,amount_cents,received_on,verification,evidence_reference) VALUES($1,$2,700,$3,'signed_test_event','Invented event')",
-      [randomUUID(), i.invoiceId, today],
+      `INSERT INTO simple_invoice_payments(id,invoice_id,amount_cents,received_on,verification,evidence_reference,
+         provider_event_id,provider_payment_ref,provider_event_type,provider_event_digest,provider_occurred_at)
+       VALUES($1,$2,700,$3,'signed_test_event','Invented event','evt-recon-09','pay-recon-09','payment.succeeded',$4,now())`,
+      [randomUUID(), i.invoiceId, today, "a".repeat(64)],
     );
     await client.query(
       "UPDATE simple_invoices SET paid_cents=700 WHERE id=$1",

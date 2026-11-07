@@ -18,7 +18,19 @@ A finite current platform administrator can also explicitly generate due invoice
 
 Offline funds and refunds are separate, append-only events with server actor and time, event date, a required evidence reference and the fixed status `manual_unverified`. The invoice shows them as a **Payment record** labelled "Recorded manually by staff. Not verified by a payment provider." The member sees amount, date and reference, and the export adds them as `invoicePayments` (section 60, `local-member-records-v37`); only staff see who recorded each entry. The reference rejects card-like digit runs, and it must not hold bank credentials.
 
-**Record offline refund** records money already returned. It moves no money. The recorded payment stays, the status reads **Partly refunded** or **Refunded**, the balance does not reopen and the course agreement is unchanged. A mistyped receipt has no correction path yet. Signed provider events and provider reconciliation are not implemented: see [#32](https://github.com/deepnative/deep-native-engine/issues/32).
+**Record offline refund** records money already returned. It moves no money. The recorded payment stays, the status reads **Partly refunded** or **Refunded**, the balance does not reopen and the course agreement is unchanged. A mistyped receipt has no correction path yet. A real provider and its reconciliation are not implemented: see [#32](https://github.com/deepnative/deep-native-engine/issues/32).
+
+## Signed test events (local only)
+
+`DNE_TEST_PROVIDER_EVENTS=enabled` with `DNE_TEST_PROVIDER_EVENT_KEY` (an invented key of 32 or more characters) and `DNE_INVOICE_MODE=sample` adds `POST /test-provider/invoice-events`. It is off by default, and a hosted site, including the demo site, refuses to start with it on. No provider, account or money is involved, and this format is not a real provider's contract.
+
+The `X-DNE-Test-Signature` header is `sha256=` followed by the hex HMAC-SHA256 of the raw body. The body has exactly `id`, `type` (`payment.succeeded`, `payment.failed` or `refund.succeeded`), `invoiceId`, `paymentRef`, `amountCents` and `occurredAt`. A bad signature gets 401 before anything is read, and a real invoice gets 404.
+
+- Each event becomes an immutable row in the same event table, with the fixed status `signed_test_event` and no staff actor. Repeating an ID does nothing; reusing it with different content gets 409.
+- A failure never moves money, so a stale failure can't undo a payment and never reads as a refund.
+- A refund that arrives before its payment is held, then applied once when the payment arrives. A payment on a void invoice, above the balance or repeated under a new ID is held with no money moved. Held events are shown as **Test event not applied** and stay held.
+- Events change only the invoice record. They grant no access or entitlement and don't change the agreement. A return address or redirect does nothing.
+- The invoice labels these entries as simulated, and staff change history lists them as signed test events, not as a staff member's act.
 
 ## Corrections and correspondence
 

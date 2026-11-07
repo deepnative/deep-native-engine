@@ -262,8 +262,8 @@ const factsSql = `SELECT i.id,i.sample,i.owner_id IS NOT NULL AS linked,i.voided
      COALESCE(sum(p.amount_cents) FILTER (WHERE p.kind='refund' AND p.verification<>'manual_unverified'),0) AS simulated_refund_cents,
      to_char(min(p.received_on) FILTER (WHERE p.kind='receipt'),'YYYY-MM-DD') AS first_receipt,
      to_char(min(p.received_on) FILTER (WHERE p.kind='refund'),'YYYY-MM-DD') AS first_refund,
-     count(*) FILTER (WHERE to_char(p.recorded_at AT TIME ZONE 'UTC','YYYY-MM')>to_char(p.received_on,'YYYY-MM'))::integer AS late_events,
-     COALESCE(sum(p.amount_cents) FILTER (WHERE to_char(p.recorded_at AT TIME ZONE 'UTC','YYYY-MM')>to_char(p.received_on,'YYYY-MM')),0) AS late_cents
+     count(*) FILTER (WHERE p.kind IN ('receipt','refund') AND to_char(p.recorded_at AT TIME ZONE 'UTC','YYYY-MM')>to_char(p.received_on,'YYYY-MM'))::integer AS late_events,
+     COALESCE(sum(p.amount_cents) FILTER (WHERE p.kind IN ('receipt','refund') AND to_char(p.recorded_at AT TIME ZONE 'UTC','YYYY-MM')>to_char(p.received_on,'YYYY-MM')),0) AS late_cents
    FROM simple_invoice_payments p WHERE p.invoice_id=i.id
  ) e`;
 // Staff change history names a member, not an invoice, so it compares per member.

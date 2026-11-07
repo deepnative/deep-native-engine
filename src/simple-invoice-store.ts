@@ -62,13 +62,13 @@ export interface StoredInvoice {
   delivery: "not_sent" | "sending" | "sent" | "unconfirmed";
   payments?: InvoicePaymentEvent[];
 }
-/** A staff-entered event. Never a payment-provider confirmation. */
+/** Staff-entered or a signed test event. Never a payment-provider confirmation. */
 export interface InvoicePaymentEvent {
-  kind: "receipt" | "refund";
+  kind: "receipt" | "refund" | "failure" | "held";
   amountCents: number;
   on: string;
   evidence: string | null;
-  verification: "manual_unverified";
+  verification: "manual_unverified" | "signed_test_event";
   recordedBy?: string;
 }
 export interface InvoiceOverview {
@@ -1179,9 +1179,12 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             `SELECT p.kind,p.amount_cents AS "amountCents",to_char(p.received_on,'YYYY-MM-DD') AS "on",
                     p.evidence_reference AS evidence,p.verification,
                     CASE WHEN NOT $2::boolean THEN NULL
+                         WHEN p.verification='signed_test_event' THEN 'Signed test event'
                          WHEN p.actor_id IS NULL THEN 'Removed staff account'
                          ELSE 'Staff account '||left(p.actor_id::text,8) END AS "recordedBy"
              FROM simple_invoice_payments p WHERE p.invoice_id=$1
+               AND NOT (p.kind='held' AND EXISTS(SELECT 1 FROM simple_invoice_payments a
+                 WHERE a.provider_event_id=p.provider_event_id AND a.kind='refund'))
              ORDER BY p.received_on,p.recorded_at,p.id`,
             [id, admin],
           )

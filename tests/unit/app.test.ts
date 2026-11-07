@@ -20,6 +20,12 @@ import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import request from "supertest";
 import { createServer, type Server } from "node:http";
 import { app } from "../../src/app.ts";
+import {
+  signTestProviderEvent,
+  TEST_PROVIDER_PATH,
+  TEST_PROVIDER_SIGNATURE,
+  type TestProviderEventStore,
+} from "../../src/test-provider-events.ts";
 import { accountPage, lesson } from "../../src/views.ts";
 import type { UploadAdmissionStore } from "../../src/upload-admission.ts";
 import {
@@ -88,6 +94,49 @@ import {
   LEARNING_WORKSPACE_CONTENT,
   learningWorkspacePack,
 } from "../../src/learning-workspace-pack.ts";
+it("TESTPAY-01 serves signed test events only when the application is given them", async () => {
+  const key = "invented-unit-test-provider-key-0123456789",
+    apply = vi.fn(async () => ({
+      kind: "ready" as const,
+      value: { outcome: "receipt" as const },
+    })),
+    body = JSON.stringify({
+      id: "evt-app-1",
+      type: "payment.succeeded",
+      invoiceId: "00000000-0000-4000-8000-000000000001",
+      paymentRef: "pay-1",
+      amountCents: 100,
+      occurredAt: "2026-01-01T00:00:00.000Z",
+    }),
+    send = (agent: request.Agent) =>
+      agent
+        .post(TEST_PROVIDER_PATH)
+        .set("Host", new URL(origin).host)
+        .set("Content-Type", "application/json")
+        .set(TEST_PROVIDER_SIGNATURE, signTestProviderEvent(key, body))
+        .send(body);
+  const off = await send(
+    await managedAgent(app(db, { origin, secret: "secret" })),
+  );
+  expect(off.status).not.toBe(200);
+  expect(apply).not.toHaveBeenCalled();
+  const on = await send(
+    await managedAgent(
+      app(db, {
+        origin,
+        secret: "secret",
+        testProviderEvents: {
+          key,
+          store: { apply } as unknown as TestProviderEventStore,
+        },
+      }),
+    ),
+  );
+  expect(on.status).toBe(200);
+  expect(on.body).toEqual({ outcome: "receipt" });
+  expect(apply).toHaveBeenCalledOnce();
+});
+
 it("serves goal-matched event previews only to active members and never accepts enrollment", async () => {
   const db = storage();
   const agent = await managedAgent(app(db, { origin, secret: "secret" }));

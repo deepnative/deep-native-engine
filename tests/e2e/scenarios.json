@@ -2748,6 +2748,15 @@
       "expected": "Invoiced, receipts, refunds, net collected and unpaid balance read as separate amounts under a test-data heading; the empty group reads not applicable; the refund is flagged as a reversal; no evidence reference appears; the operator and member are refused with no amounts; no sideways scrolling",
       "issues": [123],
       "critical": true
+    },
+    {
+      "id": "L309",
+      "actor": "Billing administrator and member reading signed test events on a sample invoice",
+      "preconditions": "Dedicated synthetic PostgreSQL database, sample invoices, signed test events enabled with an invented key, port0 server; desktop/mobile Chromium; no provider, no real money",
+      "steps": "TESTPAY-04/06/07/10: a member accepts one invented invoice; a badly signed event is refused; signed events arrive as refund, then payment, then a stale failure; the member and administrator reload; the administrator opens change history",
+      "expected": "The bad signature changes nothing; the held refund applies once its payment arrives; the stale failure leaves the invoice paid; both readers see test entries saying no payment provider checked them and no money moved; change history lists a signed test event, not a staff member; no sideways scrolling",
+      "issues": [32],
+      "critical": true
     }
   ],
   "fullMvp": [
