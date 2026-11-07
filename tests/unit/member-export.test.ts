@@ -103,7 +103,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v37",
+      version: "local-member-records-v38",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -227,7 +227,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
     // Original indices0..59 remain; manual invoice events section60 is valid.
-    [2, 61, ...valid.slice(2)],
+    [2, 62, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -281,7 +281,7 @@ it.each([
     expect(result).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v37",
+        version: "local-member-records-v38",
         records: { [name]: [{ record: "Invented owned metadata" }] },
       },
     });
@@ -518,7 +518,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v37",
+        version: "local-member-records-v38",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -726,7 +726,7 @@ it("appends owned review accounting at indices 33-35 without moving existing sec
     expect(value).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v37",
+        version: "local-member-records-v38",
         records: { [name]: [{ id: "owned-accounting" }] },
       },
     });
@@ -759,7 +759,7 @@ it("appends safe source-deleted assignment receipts at index36 without moving an
   expect(value).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v37",
+      version: "local-member-records-v38",
       records: { sampleAssignmentOperations: [record] },
     },
   });
@@ -896,7 +896,7 @@ it("CONPUB-04 appends owner-only publication permissions at cursor index46 with 
   expect(result).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v37",
+      version: "local-member-records-v38",
       records: {
         proposalPublications: [{ state: "withdrawn", attribution: null }],
       },
@@ -1031,4 +1031,34 @@ it("LWORK-03 measures decoded export bytes and never skips corrupted private wri
     expect(corrupt.statements).toContain("ROLLBACK");
     expect(corrupt.statements).not.toContain("COMMIT");
   }
+});
+
+it("STAFFEXPORT-02/04 appends the member's staff access history at index 61 without identities", async () => {
+  const fake = fakePool({ id: "member-1" }, (sql) =>
+    sql.includes("FROM authorization_audit x")
+      ? [{ _key: ["workflow", "b"], source: "workflow", action: "note_read" }]
+      : [],
+  );
+  const result = await memberExportStore(fake.pool, secret).exportOwned(
+    "owner",
+    signed([2, 61, ["access", "a"], 2, Date.now() + 60000]),
+  );
+  if (result.kind !== "ready") throw Error("Expected appended owner cursor");
+  expect(Object.keys(result.payload.records).indexOf("staffAccess")).toBe(61);
+  expect(result.payload.records.staffAccess).toEqual([
+    { source: "workflow", action: "note_read" },
+  ]);
+  const query = fake.statements.find((sql) =>
+    sql.includes("FROM authorization_audit x"),
+  )!;
+  for (const table of [
+    "private_sample_feedback_audit",
+    "proposal_audit",
+    "workflow_review_read_audit",
+  ])
+    expect(query).toContain(table);
+  expect(query).toContain("w.owner_principal_id=$1 AND w.deleting_at IS NULL");
+  expect(query).not.toMatch(
+    /actor_id|staff_id|grant_id|assignment_id|request_id|submission_id|purpose|revision|original_name/,
+  );
 });

@@ -2793,6 +2793,15 @@
       "expected": "The refused save returns 429 with Retry-After and a plain wait message, saves nothing and keeps the typed milestone in the form; the same form then saves; no sideways scrolling",
       "issues": [42],
       "critical": true
+    },
+    {
+      "id": "L314",
+      "actor": "Member downloading their records after staff opened their work",
+      "preconditions": "Dedicated synthetic PostgreSQL database, invented administrator and coach provisioned through the authorization store, port0 server; desktop/mobile Chromium",
+      "steps": "STAFFEXPORT-01, 02, 05: an administrator gives a coach access to the member's workspace with an invented purpose and the coach opens it; the member opens When staff opened my work, follows Download my records and takes the JSON",
+      "expected": "The history page says the download includes it as staffAccess; the download is v38 and its staffAccess section lists the grant and the opening as assignment access, with no purpose, staff or grant identifiers; no sideways scrolling",
+      "issues": [40],
+      "critical": false
     }
   ],
   "fullMvp": [

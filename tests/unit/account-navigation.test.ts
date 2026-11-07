@@ -184,6 +184,6 @@ it("ACCT-PLAIN-05 the export paragraph lists the same records in plain language"
     .match(/<a href="\/member\/export">[\s\S]*?<\/p>/)![0]
     .replace(/<[^>]+>/g, "");
   expect(paragraph).toBe(
-    "Download my structured records. You get JSON files with your current profile, learning, plans and saved proposal records. Evidence samples download separately. Each file holds up to 100 records and 256 KiB, and shows your records as they are when you download it. The download leaves out audit records, billing records, files made from your evidence, copies held by service providers and backups.",
+    "Download my structured records. You get JSON files with your current profile, learning, plans and saved proposal records. Evidence samples download separately. Each file holds up to 100 records and 256 KiB, and shows your records as they are when you download it. It includes when staff opened your work. It leaves out other audit records, billing records, files made from your evidence, copies held by service providers and backups.",
   );
 });
