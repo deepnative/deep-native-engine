@@ -16,7 +16,7 @@ A request or assignment can commit even if its response is lost. Keep the origin
 
 ## History and privacy
 
-Own request receipts/history and member export contain bounded metadata. Staff attribution in export is generic; no staff directory or second raw-note copy is retained in permission history. Download every available export page for your records. Member erasure removes private note/request/grant linkage; anonymous reserved operation keys remain to prevent reuse.
+Each time a moderator opens an assigned note, `workflow_review_read_audit` records who, which grant and which version, with no note text, in the transaction that releases the note. The member sees it on When staff opened my work, with no staff identity. Reads before this log started are not recorded. Own request receipts/history and member export contain bounded metadata. Staff attribution in export is generic; no staff directory or second raw-note copy is retained in permission history. Download every available export page for your records. Member erasure removes private note/request/grant linkage; anonymous reserved operation keys remain to prevent reuse.
 
 ## Configuration and compatible pause
 

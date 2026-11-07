@@ -26,6 +26,13 @@ async function reset() {
      ON CONFLICT DO NOTHING`,
     [SEEDED],
   );
+  // As migration 103 leaves them: a hint, and no known grant date.
+  await pool.query(
+    `UPDATE account_roles r SET granted_at=NULL,email_hint=s.hint
+       FROM (VALUES ($1,'sh…@deepnative.io'),($2,'to…@deepnative.io')) s(h,hint)
+      WHERE r.email_hash=s.h`,
+    SEEDED,
+  );
 }
 beforeAll(() => migrate(pool));
 beforeEach(reset);
@@ -82,12 +89,17 @@ it("ROLEADMIN-01/02/05 lists role holders and grants roles to a typed email", as
       emailHash: hash("tom@deepnative.io"),
       roles: ["coach", "admin"],
       people: [{ id: tom.id, name: "Invented Tom" }],
+      hint: "to…@deepnative.io",
+      grantedAt: null,
       self: true,
     },
     {
       emailHash: hash("shi@deepnative.io"),
       roles: ["coach", "admin"],
       people: [],
+      // ROLE-LABEL-01: the seeded owners carry a hint from migration 103.
+      hint: "sh…@deepnative.io",
+      grantedAt: null,
       self: false,
     },
   ]);
@@ -119,6 +131,26 @@ it("ROLEADMIN-01/02/05 lists role holders and grants roles to a typed email", as
     { action: "granted", role: "coach" },
     { action: "granted", role: "admin" },
   ]);
+  // ROLE-LABEL-01/02: a role for an email with no account shows its hint and date.
+  const today = (
+    await pool.query<{ d: string }>(
+      "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD') AS d",
+    )
+  ).rows[0]!.d;
+  const later = await admin.roles(tom.credential);
+  expect(
+    later.kind === "ready" &&
+      later.value.holders.find(
+        (h) => h.emailHash === hash("later@example.test"),
+      ),
+  ).toMatchObject({ people: [], hint: "la…@example.test", grantedAt: today });
+  const picker = await admin.learnerCoaches(tom.credential, ada.id);
+  expect(
+    picker.kind === "ready" &&
+      picker.value.coaches.find(
+        (c) => c.emailHash === hash("later@example.test"),
+      )?.label,
+  ).toBe("la…@example.test (not signed up yet)");
   for (const input of [
     { email: "not an email", roles: ["coach"] as const },
     { email: "x@example.test", roles: [] as const },
@@ -164,7 +196,9 @@ it("ROLEADMIN-03/04 removes roles but never the acting administrator's own admin
   expect(
     await admin.remove(tom.credential, { emailHash: "nope", role: "admin" }),
   ).toEqual({ kind: "invalid" });
+  // CHANGELOG-03: Tom's own default assignment goes with his coach role.
   expect(await events()).toEqual([
+    { action: "cleared", role: null },
     { action: "removed", role: "coach" },
     { action: "removed", role: "admin" },
   ]);
@@ -289,6 +323,11 @@ it("DEFCOACH-01/04 an administrator sets each learner's coaches; each coach sees
     { action: "cleared", role: null },
     { action: "assigned", role: null },
     { action: "assigned", role: null },
+    // CHANGELOG-03: each learner Tom still coached is logged as lost.
+    { action: "cleared", role: null },
+    { action: "cleared", role: null },
+    { action: "cleared", role: null },
+    { action: "cleared", role: null },
     { action: "removed", role: "coach" },
   ]);
 });

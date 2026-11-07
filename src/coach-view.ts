@@ -7,7 +7,13 @@ export type CoachRow = { name: string | null; minutes: number; status: string };
 export type CoachSummaryResult =
   | {
       kind: "ready";
-      value: { month: string; today: string; rows: CoachRow[] };
+      /** `assigned` counts every learner assigned to this coach (#696). */
+      value: {
+        month: string;
+        today: string;
+        assigned: number;
+        rows: CoachRow[];
+      };
     }
   | { kind: "denied" | "invalid" | "unavailable" };
 export interface CoachView {
@@ -29,8 +35,11 @@ export function coachViewStore(pool: Pool): CoachView {
       if (month !== undefined && !coachingMonth(month))
         return { kind: "invalid" };
       try {
-        const coach = await pool.query<{ today: string }>(
-          `SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM') AS today
+        const coach = await pool.query<{ today: string; assigned: number }>(
+          `SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM') AS today,
+                  (SELECT count(DISTINCT a.learner_id)::integer FROM coach_assignments a
+                     JOIN member_email_identities e ON e.email_hash=a.coach_email_hash
+                    WHERE e.principal_id=p.id) AS assigned
              FROM principals p
              JOIN workspaces w ON w.owner_principal_id=p.id AND w.deleting_at IS NULL
              JOIN member_email_identities i ON i.principal_id=p.id
@@ -68,6 +77,7 @@ export function coachViewStore(pool: Pool): CoachView {
           value: {
             month: selected,
             today,
+            assigned: coach.rows[0]!.assigned,
             rows: rows.rows.map((r) => ({
               name: r.displayName,
               minutes: r.minutes,

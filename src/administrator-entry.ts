@@ -20,6 +20,7 @@ export interface LatestCoaching {
   returned: boolean;
   totalCents: string | null;
   paidCents: string | null;
+  refundedCents?: string | null;
   voided: boolean;
 }
 export interface AdministratorConsole {
@@ -220,7 +221,7 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
           const summary = (where: string) =>
             `(SELECT json_build_object('month',m.month,'minutes',m.minutes,'state',m.state,
                 'returned',m.return_reason IS NOT NULL,'totalCents',i.total_cents::text,
-                'paidCents',i.paid_cents::text,'voided',i.voided_at IS NOT NULL)
+                'paidCents',i.paid_cents::text,'refundedCents',i.refunded_cents::text,'voided',i.voided_at IS NOT NULL)
               FROM coaching_months m LEFT JOIN simple_invoices i ON i.id=m.invoice_id
               WHERE m.owner_id=l.id AND ${where} ORDER BY m.month DESC LIMIT 1)`;
           const members = (

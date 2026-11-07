@@ -132,7 +132,10 @@ it("MR-03 uses the selected actor and handles query, denial, failure and deliber
     next();
   });
   const read = vi.fn().mockResolvedValue(snapshot);
-  registerMetricsReportRoutes(app, { snapshot: read });
+  registerMetricsReportRoutes(app, {
+    snapshot: read,
+    logExport: vi.fn(),
+  });
   await withLoopback(app, async (server) => {
     const good = await request(server)
       .get("/operator/metrics/report")

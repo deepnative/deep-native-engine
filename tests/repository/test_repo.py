@@ -1219,6 +1219,13 @@ class AzureReleasePreservation(unittest.TestCase):
         proxy = r.prepare(app, 'b'*40)['properties']['template']['containers'][1]
         self.assertFalse(any(v['name'].startswith('DNE_INVOICE_') for v in proxy.get('env', [])))
 
+    def test_testpay02_release_never_enables_signed_test_events(self):
+        r = self.release()
+        source = (SOURCE / 'scripts/azure-release.py').read_text()
+        self.assertNotIn('DNE_TEST_PROVIDER', source)
+        container = r.prepare(self.durable(), 'b'*40)['properties']['template']['containers'][0]
+        self.assertFalse(any(v['name'].startswith('DNE_TEST_PROVIDER') for v in container['env']))
+
     def test_azinv03_hosted_runtime_accepts_the_released_invoice_settings(self):
         r = self.release()
         node = shutil.which('node')

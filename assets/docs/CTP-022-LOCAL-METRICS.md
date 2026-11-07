@@ -30,7 +30,7 @@ L222 exercises the normal staff entry/link, empty state, three-audience retained
 
 ## Existing aggregate contract
 
-The operator-only `GET /operator/metrics` endpoint returns one aggregate snapshot from the local preview database. It accepts only an active, unrevoked `operator` or `platform_admin` staff principal. It never returns member IDs, profiles, evidence or per-member drill-down. Every response is labelled `synthetic-local-preview`; none is a live business KPI. The timestamp is the database statement time. No external analytics provider receives these data.
+The operator-only `GET /operator/metrics` endpoint returns one aggregate snapshot from the local preview database. It accepts only an active, unrevoked `operator` or `platform_admin` staff principal. It never returns member IDs, profiles, evidence or per-member drill-down. Every response is labelled `synthetic-local-preview`; none is a live business KPI. Each JSON download writes a `staff_export_events` row saying who took it and when, before the data is sent; if that write fails, no data is sent. The on-screen report isn't logged. The timestamp is the database statement time. No external analytics provider receives these data.
 
 The fixed denominator for every rate is the number of **retained** learner rows at that timestamp, including members whose sessions expired or were revoked. A privacy deletion removes the learner and all linked events; the snapshot cannot reconstruct prior deleted members, so it is not a durable acquisition cohort. Zero members means the rate is undefined, not zero success. The endpoint supplies counts and definitions, not a rounded or potentially misleading rate.
 

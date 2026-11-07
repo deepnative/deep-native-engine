@@ -9,6 +9,7 @@ import {
 import {
   invoiceCents,
   invoiceDate,
+  invoiceEvidence,
   invoiceDigest,
   invoicePeriod,
   invoiceText,
@@ -41,14 +42,34 @@ export interface InvoicePlan {
   revision: number;
   nextCycle: number;
 }
+type BillingChangeAction =
+  | "plan_offered"
+  | "rate_set"
+  | "hours_returned"
+  | "coaching_invoice_issued"
+  | "monthly_invoice_issued"
+  | "payment_recorded"
+  | "payment_refunded"
+  | "invoice_voided";
 export interface StoredInvoice {
   id: string;
   document: SimpleInvoiceDocument;
   totalCents: number;
   paidCents: number;
+  refundedCents?: number;
   revision: number;
   voidReason: string | null;
   delivery: "not_sent" | "sending" | "sent" | "unconfirmed";
+  payments?: InvoicePaymentEvent[];
+}
+/** Staff-entered or a signed test event. Never a payment-provider confirmation. */
+export interface InvoicePaymentEvent {
+  kind: "receipt" | "refund" | "failure" | "held";
+  amountCents: number;
+  on: string;
+  evidence: string | null;
+  verification: "manual_unverified" | "signed_test_event";
+  recordedBy?: string;
 }
 export interface InvoiceOverview {
   plans: InvoicePlan[];
@@ -63,14 +84,18 @@ const fail = (kind: InvoiceFailure["kind"]): InvoiceFailure => ({ kind });
 const planColumns =
   'id,owner_id AS "ownerId",terms,state,revision,next_cycle AS "nextCycle"';
 const invoiceColumns =
-  'id,document,total_cents AS "totalCents",paid_cents AS "paidCents",revision,delivery,void_reason AS "voidReason"';
+  'id,document,total_cents AS "totalCents",paid_cents AS "paidCents",refunded_cents AS "refundedCents",revision,delivery,void_reason AS "voidReason"';
 const decodeInvoice = (row: StoredInvoice): StoredInvoice => ({
   ...row,
   totalCents: Number(row.totalCents),
   paidCents: Number(row.paidCents),
+  refundedCents: Number(row.refundedCents ?? 0),
   document: {
     ...row.document,
     paidCents: Number(row.paidCents),
+    ...(Number(row.refundedCents ?? 0)
+      ? { refundedCents: Number(row.refundedCents) }
+      : {}),
     ...(row.voidReason ? { voidReason: row.voidReason } : {}),
   },
 });
@@ -87,6 +112,7 @@ export interface SavedCoachingMonth {
   invoiceId?: string | null;
   totalCents?: string | null;
   paidCents?: string | null;
+  refundedCents?: string | null;
   voided?: boolean;
 }
 
@@ -186,6 +212,34 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
     );
     return { kind: "ready", value };
   }
+  /** #40 CHANGELOG-04: inside the change's transaction, so neither happens alone. */
+  const logChange = (
+    tx: PracticeTransaction,
+    actor: string,
+    action: BillingChangeAction,
+    change: { memberId: string; month?: string; amountCents?: number },
+  ) =>
+    tx.query(
+      "INSERT INTO billing_change_events(actor_id,action,member_id,month,amount_cents) VALUES($1,$2,$3,$4,$5)",
+      [
+        actor,
+        action,
+        change.memberId,
+        change.month ?? null,
+        change.amountCents ?? null,
+      ],
+    );
+  const logInvoiceChange = (
+    tx: PracticeTransaction,
+    actor: string,
+    action: BillingChangeAction,
+    invoiceId: string,
+    amountCents: number,
+  ) =>
+    tx.query(
+      "INSERT INTO billing_change_events(actor_id,action,member_id,amount_cents) SELECT $1,$2,owner_id,$3 FROM simple_invoices WHERE id=$4",
+      [actor, action, amountCents, invoiceId],
+    );
   async function coursesEligible(
     tx: PracticeTransaction,
     ownerId: string,
@@ -258,8 +312,10 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
     );
     return id;
   }
+  // A signed-in administrator's run is logged; the scheduled worker has no actor.
   async function due(
     tx: PracticeTransaction,
+    actor?: string,
   ): Promise<InvoiceResult<{ created: number }>> {
     const candidates = (
       await tx.query<{ id: string; owner_id: string }>(
@@ -288,6 +344,11 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
       )
         continue;
       await issue(tx, plan, plan.name, plan.email, plan.nextCycle);
+      if (actor)
+        await logChange(tx, actor, "monthly_invoice_issued", {
+          memberId: plan.ownerId,
+          amountCents: invoiceTotal(plan.terms),
+        });
       created++;
     }
     return { kind: "ready", value: { created } };
@@ -350,7 +411,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
                     (SELECT (s.snapshot->>'subtotalCents')::bigint FROM coaching_submissions s
                      WHERE s.owner_id=m.owner_id AND s.month=m.month AND s.revision=m.submitted_revision) AS "submittedCents",
                     m.invoice_id AS "invoiceId",i.total_cents::text AS "totalCents",
-                    i.paid_cents::text AS "paidCents",i.voided_at IS NOT NULL AS voided
+                    i.paid_cents::text AS "paidCents",i.refunded_cents::text AS "refundedCents",i.voided_at IS NOT NULL AS voided
              FROM coaching_months m LEFT JOIN simple_invoices i ON i.id=m.invoice_id
              WHERE m.owner_id=$1 ORDER BY m.month DESC LIMIT 100`,
             [memberId],
@@ -432,6 +493,11 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           "INSERT INTO coaching_rates(id,owner_id,effective_month,cents,version) VALUES($1,$2,$3,$4,$5)",
           [rateId, input.ownerId, input.effectiveMonth, input.cents, version],
         );
+        await logChange(tx, actor, "rate_set", {
+          memberId: input.ownerId,
+          month: input.effectiveMonth,
+          amountCents: input.cents,
+        });
         return remember(tx, actor, input.operationId, digest, {
           rateId,
           version,
@@ -623,6 +689,10 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           "UPDATE coaching_months SET state='draft',revision=$3,return_reason=$4,previous_invoice_id=COALESCE(invoice_id,previous_invoice_id),invoice_id=NULL WHERE owner_id=$1 AND month=$2",
           [input.ownerId, input.month, revision, input.reason],
         );
+        await logChange(tx, actor, "hours_returned", {
+          memberId: input.ownerId,
+          month: input.month,
+        });
         return remember(tx, actor, input.operationId, digest, {
           month: input.month,
           revision,
@@ -733,6 +803,11 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           "UPDATE coaching_months SET state='invoiced',revision=revision+1,invoice_id=$3 WHERE owner_id=$1 AND month=$2",
           [input.ownerId, input.month, invoiceId],
         );
+        await logChange(tx, actor, "coaching_invoice_issued", {
+          memberId: input.ownerId,
+          month: input.month,
+          amountCents: total,
+        });
         return remember(tx, actor, input.operationId, digest, { invoiceId });
       });
     },
@@ -968,6 +1043,10 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           "INSERT INTO simple_invoice_plans(id,owner_id,workspace_id,terms,created_by) VALUES($1,$2,$2,$3,$4)",
           [planId, input.ownerId, JSON.stringify(terms), actor],
         );
+        await logChange(tx, actor, "plan_offered", {
+          memberId: input.ownerId,
+          amountCents: invoiceTotal(terms),
+        });
         return remember(tx, actor, input.operationId, digest, { planId });
       });
     },
@@ -1094,9 +1173,30 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             [id, admin, actor],
           )
         ).rows[0];
-        return row
-          ? { kind: "ready", value: decodeInvoice(row) }
-          : fail("not-found");
+        if (!row) return fail("not-found");
+        const payments = (
+          await tx.query<InvoicePaymentEvent>(
+            `SELECT p.kind,p.amount_cents AS "amountCents",to_char(p.received_on,'YYYY-MM-DD') AS "on",
+                    p.evidence_reference AS evidence,p.verification,
+                    CASE WHEN NOT $2::boolean THEN NULL
+                         WHEN p.verification='signed_test_event' THEN 'Signed test event'
+                         WHEN p.actor_id IS NULL THEN 'Removed staff account'
+                         ELSE 'Staff account '||left(p.actor_id::text,8) END AS "recordedBy"
+             FROM simple_invoice_payments p WHERE p.invoice_id=$1
+               AND NOT (p.kind='held' AND EXISTS(SELECT 1 FROM simple_invoice_payments a
+                 WHERE a.provider_event_id=p.provider_event_id AND a.kind='refund'))
+             ORDER BY p.received_on,p.recorded_at,p.id`,
+            [id, admin],
+          )
+        ).rows.map(({ recordedBy, ...event }) => ({
+          ...event,
+          amountCents: Number(event.amountCents),
+          ...(recordedBy ? { recordedBy } : {}),
+        }));
+        return {
+          kind: "ready",
+          value: { ...decodeInvoice(row), payments },
+        };
       });
     },
     async pay(
@@ -1107,6 +1207,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         operationId: string;
         amountCents: number;
         receivedOn: string;
+        evidence: string;
       },
     ): Promise<InvoiceResult<{ invoiceId: string }>> {
       if (
@@ -1116,7 +1217,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         !invoiceCents(input.expectedRevision) ||
         !invoiceCents(input.amountCents) ||
         input.amountCents === 0 ||
-        !invoiceDate(input.receivedOn)
+        !invoiceDate(input.receivedOn) ||
+        !invoiceEvidence(input.evidence)
       )
         return fail("invalid");
       return run(token, true, async (tx, actor) => {
@@ -1149,18 +1251,110 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         )
           return fail("conflict");
         await tx.query(
-          "INSERT INTO simple_invoice_payments(id,invoice_id,actor_id,amount_cents,received_on) VALUES($1,$2,$3,$4,$5)",
+          "INSERT INTO simple_invoice_payments(id,invoice_id,actor_id,amount_cents,received_on,kind,evidence_reference) VALUES($1,$2,$3,$4,$5,$6,$7)",
           [
             randomUUID(),
             invoice.id,
             actor,
             input.amountCents,
             input.receivedOn,
+            "receipt",
+            input.evidence,
           ],
         );
         await tx.query(
           "UPDATE simple_invoices SET paid_cents=paid_cents+$2,revision=revision+1 WHERE id=$1",
           [invoice.id, input.amountCents],
+        );
+        await logInvoiceChange(
+          tx,
+          actor,
+          "payment_recorded",
+          invoice.id,
+          input.amountCents,
+        );
+        return remember(tx, actor, input.operationId, digest, {
+          invoiceId: invoice.id,
+        });
+      });
+    },
+    /** MANPAY-04/05: records a refund already made; no money moves here. */
+    async refund(
+      token: string,
+      input: {
+        invoiceId: string;
+        expectedRevision: number;
+        operationId: string;
+        amountCents: number;
+        refundedOn: string;
+        evidence: string;
+      },
+    ): Promise<InvoiceResult<{ invoiceId: string }>> {
+      if (
+        !input ||
+        !invoiceUuid(input.invoiceId) ||
+        !invoiceUuid(input.operationId) ||
+        !invoiceCents(input.expectedRevision) ||
+        !invoiceCents(input.amountCents) ||
+        input.amountCents === 0 ||
+        !invoiceDate(input.refundedOn) ||
+        !invoiceEvidence(input.evidence)
+      )
+        return fail("invalid");
+      return run(token, true, async (tx, actor) => {
+        const digest = invoiceDigest({ action: "refund", input }),
+          previous = await replay<{ invoiceId: string }>(
+            tx,
+            actor,
+            input.operationId,
+            digest,
+          );
+        if (previous) return previous;
+        const row = (
+          await tx.query<StoredInvoice>(
+            `SELECT ${invoiceColumns} FROM simple_invoices WHERE id=$1 FOR UPDATE`,
+            [input.invoiceId],
+          )
+        ).rows[0];
+        if (!row) return fail("not-found");
+        const invoice = decodeInvoice(row);
+        const { today, first } = (
+          await tx.query<{ today: string; first: string | null }>(
+            `SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD') AS today,
+                    (SELECT to_char(min(received_on),'YYYY-MM-DD') FROM simple_invoice_payments
+                     WHERE invoice_id=$1 AND kind='receipt') AS first`,
+            [invoice.id],
+          )
+        ).rows[0]!;
+        if (
+          invoice.revision !== input.expectedRevision ||
+          input.amountCents > invoice.paidCents - invoice.refundedCents! ||
+          input.refundedOn > today ||
+          input.refundedOn < String(first)
+        )
+          return fail("conflict");
+        await tx.query(
+          "INSERT INTO simple_invoice_payments(id,invoice_id,actor_id,amount_cents,received_on,kind,evidence_reference) VALUES($1,$2,$3,$4,$5,$6,$7)",
+          [
+            randomUUID(),
+            invoice.id,
+            actor,
+            input.amountCents,
+            input.refundedOn,
+            "refund",
+            input.evidence,
+          ],
+        );
+        await tx.query(
+          "UPDATE simple_invoices SET refunded_cents=refunded_cents+$2,revision=revision+1 WHERE id=$1",
+          [invoice.id, input.amountCents],
+        );
+        await logInvoiceChange(
+          tx,
+          actor,
+          "payment_refunded",
+          invoice.id,
+          input.amountCents,
         );
         return remember(tx, actor, input.operationId, digest, {
           invoiceId: invoice.id,
@@ -1211,6 +1405,13 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         await tx.query(
           "UPDATE simple_invoices SET void_reason=$2,voided_at=clock_timestamp(),voided_by=$3,revision=revision+1 WHERE id=$1",
           [row.id, input.reason, actor],
+        );
+        await logInvoiceChange(
+          tx,
+          actor,
+          "invoice_voided",
+          row.id,
+          Number(row.totalCents),
         );
         return remember(tx, actor, input.operationId, digest, {
           invoiceId: row.id,
@@ -1321,7 +1522,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
     async generateDue(
       token: string,
     ): Promise<InvoiceResult<{ created: number }>> {
-      return run(token, true, due);
+      return run(token, true, (tx, actor) => due(tx, actor));
     },
     async generateScheduled(): Promise<InvoiceResult<{ created: number }>> {
       try {

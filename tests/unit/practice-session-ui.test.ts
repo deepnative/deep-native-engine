@@ -10,6 +10,7 @@ import type {
 import { COOKIE, csrf } from "../../src/session.ts";
 import { withLoopback } from "../support/loopback-server.ts";
 import {
+  practiceSessionAllowanceNeededPage,
   practiceSessionStartPage,
   practiceSessionHistoryPage,
   practiceSessionPage,
@@ -505,4 +506,52 @@ it("REALINPUT-01/02 hosted practice sessions need no invented-information checkb
     expect(page.text).toContain("SIMULATED");
   }
   expect(pages[0]!.text).toContain("Leave out passwords");
+});
+it("MOCK-02/05 the start page says a unit is used only when it is, and a refusal offers the way forward", () => {
+  expect(practiceSessionStartPage(source, "c")).not.toContain(
+    "your monthly practice sessions",
+  );
+  expect(practiceSessionStartPage(source, "c", true)).toContain(
+    '<a href="/member/study-allowance">your monthly practice sessions</a>',
+  );
+  const refused = practiceSessionAllowanceNeededPage();
+  expect(refused).toContain("no new session was created");
+  expect(refused).toContain('href="/member/study-allowance"');
+});
+it("MOCK-05 a start without a unit is refused with the way forward", async () => {
+  const f = fixture();
+  f.practiceSessions.start.mockResolvedValue({ kind: "allowance-needed" });
+  const refused = await f.post(
+    `/library/${source.contentId}/practice-session/start`,
+    startFields,
+  );
+  expect(refused.status).toBe(409);
+  expect(refused.text).toContain("no new session was created");
+  expect(refused.text).toContain('href="/member/study-allowance"');
+});
+it("MOCK-07 the start page mentions units only when the setting is on", async () => {
+  const f = fixture();
+  expect(
+    (await f.get(`/library/${source.contentId}/practice-session`)).text,
+  ).not.toContain("your monthly practice sessions");
+  const on = app(f.db, {
+    origin,
+    secret,
+    practiceSessions: f.practiceSessions,
+    practiceSessionAllowance: true,
+  });
+  const body = await withLoopback(on, (server) =>
+    request(server)
+      .get(`/library/${source.contentId}/practice-session`)
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${token}`),
+  );
+  expect(body.text).toContain("your monthly practice sessions");
+});
+it("WALK-02 a refusal doesn't assume the member already claimed this month's sessions", () => {
+  const refused = practiceSessionAllowanceNeededPage();
+  expect(refused).not.toContain("no practice session units left");
+  expect(refused).toContain(
+    "haven't claimed this month's practice sessions, or you've used them all",
+  );
 });

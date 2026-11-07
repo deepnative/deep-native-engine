@@ -30,3 +30,23 @@ export function simpleInvoiceSettings(
     );
   return { sample: false, issuer, instructions };
 }
+/** TESTPAY-01/02: off unless set, and never on a host, including the demo site. */
+export function testProviderEventKey(
+  env: NodeJS.ProcessEnv,
+  hosted: boolean,
+  invoices: InvoiceSettings | undefined,
+): string | undefined {
+  const mode = env.DNE_TEST_PROVIDER_EVENTS ?? "disabled";
+  if (!["enabled", "disabled"].includes(mode))
+    throw Error("DNE_TEST_PROVIDER_EVENTS must be enabled or disabled.");
+  if (mode === "disabled") return undefined;
+  if (hosted) throw Error("Signed test events cannot run on a hosted site.");
+  if (!invoices?.sample)
+    throw Error("Signed test events require sample invoicing.");
+  const key = env.DNE_TEST_PROVIDER_EVENT_KEY;
+  if (!key || !/^[A-Za-z0-9_-]{32,200}$/.test(key))
+    throw Error(
+      "Signed test events require an invented key of 32+ characters.",
+    );
+  return key;
+}

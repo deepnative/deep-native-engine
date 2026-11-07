@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { withHosting } from "../../src/hosting-presentation.ts";
 import {
   PREPARED_SAMPLES,
   PROVIDED_SAMPLE_LABEL,
@@ -97,23 +98,31 @@ it("AHO-05 presents published assignment feedback as private member work without
 it("PREPARED-03 identifies a provided unreviewed source to member and reviewer without claiming authorship or assessment", () => {
   const template = PREPARED_SAMPLES[0]!;
   for (const reviewer of [false, true]) {
-    const html = sampleFeedbackPage(
-      {
-        ...view(),
-        source: template.text,
-        origin: {
-          kind: "platform-provided-invented",
-          templateId: template.id,
-          templateVersion: 1,
-          templateDigest: template.digest,
-          acknowledgedAt: new Date(),
-          label: PROVIDED_SAMPLE_LABEL,
+    const render = () =>
+      sampleFeedbackPage(
+        {
+          ...view(),
+          source: template.text,
+          origin: {
+            kind: "platform-provided-invented",
+            templateId: template.id,
+            templateVersion: 1,
+            templateDigest: template.digest,
+            acknowledgedAt: new Date(),
+            label: PROVIDED_SAMPLE_LABEL,
+          },
         },
-      },
-      "csrf",
-      reviewer,
-    );
+        "csrf",
+        reviewer,
+      );
+    const html = render();
     expect(html).toContain(PROVIDED_SAMPLE_LABEL);
+    // #730: the hosted page shows the plain label and keeps invented and unreviewed.
+    const online = withHosting(true, render);
+    expect(online).toContain(
+      "Provided invented example · unreviewed · template",
+    );
+    expect(online).not.toContain(PROVIDED_SAMPLE_LABEL);
     expect(html).toContain(template.digest);
     expect(html).not.toContain("Provided-example origin is not recorded");
     expectUnverifiedAuthorship(html);

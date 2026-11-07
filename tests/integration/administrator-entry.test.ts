@@ -569,6 +569,7 @@ it("CONSOLEMONTHS-01..03 lists this month, last month and the latest earlier mon
     returned: false,
     totalCents: null,
     paidCents: null,
+    refundedCents: null,
     voided: false,
   });
   await save(busy!, "2020-01", 60, "submitted");

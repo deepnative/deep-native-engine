@@ -278,7 +278,7 @@ test("[L111] operators inspect separate exact ledger categories for all three au
         ).toBeVisible();
         await expect(
           page.getByText(
-            "Invoice, collected cash, provider, job and manual-source reconciliation are unavailable",
+            "This report does not compare invoices or collected cash; platform administrators have a separate invoice and cash reconciliation. Provider and job reconciliation are unavailable",
             { exact: false },
           ),
         ).toBeVisible();

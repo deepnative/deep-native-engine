@@ -1,6 +1,8 @@
 import { expect, it } from "vitest";
 import {
   invoiceDate,
+  invoiceEvidence,
+  invoicePaymentStatus,
   invoicePeriod,
   invoiceText,
   invoiceUuid,
@@ -140,4 +142,40 @@ it("OFFPUR-04 parses only bounded decimal money without floating point rounding"
     "99999999",
   ])
     expect(parseInvoiceMoney(text)).toBeNull();
+});
+
+it("MANPAY-02 accepts one line of ordinary proof but not card-like numbers", () => {
+  expect(invoiceEvidence("Interac invented-1234567")).toBe(true);
+  expect(invoiceEvidence("123456789012")).toBe(true);
+  for (const value of [
+    "",
+    "  ",
+    "x".repeat(201),
+    "4242424242424242",
+    "4242 4242 4242 4242",
+    "4242-4242-4242-4242",
+    "two\nlines",
+    7,
+    null,
+  ])
+    expect(invoiceEvidence(value)).toBe(false);
+});
+it("MANPAY-04 words refunds separately and never as unpaid", () => {
+  const base = { voidReason: null, totalCents: 100, paidCents: 100 };
+  expect(invoicePaymentStatus({ ...base, paidCents: 0 })).toBe(
+    "Awaiting offline payment",
+  );
+  expect(invoicePaymentStatus({ ...base, paidCents: 40 })).toBe(
+    "Partially paid",
+  );
+  expect(invoicePaymentStatus(base)).toBe("Paid");
+  expect(invoicePaymentStatus({ ...base, refundedCents: 40 })).toBe(
+    "Partly refunded",
+  );
+  expect(invoicePaymentStatus({ ...base, refundedCents: 100 })).toBe(
+    "Refunded",
+  );
+  expect(
+    invoicePaymentStatus({ ...base, voidReason: "Wrong", paidCents: 0 }),
+  ).toBe("Void");
 });

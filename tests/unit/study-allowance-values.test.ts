@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  studyAllowanceCategory,
   studyAllowanceInstruction,
   studyAllowanceLedgerKey,
   studyAllowancePeriod,
@@ -46,4 +47,23 @@ it.each([
   [{ policyVersion, periodStart: "2030-01-02T00:00:00.000Z" }],
 ])("ALLOW-06 refuses the malformed instruction %j", (value) => {
   expect(studyAllowanceInstruction(value)).toBeNull();
+});
+it("MOCK-01 a mock version names its own category and ledger key", () => {
+  expect(studyAllowanceCategory("mock-allowance-test-v2")).toBe(
+    "mock_sessions",
+  );
+  expect(studyAllowanceCategory("study-allowance-test-v2")).toBe(
+    "study_requests",
+  );
+  const start = new Date("2030-01-01T00:00:00.000Z");
+  expect(studyAllowanceLedgerKey("m", start, "mock_sessions")).toBe(
+    "mock-allowance:m:2030-01",
+  );
+  expect(studyAllowanceLedgerKey("m", start)).toBe("study-allowance:m:2030-01");
+  expect(
+    studyAllowanceInstruction({
+      policyVersion: "mock-allowance-test-v1",
+      periodStart: start.toISOString(),
+    }),
+  ).not.toBeNull();
 });

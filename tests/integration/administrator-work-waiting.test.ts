@@ -96,7 +96,8 @@ async function proposal(memberId: string, state: string) {
       memberId,
       removed ? null : "PRIVATE-PROPOSAL",
       state,
-      entered ? new Date(Date.now() - 7200000) : null,
+      // A minute past two hours, so a database clock a few ms behind still reads 120.
+      entered ? new Date(Date.now() - 7260000) : null,
       state === "withdrawn" ? new Date() : null,
       moderator,
       reviewed || returned ? new Date() : null,

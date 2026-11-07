@@ -54,7 +54,31 @@ import type { AssignmentAttempt } from "../../src/attempts.ts";
 import type { OwnedEvidence } from "../../src/evidence.ts";
 import type { ContentVersion } from "../../src/catalog.ts";
 import { EVENT_PREVIEWS } from "../../src/events.ts";
-import { withHosting } from "../../src/hosting-presentation.ts";
+import { LESSON } from "../../src/content.ts";
+import { contributionMetrics } from "../../src/contribution-metrics.ts";
+import {
+  practiceComparison,
+  withHosting,
+} from "../../src/hosting-presentation.ts";
+import {
+  learningCohorts,
+  learningDisclosure,
+  learningSegments,
+} from "../../src/learning-metrics.ts";
+import {
+  metricDefinitions,
+  usefulnessDisclosure,
+  type PreviewMetrics,
+} from "../../src/metrics.ts";
+import { activityItems } from "../../src/progress.ts";
+import { workflowBundle } from "../../src/workflow-registry.ts";
+import { metricsReportPage } from "../../src/metrics-report-views.ts";
+import { preparedSamplesPage } from "../../src/prepared-sample-views.ts";
+import { PROVIDED_SAMPLE_LABEL } from "../../src/prepared-sample-values.ts";
+import { reviewGrantForm } from "../../src/review-time-grant-views.ts";
+import { mountReviewTimeRoutes } from "../../src/review-time-routes.ts";
+import { supportMinuteForm } from "../../src/support-time-grant-views.ts";
+import { workflowReviewPreviewPage } from "../../src/workflow-review-views.ts";
 import type { LocalAiChoice } from "../../src/local-ai-consent.ts";
 import {
   memberTestUnitsPage,
@@ -93,6 +117,9 @@ import type { SupportRequestSummary } from "../../src/support-requests.ts";
 import type { TrackSnapshot } from "../../src/track-readiness.ts";
 import {
   assignmentAttemptPage,
+  assignmentPortfolioStatement,
+  assignmentReadinessPage,
+  availabilityPage,
   circlesPage,
   dashboard,
   eventDetailPage,
@@ -104,11 +131,19 @@ import {
   localAiControlPage,
   manualObservationPage,
   offerHypothesesPage,
+  practiceSessionPage,
+  practiceSessionStartPage,
+  privatePracticePage,
+  proposalPreviewPage,
   readinessPage,
   staffLibraryPage,
+  studyReflectionPage,
+  tailoredReviewUnavailablePage,
   withPrerequisiteTitles,
   trackReadinessPage,
   welcome,
+  workflowDetailPage,
+  workflowFeedbackPage,
 } from "../../src/views.ts";
 
 const hosted = <T>(render: () => T) => withHosting(true, render);
@@ -425,6 +460,13 @@ const aiChoices = (jobStatus: string): LocalAiChoice[] => [
     receiptId: "99999999-9999-4999-8999-999999999999",
     grantedAt: new Date("2026-09-24T00:00:00Z"),
     withdrawnAt: null,
+    estimate: {
+      inputTokens: 11,
+      outputTokens: 256,
+      costPoints: 157,
+      modelVersion: "simulated-model-v1",
+      rateVersion: "simulated-rates-v1",
+    },
     jobs: [
       {
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -642,7 +684,7 @@ it("READABLE-13 hosted AI simulation pages keep every limit without local wordin
         "gives no qualified feedback",
         "does not establish production consent",
         "Do not put personal, client or confidential information here.",
-        "No money or token estimate is involved.",
+        "Token and cost figures are estimates or simulated test amounts in points. No money is charged.",
       ])
         expect(html).toContain(limit);
     }
@@ -1166,4 +1208,405 @@ it("READABLE-22 hosted staff sign-in and tools drop local wording, and the local
   expect(local.signIn.text).toContain("Trusted local staff credential");
   expect(local.tools.text).toContain("<h1>Your local staff tools</h1>");
   expect(local.tools.text).toContain("Current role: Local operator.");
+});
+
+// #730: what #716, #717 and #725 left, using the report's own definitions.
+it("READABLE-23 the hosted metrics report reads its real definitions without local wording", () => {
+  const report = (definitions: PreviewMetrics["definitions"]) =>
+    metricsReportPage({
+      scope: "synthetic-local-preview",
+      asOf: new Date("2026-09-24T00:00:00Z"),
+      definitions,
+      learning: learningDisclosure({
+        members: 0,
+        activated: 0,
+        selfAssessed: 0,
+        participated: 0,
+        activeCircle: 0,
+        submittedAssignment: 0,
+        returnEligible: 0,
+        crossContentReturned: 0,
+      }),
+      segments: learningSegments(
+        { background: {}, goal: {}, interests: {} },
+        0,
+      ),
+      cohorts: learningCohorts([]),
+      usefulness: usefulnessDisclosure(0, 0, 0),
+      contributions: contributionMetrics(new Date("2026-09-24T00:00:00Z"), []),
+    } as never);
+  const online = hosted(metricDefinitions);
+  for (const text of Object.values(online))
+    expect(text).not.toMatch(LOCAL_ON_HOSTED);
+  const page = hosted(() => report(online));
+  expect(visibleText(page)).not.toMatch(LOCAL_ON_HOSTED);
+  expect(page).toContain("Current retained member records");
+  expect(online.participated).toContain("ever joined a circle");
+  expect(online.activeCircle).toContain("with a circle membership");
+  // Keeping the promise: self-report, suppression and no live analytics stay.
+  expect(online.usefulness).toContain(
+    "Member self-reported usefulness on this site, not observed skill, qualified review or current curriculum quality.",
+  );
+  expect(online.usefulness).toContain("this is not approved live analytics");
+  expect(online.activeCircle).toContain(
+    "No shared community or clinic is implied.",
+  );
+  const local = metricDefinitions();
+  expect(local.denominator).toContain(
+    "Current retained local-preview member records",
+  );
+  expect(local.participated).toContain("ever joined a local circle");
+  expect(local.activeCircle).toContain("with a local circle membership");
+  expect(local.usefulness).toContain("in this synthetic local preview");
+  // The metric keys and machine-readable scope are unchanged.
+  expect(Object.keys(online)).toEqual(Object.keys(local));
+});
+
+const comparison =
+  "Simulation — unreviewed local comparison. Your paired words: “my local words and This deterministic comparison does not verify”\n" +
+  "Exact source excerpt (SYN-960 v3): “a synthetic excerpt”\n" +
+  "Compare the two yourself and identify a detail to verify. This deterministic comparison does not verify accuracy and cannot judge competence. Uncertainty remains; no qualified review has occurred.";
+const practiceSource = {
+  id: "SYN-960",
+  version: 3,
+  title: "Invented lesson",
+  body: "Invented body.",
+  promptVersion: "invented-prompt",
+  prompt: "Invented prompt",
+  response: null,
+  withdrawnAt: null,
+  sourceExcerpt: "Invented excerpt.",
+  contentId: "SYN-960",
+  contentVersion: 3,
+  goal: "everyday",
+} as never;
+const practiceDetail = {
+  id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+  contentId: "SYN-960",
+  contentVersion: 3,
+  promptVersion: "invented-prompt",
+  title: "Invented lesson",
+  goal: "everyday",
+  availability: "available",
+  prompt: "Invented prompt",
+  nextSequence: 2,
+  createdAt: new Date("2026-09-24T00:00:00Z"),
+  withdrawnAt: null,
+  exchanges: [
+    {
+      sequence: 1,
+      response: "Invented response",
+      comparison,
+      sourceExcerpt: "Invented excerpt.",
+      acceptedAt: new Date("2026-09-24T00:00:00Z"),
+    },
+  ],
+} as never;
+const workflow = (await workflowBundle("WF-001"))!;
+const reflectionSource = { ...invented, kind: "lesson" as const };
+const memberPages = {
+  availability: () => availabilityPage([], "UTC"),
+  tailoredReview: () =>
+    tailoredReviewUnavailablePage(
+      {
+        domain: "education",
+        serviceType: "formal-review",
+        state: "in preparation",
+        gaps: [],
+      } as never,
+      "education" as never,
+    ),
+  proposal: () =>
+    proposalPreviewPage(
+      {
+        id: "invented",
+        origin: "sample",
+        state: "changes_requested",
+        title: "Invented",
+        body: "Invented body",
+        sources: "Invented sources",
+        revision: 2,
+        createdAt: new Date("2026-09-24T00:00:00Z"),
+        updatedAt: new Date("2026-09-24T00:00:00Z"),
+        rightsAttestedRevision: null,
+        rightsAttestedAt: null,
+        feedback: {
+          reviewedRevision: 1,
+          requestedAt: new Date("2026-09-24T00:00:00Z"),
+          text: "Invented",
+        },
+      } as never,
+      "csrf",
+    ),
+  readiness: () =>
+    assignmentReadinessPage(
+      {
+        contentId: "SYN-960",
+        contentVersion: 3,
+        title: "Invented assignment",
+        requirements: [],
+        ready: true,
+      } as never,
+      "csrf",
+    ),
+  portfolio: () =>
+    assignmentPortfolioStatement(attempt, {
+      sequence: 1,
+      submittedAt: "2026-09-24T00:00:00Z",
+      response: "Invented",
+    }),
+  fullCircle: () =>
+    circlesPage(
+      [{ ...(circle as object), joined: false, seatsRemaining: 0 } as never],
+      "everyday",
+      "csrf",
+    ),
+  sample: () => contentPreview(reflectionSource, false),
+  workflowNote: () =>
+    workflowFeedbackPage(
+      workflow,
+      [
+        {
+          workflowId: "WF-001",
+          workflowVersion: workflow.version,
+          note: "Invented",
+          revision: 1,
+          createdAt: new Date("2026-09-24T00:00:00Z"),
+          updatedAt: new Date("2026-09-24T00:00:00Z"),
+        },
+      ],
+      "csrf",
+      "WF-001",
+      { configured: true, enabled: true },
+    ),
+  reflection: () =>
+    studyReflectionPage(reflectionSource, "everyday", "csrf", "Invented"),
+  practiceStart: () => practiceSessionStartPage(practiceSource, "csrf"),
+  practice: () => practiceSessionPage(practiceDetail, "csrf"),
+  privatePractice: () =>
+    privatePracticePage(
+      { ...(practiceSource as object), response: "Invented" } as never,
+      "csrf",
+    ),
+  reviewRequest: () =>
+    workflowReviewPreviewPage(
+      {
+        title: "Invented",
+        workflowId: "WF-001",
+        workflowVersion: 1,
+        revision: 1,
+        note: "Invented",
+        expiresAt: new Date("2026-09-25T00:00:00Z"),
+        checked: "checked",
+      } as never,
+      "csrf",
+      "operation",
+    ),
+};
+
+it("READABLE-24 hosted member pages drop local wording and the local preview keeps it", () => {
+  // "local appointment times" means the member's own time zone and stays.
+  const shown = (html: string) =>
+    visibleText(html)
+      .replace("local appointment times", "appointment times")
+      .replace("my local words and This deterministic comparison", "")
+      .replace("a synthetic excerpt", "");
+  for (const [name, render] of Object.entries(memberPages))
+    expect(shown(hosted(render)), name).not.toMatch(LOCAL_ON_HOSTED);
+  // The workflow itself is reviewed, versioned content, so only its label changes.
+  expect(hosted(() => workflowDetailPage(workflow))).toContain(
+    "Select and copy the sample workflow text",
+  );
+  expect(workflowDetailPage(workflow)).toContain(
+    "Select and copy the synthetic workflow text",
+  );
+  expect(hosted(memberPages.availability)).toContain(
+    ">View your test units</a>",
+  );
+  expect(hosted(memberPages.fullCircle)).toContain("This circle is full.");
+  expect(hosted(memberPages.practice)).toContain(
+    "<h3>Comparison · turn 2</h3>",
+  );
+  for (const [render, text] of [
+    [memberPages.availability, "View your local test units"],
+    [memberPages.tailoredReview, "common local foundation"],
+    [memberPages.proposal, "Private local feedback on revision"],
+    [memberPages.readiness, "No additional local prerequisites are named."],
+    [memberPages.portfolio, "Private local learning sample."],
+    [memberPages.fullCircle, "This local circle is full."],
+    [memberPages.workflowNote, "can permit local reading."],
+    [memberPages.sample, "LOCAL PUBLISHED PREVIEW"],
+    [memberPages.sample, "synthetic local preview"],
+    [memberPages.reflection, "This published sample is synthetic"],
+    [memberPages.reflection, "This deterministic prompt"],
+    [memberPages.practiceStart, "one deterministic local source comparison"],
+    [memberPages.practice, "These deterministic comparisons"],
+    [memberPages.practice, "Local comparison · turn 2"],
+    [memberPages.privatePractice, "local comparisons"],
+    [memberPages.reviewRequest, "PRIVATE LOCAL REVIEW REQUEST"],
+    [memberPages.reviewRequest, "individually assigned local moderator"],
+  ] as const)
+    expect(render()).toContain(text);
+});
+
+it("READABLE-24 hosted member pages keep every statement about simulation, invented data and review", () => {
+  const history = (isHosted: boolean) =>
+    withHosting(
+      isHosted,
+      () =>
+        activityItems(undefined, [], [], [
+          {
+            lessonId: LESSON.id,
+            version: LESSON.version,
+            instruction: "Invented",
+            verification: "Invented",
+            completedAt: null,
+            withdrawnAt: null,
+            goalAtStart: "everyday",
+          },
+        ] as never)[0]!.availability,
+    );
+  expect(history(true)).toMatch(/Foundation exercise; no qualified review$/);
+  expect(history(false)).toMatch(
+    /Local foundation preview; no qualified review$/,
+  );
+  expect(hosted(memberPages.portfolio)).toContain(
+    "This is not a credential, qualification, expert assessment or paid review.",
+  );
+  expect(hosted(memberPages.reflection)).toContain(
+    "This published sample is invented and has not received qualified foundation sign-off.",
+  );
+  expect(hosted(memberPages.reflection)).toContain(
+    "No live AI provider, paid allowance or formal reviewer is connected.",
+  );
+  expect(hosted(memberPages.reflection)).toContain(
+    "This prompt is not a competence assessment, generated answer or formal review.",
+  );
+  expect(hosted(memberPages.practiceStart)).toContain(
+    "No live AI provider, paid allowance or qualified reviewer is connected.",
+  );
+  expect(hosted(memberPages.practice)).toContain(
+    "These comparisons cannot judge competence",
+  );
+  expect(hosted(memberPages.privatePractice)).toContain(
+    "This prompt is not an evaluation.",
+  );
+  expect(hosted(memberPages.reviewRequest)).toContain(
+    "It is not qualified assessment or public publication.",
+  );
+});
+
+it("READABLE-25 a saved practice comparison reads plainly when hosted and is unchanged when saved", () => {
+  const online = hosted(() => practiceComparison(comparison));
+  expect(online).toMatch(/^Simulation — unreviewed comparison\. Your paired/);
+  // A member's or a source's own words are never rewritten.
+  expect(online).toContain(
+    "“my local words and This deterministic comparison does not verify”",
+  );
+  expect(online).toContain("“a synthetic excerpt”");
+  expect(online).toMatch(
+    /This comparison does not verify accuracy and cannot judge competence\. Uncertainty remains; no qualified review has occurred\.$/,
+  );
+  expect(practiceComparison(comparison)).toBe(comparison);
+  const page = hosted(memberPages.practice);
+  expect(page).toContain("Simulation — unreviewed comparison.");
+  expect(page).not.toContain("Simulation — unreviewed local comparison.");
+  expect(memberPages.practice()).toContain(
+    "Simulation — unreviewed local comparison.",
+  );
+});
+
+it("READABLE-25 the provided-sample label reads plainly when hosted and keeps invented and unreviewed", () => {
+  const origin = {
+    label: PROVIDED_SAMPLE_LABEL,
+    templateId: "invented",
+    templateVersion: 1,
+    templateDigest: "digest",
+  };
+  const clean = {
+    ...evidence,
+    quarantineState: "clean",
+    origin,
+    revisionParentId: null,
+  } as never;
+  const list = hosted(() => evidencePage([clean], "csrf"));
+  expect(visibleText(list)).not.toMatch(/\blocal\b|synthetic/i);
+  expect(list).toContain("Provided invented example · unreviewed · template");
+  expect(list).toContain("Fixed provided example; bundled invented source");
+  const samples = hosted(() => preparedSamplesPage("csrf", "everyday"));
+  expect(samples).toContain(">Provided invented example · unreviewed<");
+  expect(visibleText(samples)).not.toMatch(/\blocal\b|synthetic/i);
+  expect(evidencePage([clean], "csrf")).toContain(PROVIDED_SAMPLE_LABEL);
+  expect(preparedSamplesPage("csrf", "everyday")).toContain(
+    PROVIDED_SAMPLE_LABEL,
+  );
+  // Saved and exported values stay as they are.
+  expect(PROVIDED_SAMPLE_LABEL).toBe(
+    "Provided invented example · local synthetic · unreviewed",
+  );
+});
+
+it("READABLE-26 hosted review and support minutes drop local wording and keep their limits", async () => {
+  for (const [form, limit, localHeading] of [
+    [
+      () => reviewGrantForm("csrf", true),
+      "This creates no units, sample assignment, staff identity or qualification.",
+      "PRIVATE LOCAL REVIEW MINUTES",
+    ],
+    [
+      () => supportMinuteForm("csrf", true),
+      "This creates no units, request-text assignment, staff identity or qualification.",
+      "PRIVATE LOCAL SUPPORT MINUTES",
+    ],
+  ] as const) {
+    const html = hosted(form);
+    expect(visibleText(html)).not.toMatch(LOCAL_WORD);
+    expect(html).toContain(limit);
+    expect(html).toContain("invented");
+    expect(form()).toContain(localHeading);
+  }
+  const id = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+  const receipt = {
+    allocationId: id,
+    state: "allocated",
+    held: 20,
+    consumed: 0,
+    released: 0,
+    sourceAvailable: true,
+  };
+  const read = async (isHosted: boolean) => {
+    const application = express();
+    application.use((_req, res, next) => {
+      res.locals.token = "invented-token";
+      res.locals.csrf = "invented-csrf";
+      withHosting(isHosted, next);
+    });
+    mountReviewTimeRoutes(
+      application,
+      {
+        receipt: vi.fn().mockResolvedValue({ kind: "applied", receipt }),
+        history: vi
+          .fn()
+          .mockResolvedValue({ kind: "ready", receipts: [], next: null }),
+      } as never,
+      { owner: vi.fn().mockResolvedValue({ kind: "ready" }) } as never,
+      true,
+    );
+    return withLoopback(application, async (listener) => ({
+      history: (await request(listener).get("/review-minutes")).text,
+      form: (await request(listener).get(`/evidence/${id}/review-allocation`))
+        .text,
+      receipt: (await request(listener).get(`/review-minutes/${id}`)).text,
+    }));
+  };
+  const online = await read(true);
+  for (const [name, text] of Object.entries(online))
+    expect(visibleText(text), name).not.toMatch(LOCAL_ON_HOSTED);
+  expect(online.form).toContain(
+    "Private practice using existing test units. No payment, professional qualification or response time is promised.",
+  );
+  const local = await read(false);
+  expect(local.history).toContain("Private local test-unit receipts");
+  expect(local.form).toContain("Private local rehearsal using");
+  expect(local.receipt).toContain("Local test units only.");
 });

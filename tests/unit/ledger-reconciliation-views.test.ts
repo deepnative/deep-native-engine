@@ -85,7 +85,7 @@ it("presents five zero categories without claiming use, mixed-unit totals or ext
     "attribution is unrecorded; timestamps do not prove it",
   );
   expect(html).toContain(
-    "Invoice, collected cash, provider, job and manual-source reconciliation are unavailable",
+    "This report does not compare invoices or collected cash; platform administrators have a separate invoice and cash reconciliation. Provider and job reconciliation are unavailable.",
   );
   expect(html).toContain(
     "Qualified capacity, booked service, revenue, actual cost and production entitlement policy are unavailable",

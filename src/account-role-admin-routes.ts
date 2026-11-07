@@ -7,9 +7,16 @@ import {
 } from "./account-role-admin.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import { csrf, validCsrf } from "./session.ts";
+import { changeHistoryBody } from "./staff-change-history.ts";
 import { escape, page } from "./views.ts";
 
 const ROLE_LABEL = { coach: "Coach", admin: "Admin" } as const;
+const MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
+/** "2026-11-04" → "4 Nov 2026". */
+const dateLabel = (day: string) => {
+  const [y, m, d] = day.split("-").map(Number);
+  return `${d} ${MONTHS[m! - 1]} ${y}`;
+};
 const REFUSALS = {
   denied: [
     403,
@@ -133,15 +140,20 @@ export function mountAccountRoleAdmin(
                   `${escape(p.name ?? "Name needed")} <span class="small">· <code>${escape(p.id)}</code></span>`,
               )
               .join("<br>")
-          : '<span class="small">Email not linked to an account yet</span>';
+          : h.hint
+            ? `${escape(h.hint)} <span class="small">· not signed up yet</span>`
+            : '<span class="small">Email not linked to an account yet</span>';
+        const granted = h.grantedAt
+          ? `<br><span class="small">Granted ${dateLabel(h.grantedAt)}</span>`
+          : "";
         const roles = h.roles
           .map((role) =>
             h.self && role === "admin"
               ? `<li>${ROLE_LABEL[role]} <span class="small">(you)</span></li>`
-              : `<li><form method="post" action="/operator/roles/remove">${hidden("csrf", anti)}${hidden("emailHash", h.emailHash)}${hidden("role", role)}${ROLE_LABEL[role]} <button class="secondary" type="submit" aria-label="Remove ${ROLE_LABEL[role].toLowerCase()} role from ${escape(h.people[0] ? (h.people[0].name ?? "Name needed") : "this email")}">Remove</button></form></li>`,
+              : `<li><form method="post" action="/operator/roles/remove">${hidden("csrf", anti)}${hidden("emailHash", h.emailHash)}${hidden("role", role)}${ROLE_LABEL[role]} <button class="secondary" type="submit" aria-label="Remove ${ROLE_LABEL[role].toLowerCase()} role from ${escape(h.people[0] ? (h.people[0].name ?? "Name needed") : (h.hint ?? "this email"))}">Remove</button></form></li>`,
           )
           .join("");
-        return `<tr><td>${who}</td><td><ul class="role-list">${roles}</ul></td></tr>`;
+        return `<tr><td>${who}${granted}</td><td><ul class="role-list">${roles}</ul></td></tr>`;
       })
       .join("");
     res.send(
@@ -149,8 +161,55 @@ export function mountAccountRoleAdmin(
         "Roles",
         `<section class="portal-workspace role-admin"><h1>Roles</h1><p>Everyone is a student. Coaches see the monthly hours of learners assigned to them. Admins can enter administration. Roles follow a verified email; only its fingerprint is stored, never the address.</p><section class="portal-card" aria-labelledby="grant-role"><h2 id="grant-role">Give a role</h2><form method="post" action="/operator/roles/grant">${hidden("csrf", anti)}<label for="grant-email">Verified email</label><input id="grant-email" name="email" type="email" maxlength="254" autocomplete="off" required><fieldset><legend>Roles</legend>${GRANTED_ROLES.map((role) => `<label class="check"><input type="checkbox" name="${role}" value="yes"><span>${ROLE_LABEL[role]}</span></label>`).join("")}</fieldset><p class="small">The role takes effect when the person signs in with this email. They can sign up later.</p><button type="submit">Give role</button></form></section><section class="portal-card" aria-labelledby="role-holders"><h2 id="role-holders">People with roles</h2>${rows ? `<div class="table-scroll" tabindex="0" role="region" aria-label="People with roles"><table class="member-table role-holders"><thead><tr><th scope="col">Person</th><th scope="col">Roles</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p role="status">Nobody holds a coach or admin role.</p>'}</section>${portalActions(
           [
+            ["/operator/changes", "Change history"],
             ["/operator", "Administration console"],
             ["/admin", "Administration"],
+          ],
+        )}</section>`,
+      ),
+    );
+  });
+
+  // CHANGELOG-01/11/12: read-only; the store re-checks the administrator session.
+  app.get("/operator/changes", async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const { before, ...rest } = req.query;
+    const result =
+      Object.keys(rest).length ||
+      (before !== undefined && typeof before !== "string")
+        ? ({ kind: "invalid" } as const)
+        : await store.changes(token(res), before);
+    if (result.kind === "ready")
+      return res.send(
+        page(
+          "Change history",
+          changeHistoryBody(result.value, before === undefined),
+        ),
+      );
+    const [status, title, text] = {
+      denied: [
+        403,
+        "Change history unavailable",
+        "Enter administration from an admin account to read the change history.",
+      ],
+      invalid: [
+        400,
+        "That link doesn't work",
+        "Open the change history again from its first page.",
+      ],
+      unavailable: [
+        503,
+        "Change history unavailable",
+        "It can't be read right now, so this doesn't mean nothing changed. Try again shortly.",
+      ],
+    }[result.kind] as [number, string, string];
+    return res.status(status).send(
+      page(
+        title,
+        `<section class="reading"><h1>${title}</h1><p>${text}</p>${portalActions(
+          [
+            ["/operator/changes", "Change history"],
+            ["/operator", "Administration console"],
           ],
         )}</section>`,
       ),

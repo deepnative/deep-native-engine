@@ -21,7 +21,7 @@ import { dropAttendanceBrowserDatabase } from "./attendance-browser-database.ts"
 export async function reviewedContentFixture(
   browser: Browser,
   info: TestInfo,
-  options: { sampleInvoices?: boolean } = {},
+  options: { sampleInvoices?: boolean; testProviderKey?: string } = {},
 ) {
   const original = process.env.DNE_TEST_DATABASE_URL;
   if (
@@ -82,6 +82,12 @@ export async function reviewedContentFixture(
       DNE_PRIVATE_STORAGE_ROOT: storage,
       DNE_LOCAL_STAFF_ENTRY: "enabled",
       DNE_INVOICE_MODE: options.sampleInvoices ? "sample" : "disabled",
+      ...(options.testProviderKey
+        ? {
+            DNE_TEST_PROVIDER_EVENTS: "enabled",
+            DNE_TEST_PROVIDER_EVENT_KEY: options.testProviderKey,
+          }
+        : {}),
     });
     const origin = running.origin;
     await info.attach("reviewed-content-fixture", {
