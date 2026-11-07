@@ -243,7 +243,12 @@ import {
 } from "./catalog.ts";
 import { disabledTrackStore, type TrackStore } from "./track-readiness.ts";
 import { BACKGROUNDS, DOMAINS, GOALS, LESSON, type Domain } from "./content.ts";
-import { disabledProposalStore, type ProposalStore } from "./proposals.ts";
+import {
+  disabledProposalStore,
+  validProposal,
+  type ProposalStore,
+} from "./proposals.ts";
+import { proposalNotSavedPage } from "./member-record-admission-views.ts";
 import { workflowBundle, workflowRegistry } from "./workflow-registry.ts";
 import {
   disabledWorkflowFeedbackStore,
@@ -628,6 +633,20 @@ export function app(
     return result.kind === "admitted"
       ? null
       : anonymousWriteRefusal(kind, result);
+  };
+  // A new private text record is counted like the anonymous writes above (#42),
+  // after it is well formed and before anything is saved.
+  const memberRecordRefusal = async (
+    req: express.Request,
+    res: express.Response,
+  ) => {
+    const refused = await anonymousRefusal("member_record", req);
+    if (refused)
+      res
+        .status(refused.status)
+        .set("Cache-Control", "no-store")
+        .set("Retry-After", String(refused.retryAfterSeconds));
+    return refused?.message ?? null;
   };
   // Admit evidence creation against the shared budget before reading its body.
   const uploadAdmission = options.uploadAdmission;
@@ -2840,15 +2859,34 @@ export function app(
               : Number.NaN,
           }
         : undefined;
+    const proposal = {
+      title: value("title"),
+      body: value("body"),
+      sources: value("sources"),
+    };
+    if (validProposal(proposal)) {
+      const refused = await memberRecordRefusal(req, res);
+      if (refused) {
+        res.send(
+          proposalNotSavedPage(
+            refused,
+            res.locals.csrf as string,
+            Object.fromEntries(
+              Object.entries(fields).filter(
+                (entry): entry is [string, string] =>
+                  entry[0] !== "csrf" && typeof entry[1] === "string",
+              ),
+            ),
+          ),
+        );
+        return;
+      }
+    }
     let id: string | null;
     try {
       id = await proposals.createDraft(
         res.locals.token as string,
-        {
-          title: value("title"),
-          body: value("body"),
-          sources: value("sources"),
-        },
+        proposal,
         fields.sample_confirmed === "yes",
         workflow,
       );
@@ -5050,6 +5088,24 @@ export function app(
         );
       return;
     }
+    const refused = await memberRecordRefusal(req, res);
+    if (refused) {
+      const rows = await store.milestones(res.locals.token as string);
+      if (rows === null) {
+        milestoneDenied(res);
+        return;
+      }
+      res.send(
+        milestonesPage(
+          member,
+          rows,
+          res.locals.csrf as string,
+          [refused],
+          parsed.input,
+        ),
+      );
+      return;
+    }
     const result = await store.createMilestone(
       res.locals.token as string,
       parsed.input,
@@ -5240,6 +5296,20 @@ export function app(
       );
       return;
     }
+    const refused = await memberRecordRefusal(req, res);
+    if (refused) {
+      const snapshot = await career.snapshot(res.locals.token as string);
+      if (!snapshot) {
+        careerDenied(res);
+        return;
+      }
+      res.send(
+        careerPage(snapshot, res.locals.csrf as string, [refused], {
+          entry: parsed.input,
+        }),
+      );
+      return;
+    }
     if (
       !careerChanged(
         res,
@@ -5311,6 +5381,20 @@ export function app(
       }
       res.status(422).send(
         careerPage(snapshot, res.locals.csrf as string, parsed.errors, {
+          professional: parsed.input,
+        }),
+      );
+      return;
+    }
+    const refused = await memberRecordRefusal(req, res);
+    if (refused) {
+      const snapshot = await career.snapshot(res.locals.token as string);
+      if (!snapshot) {
+        careerDenied(res);
+        return;
+      }
+      res.send(
+        careerPage(snapshot, res.locals.csrf as string, [refused], {
           professional: parsed.input,
         }),
       );

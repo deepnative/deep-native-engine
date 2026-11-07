@@ -2784,6 +2784,15 @@
       "expected": "The page says the outcome is a test label no AI provider confirmed; it is recorded once and then shown with no form; the job's status and attempts are unchanged; no source, member, permission or grant details appear; everyone else is refused; no sideways scrolling",
       "issues": [189],
       "critical": true
+    },
+    {
+      "id": "L313",
+      "actor": "Member saving a milestone from an address past its new-record allowance",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server with a one-record allowance, invented member, a documentation-range forwarded address; desktop/mobile Chromium",
+      "steps": "RECORD-01/05: the member saves one milestone; fills the form again and saves; the window ends; the member saves the same kept form",
+      "expected": "The refused save returns 429 with Retry-After and a plain wait message, saves nothing and keeps the typed milestone in the form; the same form then saves; no sideways scrolling",
+      "issues": [42],
+      "critical": true
     }
   ],
   "fullMvp": [

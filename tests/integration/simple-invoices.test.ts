@@ -724,7 +724,7 @@ it("BILLPROFILE05 records applied migration versions and preserves the profile w
     ).rows.map((row) => row.version);
   expect(await versions()).toEqual([
     84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101,
-    102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
+    102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112,
   ]);
   const owner = await member();
   const profile = ready(
@@ -737,7 +737,7 @@ it("BILLPROFILE05 records applied migration versions and preserves the profile w
   await migrate(pool);
   expect(await versions()).toEqual([
     84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101,
-    102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
+    102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112,
   ]);
   expect(ready(await profiles.read(owner.token))).toEqual(profile);
   expect((await members.session(owner.token, "account")).kind).toBe("active");

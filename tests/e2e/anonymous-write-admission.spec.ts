@@ -180,3 +180,109 @@ test("[L307] OUTWARD-03/08 a visitor past the email-link allowance keeps the add
     lock.release();
   }
 });
+
+test("[L313] RECORD-01/05 a member past the new-record allowance keeps the typed milestone and saves it after waiting", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const lock = await pool.connect();
+  await lock.query("SELECT pg_advisory_lock($1)", [JOURNEY_LOCK]);
+  // Its own server with a one-record allowance keeps this journey short.
+  const secret = "synthetic-browser-record-secret";
+  const members = store(pool);
+  let origin = "http://127.0.0.1:0";
+  const server = await listenLoopback(
+    app(members, {
+      get origin() {
+        return origin;
+      },
+      secret,
+      anonymousWrites: anonymousWriteAdmissionStore(
+        pool,
+        { secret, publicOnly: false },
+        {
+          ...ANONYMOUS_WRITE_LIMITS,
+          member_record: { windowSeconds: 3600, perVisitor: 1, service: 100 },
+        },
+      ),
+    }),
+  );
+  const bound = server.address();
+  if (!bound || typeof bound === "string")
+    throw Error("Loopback address unavailable");
+  origin = `http://127.0.0.1:${bound.port}`;
+  try {
+    const token = randomBytes(32).toString("hex");
+    await members.create(token, { background: "explorer", goal: "everyday" });
+    await page
+      .context()
+      .addCookies([{ name: "dne_preview", value: token, url: origin }]);
+    const address = `2001:db8:${randomBytes(2).toString("hex")}:${randomBytes(2).toString("hex")}::1`;
+    await page.setExtraHTTPHeaders({
+      "X-Forwarded-For": address,
+      Origin: origin,
+    });
+    const form = page.locator('form[action="/milestones"]');
+    const fill = async (marker: string) => {
+      await form.locator('[name="goal_title"]').fill(`Invented goal ${marker}`);
+      await form
+        .locator('[name="milestone_title"]')
+        .fill(`Invented milestone ${marker}`);
+      await form
+        .locator('[name="evidence_note"]')
+        .fill(`Invented evidence ${marker}`);
+      await form
+        .locator('[name="next_action"]')
+        .fill(`Invented next ${marker}`);
+      await form.locator('[name="sample_only"]').check();
+    };
+    const save = form.getByRole("button", { name: "Save private milestone" });
+
+    // The first new record from this address uses the whole allowance.
+    await page.goto(`${origin}/milestones`);
+    await fill("first");
+    await save.click();
+    await expect(page.getByText("Invented milestone first")).toBeVisible();
+
+    await fill("kept");
+    const [refused] = await Promise.all([
+      page.waitForResponse((response) =>
+        response.url().endsWith("/milestones"),
+      ),
+      save.click(),
+    ]);
+    expect(refused.status()).toBe(429);
+    expect(Number(refused.headers()["retry-after"])).toBeGreaterThan(0);
+    await expect(page.getByRole("alert")).toContainText(
+      "Too many new records have been saved from this network.",
+    );
+    await expect(form.locator('[name="milestone_title"]')).toHaveValue(
+      "Invented milestone kept",
+    );
+    expect(await members.milestones(token).then((rows) => rows?.length)).toBe(
+      1,
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+
+    // The window ends; the same kept form now saves.
+    await lock.query(
+      "DELETE FROM anonymous_write_windows WHERE kind='member_record'",
+    );
+    await form.locator('[name="sample_only"]').check();
+    await save.click();
+    await expect(
+      page.getByText("Invented milestone kept", { exact: true }),
+    ).toBeVisible();
+    expect(await members.milestones(token).then((rows) => rows?.length)).toBe(
+      2,
+    );
+  } finally {
+    await closeLoopback(server);
+    await lock.query("SELECT pg_advisory_unlock($1)", [JOURNEY_LOCK]);
+    lock.release();
+  }
+});
