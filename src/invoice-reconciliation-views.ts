@@ -26,6 +26,7 @@ const flagText: Record<InvoiceFlag, string> = {
   partly_refunded: "Reversal: partly refunded",
   fully_refunded: "Reversal: fully refunded",
   voided: "Reversal: voided",
+  test_event_held: "Signed test event held and not applied",
 };
 const heading = {
   configured: "Invoices not marked as samples",

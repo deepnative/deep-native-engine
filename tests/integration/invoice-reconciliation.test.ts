@@ -528,8 +528,13 @@ it("RECON-14 a held event later applied counts once; one never applied is still 
     waiting: 1,
     waitingCents: 1000,
   });
+  // RECON-21: the operator can find the waiting invoice.
+  expect((await flagsOf(early.invoiceId))?.flags).toEqual(["test_event_held"]);
   expect(await signed(early.invoiceId, "payment.succeeded", 3000)).toBe(
     "receipt",
+  );
+  expect((await flagsOf(early.invoiceId))?.flags ?? []).not.toContain(
+    "test_event_held",
   );
   const over = await issued();
   expect(await signed(over.invoiceId, "payment.succeeded", 9000)).toBe("held");
@@ -542,7 +547,11 @@ it("RECON-14 a held event later applied counts once; one never applied is still 
     waitingCents: 9000,
     appliedAfterHold: 1,
   });
+  expect((await flagsOf(over.invoiceId))?.flags).toEqual(["test_event_held"]);
   const page = await get(path, admin);
   expect(page.text).toContain("Held and not applied");
+  expect(page.text).toContain(
+    `<tr data-flagged-invoice="${over.invoiceId}"><td><a href="/operator/invoices/${over.invoiceId}">`,
+  );
   expect(page.text).not.toContain("evt-");
 });

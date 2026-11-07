@@ -38,6 +38,7 @@ const token = "a".repeat(64),
     firstRefund: null,
     lateEvents: 0,
     lateCents: 0,
+    heldEvents: 0,
   },
   value = reconcileInvoices(
     [fact],
