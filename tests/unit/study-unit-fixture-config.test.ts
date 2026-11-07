@@ -28,3 +28,20 @@ it("TESTISSUE-08 issuance defaults off, requires explicit enablement, and cannot
     }),
   ).toThrow("Live application hosting");
 });
+it("MOCK-07 practice session units default off and accept only an explicit setting", () => {
+  expect(config(env).practiceSessionAllowance).toBe(false);
+  expect(
+    config({ ...env, DNE_PRACTICE_SESSION_ALLOWANCE: "enabled" })
+      .practiceSessionAllowance,
+  ).toBe(true);
+  expect(() =>
+    config({ ...env, DNE_PRACTICE_SESSION_ALLOWANCE: "yes" }),
+  ).toThrow("DNE_PRACTICE_SESSION_ALLOWANCE must be enabled or disabled.");
+  expect(() =>
+    config({
+      ...env,
+      DNE_APP_MODE: "live",
+      DNE_PRACTICE_SESSION_ALLOWANCE: "enabled",
+    }),
+  ).toThrow("Live application hosting");
+});

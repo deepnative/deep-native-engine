@@ -106,3 +106,17 @@ it.each([
     });
   },
 );
+
+it("EXPORTLOG-01/02 logs only for a token the database accepts", async () => {
+  const token = "a".repeat(64);
+  expect(await disabledMetricsStore().logExport(token)).toBe(false);
+  const query = vi
+    .fn()
+    .mockResolvedValueOnce({ rowCount: 1 })
+    .mockResolvedValueOnce({ rowCount: 0 });
+  const metrics = metricsStore({ query } as unknown as Pool);
+  expect(await metrics.logExport(token)).toBe(true);
+  expect(await metrics.logExport(token)).toBe(false);
+  expect(query.mock.calls[0]![0]).toContain("INSERT INTO staff_export_events");
+  expect(query.mock.calls[0]![1]).not.toContain(token);
+});

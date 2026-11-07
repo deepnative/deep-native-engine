@@ -588,6 +588,7 @@ it("WFREV-03 only exact current permitted moderator obtains the original note", 
       [intent],
       [readingGrant],
       [{ note: "Invented exact permitted note" }],
+      [],
     ],
     moderatorId,
   );
@@ -600,6 +601,20 @@ it("WFREV-03 only exact current permitted moderator obtains the original note", 
     expiresAt: expires.toISOString(),
   });
   expect(t.query.mock.calls[5]![1]).toEqual([instanceId, 1]);
+  // NOTEREAD-01: the reading is logged, with no note text.
+  expect(t.query.mock.calls[6]![0]).toContain(
+    "INSERT INTO workflow_review_read_audit",
+  );
+  expect(t.query.mock.calls[6]![1]).toEqual([
+    expect.any(String),
+    "owned-workspace",
+    moderatorId,
+    grantId,
+    requestId,
+    "WF-001",
+    1,
+    1,
+  ]);
 });
 it.each(["receipt", "read", "inspect"] as const)(
   "WFREV staff %s invalid reference does not acquire authority",

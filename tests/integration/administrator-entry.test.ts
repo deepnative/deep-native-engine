@@ -563,6 +563,7 @@ it("CONSOLECOACH-01 lists each learner's latest saved coaching month, or none", 
     returned: false,
     totalCents: null,
     paidCents: null,
+    refundedCents: null,
     voided: false,
   });
   expect(row(idle)!.coaching).toBeNull();

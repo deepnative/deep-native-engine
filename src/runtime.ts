@@ -4,7 +4,11 @@ import { coachViewStore } from "./coach-view.ts";
 import { memberSharingStore } from "./member-sharing.ts";
 import { accountRoleAdmin } from "./account-role-admin.ts";
 import { administratorDiagnostics } from "./administrator-diagnostics.ts";
-import { simpleInvoiceSettings } from "./simple-invoice-config.ts";
+import {
+  simpleInvoiceSettings,
+  testProviderEventKey,
+} from "./simple-invoice-config.ts";
+import { testProviderEventStore } from "./test-provider-events.ts";
 import { simpleInvoiceStore } from "./simple-invoice-store.ts";
 import { learningWorkspaceStore } from "./learning-workspace-store.ts";
 import { learningWorkspacePublicationStore } from "./learning-workspace-publication.ts";
@@ -40,6 +44,7 @@ import { app } from "./app.ts";
 import { authorizationStore } from "./authorization.ts";
 import { evidenceStore, fileObjectStorage } from "./evidence.ts";
 import { uploadAdmissionStore } from "./upload-admission.ts";
+import { anonymousWriteAdmissionStore } from "./anonymous-write-admission.ts";
 import { preparedObjectStorage } from "./prepared-sample-storage.ts";
 import { preparedSampleStore } from "./prepared-samples.ts";
 import { assignmentEvidenceStore } from "./assignment-evidence.ts";
@@ -60,6 +65,7 @@ import { circleGrantAdminStore } from "./circle-grant-admin.ts";
 import { circleStore } from "./circles.ts";
 import { metricsStore } from "./metrics.ts";
 import { ledgerReconciliationStore } from "./ledger-reconciliation.ts";
+import { invoiceReconciliationStore } from "./invoice-reconciliation.ts";
 import { localAiHoldInspectionStore } from "./local-ai-hold-inspection.ts";
 import { memberTestUnitsStore } from "./member-test-units.ts";
 import { studyUnitFixtureStore } from "./study-unit-fixtures.ts";
@@ -133,8 +139,16 @@ export async function start(env: NodeJS.ProcessEnv) {
     const invoices = invoiceSettings
       ? simpleInvoiceStore(pool, invoiceSettings)
       : undefined;
+    const testEventKey = testProviderEventKey(
+      env,
+      Boolean(settings.hosted),
+      invoiceSettings,
+    );
     const options = {
       simpleInvoices: invoices,
+      testProviderEvents: testEventKey
+        ? { key: testEventKey, store: testProviderEventStore(pool) }
+        : undefined,
       billingProfiles: billingProfileStore(pool),
       invoiceSender: !invoiceSettings
         ? undefined
@@ -184,6 +198,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       studyAllowances: studyAllowanceStore(pool, {
         mode: settings.mode,
         enabled: settings.localTestUnitIssuance,
+        practiceUnits: settings.practiceSessionAllowance,
       }),
       staffEntry: staffEntryStore(pool),
       administratorEntry: administratorEntry(pool),
@@ -252,6 +267,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       ),
       metrics: metricsStore(pool),
       ledgerReconciliation: ledgerReconciliationStore(pool),
+      invoiceReconciliation: invoiceReconciliationStore(pool),
       localHoldInspection: localAiHoldInspectionStore(pool, {
         mode: settings.mode,
         enabled: settings.localHoldInspectionReads,
@@ -260,7 +276,10 @@ export async function start(env: NodeJS.ProcessEnv) {
       memberTestUnits: memberTestUnitsStore(pool),
       attempts: attemptStore(pool),
       practice: practiceStore(pool),
-      practiceSessions: practiceSessionStore(pool),
+      practiceSessions: practiceSessionStore(pool, {
+        allowance: settings.practiceSessionAllowance,
+      }),
+      practiceSessionAllowance: settings.practiceSessionAllowance,
       reviewTimeGrantAdmin: reviewTimeGrantAdminStore(
         pool,
         {
@@ -321,6 +340,10 @@ export async function start(env: NodeJS.ProcessEnv) {
       ),
       localAiControl: localAiControlStore(pool),
       uploadAdmission: uploadAdmissionStore(pool),
+      anonymousWrites: anonymousWriteAdmissionStore(pool, {
+        secret: settings.secret,
+        publicOnly: !settings.hosted,
+      }),
       evidence: evidenceStore(
         pool,
         objects,

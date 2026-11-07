@@ -20,6 +20,12 @@ import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import request from "supertest";
 import { createServer, type Server } from "node:http";
 import { app } from "../../src/app.ts";
+import {
+  signTestProviderEvent,
+  TEST_PROVIDER_PATH,
+  TEST_PROVIDER_SIGNATURE,
+  type TestProviderEventStore,
+} from "../../src/test-provider-events.ts";
 import { accountPage, lesson } from "../../src/views.ts";
 import type { UploadAdmissionStore } from "../../src/upload-admission.ts";
 import {
@@ -88,6 +94,49 @@ import {
   LEARNING_WORKSPACE_CONTENT,
   learningWorkspacePack,
 } from "../../src/learning-workspace-pack.ts";
+it("TESTPAY-01 serves signed test events only when the application is given them", async () => {
+  const key = "invented-unit-test-provider-key-0123456789",
+    apply = vi.fn(async () => ({
+      kind: "ready" as const,
+      value: { outcome: "receipt" as const },
+    })),
+    body = JSON.stringify({
+      id: "evt-app-1",
+      type: "payment.succeeded",
+      invoiceId: "00000000-0000-4000-8000-000000000001",
+      paymentRef: "pay-1",
+      amountCents: 100,
+      occurredAt: "2026-01-01T00:00:00.000Z",
+    }),
+    send = (agent: request.Agent) =>
+      agent
+        .post(TEST_PROVIDER_PATH)
+        .set("Host", new URL(origin).host)
+        .set("Content-Type", "application/json")
+        .set(TEST_PROVIDER_SIGNATURE, signTestProviderEvent(key, body))
+        .send(body);
+  const off = await send(
+    await managedAgent(app(db, { origin, secret: "secret" })),
+  );
+  expect(off.status).not.toBe(200);
+  expect(apply).not.toHaveBeenCalled();
+  const on = await send(
+    await managedAgent(
+      app(db, {
+        origin,
+        secret: "secret",
+        testProviderEvents: {
+          key,
+          store: { apply } as unknown as TestProviderEventStore,
+        },
+      }),
+    ),
+  );
+  expect(on.status).toBe(200);
+  expect(on.body).toEqual({ outcome: "receipt" });
+  expect(apply).toHaveBeenCalledOnce();
+});
+
 it("serves goal-matched event previews only to active members and never accepts enrollment", async () => {
   const db = storage();
   const agent = await managedAgent(app(db, { origin, secret: "secret" }));
@@ -502,6 +551,21 @@ it("keeps workflow feedback owner-only and never claims a failed or stale write"
     .expect(503);
   expect(failed.text).not.toContain("private database detail");
 });
+it("WFB-NORMAL-03 workflow pages follow whether this app turns on member contributions", async () => {
+  for (const memberContributions of [true, false]) {
+    const agent = await managedAgent(
+      app(db, { origin, secret: "secret", memberContributions }),
+    );
+    const page = await agent.get("/workflows/WF-001").set("Host", host);
+    expect(page.status).toBe(200);
+    expect(
+      page.text.includes("private version-pinned improvement proposal"),
+    ).toBe(memberContributions);
+    expect(page.text.includes("It will not be published")).toBe(
+      !memberContributions,
+    );
+  }
+});
 it("keeps optional slot discovery private and reports read failures without implying a booking", async () => {
   const availability = {
     ...disabledAvailabilityStore(),
@@ -551,6 +615,7 @@ it("denies an unconfigured operator metrics route and returns only a configured 
   );
   await denied.get("/operator/metrics").set("Host", host).expect(403);
   const metrics = {
+    logExport: vi.fn<MetricsStore["logExport"]>().mockResolvedValue(true),
     snapshot: vi.fn<MetricsStore["snapshot"]>().mockResolvedValue({
       scope: "synthetic-local-preview",
       asOf: new Date("2026-09-24T00:00:00Z"),
@@ -594,6 +659,14 @@ it("denies an unconfigured operator metrics route and returns only a configured 
     .get("/operator/metrics")
     .set("Host", host)
     .expect(200);
+  expect(metrics.logExport).toHaveBeenCalledTimes(1);
+  // EXPORTLOG: no log entry, no data.
+  metrics.logExport.mockResolvedValueOnce(false);
+  const unlogged = await allowed
+    .get("/operator/metrics")
+    .set("Host", host)
+    .expect(403);
+  expect(unlogged.body).toEqual({ error: "forbidden" });
   expect(response.body.counts).toBeUndefined();
   expect(response.body.learning).toEqual({
     disclosure: "coarse-band",
@@ -1545,6 +1618,13 @@ it("requires explicit member confirmation and current local AI permission at eve
         receiptId: null,
         grantedAt: null,
         withdrawnAt: null,
+        estimate: {
+          inputTokens: 11,
+          outputTokens: 256,
+          costPoints: 157,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
         jobs: [],
       },
     ]),
@@ -2237,7 +2317,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v34",
+          version: "local-member-records-v37",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2277,7 +2357,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v34",
+    version: "local-member-records-v37",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -5849,7 +5929,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v34" as const,
+    version: "local-member-records-v37" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),

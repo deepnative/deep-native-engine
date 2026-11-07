@@ -556,6 +556,26 @@ it("OFFPUR-10 runs accepted recurring agreements without browser traffic and awa
     vi.useRealTimers();
   }
 });
+it("TESTPAY-01/02 passes the signed test event handler to the app only when enabled locally", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  server();
+  const off = await start({ ...env, DNE_INVOICE_MODE: "sample" });
+  await off.close();
+  expect(doubles.app.mock.lastCall![1].testProviderEvents).toBeUndefined();
+  server();
+  const on = await start({
+    ...env,
+    DNE_INVOICE_MODE: "sample",
+    DNE_TEST_PROVIDER_EVENTS: "enabled",
+    DNE_TEST_PROVIDER_EVENT_KEY: "invented-test-provider-key-0123456789",
+  });
+  await on.close();
+  vi.useRealTimers();
+  expect(doubles.app.mock.lastCall![1].testProviderEvents).toEqual({
+    key: "invented-test-provider-key-0123456789",
+    store: { apply: expect.any(Function) },
+  });
+});
 it("OFFPUR-07 uses existing hosted mail only for explicitly configured invoices", async () => {
   const billing = {
     DNE_INVOICE_MODE: "configured",

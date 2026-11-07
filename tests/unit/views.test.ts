@@ -698,6 +698,13 @@ it("describes local AI permission and every job state without leaking sample tex
         receiptId: null,
         grantedAt: null,
         withdrawnAt: null,
+        estimate: {
+          inputTokens: 11,
+          outputTokens: 256,
+          costPoints: 157,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
         jobs: [],
       },
     ],
@@ -717,6 +724,13 @@ it("describes local AI permission and every job state without leaking sample tex
         receiptId: "receipt-id",
         grantedAt: new Date(),
         withdrawnAt: null,
+        estimate: {
+          inputTokens: 11,
+          outputTokens: 256,
+          costPoints: 157,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
         jobs: [
           { id: "pending", status: "pending" },
           { id: "done", status: "succeeded" },
@@ -743,6 +757,13 @@ it("describes local AI permission and every job state without leaking sample tex
         receiptId: "receipt-id",
         grantedAt: new Date(),
         withdrawnAt: null,
+        estimate: {
+          inputTokens: 11,
+          outputTokens: 256,
+          costPoints: 157,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
         jobs: [{ id: "pending", status: "pending" }],
       },
     ],
@@ -1954,7 +1975,7 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v34" as const,
+    version: "local-member-records-v37" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2072,6 +2093,80 @@ it("keeps an unattributed historical draft read-only beside fresh current-goal p
   expect(html).not.toContain('value="unattributed"');
 });
 
+it("AIHOLD-06/07 shows a held request as unknown, unrunnable and never as erased", () => {
+  const estimate = {
+    inputTokens: 11,
+    outputTokens: 256,
+    costPoints: 157,
+    modelVersion: "simulated-model-v1",
+    rateVersion: "simulated-rates-v1",
+  };
+  const base = {
+    evidenceId: "sample",
+    name: "Invented.txt",
+    revisionNumber: 1,
+    receiptId: null,
+    grantedAt: null,
+    withdrawnAt: null,
+    estimate,
+    jobs: [{ id: "held", status: "needs_reconciliation" }],
+  };
+  const retired = localAiConsentPage([{ ...base, retired: true }], "csrf");
+  expect(retired).toContain("so it cannot be used again");
+  expect(retired).toContain("its outcome is unknown and it stays held");
+  expect(retired).toContain("or confirm that anything was erased");
+  expect(retired).not.toContain("/grant");
+  expect(retired).not.toContain("/withdraw");
+  expect(retired).not.toContain("/evidence/local-ai/held/run");
+  const withdrawn = localAiConsentPage(
+    [{ ...base, withdrawnAt: new Date() }],
+    "csrf",
+  );
+  expect(withdrawn).toContain("/evidence/local-ai/sample/grant");
+  expect(withdrawn).toContain("its outcome is unknown and it stays held");
+  expect(withdrawn).not.toContain("/evidence/local-ai/held/run");
+  const cancelled = localAiConsentPage(
+    [{ ...base, jobs: [{ id: "closed", status: "exhausted" }] }],
+    "csrf",
+  );
+  expect(cancelled).not.toContain("its outcome is unknown");
+});
+
+it("STAFFHOLD-08 keeps a hold visible after its source is deleted, with no source action or erasure claim", () => {
+  const html = localAiConsentPage(
+    [
+      {
+        evidenceId: "",
+        name: "A source you deleted",
+        revisionNumber: 0,
+        receiptId: null,
+        grantedAt: null,
+        withdrawnAt: null,
+        retired: true,
+        sourceDeleted: true,
+        estimate: {
+          inputTokens: 0,
+          outputTokens: 256,
+          costPoints: 128,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
+        jobs: [{ id: "held-reference", status: "needs_reconciliation" }],
+      },
+    ],
+    "csrf",
+  );
+  expect(html).toContain("A source you deleted");
+  expect(html).toContain("its text and permission are gone");
+  expect(html).toContain("Deleting your account removes it");
+  expect(html).toContain("Request reference: held-reference");
+  expect(html).toContain("or confirm that anything was erased");
+  expect(html).not.toContain("Private version");
+  expect(html).not.toContain("so it cannot be used again");
+  expect(html).not.toContain("/run");
+  expect(html).not.toContain("/grant");
+  expect(html).not.toContain("<form");
+});
 it("distinguishes metered local test units and blocks repeat dispatch of terminal receipts", () => {
   const choices = [
     {
@@ -2081,6 +2176,13 @@ it("distinguishes metered local test units and blocks repeat dispatch of termina
       receiptId: "receipt",
       grantedAt: new Date(),
       withdrawnAt: null,
+      estimate: {
+        inputTokens: 11,
+        outputTokens: 256,
+        costPoints: 157,
+        modelVersion: "simulated-model-v1",
+        rateVersion: "simulated-rates-v1",
+      },
       jobs: [
         {
           id: "pending",
@@ -2107,6 +2209,49 @@ it("distinguishes metered local test units and blocks repeat dispatch of termina
   expect(html).toContain("released");
   expect(html).not.toContain('action="/evidence/local-ai/consumed/run"');
   expect(html).not.toContain('action="/evidence/local-ai/released/run"');
+  expect(html).toContain(
+    "This request has no cost estimate, so it cannot run.",
+  );
+  expect(html).toContain(
+    "Estimate only: about 267 tokens and 157 simulated cost points (model simulated-model-v1, test rates simulated-rates-v1).",
+  );
+  const estimate = choices[0]!.estimate;
+  const budgeted = (costPoints: number) =>
+    localAiConsentPage(
+      [
+        {
+          ...choices[0]!,
+          jobs: [
+            {
+              id: "settled",
+              status: "succeeded",
+              testUnitState: "consumed" as const,
+              budget: {
+                estimate,
+                actual: { inputTokens: 11, outputTokens: 64, costPoints },
+              },
+            },
+            {
+              id: "held",
+              status: "needs_reconciliation",
+              testUnitState: "reserved" as const,
+              budget: { estimate },
+            },
+          ],
+        },
+      ],
+      "csrf",
+    );
+  const within = budgeted(42);
+  expect(within).toContain(
+    "Actual simulated use: 75 tokens and 42 cost points. Within the estimate.",
+  );
+  expect(within.match(/Actual simulated use/g)).toHaveLength(1);
+  expect(budgeted(158)).toContain(
+    "Over the estimate. You are still charged only one test request.",
+  );
+  expect(budgeted(157)).toContain("Within the estimate.");
+  expect(within).not.toContain("no cost estimate");
   const paused = localAiConsentPage(choices, "csrf", [], "paused");
   expect(paused).not.toContain("Use one local test request</button>");
   expect(paused).not.toContain("Run local test request</button>");

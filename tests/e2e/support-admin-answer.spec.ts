@@ -98,7 +98,7 @@ async function boot(page: Page) {
   };
 }
 
-test("[L300] ADMSUP-01..04 an administrator answers a member's support request themselves, then revokes it", async ({
+test("[L310] ADMSUP-01..04 an administrator answers a member's support request themselves, then revokes it", async ({
   page,
   browser,
 }) => {

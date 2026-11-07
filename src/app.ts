@@ -21,6 +21,10 @@ import {
   type InvoiceSender,
 } from "./simple-invoice-routes.ts";
 import type { SimpleInvoiceStore } from "./simple-invoice-store.ts";
+import {
+  mountTestProviderEvents,
+  type TestProviderEvents,
+} from "./test-provider-events.ts";
 import { mountLearningWorkspaceRoutes } from "./learning-workspace-routes.ts";
 import { mountLearningWorkspaceAssets } from "./learning-workspace-assets.ts";
 import { mountLearningWorkspacePages } from "./learning-workspace-pages.ts";
@@ -82,6 +86,7 @@ import cookieParser from "cookie-parser";
 import {
   withHosting,
   withDemoSite,
+  withMemberContributions,
   hostingText,
   inventedInputOnly,
 } from "./hosting-presentation.ts";
@@ -101,6 +106,12 @@ import {
 } from "./member-email-access.ts";
 import { mountMemberEmailRoutes } from "./member-email-routes.ts";
 import { mountMemberPasswordRoutes } from "./member-password-routes.ts";
+import {
+  anonymousWriteRefusal,
+  type AnonymousWriteAdmissionStore,
+  type AnonymousWriteKind,
+} from "./anonymous-write-admission.ts";
+import { visitorAddress } from "./visitor-address.ts";
 import {
   acceptablePassword,
   type MemberPasswordAccess,
@@ -149,6 +160,7 @@ import {
   practiceSessionHistoryPage,
   practiceSessionPage,
   practiceSessionRecoveryPage,
+  practiceSessionAllowanceNeededPage,
   staffLibraryPage,
   trackReadinessPage,
   tailoredReviewRequestPage,
@@ -274,6 +286,11 @@ import {
   type LedgerReconciliationStore,
 } from "./ledger-reconciliation.ts";
 import { registerLedgerReconciliationRoutes } from "./ledger-reconciliation-routes.ts";
+import {
+  disabledInvoiceReconciliationStore,
+  type InvoiceReconciliationStore,
+} from "./invoice-reconciliation.ts";
+import { registerInvoiceReconciliationRoutes } from "./invoice-reconciliation-routes.ts";
 import {
   disabledLocalAiHoldInspectionStore,
   type LocalAiHoldInspectionStore,
@@ -426,6 +443,7 @@ export function app(
     learningWorkspacePublication?: LearningWorkspacePublicationStore;
     programs?: ProgramStore;
     simpleInvoices?: SimpleInvoiceStore;
+    testProviderEvents?: TestProviderEvents;
     billingProfiles?: BillingProfileStore;
     invoiceSender?: InvoiceSender;
     foundationImport?: FoundationImportStore;
@@ -442,6 +460,7 @@ export function app(
     localCircleAdmin?: boolean;
     metrics?: MetricsStore;
     ledgerReconciliation?: LedgerReconciliationStore;
+    invoiceReconciliation?: InvoiceReconciliationStore;
     localHoldInspection?: LocalAiHoldInspectionStore;
     memberTestUnits?: MemberTestUnitsStore;
     studyUnitFixtures?: StudyUnitFixtureStore;
@@ -450,6 +469,7 @@ export function app(
     attempts?: AttemptStore;
     practice?: PracticeStore;
     practiceSessions?: PracticeSessionStore;
+    practiceSessionAllowance?: boolean;
     supportRequests?: SupportRequestStore;
     privateSupportIntake?: boolean;
     supportAssignment?: SupportAssignmentStore;
@@ -485,6 +505,7 @@ export function app(
     memberPassword?: MemberPasswordAccess;
     memberSignOut?: MemberEmailAccess["signOut"];
     uploadAdmission?: UploadAdmissionStore;
+    anonymousWrites?: AnonymousWriteAdmissionStore;
   },
 ) {
   const store = sharingHeaderSession(memberStore);
@@ -536,6 +557,9 @@ export function app(
   );
   app.use((_req, _res, next) => withDemoSite(options.demoSite === true, next));
   app.use((_req, _res, next) =>
+    withMemberContributions(options.memberContributions === true, next),
+  );
+  app.use((_req, _res, next) =>
     withHosting(
       options.hostedOrigin === options.origin &&
         options.origin.startsWith("https://"),
@@ -572,6 +596,8 @@ export function app(
     }
     next();
   });
+  if (options.testProviderEvents)
+    mountTestProviderEvents(app, options.testProviderEvents);
   app.use(
     "/assets",
     express.static(fileURLToPath(new URL("../public", import.meta.url))),
@@ -582,6 +608,21 @@ export function app(
     options,
     mode,
   );
+  // Signup and password sign-in spend scrypt and email for anyone; bound them
+  // per visitor and for the whole service before doing that work (#728).
+  const anonymousRefusal = async (
+    kind: AnonymousWriteKind,
+    req: express.Request,
+  ) => {
+    if (!options.anonymousWrites) return null;
+    const result = await options.anonymousWrites.admit(
+      kind,
+      visitorAddress(req.socket.remoteAddress, req.get("x-forwarded-for")),
+    );
+    return result.kind === "admitted"
+      ? null
+      : anonymousWriteRefusal(kind, result);
+  };
   // Admit evidence creation against the shared budget before reading its body.
   const uploadAdmission = options.uploadAdmission;
   if (uploadAdmission) {
@@ -898,6 +939,7 @@ export function app(
     signInLanding,
     options.memberSignOut,
     options.memberPassword,
+    anonymousRefusal,
   );
   if (options.memberPassword)
     mountMemberPasswordRoutes(
@@ -910,6 +952,8 @@ export function app(
         void options.memberEmail
           ?.requestAttach(memberToken, address)
           .catch(() => undefined),
+      (req) => anonymousRefusal("password_sign_in", req),
+      (req) => anonymousRefusal("password_change", req),
     );
   mountProgramRoutes(
     app,
@@ -923,6 +967,11 @@ export function app(
     res.send(trackReadinessPage(await tracks.snapshot())),
   );
   registerLedgerReconciliationRoutes(app, ledgerReconciliation, mode);
+  registerInvoiceReconciliationRoutes(
+    app,
+    options.invoiceReconciliation ?? disabledInvoiceReconciliationStore(),
+    mode,
+  );
   registerLocalAiHoldInspectionRoutes(
     app,
     options.localHoldInspection ?? disabledLocalAiHoldInspectionStore(),
@@ -951,8 +1000,10 @@ export function app(
   });
   registerMetricsReportRoutes(app, metrics);
   app.get("/operator/metrics", async (_req, res) => {
-    const snapshot = await metrics.snapshot(res.locals.token as string);
-    if (!snapshot) {
+    const token = res.locals.token as string;
+    const snapshot = await metrics.snapshot(token);
+    // Logged before it leaves: a failed log write sends no data.
+    if (!snapshot || !(await metrics.logExport(token))) {
       res.status(403).json({ error: "forbidden" });
       return;
     }
@@ -1535,13 +1586,38 @@ export function app(
           field: "signup_password",
           message: "Password: use 12 to 128 characters.",
         });
-      if (!problems.length && !(await signup.emailAvailable(signupEmail)))
-        problems.push({
-          field: "signup_email",
-          message:
-            "Email address: this email is already used for sign-in. Sign in instead, or use another email.",
-        });
       start.errors.push(...(problems as typeof start.errors));
+    }
+    if (start.input && !start.errors.length) {
+      // A well-formed request is admitted before the address is looked up, so
+      // asking whether an email is registered is bounded like signing up.
+      const refused = await anonymousRefusal("signup", req);
+      if (refused) {
+        res
+          .status(refused.status)
+          .set("Cache-Control", "no-store")
+          .set("Retry-After", String(refused.retryAfterSeconds))
+          .send(
+            welcome(
+              res.locals.csrf as string,
+              [refused.message],
+              start,
+              Boolean(options.memberEmail),
+              signup ? { email: signupEmail } : undefined,
+            ),
+          );
+        return;
+      }
+      if (signup && !(await signup.emailAvailable(signupEmail)))
+        start.errors.push(
+          ...([
+            {
+              field: "signup_email",
+              message:
+                "Email address: this email is already used for sign-in. Sign in instead, or use another email.",
+            },
+          ] as { field: string; message: string }[] as typeof start.errors),
+        );
     }
     if (!start.input || start.errors.length) {
       res
@@ -2394,7 +2470,10 @@ export function app(
             await evidence.owned(res.locals.token as string),
             res.locals.csrf as string,
             [
-              "This sample is not eligible for the local review queue. Refresh and check its current safety, consent and submission state.",
+              hostingText(
+                "This sample is not eligible for the local review queue. Refresh and check its current safety, consent and submission state.",
+                "This sample is not eligible for the review queue. Refresh and check its current safety, consent and submission state.",
+              ),
             ],
           ),
         );
@@ -3292,7 +3371,13 @@ export function app(
         );
       return;
     }
-    res.send(practiceSessionStartPage(source, res.locals.csrf as string));
+    res.send(
+      practiceSessionStartPage(
+        source,
+        res.locals.csrf as string,
+        options.practiceSessionAllowance === true,
+      ),
+    );
   });
   app.post("/library/:id/practice-session/start", async (req, res) => {
     const fields = (req.body ?? {}) as Fields;
@@ -3345,6 +3430,10 @@ export function app(
       goal: fields.goal as keyof typeof GOALS,
       promptVersion: fields.prompt_version,
     });
+    if (result.kind === "allowance-needed") {
+      res.status(409).send(practiceSessionAllowanceNeededPage());
+      return;
+    }
     if (!("sessionId" in result)) {
       res
         .status(409)
@@ -5739,7 +5828,10 @@ export function app(
         .send(
           errorPage(
             "Deletion status unconfirmed",
-            "We could not confirm completion. If the request was accepted, local cleanup will retry; this page is not a deletion receipt.",
+            hostingText(
+              "We could not confirm completion. If the request was accepted, local cleanup will retry; this page is not a deletion receipt.",
+              "We could not confirm completion. If the request was accepted, cleanup will retry; this page is not a deletion receipt.",
+            ),
           ),
         );
       return;

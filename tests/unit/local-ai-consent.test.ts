@@ -72,12 +72,15 @@ const adapterResult = {
   state: "simulated",
   reference: "test_reference",
   message: "Simulated computation",
+  usage: { inputTokens: 11, outputTokens: 64 },
 };
 function setup(
   options: {
     metered?: boolean;
     metering?: Record<string, unknown>;
     noGrant?: boolean;
+    noEstimate?: boolean;
+    usage?: unknown;
     budgetDeadline?: "claim" | "before" | "after";
     queueDeadline?: "session" | "grant";
     beforeSettlement?: "session" | "lease";
@@ -88,6 +91,7 @@ function setup(
     listenerFailure?: boolean;
     connectionError?: boolean;
     listedJobs?: Array<Record<string, unknown>>;
+    heldWithoutSource?: Array<Record<string, unknown>>;
     source?: Record<string, unknown>;
     receipt?: Record<string, unknown>;
     job?: Record<string, unknown>;
@@ -186,6 +190,8 @@ function setup(
             ]
           : [],
       };
+    if (sql.includes("SELECT 1 FROM ai_usage_estimates"))
+      return { rows: options.noEstimate ? [] : [{}] };
     if (sql.includes("SELECT r.grant_id,r.quantity"))
       return {
         rows: [
@@ -230,6 +236,8 @@ function setup(
           },
         ],
       };
+    if (sql.includes("j.local_ai_receipt_id IS NULL"))
+      return { rows: options.heldWithoutSource ?? [] };
     if (sql.includes("SELECT e.id FROM evidence_objects"))
       return { rows: [{ id }] };
     if (sql.includes("SELECT id FROM principals"))
@@ -322,7 +330,9 @@ function setup(
   const get = vi.fn(async () => options.bytes ?? data);
   const execute = vi.fn(async () => {
     outputReady = true;
-    return adapterResult;
+    return "usage" in options
+      ? { ...adapterResult, usage: options.usage }
+      : adapterResult;
   });
   const registry = {
     mode: "test",
@@ -397,7 +407,7 @@ it("creates an explicit receipt, returns identical grant and never reads provide
 });
 it("denies sources unavailable after locks, including expiry and retired sources", async () => {
   for (const missing of ["principal", "workspace", "source", "leaf"]) {
-    const f = setup({ missing });
+    const f = setup({ missing, listedJobs: [] });
     expect(await f.service.grant("member", id)).toEqual({ kind: "denied" });
     expect(await f.service.list("member")).toEqual([]);
     expect(f.execute).not.toHaveBeenCalled();
@@ -430,15 +440,46 @@ it("verifies exact byte size/digest, bounded nonempty valid UTF8 text and missin
   const missing = setup();
   missing.get.mockRejectedValueOnce(Error("private path"));
   expect(await missing.service.grant("member", id)).toEqual({ kind: "denied" });
-  const listing = setup({ bytes: Buffer.alloc(0) });
+  const listing = setup({ bytes: Buffer.alloc(0), listedJobs: [] });
   expect(await listing.service.list("member")).toEqual([]);
+});
+it("AIHOLD-06 lists a held request on a source that can no longer be used", async () => {
+  const listedJobs = [{ id: jid, status: "needs_reconciliation" }];
+  for (const f of [
+    setup({ missing: "leaf", listedJobs }),
+    setup({ bytes: Buffer.alloc(0), listedJobs }),
+  ]) {
+    expect(await f.service.list("member")).toMatchObject([
+      {
+        evidenceId: id,
+        receiptId: null,
+        retired: true,
+        jobs: [{ id: jid, status: "needs_reconciliation" }],
+      },
+    ]);
+    expect(f.execute).not.toHaveBeenCalled();
+  }
+});
+it("STAFFHOLD-08 lists a hold whose source was deleted, without any source identity", async () => {
+  const heldWithoutSource = [{ id: jid, status: "needs_reconciliation" }];
+  const listed = await setup({ heldWithoutSource }).service.list("member");
+  expect(listed.at(-1)).toMatchObject({
+    evidenceId: "",
+    sourceDeleted: true,
+    retired: true,
+    receiptId: null,
+    jobs: heldWithoutSource,
+  });
+  expect(
+    await setup({ heldWithoutSource, active: false }).service.list("member"),
+  ).toEqual([]);
 });
 it("returns only owner-safe source summaries, current receipt state and job statuses", async () => {
   expect(await setup().service.list("member")).toMatchObject([
     { receiptId: rid, jobs: [{ id: jid, status: "pending" }] },
   ]);
   expect(
-    await setup({ missing: "receipt" }).service.list("member"),
+    await setup({ missing: "receipt", listedJobs: [] }).service.list("member"),
   ).toMatchObject([
     { receiptId: null, grantedAt: null, withdrawnAt: null, jobs: [] },
   ]);
@@ -470,12 +511,15 @@ it("requires every exact binding and fails closed for unavailable receipt paths"
     expect(f.execute).not.toHaveBeenCalled();
   }
 });
-it("withdraws once and cancels outstanding attempts without invoking the adapter", async () => {
+it("withdraws once and resolves outstanding attempts without invoking the adapter", async () => {
   const f = setup();
   expect(await f.service.withdraw("member", rid)).toBe(true);
   expect(
-    f.query.mock.calls.some(([q]) => q.includes("status='exhausted'")),
+    f.query.mock.calls.some(([q]) =>
+      q.includes("WHEN attempt_count>0 THEN 'needs_reconciliation'"),
+    ),
   ).toBe(true);
+  expect(f.execute).not.toHaveBeenCalled();
   expect(
     await setup({ receipt: { withdrawn_at: new Date() } }).service.withdraw(
       "member",
@@ -969,3 +1013,65 @@ it.each(["claim", "before", "after"] as const)(
       expect(f.query.mock.calls.some(([sql]) => sql === "ROLLBACK")).toBe(true);
   },
 );
+
+it("calls no provider for a metered request without a usable estimate", async () => {
+  const { service, execute } = setup({ metered: true, noEstimate: true });
+  expect((await service.run("member", jid)).kind).toBe("denied");
+  expect(execute).not.toHaveBeenCalled();
+});
+
+it("holds a metered request when the provider usage is unusable", async () => {
+  const { service, query } = setup({
+    metered: true,
+    usage: { inputTokens: 0 },
+  });
+  expect(await service.run("member", jid)).toEqual({
+    kind: "unavailable",
+    jobId: jid,
+    status: "needs_reconciliation",
+  });
+  const statements = query.mock.calls.map(([sql]) => sql as string);
+  expect(statements.some((sql) => sql.includes("ai_usage_settlements"))).toBe(
+    false,
+  );
+});
+
+it("lists stored estimates and actual figures without other fields", async () => {
+  const stored = {
+    id: jid,
+    status: "succeeded",
+    rate_version: "simulated-rates-v1",
+    model_version: "simulated-model-v1",
+    estimated_input_tokens: 11,
+    estimated_output_tokens: 256,
+    estimated_cost_points: 157,
+  };
+  const estimate = {
+    inputTokens: 11,
+    outputTokens: 256,
+    costPoints: 157,
+    modelVersion: "simulated-model-v1",
+    rateVersion: "simulated-rates-v1",
+  };
+  const { service } = setup({
+    listedJobs: [
+      { ...stored, actual_cost_points: null },
+      {
+        ...stored,
+        actual_input_tokens: 11,
+        actual_output_tokens: 64,
+        actual_cost_points: 42,
+      },
+      stored,
+    ],
+  });
+  const [choice] = await service.list("member");
+  expect(choice!.jobs.map((job) => job.budget)).toEqual([
+    { estimate },
+    {
+      estimate,
+      actual: { inputTokens: 11, outputTokens: 64, costPoints: 42 },
+    },
+    { estimate },
+  ]);
+});

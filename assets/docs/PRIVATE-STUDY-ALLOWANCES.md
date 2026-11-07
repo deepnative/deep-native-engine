@@ -1,4 +1,4 @@
-# Versioned monthly study allowance (test units)
+# Versioned monthly study and practice allowances (test units)
 
 Delivered for part of [#199](https://github.com/deepnative/deep-native-engine/issues/199). A member can deliberately claim a finite monthly number of study-request test units at `/member/study-allowance`. These are not credits with money value. They don't call a paid AI service or represent a purchased plan.
 
@@ -22,7 +22,21 @@ New claims need `DNE_LOCAL_TEST_UNIT_ISSUANCE=enabled` in demo or test mode, the
 
 ## Privacy
 
-The structured export appends `studyAllowanceClaims` as section 57 in `local-member-records-v34`. It lists the claim, version, category, quantity, period and grant reference, and leaves out the operation key and workspace. Erasing the account removes claims and grants. Policy rows contain no member data and remain.
+The structured export appends `studyAllowanceClaims` as section 57 in `local-member-records-v34` and later. It lists the claim, version, category, quantity, period and grant reference, and leaves out the operation key and workspace. Erasing the account removes claims and grants. Policy rows contain no member data and remain.
+
+## Practice sessions
+
+Delivered for part of #199 and #200. `mock-allowance-test-v1` is 3 practice sessions per UTC calendar month, with the same claim rules as study requests and its own monthly slot. The number 3 is a test figure.
+
+`DNE_PRACTICE_SESSION_ALLOWANCE=enabled` makes starting a new private practice session use one claimed unit. It's off by default, off on the hosted site, and refused with the rest of live mode. While it's off, starts are free as before, the allowance page has no practice section unless a claim is retained, and practice claims are refused. Claims also need `DNE_LOCAL_TEST_UNIT_ISSUANCE`.
+
+**Counting rule:** one unit per new session. The session and consumed unit commit together. Returning, an exact repeat, concurrent starts of one session, and all 15 response/comparison pairs (30 visible turns; instructions don't count) use nothing more. The delivered session is otherwise unchanged and the cap remains at 15 pairs. A refused start (no unit, ineligible or retired source, changed goal, withdrawn session) creates nothing and uses nothing. Withdrawing a session doesn't refund its unit or allow a restart. Sessions already started stay open when units run out or the month ends.
+
+The sessions are the deterministic local comparison, not generated feedback or an interview mode. No provider is called, so "uses a unit" spends nothing. In the staff reconciliation report these units appear as consumed without an attachment, because there's no completion record for this category yet.
+
+The export appends `practiceSessionAllowanceUses` as section 59 in `local-member-records-v36`: session, claim and time, without the reservation. Account erasure removes uses, claims and grants.
+
+Rollback: unset the setting. Starts go back to free. Keep the additive table and ledger facts.
 
 ## Rollback
 
@@ -30,4 +44,4 @@ Turn the setting off to stop new claims. Keep the additive tables and ledger fac
 
 ## Still open on #199
 
-Real provider rates and spend ceiling, optional-offer eligibility, renewal and cancellation rules, overrun policy, the mock-session category and provider dispatch.
+Real provider rates and spend ceiling, optional-offer eligibility, renewal and cancellation rules, overrun policy and provider dispatch. On #200: generated feedback, its provider failure handling and interview mode.
