@@ -380,12 +380,11 @@ export function publicationStore(
             member_id: string;
             revision: number;
           }>(
-            "SELECT proposal_id,member_id,revision FROM proposal_publications WHERE operation_id=$1",
-            [operationId],
+            "SELECT proposal_id,member_id,revision FROM proposal_publications WHERE operation_id=$1 AND member_id=$2",
+            [operationId, actor.id],
           )
         ).rows[0];
         if (!ref) return null;
-        if (ref.member_id !== actor.id) return fail("denied");
         await owned(tx, actor.id, ref.proposal_id, false);
         return receipt(tx, ref.proposal_id, ref.revision);
       });

@@ -111,7 +111,7 @@ function fixture(
   } = {},
 ) {
   let receipts = options.receipts ?? [accepted];
-  const query = vi.fn(async (sql: string, _values?: unknown[]) => {
+  const query = vi.fn(async (sql: string, values?: unknown[]) => {
     if (options.error) throw options.error;
     if (sql.includes("token_hash=$1"))
       return {
@@ -136,19 +136,20 @@ function fixture(
       return { rows: [{ id: workspaceId }] };
     if (sql.includes("SELECT p.id"))
       return { rows: options.sources ?? [source] };
-    if (sql.startsWith("SELECT proposal_id,member_id,revision"))
+    if (sql.startsWith("SELECT proposal_id,member_id,revision")) {
+      const row = options.operation ?? {
+        proposal_id: id,
+        member_id: ownerId,
+        revision: 1,
+      };
+      // The store filters by the signed-in member (#42).
       return {
         rows:
-          options.operation === null
+          options.operation === null || row.member_id !== values![1]
             ? []
-            : [
-                options.operation ?? {
-                  proposal_id: id,
-                  member_id: ownerId,
-                  revision: 1,
-                },
-              ],
+            : [row],
       };
+    }
     if (
       sql.startsWith("SELECT pp.id,pp.proposal_id FROM proposal_publications")
     )
@@ -365,7 +366,7 @@ it("keeps receipt inspection owner-only and withdrawal available when writes pau
     await fixture({
       operation: { proposal_id: id, member_id: randomUUID(), revision: 1 },
     }).target.inspect(token, randomUUID()),
-  ).toEqual({ kind: "denied" });
+  ).toMatchObject({ kind: "ready", value: null });
   expect(await fixture().target.inspect(token, randomUUID())).toMatchObject({
     kind: "ready",
     value: accepted,

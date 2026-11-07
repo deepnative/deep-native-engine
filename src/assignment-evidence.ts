@@ -144,14 +144,10 @@ export function assignmentEvidenceStore(
       workspaceId: string;
     };
     const sql = `SELECT id AS "receiptId",evidence_id AS "evidenceId",created_at AS "createdAt",payload_digest AS digest,
-     member_id AS "memberId",workspace_id AS "workspaceId" FROM assignment_evidence_operations WHERE operation_id=$1`;
-    const discovered = (await tx.query<Operation>(sql, [operationId])).rows[0];
+     member_id AS "memberId",workspace_id AS "workspaceId" FROM assignment_evidence_operations WHERE operation_id=$1 AND member_id=$2 AND workspace_id=$3`;
+    const key = [operationId, memberId, workspaceId];
+    const discovered = (await tx.query<Operation>(sql, key)).rows[0];
     if (!discovered) return undefined;
-    if (
-      discovered.memberId !== memberId ||
-      discovered.workspaceId !== workspaceId
-    )
-      return fail("denied");
     type Retained = {
       state: string;
       consent: boolean;
@@ -170,15 +166,9 @@ export function assignmentEvidenceStore(
         )
       ).rows[0];
     }
-    const operation = (
-      await tx.query<Operation>(`${sql} FOR SHARE`, [operationId])
-    ).rows[0];
+    const operation = (await tx.query<Operation>(`${sql} FOR SHARE`, key))
+      .rows[0];
     if (!operation) return undefined;
-    if (
-      operation.memberId !== memberId ||
-      operation.workspaceId !== workspaceId
-    )
-      return fail("denied");
     let state: AssignmentEvidenceReceipt["state"] = "removed",
       assignmentOrigin: AssignmentEvidenceOrigin | null = null;
     if (operation.evidenceId !== null) {
