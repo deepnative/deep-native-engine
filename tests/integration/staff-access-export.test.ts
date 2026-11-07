@@ -45,7 +45,7 @@ async function fileOpened(workspace: string, evidence: string, i = ids()) {
   await pool.query(
     `INSERT INTO authorization_audit(actor_id,staff_id,workspace_id,grant_type,grant_id,action,evidence_id,assignment_grant_id)
      VALUES($1,$1,$2,'assignment',$3,'evidence_bytes_loaded',$4,$5)`,
-    [i.actor, workspace, i.grant, evidence, i.other],
+    [i.actor, workspace, i.grant, evidence, i.grant],
   );
   return i;
 }
@@ -186,8 +186,9 @@ it("STAFFEXPORT-04 pages neither repeat nor skip history entries", async () => {
   const owner = await member(),
     total = MAX_MEMBER_EXPORT_RECORDS + 30;
   for (let i = 0; i < total; i++)
-    if (i % 3 === 0) await workspaceRead(owner.id);
-    else if (i % 3 === 1) await noteRead(owner.id);
+    // Every entry carries its own ID, so a repeat or a gap is visible.
+    if (i % 3 === 0) await fileOpened(owner.id, randomUUID());
+    else if (i % 3 === 1) await sampleRead(owner.id, randomUUID());
     else await proposalRead(owner.id, randomUUID());
 
   const pages = await allPages(owner.token);
@@ -196,7 +197,7 @@ it("STAFFEXPORT-04 pages neither repeat nor skip history entries", async () => {
   expect(rows).toHaveLength(total);
   expect(
     new Set(
-      rows.map((row) => `${row.source}:${row.occurredAt}:${row.proposalId}`),
+      rows.map((row) => `${row.source}:${row.evidenceId}:${row.proposalId}`),
     ).size,
   ).toBe(total);
   expect(pages.at(-1)!.page.complete).toBe(true);
