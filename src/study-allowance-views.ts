@@ -11,10 +11,10 @@ import {
 const HEADING = "Your monthly study allowance";
 const links = `<p><a href="/member/test-units">Your test units</a> · <a href="/learn">Learning path</a></p>`;
 function policyFacts(policy: StudyAllowancePolicy) {
-  return `<h2>This month's rules</h2><dl><dt>Rules version</dt><dd>${escape(policy.version)}</dd><dt>How much</dt><dd>${policy.periodLimit} study requests, each calendar month (UTC)</dd><dt>Who can claim</dt><dd>Any current member who chooses to claim it</dd><dt>Where it comes from</dt><dd>Test setting on this site. It isn't bought, and it isn't a paid plan.</dd><dt>Cost estimate</dt><dd>None. These units never call a paid AI service.</dd></dl>`;
+  return `<h3>This month's rules</h3><dl><dt>Rules version</dt><dd>${escape(policy.version)}</dd><dt>How much</dt><dd>${policy.periodLimit} study requests, each calendar month (UTC)</dd><dt>Who can claim</dt><dd>Any current member who chooses to claim it</dd><dt>Where it comes from</dt><dd>Test setting on this site. It isn't bought, and it isn't a paid plan.</dd><dt>Cost estimate</dt><dd>None. These units never call a paid AI service.</dd></dl>`;
 }
 function claimFacts(claim: StudyAllowanceClaim) {
-  return `<h2>This month's claim</h2><p role="status">Claimed under ${escape(claim.policyVersion)}.</p><dl><dt>Claimed</dt><dd>${claim.quantity} study requests on ${timeTag(claim.createdAt)}</dd><dt>Left to use</dt><dd><span data-field="available">${claim.available}</span> study requests</dd><dt>Held for a request in progress</dt><dd><span data-field="reserved">${claim.reserved}</span></dd><dt>Used</dt><dd><span data-field="consumed">${claim.consumed}</span></dd><dt>Ends</dt><dd>${timeTag(claim.periodEnd)}</dd></dl><p>Unused units end with the month and don't carry over. You can claim again when the next month starts.</p>`;
+  return `<h3>This month's claim</h3><p role="status">Claimed under ${escape(claim.policyVersion)}.</p><dl><dt>Claimed</dt><dd>${claim.quantity} study requests on ${timeTag(claim.createdAt)}</dd><dt>Left to use</dt><dd><span data-field="available">${claim.available}</span> study requests</dd><dt>Held for a request in progress</dt><dd><span data-field="reserved">${claim.reserved}</span></dd><dt>Used</dt><dd><span data-field="consumed">${claim.consumed}</span></dd><dt>Ends</dt><dd>${timeTag(claim.periodEnd)}</dd></dl><p>Unused units end with the month and don't carry over. You can claim again when the next month starts.</p>`;
 }
 function claimForm(
   csrf: string,
@@ -43,7 +43,8 @@ function practiceSection(csrf: string, view: StudyAllowanceView) {
             "Claim this month's practice sessions",
           )
         : `<p role="status">New practice session claims are paused. Sessions you've already started stay open.</p>`;
-  return `<section data-allowance="mock_sessions"><h2>Practice sessions</h2>${facts}${action}</section>`;
+  // Not <section>: `.reading section` indents numbered lesson steps.
+  return `<div data-allowance="mock_sessions"><h2>Practice sessions</h2>${facts}${action}</div>`;
 }
 export function studyAllowancePage(csrf: string, view: StudyAllowanceView) {
   const action = view.claim
@@ -55,7 +56,7 @@ export function studyAllowancePage(csrf: string, view: StudyAllowanceView) {
         : `<p role="status">New claims are paused. Anything you've already claimed stays available.</p>`;
   return page(
     HEADING,
-    `<article class="reading"><p class="eyebrow">PRIVATE · TEST ONLY</p><h1>${HEADING}</h1><p>Nothing is added until you claim it. Opening this page or changing your background or goals never adds units.</p>${view.policy ? policyFacts(view.policy) : ""}${action}${view.practice ? practiceSection(csrf, view) : ""}${links}</article>`,
+    `<article class="reading"><p class="eyebrow">PRIVATE · TEST ONLY</p><h1>${HEADING}</h1><p>Nothing is added until you claim it. Opening this page or changing your background or goals never adds units.</p><div data-allowance="study_requests"><h2>Study requests</h2>${view.policy ? policyFacts(view.policy) : ""}${action}</div>${view.practice ? practiceSection(csrf, view) : ""}${links}</article>`,
   );
 }
 const notices = {
