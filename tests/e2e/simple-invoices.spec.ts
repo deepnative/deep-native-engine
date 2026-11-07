@@ -521,7 +521,7 @@ test("[L309] signed test events reconcile out of order and read as simulated to 
     await f.close();
   }
 });
-test("[L310] administrator reconciles signed test events and metered test AI requests apart from collected cash", async ({
+test("[L311] administrator reconciles signed test events and metered test AI requests apart from collected cash", async ({
   browser,
 }, info) => {
   const key = "invented-browser-reconciliation-key-01";
