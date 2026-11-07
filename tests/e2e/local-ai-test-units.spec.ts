@@ -244,6 +244,15 @@ for (const [index, [background, goal]] of audiences.entries()) {
           "One local test request: released subject to expiry.",
         ),
       ).toBeVisible();
+      // AICANCEL-01: the member cancelled it; nothing failed.
+      await expect(
+        second.item.getByText(
+          "Cancelled when you withdrew permission. It never started.",
+        ),
+      ).toBeVisible();
+      await expect(second.item.getByText(/unavailable or failed/)).toHaveCount(
+        0,
+      );
       await page
         .getByRole("link", { name: "See your local test units" })
         .click();

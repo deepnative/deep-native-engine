@@ -580,6 +580,42 @@ it("CHANGELOG-09 entries outlive a deleted member and a former administrator wit
   expect(lines.join()).not.toContain("Invented Gone Member");
 });
 
+it("CHANGELOG-13 a current administrator with no member profile isn't called a former administrator", async () => {
+  // As in the local preview: a local credential bound to a member principal
+  // that has no learner profile, so there is no name to show.
+  const staff = randomUUID(),
+    owner = randomUUID(),
+    session = randomBytes(32).toString("hex"),
+    expires = new Date(Date.now() + 3_600_000);
+  await pool.query(
+    "INSERT INTO principals(id,token_hash,kind,expires_at) VALUES($1,$2,'staff',$4),($3,$5,'member',$4)",
+    [staff, hash(randomBytes(32).toString("hex")), owner, expires, session],
+  );
+  await pool.query(
+    "INSERT INTO staff_profiles(principal_id,role) VALUES($1,'platform_admin')",
+    [staff],
+  );
+  await pool.query(
+    "INSERT INTO administrator_sessions(staff_id,member_id,member_token_hash,expires_at) VALUES($1,$2,$3,$4)",
+    [staff, owner, session, expires],
+  );
+  await pool.query(
+    "INSERT INTO billing_change_events(actor_id,action,member_id,amount_cents) VALUES($1,'plan_offered',$2,100)",
+    [staff, tom.id],
+  );
+  expect(await sentences()).toEqual([
+    "An administrator with no name set offered Invented Tom a course plan of CAD 1.00.",
+  ]);
+  // CHANGELOG-09 still holds once that member account is gone.
+  await pool.query("DELETE FROM workspaces WHERE owner_principal_id=$1", [
+    owner,
+  ]);
+  await pool.query("DELETE FROM principals WHERE id=$1", [owner]);
+  expect(await sentences()).toEqual([
+    "A former administrator offered Invented Tom a course plan of CAD 1.00.",
+  ]);
+});
+
 it("CHANGELOG-10 shows no email, fingerprint, credential or reason", async () => {
   const address = "private-10@example.test";
   await account("Invented Holder", address);
