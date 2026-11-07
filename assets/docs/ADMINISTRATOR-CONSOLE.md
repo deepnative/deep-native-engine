@@ -29,6 +29,10 @@ NAME01–05 maps to unit `display-name`, administrator route, store/domain/expor
 
 ADMINTABLE-01..04 map to `administrator-entry-routes` units and real PostgreSQL `administrator-entry` tests, all of which failed before implementation. ADMINTABLE-05 and the browser journey are critical L287 on desktop and mobile. L277 and L282 now reach learners through the table. A malformed page falls back to page 1, and an out-of-range page clamps to the last one. A repeated parameter or a search over 120 characters is refused.
 
+## Coaching months in the learner table — #732
+
+Each learner row shows **This month** and **Last month**: that month's saved coaching hours and status, linking to that month's coaching page, or "—" when nothing is saved. Months are UTC calendar months read from the database clock, like the coaching pages, and each header names its month. **Earlier coaching** (formerly Latest coaching, #654) now shows the latest saved month before last month, so it never repeats the two new columns. All three come with the page of learners in one query. CONSOLEMONTHS-01..03 map to `administrator-entry-routes` units, the PostgreSQL `administrator-entry` test and L287 on desktop and mobile; the unit and PostgreSQL tests failed before implementation.
+
 ## Administration link — #656
 
 The header and `/account` show **Administration** only to a verified owner: the existing approved-owner check, with a current account and workspace. An ended or expired administrator session keeps the link, so an owner can enter again. The link appears from the first page after email verification. It grants nothing: `/admin` and the console still authorize every request and still refuse everyone else. The check is one read-only query on signed-in pages. Signed-out visitors and static assets make no query, and a failed check hides the link while the page still renders. Tests: ADMINLINK-01/02/03 in `tests/unit/app.test.ts` and `tests/integration/administrator-entry.test.ts`, with browser coverage in L281 and L284.

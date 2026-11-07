@@ -641,6 +641,19 @@ test("[L287] ADMINTABLE-01..05 an administrator pages and searches 60 learners a
       "UPDATE learners SET display_name='Zed Owner' WHERE id=$1",
       [f.id],
     );
+    // CONSOLEMONTHS-01: the months the table should name, from the same clock.
+    const { current, previous } = (
+      await pool.query<{ current: string; previous: string }>(
+        `SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM') AS current,
+         to_char(date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')-interval '1 month','YYYY-MM') AS previous`,
+      )
+    ).rows[0]!;
+    const label = (month: string) =>
+      new Date(`${month}-01T00:00:00Z`).toLocaleString("en-CA", {
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      });
     for (let index = 1; index <= 59; index++) {
       const token = randomBytes(32).toString("hex");
       await members.create(token, { background: "technical", goal: "build" });
@@ -651,11 +664,22 @@ test("[L287] ADMINTABLE-01..05 an administrator pages and searches 60 learners a
         `Invented learner ${String(index).padStart(2, "0")}`,
       ]);
       if (index === 1)
-        await pool.query(
-          `INSERT INTO coaching_months(owner_id,month,minutes,name,email,state,revision,submitted_revision)
-           VALUES($1,'2026-10',10320,'Invented','invented@example.test','submitted',1,1)`,
-          [session.learner.id],
-        );
+        for (const [month, minutes, state] of [
+          [current, 720, "draft"],
+          [previous, 600, "submitted"],
+          ["2020-01", 10320, "submitted"],
+        ] as const)
+          await pool.query(
+            `INSERT INTO coaching_months(owner_id,month,minutes,name,email,state,revision,submitted_revision)
+             VALUES($1,$2,$3,'Invented','invented@example.test',$4,1,$5)`,
+            [
+              session.learner.id,
+              month,
+              minutes,
+              state,
+              state === "draft" ? null : 1,
+            ],
+          );
     }
     await f.verify();
     await page.goto(f.origin + "/admin");
@@ -666,11 +690,30 @@ test("[L287] ADMINTABLE-01..05 an administrator pages and searches 60 learners a
     await expect(rows).toHaveCount(25);
     await expect(page.getByText("Showing 1–25 of 60")).toBeVisible();
     await expect(rows.first()).toContainText("Invented learner 01");
-    // CONSOLECOACH-01: the latest saved month, its hours and state.
-    await expect(rows.first().locator(".member-coaching")).toHaveText(
-      "October 2026172h · Awaiting review",
-    );
-    await expect(rows.nth(1).locator(".member-coaching")).toHaveText("—");
+    // CONSOLEMONTHS-01..03: this month, last month and earlier coaching,
+    // each with its hours and state and a link to that month.
+    await expect(table.locator("thead th")).toContainText([
+      `This month${label(current)}`,
+      `Last month${label(previous)}`,
+      "Earlier coaching",
+    ]);
+    const months = rows.first().locator(".member-coaching");
+    await expect(months).toHaveText([
+      "12hDraft",
+      "10hAwaiting review",
+      "January 2020172h · Awaiting review",
+    ]);
+    for (const [index, month] of [current, previous, "2020-01"].entries())
+      await expect(months.nth(index).getByRole("link")).toHaveAttribute(
+        "href",
+        new RegExp(`/operator/coaching/[0-9a-f-]+\\?month=${month}$`),
+      );
+    // CONSOLEMONTHS-02: nothing saved reads as empty in every month column.
+    await expect(rows.nth(1).locator(".member-coaching")).toHaveText([
+      "—",
+      "—",
+      "—",
+    ]);
     await expect(pager.getByRole("link", { name: "Next" })).toBeVisible();
     await expect(pager.getByRole("link", { name: "Previous" })).toHaveCount(0);
     const fits = async () => {
@@ -693,6 +736,12 @@ test("[L287] ADMINTABLE-01..05 an administrator pages and searches 60 learners a
       path: test.info().outputPath("learner-table.png"),
       fullPage: true,
     });
+
+    // CONSOLEMONTHS-01: a month's hours open that month's coaching page.
+    await months.first().getByRole("link", { name: "12h" }).click();
+    await expect(page).toHaveURL(new RegExp(`month=${current}$`));
+    await page.goBack();
+    await expect(page.getByText("Showing 1–25 of 60")).toBeVisible();
 
     await pager.getByRole("link", { name: "Next" }).click();
     await expect(page.getByText("Showing 26–50 of 60")).toBeVisible();
