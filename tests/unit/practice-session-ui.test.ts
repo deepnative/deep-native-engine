@@ -548,3 +548,10 @@ it("MOCK-07 the start page mentions units only when the setting is on", async ()
   );
   expect(body.text).toContain("your monthly practice sessions");
 });
+it("WALK-02 a refusal doesn't assume the member already claimed this month's sessions", () => {
+  const refused = practiceSessionAllowanceNeededPage();
+  expect(refused).not.toContain("no practice session units left");
+  expect(refused).toContain(
+    "haven't claimed this month's practice sessions, or you've used them all",
+  );
+});
