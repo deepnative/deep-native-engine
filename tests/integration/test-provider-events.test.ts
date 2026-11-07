@@ -136,6 +136,8 @@ const rows = async (id: string) =>
 
 beforeAll(async () => {
   await migrate(pool);
+  // The foundation import must start fresh whichever lane file ran before.
+  await pool.query("TRUNCATE principals,cohorts,content_versions CASCADE");
   await seedDraftPack(pool);
   const staff = async (role: "platform_admin" | "reviewer" | "editor") => {
     const token = randomBytes(32).toString("hex");
