@@ -38,6 +38,7 @@ export interface LocalAiChoice {
   estimate: AiUsageEstimate;
   jobs: Array<{
     id: string;
+    /** A job status, or "cancelled" when withdrawal closed it before it started. */
     status: string;
     testUnitState?: "reserved" | "consumed" | "released";
     budget?: { estimate: AiUsageEstimate; actual?: AiUsageAmount };
@@ -124,7 +125,7 @@ type Job = {
 };
 
 const JOB_COLUMNS =
-  "SELECT j.id,j.status,b.policy,r.state AS test_unit_state,e.rate_version,e.model_version,e.input_tokens AS estimated_input_tokens,e.output_tokens AS estimated_output_tokens,e.cost_points AS estimated_cost_points,s.input_tokens AS actual_input_tokens,s.output_tokens AS actual_output_tokens,s.cost_points AS actual_cost_points FROM adapter_jobs j ";
+  "SELECT j.id,j.status,j.safe_error,b.policy,r.state AS test_unit_state,e.rate_version,e.model_version,e.input_tokens AS estimated_input_tokens,e.output_tokens AS estimated_output_tokens,e.cost_points AS estimated_cost_points,s.input_tokens AS actual_input_tokens,s.output_tokens AS actual_output_tokens,s.cost_points AS actual_cost_points FROM adapter_jobs j ";
 const JOB_DETAILS =
   "LEFT JOIN local_ai_test_unit_jobs b ON b.job_id=j.id LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id LEFT JOIN ai_usage_estimates e ON e.job_id=j.id AND e.member_id=j.member_id LEFT JOIN ai_usage_settlements s ON s.job_id=j.id AND s.member_id=j.member_id ";
 const JOBS = JOB_COLUMNS + JOB_DETAILS;
@@ -135,6 +136,7 @@ const JOBS_WITH_RECEIPT =
 type ListedJob = {
   id: string;
   status: string;
+  safe_error: string | null;
   policy?: string;
   test_unit_state?: string;
   rate_version?: string | null;
@@ -426,7 +428,12 @@ export function localAiConsentStore(
   function listedJob(job: ListedJob) {
     return {
       id: job.id,
-      status: job.status,
+      // #744 A never-started request closed by its permission ending was
+      // cancelled by the member, not a failure.
+      status:
+        job.status === "exhausted" && job.safe_error === "permission_withdrawn"
+          ? "cancelled"
+          : job.status,
       ...(job.policy === LOCAL_AI_TEST_UNIT_POLICY &&
       ["reserved", "consumed", "released"].includes(job.test_unit_state ?? "")
         ? {
@@ -733,7 +740,7 @@ export function localAiConsentStore(
         await client.query(
           // A started attempt may have reached the AI boundary: hold its unknown
           // outcome. Only a request that never started can be cancelled.
-          "UPDATE adapter_jobs SET status=CASE WHEN attempt_count>0 THEN 'needs_reconciliation' ELSE 'exhausted' END,safe_error=CASE WHEN attempt_count>0 THEN 'provider_outcome_unknown' ELSE 'provider_unavailable' END,attempt_token=NULL,lease_until=NULL,provider_operation_reference=NULL,updated_at=clock_timestamp() WHERE local_ai_receipt_id=$1 AND status IN ('pending','failed','running')",
+          "UPDATE adapter_jobs SET status=CASE WHEN attempt_count>0 THEN 'needs_reconciliation' ELSE 'exhausted' END,safe_error=CASE WHEN attempt_count>0 THEN 'provider_outcome_unknown' ELSE 'permission_withdrawn' END,attempt_token=NULL,lease_until=NULL,provider_operation_reference=NULL,updated_at=clock_timestamp() WHERE local_ai_receipt_id=$1 AND status IN ('pending','failed','running')",
           [id],
         );
         return true;

@@ -20,7 +20,9 @@ export type SafeJobError =
   | "provider_unavailable"
   | "provider_timeout"
   | "invalid_provider_response"
-  | "provider_outcome_unknown";
+  | "provider_outcome_unknown"
+  // #744 Local AI only: the request never started because permission ended.
+  | "permission_withdrawn";
 
 export interface AiJobProvenance {
   promptTemplateVersion: string;

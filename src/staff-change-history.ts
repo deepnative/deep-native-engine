@@ -8,7 +8,7 @@ export type ChangeEntry = {
   source: "billing" | "role";
   action: string;
   at: Date;
-  /** The administrator; `actorFound` is false once their account is gone. */
+  /** The administrator; `actorFound` is false once their member account is gone. */
   actorFound: boolean;
   actorName: string | null;
   /** The member affected; `personFound` is false once their account is gone. */
@@ -39,7 +39,9 @@ WITH events AS (
 SELECT e.source,e.id::text AS id,e.action,e.occurred_at AS at,e.role,e.month,
   e.amount_cents::integer AS "amountCents",
   to_char(e.occurred_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS key,
-  actor.id IS NOT NULL AS "actorFound",actor.display_name AS "actorName",
+  -- #745 The binding goes when the administrator's member account is deleted.
+  -- A current administrator may have no learner profile, so no name to show.
+  s.staff_id IS NOT NULL AS "actorFound",actor.display_name AS "actorName",
   person.id IS NOT NULL AS "personFound",person.display_name AS "personName",
   holder.id IS NOT NULL AS "holderFound",holder.display_name AS "holderName"
 FROM events e
