@@ -103,9 +103,17 @@ it("keeps ordinary intake and acceptance private; publishes only the accepted ex
       attribution: "Changed attribution",
     }),
   ).toEqual({ kind: "conflict" });
-  expect(await publications.inspect(f.peer, f.instruction.operationId)).toEqual(
-    { kind: "denied" },
-  );
+  // OPKEY-04: another member's key reads exactly like an unused one.
+  const visible = ({ kind, value }: { kind: string; value?: unknown }) => ({
+    kind,
+    value,
+  });
+  expect(
+    visible(await publications.inspect(f.peer, f.instruction.operationId)),
+  ).toEqual(visible(await publications.inspect(f.peer, randomUUID())));
+  expect(
+    visible(await publications.inspect(f.peer, f.instruction.operationId)),
+  ).toEqual({ kind: "ready", value: null });
   expect(
     ready(await publications.inspect(f.owner, f.instruction.operationId)),
   ).toEqual(shared);

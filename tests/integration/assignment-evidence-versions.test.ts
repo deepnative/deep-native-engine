@@ -390,9 +390,10 @@ it("AEV-02 IT, non-IT professional and general-learning members each copy only t
         operationId: randomUUID(),
       }),
     ).toEqual({ kind: "denied" });
-    expect(await copies.inspect(owner.token, other.input.operationId)).toEqual({
-      kind: "denied",
-    });
+    // OPKEY-03: another member's key reads exactly like an unused one.
+    expect(
+      await copies.inspect(owner.token, other.input.operationId),
+    ).toMatchObject({ kind: "absent" });
     const exported = await memberExportStore(pool).exportOwned(owner.token);
     if (exported.kind !== "ready") throw Error("Member export unavailable");
     expect(
