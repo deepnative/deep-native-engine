@@ -1975,7 +1975,7 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v35" as const,
+    version: "local-member-records-v37" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2093,6 +2093,80 @@ it("keeps an unattributed historical draft read-only beside fresh current-goal p
   expect(html).not.toContain('value="unattributed"');
 });
 
+it("AIHOLD-06/07 shows a held request as unknown, unrunnable and never as erased", () => {
+  const estimate = {
+    inputTokens: 11,
+    outputTokens: 256,
+    costPoints: 157,
+    modelVersion: "simulated-model-v1",
+    rateVersion: "simulated-rates-v1",
+  };
+  const base = {
+    evidenceId: "sample",
+    name: "Invented.txt",
+    revisionNumber: 1,
+    receiptId: null,
+    grantedAt: null,
+    withdrawnAt: null,
+    estimate,
+    jobs: [{ id: "held", status: "needs_reconciliation" }],
+  };
+  const retired = localAiConsentPage([{ ...base, retired: true }], "csrf");
+  expect(retired).toContain("so it cannot be used again");
+  expect(retired).toContain("its outcome is unknown and it stays held");
+  expect(retired).toContain("or confirm that anything was erased");
+  expect(retired).not.toContain("/grant");
+  expect(retired).not.toContain("/withdraw");
+  expect(retired).not.toContain("/evidence/local-ai/held/run");
+  const withdrawn = localAiConsentPage(
+    [{ ...base, withdrawnAt: new Date() }],
+    "csrf",
+  );
+  expect(withdrawn).toContain("/evidence/local-ai/sample/grant");
+  expect(withdrawn).toContain("its outcome is unknown and it stays held");
+  expect(withdrawn).not.toContain("/evidence/local-ai/held/run");
+  const cancelled = localAiConsentPage(
+    [{ ...base, jobs: [{ id: "closed", status: "exhausted" }] }],
+    "csrf",
+  );
+  expect(cancelled).not.toContain("its outcome is unknown");
+});
+
+it("STAFFHOLD-08 keeps a hold visible after its source is deleted, with no source action or erasure claim", () => {
+  const html = localAiConsentPage(
+    [
+      {
+        evidenceId: "",
+        name: "A source you deleted",
+        revisionNumber: 0,
+        receiptId: null,
+        grantedAt: null,
+        withdrawnAt: null,
+        retired: true,
+        sourceDeleted: true,
+        estimate: {
+          inputTokens: 0,
+          outputTokens: 256,
+          costPoints: 128,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
+        jobs: [{ id: "held-reference", status: "needs_reconciliation" }],
+      },
+    ],
+    "csrf",
+  );
+  expect(html).toContain("A source you deleted");
+  expect(html).toContain("its text and permission are gone");
+  expect(html).toContain("Deleting your account removes it");
+  expect(html).toContain("Request reference: held-reference");
+  expect(html).toContain("or confirm that anything was erased");
+  expect(html).not.toContain("Private version");
+  expect(html).not.toContain("so it cannot be used again");
+  expect(html).not.toContain("/run");
+  expect(html).not.toContain("/grant");
+  expect(html).not.toContain("<form");
+});
 it("distinguishes metered local test units and blocks repeat dispatch of terminal receipts", () => {
   const choices = [
     {

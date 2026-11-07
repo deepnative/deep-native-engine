@@ -7,6 +7,7 @@ import {
 } from "./practice-session-lifetime.ts";
 import type { Goal } from "./content.ts";
 import { hash } from "./store.ts";
+import { practiceSessionLedgerOnConnection } from "./ledger.ts";
 
 export interface PracticeSessionSource {
   contentId: string;
@@ -47,7 +48,7 @@ export interface PracticeSessionDetail extends PracticeSessionSummary {
 }
 export type PracticeSessionStart =
   | { kind: "started" | "replayed"; sessionId: string }
-  | { kind: "unavailable" | "withdrawn" };
+  | { kind: "unavailable" | "withdrawn" | "allowance-needed" };
 export type PracticeSessionAppend =
   "saved" | "replayed" | "conflict" | "full" | "withdrawn" | "unavailable";
 export type PracticeSessionWithdrawal =
@@ -146,7 +147,27 @@ function decodeCursor(after: string): [string, string] | null {
     return null;
   }
 }
-export function practiceSessionStore(pool: Pool): PracticeSessionStore {
+// The member's workspace lock serializes starts, and the grant lock holds the
+// balance against an expiry sweep, so the last unit can only be used once.
+async function allowanceUnit(client: PracticeTransaction, memberId: string) {
+  return (
+    (
+      await client.query<{ claimId: string; grantId: string }>(
+        `SELECT c.id AS "claimId",c.grant_id AS "grantId" FROM study_allowance_claims c
+         JOIN synthetic_entitlement_grants g ON g.id=c.grant_id
+         WHERE c.member_id=$1 AND c.category='mock_sessions'
+           AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp()
+           AND g.expired_at IS NULL AND g.available>0
+         ORDER BY c.period_start DESC LIMIT 1 FOR UPDATE OF g`,
+        [memberId],
+      )
+    ).rows[0] ?? null
+  );
+}
+export function practiceSessionStore(
+  pool: Pool,
+  options: { allowance?: boolean } = {},
+): PracticeSessionStore {
   async function transaction<T>(
     token: string,
     use: (client: PracticeTransaction, memberId: string) => Promise<T>,
@@ -292,6 +313,10 @@ export function practiceSessionStore(pool: Pool): PracticeSessionStore {
             if (existing?.withdrawnAt) return { kind: "withdrawn" };
             if (!row || row.goal !== input.goal) return { kind: "unavailable" };
             if (existing) return { kind: "replayed", sessionId: existing.id };
+            const unit = options.allowance
+              ? await allowanceUnit(client, memberId)
+              : null;
+            if (options.allowance && !unit) return { kind: "allowance-needed" };
             const id = randomUUID();
             await client.query(
               `INSERT INTO private_practice_sessions(id,member_id,content_id,content_version,goal_at_start,prompt_version)
@@ -305,6 +330,16 @@ export function practiceSessionStore(pool: Pool): PracticeSessionStore {
                 input.promptVersion,
               ],
             );
+            if (unit) {
+              const reservationId = await practiceSessionLedgerOnConnection(
+                client,
+              ).spend(memberId, unit.grantId, id);
+              await client.query(
+                `INSERT INTO practice_session_allowance_uses(session_id,member_id,claim_id,reservation_id)
+                 VALUES($1,$2,$3,$4)`,
+                [id, memberId, unit.claimId, reservationId],
+              );
+            }
             return { kind: "started", sessionId: id };
           },
         )) ?? { kind: "unavailable" }

@@ -46,6 +46,7 @@ function view(overrides = {}) {
     period,
     claim: null,
     creationEnabled: true,
+    practice: null,
     ...overrides,
   });
 }

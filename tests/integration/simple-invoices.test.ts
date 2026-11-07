@@ -172,6 +172,7 @@ it("OFFPUR-01/02/04/08/09 registers first, consolidates courses into one owner i
         operationId: randomUUID(),
         amount: "30.00",
         receivedOn: today,
+        evidence: "Invented bank reference",
         confirm: "received",
       })
     ).status,
@@ -181,6 +182,7 @@ it("OFFPUR-01/02/04/08/09 registers first, consolidates courses into one owner i
     operationId: randomUUID(),
     amount: "10.00",
     receivedOn: today,
+    evidence: "Invented bank reference",
     confirm: "received",
   });
   expect(paid.status).toBe(303);
@@ -195,6 +197,7 @@ it("OFFPUR-01/02/04/08/09 registers first, consolidates courses into one owner i
         operationId: randomUUID(),
         amountCents: 2001,
         receivedOn: today,
+        evidence: "Invented bank reference",
       })
     ).kind,
   ).toBe("conflict");
@@ -205,6 +208,7 @@ it("OFFPUR-01/02/04/08/09 registers first, consolidates courses into one owner i
       operationId: randomUUID(),
       amountCents: 2000,
       receivedOn: today,
+      evidence: "Invented bank reference",
     }),
   );
   expect(ready(await invoices.invoice(m.token, invoice.id)).paidCents).toBe(
@@ -237,6 +241,7 @@ it("OFFPUR-03 duplicates acceptance and payment exactly once and denies unrelate
     operationId: randomUUID(),
     amountCents: 100,
     receivedOn: today,
+    evidence: "Invented bank reference",
   };
   const results = await Promise.all([
     invoices.pay(admin, input),
@@ -409,6 +414,7 @@ it("OFFPUR-05 rejects forged origin/CSRF, malformed amounts and unknown fields w
     operationId: randomUUID(),
     amount: "1e2",
     receivedOn: today,
+    evidence: "Invented bank reference",
     confirm: "received",
   };
   expect(
@@ -494,6 +500,7 @@ it("OFFPUR-06 cancels an unpaid issued invoice without rewriting its snapshot or
         operationId: randomUUID(),
         amountCents: 100,
         receivedOn: today,
+        evidence: "Invented bank reference",
       })
     ).kind,
   ).toBe("conflict");
@@ -715,7 +722,7 @@ it("BILLPROFILE05 records applied migration versions and preserves the profile w
     ).rows.map((row) => row.version);
   expect(await versions()).toEqual([
     84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101,
-    102, 103,
+    102, 103, 104, 105, 106, 107, 108, 109, 110,
   ]);
   const owner = await member();
   const profile = ready(
@@ -728,7 +735,7 @@ it("BILLPROFILE05 records applied migration versions and preserves the profile w
   await migrate(pool);
   expect(await versions()).toEqual([
     84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101,
-    102, 103,
+    102, 103, 104, 105, 106, 107, 108, 109, 110,
   ]);
   expect(ready(await profiles.read(owner.token))).toEqual(profile);
   expect((await members.session(owner.token, "account")).kind).toBe("active");

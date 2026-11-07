@@ -14,10 +14,12 @@ import {
   type StudyFixtureOptions,
 } from "./study-unit-fixture-values.ts";
 import {
+  studyAllowanceCategory,
   studyAllowanceInstruction,
   studyAllowanceKey,
   studyAllowanceLedgerKey,
   studyAllowancePeriod,
+  type StudyAllowanceCategory,
   type StudyAllowanceClaim,
   type StudyAllowancePolicy,
 } from "./study-allowance-values.ts";
@@ -29,12 +31,17 @@ const claimSelect = `SELECT c.id,c.policy_version AS "policyVersion",c.quantity,
  g.available,g.reserved,g.consumed,g.expired
  FROM study_allowance_claims c JOIN synthetic_entitlement_grants g ON g.id=c.grant_id`;
 
-async function currentPolicy(context: StudyFixtureContext) {
+async function currentPolicy(
+  context: StudyFixtureContext,
+  category: StudyAllowanceCategory,
+) {
   return (
     (
       await context.tx.query<StudyAllowancePolicy>(
         `SELECT ${policyColumns} FROM study_allowance_policies
-         WHERE effective_from<=clock_timestamp() ORDER BY effective_from DESC,version DESC LIMIT 1`,
+         WHERE category=$1 AND effective_from<=clock_timestamp()
+         ORDER BY effective_from DESC,version DESC LIMIT 1`,
+        [category],
       )
     ).rows[0] ?? null
   );
@@ -53,14 +60,17 @@ async function claimWhere(
     ).rows[0] ?? null
   );
 }
-const periodClaim = (context: StudyFixtureContext, start: Date) =>
-  claimWhere(
-    context,
-    "c.category='study_requests' AND c.period_start=$2",
-    start,
-  );
+const periodClaim = (
+  context: StudyFixtureContext,
+  start: Date,
+  category: StudyAllowanceCategory,
+) =>
+  claimWhere(context, `c.category='${category}' AND c.period_start=$2`, start);
 
-export function studyAllowanceStore(pool: Pool, supplied: StudyFixtureOptions) {
+export function studyAllowanceStore(
+  pool: Pool,
+  supplied: StudyFixtureOptions & { practiceUnits?: boolean },
+) {
   const options = Object.freeze({ ...supplied });
   return {
     async member(token: string) {
@@ -70,11 +80,23 @@ export function studyAllowanceStore(pool: Pool, supplied: StudyFixtureOptions) {
         await studyFixtureWorkspace(context, context.actorId);
         const observed = await context.tx.observe(context.expires);
         const period = studyAllowancePeriod(observed);
+        const practiceClaim = await periodClaim(
+          context,
+          period.start,
+          "mock_sessions",
+        );
         return {
-          policy: await currentPolicy(context),
+          policy: await currentPolicy(context, "study_requests"),
           period,
-          claim: await periodClaim(context, period.start),
+          claim: await periodClaim(context, period.start, "study_requests"),
           creationEnabled: studyFixtureCreation(options),
+          practice:
+            options.practiceUnits || practiceClaim
+              ? {
+                  policy: await currentPolicy(context, "mock_sessions"),
+                  claim: practiceClaim,
+                }
+              : null,
         };
       });
     },
@@ -84,7 +106,12 @@ export function studyAllowanceStore(pool: Pool, supplied: StudyFixtureOptions) {
       const checked = studyAllowanceInstruction(input);
       if (!studyAllowanceKey(key) || !checked)
         return { kind: "invalid" as const };
-      if (!studyFixtureCreation(options)) return { kind: "denied" as const };
+      const category = studyAllowanceCategory(checked.policyVersion);
+      if (
+        !studyFixtureCreation(options) ||
+        (category === "mock_sessions" && !options.practiceUnits)
+      )
+        return { kind: "denied" as const };
       return studyFixtureExecute(pool, token, true, async (context) => {
         await studyFixtureActors(context, [], "member");
         const workspaceId = await studyFixtureWorkspace(
@@ -104,17 +131,18 @@ export function studyAllowanceStore(pool: Pool, supplied: StudyFixtureOptions) {
         const period = studyAllowancePeriod(observed);
         if (period.start.toISOString() !== checked.periodStart)
           return studyFixtureConflict();
-        const existing = await periodClaim(context, period.start);
+        const existing = await periodClaim(context, period.start, category);
         if (existing) return existing;
-        const policy = await currentPolicy(context);
+        const policy = await currentPolicy(context, category);
         if (policy?.version !== checked.policyVersion)
           return studyFixtureConflict();
         const grantId = await studyAllowanceLedgerOnConnection(
           context.tx,
         ).grant(
           context.actorId,
+          category,
           policy.periodLimit,
-          studyAllowanceLedgerKey(context.actorId, period.start),
+          studyAllowanceLedgerKey(context.actorId, period.start, category),
           {
             startsAt: observed.toISOString(),
             expiresAt: period.end.toISOString(),
@@ -123,7 +151,7 @@ export function studyAllowanceStore(pool: Pool, supplied: StudyFixtureOptions) {
         await context.tx.query(
           `INSERT INTO study_allowance_claims(id,member_id,workspace_id,policy_version,category,
            period_start,period_end,quantity,grant_id,operation_key)
-           VALUES($1,$2,$3,$4,'study_requests',$5,$6,$7,$8,$9)`,
+           VALUES($1,$2,$3,$4,$10,$5,$6,$7,$8,$9)`,
           [
             randomUUID(),
             context.actorId,
@@ -134,9 +162,10 @@ export function studyAllowanceStore(pool: Pool, supplied: StudyFixtureOptions) {
             policy.periodLimit,
             grantId,
             key,
+            category,
           ],
         );
-        return (await periodClaim(context, period.start))!;
+        return (await periodClaim(context, period.start, category))!;
       });
     },
   };

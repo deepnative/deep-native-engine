@@ -21,6 +21,10 @@ import {
   type InvoiceSender,
 } from "./simple-invoice-routes.ts";
 import type { SimpleInvoiceStore } from "./simple-invoice-store.ts";
+import {
+  mountTestProviderEvents,
+  type TestProviderEvents,
+} from "./test-provider-events.ts";
 import { mountLearningWorkspaceRoutes } from "./learning-workspace-routes.ts";
 import { mountLearningWorkspaceAssets } from "./learning-workspace-assets.ts";
 import { mountLearningWorkspacePages } from "./learning-workspace-pages.ts";
@@ -156,6 +160,7 @@ import {
   practiceSessionHistoryPage,
   practiceSessionPage,
   practiceSessionRecoveryPage,
+  practiceSessionAllowanceNeededPage,
   staffLibraryPage,
   trackReadinessPage,
   tailoredReviewRequestPage,
@@ -281,6 +286,11 @@ import {
   type LedgerReconciliationStore,
 } from "./ledger-reconciliation.ts";
 import { registerLedgerReconciliationRoutes } from "./ledger-reconciliation-routes.ts";
+import {
+  disabledInvoiceReconciliationStore,
+  type InvoiceReconciliationStore,
+} from "./invoice-reconciliation.ts";
+import { registerInvoiceReconciliationRoutes } from "./invoice-reconciliation-routes.ts";
 import {
   disabledLocalAiHoldInspectionStore,
   type LocalAiHoldInspectionStore,
@@ -433,6 +443,7 @@ export function app(
     learningWorkspacePublication?: LearningWorkspacePublicationStore;
     programs?: ProgramStore;
     simpleInvoices?: SimpleInvoiceStore;
+    testProviderEvents?: TestProviderEvents;
     billingProfiles?: BillingProfileStore;
     invoiceSender?: InvoiceSender;
     foundationImport?: FoundationImportStore;
@@ -449,6 +460,7 @@ export function app(
     localCircleAdmin?: boolean;
     metrics?: MetricsStore;
     ledgerReconciliation?: LedgerReconciliationStore;
+    invoiceReconciliation?: InvoiceReconciliationStore;
     localHoldInspection?: LocalAiHoldInspectionStore;
     memberTestUnits?: MemberTestUnitsStore;
     studyUnitFixtures?: StudyUnitFixtureStore;
@@ -457,6 +469,7 @@ export function app(
     attempts?: AttemptStore;
     practice?: PracticeStore;
     practiceSessions?: PracticeSessionStore;
+    practiceSessionAllowance?: boolean;
     supportRequests?: SupportRequestStore;
     privateSupportIntake?: boolean;
     supportAssignment?: SupportAssignmentStore;
@@ -583,6 +596,8 @@ export function app(
     }
     next();
   });
+  if (options.testProviderEvents)
+    mountTestProviderEvents(app, options.testProviderEvents);
   app.use(
     "/assets",
     express.static(fileURLToPath(new URL("../public", import.meta.url))),
@@ -924,6 +939,7 @@ export function app(
     signInLanding,
     options.memberSignOut,
     options.memberPassword,
+    anonymousRefusal,
   );
   if (options.memberPassword)
     mountMemberPasswordRoutes(
@@ -937,6 +953,7 @@ export function app(
           ?.requestAttach(memberToken, address)
           .catch(() => undefined),
       (req) => anonymousRefusal("password_sign_in", req),
+      (req) => anonymousRefusal("password_change", req),
     );
   mountProgramRoutes(
     app,
@@ -950,6 +967,11 @@ export function app(
     res.send(trackReadinessPage(await tracks.snapshot())),
   );
   registerLedgerReconciliationRoutes(app, ledgerReconciliation, mode);
+  registerInvoiceReconciliationRoutes(
+    app,
+    options.invoiceReconciliation ?? disabledInvoiceReconciliationStore(),
+    mode,
+  );
   registerLocalAiHoldInspectionRoutes(
     app,
     options.localHoldInspection ?? disabledLocalAiHoldInspectionStore(),
@@ -978,8 +1000,10 @@ export function app(
   });
   registerMetricsReportRoutes(app, metrics);
   app.get("/operator/metrics", async (_req, res) => {
-    const snapshot = await metrics.snapshot(res.locals.token as string);
-    if (!snapshot) {
+    const token = res.locals.token as string;
+    const snapshot = await metrics.snapshot(token);
+    // Logged before it leaves: a failed log write sends no data.
+    if (!snapshot || !(await metrics.logExport(token))) {
       res.status(403).json({ error: "forbidden" });
       return;
     }
@@ -3347,7 +3371,13 @@ export function app(
         );
       return;
     }
-    res.send(practiceSessionStartPage(source, res.locals.csrf as string));
+    res.send(
+      practiceSessionStartPage(
+        source,
+        res.locals.csrf as string,
+        options.practiceSessionAllowance === true,
+      ),
+    );
   });
   app.post("/library/:id/practice-session/start", async (req, res) => {
     const fields = (req.body ?? {}) as Fields;
@@ -3400,6 +3430,10 @@ export function app(
       goal: fields.goal as keyof typeof GOALS,
       promptVersion: fields.prompt_version,
     });
+    if (result.kind === "allowance-needed") {
+      res.status(409).send(practiceSessionAllowanceNeededPage());
+      return;
+    }
     if (!("sessionId" in result)) {
       res
         .status(409)

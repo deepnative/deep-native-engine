@@ -487,7 +487,7 @@ const sections = {
     true,
   ),
   invoices: section(
-    'id,document,total_cents AS "totalCents",paid_cents AS "paidCents",void_reason AS "voidReason"',
+    'id,document,total_cents AS "totalCents",paid_cents AS "paidCents",refunded_cents AS "refundedCents",void_reason AS "voidReason"',
     "simple_invoices WHERE owner_id=$1",
     "id",
     true,
@@ -529,6 +529,22 @@ const sections = {
      WHERE e.member_id=$1`,
     "e.job_id",
   ),
+  // v36 appends own practice session unit uses: no reservation reference.
+  practiceSessionAllowanceUses: section(
+    `u.session_id AS "sessionId",u.claim_id AS "claimId",u.created_at AS "createdAt"`,
+    `practice_session_allowance_uses u JOIN private_practice_sessions s ON s.id=u.session_id
+     WHERE u.member_id=$1 AND s.member_id=u.member_id`,
+    "u.session_id",
+  ),
+  // v37 appends MANPAY-08: the member's own manual invoice events, without the staff actor.
+  invoicePayments: section(
+    `p.id,p.invoice_id AS "invoiceId",p.kind,p.amount_cents AS "amountCents",
+    to_char(p.received_on,'YYYY-MM-DD') AS "on",p.evidence_reference AS evidence,
+    p.verification,p.recorded_at AS "recordedAt"`,
+    "simple_invoice_payments p JOIN simple_invoices i ON i.id=p.invoice_id WHERE i.owner_id=$1",
+    "p.id",
+    true,
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -542,7 +558,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v35";
+  version: "local-member-records-v37";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -676,7 +692,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v35",
+          version: "local-member-records-v37",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

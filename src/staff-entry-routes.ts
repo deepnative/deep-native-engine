@@ -146,6 +146,11 @@ function links(role: StaffRole, tools: StaffTools) {
         "Course billing and invoices",
       ],
       [
+        tools.invoices === true,
+        "/operator/invoice-reconciliation",
+        "Invoice and cash reconciliation",
+      ],
+      [
         tools.studyUnits === true,
         "/operator/study-test-units",
         hostingText("Issue local study test units", "Issue study test units"),

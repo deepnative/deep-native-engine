@@ -177,4 +177,12 @@ it("renders empty pages, continuation and truthful expired/terminal snapshots wi
   response = await f.get(`/operator/local-ai-holds/${jobId}`);
   expect(response.text).toContain("No longer an unconfirmed started hold");
   expect(response.text).toContain("consumed");
+  f.detail.mockResolvedValue({
+    kind: "ready",
+    value: { ...item, unitState: null, policy: null },
+  });
+  response = await f.get(`/operator/local-ai-holds/${jobId}`);
+  expect(response.text).toContain("Started request: outcome unconfirmed");
+  expect(response.text).toContain("<dd>Not metered</dd>");
+  expect(response.text).toContain("<dt>Test policy</dt><dd>None</dd>");
 });

@@ -67,6 +67,7 @@ function fixture(disabled = false, noSender = false) {
     cancel: vi.fn().mockResolvedValue(ready({ cancelled: true })),
     propose: vi.fn().mockResolvedValue(ready({ planId: id })),
     pay: vi.fn().mockResolvedValue(ready({ invoiceId: id })),
+    refund: vi.fn().mockResolvedValue(ready({ invoiceId: id })),
     voidInvoice: vi.fn().mockResolvedValue(ready({ invoiceId: id })),
     generateDue: vi.fn().mockResolvedValue(ready({ created: 0 })),
     claimEmail: vi.fn().mockResolvedValue(ready({ send: true, invoice })),
@@ -144,6 +145,7 @@ it("OFFPUR-07 exposes an honest unconfigured account entry without issuing anyth
     `${admin}/plans`,
     `${admin}/due`,
     `${admin}/${id}/payment`,
+    `${admin}/${id}/refund`,
     `${admin}/${id}/void`,
     `${admin}/${id}/email`,
   ])
@@ -338,6 +340,7 @@ it("OFFPUR-04/06 confirms offline receipts and unpaid voids without interpreting
       await f.post(`${admin}/${id}/payment`, {
         amount: "1.00",
         receivedOn: "2026-10-31",
+        evidence: "  Invented reference  ",
         confirm: "received",
       })
     ).status,
@@ -345,6 +348,7 @@ it("OFFPUR-04/06 confirms offline receipts and unpaid voids without interpreting
   expect(f.service.pay.mock.calls[0]![1]).toMatchObject({
     amountCents: 100,
     receivedOn: "2026-10-31",
+    evidence: "Invented reference",
   });
   for (const fields of [
     { amount: "1.00" },
@@ -731,4 +735,110 @@ it("GAPS-02 confirms a prepared proposal and keeps the learner selected", async 
   );
   expect((await f.get(`${admin}?ownerId=${id}&prepared=2`)).status).toBe(422);
   expect((await f.get(`${admin}?prepared=1`)).status).toBe(422);
+});
+
+const refundForm = {
+  amount: "1.00",
+  refundedOn: "2026-10-31",
+  evidence: " Invented refund ",
+  confirm: "refunded",
+};
+it("MANPAY-04 posts a confirmed refund and refuses anything unconfirmed or unavailable", async () => {
+  const f = fixture();
+  expect((await f.post(`${admin}/${id}/refund`, refundForm)).status).toBe(303);
+  expect(f.service.refund.mock.calls[0]![1]).toMatchObject({
+    amountCents: 100,
+    refundedOn: "2026-10-31",
+    evidence: "Invented refund",
+  });
+  for (const fields of [
+    { ...refundForm, confirm: "no" },
+    { ...refundForm, amount: "bad" },
+  ])
+    expect((await f.post(`${admin}/${id}/refund`, fields)).status).toBe(422);
+  await f.post(`${admin}/${id}/refund`, {
+    amount: "1.00",
+    confirm: "refunded",
+  });
+  expect(f.service.refund.mock.lastCall![1]).toMatchObject({ evidence: "" });
+  f.service.refund.mockResolvedValueOnce({ kind: "conflict" });
+  expect((await f.post(`${admin}/${id}/refund`, refundForm)).status).toBe(409);
+  expect(
+    (await f.post(`${admin}/${id}/refund`, { ...refundForm, extra: "x" }))
+      .status,
+  ).toBe(403);
+});
+it("MANPAY-01/03/04 shows payment history, statuses and the refund form only when funds remain", async () => {
+  const f = fixture();
+  const paidDoc = { ...doc, paidCents: 300, refundedCents: 100 };
+  const payments = [
+    {
+      kind: "receipt",
+      amountCents: 300,
+      on: "2026-10-30",
+      evidence: "<Invented>",
+      verification: "manual_unverified",
+      recordedBy: "Staff account 12345678",
+    },
+    {
+      kind: "refund",
+      amountCents: 100,
+      on: "2026-10-31",
+      evidence: null,
+      verification: "manual_unverified",
+    },
+  ];
+  const stored = {
+    ...invoice,
+    document: paidDoc,
+    paidCents: 300,
+    refundedCents: 100,
+    payments,
+  };
+  f.service.invoice.mockResolvedValueOnce(ready(stored));
+  const page = await f.get(`${admin}/${id}`);
+  expect(page.text).toContain("Payment record");
+  expect(page.text).toContain("&lt;Invented&gt;");
+  expect(page.text).toContain("Not recorded");
+  expect(page.text).toContain("Staff account 12345678");
+  expect(page.text).toContain("−CAD 1.00");
+  expect(page.text).toContain("Recorded refund");
+  expect(page.text).toContain("Not verified by a payment provider");
+  expect(page.text).toContain(">Record offline refund</button>");
+  f.service.invoice.mockResolvedValueOnce(
+    ready({ ...stored, refundedCents: 300 }),
+  );
+  expect((await f.get(`${admin}/${id}`)).text).not.toContain(
+    ">Record offline refund</button>",
+  );
+  f.service.invoice.mockResolvedValueOnce(ready(invoice));
+  const plain = await f.get(`${admin}/${id}`);
+  expect(plain.text).not.toContain("Payment record");
+  expect(plain.text).not.toContain(">Record offline refund</button>");
+});
+it("MANPAY-03 shows the member a receipt-only record with no staff column or refund note", async () => {
+  const f = fixture();
+  f.service.invoice.mockResolvedValueOnce(
+    ready({
+      ...invoice,
+      paidCents: 300,
+      document: { ...doc, paidCents: 300 },
+      payments: [
+        {
+          kind: "receipt",
+          amountCents: 300,
+          on: "2026-10-30",
+          evidence: "Invented reference",
+          verification: "manual_unverified",
+        },
+      ],
+    }),
+  );
+  const page = await f.get(`${base}/invoices/${id}`);
+  expect(page.text).toContain("Invented reference");
+  expect(page.text).toContain("Not verified by a payment provider");
+  expect(page.text).not.toContain("Recorded by");
+  expect(page.text).not.toContain("does not reopen this balance");
+  expect(page.text).not.toContain("Recorded refund");
+  expect(page.text).not.toContain("Record offline refund");
 });
