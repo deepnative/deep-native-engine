@@ -4,6 +4,10 @@ This bounded #97 implementation adds ordinary private proposal intake and a comp
 
 `DNE_MEMBER_CONTRIBUTIONS=enabled` deliberately enables new ordinary intake, editorial acceptance and publication. The default is disabled. Hosted configuration permits the flag, but this change does not enable it, appoint staff or claim actual moderation coverage. A real moderation contact and current authorized staff are factual inputs before real shared-space use; no response SLA is promised. Existing invented sample intake remains available under its original attestation when ordinary creation is off.
 
+## Page wording (#115)
+
+With contributions on, the workflow page, learning dashboard, proposal list and correction-failure page describe private drafting, editorial acceptance and the separate member-sharing choice. The dashboard links to **Read member contributions**. With contributions off, these pages keep the sample wording: a sample proposal is private and is not published. WFB-NORMAL-03 is checked in `tests/unit/member-contribution-copy.test.ts` and through the app in `tests/unit/app.test.ts`.
+
 A member opens **My private proposals**, saves their original text with source/rights notes and submits for private moderation. Submission grants no display permission. Existing current moderator/platform-admin authority permits **Accept this revision privately** after checking that exact revision and its notes. It is ordinary editorial review, never a credential or qualified assessment. The existing request-changes/correction/resubmission, quarantine and rejection flow remains intact.
 
 The owner opens **Inspect editorial acceptance and sharing**. Accepted text remains private. Sharing requires choosing an attribution, the **Signed-in members only** audience, and a fresh unchecked `member-display-v1` permission to display that exact revision on this platform. The author retains ownership; the flow grants no anonymous/public distribution or external reuse rights. Other current members can then read the shared contribution with its chosen attribution, sources, revision and editorial label. Legacy sample provenance remains visible.
