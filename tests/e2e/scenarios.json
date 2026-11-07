@@ -2759,6 +2759,15 @@
       "critical": true
     },
     {
+      "id": "L310",
+      "actor": "Hosted administrator and member",
+      "preconditions": "Dedicated synthetic PostgreSQL database; support assignment and staff entry enabled; administrator entered through a verified admin email; no operator account; desktop/mobile Chromium",
+      "steps": "ADMSUP-01..04: a member sends a support request; the administrator enters administration, opens the support intake inbox, confirms Answer this request myself, opens the request, saves an internal note, acknowledges and replies; the member reads it; the administrator revokes that grant from history and reopens the request",
+      "expected": "One grant to the administrator's own session, shown as platform_admin in history; the member sees the reply and acknowledgement but not the internal note; after revoking, the request is refused (403) without its text, and the member still sees the reply",
+      "issues": [39],
+      "critical": true
+    },
+    {
       "id": "L311",
       "actor": "Billing administrator reconciling signed test events and metered test AI requests",
       "preconditions": "Dedicated synthetic PostgreSQL database, sample invoices, signed test events enabled with an invented key, port0 server; desktop/mobile Chromium; no provider, no real money",
