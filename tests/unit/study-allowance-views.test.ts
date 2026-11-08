@@ -156,3 +156,99 @@ it("WALK-01 names each allowance and lays them out as peers", () => {
   // `.reading section` indents numbered lesson steps; allowances are not steps.
   expect(html).not.toMatch(/<section[^>]*>/);
 });
+const earlierMonth = {
+  category: "study_requests" as const,
+  policyVersion: "study-allowance-test-v1",
+  quantity: 5,
+  periodStart: new Date("2029-12-01T00:00:00.000Z"),
+  periodEnd: start,
+  used: 2,
+  held: 1,
+  endedUnused: 2,
+};
+it("RENEW-01 earlier months show what happened to each month's units, never as left to use", () => {
+  const html = studyAllowancePage("csrf", {
+    ...base,
+    earlier: [
+      {
+        ...earlierMonth,
+        category: "mock_sessions",
+        policyVersion: "mock-allowance-test-v1",
+        quantity: 3,
+        used: 3,
+        held: 0,
+        endedUnused: 0,
+      },
+      earlierMonth,
+    ],
+    olderOmitted: false,
+  });
+  expect(html).toContain("<h2>Earlier months</h2>");
+  expect(html).toContain("December 2029 · Practice sessions");
+  expect(html).toContain("December 2029 · Study requests");
+  expect(html.indexOf("Practice sessions</h3>")).toBeLessThan(
+    html.indexOf("Study requests</h3>"),
+  );
+  for (const field of [
+    '<span data-field="earlier-claimed">5</span>',
+    '<span data-field="earlier-used">2</span>',
+    '<span data-field="earlier-held">1</span>',
+    '<span data-field="earlier-ended">2</span>',
+  ])
+    expect(html).toContain(field);
+  const history = html.slice(html.indexOf("Earlier months"));
+  expect(history).not.toContain("Left to use");
+  expect(history).not.toContain("<form");
+  expect(html).not.toContain("records download");
+});
+it("RENEW-02 nothing renews by itself, and a claimed month says when the next opens", () => {
+  const unclaimed = studyAllowancePage("csrf", {
+    ...base,
+    earlier: [earlierMonth],
+    olderOmitted: false,
+  });
+  expect(unclaimed).toContain("Nothing renews automatically");
+  expect(unclaimed.replaceAll("&#39;", "'")).toContain("weren't carried over");
+  const claimed = studyAllowancePage("csrf", {
+    ...base,
+    claim: {
+      id: "c",
+      policyVersion: "study-allowance-test-v1",
+      quantity: 5,
+      periodStart: start,
+      periodEnd: end,
+      createdAt: start,
+      available: 5,
+      reserved: 0,
+      consumed: 0,
+      expired: 0,
+    },
+  });
+  expect(claimed).toContain("The next month opens");
+  expect(claimed).toContain(end.toISOString());
+  expect(studyAllowancePage("csrf", base)).toContain("No earlier months yet.");
+});
+it("RENEW-03 a unit still held from an earlier month explains how it ends", () => {
+  const html = studyAllowancePage("csrf", {
+    ...base,
+    earlier: [earlierMonth],
+  });
+  expect(html).toContain("can still finish");
+  expect(html.replaceAll("&#39;", "'")).toContain(
+    "doesn't move to the current month",
+  );
+  const settled = studyAllowancePage("csrf", {
+    ...base,
+    earlier: [{ ...earlierMonth, held: 0 }],
+  });
+  expect(settled).not.toContain("can still finish");
+});
+it("RENEW-04 older months point to the records download", () => {
+  const html = studyAllowancePage("csrf", {
+    ...base,
+    earlier: [earlierMonth],
+    olderOmitted: true,
+  });
+  expect(html).toContain("last 12 months");
+  expect(html).toContain('href="/member/export"');
+});
