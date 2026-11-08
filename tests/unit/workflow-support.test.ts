@@ -15,6 +15,7 @@ import {
   workflowSupport,
   workflowTestRoot,
 } from "../../src/workflow-registry.ts";
+import { workflowDetailPage, workflowRegistryPage } from "../../src/views.ts";
 import { withLoopback } from "../support/loopback-server.ts";
 
 const files = {
@@ -124,6 +125,15 @@ it("WFS-04 a retired template is withheld but its last version stays identified"
     "WF-003": { publication_state: "retired", version: "two" },
   });
   expect(await retiredWorkflows(damaged)).toEqual([]);
+  const unversioned = await release({
+    "WF-003": { publication_state: "retired" },
+  });
+  const file = new URL(files["WF-003"], unversioned);
+  await writeFile(
+    file,
+    (await readFile(file, "utf8")).replace(/^version: 2\n/m, ""),
+  );
+  expect(await retiredWorkflows(unversioned)).toEqual([]);
 });
 
 it("WFS-01..05 the list and pages show support status, and retired versions are named but not offered", async () => {
@@ -208,4 +218,16 @@ it("only test mode accepts a fixture template folder", () => {
     expect(() => workflowTestRoot(mode, value)).toThrow(
       "DNE_WORKFLOW_ROOT is accepted only in test mode, as an absolute folder.",
     );
+});
+
+it("WFS-05 a page with no readable review date says it is not currently supported", async () => {
+  const root = await release({ "WF-001": { next_review: "soon" } });
+  const item = (await workflowBundle("WF-001", root))!;
+  const page = workflowDetailPage(item, today);
+  expect(page).toContain(
+    "<dt>Support status</dt><dd>Not currently supported: no readable review date. The environment and verification details below describe the last check, not current support.</dd>",
+  );
+  expect(workflowRegistryPage([item], "", [], today)).toContain(
+    "Not currently supported: no readable review date.",
+  );
 });
