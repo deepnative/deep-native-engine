@@ -255,3 +255,88 @@ test("[L306] NOTEREAD-01, 08 a member sees when a moderator read a workflow note
     }
   }
 });
+
+test("[L314] STAFFEXPORT-01, 02, 05 a member finds when staff opened their work in Download my records", async ({
+  page,
+}) => {
+  const storage = await mkdtemp(join(tmpdir(), "dne-staff-access-export-"));
+  const purpose = "Invented confidential export purpose";
+  let running: Awaited<ReturnType<typeof start>> | undefined;
+  let owner: string | undefined;
+  try {
+    running = await start({
+      ...process.env,
+      DNE_DATABASE_URL: process.env.DNE_TEST_DATABASE_URL,
+      DNE_APP_MODE: "test",
+      DNE_PORT: "0",
+      DNE_PRIVATE_STORAGE_ROOT: storage,
+    });
+    const origin = running.origin;
+    await page.goto(origin);
+    await page.getByLabel("Display name").fill("Invented learner");
+    await page.getByLabel("Your starting point").selectOption("explorer");
+    await chooseLearningGoal(page, "everyday");
+    await page.getByRole("button", { name: "Start my learning path" }).click();
+    const token = (await page.context().cookies()).find(
+      (c) => c.name === COOKIE,
+    )!.value;
+    const session = await members.session(token);
+    if (session.kind !== "active") throw Error("Invented member unavailable");
+    owner = session.learner.id;
+
+    const expires = new Date(Date.now() + 86_400_000);
+    const adminToken = randomBytes(32).toString("hex"),
+      coachToken = randomBytes(32).toString("hex");
+    const adminId = await access.provisionStaff(
+      adminToken,
+      "platform_admin",
+      expires,
+    );
+    const coachId = await access.provisionStaff(coachToken, "coach", expires);
+    const grant = await access.grantAssignment(
+      adminId,
+      coachId,
+      owner,
+      "coach",
+      purpose,
+      expires,
+    );
+    expect(await access.readWorkspace(coachToken, owner)).toMatchObject({
+      kind: "allowed",
+    });
+
+    // STAFFEXPORT-05: the history page points to the download.
+    await page.goto(`${origin}/account/sharing/staff-access`);
+    const covers = page.getByRole("region", { name: "What this covers" });
+    await expect(covers).toContainText(
+      "Its section there is called staffAccess.",
+    );
+    expect(await noSidewaysScroll(page)).toBe(true);
+    await covers.getByRole("link", { name: "Download my records" }).click();
+    await expect(page).toHaveURL(`${origin}/member/export`);
+
+    // STAFFEXPORT-01, 02: the same two entries, with no staff details.
+    const exported = await (
+      await page.request.get(`${origin}/api/member/export`)
+    ).json();
+    expect(exported.version).toBe("local-member-records-v38");
+    expect(
+      exported.records.staffAccess
+        .map(
+          (row: { action: string; via: string }) => `${row.action}:${row.via}`,
+        )
+        .sort(),
+    ).toEqual(["grant_created:assignment", "workspace_read:assignment"]);
+    const text = JSON.stringify(exported.records.staffAccess);
+    for (const hidden of [purpose, coachId, adminId, String(grant)])
+      expect(text).not.toContain(hidden);
+  } finally {
+    await page.context().close();
+    try {
+      if (running) await running.close();
+    } finally {
+      if (owner) await members.remove(owner);
+      await rm(storage, { recursive: true, force: true });
+    }
+  }
+});

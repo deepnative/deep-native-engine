@@ -401,6 +401,11 @@ it("STAFFSEE-01 an empty history says none is recorded and what it doesn't cover
   expect(text(res.text)).toContain(
     "This history is deleted with your account.",
   );
+  // STAFFEXPORT-05: the download now carries the same history.
+  expect(text(res.text)).toContain(
+    "It's also in Download my records . Its section there is called staffAccess.",
+  );
+  expect(text(res.text)).not.toContain("It isn't part of");
   expect(res.text).not.toContain("Older entries");
 });
 

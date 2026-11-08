@@ -160,17 +160,13 @@ export function preparedSampleStore(
       workspaceId: string;
     };
     const discover = `SELECT id AS "receiptId",evidence_id AS "evidenceId",created_at AS "createdAt",payload_digest AS digest,
-       member_id AS "memberId",workspace_id AS "workspaceId" FROM provided_evidence_operations WHERE operation_id=$1`;
+       member_id AS "memberId",workspace_id AS "workspaceId" FROM provided_evidence_operations WHERE operation_id=$1 AND member_id=$2 AND workspace_id=$3`;
     // Discover without holding the child row: normal erasure locks its source
     // first, then clears the operation's FK. Match that order to avoid a cycle.
-    const discovered = (await tx.query<Operation>(discover, [operationId]))
-      .rows[0];
+    const discovered = (
+      await tx.query<Operation>(discover, [operationId, memberId, workspaceId])
+    ).rows[0];
     if (!discovered) return undefined;
-    if (
-      discovered.memberId !== memberId ||
-      discovered.workspaceId !== workspaceId
-    )
-      return deny("denied");
     type Source = {
       state: string;
       consent: boolean;
@@ -196,16 +192,11 @@ export function preparedSampleStore(
     const operation = (
       await tx.query<Operation>(
         `SELECT id AS "receiptId",evidence_id AS "evidenceId",created_at AS "createdAt",payload_digest AS digest,
-       member_id AS "memberId",workspace_id AS "workspaceId" FROM provided_evidence_operations WHERE operation_id=$1 FOR SHARE`,
-        [operationId],
+       member_id AS "memberId",workspace_id AS "workspaceId" FROM provided_evidence_operations WHERE operation_id=$1 AND member_id=$2 AND workspace_id=$3 FOR SHARE`,
+        [operationId, memberId, workspaceId],
       )
     ).rows[0];
     if (!operation) return undefined;
-    if (
-      operation.memberId !== memberId ||
-      operation.workspaceId !== workspaceId
-    )
-      return deny("denied");
     let origin: ProvidedSampleOrigin | null = null,
       state: PreparedReceipt["state"] = "removed";
     if (operation.evidenceId !== null) {

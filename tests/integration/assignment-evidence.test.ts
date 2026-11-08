@@ -323,9 +323,11 @@ it("AHO-03 serializes exact concurrent replay, rejects changed payload and preve
       sourceSha256: "a".repeat(64),
     }),
   ).toEqual({ kind: "conflict" });
-  expect(await copies.inspect(f.outsider.token, f.input.operationId)).toEqual({
-    kind: "denied",
-  });
+  // OPKEY-03: another member's key reads exactly like an unused one.
+  const kind = async (key: string) =>
+    (await copies.inspect(f.outsider.token, key)).kind;
+  expect(await kind(f.input.operationId)).toBe(await kind(randomUUID()));
+  expect(await kind(f.input.operationId)).toBe("absent");
   expect(await evidence.remove(f.owner.token, first.receipt.evidenceId!)).toBe(
     true,
   );

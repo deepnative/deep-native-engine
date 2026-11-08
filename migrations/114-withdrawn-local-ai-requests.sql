@@ -63,5 +63,5 @@ END $$;
 UPDATE adapter_jobs j SET safe_error='permission_withdrawn'
  WHERE j.status='exhausted' AND j.attempt_count=0 AND j.safe_error='provider_unavailable'
   AND EXISTS(SELECT 1 FROM local_ai_receipts p WHERE p.id=j.local_ai_receipt_id AND p.withdrawn_at IS NOT NULL);
-INSERT INTO schema_migrations(version) VALUES(113) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(114) ON CONFLICT DO NOTHING;
 COMMIT;

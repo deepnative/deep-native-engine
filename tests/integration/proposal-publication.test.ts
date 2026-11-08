@@ -103,9 +103,17 @@ it("keeps ordinary intake and acceptance private; publishes only the accepted ex
       attribution: "Changed attribution",
     }),
   ).toEqual({ kind: "conflict" });
-  expect(await publications.inspect(f.peer, f.instruction.operationId)).toEqual(
-    { kind: "denied" },
-  );
+  // OPKEY-04: another member's key reads exactly like an unused one.
+  const visible = ({ kind, value }: { kind: string; value?: unknown }) => ({
+    kind,
+    value,
+  });
+  expect(
+    visible(await publications.inspect(f.peer, f.instruction.operationId)),
+  ).toEqual(visible(await publications.inspect(f.peer, randomUUID())));
+  expect(
+    visible(await publications.inspect(f.peer, f.instruction.operationId)),
+  ).toEqual({ kind: "ready", value: null });
   expect(
     ready(await publications.inspect(f.owner, f.instruction.operationId)),
   ).toEqual(shared);
@@ -227,7 +235,7 @@ it("keeps the private original and export while withdrawing only display; no fea
   const exported = await memberExportStore(pool).exportOwned(f.owner);
   expect(exported.kind).toBe("ready");
   if (exported.kind !== "ready") throw Error("Export failed");
-  expect(exported.payload.version).toBe("local-member-records-v37");
+  expect(exported.payload.version).toBe("local-member-records-v38");
   expect(exported.payload.records.proposalPublications).toEqual([
     expect.objectContaining({
       id: shared.id,

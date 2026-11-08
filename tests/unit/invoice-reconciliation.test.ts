@@ -48,6 +48,7 @@ const fact = (change: Partial<InvoiceFact> = {}): InvoiceFact => ({
   firstRefund: null,
   lateEvents: 0,
   lateCents: 0,
+  heldEvents: 0,
   ...change,
 });
 const paid = (cents: number, change: Partial<InvoiceFact> = {}) =>
@@ -210,6 +211,37 @@ it("RECON-09 simulated events reconcile but are not collected cash", () => {
   });
 });
 
+it("RECON-21 an invoice with a held signed test event is flagged for the operator", () => {
+  const held = fact({ heldEvents: 1 }),
+    other = paid(3000, { id: "00000000-0000-4000-8000-000000000002" });
+  expect(invoiceFlags(held)).toEqual(["test_event_held"]);
+  expect(invoiceFlags(other)).toEqual([]);
+  const snapshot = reconcileInvoices(
+    [
+      held,
+      other,
+      fact({ id: "00000000-0000-4000-8000-000000000003", voided: true }),
+    ],
+    manual,
+    asOf,
+  );
+  // Waiting is not a cash mismatch, so the totals still agree.
+  expect(snapshot.groups[1]).toMatchObject({
+    status: "consistent",
+    mismatchedInvoices: 0,
+  });
+  // It needs attention before reversal-only rows.
+  expect(snapshot.flagged.map((row) => [row.id.at(-1), row.flags])).toEqual([
+    ["1", ["test_event_held"]],
+    ["3", ["voided"]],
+  ]);
+  const html = invoiceReconciliationPage(snapshot);
+  expect(html).toContain(
+    `<tr data-flagged-invoice="${held.id}"><td><a href="/operator/invoices/${held.id}">`,
+  );
+  expect(html).toContain("Signed test event held and not applied");
+});
+
 it("orders flags by severity, then gap, then id, and caps the list", () => {
   const id = (n: number) =>
     `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -312,6 +344,7 @@ const factRow = {
   firstRefund: null,
   lateEvents: 0,
   lateCents: "0",
+  heldEvents: 0,
 };
 const manualRow = {
   comparedMembers: 1,
