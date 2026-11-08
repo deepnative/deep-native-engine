@@ -15,8 +15,9 @@ A request becomes held when, after an attempt started:
 - the member withdraws permission
 - the member saves a new revision of the source
 - the member deletes the source
+- a retry is refused just after its claim, because the member was signed out, the source stopped being valid or the AI step was not the expected one. The retry itself never reached the AI step, but an earlier attempt may have.
 
-A request that never started is cancelled instead, because nothing can have left the system.
+A request that never started is cancelled instead, because nothing can have left the system. If a first attempt is refused just after its claim in the same way, it closes as `exhausted`, because the AI step was never called.
 
 ## We cannot confirm erasure
 
@@ -86,7 +87,7 @@ Source deletion is never blocked. A request that never started, succeeded or clo
 ## Known limits
 
 - Requests closed as `exhausted` before this behaviour existed are not reclassified. No provider has ever been connected, so none of them reached one.
-- If the session or source stops being valid just after a claim, `run` still closes an unmetered attempt as `exhausted`. The AI step has not been called on that path.
+- A first attempt refused just after its claim closes as `exhausted`, and a retry refused that way is held. Earlier attempts are not inspected: a retry is held even if every earlier attempt was refused before the AI step (#187, AIHOLD-08 to 10).
 - There is no retention period, automatic expiry or staff queue for holds. A live provider would need those decided first.
 - A test outcome does not appear on the member's page or in their export. It records which operator decided, which the member should not see.
 - A test outcome does not settle or release the test unit. That needs a release and charge policy tied to a real provider's evidence (#189).

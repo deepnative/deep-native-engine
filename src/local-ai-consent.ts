@@ -175,6 +175,12 @@ function jobBudget(job: ListedJob) {
   };
 }
 
+// Refused after its claim, before the AI step: this attempt never reached it,
+// but an earlier one may have, so a retry's outcome stays unknown and it is
+// held. A first attempt closes. `number` is the parameter holding the attempt.
+const refusedAfterClaim = (number: string) =>
+  `status=CASE WHEN ${number}::int>1 THEN 'needs_reconciliation' ELSE 'exhausted' END,safe_error=CASE WHEN ${number}::int>1 THEN 'provider_outcome_unknown' ELSE 'provider_unavailable' END`;
+
 export function localAiConsentStore(
   pool: Pool,
   objects: ObjectStorage,
@@ -863,8 +869,8 @@ export function localAiConsentStore(
           // never precedes any further authorization lock, so denial is terminal
           // without exposing state or reversing the global lock order.
           await client.query(
-            "UPDATE adapter_jobs SET status='exhausted',attempt_token=NULL,lease_until=NULL,safe_error='provider_unavailable',updated_at=clock_timestamp() WHERE id=$1 AND status='running' AND attempt_token=$2",
-            [id, claim.attempt],
+            `UPDATE adapter_jobs SET ${refusedAfterClaim("$3")},attempt_token=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND status='running' AND attempt_token=$2`,
+            [id, claim.attempt, claim.number],
           );
           await restoreCommitment(client, id, claim.number);
           return { kind: "denied" };
@@ -884,8 +890,8 @@ export function localAiConsentStore(
           const adapter = registry.adapter("ai", registry.mode);
           if (adapter.kind !== "ai" || adapter.mode !== registry.mode) {
             await client.query(
-              "UPDATE adapter_jobs SET status='exhausted',attempt_token=NULL,lease_until=NULL,safe_error='provider_unavailable',updated_at=clock_timestamp() WHERE id=$1",
-              [id],
+              `UPDATE adapter_jobs SET ${refusedAfterClaim("$2")},attempt_token=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1`,
+              [id, claim.number],
             );
             await restoreCommitment(client, id, claim.number);
             return { kind: "denied" };
