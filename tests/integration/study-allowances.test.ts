@@ -403,3 +403,176 @@ it("ALLOW-07 the export lists own claims without keys, and erasure leaves only t
     ).rows,
   ).toHaveLength(1);
 });
+
+// An earlier month's genuine claim of either category, through the same guard.
+async function earlierClaim(
+  id: string,
+  offset: number,
+  category: "study_requests" | "mock_sessions" = "study_requests",
+) {
+  const start = monthStart(offset),
+    end = monthStart(offset + 1),
+    prefix = category === "mock_sessions" ? "mock" : "study",
+    quantity = category === "mock_sessions" ? 3 : 5;
+  const grant = await ledger.grant(
+    id,
+    category,
+    quantity,
+    `${prefix}-allowance:${id}:${start.toISOString().slice(0, 7)}`,
+    { startsAt: start.toISOString(), expiresAt: end.toISOString() },
+  );
+  const workspace = (
+    await pool.query<{ id: string }>(
+      "SELECT id FROM workspaces WHERE owner_principal_id=$1",
+      [id],
+    )
+  ).rows[0]!.id;
+  await pool.query(
+    `INSERT INTO study_allowance_claims(id,member_id,workspace_id,policy_version,category,period_start,period_end,quantity,grant_id,operation_key)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [
+      randomUUID(),
+      id,
+      workspace,
+      `${prefix}-allowance-test-v1`,
+      category,
+      start,
+      end,
+      quantity,
+      grant,
+      randomUUID(),
+    ],
+  );
+  return grant;
+}
+// A unit held for a request before its month ended. The ledger refuses new
+// holds on an ended grant, so the earlier hold is written as it was left.
+async function heldBeforeMonthEnd(grant: string) {
+  const reservation = randomUUID();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      "UPDATE synthetic_entitlement_grants SET available=available-1,reserved=reserved+1 WHERE id=$1",
+      [grant],
+    );
+    await client.query(
+      "INSERT INTO synthetic_entitlement_reservations(id,grant_id,quantity,state) VALUES($1,$2,1,'reserved')",
+      [reservation, grant],
+    );
+    await client.query("COMMIT");
+  } finally {
+    client.release();
+  }
+  return reservation;
+}
+const practiceEnabled = studyAllowanceStore(pool, {
+  mode: "test",
+  enabled: true,
+  practiceUnits: true,
+});
+
+it("RENEW-01 earlier months list each category newest first, separately from this month", async () => {
+  const owner = await member();
+  const older = await earlierClaim(owner.id, -2);
+  await earlierClaim(owner.id, -1);
+  await earlierClaim(owner.id, -1, "mock_sessions");
+  await ledger.consume(
+    owner.id,
+    await heldBeforeMonthEnd(older),
+    `renew-01-${randomUUID()}`,
+  );
+  await ready(
+    practiceEnabled.claim(
+      owner.token,
+      randomUUID(),
+      await instruction(owner.token),
+    ),
+  );
+  const view = await ready(practiceEnabled.member(owner.token));
+  expect(view.claim?.periodStart).toEqual(monthStart(0));
+  expect(
+    view.earlier.map((row) => [row.periodStart.toISOString(), row.category]),
+  ).toEqual([
+    [monthStart(-1).toISOString(), "mock_sessions"],
+    [monthStart(-1).toISOString(), "study_requests"],
+    [monthStart(-2).toISOString(), "study_requests"],
+  ]);
+  expect(view.earlier[0]).toMatchObject({
+    policyVersion: "mock-allowance-test-v1",
+    quantity: 3,
+    used: 0,
+    held: 0,
+    endedUnused: 3,
+  });
+  expect(view.earlier[1]).toMatchObject({
+    policyVersion: V1,
+    quantity: 5,
+    used: 0,
+    endedUnused: 5,
+  });
+  expect(view.earlier[2]).toMatchObject({ used: 1, held: 0, endedUnused: 4 });
+  for (const row of view.earlier) expect(row).not.toHaveProperty("available");
+  expect(view.olderOmitted).toBe(false);
+});
+
+it("RENEW-02 a new month renews nothing by itself, and reading adds nothing", async () => {
+  const owner = await member();
+  await earlierClaim(owner.id, -1);
+  const view = await ready(enabled.member(owner.token));
+  expect(view.claim).toBeNull();
+  expect(view.earlier).toHaveLength(1);
+  expect(view.earlier[0]).toMatchObject({ used: 0, endedUnused: 5 });
+  await ready(enabled.member(owner.token));
+  expect(await grants(owner.id)).toHaveLength(1);
+  const balance = await memberTestUnitsStore(pool).snapshot(owner.token);
+  if (balance.kind !== "ready") throw Error("Expected a balance");
+  expect(
+    balance.value.categories.find((row) => row.category === "study_requests")
+      ?.usable ?? 0,
+  ).toBe(0);
+});
+
+it("RENEW-03 a unit held at month end stays with that month whether it finishes or is released", async () => {
+  const owner = await member();
+  const grant = await earlierClaim(owner.id, -1);
+  const finishing = await heldBeforeMonthEnd(grant),
+    released = await heldBeforeMonthEnd(grant);
+  await ready(
+    enabled.claim(owner.token, randomUUID(), await instruction(owner.token)),
+  );
+  let view = await ready(enabled.member(owner.token));
+  expect(view.earlier[0]).toMatchObject({ used: 0, held: 2, endedUnused: 3 });
+  await ledger.consume(owner.id, finishing, `renew-03-${randomUUID()}`);
+  await ledger.release(owner.id, released, `renew-03-${randomUUID()}`);
+  view = await ready(enabled.member(owner.token));
+  expect(view.earlier[0]).toMatchObject({ used: 1, held: 0, endedUnused: 4 });
+  expect(view.claim).toMatchObject({ quantity: 5, available: 5 });
+  const balance = await memberTestUnitsStore(pool).snapshot(owner.token);
+  if (balance.kind !== "ready") throw Error("Expected a balance");
+  expect(
+    balance.value.categories.find((row) => row.category === "study_requests")!
+      .usable,
+  ).toBe(5);
+});
+
+it("RENEW-04 earlier months are the member's own, the last 12 only, and stay readable while paused", async () => {
+  const owner = await member(),
+    other = await member();
+  await earlierClaim(other.id, -1);
+  for (const offset of [-1, -12, -13]) await earlierClaim(owner.id, offset);
+  const view = await ready(paused.member(owner.token));
+  expect(view.creationEnabled).toBe(false);
+  expect(view.earlier.map((row) => row.periodStart)).toEqual([
+    monthStart(-1),
+    monthStart(-12),
+  ]);
+  expect(view.olderOmitted).toBe(true);
+  const own = await ready(enabled.member(other.token));
+  expect(own.earlier).toHaveLength(1);
+  expect(own.olderOmitted).toBe(false);
+  const fresh = await member();
+  const empty = await ready(enabled.member(fresh.token));
+  expect(empty.earlier).toEqual([]);
+  expect(empty.olderOmitted).toBe(false);
+});

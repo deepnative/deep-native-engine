@@ -38,6 +38,14 @@ The export appends `practiceSessionAllowanceUses` as section 59 in `local-member
 
 Rollback: unset the setting. Starts go back to free. Keep the additive table and ledger facts.
 
+## Earlier months
+
+Delivered for part of #199 (RENEW-01 to RENEW-05, browser journey L319). The allowance page lists the member's own claims from the last 12 earlier months, newest first, with both categories. Each row shows the month, category, rules version, claimed, used, still held and ended unused. Units from an ended month are never shown as left to use: anything still available counts as ended unused, even before the expiry sweep records it. Older claims are left out with a link to the private records download, which lists every claim. The record stays readable while new claims are paused. This is read-only: no migration and no new ledger rule.
+
+**Renewal:** nothing renews automatically. Each month needs its own deliberate claim, and the page says when the next month opens. Unused units aren't carried over.
+
+**A request held when its month ends:** the unit stays with that month. If the request finishes, the unit counts as used in that month. If it's released, the existing ledger rule records it as expired in that month, and the current month's balance doesn't grow. The page shows these as still held, with that explanation.
+
 ## Rollback
 
 Turn the setting off to stop new claims. Keep the additive tables and ledger facts. Don't delete claims to reset a month, because that would allow a second grant.

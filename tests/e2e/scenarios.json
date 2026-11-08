@@ -2840,6 +2840,15 @@
       "critical": false
     },
     {
+      "id": "L319",
+      "actor": "Member reading last month's test study allowance",
+      "preconditions": "Dedicated synthetic PostgreSQL database, test-unit issuance enabled, a genuine claim from last month with one unit used, port0 server; desktop/mobile Chromium",
+      "steps": "RENEW-01/02/05: a member opens their monthly allowance; reads last month's record; checks their test units; ticks the confirmation and claims this month",
+      "expected": "Last month shows one used and four ended unused, never as left to use; the page says nothing renews automatically and nothing usable carried over; the new claim gives exactly five, says when the next month opens and leaves last month unchanged; no sideways scrolling",
+      "issues": [199],
+      "critical": true
+    },
+    {
       "id": "L323",
       "actor": "Administrator reading course agreement outcomes, and a refused operator",
       "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, invented administrator, operator and three members with invented real and test course agreements; desktop/mobile Chromium; no provider",

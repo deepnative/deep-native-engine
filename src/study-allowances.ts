@@ -14,6 +14,8 @@ import {
   type StudyFixtureOptions,
 } from "./study-unit-fixture-values.ts";
 import {
+  earliestListedMonth,
+  EARLIER_ALLOWANCE_MONTHS,
   studyAllowanceCategory,
   studyAllowanceInstruction,
   studyAllowanceKey,
@@ -21,6 +23,7 @@ import {
   studyAllowancePeriod,
   type StudyAllowanceCategory,
   type StudyAllowanceClaim,
+  type EarlierAllowanceMonth,
   type StudyAllowancePolicy,
 } from "./study-allowance-values.ts";
 
@@ -67,6 +70,30 @@ const periodClaim = (
 ) =>
   claimWhere(context, `c.category='${category}' AND c.period_start=$2`, start);
 
+// Every listed month has ended, so its available units ended unused too, even
+// before the expiry sweep records them as expired.
+async function earlierMonths(context: StudyFixtureContext, start: Date) {
+  const from = earliestListedMonth(start);
+  const rows = (
+    await context.tx.query<EarlierAllowanceMonth>(
+      `SELECT c.category,c.policy_version AS "policyVersion",c.quantity,
+       c.period_start AS "periodStart",c.period_end AS "periodEnd",g.consumed AS used,
+       g.reserved AS held,g.available+g.expired AS "endedUnused"
+       FROM study_allowance_claims c JOIN synthetic_entitlement_grants g ON g.id=c.grant_id
+       WHERE c.member_id=$1 AND c.period_start<$2 AND c.period_start>=$3
+       ORDER BY c.period_start DESC,c.category LIMIT $4`,
+      [context.actorId, start, from, EARLIER_ALLOWANCE_MONTHS * 2],
+    )
+  ).rows;
+  const older = (
+    await context.tx.query(
+      "SELECT 1 FROM study_allowance_claims WHERE member_id=$1 AND period_start<$2 LIMIT 1",
+      [context.actorId, from],
+    )
+  ).rows;
+  return { earlier: rows, olderOmitted: older.length > 0 };
+}
+
 export function studyAllowanceStore(
   pool: Pool,
   supplied: StudyFixtureOptions & { practiceUnits?: boolean },
@@ -90,6 +117,7 @@ export function studyAllowanceStore(
           period,
           claim: await periodClaim(context, period.start, "study_requests"),
           creationEnabled: studyFixtureCreation(options),
+          ...(await earlierMonths(context, period.start)),
           practice:
             options.practiceUnits || practiceClaim
               ? {

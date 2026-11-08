@@ -47,6 +47,8 @@ function view(overrides = {}) {
     claim: null,
     creationEnabled: true,
     practice: null,
+    earlier: [],
+    olderOmitted: false,
     ...overrides,
   });
 }
