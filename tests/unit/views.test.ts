@@ -760,7 +760,9 @@ it("describes local AI permission and every job state without leaking sample tex
     ],
     "csrf",
   );
-  expect(active).toContain("Queue local simulation");
+  // Unfinished requests on this version: no new one is offered (#44 walk).
+  expect(active).not.toContain("Queue local simulation");
+  expect(active).toContain("already has a request that is not finished");
   expect(active).toContain("Withdraw permission");
   expect(active).toContain("Run local simulation");
   expect(active).toContain("Simulated locally. No provider request");
@@ -2368,7 +2370,8 @@ it("distinguishes metered local test units and blocks repeat dispatch of termina
     },
   ];
   const html = localAiConsentPage(choices, "csrf");
-  expect(html).toContain("Use one local test request");
+  // The pending request keeps a new one from being offered (#44 walk).
+  expect(html).not.toContain("Use one local test request");
   expect(html).toContain("Run local test request");
   expect(html).toContain("consumed");
   expect(html).toContain("released");
@@ -2377,7 +2380,13 @@ it("distinguishes metered local test units and blocks repeat dispatch of termina
   expect(html).toContain(
     "This request has no cost estimate, so it cannot run.",
   );
-  expect(html).toContain(
+  // The pre-queue estimate shows once nothing is unfinished on the version.
+  expect(
+    localAiConsentPage(
+      [{ ...choices[0]!, jobs: choices[0]!.jobs.slice(1) }],
+      "csrf",
+    ),
+  ).toContain(
     "Estimate only: about 267 tokens and 157 simulated cost points (model simulated-model-v1, test rates simulated-rates-v1).",
   );
   const estimate = choices[0]!.estimate;
