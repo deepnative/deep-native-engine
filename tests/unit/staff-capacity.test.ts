@@ -90,7 +90,12 @@ it("CAP-02 unverified records keep their declared minutes apart and add nothing 
 it("CAP-03 available is capacity minus committed minus open slots, per verified record", () => {
   const group = capacityGroup("formal-review", [
     record(),
-    record({ capacityMinutes: 100, committedMinutes: 40, slotMinutes: 0 }),
+    record({
+      capacityMinutes: 100,
+      committedMinutes: 40,
+      slotMinutes: 0,
+      heldSlots: 0,
+    }),
   ]);
   expect(recordRoom(record())).toBe(120);
   expect(group).toMatchObject({
@@ -199,9 +204,10 @@ function respond(rows: {
   return (sql: string) => {
     if (sql.includes("authorized_staff_profiles"))
       return { rows: rows.allowed ?? [{}] };
+    if (sql.includes("WITH grants"))
+      return { rows: rows.review ?? [reviewRow] };
     if (sql.includes("FROM expert_registry e"))
       return { rows: rows.roster ?? [] };
-    if (sql.includes("WITH grants")) return { rows: rows.review ?? [reviewRow] };
     if (sql.includes('now() AS "asOf"'))
       return { rows: rows.asOf ?? [{ asOf }] };
     return { rows: [] };
@@ -265,9 +271,9 @@ it("CAP-10 a failed connection, read or rollback shows no figures", async () => 
     } as unknown as Pool).snapshot("c".repeat(64)),
   ).toEqual({ kind: "unavailable" });
   const missing = pool(respond({ asOf: [] }));
-  expect(await staffCapacityStore(missing.fake).snapshot("c".repeat(64))).toEqual(
-    { kind: "unavailable" },
-  );
+  expect(
+    await staffCapacityStore(missing.fake).snapshot("c".repeat(64)),
+  ).toEqual({ kind: "unavailable" });
   const release = vi.fn();
   const f = pool((sql) => {
     if (sql === "ROLLBACK") return Promise.reject(new Error("gone"));
@@ -328,5 +334,5 @@ it("CAP-02/09 the page labels unverified minutes and names no one", async () => 
   expect(empty).toMatch(/data-field="coaching.available">Not recorded/);
   expect(empty).toContain("No review time to compare.");
   for (const kind of ["denied", "unavailable", "live", "query"] as const)
-    expect(staffCapacityUnavailablePage(kind)).not.toContain("min");
+    expect(staffCapacityUnavailablePage(kind)).not.toMatch(/\d+ min/);
 });

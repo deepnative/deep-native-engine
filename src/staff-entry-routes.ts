@@ -46,6 +46,8 @@ export interface StaffTools {
   eventRehearsals?: boolean;
   workflowReviews?: boolean;
   invoices?: boolean;
+  /** #123 CAP: the staff capacity report is available here. */
+  capacity?: boolean;
   localAi: boolean;
   receipts: boolean;
 }
@@ -90,6 +92,7 @@ function links(role: StaffRole, tools: StaffTools) {
         "Your granted support test effort",
       ],
       [tools.experts, "/operator/experts", "Synthetic expert registry"],
+      [tools.capacity === true, "/operator/staff-capacity", "Staff capacity"],
       [
         tools.metrics,
         "/operator/metrics/report",

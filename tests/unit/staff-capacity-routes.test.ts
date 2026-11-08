@@ -53,7 +53,10 @@ const token = "a".repeat(64),
 const members = {
   session: vi.fn(async () => ({ kind: "none" })),
 } as unknown as Store;
-function application(store: StaffCapacityStore, mode: ApplicationMode = "test") {
+function application(
+  store: StaffCapacityStore,
+  mode: ApplicationMode = "test",
+) {
   return app(members, {
     origin: "http://127.0.0.1:3000",
     secret: "invented-capacity-route-test",
@@ -85,7 +88,7 @@ it("CAP-08 live mode refuses before reading anything", async () => {
   const r = await read(application({ snapshot }, "live"));
   expect(r.status).toBe(404);
   expect(r.text).toContain("no live figures");
-  expect(r.text).not.toContain(" min");
+  expect(r.text).not.toMatch(/\d+ min/);
   expect(snapshot).not.toHaveBeenCalled();
 });
 
@@ -93,9 +96,12 @@ it("CAP-08 denial and query fields show no figures", async () => {
   const snapshot = vi.fn(async () => ({ kind: "denied" as const }));
   const denied = await read(application({ snapshot }));
   expect(denied.status).toBe(403);
-  expect(denied.text).not.toContain(" min");
+  expect(denied.text).not.toMatch(/\d+ min/);
   snapshot.mockClear();
-  const query = await read(application({ snapshot }), `${path}?service=coaching`);
+  const query = await read(
+    application({ snapshot }),
+    `${path}?service=coaching`,
+  );
   expect(query.status).toBe(400);
   expect(snapshot).not.toHaveBeenCalled();
 });

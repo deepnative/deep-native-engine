@@ -21,11 +21,7 @@ export interface RosterFact {
   heldSlots: number;
 }
 export type RosterStanding =
-  | "covered"
-  | "unverified"
-  | "inactive"
-  | "no_backup"
-  | "not_current";
+  "covered" | "unverified" | "inactive" | "no_backup" | "not_current";
 export interface CapacityGroup {
   service: CapacityService;
   status: "empty" | "consistent" | "discrepancies";
