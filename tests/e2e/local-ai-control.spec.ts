@@ -242,7 +242,7 @@ test("[L77] an administrator pauses local AI while member permission stays exact
   }
 });
 
-test("[L315] AICAP-08 an administrator reads the test spending ceiling without member detail", async ({
+test("[L316] AICAP-08 an administrator reads the test spending ceiling without member detail", async ({
   page,
 }) => {
   const memberToken = token();

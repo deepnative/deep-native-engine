@@ -2805,6 +2805,15 @@
     },
     {
       "id": "L315",
+      "actor": "Member choosing optional interview practice",
+      "preconditions": "Dedicated synthetic PostgreSQL database, one published invented lesson, port0 server; desktop/mobile Chromium; no provider",
+      "steps": "INTERVIEW-01/03/07/08: a member opens a lesson's practice start page, ticks and starts the optional interview practice, saves one answer, reloads, starts it again and opens session history",
+      "expected": "Opening the page creates nothing; the session is labelled optional interview practice; the comparison says it doesn't predict hiring, interview results or competence; reload keeps the answer; a repeat start returns the same session; history shows interview-practice-v1; no sideways scrolling",
+      "issues": [200],
+      "critical": true
+    },
+    {
+      "id": "L316",
       "actor": "Platform administrator reading the test spending ceiling",
       "preconditions": "Shared synthetic PostgreSQL database, invented administrator and member, one invented study test request run through the deterministic metered path; desktop/mobile Chromium",
       "steps": "AICAP-08: the administrator opens the simulation control page and reads the test spending ceiling",

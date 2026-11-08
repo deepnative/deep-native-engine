@@ -8,6 +8,10 @@ import {
 import type { Goal } from "./content.ts";
 import { hash } from "./store.ts";
 import { practiceSessionLedgerOnConnection } from "./ledger.ts";
+import {
+  interviewNotice,
+  interviewPromptVersion,
+} from "./practice-session-purpose.ts";
 
 export interface PracticeSessionSource {
   contentId: string;
@@ -17,6 +21,8 @@ export interface PracticeSessionSource {
   promptVersion: string;
   prompt: string;
   sourceExcerpt: string;
+  // Optional, member-chosen interview practice for the same exact source.
+  interview: { promptVersion: string; prompt: string };
 }
 export interface PracticeSessionSummary {
   id: string;
@@ -99,14 +105,26 @@ export function disabledPracticeSessionStore(): PracticeSessionStore {
   };
 }
 // Published templates are immutable: future wording requires a new version.
-const templates = {
-  everyday:
-    "Using an invented everyday example, write an instruction and explain what you would check against the lesson.",
-  work: "Using an invented workplace example, write an instruction and explain what you would verify before using its result.",
-  build:
-    "Using an invented technical workflow, write an instruction and explain how you would test its result. No code is required.",
-} as const;
 const currentPrompt = "practice-v1";
+const templates: Record<string, Record<Goal, string>> = {
+  [currentPrompt]: {
+    everyday:
+      "Using an invented everyday example, write an instruction and explain what you would check against the lesson.",
+    work: "Using an invented workplace example, write an instruction and explain what you would verify before using its result.",
+    build:
+      "Using an invented technical workflow, write an instruction and explain how you would test its result. No code is required.",
+  },
+  // Interview practice is only ever chosen by the member. It names no job,
+  // employer or career, and nothing in it predicts an outcome.
+  [interviewPromptVersion]: {
+    everyday:
+      "Answer an invented interview question about an everyday task you might explain to someone, then say what in the lesson you would check before answering.",
+    work: "Answer an invented interview question about checking a piece of work before relying on it, then say what in the lesson you would verify first.",
+    build:
+      "Answer an invented interview question about testing a technical workflow, then say how the lesson helps you test it. No code is required.",
+  },
+};
+
 const idPattern = /^[A-Z]{2,5}-[0-9]{3}$/;
 const uuidPattern =
   /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -121,7 +139,10 @@ type SourceRow = {
   goal: Goal;
 };
 function prompt(version: string, goal: Goal): string | null {
-  return version === currentPrompt ? templates[goal] : null;
+  return Object.hasOwn(templates, version) &&
+    Object.hasOwn(templates[version]!, goal)
+    ? templates[version]![goal]
+    : null;
 }
 function excerpt(body: string): string {
   return Array.from(body).slice(0, 600).join("");
@@ -272,8 +293,12 @@ export function practiceSessionStore(
           title: row.title,
           goal: row.goal,
           promptVersion: currentPrompt,
-          prompt: templates[row.goal],
+          prompt: prompt(currentPrompt, row.goal)!,
           sourceExcerpt: excerpt(row.body),
+          interview: {
+            promptVersion: interviewPromptVersion,
+            prompt: prompt(interviewPromptVersion, row.goal)!,
+          },
         };
       });
     },
@@ -283,8 +308,8 @@ export function practiceSessionStore(
         !Number.isInteger(input.contentVersion) ||
         input.contentVersion < 1 ||
         input.contentVersion > 2147483647 ||
-        !Object.hasOwn(templates, input.goal) ||
-        input.promptVersion !== currentPrompt
+        typeof input.promptVersion !== "string" ||
+        !prompt(input.promptVersion, input.goal)
       )
         return { kind: "unavailable" };
       return (
@@ -450,7 +475,10 @@ export function practiceSessionStore(
             const comparison =
               `Simulation — unreviewed local comparison. Your paired words: “${input.response}”\n` +
               `Exact source excerpt (${row.contentId} v${row.contentVersion}): “${sourceExcerpt}”\n` +
-              "Compare the two yourself and identify a detail to verify. This deterministic comparison does not verify accuracy and cannot judge competence. Uncertainty remains; no qualified review has occurred.";
+              "Compare the two yourself and identify a detail to verify. This deterministic comparison does not verify accuracy and cannot judge competence. Uncertainty remains; no qualified review has occurred." +
+              (row.promptVersion === interviewPromptVersion
+                ? `\n${interviewNotice}`
+                : "");
             await client.query(
               `INSERT INTO private_practice_exchanges(session_id,sequence,response,comparison,source_excerpt)
           VALUES($1,$2,$3,$4,$5)`,
