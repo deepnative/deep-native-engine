@@ -317,6 +317,7 @@ import {
 } from "./member-test-units.ts";
 import { registerMemberTestUnitsRoutes } from "./member-test-units-routes.ts";
 import { mountStudyAllowanceRoutes } from "./study-allowance-routes.ts";
+import { mountStudyQuestionRoutes } from "./study-question-routes.ts";
 import type { StudyAllowanceStore } from "./study-allowances.ts";
 import type { StudyUnitFixtureStore } from "./study-unit-fixtures.ts";
 import { mountStudyUnitFixtureRoutes } from "./study-unit-fixture-routes.ts";
@@ -3864,6 +3865,17 @@ export function app(
       return;
     }
     res.redirect(303, `/library/${encodeURIComponent(source.id)}/practice`);
+  });
+  // #202: ask about the exact lesson version under the reader's eligibility.
+  mountStudyQuestionRoutes(app, async (token, id) => {
+    const item = await catalog.published(id);
+    return item &&
+      item.kind === "lesson" &&
+      item.state === "published" &&
+      !item.requiresQualifiedSignoff &&
+      (await store.openLesson(token, item.id, item.version))
+      ? item
+      : null;
   });
   app.get("/library/:id/study", async (req, res) => {
     const item = await catalog.published(req.params.id as string);

@@ -3,7 +3,7 @@
 import express from "express";
 import request from "supertest";
 import { expect, it, vi } from "vitest";
-import type { ContentVersion } from "../../src/content.ts";
+import type { ContentVersion } from "../../src/catalog.ts";
 import { withHosting } from "../../src/hosting-presentation.ts";
 import {
   mountStudyQuestionRoutes,

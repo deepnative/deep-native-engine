@@ -3059,7 +3059,7 @@ it("STUDYQ-09 answers a study question only from a lesson the member may current
     { kind: "assignment" },
     { requiresQualifiedSignoff: true },
     { state: "retired" },
-  ]) {
+  ] as Partial<ContentVersion>[]) {
     catalog.published.mockResolvedValueOnce({ ...item, ...changed });
     await ask().expect(409);
   }
