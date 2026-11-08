@@ -99,7 +99,7 @@ it("STAFFEXPORT-01 the download lists each kind of staff access with what, who a
   await noteRead(owner.id);
 
   const pages = await allPages(owner.token);
-  expect(pages[0]!.version).toBe("local-member-records-v40");
+  expect(pages[0]!.version).toBe("local-member-records-v41");
   const rows = staffAccess(pages);
   expect(rows).toHaveLength(5);
   const by = (source: string, action: string) =>

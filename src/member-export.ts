@@ -591,6 +591,28 @@ const sections = {
     "id",
     true,
   ),
+  // v41 appends #40 EXPCOV: sample sessions the member held or withdrew,
+  // never the staff, availability registry, reservation or hold operation.
+  sampleHolds: section(
+    `r.request_id AS id,r.slot_id AS "slotId",r.grant_id AS "grantId",r.domain,
+    r.service_type AS "serviceType",r.starts_at AS "startsAt",r.ends_at AS "endsAt",
+    h.state,h.created_at AS "heldAt",h.expires_at AS "expiresAt",
+    h.released_at AS "releasedAt",h.expired_at AS "expiredAt",
+    'SAMPLE HOLD · NOT A BOOKING' AS label`,
+    `synthetic_member_hold_receipts r
+    JOIN synthetic_slot_holds h ON h.id=r.hold_id AND h.member_id=r.member_id
+    WHERE r.member_id=$1`,
+    "r.request_id",
+  ),
+  // and simulated assessment results recorded on the member's work, never the
+  // reviewer.
+  contentAssessments: section(
+    `id,content_id AS "contentId",content_version AS "contentVersion",
+    rubric_version AS "rubricVersion",mode,result,
+    'SIMULATED · NOT A QUALIFIED ASSESSMENT' AS label,assessed_at AS "assessedAt"`,
+    "content_assessments WHERE member_id=$1",
+    "id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -604,7 +626,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v40";
+  version: "local-member-records-v41";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -738,7 +760,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v40",
+          version: "local-member-records-v41",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

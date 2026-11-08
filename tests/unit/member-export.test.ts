@@ -103,7 +103,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v40",
+      version: "local-member-records-v41",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -226,8 +226,8 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    // Original indices0..59 remain; appended sections 60..62 are valid.
-    [2, 63, ...valid.slice(2)],
+    // Original indices0..59 remain; appended sections 60..64 are valid.
+    [2, 65, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -281,7 +281,7 @@ it.each([
     expect(result).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v40",
+        version: "local-member-records-v41",
         records: { [name]: [{ record: "Invented owned metadata" }] },
       },
     });
@@ -518,7 +518,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v40",
+        version: "local-member-records-v41",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -726,7 +726,7 @@ it("appends owned review accounting at indices 33-35 without moving existing sec
     expect(value).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v40",
+        version: "local-member-records-v41",
         records: { [name]: [{ id: "owned-accounting" }] },
       },
     });
@@ -759,7 +759,7 @@ it("appends safe source-deleted assignment receipts at index36 without moving an
   expect(value).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v40",
+      version: "local-member-records-v41",
       records: { sampleAssignmentOperations: [record] },
     },
   });
@@ -896,7 +896,7 @@ it("CONPUB-04 appends owner-only publication permissions at cursor index46 with 
   expect(result).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v40",
+      version: "local-member-records-v41",
       records: {
         proposalPublications: [{ state: "withdrawn", attribution: null }],
       },
@@ -1084,4 +1084,40 @@ it("ECO-07-C appends the member's own course-billing agreements at index 62 with
   expect(query).toContain("simple_invoice_plans WHERE owner_id=$1");
   expect(query).toContain("accepted_at");
   expect(query).not.toContain("created_by");
+});
+
+it("EXPCOV-03/04 appends sample holds at index 63 and simulated assessment results at 64, without staff", async () => {
+  const fake = fakePool({ id: "member-1" }, (sql) =>
+    sql.includes("FROM synthetic_member_hold_receipts")
+      ? [{ _key: ["hold-b"], id: "hold-b", state: "released" }]
+      : sql.includes("FROM content_assessments")
+        ? [{ _key: ["assessment-a"], id: "assessment-a", mode: "simulated" }]
+        : [],
+  );
+  const result = await memberExportStore(fake.pool, secret).exportOwned(
+    "owner",
+    signed([2, 63, ["hold-a"], 2, Date.now() + 60000]),
+  );
+  if (result.kind !== "ready") throw Error("Expected appended owner cursor");
+  const names = Object.keys(result.payload.records);
+  expect(names.indexOf("sampleHolds")).toBe(63);
+  expect(names.indexOf("contentAssessments")).toBe(64);
+  expect(names).toHaveLength(65);
+  expect(result.payload.records.sampleHolds).toEqual([
+    { id: "hold-b", state: "released" },
+  ]);
+  expect(result.payload.records.contentAssessments).toEqual([
+    { id: "assessment-a", mode: "simulated" },
+  ]);
+  const holds = fake.statements.find((sql) =>
+    sql.includes("FROM synthetic_member_hold_receipts"),
+  )!;
+  expect(holds).toContain("WHERE r.member_id=$1");
+  expect(holds).toContain("h.member_id=r.member_id");
+  expect(holds).not.toMatch(/reservation_id|staff_id|registry/);
+  const assessments = fake.statements.find((sql) =>
+    sql.includes("FROM content_assessments"),
+  )!;
+  expect(assessments).toContain("content_assessments WHERE member_id=$1");
+  expect(assessments).not.toContain("reviewer_id");
 });
