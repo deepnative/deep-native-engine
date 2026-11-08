@@ -78,9 +78,17 @@ const sections = {
   adapterJobs: section(
     `j.id,j.adapter,j.mode,j.status,j.attempt_count AS attempts,
     j.max_attempts AS "maxAttempts",j.safe_error AS "safeError",
-    j.created_at AS "createdAt",j.updated_at AS "updatedAt",r.id AS "localAiReceiptId"`,
+    j.created_at AS "createdAt",j.updated_at AS "updatedAt",r.id AS "localAiReceiptId",
+    CASE WHEN d.job_id IS NULL THEN NULL ELSE jsonb_build_object(
+      'outcome',d.outcome,'reason',d.reason,
+      'decidedAt',to_char(d.decided_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+      'label','TEST OUTCOME · NOT PROVIDER-CONFIRMED · STILL HELD') END AS "holdTestOutcome"`,
+    // v40 adds #189's recorded test outcome, never the operator, assignment,
+    // test reference or idempotency key.
     `adapter_jobs j LEFT JOIN local_ai_receipts r
       ON r.id=j.local_ai_receipt_id AND r.member_id=j.member_id
+    LEFT JOIN local_ai_hold_test_decisions d
+      ON d.job_id=j.id AND d.member_id=j.member_id
     WHERE j.member_id=$1`,
     "j.id",
   ),
@@ -596,7 +604,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v39";
+  version: "local-member-records-v40";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -730,7 +738,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v39",
+          version: "local-member-records-v40",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

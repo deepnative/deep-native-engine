@@ -42,6 +42,13 @@ export interface LocalAiChoice {
     status: string;
     testUnitState?: "reserved" | "consumed" | "released";
     budget?: { estimate: AiUsageEstimate; actual?: AiUsageAmount };
+    /** #189 A labelled test outcome an operator recorded. Never who, under
+     * which assignment, or with which reference: it is not provider-confirmed. */
+    testOutcome?: {
+      outcome: "test-executed" | "test-not-executed";
+      reason: "matching-test-record" | "operator-test-exercise";
+      decidedAt: Date;
+    };
   }>;
 }
 export interface LocalAiConsentStore {
@@ -127,9 +134,9 @@ type Job = {
 };
 
 const JOB_COLUMNS =
-  "SELECT j.id,j.status,j.safe_error,b.policy,r.state AS test_unit_state,e.rate_version,e.model_version,e.input_tokens AS estimated_input_tokens,e.output_tokens AS estimated_output_tokens,e.cost_points AS estimated_cost_points,s.input_tokens AS actual_input_tokens,s.output_tokens AS actual_output_tokens,s.cost_points AS actual_cost_points FROM adapter_jobs j ";
+  "SELECT j.id,j.status,j.safe_error,b.policy,r.state AS test_unit_state,e.rate_version,e.model_version,e.input_tokens AS estimated_input_tokens,e.output_tokens AS estimated_output_tokens,e.cost_points AS estimated_cost_points,s.input_tokens AS actual_input_tokens,s.output_tokens AS actual_output_tokens,s.cost_points AS actual_cost_points,d.outcome AS test_outcome,d.reason AS test_reason,d.decided_at AS test_decided_at FROM adapter_jobs j ";
 const JOB_DETAILS =
-  "LEFT JOIN local_ai_test_unit_jobs b ON b.job_id=j.id LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id LEFT JOIN ai_usage_estimates e ON e.job_id=j.id AND e.member_id=j.member_id LEFT JOIN ai_usage_settlements s ON s.job_id=j.id AND s.member_id=j.member_id ";
+  "LEFT JOIN local_ai_test_unit_jobs b ON b.job_id=j.id LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id LEFT JOIN ai_usage_estimates e ON e.job_id=j.id AND e.member_id=j.member_id LEFT JOIN ai_usage_settlements s ON s.job_id=j.id AND s.member_id=j.member_id LEFT JOIN local_ai_hold_test_decisions d ON d.job_id=j.id AND d.member_id=j.member_id ";
 const JOBS = JOB_COLUMNS + JOB_DETAILS;
 const JOBS_WITH_RECEIPT =
   JOB_COLUMNS +
@@ -149,6 +156,9 @@ type ListedJob = {
   actual_input_tokens?: number | null;
   actual_output_tokens?: number | null;
   actual_cost_points?: number | null;
+  test_outcome?: "test-executed" | "test-not-executed" | null;
+  test_reason?: "matching-test-record" | "operator-test-exercise" | null;
+  test_decided_at?: Date | null;
 };
 function jobBudget(job: ListedJob) {
   if (!job.rate_version) return {};
@@ -444,6 +454,15 @@ export function localAiConsentStore(
           }
         : {}),
       ...jobBudget(job),
+      ...(job.test_outcome
+        ? {
+            testOutcome: {
+              outcome: job.test_outcome,
+              reason: job.test_reason!,
+              decidedAt: job.test_decided_at!,
+            },
+          }
+        : {}),
     };
   }
   async function currentTestReservation(
