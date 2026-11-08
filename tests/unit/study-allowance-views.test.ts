@@ -234,9 +234,7 @@ it("RENEW-03 a unit still held from an earlier month explains how it ends", () =
     earlier: [earlierMonth],
   });
   expect(html).toContain("can still finish");
-  expect(html).toContain(
-    "doesn&#39;t move to this month".replace("&#39;", "'"),
-  );
+  expect(html.replaceAll("&#39;", "'")).toContain("doesn't move to the current month");
   const settled = studyAllowancePage("csrf", {
     ...base,
     earlier: [{ ...earlierMonth, held: 0 }],

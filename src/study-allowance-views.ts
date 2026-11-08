@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 import { timeTag } from "./display-time.ts";
 import { escape, hidden, page } from "./views.ts";
 import {
+  EARLIER_ALLOWANCE_MONTHS,
   STUDY_ALLOWANCE_PATH,
+  type EarlierAllowanceMonth,
   type StudyAllowanceClaim,
   type StudyAllowancePolicy,
   type StudyAllowanceView,
@@ -14,7 +16,7 @@ function policyFacts(policy: StudyAllowancePolicy) {
   return `<h3>This month's rules</h3><dl><dt>Rules version</dt><dd>${escape(policy.version)}</dd><dt>How much</dt><dd>${policy.periodLimit} study requests, each calendar month (UTC)</dd><dt>Who can claim</dt><dd>Any current member who chooses to claim it</dd><dt>Where it comes from</dt><dd>Test setting on this site. It isn't bought, and it isn't a paid plan.</dd><dt>Cost estimate</dt><dd>None. These units never call a paid AI service.</dd></dl>`;
 }
 function claimFacts(claim: StudyAllowanceClaim) {
-  return `<h3>This month's claim</h3><p role="status">Claimed under ${escape(claim.policyVersion)}.</p><dl><dt>Claimed</dt><dd>${claim.quantity} study requests on ${timeTag(claim.createdAt)}</dd><dt>Left to use</dt><dd><span data-field="available">${claim.available}</span> study requests</dd><dt>Held for a request in progress</dt><dd><span data-field="reserved">${claim.reserved}</span></dd><dt>Used</dt><dd><span data-field="consumed">${claim.consumed}</span></dd><dt>Ends</dt><dd>${timeTag(claim.periodEnd)}</dd></dl><p>Unused units end with the month and don't carry over. You can claim again when the next month starts.</p>`;
+  return `<h3>This month's claim</h3><p role="status">Claimed under ${escape(claim.policyVersion)}.</p><dl><dt>Claimed</dt><dd>${claim.quantity} study requests on ${timeTag(claim.createdAt)}</dd><dt>Left to use</dt><dd><span data-field="available">${claim.available}</span> study requests</dd><dt>Held for a request in progress</dt><dd><span data-field="reserved">${claim.reserved}</span></dd><dt>Used</dt><dd><span data-field="consumed">${claim.consumed}</span></dd><dt>Ends</dt><dd>${timeTag(claim.periodEnd)}</dd></dl><p>Unused units end with the month and don't carry over. Nothing renews automatically. The next month opens ${timeTag(claim.periodEnd)}, and you can claim again then.</p>`;
 }
 function claimForm(
   csrf: string,
@@ -46,6 +48,29 @@ function practiceSection(csrf: string, view: StudyAllowanceView) {
   // Not <section>: `.reading section` indents numbered lesson steps.
   return `<div data-allowance="mock_sessions"><h2>Practice sessions</h2>${facts}${action}</div>`;
 }
+const categoryName = {
+  study_requests: "Study requests",
+  mock_sessions: "Practice sessions",
+} as const;
+const monthName = (start: Date) =>
+  start.toLocaleString("en-GB", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+function earlierRow(row: EarlierAllowanceMonth) {
+  const held = row.held
+    ? `<p>A request that was in progress when this month ended can still finish and uses that month's unit. If it's cancelled instead, the unit ends with that month and doesn't move to the current month.</p>`
+    : "";
+  return `<div data-earlier-month="${row.periodStart.toISOString().slice(0, 7)}" data-earlier-category="${row.category}"><h3>${monthName(row.periodStart)} · ${categoryName[row.category]}</h3><dl><dt>Rules version</dt><dd>${escape(row.policyVersion)}</dd><dt>Claimed</dt><dd><span data-field="earlier-claimed">${row.quantity}</span></dd><dt>Used</dt><dd><span data-field="earlier-used">${row.used}</span></dd><dt>Still held for a request in progress</dt><dd><span data-field="earlier-held">${row.held}</span></dd><dt>Ended unused</dt><dd><span data-field="earlier-ended">${row.endedUnused}</span></dd></dl>${held}</div>`;
+}
+function earlierMonths(view: StudyAllowanceView) {
+  const rows = view.earlier ?? [];
+  const older = view.olderOmitted
+    ? `<p>This shows the last ${EARLIER_ALLOWANCE_MONTHS} months. Older claims are in your <a href="/member/export">private records download</a>.</p>`
+    : "";
+  return `<div data-allowance-history><h2>Earlier months</h2>${rows.length ? rows.map(earlierRow).join("") : "<p>No earlier months yet.</p>"}${older}</div>`;
+}
 export function studyAllowancePage(csrf: string, view: StudyAllowanceView) {
   const action = view.claim
     ? claimFacts(view.claim)
@@ -54,9 +79,12 @@ export function studyAllowancePage(csrf: string, view: StudyAllowanceView) {
       : view.creationEnabled
         ? claimForm(csrf, view.policy, view.period.start)
         : `<p role="status">New claims are paused. Anything you've already claimed stays available.</p>`;
+  const renewal = view.claim
+    ? ""
+    : `<p>Nothing renews automatically. Any unused units from earlier months ended with their month and weren't carried over.</p>`;
   return page(
     HEADING,
-    `<article class="reading"><p class="eyebrow">PRIVATE · TEST ONLY</p><h1>${HEADING}</h1><p>Nothing is added until you claim it. Opening this page or changing your background or goals never adds units.</p><div data-allowance="study_requests"><h2>Study requests</h2>${view.policy ? policyFacts(view.policy) : ""}${action}</div>${view.practice ? practiceSection(csrf, view) : ""}${links}</article>`,
+    `<article class="reading"><p class="eyebrow">PRIVATE · TEST ONLY</p><h1>${HEADING}</h1><p>Nothing is added until you claim it. Opening this page or changing your background or goals never adds units.</p><div data-allowance="study_requests"><h2>Study requests</h2>${view.policy ? policyFacts(view.policy) : ""}${renewal}${action}</div>${view.practice ? practiceSection(csrf, view) : ""}${earlierMonths(view)}${links}</article>`,
   );
 }
 const notices = {
