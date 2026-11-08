@@ -460,3 +460,76 @@ it("discards a connection after failed rollback and sanitizes connect failures",
   );
   expect(connecting.release).not.toHaveBeenCalled();
 });
+const interview = { ...start, promptVersion: "interview-practice-v1" };
+it.each(["everyday", "work", "build"] as const)(
+  "INTERVIEW-02 offers optional %s interview practice with an invented question and no career assumption",
+  async (goal) => {
+    const f = fixture({ sourceGoal: goal });
+    const source = (await f.store.source("token", "SYN-130"))!;
+    expect(source.promptVersion).toBe("practice-v1");
+    expect(source.interview.promptVersion).toBe("interview-practice-v1");
+    expect(source.interview.prompt).toContain("invented interview question");
+    expect(source.interview.prompt).not.toMatch(
+      /job title|employer|career|hire|score/i,
+    );
+    expect(source.interview.prompt).not.toBe(source.prompt);
+    expect(f.query.mock.calls.map(([sql]) => sql).join("\n")).not.toContain(
+      "INSERT",
+    );
+  },
+);
+it("INTERVIEW-04 pins the interview prompt version as its own slot and refuses unknown versions", async () => {
+  const f = fixture();
+  expect(await f.store.start("token", interview)).toMatchObject({
+    kind: "started",
+  });
+  const insert = f.query.mock.calls.find(([sql]) =>
+    sql.startsWith("INSERT INTO private_practice_sessions"),
+  )!;
+  expect(insert[1]).toEqual([
+    expect.any(String),
+    "member-id",
+    "SYN-130",
+    1,
+    "everyday",
+    "interview-practice-v1",
+  ]);
+  const lookup = f.query.mock.calls.find(([sql]) =>
+    sql.startsWith("SELECT id,withdrawn_at"),
+  )!;
+  expect(lookup[1]).toContain("interview-practice-v1");
+  for (const promptVersion of ["interview-practice-v2", "interview", ""]) {
+    const g = fixture();
+    expect(await g.store.start("token", { ...start, promptVersion })).toEqual({
+      kind: "unavailable",
+    });
+    expect(g.connect).not.toHaveBeenCalled();
+  }
+});
+it("INTERVIEW-03 interview comparisons and detail say nothing is predicted, with no score", async () => {
+  const f = fixture({ row: { promptVersion: "interview-practice-v1" } });
+  expect(
+    await f.store.append("token", id, {
+      expectedSequence: 1,
+      response: "Invented answer",
+    }),
+  ).toBe("saved");
+  const comparison = f.pairs[0]!.comparison;
+  expect(comparison).toContain(
+    "This interview practice doesn't predict hiring, interview results or competence.",
+  );
+  expect(comparison).toContain("“Invented answer”");
+  expect(comparison).not.toMatch(/\bscore\b|\/10|rating/i);
+  const detail = (await f.store.detail("token", id))!;
+  expect(detail).toMatchObject({
+    promptVersion: "interview-practice-v1",
+    availability: "available",
+  });
+  expect(detail.prompt).toContain("invented interview question");
+  const ordinary = fixture();
+  await ordinary.store.append("token", id, {
+    expectedSequence: 1,
+    response: "Invented answer",
+  });
+  expect(ordinary.pairs[0]!.comparison).not.toContain("interview");
+});

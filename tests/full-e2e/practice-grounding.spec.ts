@@ -122,7 +122,9 @@ test("[F-ECO-06-B] nothing runs before opting in and the comparison cites its al
   await requiredCheck(1, async () => {
     await page.goto(`/library/${allowed.id}/practice-session`);
     await expect(page.locator("body")).toContainText("No live AI provider");
-    const form = page.locator(`form[action$="/practice-session/start"]`);
+    const form = page.locator(
+      `form[action$="/practice-session/start"][data-practice-purpose="lesson"]`,
+    );
     const fields: Record<string, string> = {};
     for (const name of ["csrf", "content_version", "goal", "prompt_version"])
       fields[name] = await form.locator(`[name="${name}"]`).inputValue();

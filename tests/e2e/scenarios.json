@@ -2802,6 +2802,15 @@
       "expected": "The history page says the download includes it as staffAccess; the download is v38 and its staffAccess section lists the grant and the opening as assignment access, with no purpose, staff or grant identifiers; no sideways scrolling",
       "issues": [40],
       "critical": false
+    },
+    {
+      "id": "L315",
+      "actor": "Member choosing optional interview practice",
+      "preconditions": "Dedicated synthetic PostgreSQL database, one published invented lesson, port0 server; desktop/mobile Chromium; no provider",
+      "steps": "INTERVIEW-01/03/07/08: a member opens a lesson's practice start page, ticks and starts the optional interview practice, saves one answer, reloads, starts it again and opens session history",
+      "expected": "Opening the page creates nothing; the session is labelled optional interview practice; the comparison says it doesn't predict hiring, interview results or competence; reload keeps the answer; a repeat start returns the same session; history shows interview-practice-v1; no sideways scrolling",
+      "issues": [200],
+      "critical": true
     }
   ],
   "fullMvp": [
