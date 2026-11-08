@@ -40,7 +40,22 @@ Migration 116 adds one platform-wide test spending ceiling, in simulated points 
 | A known failure before the provider call              | The estimate is returned once: wrong adapter, missing source bytes, ended permission or a pause after the claim.                                   |
 | A member is erased                                    | Their per-attempt records go, but the platform total keeps what was committed. It holds no member reference.                                       |
 
-Each attempt has one commitment record, keyed by request and attempt number. A database trigger keeps the platform total in step with these records, refuses a commitment that would pass the ceiling, and allows each commitment to close only once, as settled or restored. Platform administrators see the ceiling, committed and remaining points on the simulation control page. The page names no member, request or source. Unmetered simulations carry no estimate and are not counted. Raising the ceiling needs a reviewed migration; there is no staff control for it.
+Each attempt has one commitment record, keyed by request and attempt number. A database trigger keeps the platform total in step with these records, refuses a commitment that would pass the ceiling, and allows each commitment to close only once, as settled or restored. Platform administrators see the ceiling, committed and remaining points on the simulation control page. The page names no member, request or source. Unmetered simulations carry no estimate and are not counted.
+
+### Changing the test ceiling
+
+Migration 117 lets a platform administrator raise or lower the test ceiling on the simulation control page (`/operator/local-ai`). It is still invented test points, not money.
+
+| What happens                                     | Result                                                                                                                                       |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| An administrator raises a full ceiling           | New metered requests whose estimate fits can be queued and run again.                                                                        |
+| An administrator lowers it, even below committed | New requests that do not fit are refused before any provider call. Nothing already committed is refunded, cancelled or retried. 0 stops all. |
+| The ceiling changed after the page was opened    | Nothing changes. The administrator is asked to reload and check the current value.                                                           |
+| The same form is sent twice                      | One change. The same form key with a different value is refused.                                                                             |
+| Anyone else, or an invalid or unchanged value    | Refused, and nothing is recorded. Values are whole numbers from 0 to 1000000000000.                                                          |
+| A change runs alongside dispatch claims          | They queue on the ceiling row; each claim is checked against the ceiling in force when it is made.                                           |
+
+Every change writes one record, in the same transaction, with the ceiling it replaced, the new ceiling, committed points at that moment, the rate version, the time and the administrator. A database trigger refuses a record from anyone but a current platform administrator, or one that does not match the ceiling and committed points in force, and refuses any later edit or deletion. Removing the administrator's account clears only that link. The control page lists the 10 most recent changes without naming members, requests or administrators. The trigger does not stop a direct database update of the ceiling row itself; test setup relies on that, and such an update leaves no record.
 
 ## Unfinished requests per member
 

@@ -822,6 +822,45 @@ it("describes local AI permission and every job state without leaking sample tex
     "Simulated points at test rates simulated-&lt;rates&gt;, not money: ceiling 100000, committed 199, remaining 99801.",
   );
   expect(readout).toContain("no provider is called");
+  expect(readout).toContain('name="expected" value="100000"');
+  expect(readout).toContain("Change history unavailable.");
+  expect(readout).not.toContain("The test ceiling is full");
+  const full = localAiControlPage(
+    false,
+    "csrf",
+    {
+      rateVersion: "simulated-rates-v1",
+      ceilingPoints: 0,
+      committedPoints: 42,
+      remainingPoints: 0,
+    },
+    [
+      {
+        changedAt: new Date("2026-11-08T12:34:56Z"),
+        rateVersion: "simulated-<rates>",
+        previousPoints: 1000,
+        ceilingPoints: 0,
+        committedPoints: 42,
+      },
+    ],
+  );
+  expect(full).toContain("The test ceiling is full");
+  expect(full).toContain(
+    "2026-11-08 12:34 UTC: 1000 to 0 points (test rates simulated-&lt;rates&gt;), with 42 committed at the time.",
+  );
+  expect(
+    localAiControlPage(
+      false,
+      "csrf",
+      {
+        rateVersion: "simulated-rates-v1",
+        ceilingPoints: 10,
+        committedPoints: 0,
+        remainingPoints: 10,
+      },
+      [],
+    ),
+  ).toContain("No changes recorded yet.");
 });
 it("AICANCEL-01/02 a request cancelled by withdrawal reads as cancelled, and a real failure still reads as failed", () => {
   const withdrawn = (status: string) =>

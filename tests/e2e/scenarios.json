@@ -2840,6 +2840,15 @@
       "critical": false
     },
     {
+      "id": "L319",
+      "actor": "Platform administrator changing the test spending ceiling",
+      "preconditions": "Shared synthetic PostgreSQL database, invented administrator, two pages of the simulation control page opened at the same ceiling; an advisory lock serializes this journey's desktop/mobile runs; desktop/mobile Chromium; no provider",
+      "steps": "AICTL-01/04/08: the administrator raises the test ceiling by 1000 points on the first page and confirms, then submits a different value from the second, stale page",
+      "expected": "The readout shows the raised ceiling and the recent changes list the old and new values with committed points; the stale page's change is refused with a reload instruction and the ceiling stays raised; no token on the page; no sideways scrolling",
+      "issues": [188],
+      "critical": false
+    },
+    {
       "id": "L320",
       "actor": "Member at the limit of unfinished AI simulation requests",
       "preconditions": "Shared synthetic PostgreSQL database, one invented member with four clean invented samples and simulation permission on each; desktop/mobile Chromium; no provider",
