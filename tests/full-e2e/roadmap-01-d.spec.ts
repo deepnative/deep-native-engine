@@ -13,9 +13,9 @@ import {
   queuedSample,
   sha256,
 } from "../support/sample-feedback-journey.ts";
+import { browserOrigin as origin } from "../support/browser-origin.ts";
 
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
 test.afterAll(async () => pool.end());
 
 test("[F-ROADMAP-01-D] revising evidence keeps feedback pinned and the portfolio export says the work was simulated", async ({

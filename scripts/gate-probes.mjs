@@ -35,6 +35,11 @@ try {
     "tests/support",
     // DRAIN-01 reads these real fixture hooks as source; unit selection is unchanged.
     "tests/integration/attendance-browser-database.test.ts",
+    // PORT-01..03 (#176) load these browser configs and scan the full-MVP specs.
+    "tests/full-e2e",
+    "playwright.full.config.ts",
+    "playwright.provisional.config.ts",
+    "playwright.cross-browser.config.ts",
     "vitest.config.ts",
     "vitest.integration.config.ts",
     "package.json",

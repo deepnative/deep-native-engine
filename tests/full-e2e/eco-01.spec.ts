@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { testPool } from "../support/database.ts";
 import { requiredCheck } from "../support/required-check.ts";
+import { browserOrigin as origin } from "../support/browser-origin.ts";
 
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
 test.afterAll(async () => pool.end());
 
 async function startGeneralLearner(page: Page) {
