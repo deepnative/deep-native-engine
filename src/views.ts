@@ -82,7 +82,7 @@ import {
 } from "./practice-session-purpose.ts";
 import { EVIDENCE_NAME_HELP, type OwnedEvidence } from "./evidence.ts";
 import type { LocalAiChoice } from "./local-ai-consent.ts";
-import type { LocalAiSpending } from "./local-ai-control.ts";
+import type { CeilingChange, LocalAiSpending } from "./local-ai-control.ts";
 import { localSlotTime, type AvailableSlot } from "./availability.ts";
 import type { MemberHoldSnapshot, SampleHoldReceipt } from "./slot-holds.ts";
 import type { EventPreview, EventPreviewDetail } from "./events.ts";
@@ -1143,15 +1143,27 @@ export function evidencePage(
     }<h2>${hostingText("Export these preview samples", "Export these samples")}</h2><p><a href="/evidence/export">Download my evidence JSON</a>. This includes current sample metadata and clean source bytes encoded as base64. Pending or blocked sample bytes, derivatives, assignments, milestones, career plans, billing and hosted copies are not included. Download every live page to collect the available samples. Each page contains at most 20 samples and 4 MiB of raw clean source data. These pages are not a frozen snapshot; start again if samples change.</p><h2>New private text sample</h2><form method="post" action="/evidence">${hidden(csrf)}<label for="evidence-name">Sample title</label><input id="evidence-name" name="name" maxlength="200" aria-describedby="evidence-name-help" required value="${escape(attempted.name)}"><p id="evidence-name-help">${EVIDENCE_NAME_HELP}</p><label for="evidence-sample">Invented text sample</label><textarea id="evidence-sample" name="sample" maxlength="4000" required>${escape(attempted.sample)}</textarea><label class="check"><input type="checkbox" name="rights_confirmed" value="yes" required><span>I created this invented sample and have the right to store it.</span></label><label class="check"><input type="checkbox" name="private_review_consent" value="yes" required><span>I explicitly allow this sample to be considered for private review if a safety check and authorized reviewer are later configured. I can revoke this consent.</span></label><button type="submit">Save private text sample</button></form></section>`,
   );
 }
-function spendingText(spending: LocalAiSpending | null) {
+function spendingText(
+  spending: LocalAiSpending | null,
+  csrf: string,
+  history: CeilingChange[] | null,
+) {
   if (!spending)
     return "<p>Test spending ceiling unavailable. Metered test requests cannot run.</p>";
-  return `<h2>Test spending ceiling</h2><p>Simulated points at test rates ${escape(spending.rateVersion)}, not money: ceiling ${spending.ceilingPoints}, committed ${spending.committedPoints}, remaining ${spending.remainingPoints}.</p><p>Committed includes settled actual cost and the estimate of every attempt whose outcome is unknown. When a request's estimate does not fit, no provider is called.</p>`;
+  const full = spending.committedPoints >= spending.ceilingPoints;
+  return `<h2>Test spending ceiling</h2><p>Simulated points at test rates ${escape(spending.rateVersion)}, not money: ceiling ${spending.ceilingPoints}, committed ${spending.committedPoints}, remaining ${spending.remainingPoints}.</p><p>Committed includes settled actual cost and the estimate of every attempt whose outcome is unknown. When a request's estimate does not fit, no provider is called.</p>${full ? `<p role="status">The test ceiling is full, so new metered test requests are refused.</p>` : ""}<h3>Change the test ceiling</h3><p>This changes only the invented test ceiling. Lowering it stops new requests that do not fit; it never refunds, cancels or retries anything already committed. Every change is recorded.</p><form method="post" action="/operator/local-ai/ceiling">${hidden(csrf)}<input type="hidden" name="expected" value="${spending.ceilingPoints}"><input type="hidden" name="key" value="${randomUUID()}"><label for="ceiling-points">New test ceiling in simulated points</label><input id="ceiling-points" name="ceiling" inputmode="numeric" pattern="[0-9]{1,13}" maxlength="13" required aria-describedby="ceiling-points-help"><p id="ceiling-points-help">A whole number from 0 to 1000000000000. 0 stops all new metered test requests.</p><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Confirm this change to the test ceiling only</span></label><button type="submit">Change test ceiling</button></form>${ceilingHistoryText(history)}`;
+}
+function ceilingHistoryText(history: CeilingChange[] | null) {
+  if (!history) return "<p>Change history unavailable.</p>";
+  if (!history.length)
+    return "<h3>Recent changes</h3><p>No changes recorded yet.</p>";
+  return `<h3>Recent changes</h3><ul>${history.map((h) => `<li>${h.changedAt.toISOString().slice(0, 16).replace("T", " ")} UTC: ${h.previousPoints} to ${h.ceilingPoints} points (test rates ${escape(h.rateVersion)}), with ${h.committedPoints} committed at the time.</li>`).join("")}</ul><p>Showing up to the 10 most recent changes by platform administrators.</p>`;
 }
 export function localAiControlPage(
   paused: boolean,
   csrf: string,
   spending: LocalAiSpending | null = null,
+  history: CeilingChange[] | null = null,
 ) {
   const heading = hostingText(
     "Local AI simulation control",
@@ -1159,7 +1171,7 @@ export function localAiControlPage(
   );
   return page(
     heading,
-    `<section class="reading"><p class="eyebrow">PLATFORM ADMIN · ${hostingText("LOCAL SIMULATION ONLY", "SIMULATION ONLY")}</p><h1>${heading}</h1><p role="status">${hostingText("Local simulation", "The simulation")} is ${paused ? "paused" : "available"}.</p><p>This switch affects only ${hostingText("deterministic local demo/test requests", "simulated demo and test requests")}. It grants no permission, credits, provider access or paid service. ${hostingText("A local attempt", "An attempt")} already running may complete before a pause takes effect.</p><form method="post" action="/operator/local-ai">${hidden(csrf)}<input type="hidden" name="state" value="${paused ? "enabled" : "paused"}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Confirm ${paused ? "resume" : "pause"} for ${hostingText("local simulation", "the simulation")} only</span></label><button type="submit">${paused ? "Resume" : "Pause"} ${hostingText("local simulation", "the simulation")}</button></form>${spendingText(spending)}</section>`,
+    `<section class="reading"><p class="eyebrow">PLATFORM ADMIN · ${hostingText("LOCAL SIMULATION ONLY", "SIMULATION ONLY")}</p><h1>${heading}</h1><p role="status">${hostingText("Local simulation", "The simulation")} is ${paused ? "paused" : "available"}.</p><p>This switch affects only ${hostingText("deterministic local demo/test requests", "simulated demo and test requests")}. It grants no permission, credits, provider access or paid service. ${hostingText("A local attempt", "An attempt")} already running may complete before a pause takes effect.</p><form method="post" action="/operator/local-ai">${hidden(csrf)}<input type="hidden" name="state" value="${paused ? "enabled" : "paused"}"><label class="check"><input type="checkbox" name="confirm" value="yes" required><span>Confirm ${paused ? "resume" : "pause"} for ${hostingText("local simulation", "the simulation")} only</span></label><button type="submit">${paused ? "Resume" : "Pause"} ${hostingText("local simulation", "the simulation")}</button></form>${spendingText(spending, csrf, history)}</section>`,
   );
 }
 function estimateText(estimate: LocalAiChoice["estimate"]) {
