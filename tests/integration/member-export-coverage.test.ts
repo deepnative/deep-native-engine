@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { Pool, PoolClient } from "pg";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
@@ -212,7 +212,7 @@ it("EXPCOV-03 a member's held and withdrawn sample sessions are in Download my r
   await holds.withdraw(owner.token, withdrawn.requestId);
   const theirs = await heldBy(other, (await slot()).id);
   const { version, all } = await records(owner.token);
-  expect(version).toBe("local-member-records-v41");
+  expect(version).toBe("local-member-records-v42");
   const rows = all.sampleHolds!;
   expect(rows.map((row) => row.id).sort()).toEqual(
     [kept.requestId, withdrawn.requestId].sort(),
@@ -281,4 +281,60 @@ it("EXPCOV-04 a simulated assessment result on the member's work is in Download 
   expect(text).not.toContain(reviewer);
   expect(text).not.toContain(theirs);
   expect(text).not.toContain("someone else");
+});
+
+const sha = (value: string) => createHash("sha256").update(value).digest("hex");
+
+it("EXPCOV-05 the member's own coach assignments are in Download my records without the coach's or assigner's identity", async () => {
+  const [owner, other] = [await member(), await member()];
+  const [coach, assigner] = [
+    sha(`invented.coach.${randomUUID()}@example.test`),
+    randomUUID(),
+  ];
+  await pool.query(
+    "INSERT INTO account_roles(email_hash,role) VALUES($1,'coach') ON CONFLICT DO NOTHING",
+    [coach],
+  );
+  for (const learner of [owner.id, other.id])
+    await pool.query(
+      "INSERT INTO coach_assignments(learner_id,coach_email_hash,assigned_by) VALUES($1,$2,$3)",
+      [learner, coach, assigner],
+    );
+  const { version, all } = await records(owner.token);
+  expect(version).toBe("local-member-records-v42");
+  expect(all.coachAssignments).toEqual([
+    { role: "coach", assignedAt: expect.any(Date) },
+  ]);
+  const text = JSON.stringify(all);
+  for (const hidden of [coach, assigner, other.id])
+    expect(text).not.toContain(hidden);
+});
+
+it("EXPCOV-06 hand-recorded test payment observations about the member are in Download my records, labelled unverified, without staff", async () => {
+  const [owner, other] = [await member(), await member()];
+  const actor = randomUUID();
+  const rows = [
+    [randomUUID(), owner.id, "SYN-EXPCOV-OWNER", 1234],
+    [randomUUID(), other.id, "SYN-EXPCOV-OTHER", 4321],
+  ] as const;
+  for (const [id, learner, reference, cents] of rows)
+    await pool.query(
+      `INSERT INTO synthetic_manual_observations(id,member_id,actor_id,idempotency_key,evidence_reference,amount_cents,request_fingerprint)
+       VALUES($1,$2,$3,$4,$5,$6,$7)`,
+      [id, learner, actor, randomUUID(), reference, cents, sha(reference)],
+    );
+  const { all } = await records(owner.token);
+  expect(all.manualPaymentObservations).toEqual([
+    {
+      id: rows[0][0],
+      reference: "SYN-EXPCOV-OWNER",
+      amountCents: 1234,
+      status: "unverified_manual",
+      label: "TEST RECORD · NOT A PAYMENT",
+      recordedAt: expect.any(Date),
+    },
+  ]);
+  const text = JSON.stringify(all);
+  for (const hidden of [actor, "SYN-EXPCOV-OTHER", rows[1][0]])
+    expect(text).not.toContain(hidden);
 });
