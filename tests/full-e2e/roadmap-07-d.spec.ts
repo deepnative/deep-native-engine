@@ -87,16 +87,22 @@ test("[F-ROADMAP-07-D] after training a goal change updates next actions, only a
         GOALS.work,
       );
       await expect(plan).toContainText(`Focus: ${exercise("work").title}`);
-      // The earlier exercise is kept but no longer counts for the new goal,
-      // and the next step points at practice for that goal.
-      await expect(plan).toContainText(
-        "It does not count as practice for your current goal.",
+      // The next actions start again for the new goal: no completion is
+      // carried over, and the earlier goal's exercise is no longer the focus.
+      await expect(plan).not.toContainText(
+        "Starter exercise completed for your current goal",
       );
+      await expect(plan).toContainText("Read Give AI a clear starting point.");
       await expect(plan).not.toContainText(exercise("everyday").title);
       await member.getByRole("link", { name: "Open lesson" }).click();
       await expect(
         member.getByRole("heading", { name: exercise("work").title }),
       ).toBeVisible();
+      // The earlier completion is kept in the member's own activity.
+      await member.goto(f.origin + "/progress");
+      await expect(member.locator("main")).toContainText(
+        `Self-reported completeRecorded goal: ${GOALS.everyday}.`,
+      );
     });
 
     await requiredCheck(2, async () => {
@@ -150,14 +156,14 @@ test("[F-ROADMAP-07-D] after training a goal change updates next actions, only a
           )
         ).rows,
       ).toEqual([{ cents: 8500, version: 1 }]);
-      // Training created no contract or outcome record, and the page says
-      // outcomes are the member's own unverified reports.
+      // Training created no contract or outcome record: career planning is
+      // still off, and the member is told contracts aren't needed to learn.
       await member.goto(f.origin + "/career");
-      await expect(member.locator("body")).toContainText(
-        "No optional planning records yet.",
+      await expect(member.locator("main")).toContainText(
+        "Career, opportunity and contract records are off.",
       );
-      await expect(member.locator("body")).toContainText(
-        "Outcomes are your own reports, not verified employment or income.",
+      await expect(member.locator("main")).toContainText(
+        "Ordinary learning and projects do not need a client, contract or job title.",
       );
       expect(
         (
