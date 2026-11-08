@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 import { readFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
+import { closeLoopback } from "../support/loopback-server.ts";
 
 let server: Server;
 let origin: string;
@@ -27,9 +28,7 @@ test.beforeAll(async () => {
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}/deep-native-engine/`;
 });
 test.afterAll(async () => {
-  await new Promise<void>((resolve, reject) =>
-    server.close((error) => (error ? reject(error) : resolve())),
-  );
+  await closeLoopback(server);
 });
 
 test("[L210] PAGES-DEMO-01 visitors in all three directions save, complete and reload the browser sample", async ({
