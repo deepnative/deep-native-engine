@@ -410,3 +410,171 @@ it("AEV-02 IT, non-IT professional and general-learning members each copy only t
       kind: "denied",
     });
 });
+
+it("AEV-03 after withdrawal a member recovers with a fresh deliberate copy that needs its own grant, and published feedback stays separate from formal review", async () => {
+  // Given a member's copy was reviewed, feedback was published and consent withdrawn
+  const s = await staff(),
+    owner = await member("professional", "work", ["education"]);
+  const v: Version = {
+    id: "WDR-125",
+    version: 1,
+    title: "Invented tutoring schedule",
+    rubric: "Name one fairness check.",
+    rubricVersion: 2,
+    goals: ["work"],
+    backgrounds: ["professional"],
+    domains: ["education"],
+  };
+  await publish(s, v);
+  const response = "An invented schedule rotates the early sessions fairly.",
+    input = await submitted(owner.token, v, response),
+    withdrawn = await copy(owner.token, input),
+    withdrawnId = withdrawn.evidenceId!;
+  await grantReview(s, owner, withdrawnId);
+  const saved = await feedback.save(s.reviewer, withdrawnId, {
+    revision: 0,
+    operationId: randomUUID(),
+    criteria: [
+      {
+        label: "Fairness",
+        comment: "Say who decides the rotation.",
+        start: 0,
+        end: 11,
+        quote: "An invented",
+      },
+    ],
+    preparationMinutes: 3,
+    reviewMinutes: 7,
+  });
+  if (saved.kind !== "saved") throw Error(JSON.stringify(saved));
+  expect(
+    (
+      await feedback.publish(
+        s.reviewer,
+        withdrawnId,
+        saved.revision,
+        randomUUID(),
+      )
+    ).kind,
+  ).toBe("saved");
+  expect(await evidence.revokePrivateReview(owner.token, withdrawnId)).toBe(
+    true,
+  );
+
+  // Then the withdrawn copy can be neither read by the reviewer nor requested again
+  expect(await feedback.reviewer(s.reviewer, withdrawnId)).toEqual({
+    kind: "denied",
+  });
+  expect(await evidence.submitForReview(owner.token, withdrawnId)).toBe(false);
+  expect(await evidence.revokePrivateReview(owner.token, withdrawnId)).toBe(
+    false,
+  );
+
+  // When the member deliberately makes a fresh copy of the same submission
+  const freshInput = { ...input, operationId: randomUUID() },
+    fresh = await copy(owner.token, freshInput),
+    freshId = fresh.evidenceId!;
+  // Then it is a new available object with the same pinned provenance
+  expect(freshId).not.toBe(withdrawnId);
+  expect(fresh).toMatchObject({
+    state: "available",
+    assignmentOrigin: {
+      attemptId: input.attemptId,
+      contentVersion: 1,
+      rubricVersion: 2,
+      sourceSha256: sha(response),
+    },
+  });
+  expect(await copies.inspect(owner.token, input.operationId)).toMatchObject({
+    kind: "ready",
+    receipt: { state: "withdrawn", evidenceId: withdrawnId },
+  });
+  // And the earlier reviewer grant does not carry over, even after a new request
+  expect(await feedback.reviewer(s.reviewer, freshId)).toEqual({
+    kind: "denied",
+  });
+  expect(await evidence.submitForReview(owner.token, freshId)).toBe(true);
+  expect(await feedback.reviewer(s.reviewer, freshId)).toEqual({
+    kind: "denied",
+  });
+  const request = (
+    await pool.query(
+      "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+      [freshId],
+    )
+  ).rows[0].id;
+  const assignment = (
+    await pool.query(
+      "SELECT assignment_id FROM reviewer_evidence_grants LIMIT 1",
+    )
+  ).rows[0].assignment_id;
+  await auth.grantEvidenceReview(
+    s.admin,
+    s.reviewerId,
+    assignment,
+    request,
+    SAMPLE_FEEDBACK_PURPOSE,
+    end(),
+  );
+  // When a new exact grant is made for the fresh copy only
+  expect(await feedback.reviewer(s.reviewer, freshId)).toMatchObject({
+    kind: "ready",
+    source: response,
+  });
+  expect(await feedback.reviewer(s.reviewer, withdrawnId)).toEqual({
+    kind: "denied",
+  });
+
+  // And the member still sees the feedback published before withdrawal
+  const shown = await feedback.owner(owner.token, withdrawnId);
+  expect(shown).toMatchObject({ kind: "ready" });
+  if (shown.kind === "ready")
+    expect(shown.records[0]?.publishedAt).toBeInstanceOf(Date);
+  // And the export keeps it reviewer-attributed and not formal, with
+  // self-reported minutes apart from the review itself
+  const exported = await memberExportStore(pool).exportOwned(owner.token);
+  if (exported.kind !== "ready") throw Error("Member export unavailable");
+  expect(exported.payload.records.sampleFeedback).toEqual([
+    expect.objectContaining({
+      evidenceId: withdrawnId,
+      authorId: s.reviewerId,
+      consentActive: false,
+      label: "reviewer-attributed-private-sample-not-formal",
+      selfReportedPreparationMinutes: 3,
+      selfReportedReviewMinutes: 7,
+    }),
+  ]);
+  expect(
+    (exported.payload.records.assignmentCopyReceipts ?? [])
+      .map((row) => row.state)
+      .sort(),
+  ).toEqual(["available", "withdrawn"]);
+
+  // When the member deletes only the fresh copy
+  expect(await evidence.remove(owner.token, freshId)).toBe(true);
+  // Then the withdrawn copy, its feedback and the original submission remain
+  expect(await feedback.reviewer(s.reviewer, freshId)).toEqual({
+    kind: "denied",
+  });
+  expect(
+    await copies.inspect(owner.token, freshInput.operationId),
+  ).toMatchObject({
+    kind: "ready",
+    receipt: { state: "removed", evidenceId: null },
+  });
+  expect(await copies.inspect(owner.token, input.operationId)).toMatchObject({
+    kind: "ready",
+    receipt: { state: "withdrawn", evidenceId: withdrawnId },
+  });
+  expect((await feedback.owner(owner.token, withdrawnId)).kind).toBe("ready");
+  expect(await copies.open(owner.token, input.attemptId, 1)).toMatchObject({
+    kind: "ready",
+    source: { response },
+  });
+  // And repeating the deleted copy's request does not revive it
+  expect(await copies.create(owner.token, freshInput)).toMatchObject({
+    kind: "replayed",
+    receipt: { state: "removed", evidenceId: null },
+  });
+  expect(await count("evidence_objects")).toBe(1);
+});
