@@ -317,19 +317,15 @@ export function workflowReviewStaffStore(
             kind: string | null;
             receipt: string | null;
           }>(
-            `SELECT actor_id AS actor,kind,receipt_id AS receipt FROM workflow_review_operations WHERE operation_id=$1`,
-            [operationId],
+            `SELECT actor_id AS actor,kind,receipt_id AS receipt FROM workflow_review_operations WHERE actor_id=$1 AND operation_id=$2`,
+            [c.actorId, operationId],
           )
         ).rows[0];
         if (!op) {
           await reviewActors(c, [], "platform_admin");
           return { kind: "ready" as const, grant: null };
         }
-        if (
-          op.actor !== c.actorId ||
-          !op.receipt ||
-          !["assign", "revoke"].includes(op.kind ?? "")
-        ) {
+        if (!op.receipt || !["assign", "revoke"].includes(op.kind ?? "")) {
           await reviewActors(c, [], "platform_admin");
           return reviewDeny();
         }
@@ -340,8 +336,8 @@ export function workflowReviewStaffStore(
             kind: string | null;
             receipt: string | null;
           }>(
-            `SELECT actor_id AS actor,kind,receipt_id AS receipt FROM workflow_review_operations WHERE operation_id=$1 FOR SHARE`,
-            [operationId],
+            `SELECT actor_id AS actor,kind,receipt_id AS receipt FROM workflow_review_operations WHERE actor_id=$1 AND operation_id=$2 FOR SHARE`,
+            [c.actorId, operationId],
           )
         ).rows[0];
         if (!isDeepStrictEqual(op, current)) return reviewDeny();
@@ -474,14 +470,13 @@ export function workflowReviewStaffStore(
             instruction: unknown;
             receipt: string | null;
           }>(
-            `SELECT actor_id AS actor,kind,instruction,receipt_id AS receipt FROM workflow_review_operations WHERE operation_id=$1`,
-            [operationId],
+            `SELECT actor_id AS actor,kind,instruction,receipt_id AS receipt FROM workflow_review_operations WHERE actor_id=$1 AND operation_id=$2`,
+            [c.actorId, operationId],
           )
         ).rows[0];
         if (
           previous &&
-          (previous.actor !== c.actorId ||
-            previous.kind !== "assign" ||
+          (previous.kind !== "assign" ||
             !isDeepStrictEqual(previous.instruction, value))
         )
           return { kind: "conflict" as const };
@@ -628,14 +623,13 @@ export function workflowReviewStaffStore(
             instruction: unknown;
             receipt: string | null;
           }>(
-            `SELECT actor_id AS actor,kind,instruction,receipt_id AS receipt FROM workflow_review_operations WHERE operation_id=$1`,
-            [operationId],
+            `SELECT actor_id AS actor,kind,instruction,receipt_id AS receipt FROM workflow_review_operations WHERE actor_id=$1 AND operation_id=$2`,
+            [c.actorId, operationId],
           )
         ).rows[0];
         if (
           previous &&
-          (previous.actor !== c.actorId ||
-            previous.kind !== "revoke" ||
+          (previous.kind !== "revoke" ||
             previous.receipt !== grantId ||
             !isDeepStrictEqual(previous.instruction, instruction))
         )

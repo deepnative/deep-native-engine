@@ -174,7 +174,7 @@ it("WFREV-07 export paginates owned request/assignment metadata without staff id
     ),
   ).toBe(true);
 });
-it("WFREV-07 actual member erasure removes source/request/grant links and reserves anonymous original operation keys", async () => {
+it("WFREV-07 actual member erasure removes source/request/grant links and leaves anonymous original operation rows", async () => {
   const own = await actors(),
     row = await assigned(own);
   await db.remove(own.memberId);
@@ -208,14 +208,19 @@ it("WFREV-07 actual member erasure removes source/request/grant links and reserv
   const replacement = await actors();
   const checked = await reviews.preview(replacement.member, "WF-001");
   if (checked.kind !== "ready") throw Error("Replacement own preview required");
+  // WFKEY (#42): an erased row keeps no actor, so it reserves its key for no
+  // one; a later member's request under that key is their own new request.
+  const reused = await reviews.request(replacement.member, {
+    checked: checked.preview.checked,
+    operationId: row.operationId,
+    confirm: "yes",
+  });
+  expect(reused).toMatchObject({ kind: "applied" });
+  if (reused.kind !== "applied") throw Error("Replacement request required");
   expect(
-    await reviews.request(replacement.member, {
-      checked: checked.preview.checked,
-      operationId: row.operationId,
-      confirm: "yes",
-    }),
-  ).toMatchObject({ kind: "conflict" });
-  expect(await reviews.inspect(replacement.member, row.operationId)).toEqual({
-    kind: "denied",
+    await reviews.inspect(replacement.member, row.operationId),
+  ).toMatchObject({
+    kind: "ready",
+    receipt: { requestId: reused.receipt.requestId },
   });
 });
