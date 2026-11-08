@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { testPool } from "../support/database.ts";
-import { migrate, store } from "../../src/store.ts";
+import { hash, migrate, store } from "../../src/store.ts";
 import { evidenceStore, type ObjectStorage } from "../../src/evidence.ts";
 import { deterministicRegistry } from "../../src/adapters.ts";
 import { localAiConsentStore } from "../../src/local-ai-consent.ts";
@@ -291,8 +291,8 @@ it("AICTL-06: only a current platform administrator with a valid value changes i
       kind: "invalid",
     });
   await pool.query(
-    "UPDATE principals SET revoked_at=clock_timestamp() WHERE token_hash=encode(sha256($1::bytea),'hex')",
-    [admin.token],
+    "UPDATE principals SET revoked_at=clock_timestamp() WHERE token_hash=$1",
+    [hash(admin.token)],
   );
   expect(await change(admin.token, 1000, 2000)).toEqual({ kind: "denied" });
   expect(await ceiling()).toEqual({ ceiling: 1000, committed: 0 });
