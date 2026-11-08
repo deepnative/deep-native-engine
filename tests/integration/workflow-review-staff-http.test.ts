@@ -217,15 +217,24 @@ it("WFREV-02/03/04 browser assignment reads only the exact requested note until 
   expect.soft(inspected.text).not.toContain("Invented workflow note");
   expect.soft(canonical.text).toContain("withdrawn");
   expect.soft(canonical.text).not.toContain("Invented workflow note");
+  // WFKEY (#42): another administrator's key reads exactly like an unused one.
   const otherAdmin = await signIn("platform_admin");
-  await post("/operator/workflow-reviews/inspect", otherAdmin.cookie, {
-    csrf: field(
-      (await get("/operator/workflow-reviews", otherAdmin.cookie).expect(200))
-        .text,
-      "csrf",
-    ),
-    operationId: instruction.operationId,
-  }).expect(403);
+  const foreign = await post(
+    "/operator/workflow-reviews/inspect",
+    otherAdmin.cookie,
+    {
+      csrf: field(
+        (await get("/operator/workflow-reviews", otherAdmin.cookie).expect(200))
+          .text,
+        "csrf",
+      ),
+      operationId: instruction.operationId,
+    },
+  ).expect(200);
+  expect
+    .soft(foreign.text)
+    .toContain("does not prove the write was uncommitted");
+  expect.soft(foreign.text).not.toContain(grantId);
   const missing = await post(
     "/operator/workflow-reviews/inspect",
     admin.cookie,

@@ -264,6 +264,8 @@ export async function migrate(pool: Pool) {
       "114-withdrawn-local-ai-requests.sql",
       "115-attendance-operation-keys.sql",
       "116-ai-test-spending-ceiling.sql",
+      "117-ai-test-ceiling-changes.sql",
+      "118-workflow-review-operation-keys.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
