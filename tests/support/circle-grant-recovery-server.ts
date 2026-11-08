@@ -6,6 +6,7 @@ import { store } from "../../src/store.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
 import { authorizationStore } from "../../src/authorization.ts";
 import { circleGrantAdminStore } from "../../src/circle-grant-admin.ts";
+import { closeLoopback } from "./loopback-server.ts";
 
 /** Owned browser fixture: lose only the acknowledgement after PostgreSQL really
  * commits the first grant. No production fault flag or automatic replay. */
@@ -73,10 +74,8 @@ export async function startCircleGrantRecoveryServer(pool: Pool) {
     return {
       origin: options.origin,
       observation,
-      close: () =>
-        new Promise<void>((resolve, reject) =>
-          owned.close((error) => (error ? reject(error) : resolve())),
-        ),
+      // A browser preconnect would otherwise hold close() open (L183).
+      close: () => closeLoopback(owned),
     };
   } catch (error) {
     server?.close();
