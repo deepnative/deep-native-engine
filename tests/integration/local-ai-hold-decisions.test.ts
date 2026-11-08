@@ -445,7 +445,7 @@ const operatorDetails = (f: Awaited<ReturnType<typeof held>>, key: string) => [
 async function exportedJobs(token: string) {
   const result = await exporter.exportOwned(token);
   if (result.kind !== "ready") throw Error("Expected an export");
-  expect(result.payload.version).toBe("local-member-records-v41");
+  expect(result.payload.version).toBe("local-member-records-v42");
   return result.payload.records.adapterJobs!;
 }
 

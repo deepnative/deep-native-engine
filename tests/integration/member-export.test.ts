@@ -95,7 +95,7 @@ it("exports a withdrawn completed exercise as a text-free retained completion ma
     "withdrawn",
   );
   const after = await ready(owner.token);
-  expect(after.version).toBe("local-member-records-v41");
+  expect(after.version).toBe("local-member-records-v42");
   expect(after.records).toMatchObject({
     exercises: [
       {
@@ -999,7 +999,7 @@ it("exports current structured records only for their active owner, with redacti
   );
   const own = await ready(a.token);
   expect(own).toMatchObject({
-    version: "local-member-records-v41",
+    version: "local-member-records-v42",
     profile: { id: a.id, background: "explorer" },
     records: {
       milestones: [{ milestoneTitle: "Invented milestone" }],

@@ -285,7 +285,7 @@ it("EXPCOV-04 a simulated assessment result on the member's work is in Download 
 
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 
-it("EXPCOV-05 the member's own coach assignments are in Download my records without the coach's or assigner's identity", async () => {
+it("EXPCOV-05 how many coaches the member has, and since when, is in Download my records without the coach's or assigner's identity", async () => {
   const [owner, other] = [await member(), await member()];
   const [coach, assigner] = [
     sha(`invented.coach.${randomUUID()}@example.test`),
@@ -300,10 +300,22 @@ it("EXPCOV-05 the member's own coach assignments are in Download my records with
       "INSERT INTO coach_assignments(learner_id,coach_email_hash,assigned_by) VALUES($1,$2,$3)",
       [learner, coach, assigner],
     );
+  // New learners may also get the default coaches an administrator chose.
+  const coaches = (
+    await pool.query<{ n: number }>(
+      "SELECT count(*)::integer AS n FROM coach_assignments WHERE learner_id=$1",
+      [owner.id],
+    )
+  ).rows[0]!.n;
+  expect(coaches).toBeGreaterThanOrEqual(1);
   const { version, all } = await records(owner.token);
   expect(version).toBe("local-member-records-v42");
   expect(all.coachAssignments).toEqual([
-    { role: "coach", assignedAt: expect.any(Date) },
+    {
+      coaches,
+      firstAssignedAt: expect.any(Date),
+      latestAssignedAt: expect.any(Date),
+    },
   ]);
   const text = JSON.stringify(all);
   for (const hidden of [coach, assigner, other.id])

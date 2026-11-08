@@ -613,6 +613,24 @@ const sections = {
     "content_assessments WHERE member_id=$1",
     "id",
   ),
+  // v42 appends #40 EXPCOV: how many coaches are assigned to the member and
+  // when, as one row so neither a row nor the paging key carries a coach's
+  // email fingerprint or who assigned them,
+  coachAssignments: section(
+    `c.coaches,c."firstAssignedAt",c."latestAssignedAt"`,
+    `(SELECT learner_id,count(*)::integer AS coaches,
+      min(assigned_at) AS "firstAssignedAt",max(assigned_at) AS "latestAssignedAt"
+      FROM coach_assignments GROUP BY learner_id) c WHERE c.learner_id=$1`,
+    "c.learner_id",
+  ),
+  // and test payments staff recorded by hand about the member, never the staff
+  // member, operation key or request fingerprint.
+  manualPaymentObservations: section(
+    `id,evidence_reference AS reference,amount_cents AS "amountCents",status,
+    'TEST RECORD · NOT A PAYMENT' AS label,created_at AS "recordedAt"`,
+    "synthetic_manual_observations WHERE member_id=$1",
+    "id",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -626,7 +644,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v41";
+  version: "local-member-records-v42";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -760,7 +778,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v41",
+          version: "local-member-records-v42",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

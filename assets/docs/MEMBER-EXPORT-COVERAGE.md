@@ -7,6 +7,8 @@ Download my records (My account → Download my records, `src/member-export.ts`)
 - **EXPCOV-01/02:** every such table must be read by the download's queries or be listed below. A new table that is neither fails the test, naming it. A listed table that the download now reads, or that no longer goes with the account, fails it too.
 - **EXPCOV-03:** held and withdrawn sample sessions are in the download (`sampleHolds`, v41), without the staff member, availability registry or hold operation.
 - **EXPCOV-04:** simulated assessment results recorded on the member's work are in the download (`contentAssessments`, v41), without the reviewer. No page records these yet.
+- **EXPCOV-05:** how many coaches are assigned to the member, and since when, is in the download (`coachAssignments`, v42) as one row, without any coach's email fingerprint or who assigned them.
+- **EXPCOV-06:** test payments staff recorded by hand about the member are in the download (`manualPaymentObservations`, v42), labelled unverified, without the staff member.
 
 The check is about which tables the download reads, not which columns. Each section's own tests decide which fields a member sees.
 
@@ -25,12 +27,11 @@ The check is about which tables the download reads, not which columns. Each sect
 | `administrator_sessions`                   | Sign-in: the hashed session token used while an administrator acts on the account. A secret, not member content                                   |
 | `ai_spending_commitments`                  | Internal cost estimate per AI request attempt. The request is in `adapterJobs` and its use in `aiUsage`                                           |
 | `assignment_grants`                        | Staff access grant to the workspace. The member sees each use in `staffAccess`, without the staff member or purpose                               |
-| `coach_assignments`                        | Open: which coach is assigned, keyed by the coach's email fingerprint. The download doesn't say a coach is assigned yet                           |
 | `cohort_memberships`                       | Open on #121: cohort membership belongs to the durable cohorts work                                                                               |
 | `evidence_derivatives`                     | Open: stored files derived from uploaded evidence, such as extracted text. The uploaded file downloads from its own page                          |
 | `learning_workspace_operations`            | Operation keys that make notebook saves safe to retry. The notebooks and writing are in `learningNotebooks` and `learningWriting`                 |
-| `local_ai_hold_inspection_events`          | Open: when staff inspected a held AI request (#187). Not yet in `staffAccess`                                                                     |
-| `local_ai_hold_inspection_grants`          | Staff grant to inspect a held AI request. Its use is the open row above                                                                           |
+| `local_ai_hold_inspection_events`          | When an administrator gave or withdrew staff access to inspect a held AI request (#187). Staff-side grant history; reads aren't recorded          |
+| `local_ai_hold_inspection_grants`          | Staff grant to inspect a held AI request. Staff-side, like the row above                                                                          |
 | `local_ai_test_unit_jobs`                  | Link between an AI request and its test-unit reservation. Both are in the download (`adapterJobs`, `testUnitReservations`)                        |
 | `local_program_enrollments`                | Has its own download on My courses (`program-enrollment.json`), with the lesson activity                                                          |
 | `member_email_identities`                  | Sign-in: the fingerprint of a verified address. The address itself isn't stored                                                                   |
@@ -55,6 +56,5 @@ The check is about which tables the download reads, not which columns. Each sect
 | `support_time_events`                      | Staff time events. The member's allocations and entries are in `supportTimeAllocations` and `supportTimeEntries`                                  |
 | `support_time_grant_revocations`           | Administrator's record of revoking a staff support time grant                                                                                     |
 | `support_time_grants`                      | Staff access grant for support time                                                                                                               |
-| `synthetic_manual_observations`            | Open: payments staff recorded by hand as unverified, with an invented reference                                                                   |
 | `upload_admission_leases`                  | Short-lived upload slots. Counters, not member content                                                                                            |
 | `upload_admission_windows`                 | Hourly upload counts. Counters, not member content                                                                                                |
