@@ -302,6 +302,11 @@ import {
 } from "./staff-capacity.ts";
 import { registerStaffCapacityRoutes } from "./staff-capacity-routes.ts";
 import {
+  disabledAgreementOutcomesStore,
+  type AgreementOutcomesStore,
+} from "./agreement-outcomes.ts";
+import { registerAgreementOutcomesRoutes } from "./agreement-outcomes-routes.ts";
+import {
   disabledLocalAiHoldInspectionStore,
   type LocalAiHoldInspectionStore,
 } from "./local-ai-hold-inspection.ts";
@@ -477,6 +482,7 @@ export function app(
     ledgerReconciliation?: LedgerReconciliationStore;
     invoiceReconciliation?: InvoiceReconciliationStore;
     staffCapacity?: StaffCapacityStore;
+    agreementOutcomes?: AgreementOutcomesStore;
     localHoldInspection?: LocalAiHoldInspectionStore;
     localHoldDecisions?: LocalAiHoldDecisionStore;
     memberTestUnits?: MemberTestUnitsStore;
@@ -809,6 +815,7 @@ export function app(
     workflowReviews: Boolean(options.workflowReviewStaff),
     invoices: Boolean(options.simpleInvoices),
     capacity: Boolean(options.staffCapacity),
+    agreements: Boolean(options.agreementOutcomes),
     localAi: Boolean(options.localAiControl),
     receipts: Boolean(options.manualObservations),
   });
@@ -1007,6 +1014,11 @@ export function app(
   registerStaffCapacityRoutes(
     app,
     options.staffCapacity ?? disabledStaffCapacityStore(),
+    mode,
+  );
+  registerAgreementOutcomesRoutes(
+    app,
+    options.agreementOutcomes ?? disabledAgreementOutcomesStore(),
     mode,
   );
   registerLocalAiHoldInspectionRoutes(
