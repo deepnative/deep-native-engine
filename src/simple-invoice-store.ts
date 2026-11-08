@@ -74,6 +74,8 @@ export interface InvoicePaymentEvent {
 export interface InvoiceOverview {
   plans: InvoicePlan[];
   invoices: StoredInvoice[];
+  /** UTC date on the database clock; an offer closes once its start passes. */
+  today: string;
 }
 export interface InvoiceSettings {
   sample: boolean;
@@ -81,6 +83,13 @@ export interface InvoiceSettings {
   instructions: string;
 }
 const fail = (kind: InvoiceFailure["kind"]): InvoiceFailure => ({ kind });
+async function utcToday(tx: PracticeTransaction) {
+  return (
+    await tx.query<{ today: string }>(
+      "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD') AS today",
+    )
+  ).rows[0]!.today;
+}
 const planColumns =
   'id,owner_id AS "ownerId",terms,state,revision,next_cycle AS "nextCycle"';
 const invoiceColumns =
@@ -827,7 +836,10 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             [actor],
           )
         ).rows.map(decodeInvoice);
-        return { kind: "ready", value: { plans, invoices } };
+        return {
+          kind: "ready",
+          value: { plans, invoices, today: await utcToday(tx) },
+        };
       });
     },
     async adminOverview(token: string, ownerId?: string) {
@@ -1087,9 +1099,13 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           )
         ).rows[0];
         if (!plan) return fail("not-found");
+        // An offer can be accepted only until its start date. Accepting later
+        // would issue the first invoice for a past period and let the monthly
+        // run bill every missed month (BUILD-04-C); a new proposal is needed.
         if (
           plan.state !== "offered" ||
           plan.revision !== input.expectedRevision ||
+          plan.terms.startsOn < (await utcToday(tx)) ||
           !(await coursesEligible(tx, actor, plan.terms))
         )
           return fail("conflict");

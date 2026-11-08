@@ -188,14 +188,21 @@ test("[L213] email verification restores the exact saved member in another brows
     ).toHaveValue("everyday");
     await expect(fresh.getByText(emailAddress)).toHaveCount(0);
     // ACCT-PLAIN-01: the checkbox follows its heading, with no second divider.
+    // ERASE-06 (#40): what stays after deletion sits between them, without gaps.
     const deleteHeading = (await fresh
       .getByRole("heading", { name: "Delete your account", exact: true })
+      .boundingBox())!;
+    const deletionKept = (await fresh
+      .locator(".account-delete #deletion-kept")
       .boundingBox())!;
     const deleteCheck = (await fresh
       .locator(".account-delete .check")
       .boundingBox())!;
     expect(
-      deleteCheck.y - (deleteHeading.y + deleteHeading.height),
+      deletionKept.y - (deleteHeading.y + deleteHeading.height),
+    ).toBeLessThanOrEqual(24);
+    expect(
+      deleteCheck.y - (deletionKept.y + deletionKept.height),
     ).toBeLessThanOrEqual(24);
     await expect(fresh.locator(".account-delete .delete-form")).toHaveCSS(
       "border-top-style",

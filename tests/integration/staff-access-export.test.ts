@@ -112,12 +112,17 @@ it("STAFFEXPORT-01 the download lists each kind of staff access with what, who a
     via: "assignment",
     evidenceId: evidence,
   });
-  expect(by("feedback", "read")).toMatchObject({ evidenceId: evidence });
+  // #44 walk: every entry names the kind of staff, as the page does.
+  expect(by("feedback", "read")).toMatchObject({
+    via: "reviewer",
+    evidenceId: evidence,
+  });
   expect(by("proposal", "proposal_read")).toMatchObject({
     via: "moderator",
     proposalId: proposal,
   });
   expect(by("workflow", "note_read")).toMatchObject({
+    via: "moderator",
     workflowId: "WF-001",
     workflowVersion: 2,
   });
