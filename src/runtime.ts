@@ -66,6 +66,7 @@ import { circleStore } from "./circles.ts";
 import { metricsStore } from "./metrics.ts";
 import { ledgerReconciliationStore } from "./ledger-reconciliation.ts";
 import { invoiceReconciliationStore } from "./invoice-reconciliation.ts";
+import { staffCapacityStore } from "./staff-capacity.ts";
 import { localAiHoldInspectionStore } from "./local-ai-hold-inspection.ts";
 import { localAiHoldDecisionStore } from "./local-ai-hold-decisions.ts";
 import { memberTestUnitsStore } from "./member-test-units.ts";
@@ -269,6 +270,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       metrics: metricsStore(pool),
       ledgerReconciliation: ledgerReconciliationStore(pool),
       invoiceReconciliation: invoiceReconciliationStore(pool),
+      staffCapacity: staffCapacityStore(pool),
       localHoldInspection: localAiHoldInspectionStore(pool, {
         mode: settings.mode,
         enabled: settings.localHoldInspectionReads,
