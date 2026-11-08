@@ -2829,6 +2829,15 @@
       "expected": "Two verified coaching records leave 360 available minutes; the unverified record's 480 minutes are shown apart as not qualified coverage; formal review reads Not recorded; review time has nothing to compare; no staff identifier, reference or cost appears; no sideways scrolling; the coach is refused (403) with no figures",
       "issues": [123],
       "critical": true
+    },
+    {
+      "id": "L318",
+      "actor": "Member deleting their account",
+      "preconditions": "Dedicated synthetic PostgreSQL database, one invented member created through the ordinary start form, port0 server; desktop/mobile Chromium",
+      "steps": "ERASE-06: the member follows See what stays from the learning path to My account, reads what stays after deletion, ticks the confirmation and deletes the account",
+      "expected": "The account page says what deletion removes and lists the five kinds of records that stay (issued invoices first) and that backup copies go when backups expire; deletion is confirmed and the account row is gone; no sideways scrolling",
+      "issues": [40],
+      "critical": false
     }
   ],
   "fullMvp": [
