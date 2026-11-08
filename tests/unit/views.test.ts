@@ -897,6 +897,55 @@ it("AICANCEL-01/02 a request cancelled by withdrawal reads as cancelled, and a r
     "Local simulation unavailable or failed",
   );
 });
+it("WALK-01 a version with an unfinished request offers no new request until it finishes", () => {
+  const granted = (status: string) =>
+    localAiConsentPage(
+      [
+        {
+          evidenceId: "sample-id",
+          name: "Invented sample.txt",
+          revisionNumber: 1,
+          receiptId: "receipt-id",
+          grantedAt: new Date(),
+          withdrawnAt: null,
+          estimate: {
+            inputTokens: 11,
+            outputTokens: 256,
+            costPoints: 157,
+            modelVersion: "simulated-model-v1",
+            rateVersion: "simulated-rates-v1",
+          },
+          jobs: [{ id: "job-id", status }],
+        },
+      ],
+      "csrf",
+    );
+  for (const status of [
+    "pending",
+    "running",
+    "failed",
+    "needs_reconciliation",
+  ]) {
+    const page = granted(status);
+    expect(page).not.toContain('action="/evidence/local-ai/receipt-id/queue"');
+    expect(page).not.toContain(
+      'action="/evidence/local-ai/receipt-id/queue-metered"',
+    );
+    expect(page).toContain(
+      "This version already has a request that is not finished, so a new one can't be queued for it yet.",
+    );
+    // Withdrawing stays available.
+    expect(page).toContain('action="/evidence/local-ai/receipt-id/withdraw"');
+  }
+  for (const status of ["succeeded", "cancelled", "exhausted"]) {
+    const page = granted(status);
+    expect(page).toContain('action="/evidence/local-ai/receipt-id/queue"');
+    expect(page).toContain(
+      'action="/evidence/local-ai/receipt-id/queue-metered"',
+    );
+    expect(page).not.toContain("already has a request that is not finished");
+  }
+});
 it("keeps optional planning gated and renders escaped, unsent per-version drafts", () => {
   const off = careerPage({ enabled: false, entries: [], drafts: [] }, "csrf");
   expect(off).toContain("records are off");
