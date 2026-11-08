@@ -25,6 +25,7 @@ export async function reviewedContentFixture(
     sampleInvoices?: boolean;
     testProviderKey?: string;
     memberContributions?: boolean;
+    events?: boolean;
   } = {},
 ) {
   const original = process.env.DNE_TEST_DATABASE_URL;
@@ -94,6 +95,14 @@ export async function reviewedContentFixture(
         : {}),
       ...(options.memberContributions
         ? { DNE_MEMBER_CONTRIBUTIONS: "enabled" }
+        : {}),
+      ...(options.events
+        ? {
+            DNE_EVENT_REGISTRATION: "enabled",
+            DNE_LOCAL_EVENT_ADMIN: "enabled",
+            DNE_LOCAL_EVENT_SCHEDULING: "enabled",
+            DNE_EVENT_ATTENDANCE: "enabled",
+          }
         : {}),
     });
     const origin = running.origin;
