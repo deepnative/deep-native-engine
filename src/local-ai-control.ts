@@ -6,6 +6,28 @@ export interface LocalAiControlStore {
   read(token: string): Promise<{ paused: boolean } | null>;
   set(token: string, paused: boolean): Promise<boolean>;
   spending?(token: string): Promise<LocalAiSpending | null>;
+  setCeiling?(
+    token: string,
+    change: CeilingChangeRequest,
+  ): Promise<{ kind: CeilingChangeOutcome }>;
+  ceilingHistory?(token: string): Promise<CeilingChange[] | null>;
+}
+// An administrator's change to the TEST ceiling (#188): the value they saw,
+// the new value, and a key so a resubmitted form changes it once.
+export interface CeilingChangeRequest {
+  expectedPoints: number;
+  ceilingPoints: number;
+  key: string;
+}
+export type CeilingChangeOutcome =
+  "changed" | "replayed" | "stale" | "conflict" | "invalid" | "denied";
+// Content-free history: no member or administrator detail.
+export interface CeilingChange {
+  changedAt: Date;
+  rateVersion: string;
+  previousPoints: number;
+  ceilingPoints: number;
+  committedPoints: number;
 }
 // Content-free platform totals in invented simulated points (#188).
 export interface LocalAiSpending {
@@ -119,6 +141,12 @@ export function localAiControlStore(pool: Pool): Required<LocalAiControlStore> {
           remainingPoints: Math.max(0, ceilingPoints - committedPoints),
         };
       });
+    },
+    async setCeiling() {
+      return { kind: "denied" as const };
+    },
+    async ceilingHistory() {
+      return null;
     },
     set(token, paused) {
       if (typeof paused !== "boolean") return Promise.resolve(false);
