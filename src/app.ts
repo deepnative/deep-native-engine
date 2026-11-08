@@ -176,6 +176,7 @@ import {
   milestonesPage,
   careerPage,
   errorPage,
+  localAiLimitPage,
   circleMembershipRecoveryPage,
   usefulnessRecoveryPage,
   assignmentAttemptsPage,
@@ -2252,6 +2253,10 @@ export function app(
       receiptId,
       receiptId,
     );
+    if (outcome.kind === "limit_reached") {
+      res.status(409).send(localAiLimitPage());
+      return;
+    }
     if (outcome.kind !== "queued") {
       const paused = (await localAiControl.current()) === "paused";
       res
@@ -2295,6 +2300,10 @@ export function app(
       req.params.receiptId as string,
       fields.key,
     );
+    if (outcome.kind === "limit_reached") {
+      res.status(409).send(localAiLimitPage());
+      return;
+    }
     if (outcome.kind === "ceiling_reached") {
       res
         .status(409)

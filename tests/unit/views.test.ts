@@ -804,6 +804,9 @@ it("describes local AI permission and every job state without leaking sample tex
   expect(localAiConsentPage([], "csrf", [], "unavailable")).toContain(
     "Local simulations are unavailable",
   );
+  expect(localAiConsentPage([], "csrf")).toContain(
+    "You can have up to 3 unfinished requests at a time",
+  );
   expect(localAiControlPage(false, "csrf")).toContain("Pause local simulation");
   expect(localAiControlPage(true, "csrf")).toContain("Resume local simulation");
   expect(localAiControlPage(true, "csrf")).toContain(

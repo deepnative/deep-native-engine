@@ -1731,6 +1731,19 @@ it("requires explicit member confirmation and current local AI permission at eve
   }).expect(409);
   expect(fullQueue.text).toContain("Test spending ceiling reached");
   expect(fullQueue.text).toContain("No test request was held");
+  // AILIMIT: both queue routes explain the member-wide limit.
+  localAiConsent.enqueueMetered.mockResolvedValueOnce({
+    kind: "limit_reached",
+  });
+  const limitedMetered = await post(
+    "/evidence/local-ai/receipt-id/queue-metered",
+    { confirm: "yes", key: "private-key" },
+  ).expect(409);
+  expect(limitedMetered.text).toContain("Too many unfinished requests");
+  expect(limitedMetered.text).toContain("no provider was contacted");
+  localAiConsent.enqueue.mockResolvedValueOnce({ kind: "limit_reached" });
+  const limited = await post("/evidence/local-ai/receipt-id/queue").expect(409);
+  expect(limited.text).toContain("You already have 3 AI requests");
   localAiConsent.run.mockResolvedValueOnce({
     kind: "ceiling_reached",
     jobId: "job-id",

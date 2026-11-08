@@ -42,7 +42,21 @@ Migration 116 adds one platform-wide test spending ceiling, in simulated points 
 
 Each attempt has one commitment record, keyed by request and attempt number. A database trigger keeps the platform total in step with these records, refuses a commitment that would pass the ceiling, and allows each commitment to close only once, as settled or restored. Platform administrators see the ceiling, committed and remaining points on the simulation control page. The page names no member, request or source. Unmetered simulations carry no estimate and are not counted. Raising the ceiling needs a reviewed migration; there is no staff control for it.
 
-This does not set a real rate, currency, spending ceiling, per-member limit or grant. Those remain inputs for a real provider under #188. Resolving held requests is #189.
+## Unfinished requests per member
+
+A member can have at most 3 unfinished AI requests at a time, across all their samples (#190). Unfinished means waiting, running, failed and waiting for another try, or held because the outcome is unknown. Unmetered simulations and metered test requests share the limit.
+
+| What happens                                               | Result                                                                                                                 |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| A member with 3 unfinished requests asks again             | Refused before any test unit is held, any estimate is stored, the spending ceiling is checked or a provider is called. |
+| One finishes, or permission is withdrawn before it started | Its place is free and the next request can be queued.                                                                  |
+| One is held with an unknown outcome                        | It keeps its place until it is checked. It is never retried to make room.                                              |
+| Several are queued at once                                 | A per-member lock serializes them, so the limit is never passed.                                                       |
+| An already queued request is sent again                    | Still answered as queued, even at the limit.                                                                           |
+
+The limit is a fixed invented value for the test path, not a plan allowance. Other members' requests never count.
+
+This does not set a real rate, currency, spending ceiling or grant. Those remain inputs for a real provider under #188. Resolving held requests is #189.
 
 ## Transactions and migration
 

@@ -2838,6 +2838,15 @@
       "expected": "The account page says what deletion removes and lists the five kinds of records that stay (issued invoices first) and that backup copies go when backups expire; deletion is confirmed and the account row is gone; no sideways scrolling",
       "issues": [40],
       "critical": false
+    },
+    {
+      "id": "L320",
+      "actor": "Member at the limit of unfinished AI simulation requests",
+      "preconditions": "Shared synthetic PostgreSQL database, one invented member with four clean invented samples and simulation permission on each; desktop/mobile Chromium; no provider",
+      "steps": "AILIMIT-06: the member reads the limit, queues three simulations, tries a fourth, then runs one and queues the fourth again",
+      "expected": "The page states the limit of three; the fourth is refused with a plain reason and nothing new is queued or held; after one runs, the fourth can be queued; no sideways scrolling",
+      "issues": [190],
+      "critical": false
     }
   ],
   "fullMvp": [
