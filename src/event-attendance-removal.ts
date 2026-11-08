@@ -115,8 +115,8 @@ export async function attendanceRemove(
         instructionHash: string | null;
       }>(
         `SELECT actor_id AS "actorId",registration_id AS "registrationId",kind,instruction_hash AS "instructionHash"
-       FROM private_event_attendance_operations WHERE operation_id=$1 FOR UPDATE`,
-        [key],
+       FROM private_event_attendance_operations WHERE operation_id=$1 AND actor_id=$2 FOR UPDATE`,
+        [key, context.actorId],
       )
     ).rows[0];
     const instructionHash = hash(JSON.stringify(checked));

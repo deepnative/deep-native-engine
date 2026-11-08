@@ -570,6 +570,17 @@ const sections = {
       WHERE w.owner_principal_id=$1 AND w.deleting_at IS NULL) h WHERE TRUE`,
     "h.source,h.id",
   ),
+  // v39 appends #94 F-ECO-07-C: the course-billing agreements offered to or
+  // accepted by the member, with their exact terms, state and acceptance.
+  // Never the preparing staff member.
+  invoicePlans: section(
+    `id,terms,state,revision,next_cycle AS "nextCycle",created_at AS "offeredAt",
+    accepted_at AS "acceptedAt",recipient_name AS "recipientName",
+    recipient_email AS "recipientEmail"`,
+    "simple_invoice_plans WHERE owner_id=$1",
+    "id",
+    true,
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -583,7 +594,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v38";
+  version: "local-member-records-v39";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -717,7 +728,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v38",
+          version: "local-member-records-v39",
           profile: owner.rows[0],
           records,
           testUnitHistory: {
