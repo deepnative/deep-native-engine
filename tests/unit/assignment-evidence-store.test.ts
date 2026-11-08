@@ -114,7 +114,13 @@ function fixture() {
         if (state.changeWorkspace && state.operation)
           state.operation.workspaceId = randomUUID();
       }
-      rows = state.operation ? [{ ...state.operation }] : [];
+      // The store filters by the signed-in member and workspace (#42).
+      rows =
+        state.operation &&
+        state.operation.memberId === values![1] &&
+        state.operation.workspaceId === values![2]
+          ? [{ ...state.operation }]
+          : [];
     } else if (
       sql.includes(
         "FROM evidence_objects e LEFT JOIN assignment_evidence_origins",
@@ -300,9 +306,10 @@ it.each([
     if (reason === "missing origin") f.state.retained!.assignmentOrigin = null;
     if (reason === "source changed") f.state.changeSource = true;
     if (reason === "quarantine") f.state.retained!.state = "infected";
-    expect(await f.store.inspect(token, instruction.operationId)).toEqual({
-      kind: reason.startsWith("foreign") ? "denied" : "unavailable",
-    });
+    // Another member's or workspace's key reads exactly like an unused one.
+    expect(await f.store.inspect(token, instruction.operationId)).toMatchObject(
+      { kind: reason.startsWith("foreign") ? "absent" : "unavailable" },
+    );
   },
 );
 it.each(["withdrawn", "deleting", "removed"])(
@@ -333,15 +340,15 @@ it("AHO-03 disappearance while waiting on the source remains absent", async () =
   });
 });
 it.each(["changeOwner", "changeWorkspace"] as const)(
-  "AHO-04 %s after a source wait cannot return another actor's receipt",
+  "AHO-04 %s after a source wait reads as absent, never another actor's receipt",
   async (reason) => {
     const f = fixture(),
       instruction = input();
     retained(f, instruction);
     f.state[reason] = true;
-    expect(await f.store.inspect(token, instruction.operationId)).toEqual({
-      kind: "denied",
-    });
+    expect(await f.store.inspect(token, instruction.operationId)).toMatchObject(
+      { kind: "absent" },
+    );
   },
 );
 it("AHO-03 missing own just-created receipt cannot be reported as a confirmed effect", async () => {

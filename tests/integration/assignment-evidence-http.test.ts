@@ -184,7 +184,9 @@ it("AHO-01/02 previews one exact owned submitted sequence while a newer private 
     "/assignment-feedback/inspect",
     { csrf: nonce, operationId: fields.operationId! },
     outsider,
-  ).expect(403);
+  ).expect(200);
+  // OPKEY-03: another member's key reads exactly like an unused one.
+  expect(foreignReceipt.text).toContain("No owned receipt was found.");
   expect(foreignReceipt.text).not.toContain(evidenceId);
   expect(foreignReceipt.text).not.toContain(first.trim());
   expect(await ownedCount()).toBe(1);
