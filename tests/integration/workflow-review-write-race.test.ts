@@ -211,15 +211,15 @@ it("WFREV-06 WFKEY (#42) competing same-key requests by different members each s
   let second: ReturnType<typeof writer.request> | undefined;
   try {
     await h.entered.wait;
+    // B's own key is a separate row, so B never waits on A's held write.
     second = b.reviews.request(b.member, {
       checked: pb.preview.checked,
       operationId,
       confirm: "yes",
     });
-    await waitForSampleAssignmentBlock(pool, h.pid());
+    const theirs = await second;
     h.resume.release();
-    const mine = await first,
-      theirs = await second;
+    const mine = await first;
     expect(mine).toMatchObject({ kind: "applied" });
     expect(theirs).toMatchObject({ kind: "applied" });
     if (mine.kind !== "applied" || theirs.kind !== "applied")

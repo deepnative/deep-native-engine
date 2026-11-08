@@ -28,9 +28,18 @@ async function requester() {
   return { ...f, request };
 }
 function requestId(result: { kind: string; receipt?: unknown }) {
-  if (result.kind !== "applied" && result.kind !== "replayed")
+  const receipt = result.receipt as { requestId?: string } | null | undefined;
+  if (
+    !["applied", "replayed", "ready"].includes(result.kind) ||
+    !receipt?.requestId
+  )
     throw Error(`Saved request, got ${result.kind}`);
-  return (result.receipt as { requestId: string }).requestId;
+  return receipt.requestId;
+}
+// The answer without its per-call deadline, so two answers compare exactly.
+function answer({ deadline, ...rest }: { deadline?: number; kind: string }) {
+  void deadline;
+  return rest;
 }
 
 it("WFKEY-01 another member's request key inspects exactly like an unused key", async () => {
@@ -38,11 +47,11 @@ it("WFKEY-01 another member's request key inspects exactly like an unused key", 
     b = await requester(),
     key = randomUUID();
   requestId(await a.request(key));
-  expect(await b.reviews.inspect(b.member, randomUUID())).toEqual({
+  expect(answer(await b.reviews.inspect(b.member, randomUUID()))).toEqual({
     kind: "ready",
     receipt: null,
   });
-  expect(await b.reviews.inspect(b.member, key)).toEqual({
+  expect(answer(await b.reviews.inspect(b.member, key))).toEqual({
     kind: "ready",
     receipt: null,
   });
@@ -97,7 +106,7 @@ it("WFKEY-04 another administrator's assign and revoke keys inspect and act like
   ).toBe("applied");
   // Administrator B, on B's own request, sees nothing under A's keys.
   for (const key of [assignKey, revokeKey])
-    expect(await b.staff.inspect(b.admin, key)).toEqual({
+    expect(answer(await b.staff.inspect(b.admin, key))).toEqual({
       kind: "ready",
       grant: null,
     });
@@ -140,7 +149,7 @@ it("WFKEY-05 a member's own key reused for a different instruction still conflic
     key = randomUUID();
   const own = requestId(await a.request(key));
   expect((await b.request(key)).kind).toBe("applied");
-  expect(await a.reviews.withdraw(a.member, own, key, "yes")).toEqual({
+  expect(answer(await a.reviews.withdraw(a.member, own, key, "yes"))).toEqual({
     kind: "conflict",
   });
   // An administrator's own revoke key reused for an assignment conflicts too.
@@ -148,10 +157,10 @@ it("WFKEY-05 a member's own key reused for a different instruction still conflic
   expect((await a.staff.revoke(a.admin, a.grantId, staffKey, "yes")).kind).toBe(
     "applied",
   );
-  const checked = await a.staff.check(a.admin, a.requestId, a.moderatorId);
+  const checked = await a.staff.check(a.admin, own, a.moderatorId);
   if (checked.kind !== "ready") throw Error("Checked assignment required");
   expect(
-    await a.staff.assign(a.admin, checked.checked, staffKey, "yes"),
+    answer(await a.staff.assign(a.admin, checked.checked, staffKey, "yes")),
   ).toEqual({ kind: "conflict" });
 });
 
