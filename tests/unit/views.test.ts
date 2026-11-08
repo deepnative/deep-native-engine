@@ -781,6 +781,41 @@ it("describes local AI permission and every job state without leaking sample tex
   expect(localAiControlPage(false, "csrf")).toContain("Pause local simulation");
   expect(localAiControlPage(true, "csrf")).toContain("Resume local simulation");
 });
+it("AICANCEL-01/02 a request cancelled by withdrawal reads as cancelled, and a real failure still reads as failed", () => {
+  const withdrawn = (status: string) =>
+    localAiConsentPage(
+      [
+        {
+          evidenceId: "sample-id",
+          name: "Invented sample.txt",
+          revisionNumber: 1,
+          receiptId: null,
+          grantedAt: new Date(),
+          withdrawnAt: new Date(),
+          estimate: {
+            inputTokens: 11,
+            outputTokens: 256,
+            costPoints: 157,
+            modelVersion: "simulated-model-v1",
+            rateVersion: "simulated-rates-v1",
+          },
+          jobs: [{ id: "job-id", status, testUnitState: "released" }],
+        },
+      ],
+      "csrf",
+    );
+  const cancelled = withdrawn("cancelled");
+  expect(cancelled).toContain(
+    "Cancelled when you withdrew permission. It never started.",
+  );
+  expect(cancelled).toContain(
+    "One local test request: released subject to expiry.",
+  );
+  expect(cancelled).not.toContain("unavailable or failed");
+  expect(withdrawn("exhausted")).toContain(
+    "Local simulation unavailable or failed",
+  );
+});
 it("keeps optional planning gated and renders escaped, unsent per-version drafts", () => {
   const off = careerPage({ enabled: false, entries: [], drafts: [] }, "csrf");
   expect(off).toContain("records are off");

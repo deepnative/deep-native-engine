@@ -288,7 +288,7 @@ function setup(
                   : j,
               ],
       };
-    if (sql.includes("SELECT j.id,j.status,b.policy"))
+    if (sql.includes("SELECT j.id,j.status,j.safe_error,b.policy"))
       return { rows: options.listedJobs ?? [{ id: jid, status: j.status }] };
     if (sql.includes("SELECT id FROM adapter_jobs"))
       return { rows: options.unresolved ? [{ id: jid }] : [] };
@@ -913,6 +913,13 @@ it("receipt projection includes only validated local test states", async () => {
       },
       {
         id: jid,
+        status: "exhausted",
+        safe_error: "permission_withdrawn",
+        policy: LOCAL_AI_TEST_UNIT_POLICY,
+        test_unit_state: "released",
+      },
+      {
+        id: jid,
         status: "pending",
         policy: "forged",
         test_unit_state: "reserved",
@@ -929,6 +936,8 @@ it("receipt projection includes only validated local test states", async () => {
     { id: jid, status: "pending", testUnitState: "reserved" },
     { id: jid, status: "succeeded", testUnitState: "consumed" },
     { id: jid, status: "exhausted", testUnitState: "released" },
+    // AICANCEL-01: closed by withdrawal before it started.
+    { id: jid, status: "cancelled", testUnitState: "released" },
     { id: jid, status: "pending" },
     { id: jid, status: "pending" },
   ]);

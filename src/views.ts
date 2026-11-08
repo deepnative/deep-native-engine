@@ -1175,15 +1175,17 @@ export function localAiConsentPage(
             "Queued only in this local preview",
             "Queued only on this site",
           )
-        : value === "running" || value === "needs_reconciliation"
-          ? hostingText(
-              "Outcome needs local reconciliation; it will not be retried automatically",
-              "Outcome needs checking; it will not be retried automatically",
-            )
-          : hostingText(
-              "Local simulation unavailable or failed",
-              "Simulation unavailable or failed",
-            );
+        : value === "cancelled"
+          ? "Cancelled when you withdrew permission. It never started."
+          : value === "running" || value === "needs_reconciliation"
+            ? hostingText(
+                "Outcome needs local reconciliation; it will not be retried automatically",
+                "Outcome needs checking; it will not be retried automatically",
+              )
+            : hostingText(
+                "Local simulation unavailable or failed",
+                "Simulation unavailable or failed",
+              );
   const stateNotice =
     state === "paused"
       ? `<p role="status">${hostingText("Local simulations", "Simulations")} are paused. You can still withdraw permission.</p>`

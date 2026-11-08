@@ -1396,14 +1396,21 @@ it.each(["withdraw", "revise"] as const)(
       await evidence.submitForReview(own.token, own.evidenceId);
       await fixture(own, own.evidenceId, "Invented newer text");
     }
+    // AICANCEL-01: kept apart from a provider failure, which stays failed.
     expect(await requestState(own.jobId)).toEqual({
       status: "exhausted",
-      safe_error: "provider_unavailable",
+      safe_error: "permission_withdrawn",
       attempt_token: null,
       lease_until: null,
       provider_operation_reference: null,
       attempt_count: 0,
     });
+    if (action === "withdraw") {
+      const [choice] = await local.list(own.token);
+      expect(choice?.jobs).toMatchObject([
+        { id: own.jobId, status: "cancelled" },
+      ]);
+    }
     expect(execute).not.toHaveBeenCalled();
   },
 );

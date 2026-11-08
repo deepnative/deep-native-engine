@@ -185,6 +185,23 @@ it("permission withdrawal before claim restores exactly once and prevents dispat
   expect((await local.run(owner.token, queued.jobId)).kind).not.toBe(
     "completed",
   );
+  // AICANCEL-01: the member cancelled it; it isn't recorded as a failure.
+  expect(
+    (
+      await pool.query(
+        "SELECT status,safe_error,attempt_count FROM adapter_jobs WHERE id=$1",
+        [queued.jobId],
+      )
+    ).rows[0],
+  ).toEqual({
+    status: "exhausted",
+    safe_error: "permission_withdrawn",
+    attempt_count: 0,
+  });
+  const [choice] = await local.list(owner.token);
+  expect(choice?.jobs).toMatchObject([
+    { id: queued.jobId, status: "cancelled", testUnitState: "released" },
+  ]);
   expect(await balance(grantId)).toEqual({
     available: 1,
     reserved: 0,

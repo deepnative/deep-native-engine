@@ -508,6 +508,14 @@ test("[L309] signed test events reconcile out of order and read as simulated to 
         /A signed test event recorded a simulated test refund/,
       ),
     ).toBeVisible();
+    // CHANGELOG-13: the current local-credential administrator who offered
+    // the plan is reading this page, so it isn't "a former administrator".
+    await expect(
+      admin.page.getByText(
+        /An administrator with no name set offered .+ a course plan/,
+      ),
+    ).toBeVisible();
+    await expect(admin.page.getByText("A former administrator")).toHaveCount(0);
     for (const page of [member, admin.page]) {
       expect(
         await page.evaluate(
