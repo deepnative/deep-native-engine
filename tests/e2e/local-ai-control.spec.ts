@@ -339,3 +339,86 @@ test("[L316] AICAP-08 an administrator reads the test spending ceiling without m
     ),
   ).toBe(true);
 });
+
+test("[L320] AICTL-01/04/08 an administrator raises the test ceiling, sees it recorded, and a stale form changes nothing", async ({
+  page,
+  context,
+}) => {
+  const adminToken = token();
+  await authorizationStore(pool).provisionStaff(
+    adminToken,
+    "platform_admin",
+    new Date(Date.now() + 86_400_000),
+  );
+  // Only this journey changes the shared ceiling. The lock keeps its desktop
+  // and mobile runs from changing it under each other; it only ever rises.
+  const lock = await pool.connect();
+  await lock.query("SELECT pg_advisory_lock(188319)");
+  try {
+    await context.addCookies([
+      {
+        name: "dne_preview",
+        value: adminToken,
+        url: origin,
+        httpOnly: true,
+        sameSite: "Strict",
+      },
+    ]);
+    const first = page;
+    const second = await context.newPage();
+    await first.goto("/operator/local-ai");
+    await second.goto("/operator/local-ai");
+    const readout = first.getByText(
+      /^Simulated points at test rates simulated-rates-v1, not money: ceiling \d+, committed \d+, remaining \d+\.$/,
+    );
+    const before = Number(
+      (await readout.textContent())!.match(/ceiling (\d+)/)![1],
+    );
+    const raised = before + 1000;
+
+    await first
+      .getByLabel("New test ceiling in simulated points")
+      .fill(String(raised));
+    await first
+      .getByLabel("Confirm this change to the test ceiling only")
+      .check();
+    await first.getByRole("button", { name: "Change test ceiling" }).click();
+    await expect(first).toHaveURL(/\/operator\/local-ai$/);
+    await expect(
+      first.getByText(new RegExp(`not money: ceiling ${raised}, committed`)),
+    ).toBeVisible();
+    const recent = first.getByRole("listitem").filter({
+      hasText: new RegExp(
+        `: ${before} to ${raised} points \\(test rates simulated-rates-v1\\), with \\d+ committed at the time\\.$`,
+      ),
+    });
+    await expect(recent.first()).toBeVisible();
+
+    // The second page still shows the old ceiling: its change is refused.
+    await second
+      .getByLabel("New test ceiling in simulated points")
+      .fill(String(raised + 5));
+    await second
+      .getByLabel("Confirm this change to the test ceiling only")
+      .check();
+    await second.getByRole("button", { name: "Change test ceiling" }).click();
+    await expect(
+      second.getByText(
+        "The test ceiling changed after you opened the page. Reload it and check the current value before changing it again.",
+      ),
+    ).toBeVisible();
+    await first.reload();
+    await expect(
+      first.getByText(new RegExp(`not money: ceiling ${raised}, committed`)),
+    ).toBeVisible();
+    expect(await first.locator("main").innerText()).not.toContain(adminToken);
+    expect(
+      await first.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  } finally {
+    await lock.query("SELECT pg_advisory_unlock(188319)");
+    lock.release();
+  }
+});

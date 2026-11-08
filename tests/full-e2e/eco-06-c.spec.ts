@@ -146,7 +146,9 @@ test("[F-ECO-06-C] pausing simulation or spending the last study request stops w
       ).toBeVisible();
       expect(await memberJobs(pool, member.id)).toEqual([pending]);
 
-      await adminPage.locator('input[name="confirm"]').check();
+      await adminPage
+        .getByLabel("Confirm resume for local simulation only")
+        .check();
       await adminPage
         .getByRole("button", { name: "Resume local simulation" })
         .click();

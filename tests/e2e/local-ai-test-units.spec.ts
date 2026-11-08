@@ -379,3 +379,63 @@ test("[L123] absent units, pause and a seeded uncertain claim never create an au
     await members.remove(id);
   }
 });
+
+test("[L321] AILIMIT-06 a member at the unfinished-request limit is told why and nothing new is queued", async ({
+  page,
+}) => {
+  const token = randomBytes(32).toString("hex");
+  await members.create(token, { background: "professional", goal: "work" });
+  const session = await members.session(token);
+  if (session.kind !== "active") throw Error("Synthetic member unavailable");
+  const memberId = session.learner.id;
+  const items: Locator[] = [];
+  for (let n = 0; n < 4; n++)
+    items.push(
+      (await source(page, token, `Invented limit ${n} ${randomUUID()}`)).item,
+    );
+  await expect(
+    page.getByText(
+      "You can have up to 3 unfinished requests at a time, across all your samples; a held request counts until it is checked.",
+    ),
+  ).toBeVisible();
+  for (const item of items.slice(0, 3)) {
+    await item.getByRole("button", { name: "Queue local simulation" }).click();
+    await expect(
+      item.getByRole("button", { name: "Run local simulation" }),
+    ).toBeVisible();
+  }
+  await items[3]!
+    .getByRole("button", { name: "Queue local simulation" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Too many unfinished requests" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "You already have 3 AI requests that are not finished. Run one, wait for a held one to be checked, or withdraw permission for one that has not started, then try again. Nothing new was queued or held, and no provider was contacted.",
+    ),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  const jobs = await pool.query(
+    "SELECT status FROM adapter_jobs WHERE member_id=$1",
+    [memberId],
+  );
+  expect(jobs.rows.map((r) => r.status)).toEqual([
+    "pending",
+    "pending",
+    "pending",
+  ]);
+  // Running one frees its place.
+  await page.goto("/evidence/local-ai");
+  await items[0]!.getByRole("button", { name: "Run local simulation" }).click();
+  await items[3]!
+    .getByRole("button", { name: "Queue local simulation" })
+    .click();
+  await expect(
+    items[3]!.getByRole("button", { name: "Run local simulation" }),
+  ).toBeVisible();
+});

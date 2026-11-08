@@ -18,6 +18,8 @@ import {
 } from "./ai-budget-policy.ts";
 
 export const LOCAL_AI_PURPOSE = "evidence-summary-local-v1";
+// #190: at most this many unfinished AI requests per member, across sources.
+export const LOCAL_AI_MEMBER_OPEN_LIMIT = 3;
 export const LOCAL_AI_STATEMENT_VERSION = "local-simulation-v1";
 export const LOCAL_AI_TEST_UNIT_POLICY = "deterministic-request-test-v1";
 const MODEL = "deterministic-local-v1";
@@ -64,7 +66,7 @@ export interface LocalAiConsentStore {
     key: string,
   ): Promise<
     | { kind: "queued"; jobId: string }
-    | { kind: "denied" | "conflict" | "ceiling_reached" }
+    | { kind: "denied" | "conflict" | "ceiling_reached" | "limit_reached" }
   >;
   enqueueMetered(
     token: string,
@@ -72,7 +74,7 @@ export interface LocalAiConsentStore {
     key: string,
   ): Promise<
     | { kind: "queued"; jobId: string }
-    | { kind: "denied" | "conflict" | "ceiling_reached" }
+    | { kind: "denied" | "conflict" | "ceiling_reached" | "limit_reached" }
   >;
   run(
     token: string,
@@ -544,7 +546,7 @@ export function localAiConsentStore(
       return { kind: "denied" };
     return transaction<
       | { kind: "queued"; jobId: string }
-      | { kind: "denied" | "conflict" | "ceiling_reached" }
+      | { kind: "denied" | "conflict" | "ceiling_reached" | "limit_reached" }
     >({ kind: "denied" }, async (client) => {
       if (!(await localAiEnabled(client))) return { kind: "denied" };
       const authorization = await receipt(client, token, id);
@@ -579,6 +581,22 @@ export function localAiConsentStore(
           : { kind: "conflict" };
       }
       if (!unresolved) {
+        // A member's own enqueues serialize here, after the receipt lock; no
+        // other path takes this lock. Runs only ever free places, so a count
+        // read under it never lets a member pass the limit.
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended('local-ai-member-open:'||$1::text,0))",
+          [authorization.row.owner_principal_id],
+        );
+        const open = (
+          await client.query<{ open: number }>(
+            "SELECT count(*)::int AS open FROM adapter_jobs WHERE member_id=$1 AND adapter='ai' AND operation=$2 AND status IN ('pending','running','failed','needs_reconciliation')",
+            [authorization.row.owner_principal_id, LOCAL_AI_PURPOSE],
+          )
+        ).rows[0]!.open;
+        // Refused before any unit, estimate, ceiling room or provider call.
+        if (open >= LOCAL_AI_MEMBER_OPEN_LIMIT)
+          return { kind: "limit_reached" };
         const estimate = estimateAiRequest(authorization.row.byte_size);
         // Nothing is held for a request the ceiling has no room to run.
         if (metered && !(await ceilingRoom(client, estimate.costPoints)))

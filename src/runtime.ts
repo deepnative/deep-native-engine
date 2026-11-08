@@ -1,4 +1,5 @@
 import { billingProfileStore } from "./billing-profile.ts";
+import { workflowTestRoot } from "./workflow-registry.ts";
 import { administratorEntry } from "./administrator-entry.ts";
 import { coachViewStore } from "./coach-view.ts";
 import { memberSharingStore } from "./member-sharing.ts";
@@ -165,6 +166,7 @@ export async function start(env: NodeJS.ProcessEnv) {
               )
             : undefined,
       ...settings,
+      workflowRoot: workflowTestRoot(settings.mode, env.DNE_WORKFLOW_ROOT),
       assignmentEvidence: assignmentEvidenceStore(pool, {
         enabled: settings.assignmentHandoff,
       }),
