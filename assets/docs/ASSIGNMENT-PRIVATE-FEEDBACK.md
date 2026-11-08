@@ -9,7 +9,7 @@ Issue [#545](https://github.com/deepnative/deep-native-engine/issues/545), linke
 3. Check the separate consent box and create the private feedback copy. No reviewer receives access automatically.
 4. Open **Manage private copies and request feedback**, then explicitly request review. An administrator must separately grant one reviewer access to that exact copy for a finite interval.
 5. Read published feedback and, while consent and reviewer authority remain active, send one clarification and receive one answer.
-6. Withdraw consent to stop future reviewer reads and exchanges. Already published feedback remains visible to you. Delete only the copy to retain your original assignment, or delete the original attempt to remove all linked copies and feedback.
+6. Withdraw consent to stop future reviewer reads and exchanges. Already published feedback remains visible to you. A withdrawn copy cannot be requested again; to ask for feedback once more, make a fresh copy of the same submission, which needs its own request and a new reviewer grant. Delete only the copy to retain your original assignment, or delete the original attempt to remove all linked copies and feedback.
 
 Each copy retains its assignment, content version, submitted sequence, rubric version, submission time and response digest. It is labelled **Member assignment submission · private · unreviewed**. These labels do not establish authorship or formal competence.
 
@@ -33,5 +33,6 @@ If saving cannot be confirmed, the page retains the original request. **Inspect 
 | Configured creation with retained inspection during rollback            | AHO-10; runtime/configuration, route and native-restart integration tests; L217–L218 |
 | Later versions, goal changes and retirement never migrate a copy (#125) | AEV-01; assignment-evidence-versions integration test                                |
 | IT, non-IT professional and general-learning examples (#125)            | AEV-02; assignment-evidence-versions integration test                                |
+| Fresh copy after withdrawal; feedback stays not formal (#125)           | AEV-03; assignment-evidence-versions integration test                                |
 
 The register extends the existing 213 approved journeys to 218, retaining every prior journey and full-MVP requirement. Desktop and mobile cases use invented data in isolated test runtimes. Actual test results, exact revisions, CI, deployment and the separate milestone demonstration belong in the issue closeout; this guide alone establishes none of those results.
