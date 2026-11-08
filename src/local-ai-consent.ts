@@ -18,6 +18,8 @@ import {
 } from "./ai-budget-policy.ts";
 
 export const LOCAL_AI_PURPOSE = "evidence-summary-local-v1";
+// #190: at most this many unfinished AI requests per member, across sources.
+export const LOCAL_AI_MEMBER_OPEN_LIMIT = 3;
 export const LOCAL_AI_STATEMENT_VERSION = "local-simulation-v1";
 export const LOCAL_AI_TEST_UNIT_POLICY = "deterministic-request-test-v1";
 const MODEL = "deterministic-local-v1";
@@ -64,7 +66,7 @@ export interface LocalAiConsentStore {
     key: string,
   ): Promise<
     | { kind: "queued"; jobId: string }
-    | { kind: "denied" | "conflict" | "ceiling_reached" }
+    | { kind: "denied" | "conflict" | "ceiling_reached" | "limit_reached" }
   >;
   enqueueMetered(
     token: string,
@@ -72,7 +74,7 @@ export interface LocalAiConsentStore {
     key: string,
   ): Promise<
     | { kind: "queued"; jobId: string }
-    | { kind: "denied" | "conflict" | "ceiling_reached" }
+    | { kind: "denied" | "conflict" | "ceiling_reached" | "limit_reached" }
   >;
   run(
     token: string,
@@ -544,7 +546,7 @@ export function localAiConsentStore(
       return { kind: "denied" };
     return transaction<
       | { kind: "queued"; jobId: string }
-      | { kind: "denied" | "conflict" | "ceiling_reached" }
+      | { kind: "denied" | "conflict" | "ceiling_reached" | "limit_reached" }
     >({ kind: "denied" }, async (client) => {
       if (!(await localAiEnabled(client))) return { kind: "denied" };
       const authorization = await receipt(client, token, id);
