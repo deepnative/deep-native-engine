@@ -185,7 +185,7 @@ it.each([true, false])(
     }
   },
 );
-it("WFREV-06 globally competing same-key requests by different members reserve the key for only the first exact actor", async () => {
+it("WFREV-06 WFKEY (#42) competing same-key requests by different members each save their own request", async () => {
   const a = await workflowReviewFixture(pool),
     b = await workflowReviewFixture(pool);
   for (const f of [a, b])
@@ -218,16 +218,25 @@ it("WFREV-06 globally competing same-key requests by different members reserve t
     });
     await waitForSampleAssignmentBlock(pool, h.pid());
     h.resume.release();
-    expect(await first).toMatchObject({ kind: "applied" });
-    expect(await second).toMatchObject({ kind: "conflict" });
-    expect(await b.reviews.inspect(b.member, operationId)).toEqual({
-      kind: "denied",
+    const mine = await first,
+      theirs = await second;
+    expect(mine).toMatchObject({ kind: "applied" });
+    expect(theirs).toMatchObject({ kind: "applied" });
+    if (mine.kind !== "applied" || theirs.kind !== "applied")
+      throw Error("Both members' own requests required");
+    expect(theirs.receipt.requestId).not.toBe(mine.receipt.requestId);
+    expect(await b.reviews.inspect(b.member, operationId)).toMatchObject({
+      kind: "ready",
+      receipt: { requestId: theirs.receipt.requestId },
     });
     const reserved = await pool.query(
-      "SELECT actor_id AS actor FROM workflow_review_operations WHERE operation_id=$1",
+      "SELECT actor_id AS actor FROM workflow_review_operations WHERE operation_id=$1 ORDER BY created_at",
       [operationId],
     );
-    expect(reserved.rows).toEqual([{ actor: a.memberId }]);
+    expect(reserved.rows).toEqual([
+      { actor: a.memberId },
+      { actor: b.memberId },
+    ]);
   } finally {
     h.resume.release();
     await Promise.allSettled([first, ...(second ? [second] : [])]);
