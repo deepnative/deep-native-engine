@@ -26,6 +26,8 @@ export async function reviewedContentFixture(
     testProviderKey?: string;
     memberContributions?: boolean;
     events?: boolean;
+    // #769: an absolute folder holding a fixture workflow source release.
+    workflowRoot?: string;
   } = {},
 ) {
   const original = process.env.DNE_TEST_DATABASE_URL;
@@ -95,6 +97,9 @@ export async function reviewedContentFixture(
         : {}),
       ...(options.memberContributions
         ? { DNE_MEMBER_CONTRIBUTIONS: "enabled" }
+        : {}),
+      ...(options.workflowRoot
+        ? { DNE_WORKFLOW_ROOT: options.workflowRoot }
         : {}),
       ...(options.events
         ? {
