@@ -170,7 +170,7 @@ export async function studyFixtureOperation(
 ) {
   await context.tx.query(
     "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
-    [key],
+    [`${context.actorId}:${key}`],
   );
   const original = (
     await context.tx.query<{
@@ -181,8 +181,9 @@ export async function studyFixtureOperation(
       digest: string | null;
     }>(
       `SELECT actor_id AS "actorId",workspace_id AS "workspaceId",request_id AS "requestId",
-       kind,instruction_hash AS digest FROM browser_study_fixture_operations WHERE operation_id=$1 FOR UPDATE`,
-      [key],
+       kind,instruction_hash AS digest FROM browser_study_fixture_operations
+       WHERE operation_id=$1 AND actor_id=$2 FOR UPDATE`,
+      [key, context.actorId],
     )
   ).rows[0];
   if (!original) return null;
