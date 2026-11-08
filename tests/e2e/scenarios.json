@@ -2811,6 +2811,15 @@
       "expected": "Opening the page creates nothing; the session is labelled optional interview practice; the comparison says it doesn't predict hiring, interview results or competence; reload keeps the answer; a repeat start returns the same session; history shows interview-practice-v1; no sideways scrolling",
       "issues": [200],
       "critical": true
+    },
+    {
+      "id": "L316",
+      "actor": "Platform administrator reading the test spending ceiling",
+      "preconditions": "Shared synthetic PostgreSQL database, invented administrator and member, one invented study test request run through the deterministic metered path; desktop/mobile Chromium",
+      "steps": "AICAP-08: the administrator opens the simulation control page and reads the test spending ceiling",
+      "expected": "Ceiling, committed and remaining simulated points at simulated-rates-v1, labelled not money, with remaining equal to ceiling minus committed; no source name, member, request or source text; no sideways scrolling",
+      "issues": [188],
+      "critical": false
     }
   ],
   "fullMvp": [

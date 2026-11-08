@@ -127,6 +127,11 @@ test("[L53] three learner paths retain visible keyboard focus, actionable errors
     await page
       .getByRole("link", { name: "Return to learning", exact: true })
       .click();
+    // Let the return navigation finish before reloading, as the other reloads do.
+    await expect(
+      page.getByRole("heading", { name: "Your sample proposals", exact: true }),
+    ).toBeHidden();
+    await expect(participation).toBeVisible();
     await page.reload();
     await expect(participation).toBeVisible();
 

@@ -5,6 +5,14 @@ export interface LocalAiControlStore {
   current(): Promise<"paused" | "enabled" | "unavailable">;
   read(token: string): Promise<{ paused: boolean } | null>;
   set(token: string, paused: boolean): Promise<boolean>;
+  spending?(token: string): Promise<LocalAiSpending | null>;
+}
+// Content-free platform totals in invented simulated points (#188).
+export interface LocalAiSpending {
+  rateVersion: string;
+  ceilingPoints: number;
+  committedPoints: number;
+  remainingPoints: number;
 }
 
 // Queue and both dispatch transactions take this lock before principal,
@@ -19,7 +27,7 @@ export async function localAiEnabled(client: PoolClient): Promise<boolean> {
   return row?.paused === false;
 }
 
-export function localAiControlStore(pool: Pool): LocalAiControlStore {
+export function localAiControlStore(pool: Pool): Required<LocalAiControlStore> {
   async function transaction<T>(
     fallback: T,
     work: (client: PoolClient) => Promise<T>,
@@ -87,6 +95,29 @@ export function localAiControlStore(pool: Pool): LocalAiControlStore {
         if (typeof row?.paused !== "boolean" || !(await admin(client, token)))
           return null;
         return { paused: row.paused };
+      });
+    },
+    spending(token) {
+      return transaction<LocalAiSpending | null>(null, async (client) => {
+        if (!(await admin(client, token))) return null;
+        const row = (
+          await client.query<{
+            rate_version: string;
+            ceiling_points: string;
+            committed_points: string;
+          }>(
+            "SELECT rate_version,ceiling_points,committed_points FROM ai_test_spending_ceiling WHERE singleton",
+          )
+        ).rows[0];
+        if (!row) return null;
+        const ceilingPoints = Number(row.ceiling_points);
+        const committedPoints = Number(row.committed_points);
+        return {
+          rateVersion: row.rate_version,
+          ceilingPoints,
+          committedPoints,
+          remainingPoints: Math.max(0, ceilingPoints - committedPoints),
+        };
       });
     },
     set(token, paused) {
