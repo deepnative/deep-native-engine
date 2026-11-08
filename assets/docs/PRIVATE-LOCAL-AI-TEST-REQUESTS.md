@@ -28,7 +28,7 @@ Stored figures are integers and version names only. Provider usage is read as tw
 
 ## Test spending ceiling
 
-Migration 115 adds one platform-wide test spending ceiling, in simulated points of `simulated-rates-v1`. Its invented starting value is 100000 points, room for several hundred demo requests. It is not money and not a real provider ceiling.
+Migration 116 adds one platform-wide test spending ceiling, in simulated points of `simulated-rates-v1`. Its invented starting value is 100000 points, room for several hundred demo requests. It is not money and not a real provider ceiling.
 
 | Case                                                  | What happens                                                                                                                                       |
 | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |

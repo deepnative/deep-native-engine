@@ -8,7 +8,7 @@ BEGIN;
 -- erasing a member never lowers recorded spend.
 DO $$ BEGIN
  IF to_regclass('ai_test_spending_ceiling') IS NULL
-    AND NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=115) THEN
+    AND NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=116) THEN
   CREATE TABLE ai_test_spending_ceiling (
    singleton boolean PRIMARY KEY CHECK(singleton),
    rate_version text NOT NULL CHECK(rate_version ~ '^[a-z0-9-]{1,64}$'),
@@ -79,5 +79,5 @@ END $$;
 DROP TRIGGER IF EXISTS ai_spending_commitment_guard ON ai_spending_commitments;
 CREATE TRIGGER ai_spending_commitment_guard BEFORE INSERT OR UPDATE OR DELETE ON ai_spending_commitments
  FOR EACH ROW EXECUTE FUNCTION guard_ai_spending_commitment();
-INSERT INTO schema_migrations(version) VALUES(115) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(116) ON CONFLICT DO NOTHING;
 COMMIT;
