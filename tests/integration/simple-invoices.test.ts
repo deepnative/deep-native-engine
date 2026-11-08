@@ -533,6 +533,78 @@ it("OFFPUR-10 a replacement course proposal cannot create two active recurring b
   expect((await invoices.accept(m.token, input)).kind).toBe("ready");
 });
 
+it("BUILD-04-C an offer whose start date has passed cannot be accepted or bill the missed months", async () => {
+  const m = await member(),
+    p = ready(await invoices.propose(admin, proposal(m.id, "monthly")));
+  // Stands in for the acceptance window passing: the offered start moves two
+  // months back in this isolated database, with the terms guard restored.
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      "ALTER TABLE simple_invoice_plans DISABLE TRIGGER simple_invoice_terms_immutable",
+    );
+    await client.query(
+      `UPDATE simple_invoice_plans SET terms=jsonb_set(terms,'{startsOn}',
+         to_jsonb(to_char((terms->>'startsOn')::date-interval '2 months','YYYY-MM-DD')))
+       WHERE id=$1`,
+      [p.planId],
+    );
+    await client.query(
+      "ALTER TABLE simple_invoice_plans ENABLE TRIGGER simple_invoice_terms_immutable",
+    );
+    await client.query("COMMIT");
+  } finally {
+    client.release();
+  }
+  const overview = ready(await invoices.overview(m.token));
+  expect(overview.today).toBe(today);
+  expect(overview.plans[0]!.terms.startsOn < today).toBe(true);
+  expect(
+    await invoices.accept(m.token, {
+      planId: p.planId,
+      expectedRevision: 1,
+      operationId: randomUUID(),
+      name: "Invented student",
+      email: "invented-student@example.invalid",
+    }),
+  ).toEqual({ kind: "conflict" });
+  ready(await invoices.generateDue(admin));
+  const stored = await pool.query(
+    "SELECT state,accepted_at FROM simple_invoice_plans WHERE id=$1",
+    [p.planId],
+  );
+  expect(stored.rows[0]).toEqual({ state: "offered", accepted_at: null });
+  expect(
+    (
+      await pool.query("SELECT 1 FROM simple_invoices WHERE owner_id=$1", [
+        m.id,
+      ])
+    ).rowCount,
+  ).toBe(0);
+  // A separately accepted replacement starting today is the only agreement billed.
+  const replacement = ready(
+    await invoices.propose(admin, proposal(m.id, "monthly")),
+  );
+  ready(
+    await invoices.accept(m.token, {
+      planId: replacement.planId,
+      expectedRevision: 1,
+      operationId: randomUUID(),
+      name: "Invented student",
+      email: "invented-student@example.invalid",
+    }),
+  );
+  ready(await invoices.generateDue(admin));
+  expect(
+    (
+      await pool.query(
+        "SELECT plan_id,cycle FROM simple_invoices WHERE owner_id=$1",
+        [m.id],
+      )
+    ).rows,
+  ).toEqual([{ plan_id: replacement.planId, cycle: 0 }]);
+});
 it("BILLPROFILE02 persists only own recipient, validates fields, serializes concurrent edits and exports/erases the private profile", async () => {
   const m = await member(),
     other = await member();
