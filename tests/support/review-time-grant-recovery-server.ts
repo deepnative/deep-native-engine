@@ -8,6 +8,7 @@ import { authorizationStore } from "../../src/authorization.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { memberExportStore } from "../../src/member-export.ts";
 import { reviewTimeGrantAdminStore } from "../../src/review-time-grant-admin.ts";
+import { closeLoopback } from "./loopback-server.ts";
 
 /** Test-owned listener: lose the first grant and revoke acknowledgements only
  * after PostgreSQL actually commits each named write. No production fault flag,
@@ -116,10 +117,8 @@ export async function startReviewTimeGrantRecoveryServer(
     return {
       origin: options.origin,
       observation,
-      close: () =>
-        new Promise<void>((resolve, reject) =>
-          owned.close((error) => (error ? reject(error) : resolve())),
-        ),
+      // A browser preconnect would otherwise hold close() open (L183).
+      close: () => closeLoopback(owned),
     };
   } catch (error) {
     server?.close();

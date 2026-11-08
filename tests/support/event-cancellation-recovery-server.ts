@@ -7,6 +7,7 @@ import { staffEntryStore } from "../../src/staff-entry.ts";
 import { authorizationStore } from "../../src/authorization.ts";
 import type { EventPreview } from "../../src/events.ts";
 import { eventCancellationStore } from "../../src/event-cancellations.ts";
+import { closeLoopback } from "./loopback-server.ts";
 
 /** Owned browser fixture: lose only the acknowledgement after PostgreSQL really
  * commits the first cancellation. No production fault flag or automatic replay. */
@@ -79,10 +80,8 @@ export async function startEventCancellationRecoveryServer(
     return {
       origin: options.origin,
       observation,
-      close: () =>
-        new Promise<void>((resolve, reject) =>
-          owned.close((error) => (error ? reject(error) : resolve())),
-        ),
+      // A browser preconnect would otherwise hold close() open (L183).
+      close: () => closeLoopback(owned),
     };
   } catch (error) {
     server?.close();

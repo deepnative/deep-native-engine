@@ -736,6 +736,24 @@ it("describes local AI permission and every job state without leaking sample tex
           { id: "done", status: "succeeded" },
           { id: "running", status: "running" },
           { id: "held", status: "needs_reconciliation" },
+          {
+            id: "held-ran",
+            status: "needs_reconciliation",
+            testOutcome: {
+              outcome: "test-executed",
+              reason: "matching-test-record",
+              decidedAt: new Date("2026-11-08T10:00:00Z"),
+            },
+          },
+          {
+            id: "held-not-run",
+            status: "needs_reconciliation",
+            testOutcome: {
+              outcome: "test-not-executed",
+              reason: "operator-test-exercise",
+              decidedAt: new Date("2026-11-07T23:59:59Z"),
+            },
+          },
           { id: "failed", status: "failed" },
         ],
       },
@@ -748,6 +766,14 @@ it("describes local AI permission and every job state without leaking sample tex
   expect(active).toContain("Simulated locally. No provider request");
   expect(active).toContain("Outcome needs local reconciliation");
   expect(active).toContain("Local simulation unavailable or failed");
+  // #189 HOLDDEC: a recorded test outcome is labelled, dated, and never resolves the hold.
+  expect(active).toContain(
+    "recorded for this held request on 2026-11-08: it ran, matched to an invented test record.",
+  );
+  expect(active).toContain(
+    "on 2026-11-07: it did not run, recorded as an operator test exercise.",
+  );
+  expect(active.match(/A test outcome was recorded/g)).toHaveLength(2);
   const paused = localAiConsentPage(
     [
       {
@@ -2023,7 +2049,7 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v39" as const,
+    version: "local-member-records-v40" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),

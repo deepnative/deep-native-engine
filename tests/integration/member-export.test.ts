@@ -95,7 +95,7 @@ it("exports a withdrawn completed exercise as a text-free retained completion ma
     "withdrawn",
   );
   const after = await ready(owner.token);
-  expect(after.version).toBe("local-member-records-v39");
+  expect(after.version).toBe("local-member-records-v40");
   expect(after.records).toMatchObject({
     exercises: [
       {
@@ -205,6 +205,7 @@ it("exports each retained local permission receipt once with safe owned job link
       "createdAt",
       "updatedAt",
       "localAiReceiptId",
+      "holdTestOutcome",
     ].sort(),
   );
   const repeated = await ready(owner.token);
@@ -998,7 +999,7 @@ it("exports current structured records only for their active owner, with redacti
   );
   const own = await ready(a.token);
   expect(own).toMatchObject({
-    version: "local-member-records-v39",
+    version: "local-member-records-v40",
     profile: { id: a.id, background: "explorer" },
     records: {
       milestones: [{ milestoneTitle: "Invented milestone" }],

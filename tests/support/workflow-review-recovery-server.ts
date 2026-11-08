@@ -9,6 +9,7 @@ import { workflowFeedbackStore } from "../../src/workflow-feedback.ts";
 import { memberExportStore } from "../../src/member-export.ts";
 import { workflowReviewStore } from "../../src/workflow-review.ts";
 import { workflowReviewStaffStore } from "../../src/workflow-review-staff.ts";
+import { closeLoopback } from "./loopback-server.ts";
 
 /** Test-owned listener: lose one reply only after the real PostgreSQL operation
  * COMMIT succeeds. No production fault flag or automatic replay. */
@@ -90,10 +91,8 @@ export async function startWorkflowReviewRecoveryServer(
     return {
       origin: options.origin,
       observation,
-      close: () =>
-        new Promise<void>((resolve, reject) =>
-          owned.close((error) => (error ? reject(error) : resolve())),
-        ),
+      // A browser preconnect would otherwise hold close() open (L183).
+      close: () => closeLoopback(owned),
     };
   } catch (error) {
     server?.close();

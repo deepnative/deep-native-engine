@@ -46,13 +46,14 @@ No free text is accepted, so source text, prompts and provider messages cannot b
 
 - **One per request, never changed.** The database refuses any change or deletion except through account erasure. Sending the same form again shows the recorded outcome. A different outcome, from the same form or a new one, is refused and the first stays.
 - **It freezes the job.** After an outcome is recorded, the database refuses any change to the job's status, attempts, claim or error. A worker whose claim expired cannot complete or fail it, and no one can run it again. If the claim had expired but not yet been marked held, recording the outcome holds it first, in the same transaction.
-- **It changes nothing else.** It does not charge, refund, release or consume a test unit, settle usage, retry, or change what the member sees.
+- **It changes nothing else.** It does not charge, refund, release or consume a test unit, settle usage or retry.
+- **The member sees it, but not who recorded it.** The member's permission page shows the outcome, its reason and the date. It says no AI provider confirmed it, nothing was charged, released or retried, and the request stays held. This still shows after the source is deleted. Their export (`local-member-records-v40`) adds `holdTestOutcome` to the job, with the outcome, reason, a `decidedAt` time and the label `TEST OUTCOME · NOT PROVIDER-CONFIRMED · STILL HELD`. Neither the page nor the export shows the operator, the assignment, the test reference or the idempotency key, and no other member sees any of it (HOLDDEC-13..16).
 - **Only a current exact assignment.** The operator needs an unrevoked, unexpired assignment to that request. Members, other operators and administrators are refused the same way. It is off whenever inspection is off, and never available in live mode.
 - **Deletion and erasure.** Deleting the source keeps the outcome with the hold. Once account deletion starts, the outcome can no longer be read. Erasure removes it.
 
 ## Process for a held request
 
-1. **The member sees it.** The permission page says the outcome is unknown, that the request will not run again, and that nothing is confirmed erased. It shows a request reference.
+1. **The member sees it.** The permission page says the outcome is unknown, that the request will not run again, and that nothing is confirmed erased. It shows a request reference, and a recorded test outcome once there is one.
 2. **Find the exact request.** There is deliberately no list of held requests across members. An administrator works from a reference the member gives them, for example through private support, or from a controlled invented-data fixture.
 3. **Assign one operator.** Follow [hold inspection](PRIVATE-LOCAL-AI-HOLD-INSPECTION.md). The assignment names one request, one operator and one fixed purpose, ends at a set time, and leaves a content-free record of who made it. An unmetered request can only be assigned while its outcome is unknown.
 4. **The operator reads the metadata.** Inspection is off by default and is never available in live mode. Reading changes nothing.
