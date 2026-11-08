@@ -780,6 +780,19 @@ it("describes local AI permission and every job state without leaking sample tex
   );
   expect(localAiControlPage(false, "csrf")).toContain("Pause local simulation");
   expect(localAiControlPage(true, "csrf")).toContain("Resume local simulation");
+  expect(localAiControlPage(true, "csrf")).toContain(
+    "Test spending ceiling unavailable. Metered test requests cannot run.",
+  );
+  const readout = localAiControlPage(false, "csrf", {
+    rateVersion: "simulated-<rates>",
+    ceilingPoints: 100000,
+    committedPoints: 199,
+    remainingPoints: 99801,
+  });
+  expect(readout).toContain(
+    "Simulated points at test rates simulated-&lt;rates&gt;, not money: ceiling 100000, committed 199, remaining 99801.",
+  );
+  expect(readout).toContain("no provider is called");
 });
 it("AICANCEL-01/02 a request cancelled by withdrawal reads as cancelled, and a real failure still reads as failed", () => {
   const withdrawn = (status: string) =>

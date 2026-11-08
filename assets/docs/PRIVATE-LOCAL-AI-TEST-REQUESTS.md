@@ -18,7 +18,7 @@ Before a member holds a request, the page shows an estimate labelled with its mo
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | Request queued                               | The estimate is stored with the hold in the same transaction.                                                                               |
 | Provider reports usable usage                | The unit is consumed once. One settlement holds actual tokens and points, and commits with the consumption.                                 |
-| Actual cost is over the estimate             | The member still pays one unit. The page says it went over. There is no ceiling or automatic pause yet.                                     |
+| Actual cost is over the estimate             | The member still pays one unit. The page says it went over. The full actual cost counts against the test spending ceiling (below).          |
 | Usage is missing or malformed                | The outcome is treated as unknown. The unit stays held, with no refund and no second call.                                                  |
 | Settlement fails after the provider answered | Result and consumption roll back. The attempt stays held after its lease and is not called again.                                           |
 | No estimate or a retired rate version        | The provider is not called. Withdrawing permission releases the never-started hold. Requests queued before migration 100 are in this group. |
@@ -26,7 +26,23 @@ Before a member holds a request, the page shows an estimate labelled with its mo
 
 Stored figures are integers and version names only. Provider usage is read as two bounded integers, so no other provider text can reach these records. They are immutable, appear in the member's export as `aiUsage`, and are removed only by member erasure.
 
-This does not set a real rate, currency, spending ceiling or grant. Those remain inputs for a real provider under #188. Resolving held requests is #189.
+## Test spending ceiling
+
+Migration 115 adds one platform-wide test spending ceiling, in simulated points of `simulated-rates-v1`. Its invented starting value is 100000 points, room for several hundred demo requests. It is not money and not a real provider ceiling.
+
+| Case                                                  | What happens                                                                                                                                       |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A member queues a request whose estimate does not fit | Nothing is held and no request is created.                                                                                                         |
+| A member runs a request whose estimate does not fit   | The provider is not called. The request stays pending with its unit reserved; it can run once there is room, or withdrawing permission returns it. |
+| A request is claimed for dispatch                     | Its estimate is committed in the same transaction as the claim, before any provider call. The ceiling row is locked last, so racing claims queue.  |
+| The provider's usage settles                          | The commitment moves from the estimate to the actual cost, in the settlement transaction. An overrun counts in full and can close the ceiling.     |
+| The outcome is unknown (error, missing usage, lease)  | The estimate stays committed. It is never returned automatically.                                                                                  |
+| A known failure before the provider call              | The estimate is returned once: wrong adapter, missing source bytes, ended permission or a pause after the claim.                                   |
+| A member is erased                                    | Their per-attempt records go, but the platform total keeps what was committed. It holds no member reference.                                       |
+
+Each attempt has one commitment record, keyed by request and attempt number. A database trigger keeps the platform total in step with these records, refuses a commitment that would pass the ceiling, and allows each commitment to close only once, as settled or restored. Platform administrators see the ceiling, committed and remaining points on the simulation control page. The page names no member, request or source. Unmetered simulations carry no estimate and are not counted. Raising the ceiling needs a reviewed migration; there is no staff control for it.
+
+This does not set a real rate, currency, spending ceiling, per-member limit or grant. Those remain inputs for a real provider under #188. Resolving held requests is #189.
 
 ## Transactions and migration
 

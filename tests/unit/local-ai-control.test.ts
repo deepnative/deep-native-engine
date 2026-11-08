@@ -13,6 +13,7 @@ function fixture(
     fail?: string;
     broken?: boolean;
     connectFail?: boolean;
+    ceiling?: Record<string, unknown> | null;
   } = {},
 ) {
   const query = vi.fn(async (sql: string) => {
@@ -25,6 +26,19 @@ function fixture(
         rows: options.missing
           ? []
           : [{ paused: options.row === undefined ? false : options.row }],
+      };
+    if (sql.includes("FROM ai_test_spending_ceiling"))
+      return {
+        rows:
+          options.ceiling === null
+            ? []
+            : [
+                options.ceiling ?? {
+                  rate_version: "simulated-rates-v1",
+                  ceiling_points: "5000",
+                  committed_points: "157",
+                },
+              ],
       };
     if (sql.includes("SELECT p.id"))
       return {
@@ -93,4 +107,36 @@ it("denies invalid booleans, unauthorized and expired admin without mutation", a
   const { service, query } = fixture();
   expect(await service.set("admin", "false" as unknown as boolean)).toBe(false);
   expect(query).not.toHaveBeenCalled();
+});
+
+it("gives platform admins content-free spending totals and fails closed otherwise", async () => {
+  expect(await fixture().service.spending("admin")).toEqual({
+    rateVersion: "simulated-rates-v1",
+    ceilingPoints: 5000,
+    committedPoints: 157,
+    remainingPoints: 4843,
+  });
+  // An overrun past the ceiling shows no negative room.
+  expect(
+    await fixture({
+      ceiling: {
+        rate_version: "simulated-rates-v1",
+        ceiling_points: "100",
+        committed_points: "3600",
+      },
+    }).service.spending("admin"),
+  ).toMatchObject({ committedPoints: 3600, remainingPoints: 0 });
+  const denied = fixture({ denied: true });
+  expect(await denied.service.spending("member")).toBeNull();
+  expect(
+    denied.query.mock.calls.some(([sql]) =>
+      (sql as string).includes("ai_test_spending_ceiling"),
+    ),
+  ).toBe(false);
+  expect(await fixture({ ceiling: null }).service.spending("admin")).toBeNull();
+  expect(
+    await fixture({ fail: "ai_test_spending_ceiling" }).service.spending(
+      "admin",
+    ),
+  ).toBeNull();
 });

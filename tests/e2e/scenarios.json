@@ -2802,6 +2802,15 @@
       "expected": "The history page says the download includes it as staffAccess; the download is v38 and its staffAccess section lists the grant and the opening as assignment access, with no purpose, staff or grant identifiers; no sideways scrolling",
       "issues": [40],
       "critical": false
+    },
+    {
+      "id": "L315",
+      "actor": "Platform administrator reading the test spending ceiling",
+      "preconditions": "Shared synthetic PostgreSQL database, invented administrator and member, one invented study test request run through the deterministic metered path; desktop/mobile Chromium",
+      "steps": "AICAP-08: the administrator opens the simulation control page and reads the test spending ceiling",
+      "expected": "Ceiling, committed and remaining simulated points at simulated-rates-v1, labelled not money, with remaining equal to ceiling minus committed; no source name, member, request or source text; no sideways scrolling",
+      "issues": [188],
+      "critical": false
     }
   ],
   "fullMvp": [

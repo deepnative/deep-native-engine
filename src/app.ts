@@ -1058,7 +1058,11 @@ export function app(
         );
       return;
     }
-    res.send(localAiControlPage(state.paused, res.locals.csrf as string));
+    const spending =
+      (await localAiControl.spending?.(res.locals.token as string)) ?? null;
+    res.send(
+      localAiControlPage(state.paused, res.locals.csrf as string, spending),
+    );
   });
   app.post("/operator/local-ai", async (req, res) => {
     if (mode === "live") {
@@ -2279,6 +2283,17 @@ export function app(
       req.params.receiptId as string,
       fields.key,
     );
+    if (outcome.kind === "ceiling_reached") {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Test spending ceiling reached",
+            "The test spending ceiling has no room for this request. No test request was held and no provider was contacted.",
+          ),
+        );
+      return;
+    }
     if (outcome.kind !== "queued") {
       res
         .status(outcome.kind === "conflict" ? 409 : 403)
@@ -2303,6 +2318,17 @@ export function app(
       res.locals.token as string,
       req.params.jobId as string,
     );
+    if (outcome.kind === "ceiling_reached") {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Test spending ceiling reached",
+            "Nothing was sent to the provider. Your test request stays reserved and can run when there is room, or withdraw permission to get it back.",
+          ),
+        );
+      return;
+    }
     if (outcome.kind !== "completed") {
       const paused = (await localAiControl.current()) === "paused";
       res

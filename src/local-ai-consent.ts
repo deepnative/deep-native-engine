@@ -56,20 +56,22 @@ export interface LocalAiConsentStore {
     receiptId: string,
     key: string,
   ): Promise<
-    { kind: "queued"; jobId: string } | { kind: "denied" | "conflict" }
+    | { kind: "queued"; jobId: string }
+    | { kind: "denied" | "conflict" | "ceiling_reached" }
   >;
   enqueueMetered(
     token: string,
     receiptId: string,
     key: string,
   ): Promise<
-    { kind: "queued"; jobId: string } | { kind: "denied" | "conflict" }
+    | { kind: "queued"; jobId: string }
+    | { kind: "denied" | "conflict" | "ceiling_reached" }
   >;
   run(
     token: string,
     jobId: string,
   ): Promise<{
-    kind: "completed" | "denied" | "unavailable";
+    kind: "completed" | "denied" | "unavailable" | "ceiling_reached";
     jobId?: string;
     status?: string;
   }>;
@@ -475,14 +477,36 @@ export function localAiConsentStore(
   // Checked before a dispatch claim: no usable estimate means no provider call,
   // and the never-started hold stays releasable by withdrawing permission.
   async function currentUsageEstimate(client: PoolClient, job: Job) {
-    if (!job.test_unit_policy) return true;
+    return (
+      await client.query<{ cost_points: number }>(
+        "SELECT cost_points FROM ai_usage_estimates WHERE job_id=$1 AND member_id=$2 AND rate_version=$3 AND model_version=$4",
+        [job.id, job.member_id, AI_TEST_RATE_VERSION, AI_TEST_MODEL_VERSION],
+      )
+    ).rows[0];
+  }
+  // The test spending ceiling (#188) is in points of the current test rates.
+  // A dispatch claim locks it last, after every grant and job lock, so two
+  // claims for the last room serialize and only one reaches the provider.
+  async function ceilingRoom(client: PoolClient, points: number, lock = false) {
     return Boolean(
       (
         await client.query(
-          "SELECT 1 FROM ai_usage_estimates WHERE job_id=$1 AND member_id=$2 AND rate_version=$3 AND model_version=$4",
-          [job.id, job.member_id, AI_TEST_RATE_VERSION, AI_TEST_MODEL_VERSION],
+          `SELECT 1 FROM ai_test_spending_ceiling WHERE singleton AND rate_version=$2 AND committed_points+$1<=ceiling_points${lock ? " FOR UPDATE" : ""}`,
+          [points, AI_TEST_RATE_VERSION],
         )
       ).rows[0],
+    );
+  }
+  // Before the provider call this attempt is known not to have spent anything,
+  // so its committed estimate returns to the ceiling, once.
+  async function restoreCommitment(
+    client: PoolClient,
+    id: string,
+    attempt: number,
+  ) {
+    await client.query(
+      "UPDATE ai_spending_commitments SET state='restored' WHERE job_id=$1 AND attempt=$2 AND state='committed'",
+      [id, attempt],
     );
   }
   async function enqueue(
@@ -490,11 +514,12 @@ export function localAiConsentStore(
     id: string,
     key: string,
     metered = false,
-  ): Promise<Awaited<ReturnType<LocalAiConsentStore["enqueue"]>>> {
+  ): Promise<Awaited<ReturnType<LocalAiConsentStore["enqueueMetered"]>>> {
     if (!uuid.test(id) || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(key))
       return { kind: "denied" };
     return transaction<
-      { kind: "queued"; jobId: string } | { kind: "denied" | "conflict" }
+      | { kind: "queued"; jobId: string }
+      | { kind: "denied" | "conflict" | "ceiling_reached" }
     >({ kind: "denied" }, async (client) => {
       if (!(await localAiEnabled(client))) return { kind: "denied" };
       const authorization = await receipt(client, token, id);
@@ -529,6 +554,10 @@ export function localAiConsentStore(
           : { kind: "conflict" };
       }
       if (!unresolved) {
+        const estimate = estimateAiRequest(authorization.row.byte_size);
+        // Nothing is held for a request the ceiling has no room to run.
+        if (metered && !(await ceilingRoom(client, estimate.costPoints)))
+          return { kind: "ceiling_reached" };
         const selected = metered
           ? (
               await client.query<{ id: string }>(
@@ -576,7 +605,6 @@ export function localAiConsentStore(
                 LOCAL_AI_TEST_UNIT_POLICY,
               ],
             );
-            const estimate = estimateAiRequest(authorization.row.byte_size);
             await client.query(
               "INSERT INTO ai_usage_estimates(job_id,member_id,rate_version,model_version,input_tokens,output_tokens,cost_points) VALUES($1,$2,$3,$4,$5,$6,$7)",
               [
@@ -753,7 +781,10 @@ export function localAiConsentStore(
       // Commit a durable claim BEFORE computation. A crash/ambiguous commit leaves
       // a running attempt; expiry moves it to reconciliation, never auto-reexecution.
       const claim = await transaction<
-        { attempt: string } | { status: string } | null
+        | { attempt: string; number: number }
+        | { status: string }
+        | { ceiling: true }
+        | null
       >(null, async (client) => {
         if (!(await localAiEnabled(client))) return null;
         const authorized = await authorizedJob(client, token, id);
@@ -775,19 +806,35 @@ export function localAiConsentStore(
           );
           return { status: "exhausted" };
         }
-        if (
-          !(await currentTestReservation(client, job, "reserved")) ||
-          !(await currentUsageEstimate(client, job))
-        )
+        if (!(await currentTestReservation(client, job, "reserved")))
           return null;
+        const estimate = job.test_unit_policy
+          ? await currentUsageEstimate(client, job)
+          : undefined;
+        if (job.test_unit_policy) {
+          if (!estimate) return null;
+          // A full ceiling leaves the request pending and its unit reserved;
+          // withdrawing permission still releases it.
+          if (!(await ceilingRoom(client, estimate.cost_points, true)))
+            return { ceiling: true };
+        }
         const attempt = randomUUID();
+        const number = job.attempt_count + 1;
         await client.query(
           "UPDATE adapter_jobs SET status='running',attempt_count=attempt_count+1,attempt_token=$2,lease_until=clock_timestamp()+interval '5 minutes',safe_error=NULL,updated_at=clock_timestamp() WHERE id=$1",
           [id, attempt],
         );
-        return { attempt };
+        // Committed with the claim, before any provider call. An uncertain
+        // attempt keeps it; only settlement or a known pre-call failure moves it.
+        if (estimate)
+          await client.query(
+            "INSERT INTO ai_spending_commitments(job_id,attempt,estimated_points,state) VALUES($1,$2,$3,'committed')",
+            [id, number, estimate.cost_points],
+          );
+        return { attempt, number };
       });
       if (!claim) return { kind: "denied" };
+      if ("ceiling" in claim) return { kind: "ceiling_reached", jobId: id };
       if ("status" in claim)
         return {
           kind: claim.status === "succeeded" ? "completed" : "unavailable",
@@ -800,8 +847,12 @@ export function localAiConsentStore(
         status?: string;
       }>({ kind: "unavailable" }, async (client) => {
         // A pause between claim and execution keeps the durable running attempt
-        // held. Resume must never reset or replay this uncertain attempt.
-        if (!(await localAiEnabled(client))) return { kind: "unavailable" };
+        // held. Resume must never reset or replay this uncertain attempt. The
+        // provider was not called, so its committed estimate returns.
+        if (!(await localAiEnabled(client))) {
+          await restoreCommitment(client, id, claim.number);
+          return { kind: "unavailable" };
+        }
         const authorized = await authorizedJob(client, token, id);
         if (
           !authorized ||
@@ -815,6 +866,7 @@ export function localAiConsentStore(
             "UPDATE adapter_jobs SET status='exhausted',attempt_token=NULL,lease_until=NULL,safe_error='provider_unavailable',updated_at=clock_timestamp() WHERE id=$1 AND status='running' AND attempt_token=$2",
             [id, claim.attempt],
           );
+          await restoreCommitment(client, id, claim.number);
           return { kind: "denied" };
         }
         const text = await bytes(client, authorized.row);
@@ -823,6 +875,7 @@ export function localAiConsentStore(
             "UPDATE adapter_jobs SET status='failed',attempt_token=NULL,lease_until=NULL,safe_error='provider_unavailable' WHERE id=$1",
             [id],
           );
+          await restoreCommitment(client, id, claim.number);
           return { kind: "denied" };
         }
         let result;
@@ -834,6 +887,7 @@ export function localAiConsentStore(
               "UPDATE adapter_jobs SET status='exhausted',attempt_token=NULL,lease_until=NULL,safe_error='provider_unavailable',updated_at=clock_timestamp() WHERE id=$1",
               [id],
             );
+            await restoreCommitment(client, id, claim.number);
             return { kind: "denied" };
           }
           const output = await adapter.execute(LOCAL_AI_PURPOSE, { text });
@@ -893,6 +947,17 @@ export function localAiConsentStore(
               aiCostPoints(usage),
             ],
           );
+          // The ceiling moves from the estimate to the actual cost, including
+          // an overrun, which can close it to later claims.
+          if (
+            !(
+              await client.query(
+                "UPDATE ai_spending_commitments SET state='settled',actual_points=$3 WHERE job_id=$1 AND attempt=$2 AND state='committed' RETURNING job_id",
+                [id, claim.number, aiCostPoints(usage)],
+              )
+            ).rows[0]
+          )
+            throw Error("Local spending commitment unavailable");
           // Ledger key/grant waits can outlive the last authorization read.
           // Roll back result and consumption together; the durable claim stays
           // held and cannot be dispatched again after this uncertain boundary.

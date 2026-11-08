@@ -1722,6 +1722,22 @@ it("requires explicit member confirmation and current local AI permission at eve
     "receipt-id",
     "private-key",
   );
+  localAiConsent.enqueueMetered.mockResolvedValueOnce({
+    kind: "ceiling_reached",
+  });
+  const fullQueue = await post("/evidence/local-ai/receipt-id/queue-metered", {
+    confirm: "yes",
+    key: "private-key",
+  }).expect(409);
+  expect(fullQueue.text).toContain("Test spending ceiling reached");
+  expect(fullQueue.text).toContain("No test request was held");
+  localAiConsent.run.mockResolvedValueOnce({
+    kind: "ceiling_reached",
+    jobId: "job-id",
+  });
+  const fullRun = await post("/evidence/local-ai/job-id/run").expect(409);
+  expect(fullRun.text).toContain("Nothing was sent to the provider");
+  expect(fullRun.text).toContain("stays reserved");
   await post("/evidence/local-ai/job-id/run").expect(403);
   localAiConsent.run.mockResolvedValueOnce({ kind: "unavailable" });
   await post("/evidence/local-ai/job-id/run").expect(409);
@@ -1770,6 +1786,23 @@ it("keeps local AI pause control admin-only and shows member unavailability", as
     .set("Host", host)
     .expect(200);
   expect(control.text).toContain("Local simulation is available");
+  expect(control.text).toContain("Test spending ceiling unavailable");
+  const spending = vi.fn<NonNullable<LocalAiControlStore["spending"]>>();
+  (localAiControl as LocalAiControlStore).spending = spending;
+  spending.mockResolvedValueOnce({
+    rateVersion: "simulated-rates-v1",
+    ceilingPoints: 5000,
+    committedPoints: 157,
+    remainingPoints: 4843,
+  });
+  localAiControl.read.mockResolvedValueOnce({ paused: false });
+  const readout = await agent
+    .get("/operator/local-ai")
+    .set("Host", host)
+    .expect(200);
+  expect(readout.text).toContain("ceiling 5000, committed 157, remaining 4843");
+  expect(spending).toHaveBeenCalledWith(expect.any(String));
+  delete (localAiControl as LocalAiControlStore).spending;
   const post = (state: string, confirm = "yes") =>
     agent
       .post("/operator/local-ai")

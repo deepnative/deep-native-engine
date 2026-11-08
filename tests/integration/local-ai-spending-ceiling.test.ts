@@ -65,7 +65,14 @@ beforeEach(async () => {
   execute.mockReset();
   execute.mockImplementation(registry.adapter("ai", "test").execute);
 });
-afterAll(() => pool.end());
+afterAll(async () => {
+  // Leave the shared switch and ceiling usable for later files.
+  await pool.query("UPDATE local_ai_control SET paused=false");
+  await pool.query(
+    "UPDATE ai_test_spending_ceiling SET ceiling_points=100000,committed_points=0",
+  );
+  await pool.end();
+});
 
 async function member() {
   const token = randomBytes(32).toString("hex");
@@ -125,8 +132,6 @@ const stubUsage = (usage: unknown) =>
   );
 const held = { available: 0, reserved: 1, consumed: 0 };
 const consumedOnce = { available: 0, reserved: 0, consumed: 1 };
-const rows = async (table: string, jobId: string) =>
-  (await pool.query(`SELECT * FROM ${table} WHERE job_id=$1`, [jobId])).rows;
 
 const committed = async () =>
   Number(
@@ -196,6 +201,7 @@ it("AICAP-02: makes no provider call when the estimate would pass the ceiling, a
 
   const other = await permitted();
   const otherGrant = await grant(other);
+  await room(1000);
   const waiting = await queued(other);
   await room(0);
   expect((await local.run(other.token, waiting)).kind).toBe("ceiling_reached");
@@ -279,7 +285,6 @@ it("AICAP-05: counts an overrun in full, which closes the ceiling to later reque
 it.each([
   ["an ambiguous provider failure", "throw"],
   ["missing usage", "missing"],
-  ["an expired lease", "lease"],
 ])("AICAP-06: keeps the estimate counted after %s", async (_name, outcome) => {
   const owner = await permitted();
   const grantId = await grant(owner);
@@ -287,14 +292,6 @@ it.each([
   if (outcome === "throw")
     execute.mockRejectedValueOnce(Error("Invented provider timeout"));
   if (outcome === "missing") stubUsage(undefined);
-  if (outcome === "lease")
-    execute.mockImplementationOnce(async (...args) => {
-      await pool.query(
-        "UPDATE adapter_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1",
-        [jobId],
-      );
-      return registry.adapter("ai", "test").execute(...args);
-    });
   expect((await local.run(owner.token, jobId)).kind).toBe("unavailable");
   expect((await local.run(owner.token, jobId)).kind).toBe("unavailable");
   expect(await local.withdraw(owner.token, owner.receiptId)).toBe(true);

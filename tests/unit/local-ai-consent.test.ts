@@ -80,6 +80,8 @@ function setup(
     metering?: Record<string, unknown>;
     noGrant?: boolean;
     noEstimate?: boolean;
+    ceilingFull?: boolean;
+    noCommitment?: boolean;
     usage?: unknown;
     budgetDeadline?: "claim" | "before" | "after";
     queueDeadline?: "session" | "grant";
@@ -190,8 +192,12 @@ function setup(
             ]
           : [],
       };
-    if (sql.includes("SELECT 1 FROM ai_usage_estimates"))
-      return { rows: options.noEstimate ? [] : [{}] };
+    if (sql.includes("SELECT cost_points FROM ai_usage_estimates"))
+      return { rows: options.noEstimate ? [] : [{ cost_points: 157 }] };
+    if (sql.includes("FROM ai_test_spending_ceiling"))
+      return { rows: options.ceilingFull ? [] : [{}] };
+    if (sql.includes("SET state='settled'"))
+      return { rows: options.noCommitment ? [] : [{ job_id: jid }] };
     if (sql.includes("SELECT r.grant_id,r.quantity"))
       return {
         rows: [
@@ -1084,3 +1090,65 @@ it("lists stored estimates and actual figures without other fields", async () =>
     { estimate },
   ]);
 });
+
+it("holds nothing and calls no provider when the test spending ceiling is full", async () => {
+  const queued = setup({
+    metered: true,
+    ceilingFull: true,
+    missing: "collision",
+  });
+  expect(await queued.service.enqueueMetered("member", rid, "key")).toEqual({
+    kind: "ceiling_reached",
+  });
+  const statements = queued.query.mock.calls.map(([sql]) => sql as string);
+  expect(
+    statements.some((sql) => sql.includes("INSERT INTO adapter_jobs")),
+  ).toBe(false);
+  const run = setup({ metered: true, ceilingFull: true });
+  expect(await run.service.run("member", jid)).toEqual({
+    kind: "ceiling_reached",
+    jobId: jid,
+  });
+  expect(run.execute).not.toHaveBeenCalled();
+  // Unmetered simulations are not counted against the ceiling.
+  const unmetered = setup({ ceilingFull: true });
+  expect((await unmetered.service.run("member", jid)).kind).toBe("completed");
+});
+
+it("commits the estimate with the claim and settles it to the actual cost", async () => {
+  const { service, query } = setup({ metered: true });
+  expect((await service.run("member", jid)).kind).toBe("completed");
+  const calls = query.mock.calls.map(([sql, args]) => [sql as string, args]);
+  expect(
+    calls.find(([sql]) =>
+      (sql as string).includes("INSERT INTO ai_spending_commitments"),
+    ),
+  ).toEqual([expect.any(String), [jid, 1, 157]]);
+  expect(
+    calls.find(([sql]) => (sql as string).includes("SET state='settled'")),
+  ).toEqual([expect.any(String), [jid, 1, 42]]);
+});
+
+it("rolls back settlement when the attempt's commitment is missing", async () => {
+  const { service, query } = setup({ metered: true, noCommitment: true });
+  expect((await service.run("member", jid)).kind).toBe("unavailable");
+  expect(query.mock.calls.some(([sql]) => sql === "ROLLBACK")).toBe(true);
+});
+
+it.each([
+  ["a pause after the claim", { phase2Paused: true }],
+  ["a denial after the claim", { phase2Denied: true }],
+  ["a changed attempt", { invalidPhase2Job: true }],
+])(
+  "returns the committed estimate after %s, before any provider call",
+  async (_name, options) => {
+    const { service, query, execute } = setup({ metered: true, ...options });
+    await service.run("member", jid);
+    expect(execute).not.toHaveBeenCalled();
+    expect(
+      query.mock.calls.filter(([sql]) =>
+        (sql as string).includes("SET state='restored'"),
+      ),
+    ).toEqual([[expect.any(String), [jid, 1]]]);
+  },
+);

@@ -6,6 +6,7 @@ import { deterministicRegistry } from "../../src/adapters.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { localAiConsentStore } from "../../src/local-ai-consent.ts";
 import { store } from "../../src/store.ts";
+import { syntheticLedger } from "../../src/ledger.ts";
 import { testPool } from "../support/database.ts";
 
 const pool = testPool();
@@ -239,4 +240,102 @@ test("[L77] an administrator pauses local AI while member permission stays exact
       await Promise.all([member.close(), admin.close(), reviewer.close()]);
     }
   }
+});
+
+test("[L315] AICAP-08 an administrator reads the test spending ceiling without member detail", async ({
+  page,
+}) => {
+  const memberToken = token();
+  const adminToken = token();
+  const objects = fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!);
+  const db = store(pool);
+  await db.create(memberToken, { background: "explorer", goal: "everyday" });
+  const session = await db.session(memberToken);
+  if (session.kind !== "active") throw Error("Synthetic member unavailable");
+  await authorizationStore(pool).provisionStaff(
+    adminToken,
+    "platform_admin",
+    new Date(Date.now() + 86_400_000),
+  );
+  const name = `ceiling-source-${randomBytes(8).toString("hex")}.txt`;
+  const evidence = evidenceStore(pool, objects, "browser-secret");
+  const uploaded = await evidence.upload(memberToken, {
+    name,
+    mediaType: "text/plain",
+    data: Buffer.from("Invented source for the spending ceiling"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+  });
+  if (uploaded.kind !== "created") throw Error("Synthetic source unavailable");
+  await evidence.transitionQuarantine(uploaded.id, "clean");
+  const local = localAiConsentStore(
+    pool,
+    objects,
+    deterministicRegistry({}, "test"),
+  );
+  const permission = await local.grant(memberToken, uploaded.id);
+  if (permission.kind !== "granted")
+    throw Error("Local permission unavailable");
+  await syntheticLedger(pool).grant(
+    session.learner.id,
+    "study_requests",
+    1,
+    randomBytes(16).toString("hex"),
+    {
+      startsAt: new Date(Date.now() - 60_000).toISOString(),
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    },
+  );
+  const queued = await local.enqueueMetered(
+    memberToken,
+    permission.receiptId,
+    randomBytes(16).toString("hex"),
+  );
+  if (queued.kind !== "queued") throw Error("Metered request unavailable");
+  expect((await local.run(memberToken, queued.jobId)).kind).toBe("completed");
+
+  await page.context().addCookies([
+    {
+      name: "dne_preview",
+      value: adminToken,
+      url: origin,
+      httpOnly: true,
+      sameSite: "Strict",
+    },
+  ]);
+  await page.goto("/operator/local-ai");
+  await expect(
+    page.getByRole("heading", { name: "Test spending ceiling" }),
+  ).toBeVisible();
+  const readout = page.getByText(
+    /^Simulated points at test rates simulated-rates-v1, not money: ceiling \d+, committed \d+, remaining \d+\.$/,
+  );
+  await expect(readout).toBeVisible();
+  const [, ceiling, committed, remaining] = (await readout.textContent())!
+    .match(/ceiling (\d+), committed (\d+), remaining (\d+)/)!
+    .map(Number);
+  // Other journeys share this database, so only this request's share is known.
+  expect(committed).toBeGreaterThanOrEqual(1);
+  expect(remaining).toBe(Math.max(0, ceiling! - committed!));
+  await expect(
+    page.getByText(
+      "When a request's estimate does not fit, no provider is called.",
+    ),
+  ).toBeVisible();
+  const text = await page.locator("main").innerText();
+  for (const detail of [
+    name,
+    session.learner.id,
+    queued.jobId,
+    "Invented source",
+  ])
+    expect(text).not.toContain(detail);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });
