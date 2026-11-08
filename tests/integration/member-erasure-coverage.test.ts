@@ -198,8 +198,8 @@ it("ERASE-03/04 after deletion only the listed records still refer to the member
     "INSERT INTO member_password_failures(email_hash) VALUES($1)",
     [gone.email],
   );
-  // The member's own workflow review request: its operation key stays
-  // reserved, with every link to the member cleared.
+  // The member's own workflow review request: its operation row stays, with
+  // every link to the member cleared (since #42 it reserves the key for no one).
   const operation = randomUUID();
   await pool.query(
     `INSERT INTO workflow_review_operations(operation_id,actor_id,workspace_id,kind,instruction,receipt_id)

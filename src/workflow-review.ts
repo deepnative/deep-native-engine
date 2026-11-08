@@ -146,8 +146,8 @@ async function operation(context: WorkflowReviewContext, id: string) {
   return (
     await context.tx.query<SavedOperation>(
       `SELECT actor_id AS "actorId",kind,instruction,receipt_id AS "receiptId"
-     FROM workflow_review_operations WHERE operation_id=$1`,
-      [id],
+     FROM workflow_review_operations WHERE actor_id=$1 AND operation_id=$2`,
+      [context.actorId, id],
     )
   ).rows[0];
 }
@@ -408,9 +408,7 @@ export function workflowReviewStore(
         const earlier = await operation(context, key);
         if (
           earlier &&
-          (earlier.actorId !== context.actorId ||
-            earlier.kind !== "request" ||
-            !same(earlier.instruction, checked))
+          (earlier.kind !== "request" || !same(earlier.instruction, checked))
         )
           return conflict();
         if (earlier?.receiptId) {
@@ -473,7 +471,6 @@ export function workflowReviewStore(
         const earlier = await operation(context, key);
         if (!earlier) return { kind: "ready" as const, receipt: null };
         if (
-          earlier.actorId !== context.actorId ||
           !earlier.receiptId ||
           !["request", "withdraw"].includes(earlier.kind!)
         )
@@ -532,8 +529,7 @@ export function workflowReviewStore(
         const earlier = await operation(context, key);
         if (
           earlier &&
-          (earlier.actorId !== context.actorId ||
-            earlier.kind !== "withdraw" ||
+          (earlier.kind !== "withdraw" ||
             !same(earlier.instruction, instruction))
         )
           return conflict();
