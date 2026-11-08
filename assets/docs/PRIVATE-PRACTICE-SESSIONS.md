@@ -31,6 +31,20 @@ this mapping itself is not delivery evidence or parent/full-MVP acceptance.
 Navigation rollback requires only reverting the view change; there is no data
 migration or mutation to reverse. Preserve the existing readers and stored work.
 
+## Optional interview practice (#200)
+
+The practice start page now offers a second, optional choice after the ordinary practice: **Optional interview practice**. It uses its own immutable prompt version, `interview-practice-v1`, for the same eligible lesson. Each goal has its own wording (everyday, work, build), each asks an invented interview question, and none names a job title, employer or career. Only the member's own start chooses it. Background, goal and plan never do.
+
+Because sessions are already keyed by member, exact source version, goal and prompt version, an interview session is a separate session beside the ordinary one and needs no migration. Everything else is reused unchanged: the 15-pair (30 visible turn) cap, exact replay and conflicts, freezing on a goal change or replaced or retired source, withdrawal, export, account erasure and, when `DNE_PRACTICE_SESSION_ALLOWANCE` is on, one test unit per new session.
+
+Each saved comparison in an interview session is the same deterministic comparison with one more line: "This interview practice doesn't predict hiring, interview results or competence." There's no score or rating. The session page names its purpose, and history shows "Optional interview practice" or "Lesson practice" with the prompt version. The export already carries `promptVersion`, which tells the two apart. No AI provider is called.
+
+BDD mapping: INTERVIEW-01..07 are in `tests/unit/practice-sessions.test.ts`, `tests/unit/practice-session-ui.test.ts`, `tests/unit/member-wording.test.ts` and `tests/integration/interview-practice.test.ts`. INTERVIEW-08 is journey L315 (desktop and mobile Chromium).
+
+Rollback: revert the code. Interview sessions already saved keep their history, export and withdrawal, because an unknown prompt version is read-only.
+
+Still open on #200: generated feedback, provider output checks and failures, and live budget exhaustion. These need a provider and budget.
+
 ## Failure and rollback
 
 Failed or uncertain writes return generic non-success and never replay automatically. Reload owned history to inspect actual durable state. Expiry, revocation or deletion during lock waits denies or rolls back; a failed rollback discards the connection.

@@ -50,8 +50,8 @@ export function practiceComparison(saved: string): string {
         "Simulation — unreviewed comparison.",
       )
       .replace(
-        /This deterministic comparison (does not verify accuracy and cannot judge competence\. Uncertainty remains; no qualified review has occurred\.)$/,
-        "This comparison $1",
+        /This deterministic comparison (does not verify accuracy and cannot judge competence\. Uncertainty remains; no qualified review has occurred\.)(\n[^\n]*)?$/,
+        "This comparison $1$2",
       ),
   );
 }

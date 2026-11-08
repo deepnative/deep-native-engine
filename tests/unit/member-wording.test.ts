@@ -1279,6 +1279,10 @@ const practiceSource = {
   contentId: "SYN-960",
   contentVersion: 3,
   goal: "everyday",
+  interview: {
+    promptVersion: "invented-interview-prompt",
+    prompt: "Invented interview prompt",
+  },
 } as never;
 const practiceDetail = {
   id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
@@ -1516,6 +1520,16 @@ it("READABLE-25 a saved practice comparison reads plainly when hosted and is unc
   );
 });
 
+it("INTERVIEW-03 a hosted interview comparison reads plainly and keeps its no-prediction line", () => {
+  const notice =
+    "This interview practice doesn't predict hiring, interview results or competence.";
+  const online = hosted(() => practiceComparison(`${comparison}\n${notice}`));
+  expect(online).toContain(
+    "This comparison does not verify accuracy and cannot judge competence.",
+  );
+  expect(online).not.toContain("verify. This deterministic comparison");
+  expect(online.endsWith(`\n${notice}`)).toBe(true);
+});
 it("READABLE-25 the provided-sample label reads plainly when hosted and keeps invented and unreviewed", () => {
   const origin = {
     label: PROVIDED_SAMPLE_LABEL,
