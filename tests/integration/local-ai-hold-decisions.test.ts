@@ -13,6 +13,8 @@ import {
   localAiHoldDecisionStore,
   type HoldTestDecisionInput,
 } from "../../src/local-ai-hold-decisions.ts";
+import { memberExportStore } from "../../src/member-export.ts";
+import { localAiConsentPage } from "../../src/views.ts";
 // #189 HOLDDEC: labelled test outcomes on invented held requests. No provider
 // exists; the AI boundary always throws, which is what leaves a request held.
 const pool = testPool(),
@@ -427,4 +429,139 @@ it("HOLDDEC-11 decisions are unavailable in live mode or when hold inspection is
     });
   }
   expect(await rows(f.jobId)).toEqual([]);
+});
+
+// HOLDDEC-13..16: the member sees and exports the recorded test outcome on
+// their own held request, never who recorded it, under which assignment, with
+// which reference or key, and nothing reaches another member.
+const exporter = memberExportStore(pool);
+const operatorDetails = (f: Awaited<ReturnType<typeof held>>, key: string) => [
+  f.operatorId,
+  f.grantId,
+  key,
+  "test-record-0001",
+  PRIVATE_TEXT,
+];
+async function exportedJobs(token: string) {
+  const result = await exporter.exportOwned(token);
+  if (result.kind !== "ready") throw Error("Expected an export");
+  expect(result.payload.version).toBe("local-member-records-v40");
+  return result.payload.records.adapterJobs!;
+}
+
+it("HOLDDEC-13 the member sees the recorded test outcome on their held request, labelled as not provider-confirmed, without operator details", async () => {
+  const f = await held();
+  const [before] = await local.list(f.ownerToken);
+  expect(before!.jobs).toEqual([
+    expect.not.objectContaining({ testOutcome: expect.anything() }),
+  ]);
+  const choice = input();
+  const recorded = await decisions.record(f.operatorToken, f.jobId, choice);
+  if (recorded.kind !== "applied") throw Error("Expected a decision");
+  const listed = await local.list(f.ownerToken);
+  expect(listed[0]!.jobs).toEqual([
+    expect.objectContaining({
+      id: f.jobId,
+      status: "needs_reconciliation",
+      testOutcome: {
+        outcome: "test-executed",
+        reason: "matching-test-record",
+        decidedAt: new Date(recorded.decision.decidedAt),
+      },
+    }),
+  ]);
+  const html = localAiConsentPage(listed, "csrf-invented");
+  expect(html).toContain("A test outcome was recorded for this held request");
+  expect(html).toContain("it ran");
+  expect(html).toContain("No AI provider confirmed it");
+  expect(html).toContain("the request stays held");
+  expect(html).not.toContain(`/evidence/local-ai/${f.jobId}/run`);
+  for (const value of operatorDetails(f, choice.key)) {
+    expect(JSON.stringify(listed)).not.toContain(value);
+    expect(html).not.toContain(value);
+  }
+});
+
+it("HOLDDEC-14 the outcome stays visible after the member deletes the source", async () => {
+  const f = await held();
+  const choice = input({
+    outcome: "test-not-executed",
+    reason: "operator-test-exercise",
+  });
+  expect((await decisions.record(f.operatorToken, f.jobId, choice)).kind).toBe(
+    "applied",
+  );
+  expect(await evidence.remove(f.ownerToken, f.evidenceId)).toBe(true);
+  const listed = await local.list(f.ownerToken);
+  expect(listed).toEqual([
+    expect.objectContaining({
+      sourceDeleted: true,
+      jobs: [
+        expect.objectContaining({
+          id: f.jobId,
+          testOutcome: expect.objectContaining({
+            outcome: "test-not-executed",
+            reason: "operator-test-exercise",
+          }),
+        }),
+      ],
+    }),
+  ]);
+  const html = localAiConsentPage(listed, "csrf-invented");
+  expect(html).toContain("it did not run");
+  expect(html).toContain("recorded as an operator test exercise");
+  for (const value of operatorDetails(f, choice.key))
+    expect(html).not.toContain(value);
+});
+
+it("HOLDDEC-15 the member's export includes the test outcome without operator details; an undecided hold exports none", async () => {
+  const f = await held();
+  const choice = input();
+  const recorded = await decisions.record(f.operatorToken, f.jobId, choice);
+  if (recorded.kind !== "applied") throw Error("Expected a decision");
+  const [row] = await exportedJobs(f.ownerToken);
+  expect(row).toMatchObject({
+    id: f.jobId,
+    status: "needs_reconciliation",
+    holdTestOutcome: {
+      outcome: "test-executed",
+      reason: "matching-test-record",
+      decidedAt: recorded.decision.decidedAt,
+      label: "TEST OUTCOME · NOT PROVIDER-CONFIRMED · STILL HELD",
+    },
+  });
+  expect(Object.keys(row!.holdTestOutcome as object).sort()).toEqual([
+    "decidedAt",
+    "label",
+    "outcome",
+    "reason",
+  ]);
+  for (const value of operatorDetails(f, choice.key))
+    expect(JSON.stringify(row)).not.toContain(value);
+  const undecided = await held();
+  expect(await exportedJobs(undecided.ownerToken)).toEqual([
+    expect.objectContaining({ id: undecided.jobId, holdTestOutcome: null }),
+  ]);
+});
+
+it("HOLDDEC-16 another member sees and exports nothing of the outcome, even with their own held request", async () => {
+  const f = await held(),
+    other = await held();
+  expect((await decisions.record(f.operatorToken, f.jobId, input())).kind).toBe(
+    "applied",
+  );
+  const listed = await local.list(other.ownerToken);
+  const exportedRows = await exportedJobs(other.ownerToken);
+  for (const text of [
+    JSON.stringify(listed),
+    localAiConsentPage(listed, "csrf-invented"),
+    JSON.stringify(exportedRows),
+  ]) {
+    expect(text).not.toContain(f.jobId);
+    expect(text).not.toContain("test-executed");
+    expect(text).not.toContain("test outcome was recorded");
+  }
+  expect(exportedRows).toEqual([
+    expect.objectContaining({ id: other.jobId, holdTestOutcome: null }),
+  ]);
 });
