@@ -60,7 +60,7 @@ const monthName = (start: Date) =>
   });
 function earlierRow(row: EarlierAllowanceMonth) {
   const held = row.held
-    ? `<p>A request that was in progress when this month ended can still finish and uses that month's unit. If it's cancelled instead, the unit ends with that month and doesn't move to the current month.</p>`
+    ? `<p>A request that was still in progress when the month ended can still finish, and it uses its unit from that month. If it's cancelled instead, the unit ends unused with that month and doesn't move to the current month.</p>`
     : "";
   return `<div data-earlier-month="${row.periodStart.toISOString().slice(0, 7)}" data-earlier-category="${row.category}"><h3>${monthName(row.periodStart)} · ${categoryName[row.category]}</h3><dl><dt>Rules version</dt><dd>${escape(row.policyVersion)}</dd><dt>Claimed</dt><dd><span data-field="earlier-claimed">${row.quantity}</span></dd><dt>Used</dt><dd><span data-field="earlier-used">${row.used}</span></dd><dt>Still held for a request in progress</dt><dd><span data-field="earlier-held">${row.held}</span></dd><dt>Ended unused</dt><dd><span data-field="earlier-ended">${row.endedUnused}</span></dd></dl>${held}</div>`;
 }
