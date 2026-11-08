@@ -91,6 +91,11 @@ test("[L302] started requests stay held with an unknown outcome after withdrawal
   await withdrawn.item
     .getByRole("button", { name: "Queue local simulation" })
     .click();
+  // Let the queued page finish loading: a reload mid-navigation detaches the
+  // page ("Not attached to an active page"), and the job must exist first.
+  await expect(
+    withdrawn.item.getByRole("button", { name: "Run local simulation" }),
+  ).toBeVisible();
   await startedRequest(page, memberId);
   await withdrawn.item
     .getByLabel(`Withdraw local AI permission for ${withdrawnTitle}`)
@@ -115,6 +120,11 @@ test("[L302] started requests stay held with an unknown outcome after withdrawal
   await revised.item
     .getByRole("button", { name: "Queue local simulation" })
     .click();
+  // Let the queued page finish loading: a reload mid-navigation detaches the
+  // page ("Not attached to an active page"), and the job must exist first.
+  await expect(
+    revised.item.getByRole("button", { name: "Run local simulation" }),
+  ).toBeVisible();
   await startedRequest(page, memberId);
   await evidence.submitForReview(token, revised.id);
   const next = await evidence.upload(token, {

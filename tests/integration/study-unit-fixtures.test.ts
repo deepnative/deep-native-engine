@@ -663,6 +663,10 @@ it("TESTISSUE-07 append-only owned fixture export discloses no administrator ide
     "invoicePayments",
     "staffAccess",
     "invoicePlans",
+    "sampleHolds",
+    "contentAssessments",
+    "coachAssignments",
+    "manualPaymentObservations",
   ]);
   expect(result.payload.records.assignmentEvidenceOrigins).toEqual([]);
   expect(result.payload.records.assignmentCopyReceipts).toEqual([]);
@@ -793,20 +797,21 @@ it("TESTISSUE-06/07 a newly created account cannot revive an erased account's an
   const checked = value(
     await enabled.checkRequest(newOwner, f.administratorId),
   );
-  expect(await enabled.request(newOwner, f.requestKey, checked)).toMatchObject({
-    kind: "conflict",
-  });
   expect(
     await enabled.issue(f.admin, f.issueKey, f.issueChecked),
   ).toMatchObject({ kind: "denied" });
   expect(value(await enabled.member(newOwner)).receipt).toBeNull();
-  // An independent fresh account has no cross-account identity tracker. It can
-  // make its own new explicit request, but cannot reuse old keys or sources.
+  // SFKEY (#42): keys are per actor, so the erased account's key reads like an
+  // unused one. It makes the fresh account's own new request and revives
+  // nothing of the erased account's request or grant.
   const independent = value(
-    await enabled.request(newOwner, randomUUID(), checked),
+    await enabled.request(newOwner, f.requestKey, checked),
   );
   expect(independent.id).not.toBe(f.request.id);
   expect(independent.grantId).toBeNull();
+  expect(value(await enabled.request(newOwner, f.requestKey, checked)).id).toBe(
+    independent.id,
+  );
 });
 it("TESTISSUE-07 real bounded export continuation includes the appended fixture once and rejects foreign, forged and erased-owner cursors", async () => {
   const f = await issued();

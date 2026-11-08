@@ -679,7 +679,7 @@ it("exports v8 marker metadata with null response, keeps other notes private and
   expect(exported).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v40",
+      version: "local-member-records-v42",
       records: {
         privatePractice: [
           {
@@ -789,8 +789,11 @@ it("continues beyond the per-page cap without losing or disclosing withdrawn pra
             state: "withdrawn",
           },
         ],
+        // The coach summary (v42) is the other record: every new member gets
+        // the default coaches.
+        coachAssignments: [{ coaches: expect.any(Number) }],
       },
-      page: { number: 2, recordCount: 1, complete: true, nextCursor: null },
+      page: { number: 2, recordCount: 2, complete: true, nextCursor: null },
     },
   });
   if (last.kind !== "ready") throw Error("Synthetic last page unavailable");

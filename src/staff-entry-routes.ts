@@ -46,6 +46,8 @@ export interface StaffTools {
   eventRehearsals?: boolean;
   workflowReviews?: boolean;
   invoices?: boolean;
+  /** #123 AGREE: the course agreement outcomes report is available here. */
+  agreements?: boolean;
   /** #123 CAP: the staff capacity report is available here. */
   capacity?: boolean;
   localAi: boolean;
@@ -152,6 +154,11 @@ function links(role: StaffRole, tools: StaffTools) {
         tools.invoices === true,
         "/operator/invoice-reconciliation",
         "Invoice and cash reconciliation",
+      ],
+      [
+        tools.agreements === true,
+        "/operator/course-agreements",
+        "Course agreement outcomes",
       ],
       [
         tools.studyUnits === true,
