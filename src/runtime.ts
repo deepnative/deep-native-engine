@@ -84,6 +84,7 @@ import { availabilityStore } from "./availability.ts";
 import { manualObservationStore } from "./manual-observations.ts";
 import { assignmentReadinessStore } from "./assignment-readiness.ts";
 import { recoverPendingMemberDeletions } from "./deletion-recovery.ts";
+import { unstartedConnections } from "./listener-shutdown.ts";
 
 export function evidenceCapabilityClock(
   mode: string,
@@ -365,6 +366,7 @@ export async function start(env: NodeJS.ProcessEnv) {
     };
     const server = app(store(pool), options).listen(settings.port, "127.0.0.1");
     ownedServer = server;
+    const closeUnstarted = unstartedConnections(server);
     await new Promise<void>((resolve, reject) => {
       server.once("listening", resolve);
       server.once("error", reject);
@@ -422,9 +424,11 @@ export async function start(env: NodeJS.ProcessEnv) {
       close: async () => {
         clearInterval(recoveryTimer);
         try {
-          await new Promise<void>((resolve, reject) =>
-            server.close((error) => (error ? reject(error) : resolve())),
-          );
+          await new Promise<void>((resolve, reject) => {
+            server.close((error) => (error ? reject(error) : resolve()));
+            // A browser preconnect would otherwise hold close() open (L189).
+            closeUnstarted();
+          });
         } finally {
           await activeRecovery;
           await pool.end();
