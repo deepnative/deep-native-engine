@@ -31,6 +31,20 @@ export interface StudyAllowanceClaim {
   consumed: number;
   expired: number;
 }
+/** A claim from a month that has ended: nothing in it is left to use. */
+export interface EarlierAllowanceMonth {
+  category: StudyAllowanceCategory;
+  policyVersion: string;
+  quantity: number;
+  periodStart: Date;
+  periodEnd: Date;
+  used: number;
+  /** Held for a request in progress when the month ended. */
+  held: number;
+  endedUnused: number;
+}
+/** How many earlier months the allowance page shows. */
+export const EARLIER_ALLOWANCE_MONTHS = 12;
 export interface StudyAllowanceInstruction {
   policyVersion: string;
   periodStart: string;
@@ -40,6 +54,9 @@ export interface StudyAllowanceView {
   period: StudyAllowancePeriod;
   claim: StudyAllowanceClaim | null;
   creationEnabled: boolean;
+  /** Earlier months' claims, newest first, at most the last 12 months. */
+  earlier?: EarlierAllowanceMonth[];
+  olderOmitted?: boolean;
   /** Present only while practice sessions use units, or a claim is retained. */
   practice?: {
     policy: StudyAllowancePolicy | null;
@@ -56,6 +73,15 @@ export function studyAllowancePeriod(observed: Date): StudyAllowancePeriod {
     end: new Date(Date.UTC(year, month + 1, 1)),
   };
 }
+/** The first month the allowance page still lists before `start`. */
+export const earliestListedMonth = (start: Date) =>
+  new Date(
+    Date.UTC(
+      start.getUTCFullYear(),
+      start.getUTCMonth() - EARLIER_ALLOWANCE_MONTHS,
+      1,
+    ),
+  );
 export const studyAllowanceCategory = (
   version: string,
 ): StudyAllowanceCategory =>

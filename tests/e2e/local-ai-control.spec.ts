@@ -340,7 +340,7 @@ test("[L316] AICAP-08 an administrator reads the test spending ceiling without m
   ).toBe(true);
 });
 
-test("[L319] AICTL-01/04/08 an administrator raises the test ceiling, sees it recorded, and a stale form changes nothing", async ({
+test("[L320] AICTL-01/04/08 an administrator raises the test ceiling, sees it recorded, and a stale form changes nothing", async ({
   page,
   context,
 }) => {

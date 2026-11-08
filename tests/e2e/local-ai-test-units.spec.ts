@@ -380,7 +380,7 @@ test("[L123] absent units, pause and a seeded uncertain claim never create an au
   }
 });
 
-test("[L320] AILIMIT-06 a member at the unfinished-request limit is told why and nothing new is queued", async ({
+test("[L321] AILIMIT-06 a member at the unfinished-request limit is told why and nothing new is queued", async ({
   page,
 }) => {
   const token = randomBytes(32).toString("hex");
