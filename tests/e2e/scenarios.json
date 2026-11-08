@@ -2840,7 +2840,7 @@
       "critical": false
     },
     {
-      "id": "L319",
+      "id": "L323",
       "actor": "Administrator reading course agreement outcomes, and a refused operator",
       "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, invented administrator, operator and three members with invented real and test course agreements; desktop/mobile Chromium; no provider",
       "steps": "AGREE-01/02/03/04/06/07: the administrator opens the staff page and follows Course agreement outcomes; an operator requests the same report",

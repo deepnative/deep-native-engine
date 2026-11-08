@@ -5,7 +5,7 @@ import { reviewedContentFixture } from "../support/reviewed-content-browser.ts";
 // Staff credentials remain outside browser traces and captures.
 test.use({ trace: "off" });
 
-test("[L319] AGREE-01/02/03/04/06/07 an administrator reads course agreement outcomes with test agreements apart", async ({
+test("[L323] AGREE-01/02/03/04/06/07 an administrator reads course agreement outcomes with test agreements apart", async ({
   browser,
 }, info) => {
   const f = await reviewedContentFixture(browser, info);
