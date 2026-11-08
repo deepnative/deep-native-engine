@@ -9,6 +9,7 @@ import { usefulnessStore } from "../../src/usefulness.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
+import { closeLoopback } from "../support/loopback-server.ts";
 const pool = testPool();
 test.afterAll(() => pool.end());
 async function publishLesson(id: string) {
@@ -200,9 +201,7 @@ for (const [index, background] of (
     } finally {
       await context.close();
       await Promise.allSettled(outstanding);
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      );
+      await closeLoopback(server);
       await pool.query("DELETE FROM principals WHERE id=$1", [
         session.learner.id,
       ]);

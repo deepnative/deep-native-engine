@@ -8,6 +8,7 @@ import { store } from "../../src/store.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { proposalStore } from "../../src/proposals.ts";
 import { testPool } from "../support/database.ts";
+import { closeLoopback } from "../support/loopback-server.ts";
 const pool = testPool();
 test.afterAll(() => pool.end());
 for (const [index, background] of (
@@ -232,9 +233,7 @@ for (const [index, background] of (
       await memberContext.close();
       await staffContext.close();
       await Promise.allSettled(outstanding);
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      );
+      await closeLoopback(server);
       // Proposals retain the moderator reference after withdrawal. Remove the
       // invented member and its proposals before deleting that staff profile;
       // one multi-row DELETE does not guarantee cascade ordering.

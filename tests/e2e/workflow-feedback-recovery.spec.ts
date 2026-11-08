@@ -7,6 +7,7 @@ import { app } from "../../src/app.ts";
 import { store } from "../../src/store.ts";
 import { workflowFeedbackStore } from "../../src/workflow-feedback.ts";
 import { testPool } from "../support/database.ts";
+import { closeLoopback } from "../support/loopback-server.ts";
 const pool = testPool();
 test.afterAll(() => pool.end());
 for (const [index, background] of (
@@ -142,9 +143,7 @@ for (const [index, background] of (
     } finally {
       await context.close();
       await Promise.allSettled(outstanding);
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      );
+      await closeLoopback(server);
       await pool.query("DELETE FROM principals WHERE id=$1", [
         session.learner.id,
       ]);
