@@ -3083,6 +3083,75 @@ it("offers ephemeral source-grounded study reflection only for the current publi
     2,
   );
 });
+it("STUDYQ-09 answers a study question only from a lesson the member may currently open", async () => {
+  const catalog = catalogMock();
+  const item = {
+    id: "SYN-106",
+    version: 2,
+    kind: "lesson",
+    title: "Invented learning sample",
+    body: "Use invented facts. Check each suggestion against the original.",
+    state: "published",
+    requiresQualifiedSignoff: false,
+  } as ContentVersion;
+  catalog.published.mockResolvedValue(item);
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", catalog }),
+  );
+  const path = "/library/SYN-106/study/question";
+  // Signed-out visitors are sent to sign in first.
+  await agent.get(path).set("Host", host).expect(303);
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  active();
+  const study = await agent
+    .get("/library/SYN-106/study")
+    .set("Host", host)
+    .expect(200);
+  expect(study.text).toContain(`href="${path}"`);
+  const form = await agent.get(path).set("Host", host).expect(200);
+  expect(form.text).toContain("SYN-106 · version 2");
+  const ask = () =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, content_version: "2", question: "Which suggestion?" });
+  const answered = await ask().expect(200);
+  expect(answered.text).toContain(
+    "<blockquote>Check each suggestion against the original.</blockquote>",
+  );
+  expect(db.openLesson).toHaveBeenLastCalledWith(
+    expect.any(String),
+    "SYN-106",
+    2,
+  );
+  // The same eligibility as the reader: not openable, not a lesson, awaiting
+  // qualified sign-off or not published means no page and no answer.
+  db.openLesson.mockResolvedValueOnce(false);
+  await agent.get(path).set("Host", host).expect(404);
+  db.openLesson.mockResolvedValueOnce(false);
+  expect((await ask().expect(409)).text).not.toContain("<blockquote>");
+  for (const changed of [
+    { kind: "assignment" },
+    { requiresQualifiedSignoff: true },
+    { state: "retired" },
+  ] as Partial<ContentVersion>[]) {
+    catalog.published.mockResolvedValueOnce({ ...item, ...changed });
+    await ask().expect(409);
+  }
+  catalog.published.mockResolvedValueOnce(null);
+  await agent.get(path).set("Host", host).expect(404);
+  // A forged form is refused before any answer.
+  await agent
+    .post(path)
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf: "0".repeat(64), content_version: "2", question: "x" })
+    .expect(403);
+});
 it("supports the local editor/reviewer workflow without bypassing rejected transitions", async () => {
   const catalog = catalogMock();
   catalog.staffList.mockResolvedValue([]);

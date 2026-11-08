@@ -250,7 +250,11 @@ import {
   type ProposalStore,
 } from "./proposals.ts";
 import { proposalNotSavedPage } from "./member-record-admission-views.ts";
-import { workflowBundle, workflowRegistry } from "./workflow-registry.ts";
+import {
+  retiredWorkflows,
+  workflowBundle,
+  workflowRegistry,
+} from "./workflow-registry.ts";
 import {
   disabledWorkflowFeedbackStore,
   parseWorkflowFeedback,
@@ -323,6 +327,7 @@ import {
 } from "./member-test-units.ts";
 import { registerMemberTestUnitsRoutes } from "./member-test-units-routes.ts";
 import { mountStudyAllowanceRoutes } from "./study-allowance-routes.ts";
+import { mountStudyQuestionRoutes } from "./study-question-routes.ts";
 import type { StudyAllowanceStore } from "./study-allowances.ts";
 import type { StudyUnitFixtureStore } from "./study-unit-fixtures.ts";
 import { mountStudyUnitFixtureRoutes } from "./study-unit-fixture-routes.ts";
@@ -435,6 +440,8 @@ function currentStarter(
 export function app(
   memberStore: Store,
   options: {
+    // #769: test-mode fixture release for the /workflows pages only.
+    workflowRoot?: URL;
     administratorEntry?: AdministratorEntry;
     coachView?: CoachView;
     memberSharing?: MemberSharing;
@@ -3230,12 +3237,19 @@ export function app(
   });
   app.get("/workflows", async (req, res) => {
     const q = typeof req.query.q === "string" ? req.query.q : "";
-    res.send(workflowRegistryPage(await workflowRegistry(q), q.slice(0, 100)));
+    const [items, retired] = await Promise.all([
+      workflowRegistry(q, options.workflowRoot),
+      retiredWorkflows(options.workflowRoot),
+    ]);
+    res.send(workflowRegistryPage(items, q.slice(0, 100), retired));
   });
   const workflowPage =
     (download: boolean): express.RequestHandler =>
     async (req, res) => {
-      const item = await workflowBundle(req.params.id as string);
+      const item = await workflowBundle(
+        req.params.id as string,
+        options.workflowRoot,
+      );
       if (!item) {
         res
           .status(404)
@@ -3943,6 +3957,17 @@ export function app(
       return;
     }
     res.redirect(303, `/library/${encodeURIComponent(source.id)}/practice`);
+  });
+  // #202: ask about the exact lesson version under the reader's eligibility.
+  mountStudyQuestionRoutes(app, async (token, id) => {
+    const item = await catalog.published(id);
+    return item &&
+      item.kind === "lesson" &&
+      item.state === "published" &&
+      !item.requiresQualifiedSignoff &&
+      (await store.openLesson(token, item.id, item.version))
+      ? item
+      : null;
   });
   app.get("/library/:id/study", async (req, res) => {
     const item = await catalog.published(req.params.id as string);

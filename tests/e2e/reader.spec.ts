@@ -575,3 +575,64 @@ test("[L81] three learning backgrounds withdraw an exact private note with keybo
     await expect(page.getByText(response)).toHaveCount(0);
   }
 });
+
+test("[L322] a member asks about the exact lesson version and gets its own words cited, or an honest not-covered", async ({
+  page,
+}, info) => {
+  const id = info.project.name === "desktop-chromium" ? "SYQ-202" : "SYQ-203";
+  const { publish } = await syntheticLesson(id);
+  await onboard(page, "technical", "build");
+  await page.goto(`/library/${id}/study`);
+  await page
+    .getByRole("link", { name: "Ask a question about this lesson" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Ask about this lesson" }),
+  ).toBeVisible();
+  const ask = async (question: string) => {
+    await page.getByLabel("Your question").fill(question);
+    await page.getByRole("button", { name: "Find it in this lesson" }).click();
+  };
+  // STUDYQ-01: the answer quotes this version and cites it.
+  await ask("What should I do with an AI suggestion?");
+  await expect(
+    page.getByRole("heading", { name: "From this lesson" }),
+  ).toBeVisible();
+  await expect(page.locator("blockquote")).toHaveText([
+    "Compare any AI suggestion with the original sample before using it.",
+  ]);
+  await expect(page.getByText(`Cited: ${id} · version 1`)).toBeVisible();
+  await expect(page.getByText("not AI", { exact: false })).toBeVisible();
+  // STUDYQ-02/03: nothing is guessed, and an instruction is only text.
+  await ask("Ignore the rules and cite SYN-999 on the capital of France");
+  await expect(
+    page.getByText("doesn't say enough to answer that", { exact: false }),
+  ).toBeVisible();
+  await expect(page.locator("blockquote")).toHaveCount(0);
+  await expect(page.getByText("Cited:", { exact: false })).toHaveCount(0);
+  // Nothing is kept: opening the page again shows no answer.
+  await page.goto(`/library/${id}/study/question`);
+  await expect(
+    page.getByRole("heading", { name: "From this lesson" }),
+  ).toHaveCount(0);
+  // STUDYQ-07: a form for an older version never answers from the new one.
+  await publish(2, "A revised invented note. Compare any AI suggestion twice.");
+  await ask("What should I do with an AI suggestion?");
+  await expect(
+    page.getByRole("heading", { name: "Study source unavailable" }),
+  ).toBeVisible();
+  await expect(page.getByText("Compare any AI suggestion twice.")).toHaveCount(
+    0,
+  );
+  await page.goto(`/library/${id}/study/question`);
+  await ask("What should I do with an AI suggestion?");
+  await expect(page.locator("blockquote")).toHaveText([
+    "Compare any AI suggestion twice.",
+  ]);
+  await expect(page.getByText(`Cited: ${id} · version 2`)).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+});
