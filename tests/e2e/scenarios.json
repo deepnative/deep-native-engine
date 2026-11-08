@@ -2849,6 +2849,24 @@
       "critical": true
     },
     {
+      "id": "L320",
+      "actor": "Platform administrator changing the test spending ceiling",
+      "preconditions": "Shared synthetic PostgreSQL database, invented administrator, two pages of the simulation control page opened at the same ceiling; an advisory lock serializes this journey's desktop/mobile runs; desktop/mobile Chromium; no provider",
+      "steps": "AICTL-01/04/08: the administrator raises the test ceiling by 1000 points on the first page and confirms, then submits a different value from the second, stale page",
+      "expected": "The readout shows the raised ceiling and the recent changes list the old and new values with committed points; the stale page's change is refused with a reload instruction and the ceiling stays raised; no token on the page; no sideways scrolling",
+      "issues": [188],
+      "critical": false
+    },
+    {
+      "id": "L321",
+      "actor": "Member at the limit of unfinished AI simulation requests",
+      "preconditions": "Shared synthetic PostgreSQL database, one invented member with four clean invented samples and simulation permission on each; desktop/mobile Chromium; no provider",
+      "steps": "AILIMIT-06: the member reads the limit, queues three simulations, tries a fourth, then runs one and queues the fourth again",
+      "expected": "The page states the limit of three; the fourth is refused with a plain reason and nothing new is queued or held; after one runs, the fourth can be queued; no sideways scrolling",
+      "issues": [190],
+      "critical": false
+    },
+    {
       "id": "L323",
       "actor": "Administrator reading course agreement outcomes, and a refused operator",
       "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, invented administrator, operator and three members with invented real and test course agreements; desktop/mobile Chromium; no provider",

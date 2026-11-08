@@ -760,7 +760,9 @@ it("describes local AI permission and every job state without leaking sample tex
     ],
     "csrf",
   );
-  expect(active).toContain("Queue local simulation");
+  // Unfinished requests on this version: no new one is offered (#44 walk).
+  expect(active).not.toContain("Queue local simulation");
+  expect(active).toContain("already has a request that is not finished");
   expect(active).toContain("Withdraw permission");
   expect(active).toContain("Run local simulation");
   expect(active).toContain("Simulated locally. No provider request");
@@ -804,6 +806,9 @@ it("describes local AI permission and every job state without leaking sample tex
   expect(localAiConsentPage([], "csrf", [], "unavailable")).toContain(
     "Local simulations are unavailable",
   );
+  expect(localAiConsentPage([], "csrf")).toContain(
+    "You can have up to 3 unfinished requests at a time",
+  );
   expect(localAiControlPage(false, "csrf")).toContain("Pause local simulation");
   expect(localAiControlPage(true, "csrf")).toContain("Resume local simulation");
   expect(localAiControlPage(true, "csrf")).toContain(
@@ -819,6 +824,45 @@ it("describes local AI permission and every job state without leaking sample tex
     "Simulated points at test rates simulated-&lt;rates&gt;, not money: ceiling 100000, committed 199, remaining 99801.",
   );
   expect(readout).toContain("no provider is called");
+  expect(readout).toContain('name="expected" value="100000"');
+  expect(readout).toContain("Change history unavailable.");
+  expect(readout).not.toContain("The test ceiling is full");
+  const full = localAiControlPage(
+    false,
+    "csrf",
+    {
+      rateVersion: "simulated-rates-v1",
+      ceilingPoints: 0,
+      committedPoints: 42,
+      remainingPoints: 0,
+    },
+    [
+      {
+        changedAt: new Date("2026-11-08T12:34:56Z"),
+        rateVersion: "simulated-<rates>",
+        previousPoints: 1000,
+        ceilingPoints: 0,
+        committedPoints: 42,
+      },
+    ],
+  );
+  expect(full).toContain("The test ceiling is full");
+  expect(full).toContain(
+    "2026-11-08 12:34 UTC: 1000 to 0 points (test rates simulated-&lt;rates&gt;), with 42 committed at the time.",
+  );
+  expect(
+    localAiControlPage(
+      false,
+      "csrf",
+      {
+        rateVersion: "simulated-rates-v1",
+        ceilingPoints: 10,
+        committedPoints: 0,
+        remainingPoints: 10,
+      },
+      [],
+    ),
+  ).toContain("No changes recorded yet.");
 });
 it("AICANCEL-01/02 a request cancelled by withdrawal reads as cancelled, and a real failure still reads as failed", () => {
   const withdrawn = (status: string) =>
@@ -854,6 +898,55 @@ it("AICANCEL-01/02 a request cancelled by withdrawal reads as cancelled, and a r
   expect(withdrawn("exhausted")).toContain(
     "Local simulation unavailable or failed",
   );
+});
+it("WALK-01 a version with an unfinished request offers no new request until it finishes", () => {
+  const granted = (status: string) =>
+    localAiConsentPage(
+      [
+        {
+          evidenceId: "sample-id",
+          name: "Invented sample.txt",
+          revisionNumber: 1,
+          receiptId: "receipt-id",
+          grantedAt: new Date(),
+          withdrawnAt: null,
+          estimate: {
+            inputTokens: 11,
+            outputTokens: 256,
+            costPoints: 157,
+            modelVersion: "simulated-model-v1",
+            rateVersion: "simulated-rates-v1",
+          },
+          jobs: [{ id: "job-id", status }],
+        },
+      ],
+      "csrf",
+    );
+  for (const status of [
+    "pending",
+    "running",
+    "failed",
+    "needs_reconciliation",
+  ]) {
+    const page = granted(status);
+    expect(page).not.toContain('action="/evidence/local-ai/receipt-id/queue"');
+    expect(page).not.toContain(
+      'action="/evidence/local-ai/receipt-id/queue-metered"',
+    );
+    expect(page).toContain(
+      "This version already has a request that is not finished, so a new one can't be queued for it yet.",
+    );
+    // Withdrawing stays available.
+    expect(page).toContain('action="/evidence/local-ai/receipt-id/withdraw"');
+  }
+  for (const status of ["succeeded", "cancelled", "exhausted"]) {
+    const page = granted(status);
+    expect(page).toContain('action="/evidence/local-ai/receipt-id/queue"');
+    expect(page).toContain(
+      'action="/evidence/local-ai/receipt-id/queue-metered"',
+    );
+    expect(page).not.toContain("already has a request that is not finished");
+  }
 });
 it("keeps optional planning gated and renders escaped, unsent per-version drafts", () => {
   const off = careerPage({ enabled: false, entries: [], drafts: [] }, "csrf");
@@ -2277,7 +2370,8 @@ it("distinguishes metered local test units and blocks repeat dispatch of termina
     },
   ];
   const html = localAiConsentPage(choices, "csrf");
-  expect(html).toContain("Use one local test request");
+  // The pending request keeps a new one from being offered (#44 walk).
+  expect(html).not.toContain("Use one local test request");
   expect(html).toContain("Run local test request");
   expect(html).toContain("consumed");
   expect(html).toContain("released");
@@ -2286,7 +2380,13 @@ it("distinguishes metered local test units and blocks repeat dispatch of termina
   expect(html).toContain(
     "This request has no cost estimate, so it cannot run.",
   );
-  expect(html).toContain(
+  // The pre-queue estimate shows once nothing is unfinished on the version.
+  expect(
+    localAiConsentPage(
+      [{ ...choices[0]!, jobs: choices[0]!.jobs.slice(1) }],
+      "csrf",
+    ),
+  ).toContain(
     "Estimate only: about 267 tokens and 157 simulated cost points (model simulated-model-v1, test rates simulated-rates-v1).",
   );
   const estimate = choices[0]!.estimate;
