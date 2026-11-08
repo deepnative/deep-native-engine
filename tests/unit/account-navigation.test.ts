@@ -187,3 +187,42 @@ it("ACCT-PLAIN-05 the export paragraph lists the same records in plain language"
     "Download my structured records. You get JSON files with your current profile, learning, plans and saved proposal records. Evidence samples download separately. Each file holds up to 100 records and 256 KiB, and shows your records as they are when you download it. It includes when staff opened your work. It leaves out other audit records, billing records, files made from your evidence, copies held by service providers and backups.",
   );
 });
+
+// #40 ERASE-06: before deleting, a member reads what stays afterwards.
+const KEPT_AFTER_DELETION = [
+  "Deleting removes your profile, learning records, saved work, files and sharing choices, and signs you out on every browser.",
+  "Some records stay after deletion:",
+  "Issued invoices and the payments and refunds recorded against them, including the billing name and email on them, for accounting. Sample invoices are deleted.",
+  "Change history entries for staff changes to your coaches or billing, with your student reference and any amount, but no name or email.",
+  "A note that an administrator looked up your email address, which keeps a fingerprint of the address, not the address.",
+  "Counts that limit repeated sign-in and email attempts, tied to a fingerprint of your email address. Later sign-in activity on the site clears them once they are a day or 30 days old.",
+  "A coach or administrator role you were given stays with your email address until an administrator removes it.",
+  "Copies in service backups go only when those backups expire.",
+];
+it.each([true, false])(
+  "ERASE-06 the account page (hosted %s) says what stays after deletion before the delete button",
+  (hosted) => {
+    const text = withHosting(hosted, () => accountText("linked"));
+    const section = text.slice(text.indexOf("Delete your account"));
+    let at = 0;
+    for (const sentence of KEPT_AFTER_DELETION) {
+      const found = section.indexOf(sentence, at);
+      expect(found, sentence).toBeGreaterThanOrEqual(at);
+      at = found + sentence.length;
+    }
+    expect(
+      section.indexOf(hosted ? "Delete my account" : "Delete this preview"),
+    ).toBeGreaterThan(at);
+    if (hosted) expect(section).not.toMatch(/preview/i);
+  },
+);
+it("ERASE-06 the learning path's delete form links to what stays", () => {
+  const html = withHosting(true, () =>
+    dashboard(member as never, undefined, "a".repeat(64)),
+  );
+  const form = html.slice(html.lastIndexOf('<p class="small deletion-note">'));
+  expect(form.replace(/<[^>]+>/g, "")).toMatch(
+    /^Some records stay after you delete your account\. See what stays\.Delete my account and all its saved work\./,
+  );
+  expect(form).toContain('<a href="/account#deletion-kept">See what stays</a>');
+});
