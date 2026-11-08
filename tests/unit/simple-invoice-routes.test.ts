@@ -910,3 +910,21 @@ it("WALK-04 offers only the invoice actions the record can still accept", async 
   expect(voided).not.toContain(">Record offline payment</button>");
   expect(voided).not.toContain(">Void unpaid invoice</button>");
 });
+
+it("WALK-02 tells a member with no invoices that none have been issued, and lists them once they exist", async () => {
+  const f = fixture();
+  const empty = (await f.get(base)).text;
+  expect(empty).toContain("<h2>Your invoices</h2>");
+  expect(empty).toContain("No invoices have been issued to this account yet.");
+  expect(empty).not.toContain("<ul></ul>");
+  f.service.overview.mockResolvedValueOnce(
+    ready({
+      plans: [],
+      invoices: [{ ...invoice, document: { ...doc, sample: true } }],
+      today: "2026-10-31",
+    }),
+  );
+  const listed = (await f.get(base)).text;
+  expect(listed).toMatch(/<h2>Your invoices<\/h2><ul><li>/);
+  expect(listed).not.toContain("No invoices have been issued");
+});
