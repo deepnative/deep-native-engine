@@ -2838,6 +2838,15 @@
       "expected": "The account page says what deletion removes and lists the five kinds of records that stay (issued invoices first) and that backup copies go when backups expire; deletion is confirmed and the account row is gone; no sideways scrolling",
       "issues": [40],
       "critical": false
+    },
+    {
+      "id": "L319",
+      "actor": "Administrator reading course agreement outcomes, and a refused operator",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, invented administrator, operator and three members with invented real and test course agreements; desktop/mobile Chromium; no provider",
+      "steps": "AGREE-01/02/03/04/06/07: the administrator opens the staff page and follows Course agreement outcomes; an operator requests the same report",
+      "expected": "Real agreements read 4 offered, 2 of 4 (50%) accepted, 1 withdrawn and 1 of 2 (50%) cancelled after acceptance; the one test agreement is counted apart and never in the real figures; no member name, email, amount or agreement ID appears; no sideways scrolling; the operator is refused (403) with no figures",
+      "issues": [123],
+      "critical": true
     }
   ],
   "fullMvp": [
