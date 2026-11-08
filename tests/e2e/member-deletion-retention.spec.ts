@@ -16,7 +16,7 @@ test.afterAll(async () => pool.end());
 const noSidewaysScroll = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
-test("[L317] ERASE-06 a member reads what stays after deletion, then deletes their account", async ({
+test("[L318] ERASE-06 a member reads what stays after deletion, then deletes their account", async ({
   page,
 }) => {
   const storage = await mkdtemp(join(tmpdir(), "dne-deletion-kept-"));

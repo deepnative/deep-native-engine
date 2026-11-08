@@ -2823,6 +2823,15 @@
     },
     {
       "id": "L317",
+      "actor": "Operator comparing declared staff capacity, and a refused coach",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, invented administrator, coaches and operator, two verified coaching roster records and one unverified; desktop/mobile Chromium; no provider",
+      "steps": "CAP-01/02/03/08/09: the operator opens the staff page and follows Staff capacity; a coach requests the same report",
+      "expected": "Two verified coaching records leave 360 available minutes; the unverified record's 480 minutes are shown apart as not qualified coverage; formal review reads Not recorded; review time has nothing to compare; no staff identifier, reference or cost appears; no sideways scrolling; the coach is refused (403) with no figures",
+      "issues": [123],
+      "critical": true
+    },
+    {
+      "id": "L318",
       "actor": "Member deleting their account",
       "preconditions": "Dedicated synthetic PostgreSQL database, one invented member created through the ordinary start form, port0 server; desktop/mobile Chromium",
       "steps": "ERASE-06: the member follows See what stays from the learning path to My account, reads what stays after deletion, ticks the confirmation and deletes the account",

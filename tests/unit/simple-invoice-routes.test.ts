@@ -53,7 +53,11 @@ const invoice = {
 const ready = (value: unknown) => ({ kind: "ready", value });
 function fixture(disabled = false, noSender = false) {
   const service = {
-    overview: vi.fn().mockResolvedValue(ready({ plans: [], invoices: [] })),
+    overview: vi
+      .fn()
+      .mockResolvedValue(
+        ready({ plans: [], invoices: [], today: "2026-10-31" }),
+      ),
     adminOverview: vi.fn().mockResolvedValue(
       ready({
         members: [{ id }],
@@ -172,6 +176,7 @@ it("OFFPUR-08/10 shows exact courses, explicit cadence and cancelled agreements 
         { ...invoice, paidCents: 1100, document: { ...doc, sample: false } },
         { ...invoice, voidReason: "wrong course" },
       ],
+      today: "2026-10-31",
     }),
   );
   const r = await f.get(base);
@@ -192,6 +197,30 @@ it("OFFPUR-08/10 shows exact courses, explicit cadence and cancelled agreements 
   expect((await f.get(admin)).text).toContain(
     "Prepare course billing proposal",
   );
+});
+it("BUILD-04-C closes an offer once its start date passes, with no accept form", async () => {
+  const f = fixture();
+  f.service.overview.mockResolvedValue(
+    ready({
+      plans: [
+        { id, terms, state: "offered", revision: 1 },
+        {
+          id,
+          terms: { ...terms, startsOn: "2026-11-01" },
+          state: "offered",
+          revision: 1,
+        },
+      ],
+      invoices: [],
+      today: "2026-11-01",
+    }),
+  );
+  const r = await f.get(base);
+  expect(r.status).toBe(200);
+  expect(r.text).toContain("Acceptance closed on 2026-10-31.");
+  expect(r.text).not.toContain("Acceptance closed on 2026-11-01.");
+  // Only the offer starting today keeps its accept form.
+  expect(r.text.match(/\/accept"/g)).toHaveLength(1);
 });
 it("OFFPUR-05 denies query parameters, forged CSRF/origin and malformed form shapes", async () => {
   const f = fixture();
@@ -582,6 +611,7 @@ it("BILLPROFILE02/04 isolates profile validation, stale forms, unavailable outco
     ready({
       plans: [{ id, terms, state: "offered", revision: 1 }],
       invoices: [],
+      today: "2026-10-31",
     }),
   );
   r = await f.get(base);

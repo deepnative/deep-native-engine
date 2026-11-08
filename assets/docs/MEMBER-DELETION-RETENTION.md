@@ -7,7 +7,7 @@ This page lists every table whose rows **don't** go with the account, and every 
 - **ERASE-01/02:** a table that isn't removed through a cascade, or a column named `member_id`, `learner_id`, `owner_id`, `owner_principal_id`, `workspace_id` or `principal_id` without a cascading key, fails the test until it is listed here with a reason. An entry that no longer applies fails it too.
 - **ERASE-03/04:** after a seeded member is deleted, a scan of every text, ID and JSON column finds their account ID, workspace ID, email fingerprint, display name and private note only in the rows marked "Kept" below.
 
-The account page tells members the same thing in plain words before they delete (ERASE-06, browser scenario L317).
+The account page tells members the same thing in plain words before they delete (ERASE-06, browser scenario L318).
 
 ## Not covered here
 
