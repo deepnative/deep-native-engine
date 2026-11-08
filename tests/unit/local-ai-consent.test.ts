@@ -7,6 +7,7 @@ import {
   LOCAL_AI_TEST_UNIT_POLICY,
   LOCAL_AI_PURPOSE,
   LOCAL_AI_STATEMENT_VERSION,
+  LOCAL_AI_MEMBER_OPEN_LIMIT,
 } from "../../src/local-ai-consent.ts";
 import {
   requestFingerprint,
@@ -81,6 +82,7 @@ function setup(
     noGrant?: boolean;
     noEstimate?: boolean;
     ceilingFull?: boolean;
+    open?: number;
     noCommitment?: boolean;
     usage?: unknown;
     budgetDeadline?: "claim" | "before" | "after";
@@ -196,6 +198,8 @@ function setup(
       return { rows: options.noEstimate ? [] : [{ cost_points: 157 }] };
     if (sql.includes("FROM ai_test_spending_ceiling"))
       return { rows: options.ceilingFull ? [] : [{}] };
+    if (sql.includes("SELECT count(*)::int AS open FROM adapter_jobs"))
+      return { rows: [{ open: options.open ?? 0 }] };
     if (sql.includes("SET state='settled'"))
       return { rows: options.noCommitment ? [] : [{ job_id: jid }] };
     if (sql.includes("SELECT r.grant_id,r.quantity"))
@@ -1113,6 +1117,44 @@ it("holds nothing and calls no provider when the test spending ceiling is full",
   // Unmetered simulations are not counted against the ceiling.
   const unmetered = setup({ ceilingFull: true });
   expect((await unmetered.service.run("member", jid)).kind).toBe("completed");
+});
+
+it("AILIMIT refuses a member at the open-request limit before any unit, estimate or ceiling check", async () => {
+  for (const metered of [true, false]) {
+    const { service, query } = setup({
+      metered,
+      open: LOCAL_AI_MEMBER_OPEN_LIMIT,
+      missing: "collision",
+    });
+    expect(
+      await (metered
+        ? service.enqueueMetered("member", rid, "key")
+        : service.enqueue("member", rid, "key")),
+    ).toEqual({ kind: "limit_reached" });
+    const statements = query.mock.calls.map(([sql]) => sql as string);
+    expect(
+      statements.some(
+        (sql) =>
+          sql.includes("INSERT INTO adapter_jobs") ||
+          sql.includes("ai_test_spending_ceiling") ||
+          sql.includes("synthetic_entitlement_grants"),
+      ),
+    ).toBe(false);
+    expect(
+      query.mock.calls.find(([sql]) =>
+        (sql as string).includes("pg_advisory_xact_lock"),
+      ),
+    ).toEqual([expect.any(String), [expect.any(String)]]);
+  }
+  // One below the limit still queues.
+  const below = setup({
+    metered: true,
+    open: LOCAL_AI_MEMBER_OPEN_LIMIT - 1,
+    missing: "collision",
+  });
+  expect((await below.service.enqueueMetered("member", rid, "key")).kind).toBe(
+    "queued",
+  );
 });
 
 it("commits the estimate with the claim and settles it to the actual cost", async () => {

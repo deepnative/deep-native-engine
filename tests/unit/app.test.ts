@@ -1731,6 +1731,19 @@ it("requires explicit member confirmation and current local AI permission at eve
   }).expect(409);
   expect(fullQueue.text).toContain("Test spending ceiling reached");
   expect(fullQueue.text).toContain("No test request was held");
+  // AILIMIT: both queue routes explain the member-wide limit.
+  localAiConsent.enqueueMetered.mockResolvedValueOnce({
+    kind: "limit_reached",
+  });
+  const limitedMetered = await post(
+    "/evidence/local-ai/receipt-id/queue-metered",
+    { confirm: "yes", key: "private-key" },
+  ).expect(409);
+  expect(limitedMetered.text).toContain("Too many unfinished requests");
+  expect(limitedMetered.text).toContain("no provider was contacted");
+  localAiConsent.enqueue.mockResolvedValueOnce({ kind: "limit_reached" });
+  const limited = await post("/evidence/local-ai/receipt-id/queue").expect(409);
+  expect(limited.text).toContain("You already have 3 AI requests");
   localAiConsent.run.mockResolvedValueOnce({
     kind: "ceiling_reached",
     jobId: "job-id",
@@ -1803,6 +1816,64 @@ it("keeps local AI pause control admin-only and shows member unavailability", as
   expect(readout.text).toContain("ceiling 5000, committed 157, remaining 4843");
   expect(spending).toHaveBeenCalledWith(expect.any(String));
   delete (localAiControl as LocalAiControlStore).spending;
+
+  // AICTL: the ceiling form. Without a store method nothing can change.
+  const ceilingPost = (fields: Record<string, string>) =>
+    agent
+      .post("/operator/local-ai/ceiling")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  const ceilingFields = {
+    expected: "5000",
+    ceiling: "0",
+    key: "4f9c2a51-3b7e-4d2a-9c11-0a7b5e6f8d21",
+    confirm: "yes",
+  };
+  await ceilingPost(ceilingFields).expect(422);
+  const setCeiling = vi.fn<NonNullable<LocalAiControlStore["setCeiling"]>>();
+  const ceilingHistory =
+    vi.fn<NonNullable<LocalAiControlStore["ceilingHistory"]>>();
+  Object.assign(localAiControl, { setCeiling, ceilingHistory });
+  await ceilingPost({ ...ceilingFields, confirm: "no" }).expect(422);
+  expect(setCeiling).not.toHaveBeenCalled();
+  for (const [kind, status, text] of [
+    ["changed", 303, ""],
+    ["replayed", 303, ""],
+    ["denied", 403, "Platform administrator access is required"],
+    ["stale", 409, "changed after you opened the page"],
+    ["conflict", 409, "already used for a different value"],
+    ["invalid", 422, "Enter a different whole number"],
+  ] as const) {
+    setCeiling.mockResolvedValueOnce({ kind });
+    const response = await ceilingPost(ceilingFields).expect(status);
+    expect(response.text).toContain(text);
+  }
+  expect(setCeiling).toHaveBeenLastCalledWith(expect.any(String), {
+    expectedPoints: 5000,
+    ceilingPoints: 0,
+    key: "4f9c2a51-3b7e-4d2a-9c11-0a7b5e6f8d21",
+  });
+  // Malformed numbers and keys reach the store as values it refuses.
+  setCeiling.mockResolvedValueOnce({ kind: "invalid" });
+  await ceilingPost({
+    confirm: "yes",
+    expected: "1e3",
+    ceiling: "-5",
+  }).expect(422);
+  expect(setCeiling).toHaveBeenLastCalledWith(expect.any(String), {
+    expectedPoints: NaN,
+    ceilingPoints: NaN,
+    key: "",
+  });
+  ceilingHistory.mockResolvedValueOnce([]);
+  localAiControl.read.mockResolvedValueOnce({ paused: false });
+  await agent.get("/operator/local-ai").set("Host", host).expect(200);
+  expect(ceilingHistory).toHaveBeenCalledWith(expect.any(String));
+  delete (localAiControl as LocalAiControlStore).setCeiling;
+  delete (localAiControl as LocalAiControlStore).ceilingHistory;
+
   const post = (state: string, confirm = "yes") =>
     agent
       .post("/operator/local-ai")
@@ -1859,6 +1930,13 @@ it("keeps local AI pause control admin-only and shows member unavailability", as
     .set("Origin", origin)
     .type("form")
     .send({ csrf: liveCsrf, state: "paused", confirm: "yes" })
+    .expect(404);
+  await live
+    .post("/operator/local-ai/ceiling")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf: liveCsrf, expected: "1", ceiling: "2", confirm: "yes" })
     .expect(404);
 });
 let db: ReturnType<typeof storage>;

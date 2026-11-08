@@ -176,6 +176,7 @@ import {
   milestonesPage,
   careerPage,
   errorPage,
+  localAiLimitPage,
   circleMembershipRecoveryPage,
   usefulnessRecoveryPage,
   assignmentAttemptsPage,
@@ -1072,9 +1073,67 @@ export function app(
     }
     const spending =
       (await localAiControl.spending?.(res.locals.token as string)) ?? null;
+    const history =
+      (await localAiControl.ceilingHistory?.(res.locals.token as string)) ??
+      null;
     res.send(
-      localAiControlPage(state.paused, res.locals.csrf as string, spending),
+      localAiControlPage(
+        state.paused,
+        res.locals.csrf as string,
+        spending,
+        history,
+      ),
     );
+  });
+  app.post("/operator/local-ai/ceiling", async (req, res) => {
+    if (mode === "live") {
+      res
+        .status(404)
+        .send(errorPage("Unavailable", "This preview is disabled."));
+      return;
+    }
+    const fields = req.body as Fields;
+    const whole = (value: unknown) =>
+      typeof value === "string" && /^[0-9]{1,13}$/.test(value)
+        ? Number(value)
+        : NaN;
+    const outcome =
+      fields.confirm === "yes" && localAiControl.setCeiling
+        ? await localAiControl.setCeiling(res.locals.token as string, {
+            expectedPoints: whole(fields.expected),
+            ceilingPoints: whole(fields.ceiling),
+            key: typeof fields.key === "string" ? fields.key : "",
+          })
+        : { kind: "invalid" as const };
+    if (outcome.kind === "changed" || outcome.kind === "replayed") {
+      res.redirect(303, "/operator/local-ai");
+      return;
+    }
+    const [status, title, text] =
+      outcome.kind === "denied"
+        ? [
+            403,
+            "Control unavailable",
+            "Platform administrator access is required.",
+          ]
+        : outcome.kind === "stale"
+          ? [
+              409,
+              "Ceiling unchanged",
+              "The test ceiling changed after you opened the page. Reload it and check the current value before changing it again.",
+            ]
+          : outcome.kind === "conflict"
+            ? [
+                409,
+                "Ceiling unchanged",
+                "This form was already used for a different value. Reload the page to make a new change.",
+              ]
+            : [
+                422,
+                "Ceiling unchanged",
+                "Enter a different whole number from 0 to 1000000000000 and confirm the change.",
+              ];
+    res.status(status).send(errorPage(title, text));
   });
   app.post("/operator/local-ai", async (req, res) => {
     if (mode === "live") {
@@ -2252,6 +2311,10 @@ export function app(
       receiptId,
       receiptId,
     );
+    if (outcome.kind === "limit_reached") {
+      res.status(409).send(localAiLimitPage());
+      return;
+    }
     if (outcome.kind !== "queued") {
       const paused = (await localAiControl.current()) === "paused";
       res
@@ -2295,6 +2358,10 @@ export function app(
       req.params.receiptId as string,
       fields.key,
     );
+    if (outcome.kind === "limit_reached") {
+      res.status(409).send(localAiLimitPage());
+      return;
+    }
     if (outcome.kind === "ceiling_reached") {
       res
         .status(409)
