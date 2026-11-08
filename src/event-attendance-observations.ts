@@ -173,8 +173,8 @@ export async function attendanceObserve(
         observationId: string | null;
       }>(
         `SELECT actor_id AS "actorId",registration_id AS "registrationId",kind,instruction_hash AS "instructionHash",
-       observation_id AS "observationId" FROM private_event_attendance_operations WHERE operation_id=$1 FOR UPDATE`,
-        [key],
+       observation_id AS "observationId" FROM private_event_attendance_operations WHERE operation_id=$1 AND actor_id=$2 FOR UPDATE`,
+        [key, context.actorId],
       )
     ).rows[0];
     const instructionHash = hash(JSON.stringify(checked));

@@ -79,8 +79,8 @@ export async function attendanceInspect(
     // Operation discovery is not authority, and its metadata is never returned.
     const discovered = (
       await context.tx.query<Operation>(
-        `SELECT ${columns} FROM private_event_attendance_operations WHERE operation_id=$1`,
-        [key],
+        `SELECT ${columns} FROM private_event_attendance_operations WHERE operation_id=$1 AND actor_id=$2`,
+        [key, context.actorId],
       )
     ).rows[0];
     let source;
@@ -140,8 +140,8 @@ export async function attendanceInspect(
     );
     const saved = (
       await context.tx.query<Operation>(
-        `SELECT ${columns} FROM private_event_attendance_operations WHERE operation_id=$1 FOR UPDATE`,
-        [key],
+        `SELECT ${columns} FROM private_event_attendance_operations WHERE operation_id=$1 AND actor_id=$2 FOR UPDATE`,
+        [key, context.actorId],
       )
     ).rows[0];
     if (!saved) return null;
