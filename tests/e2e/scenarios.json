@@ -2841,6 +2841,33 @@
     },
     {
       "id": "L319",
+      "actor": "Member reading last month's test study allowance",
+      "preconditions": "Dedicated synthetic PostgreSQL database, test-unit issuance enabled, a genuine claim from last month with one unit used, port0 server; desktop/mobile Chromium",
+      "steps": "RENEW-01/02/05: a member opens their monthly allowance; reads last month's record; checks their test units; ticks the confirmation and claims this month",
+      "expected": "Last month shows one used and four ended unused, never as left to use; the page says nothing renews automatically and nothing usable carried over; the new claim gives exactly five, says when the next month opens and leaves last month unchanged; no sideways scrolling",
+      "issues": [199],
+      "critical": true
+    },
+    {
+      "id": "L320",
+      "actor": "Platform administrator changing the test spending ceiling",
+      "preconditions": "Shared synthetic PostgreSQL database, invented administrator, two pages of the simulation control page opened at the same ceiling; an advisory lock serializes this journey's desktop/mobile runs; desktop/mobile Chromium; no provider",
+      "steps": "AICTL-01/04/08: the administrator raises the test ceiling by 1000 points on the first page and confirms, then submits a different value from the second, stale page",
+      "expected": "The readout shows the raised ceiling and the recent changes list the old and new values with committed points; the stale page's change is refused with a reload instruction and the ceiling stays raised; no token on the page; no sideways scrolling",
+      "issues": [188],
+      "critical": false
+    },
+    {
+      "id": "L321",
+      "actor": "Member at the limit of unfinished AI simulation requests",
+      "preconditions": "Shared synthetic PostgreSQL database, one invented member with four clean invented samples and simulation permission on each; desktop/mobile Chromium; no provider",
+      "steps": "AILIMIT-06: the member reads the limit, queues three simulations, tries a fourth, then runs one and queues the fourth again",
+      "expected": "The page states the limit of three; the fourth is refused with a plain reason and nothing new is queued or held; after one runs, the fourth can be queued; no sideways scrolling",
+      "issues": [190],
+      "critical": false
+    },
+    {
+      "id": "L322",
       "actor": "Member studying a published lesson",
       "preconditions": "Dedicated synthetic PostgreSQL database, one invented lesson published by staff, one invented member created through the ordinary start form; desktop/mobile Chromium",
       "steps": "STUDYQ-01/02/03/07: from the study reflection open Ask a question about this lesson, ask a question the lesson covers, ask one it does not cover with an injected instruction, reopen the page, then submit the open form after version 2 is published and ask again",

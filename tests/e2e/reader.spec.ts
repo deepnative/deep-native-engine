@@ -576,7 +576,7 @@ test("[L81] three learning backgrounds withdraw an exact private note with keybo
   }
 });
 
-test("[L319] a member asks about the exact lesson version and gets its own words cited, or an honest not-covered", async ({
+test("[L322] a member asks about the exact lesson version and gets its own words cited, or an honest not-covered", async ({
   page,
 }, info) => {
   const id = info.project.name === "desktop-chromium" ? "SYQ-202" : "SYQ-203";
