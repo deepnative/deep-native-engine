@@ -21,7 +21,11 @@ import { dropAttendanceBrowserDatabase } from "./attendance-browser-database.ts"
 export async function reviewedContentFixture(
   browser: Browser,
   info: TestInfo,
-  options: { sampleInvoices?: boolean; testProviderKey?: string } = {},
+  options: {
+    sampleInvoices?: boolean;
+    testProviderKey?: string;
+    memberContributions?: boolean;
+  } = {},
 ) {
   const original = process.env.DNE_TEST_DATABASE_URL;
   if (
@@ -87,6 +91,9 @@ export async function reviewedContentFixture(
             DNE_TEST_PROVIDER_EVENTS: "enabled",
             DNE_TEST_PROVIDER_EVENT_KEY: options.testProviderKey,
           }
+        : {}),
+      ...(options.memberContributions
+        ? { DNE_MEMBER_CONTRIBUTIONS: "enabled" }
         : {}),
     });
     const origin = running.origin;

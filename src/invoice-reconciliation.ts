@@ -19,7 +19,8 @@ export type InvoiceFlag =
   | "late_recorded"
   | "partly_refunded"
   | "fully_refunded"
-  | "voided";
+  | "voided"
+  | "test_event_held";
 /** One retained invoice with its events, compared before any totals exist. */
 export interface InvoiceFact {
   id: string;
@@ -42,6 +43,8 @@ export interface InvoiceFact {
   firstRefund: string | null;
   lateEvents: number;
   lateCents: number;
+  /** Signed test events on this invoice still held and not applied. */
+  heldEvents: number;
 }
 export interface InvoiceCashGroup {
   group: InvoiceGroupName;
@@ -111,7 +114,9 @@ const mismatchFlags: readonly InvoiceFlag[] = [
 const severity = (flags: readonly InvoiceFlag[]) =>
   flags.some((flag) => mismatchFlags.includes(flag))
     ? 0
-    : flags.includes("late_recorded") || flags.includes("receipt_before_issue")
+    : flags.includes("late_recorded") ||
+        flags.includes("receipt_before_issue") ||
+        flags.includes("test_event_held")
       ? 1
       : 2;
 
@@ -154,6 +159,8 @@ export function invoiceFlags(fact: InvoiceFact): InvoiceFlag[] {
         : "partly_refunded",
     );
   if (fact.voided) flags.push("voided");
+  // A held event is not a cash mismatch, but an operator must find its invoice.
+  if (fact.heldEvents > 0) flags.push("test_event_held");
   return flags;
 }
 function group(
@@ -258,7 +265,8 @@ const factsSql = `SELECT i.id,i.sample,i.owner_id IS NOT NULL AS linked,i.voided
    e.receipts,e.receipt_cents::text AS "receiptCents",e.refunds,e.refund_cents::text AS "refundCents",
    e.simulated_receipt_cents::text AS "simulatedReceiptCents",e.simulated_refund_cents::text AS "simulatedRefundCents",
    e.first_receipt AS "firstReceipt",e.first_refund AS "firstRefund",
-   e.late_events AS "lateEvents",e.late_cents::text AS "lateCents"
+   e.late_events AS "lateEvents",e.late_cents::text AS "lateCents",
+   e.held_events AS "heldEvents"
  FROM simple_invoices i
  CROSS JOIN LATERAL (
    SELECT COALESCE(sum(${digits("line->>'amountCents'")}),0) AS lines
@@ -274,7 +282,11 @@ const factsSql = `SELECT i.id,i.sample,i.owner_id IS NOT NULL AS linked,i.voided
      to_char(min(p.received_on) FILTER (WHERE p.kind='receipt'),'YYYY-MM-DD') AS first_receipt,
      to_char(min(p.received_on) FILTER (WHERE p.kind='refund'),'YYYY-MM-DD') AS first_refund,
      count(*) FILTER (WHERE p.kind IN ('receipt','refund') AND to_char(p.recorded_at AT TIME ZONE 'UTC','YYYY-MM')>to_char(p.received_on,'YYYY-MM'))::integer AS late_events,
-     COALESCE(sum(p.amount_cents) FILTER (WHERE p.kind IN ('receipt','refund') AND to_char(p.recorded_at AT TIME ZONE 'UTC','YYYY-MM')>to_char(p.received_on,'YYYY-MM')),0) AS late_cents
+     COALESCE(sum(p.amount_cents) FILTER (WHERE p.kind IN ('receipt','refund') AND to_char(p.recorded_at AT TIME ZONE 'UTC','YYYY-MM')>to_char(p.received_on,'YYYY-MM')),0) AS late_cents,
+     count(*) FILTER (WHERE p.kind='held' AND NOT EXISTS(
+       SELECT 1 FROM simple_invoice_payments a
+       WHERE a.provider_event_id=p.provider_event_id AND a.kind IN ('receipt','refund')
+     ))::integer AS held_events
    FROM simple_invoice_payments p WHERE p.invoice_id=i.id
  ) e`;
 // Staff change history names a member, not an invoice, so it compares per member.
@@ -329,6 +341,7 @@ const decodeFact = (row: Record<string, unknown>): InvoiceFact => ({
   firstRefund: (row.firstRefund ?? null) as string | null,
   lateEvents: whole(row.lateEvents),
   lateCents: whole(row.lateCents),
+  heldEvents: whole(row.heldEvents),
 });
 /** Reads the comparison inside the caller's one read-only snapshot. */
 export async function readInvoiceReconciliation(

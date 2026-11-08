@@ -281,3 +281,84 @@ test("[F-BUILD-05-B] older signed test events cannot overwrite a newer paid stat
     await f.close();
   }
 });
+
+test("[F-BUILD-05-D] a deliberately missing payment event is flagged on its invoice for the operator", async ({
+  browser,
+}, info) => {
+  test.setTimeout(90_000);
+  const f = await reviewedContentFixture(browser, info, {
+    sampleInvoices: true,
+    testProviderKey: key,
+  });
+  try {
+    const { admin, invoiceId, deliver } = await sampleInvoice(f);
+    await requiredCheck(1, async () => {
+      // The refund arrives, but its payment event is deliberately never sent.
+      const payment = {
+        id: "evt-provisional-missing-pay",
+        type: "payment.succeeded",
+        paymentRef: "pay-provisional-missing",
+        amountCents: 3000,
+        occurredAt: "2026-11-02T12:00:00.000Z",
+      };
+      expect(
+        await deliver({
+          id: "evt-provisional-early-refund",
+          type: "refund.succeeded",
+          paymentRef: payment.paymentRef,
+          amountCents: 3000,
+          occurredAt: "2026-11-03T12:00:00.000Z",
+        }),
+      ).toEqual({ status: 200, body: { outcome: "held" } });
+      expect(await invoiceState(f, invoiceId)).toEqual({
+        paid: "0",
+        refunded: "0",
+        rows: ["held:evt-provisional-early-refund:3000"],
+        history: [],
+      });
+
+      await admin.goto(f.origin + "/operator/invoice-reconciliation");
+      const events = admin.locator("[data-test-events]");
+      await expect(
+        events.locator('[data-reconciliation-status="waiting"]'),
+      ).toContainText("held and not applied");
+      await expect(events.locator('[data-field="test.waiting"]')).toHaveText(
+        "CAD 30.00",
+      );
+      await expect(
+        events.locator("dt").filter({ hasText: "Held and not applied (1)" }),
+      ).toHaveCount(1);
+      // The operator can see which invoice is waiting and open it.
+      const flagged = admin.locator(`[data-flagged-invoice="${invoiceId}"]`);
+      await expect(flagged).toContainText(
+        "Signed test event held and not applied",
+      );
+      await flagged.getByRole("link").click();
+      await expect(admin).toHaveURL(
+        new RegExp(`/operator/invoices/${invoiceId}$`),
+      );
+      await expect(admin.getByText("Test event not applied")).toBeVisible();
+
+      // Once the missing payment arrives, the held refund applies once and the
+      // invoice is no longer waiting.
+      expect(await deliver(payment)).toEqual({
+        status: 200,
+        body: { outcome: "receipt" },
+      });
+      await admin.goto(f.origin + "/operator/invoice-reconciliation");
+      await expect(
+        events.locator('[data-reconciliation-status="applied"]'),
+      ).toBeVisible();
+      await expect(
+        events.locator('[data-field="test.appliedAfterHold"]'),
+      ).toHaveText("1");
+      await expect(
+        admin
+          .locator(`[data-flagged-invoice="${invoiceId}"]`)
+          .getByText("Signed test event held and not applied"),
+      ).toHaveCount(0);
+    });
+  } finally {
+    await f.close();
+  }
+});
