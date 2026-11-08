@@ -1,3 +1,4 @@
+import { browserOrigin } from "./tests/support/browser-origin.js";
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
@@ -21,19 +22,19 @@ export default defineConfig({
       dirty: false,
     },
   },
-  use: { baseURL: "http://127.0.0.1:4317", trace: "on" },
+  use: { baseURL: browserOrigin, trace: "on" },
   projects: [
     { name: "desktop-chromium", use: { ...devices["Desktop Chrome"] } },
     { name: "mobile-chromium", use: { ...devices["Pixel 7"] } },
   ],
   webServer: {
     command: "node dist/main.js",
-    url: "http://127.0.0.1:4317",
+    url: browserOrigin,
     timeout: 30000,
     reuseExistingServer: false,
     env: {
       DNE_DATABASE_URL: process.env.DNE_TEST_DATABASE_URL!,
-      DNE_PORT: "4317",
+      DNE_PORT: new URL(browserOrigin).port,
       DNE_APP_MODE: "test",
       DNE_PRIVATE_STORAGE_ROOT: process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!,
     },

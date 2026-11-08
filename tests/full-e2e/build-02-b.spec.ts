@@ -10,9 +10,9 @@ import {
   queuedSample,
   sha256,
 } from "../support/sample-feedback-journey.ts";
+import { browserOrigin as origin } from "../support/browser-origin.ts";
 
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
 test.afterAll(async () => pool.end());
 
 test("[F-BUILD-02-B] an assigned reviewer's published feedback references only the authorized pinned version", async ({

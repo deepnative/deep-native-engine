@@ -5,9 +5,9 @@ import { authorizationStore } from "../../src/authorization.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
 import { requiredCheck } from "../support/required-check.ts";
+import { browserOrigin as origin } from "../support/browser-origin.ts";
 
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
 test.afterAll(async () => pool.end());
 
 async function memberId(context: BrowserContext) {
