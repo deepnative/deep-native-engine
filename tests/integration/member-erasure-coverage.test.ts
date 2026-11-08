@@ -55,7 +55,7 @@ async function reviewed() {
     return parts[1]!.split("\n## ")[0]!;
   };
   const names = (body: string) =>
-    [...body.matchAll(/^\| `([a-z0-9_.]+)` \|/gm)].map((m) => m[1]!);
+    [...body.matchAll(/^\| `([a-z0-9_.]+)` +\|/gm)].map((m) => m[1]!);
   return {
     tables: names(section("Tables kept when an account is deleted")),
     links: names(section("Member links in kept rows")),
@@ -140,7 +140,8 @@ async function member(name: string) {
       [id],
     )
   ).rows[0]!.id;
-  const email = sha(`${name.toLowerCase().replaceAll(" ", ".")}@example.test`);
+  // Kept rows outlive TRUNCATE principals, so each run uses a fresh address.
+  const email = sha(`invented.${randomUUID()}@example.test`);
   await pool.query(
     "INSERT INTO member_email_identities(email_hash,principal_id,verified_at) VALUES($1,$2,clock_timestamp())",
     [email, id],
@@ -256,6 +257,6 @@ it("ERASE-04 each listed member link says what stays and what is cleared", async
   const links = text
     .split("\n## Member links in kept rows\n")[1]!
     .split("\n## ")[0]!;
-  for (const row of links.matchAll(/^\| `([a-z0-9_.]+)` \| ([^|]+) \|/gm))
+  for (const row of links.matchAll(/^\| `([a-z0-9_.]+)` +\| ([^|]+)\|/gm))
     expect(row[2]!.trim(), row[1]).toMatch(/^(Kept|Cleared)\b/);
 });
