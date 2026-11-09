@@ -25,6 +25,7 @@ interface Options {
   principalAfter?: boolean;
   failAt?: string;
   suggestionState?: "requested" | "ready" | "rejected" | null;
+  testOutcome?: boolean;
 }
 function fixture(
   options: Options = {},
@@ -133,6 +134,9 @@ function fixture(
             suggestionRequestedAt: options.suggestionState
               ? new Date("2026-01-02")
               : null,
+            testOutcome: options.testOutcome ? "test-executed" : null,
+            testReason: options.testOutcome ? "matching-test-record" : null,
+            testDecidedAt: options.testOutcome ? new Date("2026-01-03") : null,
           },
         ],
       };
@@ -296,6 +300,21 @@ it("PRACTICE-AI-01/05 detail reports whether suggestions can be asked for and ea
   const heldDetail = (await held.store.detail("token", id))!;
   expect(heldDetail.suggestions).toBe("paused");
   expect(heldDetail.exchanges[0]!.suggestion!.state).toBe("unknown");
+  expect(heldDetail.exchanges[0]!.suggestion!.testOutcome).toBeNull();
+  // #189 PRACTICE-HOLD-03: a recorded test outcome rides on the unknown one.
+  const reviewed = fixture({ suggestionState: "requested", testOutcome: true });
+  expect(
+    (await reviewed.store.detail("token", id))!.exchanges[0]!.suggestion,
+  ).toEqual({
+    state: "unknown",
+    text: null,
+    requestedAt: new Date("2026-01-02"),
+    testOutcome: {
+      outcome: "test-executed",
+      reason: "matching-test-record",
+      decidedAt: new Date("2026-01-03"),
+    },
+  });
   expect(
     (await fixture({ paused: null }).store.detail("token", id))!.suggestions,
   ).toBe("paused");

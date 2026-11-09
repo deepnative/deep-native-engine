@@ -79,6 +79,7 @@ import type {
   PracticeSessionSummary,
   PracticeSessionDetail,
   PracticeSessionExchange,
+  PracticeSuggestionView,
 } from "./practice-sessions.ts";
 import {
   interviewNotice,
@@ -1635,6 +1636,12 @@ export function practiceSessionHistoryPage(
     `<section class="reading"><h1>Private session history</h1><p>Only your signed-in account can read these ${hostingText("local sample", "practice")} sessions. Each page lists at most 20 sessions. Stored pairs remain tied to their exact source, goal and prompt; unavailable sources do not generate new comparisons.</p>${history.items.length ? `<ol aria-label="Saved practice sessions">${history.items.map((item) => `<li><a href="/practice-sessions/${encodeURIComponent(item.id)}">${escape(item.contentId)} · version ${item.contentVersion} · ${escape(GOALS[item.goal])}</a><p>${practicePurposeLabel(item.promptVersion)} · prompt ${escape(item.promptVersion)} · started ${timeTag(item.createdAt)}${item.withdrawnAt ? ` · Withdrawn ${timeTag(item.withdrawnAt)}; response, comparison and excerpt text removed` : " · Private retained session"}</p></li>`).join("")}</ol>` : "<p>No private sessions are saved yet. Choose a published sample lesson to opt in.</p>"}${history.nextCursor ? `<p><a href="/practice-sessions?after=${encodeURIComponent(history.nextCursor)}">Next session page</a></p>` : ""}${coach ? coachPracticeSection(coach) : ""}<p><a href="/learn">Return to learning</a> · <a href="/member/export">${privateRecordsLabel()}</a> · <a href="/practice">One-note practice history</a> · <a href="/library">Learning library</a></p></section>`,
   );
 }
+// #189 PRACTICE-HOLD-03: the same wording as a sample request's test outcome.
+function practiceTestOutcome(
+  value: NonNullable<NonNullable<PracticeSuggestionView["testOutcome"]>>,
+) {
+  return `<p role="status" data-practice-suggestion-test-outcome>A test outcome was recorded for this held suggestion on ${value.decidedAt.toISOString().slice(0, 10)}: ${value.outcome === "test-executed" ? "it ran" : "it did not run"}, ${value.reason === "matching-test-record" ? "matched to an invented test record" : "recorded as an operator test exercise"}. This is a test record only. No AI provider confirmed it, nothing was charged, released or retried, no suggestion was added, and the request stays held.</p>`;
+}
 // #200 PRACTICE-AI: one optional simulated suggestion per saved pair.
 function practiceSuggestionBlock(
   detail: PracticeSessionDetail,
@@ -1648,7 +1655,7 @@ function practiceSuggestionBlock(
   if (suggestion?.state === "rejected")
     return `<p role="status" data-practice-suggestion-state="rejected">The simulated AI suggestion for this pair was rejected. It didn't quote your words and ${escape(detail.contentId)} version ${detail.contentVersion} correctly, didn't say it was uncertain, or tried to score you. Nothing from it was kept, and it isn't requested again.</p>`;
   if (suggestion?.state === "unknown")
-    return `<p role="status" data-practice-suggestion-state="unknown">The outcome of the simulated AI suggestion for this pair isn't known. It isn't requested again, and nothing was scored.</p>`;
+    return `<p role="status" data-practice-suggestion-state="unknown">The outcome of the simulated AI suggestion for this pair isn't known. It isn't requested again, and nothing was scored.</p>${suggestion.testOutcome ? practiceTestOutcome(suggestion.testOutcome) : ""}`;
   if (
     detail.suggestions !== "available" ||
     (detail.availability !== "available" && detail.availability !== "full")
