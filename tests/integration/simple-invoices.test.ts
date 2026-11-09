@@ -862,6 +862,7 @@ it("BILLPROFILE02/04 an acknowledged profile commit with a lost response stays i
     plans: [],
     invoices: [],
     today,
+    unavailable: {},
   });
 });
 
