@@ -100,6 +100,7 @@ import type {
   ReadinessRequirement,
 } from "./assignment-readiness.ts";
 import { learningPlan } from "./learning-plan.ts";
+import { CUSTOMER_COUNTRIES, OPERATOR_STATEMENT } from "./customer-market.ts";
 import type {
   ProfileEditResult,
   ProfileError,
@@ -955,17 +956,25 @@ export function careerPage(
   );
 }
 /** SIGNUP-01: the email and password that sign this new account in. */
-function signupFields(email: string, errors: { field: string }[]) {
+function signupFields(
+  email: string,
+  errors: { field: string }[],
+  country = "",
+) {
   const invalid = (field: string) =>
     errors.some((error) => error.field === field) ? ' aria-invalid="true"' : "";
-  return `<fieldset class="signup-fields"><legend>Create your account</legend><p class="small">Your email is your username. You are signed in as soon as you press Start my learning path, and you can sign in with your password from then on. We send a link to verify the email in the background.</p><label for="signup_email">Email address</label><input id="signup_email" name="signup_email" type="email" autocomplete="username" maxlength="254" required value="${escape(email)}"${invalid("signup_email")}><label for="signup_password">Password</label><input id="signup_password" name="signup_password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required aria-describedby="signup_password_rule"${invalid("signup_password")}><p id="signup_password_rule" class="small">12 to 128 characters. A short phrase is easiest to remember.</p></fieldset>`;
+  const option = (value: string, label: string) =>
+    `<option value="${value}"${country === value ? " selected" : ""}>${label}</option>`;
+  // #12 D02: asked first, and checked before anything is looked up or saved.
+  const countries = `<label for="signup_country">Country where you live</label><select id="signup_country" name="signup_country" required aria-describedby="signup_country_rule"${invalid("signup_country")}>${option("", "Choose a country")}${CUSTOMER_COUNTRIES.map((item) => option(item.code, item.name)).join("")}${option("other", "Another country")}</select><p id="signup_country_rule" class="small">${escape(OPERATOR_STATEMENT)}</p>`;
+  return `<fieldset class="signup-fields"><legend>Create your account</legend><p class="small">Your email is your username. You are signed in as soon as you press Start my learning path, and you can sign in with your password from then on. We send a link to verify the email in the background.</p>${countries}<label for="signup_email">Email address</label><input id="signup_email" name="signup_email" type="email" autocomplete="username" maxlength="254" required value="${escape(email)}"${invalid("signup_email")}><label for="signup_password">Password</label><input id="signup_password" name="signup_password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required aria-describedby="signup_password_rule"${invalid("signup_password")}><p id="signup_password_rule" class="small">12 to 128 characters. A short phrase is easiest to remember.</p></fieldset>`;
 }
 export function welcome(
   csrf: string,
   error: string[] = [],
   onboardingState?: ProfileStartResult,
   emailRecovery = false,
-  signup?: { email: string },
+  signup?: { email: string; country?: string },
   landing?: LandingNotice,
 ) {
   return page(
@@ -981,7 +990,7 @@ export function welcome(
         </div><p class="example-caption">Choose an answer to see why. Sample exercise. Nothing is saved.</p></section>
       </section>
       <ol class="landing-path" aria-label="How your learning path works"><li><span class="path-number" aria-hidden="true">1</span><div><h2>Learn one idea</h2><p>Start with a clear, useful example.</p></div></li><li><span class="path-number" aria-hidden="true">2</span><div><h2>Try a decision</h2><p>Make a choice. See the reasoning.</p></div></li><li><span class="path-number" aria-hidden="true">3</span><div><h2>Apply it yourself</h2><p>Build an answer and keep your work.</p></div></li></ol>
-      <section id="your-path" class="onboard" aria-labelledby="onboard-title"><div><h2 id="onboard-title">A starting point<br>that feels like you.</h2><p>Exploring AI, applying it at work or building something new? Choose where you are and where you'd like to go.</p><p>Your profile and learning work stay private unless you choose to share. ${hostingText("Features labelled as simulations still require invented inputs.", "Features labelled as simulations use no live AI.")}</p><p class="small">${hostingText("Your work stays on this computer.", "Your learning work is stored on this Azure-hosted service.")} This browser stays signed in for up to 30 days. ${emailRecovery ? "After starting, use Email access to link and verify an email before you clear cookies or change devices. If you already verified a linked email, choose Sign in to return to your saved learning." : "Email recovery is unavailable here. Clearing this browser’s cookie loses access to saved work."} Use ${hostingText("Delete this preview", "Delete my account")} to remove your saved work.</p></div><form method="post" action="/start">${hidden(csrf)}${onboardingState?.errors.length ? profileErrorSummary(onboardingState, "Fix your starting choices") : notice(error)}${profileFields(undefined, onboardingState?.attempted, onboardingState?.errors, true)}${signup ? signupFields(signup.email, onboardingState?.errors ?? []) : ""}<button type="submit">Start my learning path</button></form></section>
+      <section id="your-path" class="onboard" aria-labelledby="onboard-title"><div><h2 id="onboard-title">A starting point<br>that feels like you.</h2><p>Exploring AI, applying it at work or building something new? Choose where you are and where you'd like to go.</p><p>Your profile and learning work stay private unless you choose to share. ${hostingText("Features labelled as simulations still require invented inputs.", "Features labelled as simulations use no live AI.")}</p><p class="small">${hostingText("Your work stays on this computer.", "Your learning work is stored on this Azure-hosted service.")} This browser stays signed in for up to 30 days. ${emailRecovery ? "After starting, use Email access to link and verify an email before you clear cookies or change devices. If you already verified a linked email, choose Sign in to return to your saved learning." : "Email recovery is unavailable here. Clearing this browser’s cookie loses access to saved work."} Use ${hostingText("Delete this preview", "Delete my account")} to remove your saved work.</p></div><form method="post" action="/start">${hidden(csrf)}${onboardingState?.errors.length ? profileErrorSummary(onboardingState, "Fix your starting choices") : notice(error)}${profileFields(undefined, onboardingState?.attempted, onboardingState?.errors, true)}${signup ? signupFields(signup.email, onboardingState?.errors ?? [], signup.country) : ""}<button type="submit">Start my learning path</button></form></section>
     </div>`,
   );
 }

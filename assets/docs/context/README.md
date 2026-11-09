@@ -27,7 +27,7 @@ At inspection, `main` was clean at `a30f87f` and contained no tracked source fil
 
 People across IT, other professions and general learning interests share an accessible AI foundation, goal-based practical work, bounded participation and reviewed contributions. The nine IT role families and contractor/career paths are optional specializations, not admission requirements. Foundation/participation access and pricing require explicit separate decisions. The archived CAD 3,000 pilot, CAD 9,000 continuation and CAD 12,000 annual Professional service remain optional coaching-offer hypotheses, with their original consent/date/ledger invariants; higher tiers remain gated hypotheses. No universal price or free tier is inferred.
 
-No demand, expert appointments, legal clearance, live integrations, paid pilots, or completed full-MVP software is claimed. Jurisdiction, entity, budget, real roster, rights, terms, tax, and provider selection have owners and blocking decisions in the roadmap.
+No demand, expert appointments, legal clearance, live integrations, paid pilots, or completed full-MVP software is claimed. The operating entity (Deep Native Inc., Ontario, Canada) and initial market (Canada) are owner decisions of 9 November 2026; jurisdictional review, budget, real roster, rights, terms, tax, and provider selection have owners and blocking decisions in the roadmap.
 
 ## Board conventions
 

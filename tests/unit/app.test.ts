@@ -8061,3 +8061,11 @@ it("FRICTION-05/06 ignores an unknown notice and reads member state only where n
   db.session.mockRejectedValue(new Error("synthetic store failure"));
   expect(await navigation()).toContain("/account/sign-out");
 });
+it("MARKET-04 a local preview without signup asks nothing about country", async () => {
+  const agent = await managedAgent(
+    app(storage(), { origin, secret: "secret" }),
+  );
+  const home = await agent.get("/").set("Host", host).expect(200);
+  expect(home.text).not.toContain("signup_country");
+  expect(home.text).not.toContain("Country where you live");
+});
