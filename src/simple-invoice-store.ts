@@ -61,7 +61,12 @@ export interface StoredInvoice {
   voidReason: string | null;
   delivery: "not_sent" | "sending" | "sent" | "unconfirmed";
   payments?: InvoicePaymentEvent[];
+  /** SVC: present only on a sample invoice that signed test events reached. */
+  service?: SampleService;
 }
+export type SampleService =
+  | { state: "awaiting_payment" }
+  | { state: "ready" | "withdrawn"; since: string };
 /** Staff-entered or a signed test event. Never a payment-provider confirmation. */
 export interface InvoicePaymentEvent {
   kind: "receipt" | "refund" | "failure" | "held";
@@ -1229,9 +1234,25 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           amountCents: Number(event.amountCents),
           ...(recordedBy ? { recordedBy } : {}),
         }));
+        // SVC-07: the latest simulated service state, once a signed test event arrived.
+        const service = payments.some(
+          (p) => p.verification === "signed_test_event",
+        )
+          ? ((
+              await tx.query<SampleService>(
+                `SELECT state,to_char(changed_at AT TIME ZONE 'UTC','YYYY-MM-DD') AS since
+                 FROM sample_service_states WHERE invoice_id=$1 ORDER BY state='withdrawn' DESC LIMIT 1`,
+                [id],
+              )
+            ).rows[0] ?? { state: "awaiting_payment" })
+          : undefined;
         return {
           kind: "ready",
-          value: { ...decodeInvoice(row), payments },
+          value: {
+            ...decodeInvoice(row),
+            payments,
+            ...(service ? { service } : {}),
+          },
         };
       });
     },

@@ -32,6 +32,16 @@ The `X-DNE-Test-Signature` header is `sha256=` followed by the hex HMAC-SHA256 o
 - Events change only the invoice record. They grant no access or entitlement and don't change the agreement. A return address or redirect does nothing.
 - The invoice labels these entries as simulated, and staff change history lists them as signed test events, not as a staff member's act.
 
+### Simulated service state (#32 SVC)
+
+Once a signed test event reaches a sample invoice, the invoice shows **Service (simulated)**, a record separate from the invoice, its payment rows and the course agreement. It is stored as append-only rows in `sample_service_states` (migration 122), one per change, each naming the applied event that moved it. No row means awaiting payment.
+
+- **Awaiting payment** until signed test receipts cover the total. Staff manual receipts never move it, because nobody verified them.
+- **Ready** once they do. **Withdrawn** once a signed test refund brings what was received below the total. Both sums only grow, so a withdrawn service never becomes ready again and every arrival order ends in the same state.
+- Failures, held events, duplicates and stale failures don't change it.
+- It provides nothing and grants no access. The database refuses rows on real invoices, edits, deletes and repeats, and the rows go when their sample invoice is erased with its account.
+- Download my records doesn't include it yet; the member's own signed test events are already there.
+
 ## Corrections and correspondence
 
 For an unpaid incorrect invoice, staff records a reason and chooses **Void unpaid invoice**, then prepares a corrected proposal. The original document remains visible as void, with no payment due. Voiding does not cancel the underlying course agreement. Invoices with recorded money or an uncertain in-flight email cannot be voided through this flow; refunds and paid-accounting adjustments are not implemented.

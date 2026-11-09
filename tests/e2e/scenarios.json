@@ -2753,8 +2753,8 @@
       "id": "L309",
       "actor": "Billing administrator and member reading signed test events on a sample invoice",
       "preconditions": "Dedicated synthetic PostgreSQL database, sample invoices, signed test events enabled with an invented key, port0 server; desktop/mobile Chromium; no provider, no real money",
-      "steps": "TESTPAY-04/06/07/10: a member accepts one invented invoice; a badly signed event is refused; signed events arrive as refund, then payment, then a stale failure; the member and administrator reload; the administrator opens change history",
-      "expected": "The bad signature changes nothing; the held refund applies once its payment arrives; the stale failure leaves the invoice paid; both readers see test entries saying no payment provider checked them and no money moved; change history lists a signed test event, not a staff member; no sideways scrolling",
+      "steps": "TESTPAY-04/06/07/10: a member accepts one invented invoice; a badly signed event is refused; signed events arrive as refund, then payment, then a stale failure; the member and administrator reload; the administrator opens change history. SVC-03/07: each reload reads the simulated service state",
+      "expected": "The bad signature changes nothing; the held refund applies once its payment arrives; the stale failure leaves the invoice paid; both readers see test entries saying no payment provider checked them and no money moved; change history lists a signed test event, not a staff member; the simulated service is absent before any signed event, awaiting payment while the refund is held and withdrawn at the end, saying it provides nothing; no sideways scrolling",
       "issues": [32],
       "critical": true
     },

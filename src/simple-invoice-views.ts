@@ -1,6 +1,9 @@
 import { monthLabel } from "./coaching-values.ts";
 import { coachingDuration } from "./coaching-values.ts";
-import type { InvoicePaymentEvent } from "./simple-invoice-store.ts";
+import type {
+  InvoicePaymentEvent,
+  SampleService,
+} from "./simple-invoice-store.ts";
 import { escape, page } from "./views.ts";
 
 export interface SimpleInvoiceDocument {
@@ -43,11 +46,24 @@ const entryLabel = (event: InvoicePaymentEvent) =>
       ? "Refund"
       : "Receipt";
 
+const SERVICE = {
+  awaiting_payment: () => "Awaiting payment",
+  ready: (since: string) => `Ready since ${escape(since)}`,
+  withdrawn: (since: string) =>
+    `Withdrawn after a test refund on ${escape(since)}`,
+};
+/** SVC-07: a separate simulated record, never access or a provider's word. */
+const serviceSection = (service?: SampleService) =>
+  service
+    ? `<h2>Service (simulated)</h2><p class="invoice-service" role="status">${service.state === "awaiting_payment" ? SERVICE.awaiting_payment() : SERVICE[service.state](service.since)}</p><p>Signed test events move this sample service state. It provides nothing and grants no access. No payment provider checked it and no money moved.</p>`
+    : "";
+
 /** Amounts come from the validated immutable invoice, never query/form values. */
 export function simpleInvoiceDocument(
   invoice: SimpleInvoiceDocument,
   admin = false,
   payments: InvoicePaymentEvent[] = [],
+  service?: SampleService,
 ) {
   // GAPS-01: each reader returns to their own billing pages.
   const [billing, home] = admin
@@ -73,6 +89,6 @@ export function simpleInvoiceDocument(
     : "";
   return page(
     `Invoice ${invoice.number}`,
-    `<article class="invoice-document"><p>${invoice.sample ? "SAMPLE · NOT PAYABLE" : "INVOICE"}</p><h1>Invoice</h1><p class="invoice-reference">${escape(invoice.number)}</p><p>Issued ${escape(invoice.issuedOn)}</p>${invoice.voidReason ? `<p role="status"><strong>VOID · No payment due</strong> — ${escape(invoice.voidReason)}</p>` : ""}<h2>From</h2><p class="invoice-instructions">${escape(invoice.issuer)}</p><h2>Bill to</h2><p>${escape(invoice.billedTo)}</p>${invoice.billing.kind === "one_time" ? "<p>One-time billing</p>" : `<p>Recurring billing · Period starts ${escape(invoice.billing.periodStart)} and ends before ${escape(invoice.billing.periodEnd)}. No automatic payment is taken.</p>`}${invoice.coaching ? `<h2>Monthly coaching</h2><p>Month: ${escape(monthLabel(invoice.coaching.month))} · ${coachingDuration(invoice.coaching.minutes)} · ${money(invoice.coaching.rateCents)} per hour · rate version ${invoice.coaching.rateVersion} · submitted revision ${invoice.coaching.submissionRevision}</p>${invoice.coaching.replacesInvoiceId ? `<p>Replaces void invoice DN-${escape(invoice.coaching.replacesInvoiceId)}. The original remains retained.</p>` : ""}` : ""}<table><caption>${invoice.coaching ? "Coaching charges" : "Included courses"}</caption><thead><tr><th scope="col">Description</th><th scope="col">Amount</th></tr></thead><tbody>${invoice.lines.map((line) => `<tr><td>${escape(line.description)}</td><td>${money(line.amountCents)}</td></tr>`).join("")}</tbody></table><dl><dt>Subtotal</dt><dd>${money(subtotal)}</dd><dt>Tax</dt><dd>${money(invoice.taxCents)}</dd><dt>Total</dt><dd>${money(total)}</dd><dt>Recorded payment</dt><dd>${money(invoice.paidCents)}</dd>${refunded ? `<dt>Recorded refund</dt><dd>${money(refunded)}</dd>` : ""}<dt>Balance</dt><dd>${money(invoice.voidReason ? 0 : total - invoice.paidCents)}</dd></dl>${record}<h2>Offline payment</h2><p class="invoice-instructions">${escape(invoice.instructions)}</p>${invoice.sample ? "<p>This sample cannot be paid. Its issuer, amounts and tax are invented preview values.</p>" : "<p>Payment is confirmed after staff records received funds against this invoice.</p>"}</article><aside class="invoice-controls"><p>Use your browser’s Print command to print this invoice or save it as a PDF.</p><p class="account-links invoice-actions">${billing} ${home}</p></aside>`,
+    `<article class="invoice-document"><p>${invoice.sample ? "SAMPLE · NOT PAYABLE" : "INVOICE"}</p><h1>Invoice</h1><p class="invoice-reference">${escape(invoice.number)}</p><p>Issued ${escape(invoice.issuedOn)}</p>${invoice.voidReason ? `<p role="status"><strong>VOID · No payment due</strong> — ${escape(invoice.voidReason)}</p>` : ""}<h2>From</h2><p class="invoice-instructions">${escape(invoice.issuer)}</p><h2>Bill to</h2><p>${escape(invoice.billedTo)}</p>${invoice.billing.kind === "one_time" ? "<p>One-time billing</p>" : `<p>Recurring billing · Period starts ${escape(invoice.billing.periodStart)} and ends before ${escape(invoice.billing.periodEnd)}. No automatic payment is taken.</p>`}${invoice.coaching ? `<h2>Monthly coaching</h2><p>Month: ${escape(monthLabel(invoice.coaching.month))} · ${coachingDuration(invoice.coaching.minutes)} · ${money(invoice.coaching.rateCents)} per hour · rate version ${invoice.coaching.rateVersion} · submitted revision ${invoice.coaching.submissionRevision}</p>${invoice.coaching.replacesInvoiceId ? `<p>Replaces void invoice DN-${escape(invoice.coaching.replacesInvoiceId)}. The original remains retained.</p>` : ""}` : ""}<table><caption>${invoice.coaching ? "Coaching charges" : "Included courses"}</caption><thead><tr><th scope="col">Description</th><th scope="col">Amount</th></tr></thead><tbody>${invoice.lines.map((line) => `<tr><td>${escape(line.description)}</td><td>${money(line.amountCents)}</td></tr>`).join("")}</tbody></table><dl><dt>Subtotal</dt><dd>${money(subtotal)}</dd><dt>Tax</dt><dd>${money(invoice.taxCents)}</dd><dt>Total</dt><dd>${money(total)}</dd><dt>Recorded payment</dt><dd>${money(invoice.paidCents)}</dd>${refunded ? `<dt>Recorded refund</dt><dd>${money(refunded)}</dd>` : ""}<dt>Balance</dt><dd>${money(invoice.voidReason ? 0 : total - invoice.paidCents)}</dd></dl>${record}${serviceSection(service)}<h2>Offline payment</h2><p class="invoice-instructions">${escape(invoice.instructions)}</p>${invoice.sample ? "<p>This sample cannot be paid. Its issuer, amounts and tax are invented preview values.</p>" : "<p>Payment is confirmed after staff records received funds against this invoice.</p>"}</article><aside class="invoice-controls"><p>Use your browser’s Print command to print this invoice or save it as a PDF.</p><p class="account-links invoice-actions">${billing} ${home}</p></aside>`,
   );
 }

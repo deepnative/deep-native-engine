@@ -120,6 +120,26 @@ export function testEventEffect(
     : "held";
 }
 
+/** SVC: no row is awaiting payment; a row grants nothing. */
+export type SampleServiceState = "awaiting_payment" | "ready" | "withdrawn";
+/**
+ * SVC-01/02/03: only signed test receipts and refunds move the simulated service, never a
+ * staff record nobody verified. Both sums only grow, so the state only moves forward and
+ * every arrival order ends in the same state.
+ */
+export function sampleServiceState(
+  totalCents: number,
+  events: InvoiceMoney["events"],
+): SampleServiceState {
+  const sum = (kind: TestEventKind) =>
+    events
+      .filter((e) => e.kind === kind)
+      .reduce((total, e) => total + e.amountCents, 0);
+  const received = sum("receipt");
+  if (received < totalCents) return "awaiting_payment";
+  return received - sum("refund") >= totalCents ? "ready" : "withdrawn";
+}
+
 type StoredEvent = {
   kind: TestEventKind;
   id: string;
@@ -271,6 +291,17 @@ export function testProviderEventStore(pool: Pool) {
                 { ...waiting, kind: "refund" },
               ];
             }
+          }
+          if (kind === "receipt" || kind === "refund") {
+            // SVC-02/03: append the state this event reached, once.
+            const now = (await read(tx, event.invoiceId))!,
+              state = sampleServiceState(now.money.totalCents, now.stored);
+            if (state !== "awaiting_payment")
+              await tx.query(
+                `INSERT INTO sample_service_states(id,invoice_id,state,cause_event_id) VALUES($1,$2,$3,$4)
+                 ON CONFLICT (invoice_id,state) DO NOTHING`,
+                [randomUUID(), event.invoiceId, state, event.id],
+              );
           }
           return { kind: "ready", value: { outcome: kind } };
         });
