@@ -51,8 +51,19 @@ it("returns only defined synthetic aggregates to an authorized operator", async 
   const snapshot = await metrics.snapshot("a".repeat(64));
   expect(query).toHaveBeenCalledWith(
     expect.stringContaining("p.revoked_at IS NULL"),
-    [hash("a".repeat(64))],
+    [hash("a".repeat(64)), false],
   );
+  expect(snapshot?.accounts).toBe("not-demo");
+  // DEMOACCT-04: a demo site asks for its demo accounts and says so.
+  const demo = await metricsStore({ query } as unknown as Pool, {
+    demoSite: true,
+  }).snapshot("a".repeat(64));
+  expect(query).toHaveBeenLastCalledWith(
+    expect.stringContaining("l.created_on_demo_site=$2"),
+    [hash("a".repeat(64)), true],
+  );
+  expect(demo?.accounts).toBe("demo");
+  expect(demo?.definitions.accounts).toContain("test data");
   expect(snapshot).toMatchObject({
     scope: "synthetic-local-preview",
     learning: {

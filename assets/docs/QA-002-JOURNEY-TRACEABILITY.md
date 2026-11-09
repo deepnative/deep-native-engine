@@ -130,7 +130,7 @@ Re-measured on 9 November 2026 (UTC): seventy-one IDs had provisional browser te
 
 Limits of this evidence:
 
-- "Demo" here means sample billing, the only records the product marks as demo. The learning snapshot has no demo marker for members, and says so ("Demo records are not yet separated from other members"); it is labelled as a synthetic preview, not a live report. ECO-08-B's demo check therefore rests on agreements and invoices.
+- "Demo" here means sample billing. When this tranche was recorded the learning snapshot had no demo marker for members, so ECO-08-B's demo check rests on agreements and invoices. Since [#123](https://github.com/deepnative/deep-native-engine/issues/123) DEMOACCT, member accounts created on a demo site are marked and left out of the snapshot on any other site; that is covered by its own PostgreSQL tests, not by this browser tranche.
 - The "seeded outcome" in BUILD-09-A is a sample course agreement and its cancellation. There are no seeded career outcomes.
 - With four or fewer members the learning and contribution values are suppressed, so ECO-08-A checks definitions and denominators, not values. The conversion counts are exact.
 - The configured listener is a second local test listener with invented issuer text. No payment provider, no money and no hosted configuration change.

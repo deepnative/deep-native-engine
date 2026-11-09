@@ -272,7 +272,7 @@ export async function start(env: NodeJS.ProcessEnv) {
         settings.secret,
         settings.circleDiscussion,
       ),
-      metrics: metricsStore(pool),
+      metrics: metricsStore(pool, { demoSite: settings.demoSite }),
       ledgerReconciliation: ledgerReconciliationStore(pool),
       invoiceReconciliation: invoiceReconciliationStore(pool),
       staffCapacity: staffCapacityStore(pool),
@@ -374,7 +374,10 @@ export async function start(env: NodeJS.ProcessEnv) {
         ),
       ),
     };
-    const server = app(store(pool), options).listen(settings.port, "127.0.0.1");
+    const server = app(
+      store(pool, { demoSite: settings.demoSite }),
+      options,
+    ).listen(settings.port, "127.0.0.1");
     ownedServer = server;
     const closeUnstarted = unstartedConnections(server);
     await new Promise<void>((resolve, reject) => {

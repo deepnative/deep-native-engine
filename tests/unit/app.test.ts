@@ -618,8 +618,10 @@ it("denies an unconfigured operator metrics route and returns only a configured 
     logExport: vi.fn<MetricsStore["logExport"]>().mockResolvedValue(true),
     snapshot: vi.fn<MetricsStore["snapshot"]>().mockResolvedValue({
       scope: "synthetic-local-preview",
+      accounts: "not-demo",
       asOf: new Date("2026-09-24T00:00:00Z"),
       definitions: {
+        accounts: "demo accounts left out",
         denominator: "retained members",
         activated: "lesson open",
         selfAssessed: "self-report",
