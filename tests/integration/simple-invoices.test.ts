@@ -605,6 +605,83 @@ it("BUILD-04-C an offer whose start date has passed cannot be accepted or bill t
     ).rows,
   ).toEqual([{ plan_id: replacement.planId, cycle: 0 }]);
 });
+it("BUILD-09-B an offer whose course was retired after it was prepared says so and cannot be accepted", async () => {
+  const m = await member(),
+    editor = await staff("editor"),
+    p = ready(
+      await invoices.propose(admin, {
+        ...proposal(m.id),
+        courses: [
+          { id: "FND-001", version: 2, amountCents: 1000 },
+          { id: "FND-006", version: 2, amountCents: 2000 },
+        ],
+      }),
+    );
+  const open = await get("/account/purchases", m.token);
+  expect(open.text).toContain("Accept courses and create invoice");
+  expect(ready(await invoices.overview(m.token)).unavailable).toEqual({});
+  // FND-006 is used by no other case in this file; its publication is put
+  // back afterwards so later cases see the same catalog.
+  expect(await catalog.retire(editor, "FND-006")).toBe(true);
+  try {
+    expect(ready(await invoices.overview(m.token)).unavailable).toEqual({
+      [p.planId]: ["FND-006"],
+    });
+    const page = await get("/account/purchases", m.token);
+    expect(page.status).toBe(200);
+    expect(page.text).not.toContain("Accept courses and create invoice");
+    expect(page.text).toContain(
+      "This proposal can no longer be accepted: FND-006 is not currently offered.",
+    );
+    // A form opened before the course was retired is refused too.
+    const attempt = await post(
+      `/account/purchases/plans/${p.planId}/accept`,
+      m.token,
+      {
+        revision: "1",
+        operationId: randomUUID(),
+        name: "Invented student",
+        email: "invented-student@example.invalid",
+        confirm: "accept",
+      },
+    );
+    expect(attempt.status).toBe(409);
+    expect(
+      (
+        await pool.query(
+          "SELECT state,accepted_at FROM simple_invoice_plans WHERE id=$1",
+          [p.planId],
+        )
+      ).rows[0],
+    ).toEqual({ state: "offered", accepted_at: null });
+    expect(
+      (
+        await pool.query("SELECT 1 FROM simple_invoices WHERE owner_id=$1", [
+          m.id,
+        ])
+      ).rowCount,
+    ).toBe(0);
+  } finally {
+    // Retirement is one-way in the product; only this isolated test database
+    // lifts the guard for a moment to restore the shared fixture.
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "ALTER TABLE content_versions DISABLE TRIGGER content_versions_immutable",
+      );
+      await client.query(
+        "UPDATE content_versions SET state='published',retired_at=NULL WHERE id='FND-006' AND state='retired'",
+      );
+      await client.query(
+        "ALTER TABLE content_versions ENABLE TRIGGER content_versions_immutable",
+      );
+      await client.query("COMMIT");
+    } finally {
+      client.release();
+    }
+  }
+});
 it("BILLPROFILE02 persists only own recipient, validates fields, serializes concurrent edits and exports/erases the private profile", async () => {
   const m = await member(),
     other = await member();
