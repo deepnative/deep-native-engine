@@ -36,6 +36,8 @@ export default defineConfig({
       DNE_DATABASE_URL: process.env.DNE_TEST_DATABASE_URL!,
       DNE_PORT: new URL(browserOrigin).port,
       DNE_APP_MODE: "test",
+      // HOLD06D: marked invented text only; refused on hosted sites.
+      DNE_TEST_AI_FAULTS: "enabled",
       DNE_PRIVATE_STORAGE_ROOT: process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!,
     },
   },

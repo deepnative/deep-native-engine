@@ -4114,16 +4114,16 @@
         {
           "id": "F-BUILD-06-D",
           "steps": "Cause timeout and malformed provider output",
-          "expected": "Usage reservation is released or settled exactly once and the UI reports the real failure",
+          "expected": "A started metered request whose outcome is unknown keeps its usage reservation held once as an unknown outcome, never released, retried or settled, and the UI reports the real failure",
           "critical": true,
           "requiredChecks": [
             {
               "action": "Cause a provider timeout",
-              "expected": "The reservation is restored or settled exactly once and the UI reports the timeout"
+              "expected": "The reservation stays held once with no settlement or retry, and the UI reports the timeout"
             },
             {
               "action": "Cause malformed provider output",
-              "expected": "The reservation is restored or settled exactly once and the UI reports the malformed result"
+              "expected": "A metered reservation stays held once with no settlement and the UI reports the unknown outcome; an unmetered malformed result is reported with nothing shown, saved or charged"
             }
           ]
         }
