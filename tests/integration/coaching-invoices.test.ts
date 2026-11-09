@@ -1181,10 +1181,21 @@ it("RECIPIENT-01/02/03/05 suggests the registered name, keeps coaching-form edit
   const s = await members.session(token, "account");
   if (s.kind !== "active") throw Error();
   const id = s.learner.id;
-  // RECIPIENT-01: only the name; the sign-in email is never stored in plain text.
+  // RECIPIENT-01: no verified address yet, so only the name.
   expect(ready(await profiles.suggest(token))).toEqual({
     name: "陳 Registered member",
     email: "",
+    company: null,
+    revision: 0,
+  });
+  // SIGNEMAIL-01: a verified sign-in email becomes the default invoice email.
+  await pool.query(
+    "INSERT INTO member_email_identities(email_hash,principal_id,address) VALUES($1,$2,$3)",
+    ["a".repeat(64), id, "verified-member@example.invalid"],
+  );
+  expect(ready(await profiles.suggest(token))).toEqual({
+    name: "陳 Registered member",
+    email: "verified-member@example.invalid",
     company: null,
     revision: 0,
   });

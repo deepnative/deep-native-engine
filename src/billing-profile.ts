@@ -78,23 +78,30 @@ export function billingProfileStore(pool: Pool) {
           await tx.observe([member.expires]);
           return { kind: "ready" as const, value: saved };
         }
-        // RECIPIENT-01: until a recipient is saved, suggest the registered
-        // name. The sign-in email is stored only as a hash, so none is offered.
-        const value =
+        // RECIPIENT-01/SIGNEMAIL-01: until a recipient is saved, suggest the
+        // registered name and verified sign-in email. Members verified before
+        // #796 have no readable address until their next email sign-in.
+        const registered =
           current || !suggest
-            ? current
-            : {
-                name:
-                  (
-                    await tx.query<{ displayName: string | null }>(
-                      'SELECT display_name AS "displayName" FROM learners WHERE id=$1',
-                      [member.id],
-                    )
-                  ).rows[0]!.displayName ?? "",
-                email: "",
-                company: null,
-                revision: 0,
-              };
+            ? null
+            : (
+                await tx.query<{
+                  displayName: string | null;
+                  address: string | null;
+                }>(
+                  `SELECT l.display_name AS "displayName",i.address FROM learners l
+                   LEFT JOIN member_email_identities i ON i.principal_id=l.id WHERE l.id=$1`,
+                  [member.id],
+                )
+              ).rows[0]!;
+        const value = registered
+          ? {
+              name: registered.displayName ?? "",
+              email: registered.address ?? "",
+              company: null,
+              revision: 0,
+            }
+          : current;
         await tx.observe([member.expires]);
         return { kind: "ready" as const, value };
       });

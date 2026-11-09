@@ -533,14 +533,14 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
   try {
     await f.verify();
     await f.publishCourse();
-    // RECIPIENT-01: a new month suggests the registered name. The verified
-    // sign-in email is stored only as a hash, so the email starts empty.
+    // RECIPIENT-01/SIGNEMAIL-01: a new month suggests the registered name and
+    // the verified sign-in email.
     await page.goto(f.origin + "/account/coaching");
     await expect(page.getByLabel("Invoice recipient name")).toHaveValue(
       "陳 Registered learner",
     );
     await expect(page.getByLabel("Invoice email", { exact: true })).toHaveValue(
-      "",
+      "tom@deepnative.io",
     );
     await expect(page.getByLabel("Company name (optional)")).toHaveValue("");
     await page.goto(f.origin + "/account");

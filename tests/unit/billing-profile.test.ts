@@ -23,7 +23,8 @@ const pool = {} as Pool,
 let member: unknown,
   workspace: boolean,
   current: unknown,
-  registered: string | null;
+  registered: string | null,
+  verified: string | null;
 const query = vi.fn(async (sql: string) => ({
   rows: sql.startsWith("SELECT p.id")
     ? member
@@ -33,8 +34,8 @@ const query = vi.fn(async (sql: string) => ({
       ? current
         ? [current]
         : []
-      : sql.startsWith("SELECT display_name")
-        ? [{ displayName: registered }]
+      : sql.startsWith("SELECT l.display_name")
+        ? [{ displayName: registered, address: verified }]
         : [],
   rowCount: sql.startsWith("SELECT id FROM workspaces") ? Number(workspace) : 1,
 }));
@@ -45,6 +46,7 @@ beforeEach(() => {
   workspace = true;
   current = null;
   registered = "陳 Registered";
+  verified = "member@example.invalid";
   vi.mocked(practiceTransaction).mockImplementation(async (_pool, use) =>
     use({ query, observe } as unknown as PracticeTransaction),
   );
@@ -129,12 +131,19 @@ it("BILLPROFILE02 reports uncertain storage and authority failures without retry
 
 it("RECIPIENT-01/02 suggests the registered name until a recipient is saved, and a saved recipient always wins", async () => {
   const s = billingProfileStore(pool);
-  // The verified sign-in email is stored only as a hash, so it is never suggested.
   expect(await s.suggest(token)).toEqual({
     kind: "ready",
-    value: { name: "陳 Registered", email: "", company: null, revision: 0 },
+    value: {
+      name: "陳 Registered",
+      email: "member@example.invalid",
+      company: null,
+      revision: 0,
+    },
   });
+  // Members verified before #796 have no readable address until they next
+  // sign in by email.
   registered = null;
+  verified = null;
   expect(await s.suggest(token)).toEqual({
     kind: "ready",
     value: { name: "", email: "", company: null, revision: 0 },
@@ -147,7 +156,7 @@ it("RECIPIENT-01/02 suggests the registered name until a recipient is saved, and
   };
   expect(await s.suggest(token)).toEqual({ kind: "ready", value: current });
   expect(
-    query.mock.calls.filter(([sql]) => sql.startsWith("SELECT display_name")),
+    query.mock.calls.filter(([sql]) => sql.startsWith("SELECT l.display_name")),
   ).toHaveLength(2);
   member = null;
   expect(await s.suggest(token)).toEqual({ kind: "denied" });

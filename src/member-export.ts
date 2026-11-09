@@ -656,6 +656,13 @@ const sections = {
     "member_record_access a WHERE a.member_id=$1",
     "a.id",
   ),
+  // v45 appends #796 SIGNEMAIL: the member's own verified sign-in email, as
+  // kept readable for their default invoice email. Never its fingerprint.
+  signInEmail: section(
+    'address,verified_at AS "verifiedAt"',
+    "member_email_identities WHERE principal_id=$1",
+    "principal_id",
+  ),
 } as const;
 /** Section SQL, shared with the member-authorized operator download (#40). */
 export const MEMBER_EXPORT_SECTIONS = sections;
@@ -671,7 +678,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v44";
+  version: "local-member-records-v45";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -805,7 +812,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v44",
+          version: "local-member-records-v45",
           profile: owner.rows[0],
           records,
           testUnitHistory: {
