@@ -170,13 +170,13 @@ export function reviewTimeCommitments(
 
 // The registry's own checks (expertEligible and the availability page), read once
 // at the snapshot's time. A record is never counted from its label alone.
-const verifiedSql = (e: string) =>
+export const verifiedSql = (e: string) =>
   `(${e}.verified_by IS NOT NULL AND ${e}.verified_at IS NOT NULL AND ${e}.verified_at<=now()
     AND btrim(${e}.qualification_ref)<>'' AND btrim(${e}.agreement_ref)<>'' AND btrim(${e}.conflict_review_ref)<>''
     AND ${e}.backup_staff_id IS NOT NULL AND ${e}.backup_staff_id<>${e}.staff_id)`;
-const currentSql = (e: string) =>
+export const currentSql = (e: string) =>
   `(${e}.retired_at IS NULL AND ${e}.starts_at<=now() AND ${e}.ends_at>now())`;
-const activeSql = (e: string) =>
+export const activeSql = (e: string) =>
   `EXISTS(SELECT 1 FROM principals p WHERE p.id=${e}.staff_id AND p.kind='staff'
     AND p.revoked_at IS NULL AND p.expires_at>now())`;
 const rosterSql = `SELECT e.service_type AS service,
