@@ -84,5 +84,5 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'AI test spending ceiling unavailable'; END IF;
  RETURN NEW;
 END $$;
-INSERT INTO schema_migrations(version) VALUES(122) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(123) ON CONFLICT DO NOTHING;
 COMMIT;

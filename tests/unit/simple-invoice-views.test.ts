@@ -154,3 +154,21 @@ it("TESTPAY-10 labels signed test entries as simulated and keeps manual wording 
   ]);
   expect(manual).not.toContain("No payment provider checked them");
 });
+
+it("SVC-07 shows the simulated service state only when one is given, saying nothing is provided", () => {
+  expect(simpleInvoiceDocument(invoice)).not.toContain("Service (simulated)");
+  for (const [service, words] of [
+    [{ state: "awaiting_payment" }, "Awaiting payment"],
+    [{ state: "ready", since: "2026-11-01" }, "Ready since 2026-11-01"],
+    [
+      { state: "withdrawn", since: "2026-11-02" },
+      "Withdrawn after a test refund on 2026-11-02",
+    ],
+  ] as const) {
+    const html = simpleInvoiceDocument(invoice, false, [], service);
+    expect(html).toContain("<h2>Service (simulated)</h2>");
+    expect(html).toContain(words);
+    expect(html).toContain("It provides nothing and grants no access");
+    expect(html).toContain("No payment provider checked it and no money moved");
+  }
+});

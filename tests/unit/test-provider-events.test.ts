@@ -13,6 +13,7 @@ import {
   signTestProviderEvent,
   TEST_PROVIDER_PATH,
   TEST_PROVIDER_SIGNATURE,
+  sampleServiceState,
   testEventEffect,
   testProviderEventStore,
   validTestProviderSignature,
@@ -357,4 +358,60 @@ it("TESTPAY-03 answers the handler's outcomes and never calls the store for a re
   expect((await post({ apply }, body)).body).toEqual({ outcome: "duplicate" });
   apply.mockRejectedValueOnce(Error("offline"));
   expect((await post({ apply }, body)).status).toBe(500);
+});
+
+it("SVC-01/02/03 computes the simulated service from signed receipts and refunds only", () => {
+  const e = (
+    kind: "receipt" | "refund" | "failure" | "held",
+    amountCents: number,
+  ) => ({
+    kind,
+    paymentRef: "pay-1",
+    amountCents,
+  });
+  expect(sampleServiceState(3000, [])).toBe("awaiting_payment");
+  expect(sampleServiceState(3000, [e("receipt", 2999), e("held", 1)])).toBe(
+    "awaiting_payment",
+  );
+  expect(sampleServiceState(3000, [e("failure", 3000)])).toBe(
+    "awaiting_payment",
+  );
+  expect(
+    sampleServiceState(3000, [e("receipt", 1000), e("receipt", 2000)]),
+  ).toBe("ready");
+  expect(
+    sampleServiceState(3000, [
+      e("receipt", 3000),
+      e("held", 3000),
+      e("failure", 3000),
+    ]),
+  ).toBe("ready");
+  expect(sampleServiceState(3000, [e("receipt", 3000), e("refund", 1)])).toBe(
+    "withdrawn",
+  );
+});
+
+it("SVC-02/03 appends the service state the event reaches, and nothing while awaiting payment", async () => {
+  const f = harness({ invoice: openInvoice() });
+  await apply();
+  const inserted = f.query.mock.calls.filter(([text]) =>
+    text.startsWith("INSERT INTO sample_service_states"),
+  );
+  expect(inserted.map(([, values]) => values!.slice(1))).toEqual([
+    [invoiceId, "ready", "evt-1"],
+  ]);
+  const part = harness({ invoice: openInvoice() });
+  await apply({ ...valid, amountCents: 1000 });
+  expect(
+    part.query.mock.calls.some(([text]) =>
+      text.startsWith("INSERT INTO sample_service_states"),
+    ),
+  ).toBe(false);
+  const failed = harness({ invoice: openInvoice() });
+  await apply({ ...valid, type: "payment.failed" });
+  expect(
+    failed.query.mock.calls.some(([text]) =>
+      text.includes("sample_service_states"),
+    ),
+  ).toBe(false);
 });
