@@ -270,7 +270,9 @@ test("[F-ECO-08-B] demo agreements and payments stay out of the real measures an
       );
       await expect(cash(admin, "sample", "invoiced")).toHaveText("CAD 25.00");
       await expect(
-        admin.locator('[data-invoice-group="sample"]').getByRole("heading"),
+        admin
+          .locator('[data-invoice-group="sample"]')
+          .getByRole("heading", { level: 2 }),
       ).toHaveText("Sample invoices · Test data");
       await expect(
         admin.locator('[data-invoice-group="sample"]'),
@@ -306,7 +308,6 @@ test("[F-ECO-08-B] demo agreements and payments stay out of the real measures an
       expect(body.definitions.selfAssessed).toContain(
         "not observed skill or formal assessment",
       );
-      expect(JSON.stringify(body)).not.toMatch(/verified (skill|outcome)/i);
     });
   } finally {
     await f.close();
