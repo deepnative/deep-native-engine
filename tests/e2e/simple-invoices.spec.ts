@@ -256,7 +256,9 @@ test("[L304] staff records offline funds and refunds that the member sees as man
     });
     await expect(record).toContainText("Invented transfer reference");
     await expect(
-      member.getByText("Not verified by a payment provider."),
+      member.getByText(
+        "Recorded manually by staff when the offline payment was received.",
+      ),
     ).toBeVisible();
     await expect(member.getByText("Recorded by")).toHaveCount(0);
     await expect(

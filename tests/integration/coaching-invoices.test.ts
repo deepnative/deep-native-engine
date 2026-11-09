@@ -26,6 +26,7 @@ const application = app(members, {
 });
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { memberExportStore } from "../../src/member-export.ts";
+import { simpleInvoiceSettings } from "../../src/simple-invoice-config.ts";
 import type { Pool, PoolClient } from "pg";
 const auth = authorizationStore(pool),
   settings = {
@@ -1167,4 +1168,55 @@ it("DASH-01/02 summarizes one month's contractor hours and invoices exactly", as
   expect(ready(await invoices.coachingDashboard(admin)).month).toBe(
     previous.toISOString().slice(0, 7),
   );
+});
+
+it("ISSUER-03 issues a configured coaching invoice with 13% HST and refuses a typed tax", async () => {
+  const real = simpleInvoiceStore(
+    pool,
+    simpleInvoiceSettings(
+      { DNE_INVOICE_MODE: "configured", DNE_INVOICE_CURRENCY: "CAD" },
+      true,
+    )!,
+  );
+  const m = await member(),
+    rate = ready(await real.setCoachingRate(admin, rateInput(m.id, 12345)));
+  const saved = ready(await real.saveCoaching(m.token, saveInput(90)));
+  const submission = ready(
+    await real.submitCoaching(m.token, {
+      month,
+      rateId: rate.rateId,
+      sample: false,
+      expectedRevision: saved.revision,
+      operationId: randomUUID(),
+    }),
+  );
+  const input = { ...m, revision: submission.revision };
+  expect((await real.issueCoaching(admin, issueInput(input))).kind).toBe(
+    "invalid",
+  );
+  const computed: Partial<ReturnType<typeof issueInput>> = issueInput(input);
+  delete computed.taxCents;
+  const { invoiceId } = ready(
+    await real.issueCoaching(
+      admin,
+      computed as Omit<ReturnType<typeof issueInput>, "taxCents">,
+    ),
+  );
+  const row = (
+    await pool.query<{ total: number; document: Record<string, unknown> }>(
+      "SELECT total_cents::int AS total,document FROM simple_invoices WHERE id=$1",
+      [invoiceId],
+    )
+  ).rows[0]!;
+  // HST is 13% of the coaching subtotal, rounded half up to the cent.
+  const subtotal = (row.document.lines as Array<{ amountCents: number }>)[0]!
+    .amountCents;
+  const hst = Math.floor((subtotal * 1300 + 5000) / 10000);
+  expect(row.document).toMatchObject({
+    taxCents: hst,
+    tax: { label: "HST", registration: "713254472RT0001" },
+    issuer: "Deep Native Inc. · Ontario, Canada",
+  });
+  expect(row.total).toBe(subtotal + hst);
+  expect(hst).toBeGreaterThan(0);
 });
