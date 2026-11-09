@@ -55,7 +55,9 @@ Migration 117 lets a platform administrator raise or lower the test ceiling on t
 | Anyone else, or an invalid or unchanged value    | Refused, and nothing is recorded. Values are whole numbers from 0 to 1000000000000.                                                          |
 | A change runs alongside dispatch claims          | They queue on the ceiling row; each claim is checked against the ceiling in force when it is made.                                           |
 
-Every change writes one record, in the same transaction, with the ceiling it replaced, the new ceiling, committed points at that moment, the rate version, the time and the administrator. A database trigger refuses a record from anyone but a current platform administrator, or one that does not match the ceiling and committed points in force, and refuses any later edit or deletion. Removing the administrator's account clears only that link. The control page lists the 10 most recent changes without naming members, requests or administrators. The trigger does not stop a direct database update of the ceiling row itself; test setup relies on that, and such an update leaves no record.
+Every change writes one record, in the same transaction, with the ceiling it replaced, the new ceiling, committed points at that moment, the rate version, the time and the administrator. A database trigger refuses a record from anyone but a current platform administrator, or one that does not match the ceiling and committed points in force, and refuses any later edit or deletion. Removing the administrator's account clears only that link. The control page lists the 10 most recent changes without naming members, requests or administrators.
+
+Migration 120 guards the ceiling row itself. The database refuses any direct statement that changes the ceiling, rate version or committed points, or that adds, deletes or truncates the row. The ceiling changes only through a change record, and committed points move only with spending commitments. Test setup that needs a known value suspends the table's triggers inside one transaction, which needs table ownership; application code never does.
 
 ## Unfinished requests per member
 
@@ -86,7 +88,7 @@ The AI step has a fixed 5-second deadline (#190, `LOCAL_AI_STEP_DEADLINE_MS`), f
 
 The run page says the attempt did not finish normally and sends the member back to the simulation page, which says "did not answer within 5 seconds, so it timed out" or "answered, but not in the expected form".
 
-**Test-only faults.** `DNE_TEST_AI_FAULTS=enabled` lets invented text containing `[dne-test-fault:timeout]` or `[dne-test-fault:malformed]` make the simulated step never answer or answer with an empty message. It is off by default, and the server refuses to start with it outside local test mode or on a hosted site. The browser test configuration turns it on for L324.
+**Test-only faults.** `DNE_TEST_AI_FAULTS=enabled` lets invented text containing `[dne-test-fault:timeout]` or `[dne-test-fault:malformed]` make the simulated step never answer or answer with an empty message. It is off by default, and the server refuses to start with it outside local test mode or on a hosted site. The browser test configuration turns it on for L325.
 
 A held timeout follows the [held request process](LOCAL-AI-HELD-REQUEST-HANDLING.md). Settling or releasing it needs a real provider's evidence and the #189 policy.
 

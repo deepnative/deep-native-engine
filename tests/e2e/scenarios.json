@@ -2886,6 +2886,15 @@
     },
     {
       "id": "L324",
+      "actor": "Member checking whether a practice interview with a coach is open to them",
+      "preconditions": "Shared synthetic PostgreSQL database, invented operator, coaches and one sample coaching window; a 60-minute coach-minute test grant seeded mid-journey; desktop/mobile Chromium; no provider or payment",
+      "steps": "COACHMOCK-01/02/03/04/06: a member opens their practice history; is given test coach minutes and reloads; follows the sample coaching window link and reserves a sample hold; returns to their practice history and opens the hold",
+      "expected": "Without coach minutes the section says a practice interview with a person needs coach minutes and no coach is booked, with no request link; with minutes it links to sample windows and says a sample hold isn't a booking; the reserved hold appears once as a sample hold with a coach, not a booking, held until its deadline; the simulated sessions are said to be read by no person; no sideways scrolling",
+      "issues": [201],
+      "critical": true
+    },
+    {
+      "id": "L325",
       "actor": "Member whose AI step times out or answers in an unexpected form",
       "preconditions": "Shared synthetic PostgreSQL database, one invented member with one test unit and two clean invented samples marked for a test-only timeout and malformed answer (DNE_TEST_AI_FAULTS, local test mode only); desktop/mobile Chromium; no provider",
       "steps": "AIFAULT-07: the member runs a test request whose AI step never answers, reopens the page, then queues and runs a simulation that answers in an unexpected form and tries it again",

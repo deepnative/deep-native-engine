@@ -360,6 +360,7 @@ import {
   disabledAssignmentReadinessStore,
   type AssignmentReadinessStore,
 } from "./assignment-readiness.ts";
+import { coachPracticeState } from "./coach-practice-views.ts";
 import {
   disabledMemberSlotHolds,
   SlotHoldFailure,
@@ -3659,7 +3660,15 @@ export function app(
         );
       return;
     }
-    res.send(practiceSessionHistoryPage(result));
+    // COACHMOCK-05: only the first page carries the coach section, and a
+    // failed check never hides the member's own history.
+    const coach =
+      req.query.after === undefined
+        ? await memberHolds
+            .snapshot(res.locals.token as string)
+            .then(coachPracticeState, () => ({ kind: "failed" as const }))
+        : undefined;
+    res.send(practiceSessionHistoryPage(result, coach));
   });
   app.get("/practice-sessions/:sessionId", async (req, res) => {
     const detail = await practiceSessions.detail(

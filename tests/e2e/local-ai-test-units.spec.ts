@@ -454,7 +454,7 @@ test("[L321] AILIMIT-06 a member at the unfinished-request limit is told why and
   ).toBeVisible();
 });
 
-test("[L324] AIFAULT-07 a timed-out test request stays held once and a malformed simulation answer is named with one more try", async ({
+test("[L325] AIFAULT-07 a timed-out test request stays held once and a malformed simulation answer is named with one more try", async ({
   page,
 }) => {
   test.setTimeout(60_000);

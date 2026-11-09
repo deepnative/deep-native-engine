@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { testPool } from "../support/database.ts";
+import { setTestCeiling } from "../support/ai-test-ceiling.ts";
 import { migrate, store } from "../../src/store.ts";
 import { evidenceStore, type ObjectStorage } from "../../src/evidence.ts";
 import { deterministicRegistry } from "../../src/adapters.ts";
@@ -44,18 +45,14 @@ beforeEach(async () => {
   await pool.query(
     "INSERT INTO local_ai_control(singleton,paused) VALUES(true,false) ON CONFLICT(singleton) DO UPDATE SET paused=false",
   );
-  await pool.query(
-    "UPDATE ai_test_spending_ceiling SET ceiling_points=1000000,committed_points=0",
-  );
+  await setTestCeiling(pool, { ceiling: 1000000, committed: 0 });
   data.clear();
   execute.mockReset();
   execute.mockImplementation(registry.adapter("ai", "test").execute);
 });
 afterAll(async () => {
   await pool.query("UPDATE local_ai_control SET paused=false");
-  await pool.query(
-    "UPDATE ai_test_spending_ceiling SET ceiling_points=100000,committed_points=0",
-  );
+  await setTestCeiling(pool, { ceiling: 100000, committed: 0 });
   await pool.end();
 });
 
