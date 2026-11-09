@@ -28,6 +28,7 @@ export interface PreviewMetrics {
     submittedAssignment: string;
     returnEligible: string;
     crossContentReturned: string;
+    reportedOutcome: string;
     usefulness: string;
     segments: string;
     cohorts: string;
@@ -170,6 +171,9 @@ export async function exactMetrics(pool: Pool, token: string) {
                   AND s.submitted_at>=j.joined+interval '7 days'
                   AND s.submitted_at<j.joined+interval '30 days'))
                AS cohort_continued,
+             -- #123 OUTCOME: the member's own words on their own plan entries.
+             EXISTS(SELECT 1 FROM career_entries c WHERE c.member_id=l.id
+               AND btrim(c.self_reported_outcome)<>'') AS reported_outcome,
              l.background,l.goal,l.background_tags,j.joined,
              anchor.opened_at AS first_open,
              anchor.content_id AS first_lesson_id
@@ -250,6 +254,7 @@ export async function exactMetrics(pool: Pool, token: string) {
            COUNT(*) FILTER(WHERE submitted_assignment)::integer AS "submittedAssignment",
            COUNT(*) FILTER(WHERE return_eligible)::integer AS "returnEligible",
            COUNT(*) FILTER(WHERE cross_content_returned)::integer AS "crossContentReturned",
+           COUNT(*) FILTER(WHERE reported_outcome)::integer AS "reportedOutcome",
            COALESCE(MAX(uc.respondents),0)::integer AS "usefulnessRespondents",
            COALESCE(MAX(uc.helpful),0)::integer AS "usefulnessHelpful",
            COALESCE(MAX(uc.not_yet),0)::integer AS "usefulnessNotYet",
@@ -284,6 +289,8 @@ export function metricDefinitions(): PreviewMetrics["definitions"] {
       "Distinct retained members whose first recorded versioned lesson open is at least 14 full days old at asOf. Deleted records are unavailable; this is not an enrollment or acquisition cohort.",
     crossContentReturned:
       "Of returnEligible, distinct members with a different lesson content ID first opened or an assignment submitted at or after 7 full days and before 14 full days from their first lesson open. This is an observed cross-content return proxy, not general learning retention; the same lesson or a newer version alone is not a return. Zero eligible means the rate is undefined.",
+    reportedOutcome:
+      "Member-reported: distinct retained members who wrote a self-reported outcome on at least one of their own private career, opportunity or contract plan entries, divided by members. It is not verified, and it is not a hiring, placement, contract or income rate. Plans without an outcome don't count. Outcome text is never read into this report.",
     usefulness: `Member self-reported usefulness ${hostingText("in this synthetic local preview", "on this site")}, not observed skill, qualified review or current curriculum quality. Each retained member contributes only their latest corrected exact-version answer; historical versions remain historical. The denominator is respondents, not all members or an enrollment cohort. No exact respondent or choice counts are exposed. The whole block is suppressed below 20 respondents or when either choice has fewer than five; otherwise only a coarse helpful-share band is shown. Repeated snapshots can still permit inference, so this is not approved live analytics.`,
     segments:
       "The same measures for each current starting point, current goal and interest tag. Interest tags overlap, so segment rows can add up to more than the total. A segment is suppressed below 20 members or when fewer than five members lie outside it; every segment is always listed, so a suppressed row may be zero or not. A segment is a member's own current choice; it never implies a paid tier, career path or staff right.",

@@ -16,6 +16,7 @@ const raw = (over: Partial<RawLearningCell> = {}): RawLearningCell => ({
   submittedAssignment: 19,
   returnEligible: 40,
   crossContentReturned: 36,
+  reportedOutcome: 10,
   ...over,
 });
 
@@ -52,6 +53,7 @@ it("MET-SUPP-01 shows nothing below 20 members and only bands from 20", () => {
       returnEligible: "20-49",
       // The return measure's denominator is the eligible group, not all members.
       crossContentReturned: null,
+      reportedOutcome: "5-19",
     },
   });
   expect(learningDisclosure(raw({ members: 20 })).members).toBe("20-49");
