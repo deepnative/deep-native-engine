@@ -5,8 +5,11 @@ BEGIN;
 -- run as a demo, and nothing has launched. The answer is fixed at creation.
 DO $$ BEGIN
 IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=124) THEN
- ALTER TABLE learners ADD COLUMN created_on_demo_site boolean;
- UPDATE learners SET created_on_demo_site=true;
+ IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema()
+   AND table_name='learners' AND column_name='created_on_demo_site') THEN
+  ALTER TABLE learners ADD COLUMN created_on_demo_site boolean;
+  UPDATE learners SET created_on_demo_site=true;
+ END IF;
  ALTER TABLE learners ALTER COLUMN created_on_demo_site SET DEFAULT false;
  ALTER TABLE learners ALTER COLUMN created_on_demo_site SET NOT NULL;
 END IF;
