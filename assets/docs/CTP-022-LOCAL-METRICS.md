@@ -12,9 +12,23 @@ No exact learning count leaves the store. `src/learning-metrics.ts` turns the ag
 
 **No new tracking.** This uses existing records only, with no new table, event or provider. Exact counts remain in `exactMetrics`, which no route may serve; database tests use it to check the SQL.
 
-**Limits.** Repeated snapshots near a band boundary can still allow inference, so this is an interim safeguard, not an anonymity claim. Segments use current choices, not values at the time of each event, and demo records are not yet excluded. Both stay on #121.
+**Limits.** Repeated snapshots near a band boundary can still allow inference, so this is an interim safeguard, not an anonymity claim. Segments use current choices, not values at the time of each event; that stays on #121. Demo accounts are separated as described under "Demo accounts" below.
 
 **Evidence.** MET-SUPP-01, MET-SEG-01/02 and MET-COH-01/02/03 are in `tests/unit/learning-metrics.test.ts` and `tests/integration/learning-cohorts.test.ts`, which failed before implementation. Journeys L222 and L223 read the bands in the browser on desktop and mobile; L47 and L68 confirm no exact count is served.
+
+## Member-reported career outcomes — #123
+
+The snapshot also counts **retained members who reported an outcome on their own plan**: at least one of their private career, opportunity or contract entries has a non-blank self-reported outcome. It counts members, not entries, uses the same bands and suppression, and appears in every segment row as "Reported an outcome". The report labels it member-reported and not verified. It is not a hiring, placement, contract or income rate, and no outcome text, entry or member is read into the report. Plans without an outcome don't count. A deleted account leaves the count with its entries.
+
+Nothing here is verified, and no live outcome figure exists yet. Evidence: OUTCOME-01..03 in `tests/integration/career-outcome-metric.test.ts`, and the report wording in `tests/unit/metrics-report.test.ts`.
+
+## Demo accounts — #123
+
+Each member account records, once and for good, whether it was created while the site ran as a demo (`learners.created_on_demo_site`, migration 125; a trigger refuses any change). Accounts that existed before migration 125 are recorded as demo accounts, because the hosted site has only ever run as a demo and nothing has launched.
+
+The snapshot (`/operator/metrics` and its report) counts only the accounts that match the site: on a site that isn't a demo, every figure leaves out demo accounts and their activity (members, learning measures, segments, cohorts, usefulness, contributions and reported outcomes); on a demo site, it counts only demo accounts and says they are test data, not live figures. The JSON carries `accounts: "demo"` or `"not-demo"`, and the report states which accounts it counted. An account created on the demo stays a demo account after the site stops being a demo. Access, bands and suppression are unchanged.
+
+Evidence: DEMOACCT-01..04 in `tests/integration/demo-site-accounts.test.ts` and DEMOACCT-05 in `tests/unit/metrics-report.test.ts`.
 
 Exact-count wording below describes the earlier contract and is superseded by this section.
 
@@ -30,7 +44,7 @@ L222 exercises the normal staff entry/link, empty state, three-audience retained
 
 ## Existing aggregate contract
 
-The operator-only `GET /operator/metrics` endpoint returns one aggregate snapshot from the local preview database. It accepts only an active, unrevoked `operator` or `platform_admin` staff principal. It never returns member IDs, profiles, evidence or per-member drill-down. Every response is labelled `synthetic-local-preview`; none is a live business KPI. The timestamp is the database statement time. No external analytics provider receives these data.
+The operator-only `GET /operator/metrics` endpoint returns one aggregate snapshot from the local preview database. It accepts only an active, unrevoked `operator` or `platform_admin` staff principal. It never returns member IDs, profiles, evidence or per-member drill-down. Every response is labelled `synthetic-local-preview`; none is a live business KPI. Each JSON download writes a `staff_export_events` row saying who took it and when, before the data is sent; if that write fails, no data is sent. The on-screen report isn't logged. The timestamp is the database statement time. No external analytics provider receives these data.
 
 The fixed denominator for every rate is the number of **retained** learner rows at that timestamp, including members whose sessions expired or were revoked. A privacy deletion removes the learner and all linked events; the snapshot cannot reconstruct prior deleted members, so it is not a durable acquisition cohort. Zero members means the rate is undefined, not zero success. The endpoint supplies counts and definitions, not a rounded or potentially misleading rate.
 

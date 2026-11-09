@@ -1,17 +1,20 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import type { Store } from "./store.ts";
-import type { MemberEmailAccess } from "./member-email-access.ts";
+import {
+  normalizedEmail,
+  type MemberEmailAccess,
+} from "./member-email-access.ts";
 import { COOKIE, cookieOptions } from "./session.ts";
 import { STAFF_COOKIE, SIGNED_OUT } from "./staff-entry-selection.ts";
-import { page } from "./views.ts";
+import { escape, page } from "./views.ts";
 import { hostingText } from "./hosting-presentation.ts";
 import { withMembership } from "./membership-presentation.ts";
 import { passwordSignInForm } from "./member-password-routes.ts";
 import type { MemberPasswordAccess } from "./member-password-access.ts";
 import { visitorAddress } from "./visitor-address.ts";
 
-function form(action: string, csrf: string, button: string) {
-  return `<form method="post" action="${action}"><input type="hidden" name="csrf" value="${csrf}"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" required><button type="submit">${button}</button></form>`;
+function form(action: string, csrf: string, button: string, typed = "") {
+  return `<form method="post" action="${action}"><input type="hidden" name="csrf" value="${csrf}"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" value="${escape(typed)}" required><button type="submit">${button}</button></form>`;
 }
 
 const NOTHING_ARRIVED =
@@ -29,9 +32,17 @@ export function mountMemberEmailRoutes(
   store: Store,
   access: MemberEmailAccess | undefined,
   origin: string,
-  continuation?: (rawCookie: string | undefined) => string | null,
-  memberSignOut?: MemberEmailAccess["signOut"],
-  password?: MemberPasswordAccess,
+  continuation: ((rawCookie: string | undefined) => string | null) | undefined,
+  memberSignOut: MemberEmailAccess["signOut"] | undefined,
+  password: MemberPasswordAccess | undefined,
+  refuseEmail: (
+    kind: "email_attach" | "email_sign_in",
+    req: Request,
+  ) => Promise<{
+    status: number;
+    retryAfterSeconds: number;
+    message: string;
+  } | null>,
 ) {
   const passwordSignIn = Boolean(password);
   const signOut = memberSignOut ?? access?.signOut.bind(access);
@@ -57,7 +68,7 @@ export function mountMemberEmailRoutes(
     return res.send(
       page(
         "Sign out",
-        `<section class="reading"><h1>Sign out</h1><p>This signs out this browser only, including any copies of its sign-in cookie. Other browsers where you signed in stay signed in. Saved records are not deleted. No email is sent.</p>${linked ? "<p>Your verified email lets you return to the same account through email sign-in.</p>" : '<p role="alert"><strong>You may lose access to your saved work.</strong> Without a verified email, you cannot sign back in to this account. Link and verify an email first if you want to return. If email recovery is unavailable, keep this session until you have saved what you need.</p><p><a href="/email/attach">Link an email</a> · <a href="/member/export">Download my records</a></p>'}<form method="post" action="/account/sign-out"><input type="hidden" name="csrf" value="${res.locals.csrf as string}">${linked ? "" : '<label><input type="checkbox" name="acknowledgeAccessLoss" value="yes" required> I understand I may not be able to return to this account.</label>'}<button type="submit">Sign out</button></form><p><a href="/account">Stay signed in</a></p></section>`,
+        `<section class="portal-page"><div class="portal-intro"><h1>Sign out</h1><p>This signs out this browser only, including any copies of its sign-in cookie. Other browsers where you signed in stay signed in. Saved records are not deleted. No email is sent.</p>${linked ? "<p>Your verified email lets you return to the same account through email sign-in.</p>" : '<p role="alert"><strong>You may lose access to your saved work.</strong> Without a verified email, you cannot sign back in to this account. Link and verify an email first if you want to return. If email recovery is unavailable, keep this session until you have saved what you need.</p><p><a href="/email/attach">Link an email</a> · <a href="/member/export">Download my records</a></p>'}</div><form method="post" action="/account/sign-out"><input type="hidden" name="csrf" value="${res.locals.csrf as string}">${linked ? "" : '<label class="check"><input type="checkbox" name="acknowledgeAccessLoss" value="yes" required> <span>I understand I may not be able to return to this account.</span></label>'}<div class="portal-actions"><button type="submit">Sign out</button><a class="button secondary" href="/account">Stay signed in</a></div></form></section>`,
       ),
     );
   });
@@ -121,7 +132,7 @@ export function mountMemberEmailRoutes(
         () =>
           page(
             "Signed out",
-            `<section class="error-page"><h1>Signed out</h1><p>You signed out in this browser. Other browsers where you signed in stay signed in. Your saved records were not deleted. ${password ? "Sign in again with your email and password, or with an email link." : "Return with a previously verified email, if you linked one. Without it, you cannot recover this account."} No email was sent.</p><p class="account-links"><a class="button" href="/email/sign-in">Sign in</a> <a class="button secondary" href="/">Start a new learning path</a></p></section>`,
+            `<section class="error-page"><h1>Signed out</h1><p>You signed out in this browser. Other browsers where you signed in stay signed in. Your saved records were not deleted. ${password ? "Sign in again with your email and password, or with an email link." : "Return with a previously verified email, if you linked one. Without it, you cannot recover this account."} No email was sent.</p><p class="account-links"><a class="button" href="/email/sign-in">Sign in</a> <a class="button secondary" href="/#your-path">Start my learning path</a></p></section>`,
           ),
       ),
     );
@@ -145,14 +156,14 @@ export function mountMemberEmailRoutes(
         });
     });
   }
+  const signInPage = (csrf: string, notice = "", typed = "") =>
+    page(
+      "Return to your learning",
+      `<section class="sign-in-page"><h1>Return to your learning</h1><p class="sign-in-new"><strong>New here?</strong> You don’t need to sign in first. <a class="button" href="/#your-path">Create account</a></p>${passwordSignIn ? passwordSignInForm(csrf) : ""}<section class="sign-in-option" aria-labelledby="email-sign-in"><h2 id="email-sign-in">${passwordSignIn ? "Or get an email link" : "Get an email link"}</h2><p>Enter the email you previously linked to this learning record. A private sign-in link expires after 15 minutes.</p>${notice}${access ? form("/email/sign-in", csrf, "Send sign-in link", typed) : `<p>Email sign-in is unavailable ${hostingText("on this preview", "here")}.</p>`}</section></section>`,
+    );
   app.get("/email/sign-in", (_req, res) => {
     res.cookie(COOKIE, res.locals.token as string, cookieOptions(origin));
-    res.send(
-      page(
-        "Return to your learning",
-        `<section class="sign-in-page"><h1>Return to your learning</h1><p class="sign-in-new"><strong>New here?</strong> You don’t need to sign in first. <a class="button" href="/#your-path">Create an account</a></p>${passwordSignIn ? passwordSignInForm(res.locals.csrf as string) : ""}<section class="sign-in-option" aria-labelledby="email-sign-in"><h2 id="email-sign-in">${passwordSignIn ? "Or get an email link" : "Get an email link"}</h2><p>Enter the email you previously linked to this learning record. A private sign-in link expires after 15 minutes.</p>${access ? form("/email/sign-in", res.locals.csrf as string, "Send sign-in link") : `<p>Email sign-in is unavailable ${hostingText("on this preview", "here")}.</p>`}</section><p class="account-links"><a class="button secondary" href="/">Start a new learning path</a></p></section>`,
-      ),
-    );
+    res.send(signInPage(res.locals.csrf as string));
   });
   app.post("/email/sign-in", async (req, res) => {
     if (!access)
@@ -165,6 +176,22 @@ export function mountMemberEmailRoutes(
           ),
         );
     const address = String(req.body.email ?? "");
+    // Admitted before any lookup, and the refusal is the same either way, so it
+    // says nothing about whether the address is registered.
+    const refused = normalizedEmail(address)
+      ? await refuseEmail("email_sign_in", req)
+      : null;
+    if (refused)
+      return res
+        .status(refused.status)
+        .set("Retry-After", String(refused.retryAfterSeconds))
+        .send(
+          signInPage(
+            res.locals.csrf as string,
+            `<p role="alert">${escape(refused.message)}</p>`,
+            address,
+          ),
+        );
     const visitor = visitorAddress(
       req.socket.remoteAddress,
       req.get("x-forwarded-for"),
@@ -228,6 +255,19 @@ export function mountMemberEmailRoutes(
     if (status === "linked") return res.send(linkedPage());
     const memberToken = res.locals.token as string;
     const address = String(req.body.email ?? "");
+    const refused = normalizedEmail(address)
+      ? await refuseEmail("email_attach", req)
+      : null;
+    if (refused)
+      return res
+        .status(refused.status)
+        .set("Retry-After", String(refused.retryAfterSeconds))
+        .send(
+          page(
+            "Keep access to your learning",
+            `<section class="error-page"><h1>Keep access to your learning</h1><p role="alert">${escape(refused.message)}</p>${form("/email/attach", res.locals.csrf as string, "Send verification link", address)}<p><a href="/learn">Return to learning</a></p></section>`,
+          ),
+        );
     dispatch(() => access!.requestAttach(memberToken, address));
     return res.send(
       page(

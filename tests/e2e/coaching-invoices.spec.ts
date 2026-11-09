@@ -176,7 +176,7 @@ async function fixture(
     member,
     admin,
     owner,
-    async close(completed: boolean) {
+    async close() {
       await Promise.all(contexts.map((c) => c.close()));
       await closeLoopback(server);
       await pool.end();
@@ -188,8 +188,8 @@ async function fixture(
           )
         ).rows[0];
         expect(actual).toEqual({ oid, marker });
-        // A thrown test is recorded after finally; only explicit completion permits cleanup.
-        if (completed) await dropAttendanceBrowserDatabase(control, name);
+        // Cleans up after a failed test too: traces, not this database, are the evidence.
+        await dropAttendanceBrowserDatabase(control, name);
       } finally {
         await control.end();
       }
@@ -243,7 +243,6 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
   browser,
 }, info) => {
   const f = await fixture(browser, info);
-  let completed = false;
   try {
     const a = await f.member(),
       b = await f.member(),
@@ -365,9 +364,8 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
     await expect(pending).toHaveText(
       `Sample learner · ${monthLabel(pastMonth)}`,
     );
-    completed = true;
   } finally {
-    await f.close(completed);
+    await f.close();
   }
 });
 // Layout checks shared by every L284 page: no sideways scrolling, and form
@@ -400,7 +398,6 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
   browser,
 }, info) => {
   const f = await fixture(browser, info, true, true);
-  let completed = false;
   try {
     const previous = new Date(`${f.month}-01T00:00:00Z`);
     previous.setUTCMonth(previous.getUTCMonth() - 1);
@@ -566,6 +563,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await o
       .getByLabel("Received on", { exact: true })
       .fill(new Date().toISOString().slice(0, 10));
+    await o.getByLabel("Evidence reference").first().fill("Invented reference");
     await o
       .getByRole("checkbox", {
         name: "I verified these funds were received for this exact invoice.",
@@ -598,16 +596,14 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await expect(row()).toContainText("Sent");
     await expect(row()).toContainText("Paid");
     await friendly(o, "owner-dashboard-paid");
-    completed = true;
   } finally {
-    await f.close(completed);
+    await f.close();
   }
 });
 test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains a linked original invoice", async ({
   browser,
 }, info) => {
   const f = await fixture(browser, info);
-  let completed = false;
   try {
     const m = await f.member(),
       other = await f.member(),
@@ -666,6 +662,10 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
       .getByLabel("Received on")
       .fill(new Date().toISOString().slice(0, 10));
     await admin
+      .getByLabel("Evidence reference")
+      .first()
+      .fill("Invented reference");
+    await admin
       .getByRole("checkbox", { name: /I verified these funds/ })
       .check();
     await admin.getByRole("button", { name: "Record offline payment" }).click();
@@ -684,16 +684,14 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
     await expect(admin.getByRole("alert")).toContainText(
       "does not allow this action",
     );
-    completed = true;
   } finally {
-    await f.close(completed);
+    await f.close();
   }
 });
 test("[L275] HOUR03/06/09 committed submission recovery preserves zero totals without another submission or invoice", async ({
   browser,
 }, info) => {
   const f = await fixture(browser, info);
-  let completed = false;
   try {
     const m = await f.member(),
       admin = await f.admin();
@@ -746,16 +744,14 @@ test("[L275] HOUR03/06/09 committed submission recovery preserves zero totals wi
         ])
       ).rowCount,
     ).toBe(0);
-    completed = true;
   } finally {
-    await f.close(completed);
+    await f.close();
   }
 });
 test("[L276] HOUR09 disabled invoicing keeps monthly entry honest and learning accessible", async ({
   browser,
 }, info) => {
   const f = await fixture(browser, info, false);
-  let completed = false;
   try {
     const m = await f.member();
     await m.page
@@ -770,8 +766,7 @@ test("[L276] HOUR09 disabled invoicing keeps monthly entry honest and learning a
     ).toHaveCount(0);
     await m.page.getByRole("link", { name: "My account", exact: true }).click();
     await expect(m.page.locator("code").first()).toHaveText(m.id);
-    completed = true;
   } finally {
-    await f.close(completed);
+    await f.close();
   }
 });

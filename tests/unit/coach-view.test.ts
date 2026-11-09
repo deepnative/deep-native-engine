@@ -37,7 +37,7 @@ it("ROLES-03/04 the coach summary checks the coach role, then reads hours only",
   expect(await coach.summary(token, "2026-12")).toEqual({ kind: "invalid" });
 
   query
-    .mockResolvedValueOnce({ rows: [{ today: "2026-11" }] })
+    .mockResolvedValueOnce({ rows: [{ today: "2026-11", assigned: 4 }] })
     .mockResolvedValueOnce({
       rows: [
         { displayName: "Ada", minutes: 90, state: "draft", returned: false },
@@ -52,6 +52,7 @@ it("ROLES-03/04 the coach summary checks the coach role, then reads hours only",
     value: {
       month: "2026-11",
       today: "2026-11",
+      assigned: 4,
       rows: [
         { name: "Ada", minutes: 90, status: "Draft" },
         { name: null, minutes: 30, status: "Returned for changes" },
@@ -64,6 +65,10 @@ it("ROLES-03/04 the coach summary checks the coach role, then reads hours only",
   expect(sql).not.toMatch(/rate|cents|invoice|INSERT|UPDATE |DELETE/i);
   // #684 COACHLINK-02: only learners assigned to this coach are read.
   expect(sql).toContain("FROM coach_assignments a");
+  // #696 ROLE-LABEL-03: the role check also counts this coach's learners.
+  expect(String(query.mock.calls.at(-2)![0])).toContain(
+    "count(DISTINCT a.learner_id)::integer FROM coach_assignments",
+  );
   expect(query.mock.calls.at(-1)![1]).toEqual(["2026-11", hash(token)]);
 
   query.mockRejectedValueOnce(new Error("database unavailable"));
@@ -86,6 +91,7 @@ it("ROLES-03 Coaching lists each person's hours and status with no billing", asy
     value: {
       month: "2026-10",
       today: "2026-11",
+      assigned: 2,
       rows: [
         { name: "Ada <Lovelace>", minutes: 90, status: "Submitted" },
         { name: null, minutes: 45, status: "Draft" },
@@ -112,12 +118,25 @@ it("ROLES-03 Coaching lists each person's hours and status with no billing", asy
 it("ROLES-03 the current month has no next link and an empty month says so", async () => {
   const f = fixture({
     kind: "ready",
-    value: { month: "2026-11", today: "2026-11", rows: [] },
+    value: { month: "2026-11", today: "2026-11", assigned: 2, rows: [] },
   });
   const r = await (await f.http()).get("/coach").set("Cookie", member);
   expect(f.summary).toHaveBeenCalledWith(token, undefined);
   expect(r.text).toContain("No coaching hours saved for this month.");
+  expect(r.text).not.toContain("No learners are assigned to you");
   expect(r.text).not.toContain('href="/coach?month=2026-12"');
+});
+
+it("ROLE-LABEL-03 a coach with no assigned learners is told so and who to ask", async () => {
+  const f = fixture({
+    kind: "ready",
+    value: { month: "2026-11", today: "2026-11", assigned: 0, rows: [] },
+  });
+  const r = await (await f.http()).get("/coach").set("Cookie", member);
+  expect(r.text).toContain(
+    "No learners are assigned to you yet. Ask an administrator to assign learners to you in the Administration console.",
+  );
+  expect(r.text).not.toContain("No coaching hours saved for this month.");
 });
 
 it.each([

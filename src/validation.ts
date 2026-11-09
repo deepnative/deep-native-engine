@@ -142,7 +142,7 @@ function parseProfile(body: Fields): ProfileEditResult {
     errors.push({
       field: "timezone",
       message:
-        "Time zone: enter a valid location-style time zone, or leave it blank.",
+        "Time zone: enter your time zone as a region and city, such as America/Toronto, or leave it blank.",
     });
   if (weeklyMinutes === undefined)
     errors.push({

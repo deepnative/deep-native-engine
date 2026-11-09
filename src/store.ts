@@ -250,14 +250,45 @@ export async function migrate(pool: Pool) {
       "096-administrator-email-lookups.sql",
       "097-default-coaches.sql",
       "098-member-email-notice-visitors.sql",
-      "099-member-browser-sessions.sql",
+      "099-study-allowances.sql",
+      "100-ai-usage-settlement.sql",
+      "101-anonymous-write-windows.sql",
+      "102-staff-change-log.sql",
+      "103-role-email-hints.sql",
+      "104-hold-started-local-ai-requests.sql",
+      "105-mock-session-allowances.sql",
+      "106-manual-invoice-events.sql",
+      "107-retain-held-unmetered-local-ai.sql",
+      "108-staff-read-and-export-log.sql",
+      "109-outward-email-admission.sql",
+      "110-signed-test-provider-events.sql",
+      "111-local-ai-hold-test-decisions.sql",
+      "112-member-record-admission.sql",
+      "113-member-operation-keys.sql",
+      "114-withdrawn-local-ai-requests.sql",
+      "115-attendance-operation-keys.sql",
+      "116-ai-test-spending-ceiling.sql",
+      "117-ai-test-ceiling-changes.sql",
+      "118-workflow-review-operation-keys.sql",
+      "119-study-fixture-operation-keys.sql",
+      "120-ai-test-ceiling-row-guard.sql",
+      "121-practice-ai-suggestions.sql",
+      "122-sample-service-states.sql",
+      "123-practice-suggestion-spending.sql",
+      "124-member-record-access.sql",
+      "125-demo-site-accounts.sql",
+      "129-member-browser-sessions.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
   );
   await pool.query(scripts.join("\n"));
 }
-export function store(pool: Pool): Store {
+/** DEMOACCT-01: `demoSite` marks every account this store creates as a demo account. */
+export function store(
+  pool: Pool,
+  settings: { demoSite?: boolean } = {},
+): Store {
   async function exerciseTransaction<T>(
     token: string,
     write: boolean,
@@ -384,8 +415,8 @@ export function store(pool: Pool): Store {
          ), member AS (
            INSERT INTO learners(id,token_hash,background,goal,expires_at,
                                 background_tags,domain_tags,it_roles,experience,exploratory,
-                                time_zone,weekly_minutes,display_name)
-           SELECT id,token_hash,$3,$4,expires_at,$5,$6,$7,$8,$9,$10,$11,$12 FROM identity
+                                time_zone,weekly_minutes,display_name,created_on_demo_site)
+           SELECT id,token_hash,$3,$4,expires_at,$5,$6,$7,$8,$9,$10,$11,$12,$13 FROM identity
            RETURNING id
          )
          INSERT INTO workspaces(id,owner_principal_id)
@@ -403,6 +434,7 @@ export function store(pool: Pool): Store {
           profile.timezone ?? null,
           profile.weeklyMinutes ?? null,
           profile.displayName ?? null,
+          settings.demoSite === true,
         ],
       );
     },

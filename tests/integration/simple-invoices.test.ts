@@ -112,6 +112,8 @@ async function accepted(
 }
 beforeAll(async () => {
   await migrate(pool);
+  // The foundation import must start fresh whichever lane file ran before.
+  await pool.query("TRUNCATE principals,cohorts,content_versions CASCADE");
   await seedDraftPack(pool);
   admin = await staff("platform_admin");
   const editor = await staff("editor"),
@@ -172,6 +174,7 @@ it("OFFPUR-01/02/04/08/09 registers first, consolidates courses into one owner i
         operationId: randomUUID(),
         amount: "30.00",
         receivedOn: today,
+        evidence: "Invented bank reference",
         confirm: "received",
       })
     ).status,
@@ -181,6 +184,7 @@ it("OFFPUR-01/02/04/08/09 registers first, consolidates courses into one owner i
     operationId: randomUUID(),
     amount: "10.00",
     receivedOn: today,
+    evidence: "Invented bank reference",
     confirm: "received",
   });
   expect(paid.status).toBe(303);
@@ -195,6 +199,7 @@ it("OFFPUR-01/02/04/08/09 registers first, consolidates courses into one owner i
         operationId: randomUUID(),
         amountCents: 2001,
         receivedOn: today,
+        evidence: "Invented bank reference",
       })
     ).kind,
   ).toBe("conflict");
@@ -205,6 +210,7 @@ it("OFFPUR-01/02/04/08/09 registers first, consolidates courses into one owner i
       operationId: randomUUID(),
       amountCents: 2000,
       receivedOn: today,
+      evidence: "Invented bank reference",
     }),
   );
   expect(ready(await invoices.invoice(m.token, invoice.id)).paidCents).toBe(
@@ -237,6 +243,7 @@ it("OFFPUR-03 duplicates acceptance and payment exactly once and denies unrelate
     operationId: randomUUID(),
     amountCents: 100,
     receivedOn: today,
+    evidence: "Invented bank reference",
   };
   const results = await Promise.all([
     invoices.pay(admin, input),
@@ -409,6 +416,7 @@ it("OFFPUR-05 rejects forged origin/CSRF, malformed amounts and unknown fields w
     operationId: randomUUID(),
     amount: "1e2",
     receivedOn: today,
+    evidence: "Invented bank reference",
     confirm: "received",
   };
   expect(
@@ -494,6 +502,7 @@ it("OFFPUR-06 cancels an unpaid issued invoice without rewriting its snapshot or
         operationId: randomUUID(),
         amountCents: 100,
         receivedOn: today,
+        evidence: "Invented bank reference",
       })
     ).kind,
   ).toBe("conflict");
@@ -524,6 +533,155 @@ it("OFFPUR-10 a replacement course proposal cannot create two active recurring b
   expect((await invoices.accept(m.token, input)).kind).toBe("ready");
 });
 
+it("BUILD-04-C an offer whose start date has passed cannot be accepted or bill the missed months", async () => {
+  const m = await member(),
+    p = ready(await invoices.propose(admin, proposal(m.id, "monthly")));
+  // Stands in for the acceptance window passing: the offered start moves two
+  // months back in this isolated database, with the terms guard restored.
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      "ALTER TABLE simple_invoice_plans DISABLE TRIGGER simple_invoice_terms_immutable",
+    );
+    await client.query(
+      `UPDATE simple_invoice_plans SET terms=jsonb_set(terms,'{startsOn}',
+         to_jsonb(to_char((terms->>'startsOn')::date-interval '2 months','YYYY-MM-DD')))
+       WHERE id=$1`,
+      [p.planId],
+    );
+    await client.query(
+      "ALTER TABLE simple_invoice_plans ENABLE TRIGGER simple_invoice_terms_immutable",
+    );
+    await client.query("COMMIT");
+  } finally {
+    client.release();
+  }
+  const overview = ready(await invoices.overview(m.token));
+  expect(overview.today).toBe(today);
+  expect(overview.plans[0]!.terms.startsOn < today).toBe(true);
+  expect(
+    await invoices.accept(m.token, {
+      planId: p.planId,
+      expectedRevision: 1,
+      operationId: randomUUID(),
+      name: "Invented student",
+      email: "invented-student@example.invalid",
+    }),
+  ).toEqual({ kind: "conflict" });
+  ready(await invoices.generateDue(admin));
+  const stored = await pool.query(
+    "SELECT state,accepted_at FROM simple_invoice_plans WHERE id=$1",
+    [p.planId],
+  );
+  expect(stored.rows[0]).toEqual({ state: "offered", accepted_at: null });
+  expect(
+    (
+      await pool.query("SELECT 1 FROM simple_invoices WHERE owner_id=$1", [
+        m.id,
+      ])
+    ).rowCount,
+  ).toBe(0);
+  // A separately accepted replacement starting today is the only agreement billed.
+  const replacement = ready(
+    await invoices.propose(admin, proposal(m.id, "monthly")),
+  );
+  ready(
+    await invoices.accept(m.token, {
+      planId: replacement.planId,
+      expectedRevision: 1,
+      operationId: randomUUID(),
+      name: "Invented student",
+      email: "invented-student@example.invalid",
+    }),
+  );
+  ready(await invoices.generateDue(admin));
+  expect(
+    (
+      await pool.query(
+        "SELECT plan_id,cycle FROM simple_invoices WHERE owner_id=$1",
+        [m.id],
+      )
+    ).rows,
+  ).toEqual([{ plan_id: replacement.planId, cycle: 0 }]);
+});
+it("BUILD-09-B an offer whose course was retired after it was prepared says so and cannot be accepted", async () => {
+  const m = await member(),
+    editor = await staff("editor"),
+    p = ready(
+      await invoices.propose(admin, {
+        ...proposal(m.id),
+        courses: [
+          { id: "FND-001", version: 2, amountCents: 1000 },
+          { id: "FND-006", version: 2, amountCents: 2000 },
+        ],
+      }),
+    );
+  const open = await get("/account/purchases", m.token);
+  expect(open.text).toContain("Accept courses and create invoice");
+  expect(ready(await invoices.overview(m.token)).unavailable).toEqual({});
+  // FND-006 is used by no other case in this file; its publication is put
+  // back afterwards so later cases see the same catalog.
+  expect(await catalog.retire(editor, "FND-006")).toBe(true);
+  try {
+    expect(ready(await invoices.overview(m.token)).unavailable).toEqual({
+      [p.planId]: ["FND-006"],
+    });
+    const page = await get("/account/purchases", m.token);
+    expect(page.status).toBe(200);
+    expect(page.text).not.toContain("Accept courses and create invoice");
+    expect(page.text).toContain(
+      "This proposal can no longer be accepted: FND-006 is not currently offered.",
+    );
+    // A form opened before the course was retired is refused too.
+    const attempt = await post(
+      `/account/purchases/plans/${p.planId}/accept`,
+      m.token,
+      {
+        revision: "1",
+        operationId: randomUUID(),
+        name: "Invented student",
+        email: "invented-student@example.invalid",
+        confirm: "accept",
+      },
+    );
+    expect(attempt.status).toBe(409);
+    expect(
+      (
+        await pool.query(
+          "SELECT state,accepted_at FROM simple_invoice_plans WHERE id=$1",
+          [p.planId],
+        )
+      ).rows[0],
+    ).toEqual({ state: "offered", accepted_at: null });
+    expect(
+      (
+        await pool.query("SELECT 1 FROM simple_invoices WHERE owner_id=$1", [
+          m.id,
+        ])
+      ).rowCount,
+    ).toBe(0);
+  } finally {
+    // Retirement is one-way in the product; only this isolated test database
+    // lifts the guard for a moment to restore the shared fixture.
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "ALTER TABLE content_versions DISABLE TRIGGER content_versions_immutable",
+      );
+      await client.query(
+        "UPDATE content_versions SET state='published',retired_at=NULL WHERE id='FND-006' AND state='retired'",
+      );
+      await client.query(
+        "ALTER TABLE content_versions ENABLE TRIGGER content_versions_immutable",
+      );
+      await client.query("COMMIT");
+    } finally {
+      client.release();
+    }
+  }
+});
 it("BILLPROFILE02 persists only own recipient, validates fields, serializes concurrent edits and exports/erases the private profile", async () => {
   const m = await member(),
     other = await member();
@@ -703,6 +861,8 @@ it("BILLPROFILE02/04 an acknowledged profile commit with a lost response stays i
   expect(ready(await invoices.overview(m.token))).toEqual({
     plans: [],
     invoices: [],
+    today,
+    unavailable: {},
   });
 });
 
@@ -714,7 +874,9 @@ it("BILLPROFILE05 records applied migration versions and preserves the profile w
       )
     ).rows.map((row) => row.version);
   expect(await versions()).toEqual([
-    84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
+    84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101,
+    102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
+    117, 118, 119, 120, 121, 122, 123, 124, 125, 129,
   ]);
   const owner = await member();
   const profile = ready(
@@ -726,7 +888,9 @@ it("BILLPROFILE05 records applied migration versions and preserves the profile w
   );
   await migrate(pool);
   expect(await versions()).toEqual([
-    84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
+    84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101,
+    102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
+    117, 118, 119, 120, 121, 122, 123, 124, 125, 129,
   ]);
   expect(ready(await profiles.read(owner.token))).toEqual(profile);
   expect((await members.session(owner.token, "account")).kind).toBe("active");

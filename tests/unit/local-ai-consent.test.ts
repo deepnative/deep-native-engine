@@ -7,6 +7,7 @@ import {
   LOCAL_AI_TEST_UNIT_POLICY,
   LOCAL_AI_PURPOSE,
   LOCAL_AI_STATEMENT_VERSION,
+  LOCAL_AI_MEMBER_OPEN_LIMIT,
 } from "../../src/local-ai-consent.ts";
 import {
   requestFingerprint,
@@ -72,12 +73,18 @@ const adapterResult = {
   state: "simulated",
   reference: "test_reference",
   message: "Simulated computation",
+  usage: { inputTokens: 11, outputTokens: 64 },
 };
 function setup(
   options: {
     metered?: boolean;
     metering?: Record<string, unknown>;
     noGrant?: boolean;
+    noEstimate?: boolean;
+    ceilingFull?: boolean;
+    open?: number;
+    noCommitment?: boolean;
+    usage?: unknown;
     budgetDeadline?: "claim" | "before" | "after";
     queueDeadline?: "session" | "grant";
     beforeSettlement?: "session" | "lease";
@@ -88,6 +95,7 @@ function setup(
     listenerFailure?: boolean;
     connectionError?: boolean;
     listedJobs?: Array<Record<string, unknown>>;
+    heldWithoutSource?: Array<Record<string, unknown>>;
     source?: Record<string, unknown>;
     receipt?: Record<string, unknown>;
     job?: Record<string, unknown>;
@@ -103,6 +111,7 @@ function setup(
     invalidPhase2Job?: boolean;
     paused?: boolean;
     phase2Paused?: boolean;
+    stepDeadlineMs?: number;
   } = {},
 ) {
   const owner = options.metered
@@ -186,6 +195,14 @@ function setup(
             ]
           : [],
       };
+    if (sql.includes("SELECT cost_points FROM ai_usage_estimates"))
+      return { rows: options.noEstimate ? [] : [{ cost_points: 157 }] };
+    if (sql.includes("FROM ai_test_spending_ceiling"))
+      return { rows: options.ceilingFull ? [] : [{}] };
+    if (sql.includes("SELECT count(*)::int AS open FROM adapter_jobs"))
+      return { rows: [{ open: options.open ?? 0 }] };
+    if (sql.includes("SET state='settled'"))
+      return { rows: options.noCommitment ? [] : [{ job_id: jid }] };
     if (sql.includes("SELECT r.grant_id,r.quantity"))
       return {
         rows: [
@@ -230,6 +247,8 @@ function setup(
           },
         ],
       };
+    if (sql.includes("j.local_ai_receipt_id IS NULL"))
+      return { rows: options.heldWithoutSource ?? [] };
     if (sql.includes("SELECT e.id FROM evidence_objects"))
       return { rows: [{ id }] };
     if (sql.includes("SELECT id FROM principals"))
@@ -280,7 +299,9 @@ function setup(
                   : j,
               ],
       };
-    if (sql.includes("SELECT j.id,j.status,b.policy"))
+    if (
+      sql.includes("SELECT j.id,j.status,j.safe_error,j.attempt_count,b.policy")
+    )
       return { rows: options.listedJobs ?? [{ id: jid, status: j.status }] };
     if (sql.includes("SELECT id FROM adapter_jobs"))
       return { rows: options.unresolved ? [{ id: jid }] : [] };
@@ -322,7 +343,9 @@ function setup(
   const get = vi.fn(async () => options.bytes ?? data);
   const execute = vi.fn(async () => {
     outputReady = true;
-    return adapterResult;
+    return "usage" in options
+      ? { ...adapterResult, usage: options.usage }
+      : adapterResult;
   });
   const registry = {
     mode: "test",
@@ -332,6 +355,9 @@ function setup(
     { connect } as unknown as Pool,
     { get, put: vi.fn(), remove: vi.fn() },
     registry,
+    options.stepDeadlineMs === undefined
+      ? undefined
+      : { stepDeadlineMs: options.stepDeadlineMs },
   );
   return {
     service,
@@ -397,7 +423,7 @@ it("creates an explicit receipt, returns identical grant and never reads provide
 });
 it("denies sources unavailable after locks, including expiry and retired sources", async () => {
   for (const missing of ["principal", "workspace", "source", "leaf"]) {
-    const f = setup({ missing });
+    const f = setup({ missing, listedJobs: [] });
     expect(await f.service.grant("member", id)).toEqual({ kind: "denied" });
     expect(await f.service.list("member")).toEqual([]);
     expect(f.execute).not.toHaveBeenCalled();
@@ -430,15 +456,46 @@ it("verifies exact byte size/digest, bounded nonempty valid UTF8 text and missin
   const missing = setup();
   missing.get.mockRejectedValueOnce(Error("private path"));
   expect(await missing.service.grant("member", id)).toEqual({ kind: "denied" });
-  const listing = setup({ bytes: Buffer.alloc(0) });
+  const listing = setup({ bytes: Buffer.alloc(0), listedJobs: [] });
   expect(await listing.service.list("member")).toEqual([]);
+});
+it("AIHOLD-06 lists a held request on a source that can no longer be used", async () => {
+  const listedJobs = [{ id: jid, status: "needs_reconciliation" }];
+  for (const f of [
+    setup({ missing: "leaf", listedJobs }),
+    setup({ bytes: Buffer.alloc(0), listedJobs }),
+  ]) {
+    expect(await f.service.list("member")).toMatchObject([
+      {
+        evidenceId: id,
+        receiptId: null,
+        retired: true,
+        jobs: [{ id: jid, status: "needs_reconciliation" }],
+      },
+    ]);
+    expect(f.execute).not.toHaveBeenCalled();
+  }
+});
+it("STAFFHOLD-08 lists a hold whose source was deleted, without any source identity", async () => {
+  const heldWithoutSource = [{ id: jid, status: "needs_reconciliation" }];
+  const listed = await setup({ heldWithoutSource }).service.list("member");
+  expect(listed.at(-1)).toMatchObject({
+    evidenceId: "",
+    sourceDeleted: true,
+    retired: true,
+    receiptId: null,
+    jobs: heldWithoutSource,
+  });
+  expect(
+    await setup({ heldWithoutSource, active: false }).service.list("member"),
+  ).toEqual([]);
 });
 it("returns only owner-safe source summaries, current receipt state and job statuses", async () => {
   expect(await setup().service.list("member")).toMatchObject([
     { receiptId: rid, jobs: [{ id: jid, status: "pending" }] },
   ]);
   expect(
-    await setup({ missing: "receipt" }).service.list("member"),
+    await setup({ missing: "receipt", listedJobs: [] }).service.list("member"),
   ).toMatchObject([
     { receiptId: null, grantedAt: null, withdrawnAt: null, jobs: [] },
   ]);
@@ -470,12 +527,15 @@ it("requires every exact binding and fails closed for unavailable receipt paths"
     expect(f.execute).not.toHaveBeenCalled();
   }
 });
-it("withdraws once and cancels outstanding attempts without invoking the adapter", async () => {
+it("withdraws once and resolves outstanding attempts without invoking the adapter", async () => {
   const f = setup();
   expect(await f.service.withdraw("member", rid)).toBe(true);
   expect(
-    f.query.mock.calls.some(([q]) => q.includes("status='exhausted'")),
+    f.query.mock.calls.some(([q]) =>
+      q.includes("WHEN attempt_count>0 THEN 'needs_reconciliation'"),
+    ),
   ).toBe(true);
+  expect(f.execute).not.toHaveBeenCalled();
   expect(
     await setup({ receipt: { withdrawn_at: new Date() } }).service.withdraw(
       "member",
@@ -639,6 +699,79 @@ it("holds adapter exceptions and treats malformed responses as failed without pe
   expect(await invalid.service.run("member", jid)).toMatchObject({
     status: "failed",
   });
+});
+it("AIFAULT-01 holds a step that misses its deadline as a timeout, and a late answer is dropped", async () => {
+  const f = setup({ stepDeadlineMs: 5 });
+  let late: (value: unknown) => void = () => {};
+  f.execute.mockImplementationOnce(
+    () => new Promise((resolve) => (late = resolve)) as never,
+  );
+  expect(await f.service.run("member", jid)).toMatchObject({
+    kind: "unavailable",
+    status: "needs_reconciliation",
+  });
+  const held = f.query.mock.calls.find(
+    ([sql]) =>
+      typeof sql === "string" &&
+      sql.startsWith("UPDATE adapter_jobs SET status='needs_reconciliation'"),
+  )!;
+  expect(held[1]).toEqual([jid, "provider_timeout"]);
+  late({ kind: "ai", mode: "test", state: "simulated" });
+  const other = setup({ stepDeadlineMs: 5_000 });
+  other.execute.mockRejectedValueOnce(Error("private provider detail"));
+  await other.service.run("member", jid);
+  expect(
+    other.query.mock.calls.find(
+      ([sql]) =>
+        typeof sql === "string" &&
+        sql.startsWith("UPDATE adapter_jobs SET status='needs_reconciliation'"),
+    )![1],
+  ).toEqual([jid, "provider_outcome_unknown"]);
+});
+it("AIFAULT-03 names a timeout or malformed answer and offers a retry only while tries remain", async () => {
+  const f = setup({
+    listedJobs: [
+      {
+        id: jid,
+        status: "needs_reconciliation",
+        safe_error: "provider_timeout",
+        attempt_count: 1,
+      },
+      {
+        id: jid,
+        status: "needs_reconciliation",
+        safe_error: "provider_outcome_unknown",
+        attempt_count: 1,
+      },
+      {
+        id: jid,
+        status: "failed",
+        safe_error: "invalid_provider_response",
+        attempt_count: 1,
+      },
+      {
+        id: jid,
+        status: "failed",
+        safe_error: "invalid_provider_response",
+        attempt_count: 3,
+      },
+      {
+        id: jid,
+        status: "failed",
+        safe_error: "provider_unavailable",
+        attempt_count: 2,
+      },
+      { id: jid, status: "succeeded", safe_error: null, attempt_count: 1 },
+    ],
+  });
+  expect((await f.service.list("member"))[0]!.jobs).toEqual([
+    { id: jid, status: "needs_reconciliation", failure: "timeout" },
+    { id: jid, status: "needs_reconciliation" },
+    { id: jid, status: "failed", failure: "malformed", canRetry: true },
+    { id: jid, status: "failed", failure: "malformed" },
+    { id: jid, status: "failed", canRetry: true },
+    { id: jid, status: "succeeded" },
+  ]);
 });
 it("sanitizes storage/transaction failures and discards broken clients without erasing durable claims", async () => {
   for (const fail of ["BEGIN", "COMMIT", "SELECT * FROM evidence_objects"]) {
@@ -869,6 +1002,13 @@ it("receipt projection includes only validated local test states", async () => {
       },
       {
         id: jid,
+        status: "exhausted",
+        safe_error: "permission_withdrawn",
+        policy: LOCAL_AI_TEST_UNIT_POLICY,
+        test_unit_state: "released",
+      },
+      {
+        id: jid,
         status: "pending",
         policy: "forged",
         test_unit_state: "reserved",
@@ -885,6 +1025,8 @@ it("receipt projection includes only validated local test states", async () => {
     { id: jid, status: "pending", testUnitState: "reserved" },
     { id: jid, status: "succeeded", testUnitState: "consumed" },
     { id: jid, status: "exhausted", testUnitState: "released" },
+    // AICANCEL-01: closed by withdrawal before it started.
+    { id: jid, status: "cancelled", testUnitState: "released" },
     { id: jid, status: "pending" },
     { id: jid, status: "pending" },
   ]);
@@ -967,5 +1109,167 @@ it.each(["claim", "before", "after"] as const)(
     expect(f.execute).toHaveBeenCalledTimes(budgetDeadline === "claim" ? 0 : 1);
     if (budgetDeadline === "after")
       expect(f.query.mock.calls.some(([sql]) => sql === "ROLLBACK")).toBe(true);
+  },
+);
+
+it("calls no provider for a metered request without a usable estimate", async () => {
+  const { service, execute } = setup({ metered: true, noEstimate: true });
+  expect((await service.run("member", jid)).kind).toBe("denied");
+  expect(execute).not.toHaveBeenCalled();
+});
+
+it("holds a metered request when the provider usage is unusable", async () => {
+  const { service, query } = setup({
+    metered: true,
+    usage: { inputTokens: 0 },
+  });
+  expect(await service.run("member", jid)).toEqual({
+    kind: "unavailable",
+    jobId: jid,
+    status: "needs_reconciliation",
+  });
+  const statements = query.mock.calls.map(([sql]) => sql as string);
+  expect(statements.some((sql) => sql.includes("ai_usage_settlements"))).toBe(
+    false,
+  );
+});
+
+it("lists stored estimates and actual figures without other fields", async () => {
+  const stored = {
+    id: jid,
+    status: "succeeded",
+    rate_version: "simulated-rates-v1",
+    model_version: "simulated-model-v1",
+    estimated_input_tokens: 11,
+    estimated_output_tokens: 256,
+    estimated_cost_points: 157,
+  };
+  const estimate = {
+    inputTokens: 11,
+    outputTokens: 256,
+    costPoints: 157,
+    modelVersion: "simulated-model-v1",
+    rateVersion: "simulated-rates-v1",
+  };
+  const { service } = setup({
+    listedJobs: [
+      { ...stored, actual_cost_points: null },
+      {
+        ...stored,
+        actual_input_tokens: 11,
+        actual_output_tokens: 64,
+        actual_cost_points: 42,
+      },
+      stored,
+    ],
+  });
+  const [choice] = await service.list("member");
+  expect(choice!.jobs.map((job) => job.budget)).toEqual([
+    { estimate },
+    {
+      estimate,
+      actual: { inputTokens: 11, outputTokens: 64, costPoints: 42 },
+    },
+    { estimate },
+  ]);
+});
+
+it("holds nothing and calls no provider when the test spending ceiling is full", async () => {
+  const queued = setup({
+    metered: true,
+    ceilingFull: true,
+    missing: "collision",
+  });
+  expect(await queued.service.enqueueMetered("member", rid, "key")).toEqual({
+    kind: "ceiling_reached",
+  });
+  const statements = queued.query.mock.calls.map(([sql]) => sql as string);
+  expect(
+    statements.some((sql) => sql.includes("INSERT INTO adapter_jobs")),
+  ).toBe(false);
+  const run = setup({ metered: true, ceilingFull: true });
+  expect(await run.service.run("member", jid)).toEqual({
+    kind: "ceiling_reached",
+    jobId: jid,
+  });
+  expect(run.execute).not.toHaveBeenCalled();
+  // Unmetered simulations are not counted against the ceiling.
+  const unmetered = setup({ ceilingFull: true });
+  expect((await unmetered.service.run("member", jid)).kind).toBe("completed");
+});
+
+it("AILIMIT refuses a member at the open-request limit before any unit, estimate or ceiling check", async () => {
+  for (const metered of [true, false]) {
+    const { service, query } = setup({
+      metered,
+      open: LOCAL_AI_MEMBER_OPEN_LIMIT,
+      missing: "collision",
+    });
+    expect(
+      await (metered
+        ? service.enqueueMetered("member", rid, "key")
+        : service.enqueue("member", rid, "key")),
+    ).toEqual({ kind: "limit_reached" });
+    const statements = query.mock.calls.map(([sql]) => sql as string);
+    expect(
+      statements.some(
+        (sql) =>
+          sql.includes("INSERT INTO adapter_jobs") ||
+          sql.includes("ai_test_spending_ceiling") ||
+          sql.includes("synthetic_entitlement_grants"),
+      ),
+    ).toBe(false);
+    expect(
+      query.mock.calls.find(([sql]) =>
+        (sql as string).includes("pg_advisory_xact_lock"),
+      ),
+    ).toEqual([expect.any(String), [expect.any(String)]]);
+  }
+  // One below the limit still queues.
+  const below = setup({
+    metered: true,
+    open: LOCAL_AI_MEMBER_OPEN_LIMIT - 1,
+    missing: "collision",
+  });
+  expect((await below.service.enqueueMetered("member", rid, "key")).kind).toBe(
+    "queued",
+  );
+});
+
+it("commits the estimate with the claim and settles it to the actual cost", async () => {
+  const { service, query } = setup({ metered: true });
+  expect((await service.run("member", jid)).kind).toBe("completed");
+  const calls = query.mock.calls.map(([sql, args]) => [sql as string, args]);
+  expect(
+    calls.find(([sql]) =>
+      (sql as string).includes("INSERT INTO ai_spending_commitments"),
+    ),
+  ).toEqual([expect.any(String), [jid, 1, 157]]);
+  expect(
+    calls.find(([sql]) => (sql as string).includes("SET state='settled'")),
+  ).toEqual([expect.any(String), [jid, 1, 42]]);
+});
+
+it("rolls back settlement when the attempt's commitment is missing", async () => {
+  const { service, query } = setup({ metered: true, noCommitment: true });
+  expect((await service.run("member", jid)).kind).toBe("unavailable");
+  expect(query.mock.calls.some(([sql]) => sql === "ROLLBACK")).toBe(true);
+});
+
+it.each([
+  ["a pause after the claim", { phase2Paused: true }],
+  ["a denial after the claim", { phase2Denied: true }],
+  ["a changed attempt", { invalidPhase2Job: true }],
+])(
+  "returns the committed estimate after %s, before any provider call",
+  async (_name, options) => {
+    const { service, query, execute } = setup({ metered: true, ...options });
+    await service.run("member", jid);
+    expect(execute).not.toHaveBeenCalled();
+    expect(
+      query.mock.calls.filter(([sql]) =>
+        (sql as string).includes("SET state='restored'"),
+      ),
+    ).toEqual([[expect.any(String), [jid, 1]]]);
   },
 );

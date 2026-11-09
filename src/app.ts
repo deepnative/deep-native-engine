@@ -1,4 +1,6 @@
 import { mountAdministratorDiagnostics } from "./administrator-diagnostics-routes.ts";
+import { OUTSIDE_MARKET_MESSAGE, servedCountry } from "./customer-market.ts";
+import { workQueueTools } from "./administrator-work-waiting-views.ts";
 import type { AdministratorDiagnostics } from "./administrator-diagnostics.ts";
 import {
   invoiceResumeTarget,
@@ -10,6 +12,8 @@ import { mountAccountViews } from "./account-view-routes.ts";
 import { mountCoachView } from "./coach-view-routes.ts";
 import type { MemberSharing } from "./member-sharing.ts";
 import { mountMemberSharing } from "./member-sharing-routes.ts";
+import { mountMemberRecordAccess } from "./member-record-access-routes.ts";
+import type { MemberRecordAccess } from "./member-record-access.ts";
 import { mountAccountRoleAdmin } from "./account-role-admin-routes.ts";
 import type { AccountRoleAdmin } from "./account-role-admin.ts";
 import type { CoachView } from "./coach-view.ts";
@@ -20,6 +24,10 @@ import {
   type InvoiceSender,
 } from "./simple-invoice-routes.ts";
 import type { SimpleInvoiceStore } from "./simple-invoice-store.ts";
+import {
+  mountTestProviderEvents,
+  type TestProviderEvents,
+} from "./test-provider-events.ts";
 import { mountLearningWorkspaceRoutes } from "./learning-workspace-routes.ts";
 import { mountLearningWorkspaceAssets } from "./learning-workspace-assets.ts";
 import { mountLearningWorkspacePages } from "./learning-workspace-pages.ts";
@@ -81,6 +89,7 @@ import cookieParser from "cookie-parser";
 import {
   withHosting,
   withDemoSite,
+  withMemberContributions,
   hostingText,
   inventedInputOnly,
 } from "./hosting-presentation.ts";
@@ -100,6 +109,12 @@ import {
 } from "./member-email-access.ts";
 import { mountMemberEmailRoutes } from "./member-email-routes.ts";
 import { mountMemberPasswordRoutes } from "./member-password-routes.ts";
+import {
+  anonymousWriteRefusal,
+  type AnonymousWriteAdmissionStore,
+  type AnonymousWriteKind,
+} from "./anonymous-write-admission.ts";
+import { visitorAddress } from "./visitor-address.ts";
 import {
   acceptablePassword,
   type MemberPasswordAccess,
@@ -127,6 +142,7 @@ import {
   memberExportPage,
   localAiConsentPage,
   localAiControlPage,
+  withPrerequisiteTitles,
   evidenceRevisionPage,
   lesson,
   readinessPage,
@@ -147,6 +163,7 @@ import {
   practiceSessionHistoryPage,
   practiceSessionPage,
   practiceSessionRecoveryPage,
+  practiceSessionAllowanceNeededPage,
   staffLibraryPage,
   trackReadinessPage,
   tailoredReviewRequestPage,
@@ -162,6 +179,7 @@ import {
   milestonesPage,
   careerPage,
   errorPage,
+  localAiLimitPage,
   circleMembershipRecoveryPage,
   usefulnessRecoveryPage,
   assignmentAttemptsPage,
@@ -229,8 +247,17 @@ import {
 } from "./catalog.ts";
 import { disabledTrackStore, type TrackStore } from "./track-readiness.ts";
 import { BACKGROUNDS, DOMAINS, GOALS, LESSON, type Domain } from "./content.ts";
-import { disabledProposalStore, type ProposalStore } from "./proposals.ts";
-import { workflowBundle, workflowRegistry } from "./workflow-registry.ts";
+import {
+  disabledProposalStore,
+  validProposal,
+  type ProposalStore,
+} from "./proposals.ts";
+import { proposalNotSavedPage } from "./member-record-admission-views.ts";
+import {
+  retiredWorkflows,
+  workflowBundle,
+  workflowRegistry,
+} from "./workflow-registry.ts";
 import {
   disabledWorkflowFeedbackStore,
   parseWorkflowFeedback,
@@ -238,7 +265,10 @@ import {
 } from "./workflow-feedback.ts";
 import type { WorkflowReviewStore } from "./workflow-review.ts";
 import { mountWorkflowReviewRoutes } from "./workflow-review-routes.ts";
-import { registerCircleDiscussion } from "./circle-discussion-routes.ts";
+import {
+  circleReplySummaries,
+  registerCircleDiscussion,
+} from "./circle-discussion-routes.ts";
 import { disabledProgramStore, type ProgramStore } from "./program-values.ts";
 import { mountProgramRoutes } from "./program-routes.ts";
 import { programResumeTarget } from "./program-selection.ts";
@@ -270,15 +300,43 @@ import {
 } from "./ledger-reconciliation.ts";
 import { registerLedgerReconciliationRoutes } from "./ledger-reconciliation-routes.ts";
 import {
+  disabledInvoiceReconciliationStore,
+  type InvoiceReconciliationStore,
+} from "./invoice-reconciliation.ts";
+import { registerInvoiceReconciliationRoutes } from "./invoice-reconciliation-routes.ts";
+import {
+  disabledStaffCapacityStore,
+  type StaffCapacityStore,
+} from "./staff-capacity.ts";
+import { registerStaffCapacityRoutes } from "./staff-capacity-routes.ts";
+import {
+  disabledMyStaffTimeStore,
+  type MyStaffTimeStore,
+} from "./my-staff-time.ts";
+import { registerMyStaffTimeRoutes } from "./my-staff-time-routes.ts";
+import {
+  disabledAgreementOutcomesStore,
+  type AgreementOutcomesStore,
+} from "./agreement-outcomes.ts";
+import { registerAgreementOutcomesRoutes } from "./agreement-outcomes-routes.ts";
+import {
   disabledLocalAiHoldInspectionStore,
   type LocalAiHoldInspectionStore,
 } from "./local-ai-hold-inspection.ts";
 import { registerLocalAiHoldInspectionRoutes } from "./local-ai-hold-inspection-routes.ts";
 import {
+  disabledLocalAiHoldDecisionStore,
+  type LocalAiHoldDecisionStore,
+} from "./local-ai-hold-decisions.ts";
+import { registerLocalAiHoldDecisionRoutes } from "./local-ai-hold-decision-routes.ts";
+import {
   disabledMemberTestUnitsStore,
   type MemberTestUnitsStore,
 } from "./member-test-units.ts";
 import { registerMemberTestUnitsRoutes } from "./member-test-units-routes.ts";
+import { mountStudyAllowanceRoutes } from "./study-allowance-routes.ts";
+import { mountStudyQuestionRoutes } from "./study-question-routes.ts";
+import type { StudyAllowanceStore } from "./study-allowances.ts";
 import type { StudyUnitFixtureStore } from "./study-unit-fixtures.ts";
 import { mountStudyUnitFixtureRoutes } from "./study-unit-fixture-routes.ts";
 import { disabledPracticeStore, type PracticeStore } from "./practice.ts";
@@ -310,6 +368,7 @@ import {
   disabledAssignmentReadinessStore,
   type AssignmentReadinessStore,
 } from "./assignment-readiness.ts";
+import { coachPracticeState } from "./coach-practice-views.ts";
 import {
   disabledMemberSlotHolds,
   SlotHoldFailure,
@@ -390,9 +449,12 @@ function currentStarter(
 export function app(
   memberStore: Store,
   options: {
+    // #769: test-mode fixture release for the /workflows pages only.
+    workflowRoot?: URL;
     administratorEntry?: AdministratorEntry;
     coachView?: CoachView;
     memberSharing?: MemberSharing;
+    memberRecordAccess?: MemberRecordAccess;
     roleAdmin?: AccountRoleAdmin;
     administratorDiagnostics?: AdministratorDiagnostics;
     localStaffEntry?: boolean;
@@ -419,6 +481,7 @@ export function app(
     learningWorkspacePublication?: LearningWorkspacePublicationStore;
     programs?: ProgramStore;
     simpleInvoices?: SimpleInvoiceStore;
+    testProviderEvents?: TestProviderEvents;
     billingProfiles?: BillingProfileStore;
     invoiceSender?: InvoiceSender;
     foundationImport?: FoundationImportStore;
@@ -435,13 +498,20 @@ export function app(
     localCircleAdmin?: boolean;
     metrics?: MetricsStore;
     ledgerReconciliation?: LedgerReconciliationStore;
+    invoiceReconciliation?: InvoiceReconciliationStore;
+    staffCapacity?: StaffCapacityStore;
+    myStaffTime?: MyStaffTimeStore;
+    agreementOutcomes?: AgreementOutcomesStore;
     localHoldInspection?: LocalAiHoldInspectionStore;
+    localHoldDecisions?: LocalAiHoldDecisionStore;
     memberTestUnits?: MemberTestUnitsStore;
     studyUnitFixtures?: StudyUnitFixtureStore;
+    studyAllowances?: StudyAllowanceStore;
     localTestUnitIssuance?: boolean;
     attempts?: AttemptStore;
     practice?: PracticeStore;
     practiceSessions?: PracticeSessionStore;
+    practiceSessionAllowance?: boolean;
     supportRequests?: SupportRequestStore;
     privateSupportIntake?: boolean;
     supportAssignment?: SupportAssignmentStore;
@@ -477,6 +547,7 @@ export function app(
     memberPassword?: MemberPasswordAccess;
     memberSignOut?: MemberEmailAccess["signOut"];
     uploadAdmission?: UploadAdmissionStore;
+    anonymousWrites?: AnonymousWriteAdmissionStore;
   },
 ) {
   const store = sharingHeaderSession(memberStore);
@@ -528,6 +599,9 @@ export function app(
   );
   app.use((_req, _res, next) => withDemoSite(options.demoSite === true, next));
   app.use((_req, _res, next) =>
+    withMemberContributions(options.memberContributions === true, next),
+  );
+  app.use((_req, _res, next) =>
     withHosting(
       options.hostedOrigin === options.origin &&
         options.origin.startsWith("https://"),
@@ -564,6 +638,8 @@ export function app(
     }
     next();
   });
+  if (options.testProviderEvents)
+    mountTestProviderEvents(app, options.testProviderEvents);
   app.use(
     "/assets",
     express.static(fileURLToPath(new URL("../public", import.meta.url))),
@@ -574,6 +650,35 @@ export function app(
     options,
     mode,
   );
+  // Signup and password sign-in spend scrypt and email for anyone; bound them
+  // per visitor and for the whole service before doing that work (#728).
+  const anonymousRefusal = async (
+    kind: AnonymousWriteKind,
+    req: express.Request,
+  ) => {
+    if (!options.anonymousWrites) return null;
+    const result = await options.anonymousWrites.admit(
+      kind,
+      visitorAddress(req.socket.remoteAddress, req.get("x-forwarded-for")),
+    );
+    return result.kind === "admitted"
+      ? null
+      : anonymousWriteRefusal(kind, result);
+  };
+  // A new private text record is counted like the anonymous writes above (#42),
+  // after it is well formed and before anything is saved.
+  const memberRecordRefusal = async (
+    req: express.Request,
+    res: express.Response,
+  ) => {
+    const refused = await anonymousRefusal("member_record", req);
+    if (refused)
+      res
+        .status(refused.status)
+        .set("Cache-Control", "no-store")
+        .set("Retry-After", String(refused.retryAfterSeconds));
+    return refused?.message ?? null;
+  };
   // Admit evidence creation against the shared budget before reading its body.
   const uploadAdmission = options.uploadAdmission;
   if (uploadAdmission) {
@@ -690,7 +795,12 @@ export function app(
         () => next(),
       );
   });
-  mountAdministratorEntry(app, options.administratorEntry, options);
+  mountAdministratorEntry(
+    app,
+    options.administratorEntry,
+    options,
+    workQueueTools(options),
+  );
   mountAdministratorDiagnostics(app, options.administratorDiagnostics, options);
   mountStaffEntryRoutes(app, options.staffEntry, options, {
     library: Boolean(options.catalog),
@@ -736,6 +846,10 @@ export function app(
     eventRehearsals: Boolean(options.eventRehearsals),
     workflowReviews: Boolean(options.workflowReviewStaff),
     invoices: Boolean(options.simpleInvoices),
+    capacity: Boolean(options.staffCapacity),
+    recordAccess: Boolean(options.memberRecordAccess),
+    myTime: Boolean(options.myStaffTime),
+    agreements: Boolean(options.agreementOutcomes),
     localAi: Boolean(options.localAiControl),
     receipts: Boolean(options.manualObservations),
   });
@@ -752,7 +866,10 @@ export function app(
         .send(
           errorPage(
             "Staff access unavailable",
-            "Open staff sign-in to establish current local staff access. Your learning access is unchanged.",
+            hostingText(
+              "Open staff sign-in to establish current local staff access. Your learning access is unchanged.",
+              "Open staff sign-in to establish current staff access. Your learning access is unchanged.",
+            ),
           ),
         );
       return;
@@ -895,6 +1012,7 @@ export function app(
     signInLanding,
     options.memberSignOut,
     options.memberPassword,
+    anonymousRefusal,
   );
   if (options.memberPassword)
     mountMemberPasswordRoutes(
@@ -907,6 +1025,8 @@ export function app(
         void options.memberEmail
           ?.requestAttach(memberToken, address)
           .catch(() => undefined),
+      (req) => anonymousRefusal("password_sign_in", req),
+      (req) => anonymousRefusal("password_change", req),
     );
   mountProgramRoutes(
     app,
@@ -920,9 +1040,34 @@ export function app(
     res.send(trackReadinessPage(await tracks.snapshot())),
   );
   registerLedgerReconciliationRoutes(app, ledgerReconciliation, mode);
+  registerInvoiceReconciliationRoutes(
+    app,
+    options.invoiceReconciliation ?? disabledInvoiceReconciliationStore(),
+    mode,
+  );
+  registerStaffCapacityRoutes(
+    app,
+    options.staffCapacity ?? disabledStaffCapacityStore(),
+    mode,
+  );
+  registerMyStaffTimeRoutes(
+    app,
+    options.myStaffTime ?? disabledMyStaffTimeStore(),
+    mode,
+  );
+  registerAgreementOutcomesRoutes(
+    app,
+    options.agreementOutcomes ?? disabledAgreementOutcomesStore(),
+    mode,
+  );
   registerLocalAiHoldInspectionRoutes(
     app,
     options.localHoldInspection ?? disabledLocalAiHoldInspectionStore(),
+    mode,
+  );
+  registerLocalAiHoldDecisionRoutes(
+    app,
+    options.localHoldDecisions ?? disabledLocalAiHoldDecisionStore(),
     mode,
   );
   registerMemberTestUnitsRoutes(
@@ -930,7 +1075,9 @@ export function app(
     options.memberTestUnits ?? disabledMemberTestUnitsStore(),
     mode,
     Boolean(options.studyUnitFixtures),
+    Boolean(options.studyAllowances) && options.localTestUnitIssuance === true,
   );
+  mountStudyAllowanceRoutes(app, options.studyAllowances, mode);
   mountStudyUnitFixtureRoutes(app, options.studyUnitFixtures, options);
   app.get("/operator/experts", async (_req, res) => {
     const records = await tracks.registry(res.locals.token as string);
@@ -946,8 +1093,10 @@ export function app(
   });
   registerMetricsReportRoutes(app, metrics);
   app.get("/operator/metrics", async (_req, res) => {
-    const snapshot = await metrics.snapshot(res.locals.token as string);
-    if (!snapshot) {
+    const token = res.locals.token as string;
+    const snapshot = await metrics.snapshot(token);
+    // Logged before it leaves: a failed log write sends no data.
+    if (!snapshot || !(await metrics.logExport(token))) {
       res.status(403).json({ error: "forbidden" });
       return;
     }
@@ -972,7 +1121,69 @@ export function app(
         );
       return;
     }
-    res.send(localAiControlPage(state.paused, res.locals.csrf as string));
+    const spending =
+      (await localAiControl.spending?.(res.locals.token as string)) ?? null;
+    const history =
+      (await localAiControl.ceilingHistory?.(res.locals.token as string)) ??
+      null;
+    res.send(
+      localAiControlPage(
+        state.paused,
+        res.locals.csrf as string,
+        spending,
+        history,
+      ),
+    );
+  });
+  app.post("/operator/local-ai/ceiling", async (req, res) => {
+    if (mode === "live") {
+      res
+        .status(404)
+        .send(errorPage("Unavailable", "This preview is disabled."));
+      return;
+    }
+    const fields = req.body as Fields;
+    const whole = (value: unknown) =>
+      typeof value === "string" && /^[0-9]{1,13}$/.test(value)
+        ? Number(value)
+        : NaN;
+    const outcome =
+      fields.confirm === "yes" && localAiControl.setCeiling
+        ? await localAiControl.setCeiling(res.locals.token as string, {
+            expectedPoints: whole(fields.expected),
+            ceilingPoints: whole(fields.ceiling),
+            key: typeof fields.key === "string" ? fields.key : "",
+          })
+        : { kind: "invalid" as const };
+    if (outcome.kind === "changed" || outcome.kind === "replayed") {
+      res.redirect(303, "/operator/local-ai");
+      return;
+    }
+    const [status, title, text] =
+      outcome.kind === "denied"
+        ? [
+            403,
+            "Control unavailable",
+            "Platform administrator access is required.",
+          ]
+        : outcome.kind === "stale"
+          ? [
+              409,
+              "Ceiling unchanged",
+              "The test ceiling changed after you opened the page. Reload it and check the current value before changing it again.",
+            ]
+          : outcome.kind === "conflict"
+            ? [
+                409,
+                "Ceiling unchanged",
+                "This form was already used for a different value. Reload the page to make a new change.",
+              ]
+            : [
+                422,
+                "Ceiling unchanged",
+                "Enter a different whole number from 0 to 1000000000000 and confirm the change.",
+              ];
+    res.status(status).send(errorPage(title, text));
   });
   app.post("/operator/local-ai", async (req, res) => {
     if (mode === "live") {
@@ -991,7 +1202,10 @@ export function app(
         .send(
           errorPage(
             "Control unchanged",
-            "Choose and confirm an explicit local simulation state.",
+            hostingText(
+              "Choose and confirm an explicit local simulation state.",
+              "Choose and confirm an explicit simulation state.",
+            ),
           ),
         );
       return;
@@ -1051,7 +1265,10 @@ export function app(
         .send(
           errorPage(
             "Observation unchanged",
-            "Use invented SYN- evidence, a valid local member ID and positive integer CAD cents, then confirm the test-only action.",
+            hostingText(
+              "Use invented SYN- evidence, a valid local member ID and positive integer CAD cents, then confirm the test-only action.",
+              "Use invented SYN- evidence, a valid member ID and positive integer CAD cents, then confirm the test-only action.",
+            ),
           ),
         );
       return;
@@ -1077,7 +1294,10 @@ export function app(
         .send(
           errorPage(
             "Observation unchanged",
-            "The local member or invented observation details are unavailable.",
+            hostingText(
+              "The local member or invented observation details are unavailable.",
+              "The member or invented observation details are unavailable.",
+            ),
           ),
         );
       return;
@@ -1509,8 +1729,18 @@ export function app(
         ? body.signup_email
         : "";
     const signupPassword = body.signup_password;
+    const signupCountry =
+      body.signup_country === "other" || servedCountry(body.signup_country)
+        ? (body.signup_country as string)
+        : "";
     if (signup) {
       const problems: { field: string; message: string }[] = [];
+      // #12 D02: Canada first. Refused before any lookup, admission or save.
+      if (!servedCountry(body.signup_country))
+        problems.push({
+          field: "signup_country",
+          message: OUTSIDE_MARKET_MESSAGE,
+        });
       if (!normalizedEmail(signupEmail))
         problems.push({
           field: "signup_email",
@@ -1521,13 +1751,40 @@ export function app(
           field: "signup_password",
           message: "Password: use 12 to 128 characters.",
         });
-      if (!problems.length && !(await signup.emailAvailable(signupEmail)))
-        problems.push({
-          field: "signup_email",
-          message:
-            "Email address: this email is already used for sign-in. Sign in instead, or use another email.",
-        });
       start.errors.push(...(problems as typeof start.errors));
+    }
+    if (start.input && !start.errors.length) {
+      // A well-formed request is admitted before the address is looked up, so
+      // asking whether an email is registered is bounded like signing up.
+      const refused = await anonymousRefusal("signup", req);
+      if (refused) {
+        res
+          .status(refused.status)
+          .set("Cache-Control", "no-store")
+          .set("Retry-After", String(refused.retryAfterSeconds))
+          .send(
+            welcome(
+              res.locals.csrf as string,
+              [refused.message],
+              start,
+              Boolean(options.memberEmail),
+              signup
+                ? { email: signupEmail, country: signupCountry }
+                : undefined,
+            ),
+          );
+        return;
+      }
+      if (signup && !(await signup.emailAvailable(signupEmail)))
+        start.errors.push(
+          ...([
+            {
+              field: "signup_email",
+              message:
+                "Email address: this email is already used for sign-in. Sign in instead, or use another email.",
+            },
+          ] as { field: string; message: string }[] as typeof start.errors),
+        );
     }
     if (!start.input || start.errors.length) {
       res
@@ -1538,7 +1795,7 @@ export function app(
             [],
             start,
             Boolean(options.memberEmail),
-            signup ? { email: signupEmail } : undefined,
+            signup ? { email: signupEmail, country: signupCountry } : undefined,
           ),
         );
       return;
@@ -2048,7 +2305,10 @@ export function app(
         .send(
           errorPage(
             "Confirmation needed",
-            "Choose the local-only permission before continuing.",
+            hostingText(
+              "Choose the local-only permission before continuing.",
+              "Choose the simulation permission before continuing.",
+            ),
           ),
         );
       return;
@@ -2062,7 +2322,10 @@ export function app(
         .status(403)
         .send(
           errorPage(
-            "Local simulation unavailable",
+            hostingText(
+              "Local simulation unavailable",
+              "Simulation unavailable",
+            ),
             "Refresh your evidence and check the current version and safety state.",
           ),
         );
@@ -2093,7 +2356,10 @@ export function app(
         .send(
           errorPage(
             "Permission unavailable",
-            "This local permission is no longer available.",
+            hostingText(
+              "This local permission is no longer available.",
+              "This simulation permission is no longer available.",
+            ),
           ),
         );
       return;
@@ -2107,15 +2373,25 @@ export function app(
       receiptId,
       receiptId,
     );
+    if (outcome.kind === "limit_reached") {
+      res.status(409).send(localAiLimitPage());
+      return;
+    }
     if (outcome.kind !== "queued") {
       const paused = (await localAiControl.current()) === "paused";
       res
         .status(outcome.kind === "conflict" ? 409 : 403)
         .send(
           errorPage(
-            "Local simulation unavailable",
+            hostingText(
+              "Local simulation unavailable",
+              "Simulation unavailable",
+            ),
             paused
-              ? "Local simulations are paused. No new local job was queued."
+              ? hostingText(
+                  "Local simulations are paused. No new local job was queued.",
+                  "Simulations are paused. No new simulation was queued.",
+                )
               : "Refresh the page and check the exact-source permission.",
           ),
         );
@@ -2131,7 +2407,10 @@ export function app(
         .send(
           errorPage(
             "Confirmation needed",
-            "Confirm use of one existing local test request before continuing.",
+            hostingText(
+              "Confirm use of one existing local test request before continuing.",
+              "Confirm use of one existing test request before continuing.",
+            ),
           ),
         );
       return;
@@ -2141,13 +2420,34 @@ export function app(
       req.params.receiptId as string,
       fields.key,
     );
+    if (outcome.kind === "limit_reached") {
+      res.status(409).send(localAiLimitPage());
+      return;
+    }
+    if (outcome.kind === "ceiling_reached") {
+      res
+        .status(409)
+        .send(
+          errorPage(
+            "Test spending ceiling reached",
+            "The test spending ceiling has no room for this request. No test request was held and no provider was contacted.",
+          ),
+        );
+      return;
+    }
     if (outcome.kind !== "queued") {
       res
         .status(outcome.kind === "conflict" ? 409 : 403)
         .send(
           errorPage(
-            "Local test request unavailable",
-            "Check current permission, the local pause state and your existing test units. No allowance was granted and no live provider was contacted.",
+            hostingText(
+              "Local test request unavailable",
+              "Test request unavailable",
+            ),
+            hostingText(
+              "Check current permission, the local pause state and your existing test units. No allowance was granted and no live provider was contacted.",
+              "Check current permission, whether simulations are paused and your existing test units. No allowance was granted and no live provider was contacted.",
+            ),
           ),
         );
       return;
@@ -2159,18 +2459,34 @@ export function app(
       res.locals.token as string,
       req.params.jobId as string,
     );
-    if (outcome.kind !== "completed") {
-      const paused = (await localAiControl.current()) === "paused";
+    if (outcome.kind === "ceiling_reached") {
       res
-        .status(outcome.kind === "unavailable" ? 409 : 403)
+        .status(409)
         .send(
           errorPage(
-            "Local simulation unavailable",
-            paused
-              ? "Local simulations are paused. This attempt will not retry automatically."
-              : "Refresh the page. No live AI provider was contacted.",
+            "Test spending ceiling reached",
+            "Nothing was sent to the provider. Your test request stays reserved and can run when there is room, or withdraw permission to get it back.",
           ),
         );
+      return;
+    }
+    if (outcome.kind !== "completed") {
+      const paused = (await localAiControl.current()) === "paused";
+      res.status(outcome.kind === "unavailable" ? 409 : 403).send(
+        errorPage(
+          hostingText("Local simulation unavailable", "Simulation unavailable"),
+          paused
+            ? hostingText(
+                "Local simulations are paused. This attempt will not retry automatically.",
+                "Simulations are paused. This attempt will not retry automatically.",
+              )
+            : outcome.status === "needs_reconciliation" ||
+                outcome.status === "failed"
+              ? // #190 AIFAULT: the page names the real failure.
+                "This attempt did not finish normally and will not retry automatically. Go back to your AI simulation page to see what happened. No live AI provider was contacted."
+              : "Refresh the page. No live AI provider was contacted.",
+        ),
+      );
       return;
     }
     res.redirect(303, "/evidence/local-ai");
@@ -2350,7 +2666,10 @@ export function app(
             await evidence.owned(res.locals.token as string),
             res.locals.csrf as string,
             [
-              "This sample is not eligible for the local review queue. Refresh and check its current safety, consent and submission state.",
+              hostingText(
+                "This sample is not eligible for the local review queue. Refresh and check its current safety, consent and submission state.",
+                "This sample is not eligible for the review queue. Refresh and check its current safety, consent and submission state.",
+              ),
             ],
           ),
         );
@@ -2423,6 +2742,13 @@ export function app(
         (res.locals.learner as Learner).goal,
         res.locals.csrf as string,
         options.circleDiscussionEnabled ?? false,
+        await circleReplySummaries(
+          options.circleDiscussion ?? disabledCircleDiscussionStore(),
+          res.locals.token as string,
+          options.circleDiscussionEnabled
+            ? items.filter((item) => item.joined).map((item) => item.id)
+            : [],
+        ),
       ),
     );
   });
@@ -2699,15 +3025,34 @@ export function app(
               : Number.NaN,
           }
         : undefined;
+    const proposal = {
+      title: value("title"),
+      body: value("body"),
+      sources: value("sources"),
+    };
+    if (validProposal(proposal)) {
+      const refused = await memberRecordRefusal(req, res);
+      if (refused) {
+        res.send(
+          proposalNotSavedPage(
+            refused,
+            res.locals.csrf as string,
+            Object.fromEntries(
+              Object.entries(fields).filter(
+                (entry): entry is [string, string] =>
+                  entry[0] !== "csrf" && typeof entry[1] === "string",
+              ),
+            ),
+          ),
+        );
+        return;
+      }
+    }
     let id: string | null;
     try {
       id = await proposals.createDraft(
         res.locals.token as string,
-        {
-          title: value("title"),
-          body: value("body"),
-          sources: value("sources"),
-        },
+        proposal,
         fields.sample_confirmed === "yes",
         workflow,
       );
@@ -2934,12 +3279,19 @@ export function app(
   });
   app.get("/workflows", async (req, res) => {
     const q = typeof req.query.q === "string" ? req.query.q : "";
-    res.send(workflowRegistryPage(await workflowRegistry(q), q.slice(0, 100)));
+    const [items, retired] = await Promise.all([
+      workflowRegistry(q, options.workflowRoot),
+      retiredWorkflows(options.workflowRoot),
+    ]);
+    res.send(workflowRegistryPage(items, q.slice(0, 100), retired));
   });
   const workflowPage =
     (download: boolean): express.RequestHandler =>
     async (req, res) => {
-      const item = await workflowBundle(req.params.id as string);
+      const item = await workflowBundle(
+        req.params.id as string,
+        options.workflowRoot,
+      );
       if (!item) {
         res
           .status(404)
@@ -3214,7 +3566,16 @@ export function app(
               entry.contentVersion === item.version,
           )
         : undefined;
-    res.send(contentPreview(item, false, res.locals.csrf as string, activity));
+    res.send(
+      contentPreview(
+        item.structuredPrerequisites
+          ? withPrerequisiteTitles([item], await catalog.search({}))[0]!
+          : item,
+        false,
+        res.locals.csrf as string,
+        activity,
+      ),
+    );
   });
   app.get("/library/:id/practice-session", async (req, res) => {
     const source = await practiceSessions.source(
@@ -3232,7 +3593,13 @@ export function app(
         );
       return;
     }
-    res.send(practiceSessionStartPage(source, res.locals.csrf as string));
+    res.send(
+      practiceSessionStartPage(
+        source,
+        res.locals.csrf as string,
+        options.practiceSessionAllowance === true,
+      ),
+    );
   });
   app.post("/library/:id/practice-session/start", async (req, res) => {
     const fields = (req.body ?? {}) as Fields;
@@ -3285,6 +3652,10 @@ export function app(
       goal: fields.goal as keyof typeof GOALS,
       promptVersion: fields.prompt_version,
     });
+    if (result.kind === "allowance-needed") {
+      res.status(409).send(practiceSessionAllowanceNeededPage());
+      return;
+    }
     if (!("sessionId" in result)) {
       res
         .status(409)
@@ -3331,7 +3702,15 @@ export function app(
         );
       return;
     }
-    res.send(practiceSessionHistoryPage(result));
+    // COACHMOCK-05: only the first page carries the coach section, and a
+    // failed check never hides the member's own history.
+    const coach =
+      req.query.after === undefined
+        ? await memberHolds
+            .snapshot(res.locals.token as string)
+            .then(coachPracticeState, () => ({ kind: "failed" as const }))
+        : undefined;
+    res.send(practiceSessionHistoryPage(result, coach));
   });
   app.get("/practice-sessions/:sessionId", async (req, res) => {
     const detail = await practiceSessions.detail(
@@ -3406,6 +3785,63 @@ export function app(
       `/practice-sessions/${encodeURIComponent(req.params.sessionId as string)}`,
     );
   });
+  // #200 PRACTICE-AI: ask for one simulated suggestion on a saved pair.
+  app.post(
+    "/practice-sessions/:sessionId/pairs/:sequence/suggestion",
+    async (req, res) => {
+      const fields = (req.body ?? {}) as Fields;
+      const raw = req.params.sequence as string;
+      const sequence = Number(raw);
+      if (
+        typeof fields.csrf !== "string" ||
+        Object.keys(fields).some((key) => key !== "csrf") ||
+        !/^[1-9][0-9]?$/.test(raw) ||
+        !practiceSessions.suggest
+      ) {
+        res
+          .status(404)
+          .send(
+            practiceSessionRecoveryPage(
+              "Suggestion not requested",
+              "Open the exact saved session and choose the pair again. Nothing was requested.",
+            ),
+          );
+        return;
+      }
+      const result = await practiceSessions.suggest(
+        res.locals.token as string,
+        req.params.sessionId as string,
+        sequence,
+      );
+      if (
+        result === "paused" ||
+        result === "limit" ||
+        result === "ceiling" ||
+        result === "unavailable"
+      ) {
+        res.status(result === "unavailable" ? 404 : 409).send(
+          practiceSessionRecoveryPage(
+            "Suggestion not requested",
+            {
+              paused:
+                "Simulated AI suggestions are paused on this service. Nothing was requested.",
+              limit:
+                "You already have 3 unfinished AI requests. Nothing was requested; try again once one finishes.",
+              ceiling:
+                "The test spending ceiling for simulated AI on this service has no room for this suggestion. Nothing was requested and no provider was contacted.",
+              unavailable:
+                "This pair, its session or its exact source version is unavailable for a suggestion. Nothing was requested.",
+            }[result],
+          ),
+        );
+        return;
+      }
+      res.redirect(
+        303,
+        `/practice-sessions/${encodeURIComponent(req.params.sessionId as string)}#pair-${sequence}`,
+      );
+    },
+  );
   app.post("/practice-sessions/:sessionId/withdraw", async (req, res) => {
     const fields = (req.body ?? {}) as Fields;
     if (
@@ -3628,6 +4064,17 @@ export function app(
       return;
     }
     res.redirect(303, `/library/${encodeURIComponent(source.id)}/practice`);
+  });
+  // #202: ask about the exact lesson version under the reader's eligibility.
+  mountStudyQuestionRoutes(app, async (token, id) => {
+    const item = await catalog.published(id);
+    return item &&
+      item.kind === "lesson" &&
+      item.state === "published" &&
+      !item.requiresQualifiedSignoff &&
+      (await store.openLesson(token, item.id, item.version))
+      ? item
+      : null;
   });
   app.get("/library/:id/study", async (req, res) => {
     const item = await catalog.published(req.params.id as string);
@@ -4004,6 +4451,7 @@ export function app(
   mountMemberSharing(app, options.memberSharing, {
     contributions: options.memberContributions === true,
   });
+  mountMemberRecordAccess(app, options.memberRecordAccess);
   app.get("/account", async (_req, res) => {
     const memberToken = res.locals.token as string;
     const memberId = (res.locals.learner as Learner).id;
@@ -4071,7 +4519,10 @@ export function app(
       progress,
       res.locals.csrf as string,
       [],
-      eligibleAssignments(published, member, progress, activity),
+      withPrerequisiteTitles(
+        eligibleAssignments(published, member, progress, activity),
+        published,
+      ),
       choice,
       recommendLesson(published, member, progress, activity),
       undefined,
@@ -4887,6 +5338,24 @@ export function app(
         );
       return;
     }
+    const refused = await memberRecordRefusal(req, res);
+    if (refused) {
+      const rows = await store.milestones(res.locals.token as string);
+      if (rows === null) {
+        milestoneDenied(res);
+        return;
+      }
+      res.send(
+        milestonesPage(
+          member,
+          rows,
+          res.locals.csrf as string,
+          [refused],
+          parsed.input,
+        ),
+      );
+      return;
+    }
     const result = await store.createMilestone(
       res.locals.token as string,
       parsed.input,
@@ -5077,6 +5546,20 @@ export function app(
       );
       return;
     }
+    const refused = await memberRecordRefusal(req, res);
+    if (refused) {
+      const snapshot = await career.snapshot(res.locals.token as string);
+      if (!snapshot) {
+        careerDenied(res);
+        return;
+      }
+      res.send(
+        careerPage(snapshot, res.locals.csrf as string, [refused], {
+          entry: parsed.input,
+        }),
+      );
+      return;
+    }
     if (
       !careerChanged(
         res,
@@ -5148,6 +5631,20 @@ export function app(
       }
       res.status(422).send(
         careerPage(snapshot, res.locals.csrf as string, parsed.errors, {
+          professional: parsed.input,
+        }),
+      );
+      return;
+    }
+    const refused = await memberRecordRefusal(req, res);
+    if (refused) {
+      const snapshot = await career.snapshot(res.locals.token as string);
+      if (!snapshot) {
+        careerDenied(res);
+        return;
+      }
+      res.send(
+        careerPage(snapshot, res.locals.csrf as string, [refused], {
           professional: parsed.input,
         }),
       );
@@ -5277,7 +5774,10 @@ export function app(
             progress,
             res.locals.csrf as string,
             [],
-            eligibleAssignments(published, member, progress, activity),
+            withPrerequisiteTitles(
+              eligibleAssignments(published, member, progress, activity),
+              published,
+            ),
             choice,
             recommendLesson(published, member, progress, activity),
             edit,
@@ -5673,7 +6173,10 @@ export function app(
         .send(
           errorPage(
             "Deletion status unconfirmed",
-            "We could not confirm completion. If the request was accepted, local cleanup will retry; this page is not a deletion receipt.",
+            hostingText(
+              "We could not confirm completion. If the request was accepted, local cleanup will retry; this page is not a deletion receipt.",
+              "We could not confirm completion. If the request was accepted, cleanup will retry; this page is not a deletion receipt.",
+            ),
           ),
         );
       return;

@@ -6,6 +6,8 @@ import {
   demoImpersonation,
   deterministicAdapter,
   deterministicRegistry,
+  TEST_AI_FAULT_MARKERS,
+  testAiFaults,
   validateAdapterResult,
   validateDatabaseIsolation,
 } from "../../src/adapters.ts";
@@ -190,6 +192,23 @@ describe("deterministic adapter and synthetic fixtures", () => {
     expect(first.message).toContain("no external side effect");
   });
 
+  it("reports simulated AI usage for text input only", async () => {
+    const adapter = deterministicAdapter("ai", "test");
+    const operation = "summary";
+    expect(
+      (await adapter.execute(operation, { text: "é".repeat(21) })).usage,
+    ).toEqual({ inputTokens: 11, outputTokens: 64 });
+    for (const input of [null, "text", {}, { text: 5 }])
+      expect(await adapter.execute(operation, input)).not.toHaveProperty(
+        "usage",
+      );
+    expect(
+      await deterministicAdapter("email", "test").execute(operation, {
+        text: "invented",
+      }),
+    ).not.toHaveProperty("usage");
+  });
+
   it.each(["", "x".repeat(81)])(
     "rejects unsafe operation %j",
     async (operation) =>
@@ -221,5 +240,70 @@ describe("deterministic adapter and synthetic fixtures", () => {
         .filter((person) => person.role === "coach")
         .map((person) => person.assignment),
     ).toEqual(["assigned", "revoked"]);
+  });
+});
+
+describe("#190 AIFAULT test AI faults", () => {
+  it("are off by default and refused outside local test mode", () => {
+    expect(testAiFaults({}, "test", false)).toBe(false);
+    expect(testAiFaults({ DNE_TEST_AI_FAULTS: "disabled" }, "demo", true)).toBe(
+      false,
+    );
+    expect(testAiFaults({ DNE_TEST_AI_FAULTS: "enabled" }, "test", false)).toBe(
+      true,
+    );
+    expect(() =>
+      testAiFaults({ DNE_TEST_AI_FAULTS: "yes" }, "test", false),
+    ).toThrow("DNE_TEST_AI_FAULTS must be enabled or disabled.");
+    for (const [mode, hosted] of [
+      ["demo", false],
+      ["live", false],
+      ["test", true],
+    ] as const)
+      expect(() =>
+        testAiFaults({ DNE_TEST_AI_FAULTS: "enabled" }, mode, hosted),
+      ).toThrow("Test AI faults run only in local test mode.");
+  });
+
+  it("let marked invented text time out or answer malformed, and change nothing else", async () => {
+    const faulty = deterministicRegistry({}, "test", { aiFaults: true });
+    const plain = deterministicRegistry({}, "test").adapter("ai", "test");
+    const ai = faulty.adapter("ai", "test");
+    const pending = ai.execute("op", {
+      text: `Invented ${TEST_AI_FAULT_MARKERS.timeout}`,
+    });
+    const settled = await Promise.race([
+      pending.then(() => "answered"),
+      new Promise((resolve) => setTimeout(() => resolve("silent"), 20)),
+    ]);
+    expect(settled).toBe("silent");
+    const malformed = await ai.execute("op", {
+      text: `Invented ${TEST_AI_FAULT_MARKERS.malformed}`,
+    });
+    expect(malformed.message).toBe("");
+    expect(validateAdapterResult(malformed, "ai", "test")).toBeNull();
+    for (const input of [
+      { text: "Invented ordinary text" },
+      { text: 1 },
+      null,
+      "x",
+    ])
+      expect(await ai.execute("op", input)).toEqual(
+        await plain.execute("op", input),
+      );
+    // Other adapters and the demo mode never fault.
+    const email = faulty.adapter("email", "test");
+    expect(
+      (await email.execute("op", { text: TEST_AI_FAULT_MARKERS.timeout }))
+        .message,
+    ).not.toBe("");
+    const demo = deterministicRegistry({}, "demo", { aiFaults: true }).adapter(
+      "ai",
+      "demo",
+    );
+    expect(
+      (await demo.execute("op", { text: TEST_AI_FAULT_MARKERS.malformed }))
+        .message,
+    ).not.toBe("");
   });
 });

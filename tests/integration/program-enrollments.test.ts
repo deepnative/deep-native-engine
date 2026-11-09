@@ -32,6 +32,8 @@ const memberToken = randomBytes(32).toString("hex");
 let server: Server;
 beforeAll(async () => {
   await migrate(pool);
+  // The foundation import must start fresh whichever lane file ran before.
+  await pool.query("TRUNCATE principals,cohorts,content_versions CASCADE");
   server = await listenLoopback(application);
   await seedDraftPack(pool);
   await members.create(memberToken, {

@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import type {
   AdministratorConsole,
   AdministratorEntry,
+  LatestCoaching,
 } from "./administrator-entry.ts";
 import { COOKIE, cookieOptions, csrf, validCsrf } from "./session.ts";
 import {
@@ -20,6 +21,12 @@ import { hours } from "./coaching-dashboard-views.ts";
 import { monthLabel } from "./coaching-values.ts";
 import type { AccountRoleAdmin } from "./account-role-admin.ts";
 import { coachAssignmentCard } from "./account-role-admin-routes.ts";
+import type { AdministratorDiagnostics } from "./administrator-diagnostics.ts";
+import {
+  workWaitingCard,
+  workWaitingUnavailable,
+  type WorkQueueTools,
+} from "./administrator-work-waiting-views.ts";
 import { hostingText } from "./hosting-presentation.ts";
 
 const CONSOLE_SEARCH_MAX = 120;
@@ -32,11 +39,22 @@ function learnersCard(v: AdministratorConsole, ownerId?: string) {
     if (v.search) query.set("q", v.search);
     return escape(`/operator?${query}${anchor}`);
   };
-  // CONSOLECOACH-01: the latest saved month, its hours and where it stands.
-  const coaching = (m: AdministratorConsole["members"][number]) =>
-    m.coaching
-      ? `<td class="member-coaching"><a href="/operator/coaching/${escape(m.id)}?month=${escape(m.coaching.month)}">${monthLabel(m.coaching.month)}</a><span>${hours(m.coaching.minutes)} · ${coachingStatus(m.coaching)}</span></td>`
-      : '<td class="member-coaching">—</td>';
+  // CONSOLEMONTHS-01..03: this month's and last month's hours and where they
+  // stand, then the latest earlier month, each linking to its coaching page.
+  type Member = AdministratorConsole["members"][number];
+  const month = (
+    m: Member,
+    saved: LatestCoaching | null | undefined,
+    named = false,
+  ) => {
+    if (!saved) return '<td class="member-coaching">—</td>';
+    const link = `/operator/coaching/${escape(m.id)}?month=${escape(saved.month)}`;
+    return named
+      ? `<td class="member-coaching"><a href="${link}">${monthLabel(saved.month)}</a><span>${hours(saved.minutes)} · ${coachingStatus(saved)}</span></td>`
+      : `<td class="member-coaching"><a href="${link}">${hours(saved.minutes)}</a><span>${coachingStatus(saved)}</span></td>`;
+  };
+  const coaching = (m: Member) =>
+    month(m, m.thisMonth) + month(m, m.lastMonth) + month(m, m.coaching, true);
   const first = (v.page - 1) * v.pageSize + 1,
     last = first + v.members.length - 1,
     pages = Math.max(Math.ceil(v.total / v.pageSize), 1);
@@ -48,7 +66,7 @@ function learnersCard(v: AdministratorConsole, ownerId?: string) {
     )
     .join("");
   const list = v.members.length
-    ? `<p role="status">Showing ${count(first)}–${count(last)} of ${count(v.total)}</p><div class="table-scroll" tabindex="0" role="region" aria-label="Learner accounts"><table class="member-table"><thead><tr><th scope="col">Name</th><th scope="col">Starting point</th><th scope="col">Goal</th><th scope="col">Latest coaching</th><th scope="col">Joined</th><th scope="col">Account reference</th></tr></thead><tbody>${rows}</tbody></table></div><nav class="member-pager" aria-label="Learner pages">${v.page > 1 ? `<a class="button secondary" href="${href(v.page - 1)}">Previous</a>` : ""}<span>Page ${count(v.page)} of ${count(pages)}</span>${v.page < pages ? `<a class="button secondary" href="${href(v.page + 1)}">Next</a>` : ""}</nav>`
+    ? `<p role="status">Showing ${count(first)}–${count(last)} of ${count(v.total)}</p><div class="table-scroll" tabindex="0" role="region" aria-label="Learner accounts"><table class="member-table"><thead><tr><th scope="col">Name</th><th scope="col">Starting point</th><th scope="col">Goal</th><th scope="col">This month<span>${monthLabel(v.months.current)}</span></th><th scope="col">Last month<span>${monthLabel(v.months.previous)}</span></th><th scope="col">Earlier coaching</th><th scope="col">Joined</th><th scope="col">Account reference</th></tr></thead><tbody>${rows}</tbody></table></div><nav class="member-pager" aria-label="Learner pages">${v.page > 1 ? `<a class="button secondary" href="${href(v.page - 1)}">Previous</a>` : ""}<span>Page ${count(v.page)} of ${count(pages)}</span>${v.page < pages ? `<a class="button secondary" href="${href(v.page + 1)}">Next</a>` : ""}</nav>`
     : `<p role="status">${v.search ? "No learner accounts match this search." : "No learner accounts available."}</p>`;
   return `<section class="portal-card" id="learners"><h2>Learners</h2><form class="portal-search" method="get" action="/operator">${ownerId ? `<input type="hidden" name="ownerId" value="${escape(ownerId)}">` : ""}<label for="console-search">Search by name or account reference</label><div><input id="console-search" type="text" name="q" maxlength="${CONSOLE_SEARCH_MAX}" value="${escape(v.search)}"><button>Search</button></div></form>${v.search ? '<p><a href="/operator">Clear search</a></p>' : ""}${list}</section>`;
 }
@@ -70,7 +88,9 @@ export function mountAdministratorEntry(
     mode?: string;
     simpleInvoices?: unknown;
     roleAdmin?: AccountRoleAdmin;
+    administratorDiagnostics?: Pick<AdministratorDiagnostics, "work">;
   },
+  workQueues?: WorkQueueTools,
 ) {
   const member = memberToken;
   const fail = (res: Response, status: number) =>
@@ -168,10 +188,21 @@ export function mountAdministratorEntry(
             : "<p>Billing is disabled. No proposal, invoice or rate can be created from this console.</p>"
         }</section>${coachCard}`
       : "";
+    // WAITWORK-08: a failed read says so, never shows zero, and keeps the console.
+    let waiting = "";
+    if (workQueues && options.administratorDiagnostics) {
+      const work = await options.administratorDiagnostics
+        .work(cookie.value)
+        .catch(() => undefined);
+      waiting =
+        work?.kind === "ready"
+          ? workWaitingCard(work.value, workQueues)
+          : workWaitingUnavailable();
+    }
     return res.send(
       page(
         "Administration console",
-        `<div class="portal-page administrator-console"><div class="portal-intro"><h1>Administration console</h1><p>Manage the selected learner’s courses and billing. Registration and a proposal do not create enrollment or a charge; the learner must accept exact billing terms.</p><nav class="portal-actions" aria-label="Administration sections"><a href="#learners" class="button secondary">Learners</a><a href="#courses" class="button secondary">Courses/services</a><a href="#invoices" class="button secondary">Invoices</a></nav></div>${learnersCard(v, target)}${summaries}<section class="portal-card" id="courses"><h2>Courses/services</h2><p>Published lesson versions only. Planned services, prices and support capacity are not published offers. These are course candidates; final eligibility is checked for the exact learner.</p><ul>${v.courses.map((c) => `<li>${escape(c.title)} · ${escape(c.id)} version ${c.version}</li>`).join("") || "<li>No published course candidates.</li>"}</ul></section><section class="portal-card" id="invoices"><h2>Invoices</h2>${
+        `<div class="portal-page administrator-console"><div class="portal-intro"><h1>Administration console</h1><p>Manage the selected learner’s courses and billing. Registration and a proposal do not create enrollment or a charge; the learner must accept exact billing terms.</p><nav class="portal-actions" aria-label="Administration sections"><a href="#learners" class="button secondary">Learners</a><a href="#courses" class="button secondary">Courses/services</a><a href="#invoices" class="button secondary">Invoices</a></nav></div>${waiting}${learnersCard(v, target)}${summaries}<section class="portal-card" id="courses"><h2>Courses/services</h2><p>Published lesson versions only. Planned services, prices and support capacity are not published offers. These are course candidates; final eligibility is checked for the exact learner.</p><ul>${v.courses.map((c) => `<li>${escape(c.title)} · ${escape(c.id)} version ${c.version}</li>`).join("") || "<li>No published course candidates.</li>"}</ul></section><section class="portal-card" id="invoices"><h2>Invoices</h2>${
           options.simpleInvoices
             ? `<p>Select a learner above to inspect their retained invoices or compose a proposal for that exact account.</p>${portalActions(
                 [
@@ -182,7 +213,10 @@ export function mountAdministratorEntry(
             : "<p>Invoicing is disabled. Learning accounts and saved work remain available.</p>"
         }</section><div class="portal-footer">${portalActions([
           ...(options.roleAdmin
-            ? ([["/operator/roles", "Roles"]] as [string, string][])
+            ? ([
+                ["/operator/roles", "Roles"],
+                ["/operator/changes", "Change history"],
+              ] as [string, string][])
             : []),
           ["/operator/diagnostics", "Diagnostics"],
           // FRICTION-11: /admin needs a member account, so offer it only then.
@@ -211,7 +245,10 @@ export function mountAdministratorEntry(
             ["/operator/invoices", "Courses and invoices"],
             ["/operator/coaching", "Monthly coaching"],
             ...(options.roleAdmin
-              ? ([["/operator/roles", "Roles"]] as [string, string][])
+              ? ([
+                  ["/operator/roles", "Roles"],
+                  ["/operator/changes", "Change history"],
+                ] as [string, string][])
               : []),
             ["/staff", "Staff tools"],
           ],

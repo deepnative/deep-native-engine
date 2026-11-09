@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import type { ApplicationMode } from "./adapters.ts";
@@ -22,16 +23,22 @@ import {
   type StudyFixtureAttempt,
 } from "./study-unit-fixture-views.ts";
 
-const messages = {
-  denied:
+const messages = () => ({
+  denied: hostingText(
     "This exact test fixture is unavailable to your current access. No other member's request or balance is disclosed.",
+    "This test request is unavailable to your current access. No other member's request or balance is disclosed.",
+  ),
   invalid:
     "Check the exact reference and explicitly confirm the fixed test scope. This form was not accepted.",
-  conflict:
+  conflict: hostingText(
     "This instruction conflicts with the original request or the one-time policy slot. It cannot reset or renew that fixture.",
-  unavailable:
+    "This instruction conflicts with the original one-time request. It cannot reset or renew that request.",
+  ),
+  unavailable: hostingText(
     "The fixture result cannot be confirmed. A write may already have committed; inspect the original operation before repeating the same instruction.",
-};
+    "The result cannot be confirmed. A write may already have committed; inspect the original operation before repeating the same instruction.",
+  ),
+});
 function submitted(input: unknown, confirmed: boolean) {
   const keys = [
     "csrf",
@@ -76,7 +83,7 @@ export function mountStudyUnitFixtureRoutes(
   store: StudyUnitFixtureStore | undefined,
   options: { mode?: ApplicationMode; localStaffEntry?: boolean },
 ) {
-  const failure = (res: Response, kind: keyof typeof messages) =>
+  const failure = (res: Response, kind: keyof ReturnType<typeof messages>) =>
     res
       .status(
         { denied: 403, invalid: 422, conflict: 409, unavailable: 503 }[kind],
@@ -84,7 +91,7 @@ export function mountStudyUnitFixtureRoutes(
       .send(
         studyFixtureNotice(
           res.locals.csrf ?? "",
-          messages[kind],
+          messages()[kind],
           kind === "unavailable" ? res.locals.studyFixtureAttempt : undefined,
         ),
       );
@@ -118,7 +125,10 @@ export function mountStudyUnitFixtureRoutes(
         .send(
           studyFixtureNotice(
             "",
-            "Local test-unit issuance is unavailable in this configuration.",
+            hostingText(
+              "Local test-unit issuance is unavailable in this configuration.",
+              "Test-unit issuance is unavailable on this site.",
+            ),
           ),
         );
     if (!studyFixtureFields(req.query, [])) return failure(res, "invalid");
@@ -128,7 +138,15 @@ export function mountStudyUnitFixtureRoutes(
     if (!options.localStaffEntry)
       return res
         .status(404)
-        .send(studyFixtureNotice("", "Local staff entry is unavailable."));
+        .send(
+          studyFixtureNotice(
+            "",
+            hostingText(
+              "Local staff entry is unavailable.",
+              "Staff entry is unavailable.",
+            ),
+          ),
+        );
     const cookie = staffCookie(req.headers.cookie);
     if (cookie.kind !== "value" || !staffCredential(cookie.value))
       return failure(res, "denied");

@@ -1,10 +1,11 @@
 import { browserOrigin } from "../support/browser-origin.js";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { store } from "../../src/store.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { COOKIE } from "../../src/session.ts";
+import { TEST_AI_FAULT_MARKERS } from "../../src/adapters.ts";
 import { testPool } from "../support/database.ts";
 const pool = testPool(),
   members = store(pool),
@@ -28,13 +29,16 @@ async function signIn(page: Page, token: string) {
     },
   ]);
 }
-async function source(page: Page, token: string, title: string) {
+async function source(
+  page: Page,
+  token: string,
+  title: string,
+  text = "Invented private source for local test requests",
+) {
   await signIn(page, token);
   await page.goto("/evidence");
   await page.getByLabel("Sample title").fill(title);
-  await page
-    .getByLabel("Invented text sample")
-    .fill("Invented private source for local test requests");
+  await page.getByLabel("Invented text sample").fill(text);
   await page.getByLabel("I created this invented sample").check();
   await page.getByLabel("I explicitly allow this sample").check();
   await page.getByRole("button", { name: "Save private text sample" }).click();
@@ -59,6 +63,100 @@ async function source(page: Page, token: string, title: string) {
       .filter({ has: page.getByRole("heading", { name: title, exact: true }) }),
   };
 }
+// Explicit durable started-attempt fixture, not evidence of provider execution.
+async function startedRequest(page: Page, memberId: string) {
+  await pool.query(
+    "UPDATE adapter_jobs SET status='running',attempt_count=1,attempt_token=$2,lease_until=clock_timestamp()+interval '5 minutes' WHERE member_id=$1 AND status='pending'",
+    [memberId, randomUUID()],
+  );
+  await page.reload();
+}
+test("[L302] started requests stay held with an unknown outcome after withdrawal or a new version", async ({
+  page,
+}) => {
+  const token = randomBytes(32).toString("hex");
+  await members.create(token, { background: "explorer", goal: "everyday" });
+  const session = await members.session(token);
+  if (session.kind !== "active") throw Error("Synthetic member unavailable");
+  const memberId = session.learner.id;
+  const expectHeld = async (item: Locator) => {
+    await expect(
+      item.getByText("its outcome is unknown and it stays held"),
+    ).toBeVisible();
+    await expect(
+      item.getByText("confirm that anything was erased"),
+    ).toBeVisible();
+    await expect(
+      item.getByRole("button", { name: "Run local simulation" }),
+    ).toHaveCount(0);
+  };
+  const withdrawnTitle = `Invented withdrawn ${randomUUID()}`;
+  const withdrawn = await source(page, token, withdrawnTitle);
+  await withdrawn.item
+    .getByRole("button", { name: "Queue local simulation" })
+    .click();
+  // Let the queued page finish loading: a reload mid-navigation detaches the
+  // page ("Not attached to an active page"), and the job must exist first.
+  await expect(
+    withdrawn.item.getByRole("button", { name: "Run local simulation" }),
+  ).toBeVisible();
+  await startedRequest(page, memberId);
+  await withdrawn.item
+    .getByLabel(`Withdraw local AI permission for ${withdrawnTitle}`)
+    .check();
+  await withdrawn.item
+    .getByRole("button", { name: "Withdraw permission" })
+    .click();
+  await expectHeld(withdrawn.item);
+  await withdrawn.item
+    .getByLabel("I permit this exact invented sample version")
+    .check();
+  await withdrawn.item
+    .getByRole("button", { name: "Grant local simulation permission" })
+    .click();
+  await expect(
+    withdrawn.item.getByText("permission granted for this exact version"),
+  ).toBeVisible();
+  await expectHeld(withdrawn.item);
+
+  const revisedTitle = `Invented revised ${randomUUID()}`;
+  const revised = await source(page, token, revisedTitle);
+  await revised.item
+    .getByRole("button", { name: "Queue local simulation" })
+    .click();
+  // Let the queued page finish loading: a reload mid-navigation detaches the
+  // page ("Not attached to an active page"), and the job must exist first.
+  await expect(
+    revised.item.getByRole("button", { name: "Run local simulation" }),
+  ).toBeVisible();
+  await startedRequest(page, memberId);
+  await evidence.submitForReview(token, revised.id);
+  const next = await evidence.upload(token, {
+    name: `Invented newer ${randomUUID()}`,
+    mediaType: "text/plain",
+    data: Buffer.from("Invented newer private source"),
+    consent: {
+      rightsConfirmed: true,
+      privateReview: true,
+      communityPublication: false,
+    },
+    revisesId: revised.id,
+  });
+  expect(next.kind).toBe("created");
+  await page.reload();
+  await expect(
+    revised.item.getByText("so it cannot be used again"),
+  ).toBeVisible();
+  await expectHeld(revised.item);
+  await expect(
+    revised.item.getByRole("button", {
+      name: "Grant local simulation permission",
+    }),
+  ).toHaveCount(0);
+  await expect(
+    revised.item.getByRole("button", { name: "Withdraw permission" }),
+  ).toHaveCount(0);
+});
 const audiences = [
   ["explorer", "everyday"],
   ["professional", "work"],
@@ -83,6 +181,11 @@ for (const [index, [background, goal]] of audiences.entries()) {
       const action = await form.getAttribute("action");
       const key = await form.locator('[name="key"]').inputValue();
       const csrf = await form.locator('[name="csrf"]').inputValue();
+      // AIUSE-01: a labelled estimate is visible before the member commits.
+      const estimate = first.item.getByText(
+        "Estimate only: about 268 tokens and 158 simulated cost points (model simulated-model-v1, test rates simulated-rates-v1).",
+      );
+      await expect(estimate).toHaveCount(1);
       await first.item
         .getByLabel("Hold one existing local test request")
         .check();
@@ -111,6 +214,14 @@ for (const [index, [background, goal]] of audiences.entries()) {
           .getByRole("status")
           .filter({ hasText: "One local test request" }),
       ).toHaveText("One local test request: consumed.");
+      // AIUSE-02: reloading shows actual simulated use beside the estimate.
+      await page.reload();
+      await expect(estimate).toHaveCount(2);
+      await expect(
+        first.item.getByText(
+          "Actual simulated use: 76 tokens and 42 cost points. Within the estimate.",
+        ),
+      ).toBeVisible();
       await expect(
         first.item.getByRole("button", { name: "Run local test request" }),
       ).toHaveCount(0);
@@ -147,6 +258,15 @@ for (const [index, [background, goal]] of audiences.entries()) {
           "One local test request: released subject to expiry.",
         ),
       ).toBeVisible();
+      // AICANCEL-01: the member cancelled it; nothing failed.
+      await expect(
+        second.item.getByText(
+          "Cancelled when you withdrew permission. It never started.",
+        ),
+      ).toBeVisible();
+      await expect(second.item.getByText(/unavailable or failed/)).toHaveCount(
+        0,
+      );
       await page
         .getByRole("link", { name: "See your local test units" })
         .click();
@@ -271,5 +391,184 @@ test("[L123] absent units, pause and a seeded uncertain claim never create an au
     await pool.query("UPDATE local_ai_control SET paused=false");
     await evidence.removeWorkspace(token);
     await members.remove(id);
+  }
+});
+
+test("[L321] AILIMIT-06 a member at the unfinished-request limit is told why and nothing new is queued", async ({
+  page,
+}) => {
+  const token = randomBytes(32).toString("hex");
+  await members.create(token, { background: "professional", goal: "work" });
+  const session = await members.session(token);
+  if (session.kind !== "active") throw Error("Synthetic member unavailable");
+  const memberId = session.learner.id;
+  const items: Locator[] = [];
+  for (let n = 0; n < 4; n++)
+    items.push(
+      (await source(page, token, `Invented limit ${n} ${randomUUID()}`)).item,
+    );
+  await expect(
+    page.getByText(
+      "You can have up to 3 unfinished requests at a time, across all your samples; a held request counts until it is checked.",
+    ),
+  ).toBeVisible();
+  for (const item of items.slice(0, 3)) {
+    await item.getByRole("button", { name: "Queue local simulation" }).click();
+    await expect(
+      item.getByRole("button", { name: "Run local simulation" }),
+    ).toBeVisible();
+  }
+  await items[3]!
+    .getByRole("button", { name: "Queue local simulation" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Too many unfinished requests" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "You already have 3 AI requests that are not finished. Run one, wait for a held one to be checked, or withdraw permission for one that has not started, then try again. Nothing new was queued or held, and no provider was contacted.",
+    ),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  const jobs = await pool.query(
+    "SELECT status FROM adapter_jobs WHERE member_id=$1",
+    [memberId],
+  );
+  expect(jobs.rows.map((r) => r.status)).toEqual([
+    "pending",
+    "pending",
+    "pending",
+  ]);
+  // Running one frees its place.
+  await page.goto("/evidence/local-ai");
+  await items[0]!.getByRole("button", { name: "Run local simulation" }).click();
+  await items[3]!
+    .getByRole("button", { name: "Queue local simulation" })
+    .click();
+  await expect(
+    items[3]!.getByRole("button", { name: "Run local simulation" }),
+  ).toBeVisible();
+});
+
+test("[L325] AIFAULT-07 a timed-out test request stays held once and a malformed simulation answer is named with one more try", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const token = randomBytes(32).toString("hex");
+  await members.create(token, { background: "explorer", goal: "everyday" });
+  const session = await members.session(token);
+  if (session.kind !== "active") throw Error("Synthetic member unavailable");
+  const memberId = session.learner.id;
+  try {
+    await ledger.grant(memberId, "study_requests", 1, randomUUID(), {
+      startsAt: "2020-01-01T00:00:00.000Z",
+      expiresAt: "2100-01-01T00:00:00.000Z",
+    });
+    const slow = await source(
+      page,
+      token,
+      `Invented slow ${randomUUID()}`,
+      `Invented source that never gets an answer ${TEST_AI_FAULT_MARKERS.timeout}`,
+    );
+    const garbled = await source(
+      page,
+      token,
+      `Invented garbled ${randomUUID()}`,
+      `Invented source with an unexpected answer ${TEST_AI_FAULT_MARKERS.malformed}`,
+    );
+    // Timeout: the AI step misses its deadline, and the request stays held.
+    await slow.item.getByLabel("Hold one existing local test request").check();
+    await slow.item
+      .getByRole("button", { name: "Use one local test request" })
+      .click();
+    await slow.item
+      .getByRole("button", { name: "Run local test request" })
+      .click();
+    await expect(
+      page.getByText(
+        "This attempt did not finish normally and will not retry automatically.",
+        { exact: false },
+      ),
+    ).toBeVisible({ timeout: 15_000 });
+    await page.goto("/evidence/local-ai");
+    await expect(
+      slow.item.getByText(
+        "The AI step did not answer within 5 seconds, so it timed out.",
+      ),
+    ).toBeVisible();
+    await expect(
+      slow.item.getByText("One local test request: held."),
+    ).toBeVisible();
+    await expect(
+      slow.item.getByRole("button", { name: /Run|Try/ }),
+    ).toHaveCount(0);
+    const held = await pool.query(
+      `SELECT j.status,j.safe_error,j.attempt_count,
+        (SELECT string_agg(c.state,',') FROM ai_spending_commitments c WHERE c.job_id=j.id) AS commitments,
+        (SELECT count(*)::int FROM ai_usage_settlements s WHERE s.job_id=j.id) AS settlements
+       FROM adapter_jobs j JOIN local_ai_test_unit_jobs b ON b.job_id=j.id WHERE j.member_id=$1`,
+      [memberId],
+    );
+    expect(held.rows).toEqual([
+      {
+        status: "needs_reconciliation",
+        safe_error: "provider_timeout",
+        attempt_count: 1,
+        commitments: "committed",
+        settlements: 0,
+      },
+    ]);
+    // Malformed answer: named, nothing saved, and one more try is offered.
+    await garbled.item
+      .getByRole("button", { name: "Queue local simulation" })
+      .click();
+    await garbled.item
+      .getByRole("button", { name: "Run local simulation" })
+      .click();
+    await expect(
+      page.getByText(
+        "This attempt did not finish normally and will not retry automatically.",
+        { exact: false },
+      ),
+    ).toBeVisible();
+    await page.goto("/evidence/local-ai");
+    await expect(
+      garbled.item.getByText(
+        "The AI step answered, but not in the expected form, so nothing was shown or saved. Nothing was charged. You can try again.",
+      ),
+    ).toBeVisible();
+    await expect(
+      garbled.item.getByRole("button", {
+        name: "Try the local simulation again",
+      }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await garbled.item
+      .getByRole("button", { name: "Try the local simulation again" })
+      .click();
+    await page.goto("/evidence/local-ai");
+    const tries = await pool.query(
+      "SELECT status,safe_error,attempt_count,provider_operation_reference FROM adapter_jobs WHERE member_id=$1 AND id NOT IN (SELECT job_id FROM local_ai_test_unit_jobs)",
+      [memberId],
+    );
+    expect(tries.rows).toEqual([
+      {
+        status: "failed",
+        safe_error: "invalid_provider_response",
+        attempt_count: 2,
+        provider_operation_reference: null,
+      },
+    ]);
+  } finally {
+    await evidence.removeWorkspace(token);
+    await members.remove(memberId);
   }
 });

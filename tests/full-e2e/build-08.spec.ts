@@ -7,9 +7,9 @@ import { authorizationStore } from "../support/administrator-fixture.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { testPool } from "../support/database.ts";
 import { requiredCheck } from "../support/required-check.ts";
+import { browserOrigin as origin } from "../support/browser-origin.ts";
 
 const pool = testPool();
-const origin = "http://127.0.0.1:4317";
 test.afterAll(async () => pool.end());
 
 async function onboard(page: Page) {
@@ -83,7 +83,7 @@ test("[F-BUILD-08-A] owner export excludes another member's private records", as
         profile: { id: string };
         records: { milestones: { milestoneTitle: string }[] };
       };
-      expect(payload.version).toBe("local-member-records-v33");
+      expect(payload.version).toBe("local-member-records-v44");
       expect(payload.profile.id).toBe(ownerId);
       expect(payload.records.milestones).toMatchObject([
         { milestoneTitle: ownerTitle },

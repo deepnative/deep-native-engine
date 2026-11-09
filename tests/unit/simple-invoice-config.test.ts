@@ -1,5 +1,8 @@
 import { expect, it } from "vitest";
-import { simpleInvoiceSettings } from "../../src/simple-invoice-config.ts";
+import {
+  simpleInvoiceSettings,
+  testProviderEventKey,
+} from "../../src/simple-invoice-config.ts";
 it("OFFPUR-07 keeps invoices off until explicitly configured and isolates nonpayable samples", () => {
   expect(simpleInvoiceSettings({}, false)).toBeUndefined();
   expect(
@@ -53,4 +56,48 @@ it("DEMOSITE-01 allows nonpayable sample invoices on a host only when it is a vi
     issuer: expect.stringContaining("Invented"),
     instructions: expect.stringContaining("Do not send money"),
   });
+});
+it("TESTPAY-01/02 keeps signed test events off by default, off every host and tied to samples", () => {
+  const sample = { sample: true, issuer: "Invented", instructions: "Invented" };
+  const on = {
+    DNE_TEST_PROVIDER_EVENTS: "enabled",
+    DNE_TEST_PROVIDER_EVENT_KEY: "invented-test-provider-key-0123456789",
+  };
+  expect(testProviderEventKey({}, false, sample)).toBeUndefined();
+  // A leftover key alone turns nothing on.
+  expect(
+    testProviderEventKey(
+      { DNE_TEST_PROVIDER_EVENT_KEY: on.DNE_TEST_PROVIDER_EVENT_KEY },
+      true,
+      sample,
+    ),
+  ).toBeUndefined();
+  expect(testProviderEventKey(on, false, sample)).toBe(
+    on.DNE_TEST_PROVIDER_EVENT_KEY,
+  );
+  expect(() => testProviderEventKey(on, true, sample)).toThrow("hosted");
+  expect(() =>
+    testProviderEventKey({ ...on, DNE_DEMO_SITE: "enabled" }, true, sample),
+  ).toThrow("hosted");
+  expect(() => testProviderEventKey(on, false, undefined)).toThrow("sample");
+  expect(() =>
+    testProviderEventKey(on, false, { ...sample, sample: false }),
+  ).toThrow("sample");
+  expect(() =>
+    testProviderEventKey(
+      { DNE_TEST_PROVIDER_EVENTS: "enabled" },
+      false,
+      sample,
+    ),
+  ).toThrow("invented key");
+  expect(() =>
+    testProviderEventKey(
+      { ...on, DNE_TEST_PROVIDER_EVENT_KEY: "short" },
+      false,
+      sample,
+    ),
+  ).toThrow("invented key");
+  expect(() =>
+    testProviderEventKey({ DNE_TEST_PROVIDER_EVENTS: "yes" }, false, sample),
+  ).toThrow("must be");
 });

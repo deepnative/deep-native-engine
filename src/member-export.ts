@@ -78,9 +78,17 @@ const sections = {
   adapterJobs: section(
     `j.id,j.adapter,j.mode,j.status,j.attempt_count AS attempts,
     j.max_attempts AS "maxAttempts",j.safe_error AS "safeError",
-    j.created_at AS "createdAt",j.updated_at AS "updatedAt",r.id AS "localAiReceiptId"`,
+    j.created_at AS "createdAt",j.updated_at AS "updatedAt",r.id AS "localAiReceiptId",
+    CASE WHEN d.job_id IS NULL THEN NULL ELSE jsonb_build_object(
+      'outcome',d.outcome,'reason',d.reason,
+      'decidedAt',to_char(d.decided_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+      'label','TEST OUTCOME · NOT PROVIDER-CONFIRMED · STILL HELD') END AS "holdTestOutcome"`,
+    // v40 adds #189's recorded test outcome, never the operator, assignment,
+    // test reference or idempotency key.
     `adapter_jobs j LEFT JOIN local_ai_receipts r
       ON r.id=j.local_ai_receipt_id AND r.member_id=j.member_id
+    LEFT JOIN local_ai_hold_test_decisions d
+      ON d.job_id=j.id AND d.member_id=j.member_id
     WHERE j.member_id=$1`,
     "j.id",
   ),
@@ -487,7 +495,7 @@ const sections = {
     true,
   ),
   invoices: section(
-    'id,document,total_cents AS "totalCents",paid_cents AS "paidCents",void_reason AS "voidReason"',
+    'id,document,total_cents AS "totalCents",paid_cents AS "paidCents",refunded_cents AS "refundedCents",void_reason AS "voidReason"',
     "simple_invoices WHERE owner_id=$1",
     "id",
     true,
@@ -508,7 +516,149 @@ const sections = {
     "id",
     true,
   ),
+  // v34 appends own study allowance claims (#199): no operation key or workspace.
+  studyAllowanceClaims: section(
+    `c.id AS "claimId",c.policy_version AS "policyVersion",c.category,c.quantity,
+     c.period_start AS "periodStart",c.period_end AS "periodEnd",c.grant_id AS "grantId",
+     c.created_at AS "createdAt"`,
+    `study_allowance_claims c JOIN workspaces w ON w.id=c.workspace_id AND w.owner_principal_id=c.member_id
+     WHERE c.member_id=$1 AND w.deleting_at IS NULL`,
+    "c.id",
+  ),
+  // v35 appends own AI usage figures (#188): integers and versions only.
+  aiUsage: section(
+    `e.job_id AS "jobId",e.model_version AS "modelVersion",e.rate_version AS "rateVersion",
+     e.input_tokens AS "estimatedInputTokens",e.output_tokens AS "estimatedOutputTokens",
+     e.cost_points AS "estimatedCostPoints",e.created_at AS "estimatedAt",
+     s.input_tokens AS "actualInputTokens",s.output_tokens AS "actualOutputTokens",
+     s.cost_points AS "actualCostPoints",s.settled_at AS "settledAt",
+     'ESTIMATE · SIMULATED · NO MONEY CHARGED' AS label`,
+    `ai_usage_estimates e LEFT JOIN ai_usage_settlements s ON s.job_id=e.job_id
+     WHERE e.member_id=$1`,
+    "e.job_id",
+  ),
+  // v36 appends own practice session unit uses: no reservation reference.
+  practiceSessionAllowanceUses: section(
+    `u.session_id AS "sessionId",u.claim_id AS "claimId",u.created_at AS "createdAt"`,
+    `practice_session_allowance_uses u JOIN private_practice_sessions s ON s.id=u.session_id
+     WHERE u.member_id=$1 AND s.member_id=u.member_id`,
+    "u.session_id",
+  ),
+  // v37 appends MANPAY-08: the member's own manual invoice events, without the staff actor.
+  invoicePayments: section(
+    `p.id,p.invoice_id AS "invoiceId",p.kind,p.amount_cents AS "amountCents",
+    to_char(p.received_on,'YYYY-MM-DD') AS "on",p.evidence_reference AS evidence,
+    p.verification,p.recorded_at AS "recordedAt"`,
+    "simple_invoice_payments p JOIN simple_invoices i ON i.id=p.invoice_id WHERE i.owner_id=$1",
+    "p.id",
+    true,
+  ),
+  // v38 appends #40 STAFFEXPORT: the entries When staff opened my work lists.
+  // What happened, which kind of staff and when; never who, which grant,
+  // request or assignment, purpose text, file name or note text. Sample
+  // feedback is only ever a reviewer's and a note reading a moderator's, as
+  // the page says, so those name that kind of staff too (#44 walk).
+  staffAccess: section(
+    `h.source,h.action,h.via,h."evidenceId",h."proposalId",h."workflowId",
+     h."workflowVersion",h."occurredAt"`,
+    `(SELECT 'access' AS source,x.id::text AS id,x.action,x.grant_type AS via,
+        x.evidence_id AS "evidenceId",NULL::uuid AS "proposalId",NULL::text AS "workflowId",
+        NULL::integer AS "workflowVersion",x.occurred_at AS "occurredAt"
+      FROM authorization_audit x JOIN workspaces w ON w.id=x.workspace_id
+      WHERE w.owner_principal_id=$1 AND w.deleting_at IS NULL
+     UNION ALL
+     SELECT 'feedback',x.id::text,x.action,'reviewer',x.evidence_id,NULL,NULL,NULL,x.occurred_at
+      FROM private_sample_feedback_audit x JOIN workspaces w ON w.id=x.workspace_id
+      WHERE w.owner_principal_id=$1 AND w.deleting_at IS NULL
+     UNION ALL
+     SELECT 'proposal',x.id::text,x.action,x.actor_role,NULL,x.proposal_id,NULL,NULL,x.occurred_at
+      FROM proposal_audit x JOIN workspaces w ON w.id=x.workspace_id
+      WHERE w.owner_principal_id=$1 AND w.deleting_at IS NULL
+     UNION ALL
+     SELECT 'workflow',x.id::text,'note_read','moderator',NULL,NULL,x.workflow_id,x.workflow_version,x.occurred_at
+      FROM workflow_review_read_audit x JOIN workspaces w ON w.id=x.workspace_id
+      WHERE w.owner_principal_id=$1 AND w.deleting_at IS NULL
+     UNION ALL
+     SELECT 'records',d.id::text,'records_downloaded',d.scope,NULL,NULL,NULL,NULL,d.occurred_at
+      FROM member_record_access_downloads d JOIN workspaces w ON w.owner_principal_id=d.member_id
+      WHERE d.member_id=$1 AND w.deleting_at IS NULL) h WHERE TRUE`,
+    "h.source,h.id",
+  ),
+  // v39 appends #94 F-ECO-07-C: the course-billing agreements offered to or
+  // accepted by the member, with their exact terms, state and acceptance.
+  // Never the preparing staff member.
+  invoicePlans: section(
+    `id,terms,state,revision,next_cycle AS "nextCycle",created_at AS "offeredAt",
+    accepted_at AS "acceptedAt",recipient_name AS "recipientName",
+    recipient_email AS "recipientEmail"`,
+    "simple_invoice_plans WHERE owner_id=$1",
+    "id",
+    true,
+  ),
+  // v41 appends #40 EXPCOV: sample sessions the member held or withdrew,
+  // never the staff, availability registry, reservation or hold operation.
+  sampleHolds: section(
+    `r.request_id AS id,r.slot_id AS "slotId",r.grant_id AS "grantId",r.domain,
+    r.service_type AS "serviceType",r.starts_at AS "startsAt",r.ends_at AS "endsAt",
+    h.state,h.created_at AS "heldAt",h.expires_at AS "expiresAt",
+    h.released_at AS "releasedAt",h.expired_at AS "expiredAt",
+    'SAMPLE HOLD · NOT A BOOKING' AS label`,
+    `synthetic_member_hold_receipts r
+    JOIN synthetic_slot_holds h ON h.id=r.hold_id AND h.member_id=r.member_id
+    WHERE r.member_id=$1`,
+    "r.request_id",
+  ),
+  // and simulated assessment results recorded on the member's work, never the
+  // reviewer.
+  contentAssessments: section(
+    `id,content_id AS "contentId",content_version AS "contentVersion",
+    rubric_version AS "rubricVersion",mode,result,
+    'SIMULATED · NOT A QUALIFIED ASSESSMENT' AS label,assessed_at AS "assessedAt"`,
+    "content_assessments WHERE member_id=$1",
+    "id",
+  ),
+  // v42 appends #40 EXPCOV: how many coaches are assigned to the member and
+  // when, as one row so neither a row nor the paging key carries a coach's
+  // email fingerprint or who assigned them,
+  coachAssignments: section(
+    `c.coaches,c."firstAssignedAt",c."latestAssignedAt"`,
+    `(SELECT learner_id,count(*)::integer AS coaches,
+      min(assigned_at) AS "firstAssignedAt",max(assigned_at) AS "latestAssignedAt"
+      FROM coach_assignments GROUP BY learner_id) c WHERE c.learner_id=$1`,
+    "c.learner_id",
+  ),
+  // and test payments staff recorded by hand about the member, never the staff
+  // member, operation key or request fingerprint.
+  manualPaymentObservations: section(
+    `id,evidence_reference AS reference,amount_cents AS "amountCents",status,
+    'TEST RECORD · NOT A PAYMENT' AS label,created_at AS "recordedAt"`,
+    "synthetic_manual_observations WHERE member_id=$1",
+    "id",
+  ),
+  // v43 appends #200 PRACTICE-AI: simulated suggestions on the member's own
+  // saved practice pairs. Never the request fingerprint or provider reference.
+  practiceAiSuggestions: section(
+    `g.session_id AS "sessionId",g.sequence,g.state,g.suggestion,
+    g.requested_at AS "requestedAt",g.completed_at AS "completedAt",
+    'SIMULATED · LOCAL TEST PROVIDER · NOT REVIEWED · NO SCORE' AS label`,
+    `practice_ai_suggestions g
+    JOIN private_practice_sessions s ON s.id=g.session_id AND s.member_id=g.member_id
+    WHERE g.member_id=$1 AND s.withdrawn_at IS NULL`,
+    "g.session_id,g.sequence",
+  ),
+  // v44 appends #40 RECACCESS: each time the member let operators download a
+  // scope of these records, until when, and how many downloads were made.
+  // Never which operator downloaded them.
+  recordAccess: section(
+    `a.id,a.scope,a.created_at AS "createdAt",a.expires_at AS "expiresAt",
+    a.revoked_at AS "revokedAt",
+    (SELECT count(*)::integer FROM member_record_access_downloads d WHERE d.access_id=a.id) AS downloads`,
+    "member_record_access a WHERE a.member_id=$1",
+    "a.id",
+  ),
 } as const;
+/** Section SQL, shared with the member-authorized operator download (#40). */
+export const MEMBER_EXPORT_SECTIONS = sections;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
 type Key = (string | number)[];
@@ -521,7 +671,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v33";
+  version: "local-member-records-v44";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -655,7 +805,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v33",
+          version: "local-member-records-v44",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

@@ -230,7 +230,9 @@ test("[L103] all three audiences explicitly opt into ordered private pairs, relo
     await expect(
       page.getByRole("button", { name: "Save response and compare" }),
     ).toHaveCount(0);
-    const csrf = await page.locator('input[name="csrf"]').inputValue();
+    // Every form on the page carries the same token, including #200's
+    // per-pair suggestion forms.
+    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
     const overCap = await page.request.post(`${path}/responses`, {
       headers: { Origin: origin },
       form: {
@@ -403,7 +405,7 @@ test("[L105] all three audiences export ordered session pairs and withdraw all t
     await respond(page, second);
     const csrf = await page.locator('input[name="csrf"]').first().inputValue();
     const before = await exported(page);
-    expect(before.version).toBe("local-member-records-v33");
+    expect(before.version).toBe("local-member-records-v44");
     expect(before.records.practiceSessions).toEqual([
       expect.objectContaining({
         id: sessionId,

@@ -21,7 +21,14 @@ import { dropAttendanceBrowserDatabase } from "./attendance-browser-database.ts"
 export async function reviewedContentFixture(
   browser: Browser,
   info: TestInfo,
-  options: { sampleInvoices?: boolean } = {},
+  options: {
+    sampleInvoices?: boolean;
+    testProviderKey?: string;
+    memberContributions?: boolean;
+    events?: boolean;
+    // #769: an absolute folder holding a fixture workflow source release.
+    workflowRoot?: string;
+  } = {},
 ) {
   const original = process.env.DNE_TEST_DATABASE_URL;
   if (
@@ -40,6 +47,7 @@ export async function reviewedContentFixture(
     contexts: BrowserContext[] = [];
   let running: Awaited<ReturnType<typeof start>> | undefined,
     created = false;
+  const listeners: Awaited<ReturnType<typeof start>>[] = [];
   async function close() {
     const closed = await Promise.allSettled(
       contexts.map((context) => context.close()),
@@ -52,6 +60,7 @@ export async function reviewedContentFixture(
         ),
     );
 
+    for (const other of listeners.splice(0)) await other.close();
     await running?.close();
 
     await pool.end();
@@ -75,14 +84,35 @@ export async function reviewedContentFixture(
   try {
     await control.query(`CREATE DATABASE "${name}"`);
     created = true;
-    running = await start({
+    const env: NodeJS.ProcessEnv = {
       DNE_DATABASE_URL: own.href,
       DNE_PORT: "0",
       DNE_APP_MODE: "test",
       DNE_PRIVATE_STORAGE_ROOT: storage,
       DNE_LOCAL_STAFF_ENTRY: "enabled",
       DNE_INVOICE_MODE: options.sampleInvoices ? "sample" : "disabled",
-    });
+      ...(options.testProviderKey
+        ? {
+            DNE_TEST_PROVIDER_EVENTS: "enabled",
+            DNE_TEST_PROVIDER_EVENT_KEY: options.testProviderKey,
+          }
+        : {}),
+      ...(options.memberContributions
+        ? { DNE_MEMBER_CONTRIBUTIONS: "enabled" }
+        : {}),
+      ...(options.workflowRoot
+        ? { DNE_WORKFLOW_ROOT: options.workflowRoot }
+        : {}),
+      ...(options.events
+        ? {
+            DNE_EVENT_REGISTRATION: "enabled",
+            DNE_LOCAL_EVENT_ADMIN: "enabled",
+            DNE_LOCAL_EVENT_SCHEDULING: "enabled",
+            DNE_EVENT_ATTENDANCE: "enabled",
+          }
+        : {}),
+    };
+    running = await start(env);
     const origin = running.origin;
     await info.attach("reviewed-content-fixture", {
       body: JSON.stringify({ database: name, origin }),
@@ -146,7 +176,32 @@ export async function reviewedContentFixture(
       }
       return { editor, reviewer, catalog };
     }
-    return { origin, pool, page, staff, member, publishFixture, close };
+    // A second listener on the same database and storage with configured
+    // (not sample) invoicing, so one database can hold both real and sample
+    // course billing. Cookies ignore the port, so every session works on both.
+    async function configuredInvoiceListener() {
+      const other = await start({
+        ...env,
+        DNE_INVOICE_MODE: "configured",
+        DNE_INVOICE_ISSUER: "Invented configured issuer for a browser test",
+        DNE_INVOICE_PAYMENT_INSTRUCTIONS:
+          "Invented offline instructions for a browser test. Do not send money.",
+        DNE_INVOICE_CURRENCY: "CAD",
+        DNE_TEST_PROVIDER_EVENTS: "disabled",
+      });
+      listeners.push(other);
+      return other.origin;
+    }
+    return {
+      origin,
+      pool,
+      page,
+      staff,
+      member,
+      publishFixture,
+      configuredInvoiceListener,
+      close,
+    };
   } catch (error) {
     await close();
     throw error;

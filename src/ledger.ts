@@ -486,6 +486,54 @@ export function studyFixtureLedgerOnConnection(
   };
 }
 
+// Internal versioned allowance boundary. The allowance store owns current
+// authority, the one-per-period slot and the sole transaction; only the fixed
+// allowance categories can be granted, and the policy supplies the integer limit.
+export function studyAllowanceLedgerOnConnection(client: LedgerConnection) {
+  const ledger = ledgerOperations(
+    client,
+    (key, input, change) => applyEvent(client, key, input, change),
+    undefined,
+  );
+  return {
+    grant(
+      memberId: string,
+      category: "study_requests" | "mock_sessions",
+      quantity: number,
+      key: string,
+      window: ValidityWindow,
+    ) {
+      return ledger.grant(memberId, category, quantity, key, window);
+    },
+  };
+}
+
+// Internal practice session boundary. The practice store owns the member's
+// workspace lock and the sole transaction, so one session uses exactly one unit.
+export function practiceSessionLedgerOnConnection(client: LedgerConnection) {
+  const ledger = ledgerOperations(
+    client,
+    (key, input, change) => applyEvent(client, key, input, change),
+    undefined,
+  );
+  return {
+    async spend(memberId: string, grantId: string, sessionId: string) {
+      const reservationId = await ledger.reserve(
+        memberId,
+        grantId,
+        1,
+        `practice-session-reserve:${sessionId}`,
+      );
+      await ledger.consume(
+        memberId,
+        reservationId,
+        `practice-session-consume:${sessionId}`,
+      );
+      return reservationId;
+    },
+  };
+}
+
 // Internal checked support boundary. The support store owns authorization,
 // allocation/entry/link writes and the sole transaction; this grants no units.
 export function supportLedgerOnConnection(

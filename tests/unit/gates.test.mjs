@@ -549,6 +549,47 @@ it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B/D, ECO-01 to ECO-04, ECO-06-A/08-C a
     "F-BUILD-10-C",
     "F-ECO-08-C",
     "F-ROADMAP-08-D",
+    "F-ECO-04-B",
+    "F-ECO-04-C",
+    "F-BUILD-02-B",
+    "F-BUILD-07-C",
+    "F-ROADMAP-01-D",
+    "F-BUILD-03-A",
+    "F-BUILD-03-B",
+    "F-BUILD-03-D",
+    "F-ROADMAP-05-A",
+    "F-ECO-06-C",
+    "F-ROADMAP-06-A",
+    "F-ROADMAP-06-B",
+    "F-BUILD-07-A",
+    "F-ECO-06-B",
+    "F-BUILD-06-A",
+    "F-BUILD-06-B",
+    "F-ROADMAP-05-D",
+    "F-BUILD-06-C",
+    "F-ROADMAP-06-D",
+    "F-BUILD-05-A",
+    "F-BUILD-05-B",
+    "F-ROADMAP-01-C",
+    "F-BUILD-05-D",
+    "F-ECO-05-A",
+    "F-ECO-05-B",
+    "F-ECO-05-C",
+    "F-ROADMAP-03-A",
+    "F-ROADMAP-03-B",
+    "F-BUILD-09-D",
+    "F-ECO-07-A",
+    "F-ECO-07-C",
+    "F-BUILD-04-C",
+    "F-ROADMAP-07-B",
+    "F-ROADMAP-07-D",
+    "F-ROADMAP-06-C",
+    "F-BUILD-07-B",
+    "F-BUILD-09-B",
+    "F-ECO-08-A",
+    "F-ECO-08-B",
+    "F-BUILD-09-A",
+    "F-BUILD-06-D",
   ];
   const cases = proposal.fullMvp.flatMap((family) => family.cases);
   const report = {
@@ -578,11 +619,11 @@ it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B/D, ECO-01 to ECO-04, ECO-06-A/08-C a
   };
   expect(assertProvisionalReleaseJourneys(proposal, report)).toMatchObject({
     approved: false,
-    passed: 34,
-    total: 34,
-    criticalPassed: 28,
-    criticalTotal: 28,
-    executions: 34 * proposal.projects.length,
+    passed: 75,
+    total: 75,
+    criticalPassed: 69,
+    criticalTotal: 69,
+    executions: 75 * proposal.projects.length,
   });
   for (const [browserIndex, browserName] of proposal.projects.entries()) {
     for (const [name, corrupt] of [
@@ -649,6 +690,47 @@ it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B/D, ECO-01 to ECO-04, ECO-06-A/08-C a
       [31, "F-BUILD-10-C"],
       [32, "F-ECO-08-C"],
       [33, "F-ROADMAP-08-D"],
+      [34, "F-ECO-04-B"],
+      [35, "F-ECO-04-C"],
+      [36, "F-BUILD-02-B"],
+      [37, "F-BUILD-07-C"],
+      [38, "F-ROADMAP-01-D"],
+      [39, "F-BUILD-03-A"],
+      [40, "F-BUILD-03-B"],
+      [41, "F-BUILD-03-D"],
+      [42, "F-ROADMAP-05-A"],
+      [43, "F-ECO-06-C"],
+      [44, "F-ROADMAP-06-A"],
+      [45, "F-ROADMAP-06-B"],
+      [46, "F-BUILD-07-A"],
+      [47, "F-ECO-06-B"],
+      [48, "F-BUILD-06-A"],
+      [49, "F-BUILD-06-B"],
+      [50, "F-ROADMAP-05-D"],
+      [51, "F-BUILD-06-C"],
+      [52, "F-ROADMAP-06-D"],
+      [53, "F-BUILD-05-A"],
+      [54, "F-BUILD-05-B"],
+      [55, "F-ROADMAP-01-C"],
+      [56, "F-BUILD-05-D"],
+      [57, "F-ECO-05-A"],
+      [58, "F-ECO-05-B"],
+      [59, "F-ECO-05-C"],
+      [60, "F-ROADMAP-03-A"],
+      [61, "F-ROADMAP-03-B"],
+      [62, "F-BUILD-09-D"],
+      [63, "F-ECO-07-A"],
+      [64, "F-ECO-07-C"],
+      [65, "F-BUILD-04-C"],
+      [66, "F-ROADMAP-07-B"],
+      [67, "F-ROADMAP-07-D"],
+      [68, "F-ROADMAP-06-C"],
+      [69, "F-BUILD-07-B"],
+      [70, "F-BUILD-09-B"],
+      [71, "F-ECO-08-A"],
+      [72, "F-ECO-08-B"],
+      [73, "F-BUILD-09-A"],
+      [74, "F-BUILD-06-D"],
     ]) {
       const incomplete = copy(report);
       incomplete.suites[0].specs[index].tests[
@@ -859,4 +941,17 @@ it("rejects empty, duplicated or incomplete journey registers", () => {
   expect(() => assertJourneys(declassified, browser())).toThrow(
     /Incomplete full/,
   );
+});
+
+it("HOLD06D-01 words F-BUILD-06-D by the hold rule: unknown AI outcomes stay held once", () => {
+  const item = proposal.fullMvp
+    .flatMap((family) => family.cases)
+    .find((test) => test.id === "F-BUILD-06-D");
+  const text = JSON.stringify(item);
+  expect(item.critical).toBe(true);
+  expect(item.requiredChecks).toHaveLength(2);
+  expect(text).not.toMatch(/restored|released or settled/);
+  for (const check of item.requiredChecks)
+    expect(check.expected).toMatch(/held once/);
+  expect(item.expected).toMatch(/unknown outcome/);
 });

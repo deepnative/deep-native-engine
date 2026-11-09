@@ -1,4 +1,24 @@
 import { randomUUID } from "node:crypto";
+import {
+  aiCostPoints,
+  estimateAiRequest,
+  readAiUsage,
+} from "./ai-budget-policy.ts";
+import { requestFingerprint } from "./jobs.ts";
+import { LOCAL_AI_MEMBER_OPEN_LIMIT } from "./local-ai-consent.ts";
+import {
+  deterministicPracticeSuggestionProvider,
+  PRACTICE_SUGGESTION_MODEL,
+  PRACTICE_SUGGESTION_OPERATION,
+  PRACTICE_SUGGESTION_PROMPT,
+  validatePracticeSuggestion,
+  type PracticeSuggestionInput,
+  type PracticeSuggestionProvider,
+} from "./practice-ai-suggestions.ts";
+import type {
+  HoldTestOutcome,
+  HoldTestReason,
+} from "./local-ai-hold-decisions.ts";
 import type { Pool } from "pg";
 import {
   practiceTransaction,
@@ -7,6 +27,11 @@ import {
 } from "./practice-session-lifetime.ts";
 import type { Goal } from "./content.ts";
 import { hash } from "./store.ts";
+import { practiceSessionLedgerOnConnection } from "./ledger.ts";
+import {
+  interviewNotice,
+  interviewPromptVersion,
+} from "./practice-session-purpose.ts";
 
 export interface PracticeSessionSource {
   contentId: string;
@@ -16,6 +41,8 @@ export interface PracticeSessionSource {
   promptVersion: string;
   prompt: string;
   sourceExcerpt: string;
+  // Optional, member-chosen interview practice for the same exact source.
+  interview: { promptVersion: string; prompt: string };
 }
 export interface PracticeSessionSummary {
   id: string;
@@ -26,12 +53,28 @@ export interface PracticeSessionSummary {
   createdAt: Date;
   withdrawnAt: Date | null;
 }
+// #200 PRACTICE-AI: a request whose outcome was never recorded is "unknown"
+// and is never retried.
+export interface PracticeSuggestionView {
+  state: "ready" | "rejected" | "unknown";
+  text: string | null;
+  requestedAt: Date;
+  /** #189 PRACTICE-HOLD-03: a labelled TEST outcome an assigned operator
+   * recorded for an unknown one. Never the operator, assignment, test
+   * reference or key, and never a provider's confirmation. */
+  testOutcome?: {
+    outcome: HoldTestOutcome;
+    reason: HoldTestReason;
+    decidedAt: Date;
+  } | null;
+}
 export interface PracticeSessionExchange {
   sequence: number;
   response: string;
   comparison: string;
   sourceExcerpt: string;
   acceptedAt: Date;
+  suggestion?: PracticeSuggestionView | null;
 }
 export interface PracticeSessionDetail extends PracticeSessionSummary {
   title: string;
@@ -44,12 +87,24 @@ export interface PracticeSessionDetail extends PracticeSessionSummary {
     | "full";
   exchanges: PracticeSessionExchange[];
   nextSequence: number | null;
+  /** Absent when simulated suggestions are off for this service. */
+  suggestions?: "available" | "paused";
 }
 export type PracticeSessionStart =
   | { kind: "started" | "replayed"; sessionId: string }
-  | { kind: "unavailable" | "withdrawn" };
+  | { kind: "unavailable" | "withdrawn" | "allowance-needed" };
 export type PracticeSessionAppend =
   "saved" | "replayed" | "conflict" | "full" | "withdrawn" | "unavailable";
+export type PracticeSuggestionOutcome =
+  | "ready"
+  | "rejected"
+  | "unknown"
+  | "replayed"
+  | "paused"
+  | "limit"
+  | "ceiling"
+  | "withdrawn"
+  | "unavailable";
 export type PracticeSessionWithdrawal =
   "withdrawn" | "already-withdrawn" | "unavailable";
 export interface PracticeSessionStore {
@@ -86,6 +141,11 @@ export interface PracticeSessionStore {
     token: string,
     sessionId: string,
   ): Promise<PracticeSessionWithdrawal>;
+  suggest?(
+    token: string,
+    sessionId: string,
+    sequence: number,
+  ): Promise<PracticeSuggestionOutcome>;
 }
 export function disabledPracticeSessionStore(): PracticeSessionStore {
   return {
@@ -98,14 +158,26 @@ export function disabledPracticeSessionStore(): PracticeSessionStore {
   };
 }
 // Published templates are immutable: future wording requires a new version.
-const templates = {
-  everyday:
-    "Using an invented everyday example, write an instruction and explain what you would check against the lesson.",
-  work: "Using an invented workplace example, write an instruction and explain what you would verify before using its result.",
-  build:
-    "Using an invented technical workflow, write an instruction and explain how you would test its result. No code is required.",
-} as const;
 const currentPrompt = "practice-v1";
+const templates: Record<string, Record<Goal, string>> = {
+  [currentPrompt]: {
+    everyday:
+      "Using an invented everyday example, write an instruction and explain what you would check against the lesson.",
+    work: "Using an invented workplace example, write an instruction and explain what you would verify before using its result.",
+    build:
+      "Using an invented technical workflow, write an instruction and explain how you would test its result. No code is required.",
+  },
+  // Interview practice is only ever chosen by the member. It names no job,
+  // employer or career, and nothing in it predicts an outcome.
+  [interviewPromptVersion]: {
+    everyday:
+      "Answer an invented interview question about an everyday task you might explain to someone, then say what in the lesson you would check before answering.",
+    work: "Answer an invented interview question about checking a piece of work before relying on it, then say what in the lesson you would verify first.",
+    build:
+      "Answer an invented interview question about testing a technical workflow, then say how the lesson helps you test it. No code is required.",
+  },
+};
+
 const idPattern = /^[A-Z]{2,5}-[0-9]{3}$/;
 const uuidPattern =
   /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -120,7 +192,10 @@ type SourceRow = {
   goal: Goal;
 };
 function prompt(version: string, goal: Goal): string | null {
-  return version === currentPrompt ? templates[goal] : null;
+  return Object.hasOwn(templates, version) &&
+    Object.hasOwn(templates[version]!, goal)
+    ? templates[version]![goal]
+    : null;
 }
 function excerpt(body: string): string {
   return Array.from(body).slice(0, 600).join("");
@@ -146,7 +221,54 @@ function decodeCursor(after: string): [string, string] | null {
     return null;
   }
 }
-export function practiceSessionStore(pool: Pool): PracticeSessionStore {
+// The member's workspace lock serializes starts, and the grant lock holds the
+// balance against an expiry sweep, so the last unit can only be used once.
+async function allowanceUnit(client: PracticeTransaction, memberId: string) {
+  return (
+    (
+      await client.query<{ claimId: string; grantId: string }>(
+        `SELECT c.id AS "claimId",c.grant_id AS "grantId" FROM study_allowance_claims c
+         JOIN synthetic_entitlement_grants g ON g.id=c.grant_id
+         WHERE c.member_id=$1 AND c.category='mock_sessions'
+           AND g.starts_at<=clock_timestamp() AND g.expires_at>clock_timestamp()
+           AND g.expired_at IS NULL AND g.available>0
+         ORDER BY c.period_start DESC LIMIT 1 FOR UPDATE OF g`,
+        [memberId],
+      )
+    ).rows[0] ?? null
+  );
+}
+const PROVIDER_LIMIT_MS = 5000;
+async function bounded(
+  provider: PracticeSuggestionProvider,
+  input: PracticeSuggestionInput,
+  limit: number,
+) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => provider.suggest(input)),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("timeout")), limit);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+export function practiceSessionStore(
+  pool: Pool,
+  options: {
+    allowance?: boolean;
+    // #200 PRACTICE-AI: on only with a local deterministic (or test) provider.
+    suggestions?: {
+      mode: "demo" | "test";
+      provider?: PracticeSuggestionProvider;
+      /** Tests only: a shorter wait before an unanswered call is unknown. */
+      providerLimitMs?: number;
+    };
+  } = {},
+): PracticeSessionStore {
   async function transaction<T>(
     token: string,
     use: (client: PracticeTransaction, memberId: string) => Promise<T>,
@@ -231,13 +353,60 @@ export function practiceSessionStore(pool: Pool): PracticeSessionStore {
     client: PracticeTransaction,
     id: string,
   ): Promise<PracticeSessionExchange[]> {
-    return (
-      await client.query<PracticeSessionExchange>(
-        `SELECT sequence,response,comparison,source_excerpt AS "sourceExcerpt",accepted_at AS "acceptedAt"
-       FROM private_practice_exchanges WHERE session_id=$1 ORDER BY sequence LIMIT 15`,
+    const rows = (
+      await client.query<
+        Omit<PracticeSessionExchange, "suggestion"> & {
+          suggestionState: "requested" | "ready" | "rejected" | null;
+          suggestionText: string | null;
+          suggestionRequestedAt: Date | null;
+          testOutcome: HoldTestOutcome | null;
+          testReason: HoldTestReason | null;
+          testDecidedAt: Date | null;
+        }
+      >(
+        `SELECT e.sequence,e.response,e.comparison,e.source_excerpt AS "sourceExcerpt",e.accepted_at AS "acceptedAt",
+         g.state AS "suggestionState",g.suggestion AS "suggestionText",g.requested_at AS "suggestionRequestedAt",
+         d.outcome AS "testOutcome",d.reason AS "testReason",d.decided_at AS "testDecidedAt"
+       FROM private_practice_exchanges e
+       LEFT JOIN practice_ai_suggestions g ON g.session_id=e.session_id AND g.sequence=e.sequence
+       LEFT JOIN local_ai_hold_test_decisions d ON d.job_id=g.job_id AND d.member_id=g.member_id
+        AND g.state='requested'
+       WHERE e.session_id=$1 ORDER BY e.sequence LIMIT 15`,
         [id],
       )
     ).rows;
+    return rows.map(
+      ({
+        suggestionState,
+        suggestionText,
+        suggestionRequestedAt,
+        testOutcome,
+        testReason,
+        testDecidedAt,
+        ...pair
+      }) => ({
+        ...pair,
+        suggestion: suggestionState
+          ? {
+              state:
+                suggestionState === "requested" ? "unknown" : suggestionState,
+              text: suggestionText,
+              requestedAt: suggestionRequestedAt!,
+              // Only an unknown suggestion can carry a test outcome.
+              ...(suggestionState === "requested" && {
+                testOutcome:
+                  testOutcome && testReason && testDecidedAt
+                    ? {
+                        outcome: testOutcome,
+                        reason: testReason,
+                        decidedAt: testDecidedAt,
+                      }
+                    : null,
+              }),
+            }
+          : null,
+      }),
+    );
   }
   return {
     async source(token, contentId) {
@@ -251,8 +420,12 @@ export function practiceSessionStore(pool: Pool): PracticeSessionStore {
           title: row.title,
           goal: row.goal,
           promptVersion: currentPrompt,
-          prompt: templates[row.goal],
+          prompt: prompt(currentPrompt, row.goal)!,
           sourceExcerpt: excerpt(row.body),
+          interview: {
+            promptVersion: interviewPromptVersion,
+            prompt: prompt(interviewPromptVersion, row.goal)!,
+          },
         };
       });
     },
@@ -262,8 +435,8 @@ export function practiceSessionStore(pool: Pool): PracticeSessionStore {
         !Number.isInteger(input.contentVersion) ||
         input.contentVersion < 1 ||
         input.contentVersion > 2147483647 ||
-        !Object.hasOwn(templates, input.goal) ||
-        input.promptVersion !== currentPrompt
+        typeof input.promptVersion !== "string" ||
+        !prompt(input.promptVersion, input.goal)
       )
         return { kind: "unavailable" };
       return (
@@ -292,6 +465,10 @@ export function practiceSessionStore(pool: Pool): PracticeSessionStore {
             if (existing?.withdrawnAt) return { kind: "withdrawn" };
             if (!row || row.goal !== input.goal) return { kind: "unavailable" };
             if (existing) return { kind: "replayed", sessionId: existing.id };
+            const unit = options.allowance
+              ? await allowanceUnit(client, memberId)
+              : null;
+            if (options.allowance && !unit) return { kind: "allowance-needed" };
             const id = randomUUID();
             await client.query(
               `INSERT INTO private_practice_sessions(id,member_id,content_id,content_version,goal_at_start,prompt_version)
@@ -305,6 +482,16 @@ export function practiceSessionStore(pool: Pool): PracticeSessionStore {
                 input.promptVersion,
               ],
             );
+            if (unit) {
+              const reservationId = await practiceSessionLedgerOnConnection(
+                client,
+              ).spend(memberId, unit.grantId, id);
+              await client.query(
+                `INSERT INTO practice_session_allowance_uses(session_id,member_id,claim_id,reservation_id)
+                 VALUES($1,$2,$3,$4)`,
+                [id, memberId, unit.claimId, reservationId],
+              );
+            }
             return { kind: "started", sessionId: id };
           },
         )) ?? { kind: "unavailable" }
@@ -361,12 +548,23 @@ export function practiceSessionStore(pool: Pool): PracticeSessionStore {
               : pairs.length === 15
                 ? "full"
                 : "available";
+        const paused =
+          options.suggestions && !row.withdrawnAt
+            ? (
+                await client.query<{ paused: unknown }>(
+                  "SELECT paused FROM local_ai_control WHERE singleton=true",
+                )
+              ).rows[0]?.paused !== false
+            : null;
         return {
           ...row,
           prompt: row.withdrawnAt ? null : instruction,
           availability,
           exchanges: pairs,
           nextSequence: availability === "available" ? pairs.length + 1 : null,
+          ...(paused === null
+            ? {}
+            : { suggestions: paused ? "paused" : "available" }),
         };
       });
     },
@@ -415,7 +613,10 @@ export function practiceSessionStore(pool: Pool): PracticeSessionStore {
             const comparison =
               `Simulation — unreviewed local comparison. Your paired words: “${input.response}”\n` +
               `Exact source excerpt (${row.contentId} v${row.contentVersion}): “${sourceExcerpt}”\n` +
-              "Compare the two yourself and identify a detail to verify. This deterministic comparison does not verify accuracy and cannot judge competence. Uncertainty remains; no qualified review has occurred.";
+              "Compare the two yourself and identify a detail to verify. This deterministic comparison does not verify accuracy and cannot judge competence. Uncertainty remains; no qualified review has occurred." +
+              (row.promptVersion === interviewPromptVersion
+                ? `\n${interviewNotice}`
+                : "");
             await client.query(
               `INSERT INTO private_practice_exchanges(session_id,sequence,response,comparison,source_excerpt)
           VALUES($1,$2,$3,$4,$5)`,
@@ -453,6 +654,253 @@ export function practiceSessionStore(pool: Pool): PracticeSessionStore {
           },
         )) ?? "unavailable"
       );
+    },
+    async suggest(token, id, sequence) {
+      const settings = options.suggestions;
+      if (
+        !settings ||
+        !uuidPattern.test(id) ||
+        !Number.isInteger(sequence) ||
+        sequence < 1 ||
+        sequence > 15
+      )
+        return "unavailable";
+      const provider =
+        settings.provider ??
+        deterministicPracticeSuggestionProvider(settings.mode);
+      type Begun = {
+        jobId: string;
+        attemptToken: string;
+        input: PracticeSuggestionInput;
+      };
+      const begun = await transaction<Begun | PracticeSuggestionOutcome>(
+        token,
+        async (client, memberId) => {
+          const metadata = await session(client, memberId, id, false);
+          if (!metadata) return "unavailable";
+          const current = await source(
+            client,
+            memberId,
+            metadata.contentId,
+            metadata.contentVersion,
+          );
+          // The session lock serializes requests for its pairs, so one pair
+          // gets at most one request however many arrive together.
+          const row = (await session(client, memberId, id, true))!;
+          if (row.withdrawnAt) return "withdrawn";
+          const pair = (
+            await client.query<{ response: string; sourceExcerpt: string }>(
+              `SELECT response,source_excerpt AS "sourceExcerpt" FROM private_practice_exchanges
+               WHERE session_id=$1 AND sequence=$2`,
+              [id, sequence],
+            )
+          ).rows[0];
+          if (!pair) return "unavailable";
+          if (
+            (
+              await client.query(
+                "SELECT 1 FROM practice_ai_suggestions WHERE session_id=$1 AND sequence=$2",
+                [id, sequence],
+              )
+            ).rows[0]
+          )
+            return "replayed";
+          // Only for the exact source version still eligible for this goal.
+          if (
+            !current ||
+            current.goal !== row.goal ||
+            !prompt(row.promptVersion, row.goal)
+          )
+            return "unavailable";
+          const control = (
+            await client.query<{ paused: unknown }>(
+              "SELECT paused FROM local_ai_control WHERE singleton=true FOR SHARE",
+            )
+          ).rows[0];
+          if (control?.paused !== false) return "paused";
+          // #190: the same per-member lock and limit as sample requests.
+          await client.query(
+            "SELECT pg_advisory_xact_lock(hashtextextended('local-ai-member-open:'||$1::text,0))",
+            [memberId],
+          );
+          const open = (
+            await client.query<{ open: number }>(
+              `SELECT count(*)::int AS open FROM adapter_jobs WHERE member_id=$1 AND adapter='ai'
+               AND status IN ('pending','running','failed','needs_reconciliation')`,
+              [memberId],
+            )
+          ).rows[0]!.open;
+          if (open >= LOCAL_AI_MEMBER_OPEN_LIMIT) return "limit";
+          const input: PracticeSuggestionInput = {
+            response: pair.response,
+            contentId: row.contentId,
+            contentVersion: row.contentVersion,
+            sourceExcerpt: pair.sourceExcerpt,
+            interview: row.promptVersion === interviewPromptVersion,
+          };
+          // #188: the request counts against the platform test spending
+          // ceiling. Locked last, so two requests for the last room serialize
+          // and a ceiling without room creates nothing and calls nothing.
+          const estimate = estimateAiRequest(
+            Buffer.byteLength(input.response) +
+              Buffer.byteLength(input.sourceExcerpt),
+          );
+          if (
+            !(
+              await client.query(
+                `SELECT 1 FROM ai_test_spending_ceiling WHERE singleton AND rate_version=$2
+                 AND committed_points+$1<=ceiling_points FOR UPDATE`,
+                [estimate.costPoints, estimate.rateVersion],
+              )
+            ).rows[0]
+          )
+            return "ceiling";
+          const jobId = randomUUID(),
+            attemptToken = randomUUID();
+          // One attempt only: an unknown outcome is held, never retried.
+          await client.query(
+            `INSERT INTO adapter_jobs(id,adapter,mode,operation,idempotency_key,request_fingerprint,
+             status,attempt_count,max_attempts,attempt_token,lease_until,
+             prompt_template_version,model_contract_version,member_id)
+             VALUES($1,'ai',$2,$3,$4,$5,'running',1,1,$6,clock_timestamp()+INTERVAL '5 minutes',$7,$8,$9)`,
+            [
+              jobId,
+              settings.mode,
+              PRACTICE_SUGGESTION_OPERATION,
+              `practice-suggestion:${id}:${sequence}`,
+              requestFingerprint(input),
+              attemptToken,
+              PRACTICE_SUGGESTION_PROMPT,
+              PRACTICE_SUGGESTION_MODEL,
+              memberId,
+            ],
+          );
+          await client.query(
+            `INSERT INTO practice_ai_suggestions(session_id,sequence,member_id,job_id)
+             VALUES($1,$2,$3,$4)`,
+            [id, sequence, memberId, jobId],
+          );
+          // Committed before the provider call, at the labelled estimate.
+          await client.query(
+            `INSERT INTO ai_usage_estimates(job_id,member_id,rate_version,model_version,input_tokens,output_tokens,cost_points)
+             VALUES($1,$2,$3,$4,$5,$6,$7)`,
+            [
+              jobId,
+              memberId,
+              estimate.rateVersion,
+              estimate.modelVersion,
+              estimate.inputTokens,
+              estimate.outputTokens,
+              estimate.costPoints,
+            ],
+          );
+          await client.query(
+            `INSERT INTO ai_spending_commitments(job_id,attempt,estimated_points,state)
+             VALUES($1,1,$2,'committed')`,
+            [jobId, estimate.costPoints],
+          );
+          return { jobId, attemptToken, input };
+        },
+      );
+      if (begun === null) return "unavailable";
+      if (typeof begun === "string") return begun;
+      let raw: unknown,
+        reached = true;
+      try {
+        raw = await bounded(
+          provider,
+          begun.input,
+          settings.providerLimitMs ?? PROVIDER_LIMIT_MS,
+        );
+      } catch {
+        reached = false;
+      }
+      const valid = reached
+        ? validatePracticeSuggestion(raw, begun.input)
+        : null;
+      // Without reported usage the spend is unknown, so the estimate stays
+      // committed; an error or timeout keeps it too.
+      const usage = reached ? readAiUsage(raw) : null;
+      try {
+        return (
+          (await transaction<PracticeSuggestionOutcome>(
+            token,
+            async (client, memberId) => {
+              const job = (
+                await client.query<{
+                  status: string;
+                  attempt_token: string | null;
+                }>(
+                  "SELECT status,attempt_token FROM adapter_jobs WHERE id=$1 AND member_id=$2 FOR UPDATE",
+                  [begun.jobId, memberId],
+                )
+              ).rows[0];
+              if (
+                !job ||
+                job.status !== "running" ||
+                job.attempt_token !== begun.attemptToken
+              )
+                return "unknown";
+              if (usage) {
+                await client.query(
+                  `INSERT INTO ai_usage_settlements(job_id,member_id,input_tokens,output_tokens,cost_points)
+                   VALUES($1,$2,$3,$4,$5)`,
+                  [
+                    begun.jobId,
+                    memberId,
+                    usage.inputTokens,
+                    usage.outputTokens,
+                    aiCostPoints(usage),
+                  ],
+                );
+                // The ceiling moves from the estimate to the reported cost,
+                // including an overrun.
+                await client.query(
+                  `UPDATE ai_spending_commitments SET state='settled',actual_points=$2
+                   WHERE job_id=$1 AND attempt=1 AND state='committed'`,
+                  [begun.jobId, aiCostPoints(usage)],
+                );
+              }
+              if (!reached) {
+                await client.query(
+                  `UPDATE adapter_jobs SET status='needs_reconciliation',safe_error='provider_outcome_unknown',
+                   attempt_token=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1`,
+                  [begun.jobId],
+                );
+                return "unknown";
+              }
+              if (!valid) {
+                await client.query(
+                  `UPDATE adapter_jobs SET status='exhausted',safe_error='invalid_provider_response',
+                   attempt_token=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1`,
+                  [begun.jobId],
+                );
+                await client.query(
+                  `UPDATE practice_ai_suggestions SET state='rejected',completed_at=clock_timestamp()
+                   WHERE job_id=$1`,
+                  [begun.jobId],
+                );
+                return "rejected";
+              }
+              await client.query(
+                `UPDATE adapter_jobs SET status='succeeded',safe_error=NULL,attempt_token=NULL,lease_until=NULL,
+                 provider_operation_reference=$2,updated_at=clock_timestamp() WHERE id=$1`,
+                [begun.jobId, valid.reference],
+              );
+              // Withdrawn meanwhile: the pair and its request row are gone, so
+              // the answer is not kept anywhere.
+              const kept = await client.query(
+                `UPDATE practice_ai_suggestions SET state='ready',suggestion=$2,completed_at=clock_timestamp()
+                 WHERE job_id=$1 RETURNING 1`,
+                [begun.jobId, valid.text],
+              );
+              return kept.rows[0] ? "ready" : "withdrawn";
+            },
+          )) ?? "unknown"
+        );
+      } catch {
+        return "unknown";
+      }
     },
   };
 }

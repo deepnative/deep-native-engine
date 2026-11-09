@@ -20,6 +20,12 @@ import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import request from "supertest";
 import { createServer, type Server } from "node:http";
 import { app } from "../../src/app.ts";
+import {
+  signTestProviderEvent,
+  TEST_PROVIDER_PATH,
+  TEST_PROVIDER_SIGNATURE,
+  type TestProviderEventStore,
+} from "../../src/test-provider-events.ts";
 import { accountPage, lesson } from "../../src/views.ts";
 import type { UploadAdmissionStore } from "../../src/upload-admission.ts";
 import {
@@ -88,6 +94,49 @@ import {
   LEARNING_WORKSPACE_CONTENT,
   learningWorkspacePack,
 } from "../../src/learning-workspace-pack.ts";
+it("TESTPAY-01 serves signed test events only when the application is given them", async () => {
+  const key = "invented-unit-test-provider-key-0123456789",
+    apply = vi.fn(async () => ({
+      kind: "ready" as const,
+      value: { outcome: "receipt" as const },
+    })),
+    body = JSON.stringify({
+      id: "evt-app-1",
+      type: "payment.succeeded",
+      invoiceId: "00000000-0000-4000-8000-000000000001",
+      paymentRef: "pay-1",
+      amountCents: 100,
+      occurredAt: "2026-01-01T00:00:00.000Z",
+    }),
+    send = (agent: request.Agent) =>
+      agent
+        .post(TEST_PROVIDER_PATH)
+        .set("Host", new URL(origin).host)
+        .set("Content-Type", "application/json")
+        .set(TEST_PROVIDER_SIGNATURE, signTestProviderEvent(key, body))
+        .send(body);
+  const off = await send(
+    await managedAgent(app(db, { origin, secret: "secret" })),
+  );
+  expect(off.status).not.toBe(200);
+  expect(apply).not.toHaveBeenCalled();
+  const on = await send(
+    await managedAgent(
+      app(db, {
+        origin,
+        secret: "secret",
+        testProviderEvents: {
+          key,
+          store: { apply } as unknown as TestProviderEventStore,
+        },
+      }),
+    ),
+  );
+  expect(on.status).toBe(200);
+  expect(on.body).toEqual({ outcome: "receipt" });
+  expect(apply).toHaveBeenCalledOnce();
+});
+
 it("serves goal-matched event previews only to active members and never accepts enrollment", async () => {
   const db = storage();
   const agent = await managedAgent(app(db, { origin, secret: "secret" }));
@@ -502,6 +551,21 @@ it("keeps workflow feedback owner-only and never claims a failed or stale write"
     .expect(503);
   expect(failed.text).not.toContain("private database detail");
 });
+it("WFB-NORMAL-03 workflow pages follow whether this app turns on member contributions", async () => {
+  for (const memberContributions of [true, false]) {
+    const agent = await managedAgent(
+      app(db, { origin, secret: "secret", memberContributions }),
+    );
+    const page = await agent.get("/workflows/WF-001").set("Host", host);
+    expect(page.status).toBe(200);
+    expect(
+      page.text.includes("private version-pinned improvement proposal"),
+    ).toBe(memberContributions);
+    expect(page.text.includes("It will not be published")).toBe(
+      !memberContributions,
+    );
+  }
+});
 it("keeps optional slot discovery private and reports read failures without implying a booking", async () => {
   const availability = {
     ...disabledAvailabilityStore(),
@@ -551,10 +615,13 @@ it("denies an unconfigured operator metrics route and returns only a configured 
   );
   await denied.get("/operator/metrics").set("Host", host).expect(403);
   const metrics = {
+    logExport: vi.fn<MetricsStore["logExport"]>().mockResolvedValue(true),
     snapshot: vi.fn<MetricsStore["snapshot"]>().mockResolvedValue({
       scope: "synthetic-local-preview",
+      accounts: "not-demo",
       asOf: new Date("2026-09-24T00:00:00Z"),
       definitions: {
+        accounts: "demo accounts left out",
         denominator: "retained members",
         activated: "lesson open",
         selfAssessed: "self-report",
@@ -563,6 +630,7 @@ it("denies an unconfigured operator metrics route and returns only a configured 
         submittedAssignment: "observed submission",
         returnEligible: "matured first-open cohort",
         crossContentReturned: "bounded observed return",
+        reportedOutcome: "member-reported outcome",
         usefulness: "coarse self-reported usefulness",
         segments: "Segments.",
         cohorts: "Cohorts.",
@@ -580,6 +648,7 @@ it("denies an unconfigured operator metrics route and returns only a configured 
         submittedAssignment: 7,
         returnEligible: 20,
         crossContentReturned: 8,
+        reportedOutcome: 5,
       }),
       segments: learningSegments(null, 30),
       cohorts: [],
@@ -594,6 +663,14 @@ it("denies an unconfigured operator metrics route and returns only a configured 
     .get("/operator/metrics")
     .set("Host", host)
     .expect(200);
+  expect(metrics.logExport).toHaveBeenCalledTimes(1);
+  // EXPORTLOG: no log entry, no data.
+  metrics.logExport.mockResolvedValueOnce(false);
+  const unlogged = await allowed
+    .get("/operator/metrics")
+    .set("Host", host)
+    .expect(403);
+  expect(unlogged.body).toEqual({ error: "forbidden" });
   expect(response.body.counts).toBeUndefined();
   expect(response.body.learning).toEqual({
     disclosure: "coarse-band",
@@ -606,6 +683,7 @@ it("denies an unconfigured operator metrics route and returns only a configured 
       submittedAssignment: "5-19",
       returnEligible: "20-49",
       crossContentReturned: "5-19",
+      reportedOutcome: "5-19",
     },
   });
   expect(response.body.scope).toBe("synthetic-local-preview");
@@ -1545,6 +1623,13 @@ it("requires explicit member confirmation and current local AI permission at eve
         receiptId: null,
         grantedAt: null,
         withdrawnAt: null,
+        estimate: {
+          inputTokens: 11,
+          outputTokens: 256,
+          costPoints: 157,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
         jobs: [],
       },
     ]),
@@ -1642,9 +1727,51 @@ it("requires explicit member confirmation and current local AI permission at eve
     "receipt-id",
     "private-key",
   );
+  localAiConsent.enqueueMetered.mockResolvedValueOnce({
+    kind: "ceiling_reached",
+  });
+  const fullQueue = await post("/evidence/local-ai/receipt-id/queue-metered", {
+    confirm: "yes",
+    key: "private-key",
+  }).expect(409);
+  expect(fullQueue.text).toContain("Test spending ceiling reached");
+  expect(fullQueue.text).toContain("No test request was held");
+  // AILIMIT: both queue routes explain the member-wide limit.
+  localAiConsent.enqueueMetered.mockResolvedValueOnce({
+    kind: "limit_reached",
+  });
+  const limitedMetered = await post(
+    "/evidence/local-ai/receipt-id/queue-metered",
+    { confirm: "yes", key: "private-key" },
+  ).expect(409);
+  expect(limitedMetered.text).toContain("Too many unfinished requests");
+  expect(limitedMetered.text).toContain("no provider was contacted");
+  localAiConsent.enqueue.mockResolvedValueOnce({ kind: "limit_reached" });
+  const limited = await post("/evidence/local-ai/receipt-id/queue").expect(409);
+  expect(limited.text).toContain("You already have 3 AI requests");
+  localAiConsent.run.mockResolvedValueOnce({
+    kind: "ceiling_reached",
+    jobId: "job-id",
+  });
+  const fullRun = await post("/evidence/local-ai/job-id/run").expect(409);
+  expect(fullRun.text).toContain("Nothing was sent to the provider");
+  expect(fullRun.text).toContain("stays reserved");
   await post("/evidence/local-ai/job-id/run").expect(403);
   localAiConsent.run.mockResolvedValueOnce({ kind: "unavailable" });
-  await post("/evidence/local-ai/job-id/run").expect(409);
+  const unknown = await post("/evidence/local-ai/job-id/run").expect(409);
+  expect(unknown.text).toContain("Refresh the page.");
+  // AIFAULT: a held or failed attempt points back to the page that names it.
+  for (const status of ["needs_reconciliation", "failed"]) {
+    localAiConsent.run.mockResolvedValueOnce({
+      kind: "unavailable",
+      jobId: "job-id",
+      status,
+    });
+    const named = await post("/evidence/local-ai/job-id/run").expect(409);
+    expect(named.text).toContain(
+      "This attempt did not finish normally and will not retry automatically.",
+    );
+  }
   localAiConsent.run.mockResolvedValueOnce({
     kind: "completed",
     jobId: "job-id",
@@ -1690,6 +1817,81 @@ it("keeps local AI pause control admin-only and shows member unavailability", as
     .set("Host", host)
     .expect(200);
   expect(control.text).toContain("Local simulation is available");
+  expect(control.text).toContain("Test spending ceiling unavailable");
+  const spending = vi.fn<NonNullable<LocalAiControlStore["spending"]>>();
+  (localAiControl as LocalAiControlStore).spending = spending;
+  spending.mockResolvedValueOnce({
+    rateVersion: "simulated-rates-v1",
+    ceilingPoints: 5000,
+    committedPoints: 157,
+    remainingPoints: 4843,
+  });
+  localAiControl.read.mockResolvedValueOnce({ paused: false });
+  const readout = await agent
+    .get("/operator/local-ai")
+    .set("Host", host)
+    .expect(200);
+  expect(readout.text).toContain("ceiling 5000, committed 157, remaining 4843");
+  expect(spending).toHaveBeenCalledWith(expect.any(String));
+  delete (localAiControl as LocalAiControlStore).spending;
+
+  // AICTL: the ceiling form. Without a store method nothing can change.
+  const ceilingPost = (fields: Record<string, string>) =>
+    agent
+      .post("/operator/local-ai/ceiling")
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  const ceilingFields = {
+    expected: "5000",
+    ceiling: "0",
+    key: "4f9c2a51-3b7e-4d2a-9c11-0a7b5e6f8d21",
+    confirm: "yes",
+  };
+  await ceilingPost(ceilingFields).expect(422);
+  const setCeiling = vi.fn<NonNullable<LocalAiControlStore["setCeiling"]>>();
+  const ceilingHistory =
+    vi.fn<NonNullable<LocalAiControlStore["ceilingHistory"]>>();
+  Object.assign(localAiControl, { setCeiling, ceilingHistory });
+  await ceilingPost({ ...ceilingFields, confirm: "no" }).expect(422);
+  expect(setCeiling).not.toHaveBeenCalled();
+  for (const [kind, status, text] of [
+    ["changed", 303, ""],
+    ["replayed", 303, ""],
+    ["denied", 403, "Platform administrator access is required"],
+    ["stale", 409, "changed after you opened the page"],
+    ["conflict", 409, "already used for a different value"],
+    ["invalid", 422, "Enter a different whole number"],
+  ] as const) {
+    setCeiling.mockResolvedValueOnce({ kind });
+    const response = await ceilingPost(ceilingFields).expect(status);
+    expect(response.text).toContain(text);
+  }
+  expect(setCeiling).toHaveBeenLastCalledWith(expect.any(String), {
+    expectedPoints: 5000,
+    ceilingPoints: 0,
+    key: "4f9c2a51-3b7e-4d2a-9c11-0a7b5e6f8d21",
+  });
+  // Malformed numbers and keys reach the store as values it refuses.
+  setCeiling.mockResolvedValueOnce({ kind: "invalid" });
+  await ceilingPost({
+    confirm: "yes",
+    expected: "1e3",
+    ceiling: "-5",
+  }).expect(422);
+  expect(setCeiling).toHaveBeenLastCalledWith(expect.any(String), {
+    expectedPoints: NaN,
+    ceilingPoints: NaN,
+    key: "",
+  });
+  ceilingHistory.mockResolvedValueOnce([]);
+  localAiControl.read.mockResolvedValueOnce({ paused: false });
+  await agent.get("/operator/local-ai").set("Host", host).expect(200);
+  expect(ceilingHistory).toHaveBeenCalledWith(expect.any(String));
+  delete (localAiControl as LocalAiControlStore).setCeiling;
+  delete (localAiControl as LocalAiControlStore).ceilingHistory;
+
   const post = (state: string, confirm = "yes") =>
     agent
       .post("/operator/local-ai")
@@ -1746,6 +1948,13 @@ it("keeps local AI pause control admin-only and shows member unavailability", as
     .set("Origin", origin)
     .type("form")
     .send({ csrf: liveCsrf, state: "paused", confirm: "yes" })
+    .expect(404);
+  await live
+    .post("/operator/local-ai/ceiling")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf: liveCsrf, expected: "1", ceiling: "2", confirm: "yes" })
     .expect(404);
 });
 let db: ReturnType<typeof storage>;
@@ -2237,7 +2446,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v33",
+          version: "local-member-records-v44",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2277,7 +2486,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v33",
+    version: "local-member-records-v44",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -2299,13 +2508,13 @@ it("serves the local welcome, stylesheet and safe security headers", async () =>
   expect(res.headers["x-powered-by"]).toBeUndefined();
   expect(res.headers["cache-control"]).toBe("no-store");
 });
-it("reports deterministic integration readiness without claiming live effects", async () => {
+it("reports simulated service status without claiming live effects", async () => {
   const agent = await managedAgent(app(db, { origin, secret: "s" }));
   const res = await agent.get("/readiness").set("Host", host).expect(200);
-  expect(res.text).toContain("DEMO ENVIRONMENT");
-  expect(res.text).toMatch(/<strong>ai<\/strong> · simulated/);
-  expect(res.text).toMatch(/<strong>payment<\/strong> · simulated/);
-  expect(res.text).toContain("no external side effect occurs");
+  expect(res.text).toContain("DEMO SITE");
+  expect(res.text).toMatch(/<strong>AI<\/strong> · Simulated/);
+  expect(res.text).toMatch(/<strong>Payments<\/strong> · Simulated/);
+  expect(res.text).toContain("Simulated. No payment is taken.");
   expect(res.text).not.toContain("configured");
 });
 it("serves concurrent requests through one test agent without transport failures", async () => {
@@ -2319,7 +2528,7 @@ it("serves concurrent requests through one test agent without transport failures
     );
     expect(responses).toHaveLength(8);
     for (const response of responses) {
-      expect(response.text).toContain("DEMO ENVIRONMENT");
+      expect(response.text).toContain("DEMO SITE");
     }
   } finally {
     await closeLoopback(server);
@@ -2891,6 +3100,75 @@ it("offers ephemeral source-grounded study reflection only for the current publi
     "SYN-106",
     2,
   );
+});
+it("STUDYQ-09 answers a study question only from a lesson the member may currently open", async () => {
+  const catalog = catalogMock();
+  const item = {
+    id: "SYN-106",
+    version: 2,
+    kind: "lesson",
+    title: "Invented learning sample",
+    body: "Use invented facts. Check each suggestion against the original.",
+    state: "published",
+    requiresQualifiedSignoff: false,
+  } as ContentVersion;
+  catalog.published.mockResolvedValue(item);
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", catalog }),
+  );
+  const path = "/library/SYN-106/study/question";
+  // Signed-out visitors are sent to sign in first.
+  await agent.get(path).set("Host", host).expect(303);
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  active();
+  const study = await agent
+    .get("/library/SYN-106/study")
+    .set("Host", host)
+    .expect(200);
+  expect(study.text).toContain(`href="${path}"`);
+  const form = await agent.get(path).set("Host", host).expect(200);
+  expect(form.text).toContain("SYN-106 · version 2");
+  const ask = () =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, content_version: "2", question: "Which suggestion?" });
+  const answered = await ask().expect(200);
+  expect(answered.text).toContain(
+    "<blockquote>Check each suggestion against the original.</blockquote>",
+  );
+  expect(db.openLesson).toHaveBeenLastCalledWith(
+    expect.any(String),
+    "SYN-106",
+    2,
+  );
+  // The same eligibility as the reader: not openable, not a lesson, awaiting
+  // qualified sign-off or not published means no page and no answer.
+  db.openLesson.mockResolvedValueOnce(false);
+  await agent.get(path).set("Host", host).expect(404);
+  db.openLesson.mockResolvedValueOnce(false);
+  expect((await ask().expect(409)).text).not.toContain("<blockquote>");
+  for (const changed of [
+    { kind: "assignment" },
+    { requiresQualifiedSignoff: true },
+    { state: "retired" },
+  ] as Partial<ContentVersion>[]) {
+    catalog.published.mockResolvedValueOnce({ ...item, ...changed });
+    await ask().expect(409);
+  }
+  catalog.published.mockResolvedValueOnce(null);
+  await agent.get(path).set("Host", host).expect(404);
+  // A forged form is refused before any answer.
+  await agent
+    .post(path)
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf: "0".repeat(64), content_version: "2", question: "x" })
+    .expect(403);
 });
 it("supports the local editor/reviewer workflow without bypassing rejected transitions", async () => {
   const catalog = catalogMock();
@@ -5849,7 +6127,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v33" as const,
+    version: "local-member-records-v44" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -6819,7 +7097,7 @@ it("NAV-09/10 keeps the signed-out header on form responses and offers sign-in b
   const main = out.text.match(/<main[^>]*>([\s\S]*?)<\/main>/)?.[1] ?? "";
   expect(main).toContain('class="button" href="/email/sign-in">Sign in</a>');
   expect(main).toContain(
-    'class="button secondary" href="/">Start a new learning path</a>',
+    'class="button secondary" href="/#your-path">Start my learning path</a>',
   );
 });
 it("FOOTER-01 lists footer links as whole items without dot separators", async () => {
@@ -6839,7 +7117,7 @@ it("FOOTER-01 lists footer links as whole items without dot separators", async (
     "My courses",
     "Local circles",
     "Workflow demonstrations",
-    "Integration readiness",
+    "Service status",
   ])
     expect(footer).toContain(`>${label}</a>`);
 });
@@ -7306,6 +7584,68 @@ it("REALINPUT-01/02/03 hosted private learning forms take real information while
   expect(dashboardPage.text).not.toContain("FOUNDATION PREVIEW");
   expect((await local.get("/learn")).text).toContain("Delete this preview");
 });
+it("READABLE-14 a hosted member sees the prerequisite lesson's title on its route", async () => {
+  const hostedOrigin = "https://engine.deepnative.io";
+  const base: ContentVersion = {
+    id: "SYN-960",
+    version: 1,
+    kind: "assignment",
+    origin: "curated",
+    title: "Invented assignment",
+    body: "Invented body.",
+    owner: "Invented owner",
+    sources: "Invented source",
+    rights: "Invented rights",
+    goals: ["everyday", "work", "build"],
+    backgrounds: ["explorer", "professional", "technical"],
+    domains: [],
+    prerequisites: "",
+    rubric: null,
+    rubricVersion: null,
+    state: "published",
+    requiresQualifiedSignoff: false,
+    reviewedAt: new Date(),
+    publishedAt: new Date(),
+  };
+  const assignment: ContentVersion = {
+    ...base,
+    structuredPrerequisites: {
+      schemaVersion: 1,
+      all: [{ kind: "lesson", id: "SYN-805", version: 2, activity: "started" }],
+    },
+  };
+  const lesson: ContentVersion = {
+    ...base,
+    id: "SYN-805",
+    version: 2,
+    kind: "lesson",
+    title: "Check an invented claim",
+  };
+  const db = storage();
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
+  const catalog = catalogMock();
+  catalog.published.mockResolvedValue(assignment);
+  catalog.search.mockResolvedValue([assignment, lesson]);
+  const secret = "hosting-copy-test";
+  const bearer = "c".repeat(64);
+  const page = await withLoopback(
+    app(db, { origin: hostedOrigin, hostedOrigin, secret, catalog }),
+    (s) =>
+      request(s)
+        .get("/library/SYN-960")
+        .set("Host", "engine.deepnative.io")
+        .set("Cookie", `${COOKIE}=${bearer}`),
+  );
+  expect(page.status).toBe(200);
+  expect(page.text).toContain(
+    "Lesson “Check an invented claim” version 2: started",
+  );
+  expect(page.text).not.toContain("SYN-805");
+});
 it("HOSTED-12 presents accurate hosted persistence while concurrent local rendering stays local", async () => {
   const hosted = app(storage(), {
     origin: "https://engine.deepnative.io",
@@ -7722,4 +8062,12 @@ it("FRICTION-05/06 ignores an unknown notice and reads member state only where n
   expect(await navigation()).not.toContain("/account/sign-out");
   db.session.mockRejectedValue(new Error("synthetic store failure"));
   expect(await navigation()).toContain("/account/sign-out");
+});
+it("MARKET-04 a local preview without signup asks nothing about country", async () => {
+  const agent = await managedAgent(
+    app(storage(), { origin, secret: "secret" }),
+  );
+  const home = await agent.get("/").set("Host", host).expect(200);
+  expect(home.text).not.toContain("signup_country");
+  expect(home.text).not.toContain("Country where you live");
 });

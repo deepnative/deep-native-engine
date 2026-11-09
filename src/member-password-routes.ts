@@ -42,8 +42,18 @@ export function mountMemberPasswordRoutes(
   store: Store,
   access: MemberPasswordAccess,
   origin: string,
-  continuation?: (rawCookie: string | undefined) => string | null,
-  verify?: (memberToken: string, email: string) => void,
+  continuation: ((rawCookie: string | undefined) => string | null) | undefined,
+  verify: ((memberToken: string, email: string) => void) | undefined,
+  refuseSignIn: (req: Request) => Promise<{
+    status: number;
+    retryAfterSeconds: number;
+    message: string;
+  } | null>,
+  refuseChange: (req: Request) => Promise<{
+    status: number;
+    retryAfterSeconds: number;
+    message: string;
+  } | null>,
 ) {
   const token = (res: Response) => res.locals.token as string;
   const csrf = (res: Response) => res.locals.csrf as string;
@@ -108,6 +118,19 @@ export function mountMemberPasswordRoutes(
           ? "The two passwords do not match."
           : `Use ${PASSWORD_MIN} to ${PASSWORD_MAX} characters.`,
       );
+    // Well formed, so saving it would run the costly hash and may send mail.
+    const refused = await refuseChange(req);
+    if (refused) {
+      res.set("Retry-After", String(refused.retryAfterSeconds));
+      return show(
+        res,
+        refused.status,
+        refused.message,
+        typeof fields.email === "string" && fields.email.length <= 254
+          ? fields.email
+          : undefined,
+      );
+    }
     if (fields.email !== undefined) {
       const address = String(fields.email);
       const kept = address.length <= 254 ? address : "";
@@ -174,6 +197,11 @@ export function mountMemberPasswordRoutes(
         );
     if (!onlyFields(req, ["csrf", "email", "password"]))
       return retry(400, "Open the sign-in form again.");
+    const refused = await refuseSignIn(req);
+    if (refused) {
+      res.set("Retry-After", String(refused.retryAfterSeconds));
+      return retry(refused.status, refused.message);
+    }
     const result = await access
       .signIn(String(req.body?.email ?? ""), String(req.body?.password ?? ""))
       .catch(() => undefined);

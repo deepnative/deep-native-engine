@@ -22,13 +22,20 @@ export interface LocalAiHoldItem {
   jobId: string;
   state: "needs-reconciliation" | "expired-claim" | "not-unconfirmed";
   status:
-    "pending" | "running" | "needs_reconciliation" | "succeeded" | "exhausted";
+    | "pending"
+    | "running"
+    | "needs_reconciliation"
+    | "succeeded"
+    | "failed"
+    | "exhausted";
   createdAt: string;
   updatedAt: string;
   leaseUntil: string | null;
-  unitState: "reserved" | "consumed" | "released";
-  policy: "deterministic-request-test-v1";
-  promptTemplateVersion: "local-simulation-v1";
+  // Both null for a request that used no test unit.
+  unitState: "reserved" | "consumed" | "released" | null;
+  policy: "deterministic-request-test-v1" | null;
+  // #189: a sample request, or a practice suggestion (#200).
+  promptTemplateVersion: "local-simulation-v1" | "practice-suggestion-v1";
   modelContractVersion: "deterministic-local-v1";
 }
 type Failure = { kind: "denied" | "invalid" | "unavailable" };
@@ -61,15 +68,16 @@ interface Candidate extends QueryResultRow {
   at: string;
   expiredClaim: boolean;
   unitState: LocalAiHoldItem["unitState"];
-  quantity: number;
+  quantity: number | null;
   attemptCount: number;
   maxAttempts: number;
-  policy: string;
+  policy: string | null;
   promptTemplateVersion: string;
   modelContractVersion: string;
 }
 // One database-observed instant determines grant validity and effective claim
 // expiry. Source/receipt/private text are deliberately absent from every join.
+// A test-unit link is optional, but one that exists must be fully consistent.
 const selection = `WITH instant AS MATERIALIZED (SELECT clock_timestamp() AS observed)
  SELECT j.id AS "jobId",j.member_id AS "memberId",chosen.id AS "grantId",chosen.expires_at AS "grantExpires",
  j.status,j.created_at AS "createdAt",j.updated_at AS "updatedAt",j.lease_until AS "leaseUntil",
@@ -78,28 +86,29 @@ const selection = `WITH instant AS MATERIALIZED (SELECT clock_timestamp() AS obs
  r.state AS "unitState",r.quantity,j.attempt_count AS "attemptCount",j.max_attempts AS "maxAttempts",
  b.policy,j.prompt_template_version AS "promptTemplateVersion",j.model_contract_version AS "modelContractVersion"
  FROM instant CROSS JOIN adapter_jobs j
- JOIN local_ai_test_unit_jobs b ON b.job_id=j.id AND b.member_id=j.member_id
- JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id
- JOIN synthetic_entitlement_grants units ON units.id=r.grant_id AND units.member_id=j.member_id
+ LEFT JOIN local_ai_test_unit_jobs b ON b.job_id=j.id
+ LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id
+ LEFT JOIN synthetic_entitlement_grants units ON units.id=r.grant_id
  JOIN workspaces w ON w.owner_principal_id=j.member_id AND w.deleting_at IS NULL
  JOIN LATERAL (SELECT g.id,g.expires_at FROM local_ai_hold_inspection_grants g
   WHERE g.job_id=j.id AND g.member_id=j.member_id AND g.staff_id=$1 AND g.purpose=$2
    AND g.revoked_at IS NULL AND g.starts_at<=instant.observed AND g.expires_at>instant.observed
   ORDER BY g.expires_at DESC,g.id LIMIT 1) chosen ON TRUE
- WHERE j.adapter='ai' AND j.mode IN ('demo','test') AND j.operation='evidence-summary-local-v1'
- AND units.category='study_requests'
+ WHERE j.adapter='ai' AND j.mode IN ('demo','test')
+ AND ((j.operation='evidence-summary-local-v1' AND j.prompt_template_version='local-simulation-v1')
+  OR (j.operation='practice-suggestion-local-v1' AND j.prompt_template_version='practice-suggestion-v1' AND b.job_id IS NULL))
+ AND (b.job_id IS NULL OR (b.member_id=j.member_id AND units.member_id=j.member_id AND units.category='study_requests'))
  AND ($3::timestamptz IS NULL OR (j.created_at,j.id)>($3::timestamptz,$4::uuid))
- AND (NOT $5::boolean OR (r.state='reserved' AND (j.status='needs_reconciliation' OR (j.status='running' AND j.lease_until<=instant.observed))))
+ AND (NOT $5::boolean OR ((b.job_id IS NULL OR r.state='reserved') AND (j.status='needs_reconciliation' OR (j.status='running' AND j.lease_until<=instant.observed))))
  AND ($6::uuid IS NULL OR j.id=$6::uuid)`;
 function timestamp(value: Date): string {
   if (!(value instanceof Date) || !Number.isFinite(+value))
     throw new SampleFeedbackFailure("unavailable");
   return value.toISOString();
 }
-function item(row: Candidate): LocalAiHoldItem {
-  const statePairs: Record<
-    LocalAiHoldItem["status"],
-    [number, LocalAiHoldItem["unitState"]]
+function meteredShape(row: Candidate) {
+  const statePairs: Partial<
+    Record<LocalAiHoldItem["status"], [number, LocalAiHoldItem["unitState"]]>
   > = {
     pending: [0, "reserved"],
     running: [1, "reserved"],
@@ -110,15 +119,39 @@ function item(row: Candidate): LocalAiHoldItem {
   const pair = Object.hasOwn(statePairs, row.status)
     ? statePairs[row.status]
     : undefined;
+  return (
+    pair !== undefined &&
+    row.quantity === 1 &&
+    row.maxAttempts === 1 &&
+    pair[0] === row.attemptCount &&
+    pair[1] === row.unitState &&
+    row.policy === "deterministic-request-test-v1"
+  );
+}
+function unmeteredShape(row: Candidate) {
+  return (
+    row.unitState === null &&
+    row.quantity === null &&
+    [
+      "pending",
+      "running",
+      "needs_reconciliation",
+      "succeeded",
+      "failed",
+      "exhausted",
+    ].includes(row.status) &&
+    row.attemptCount <= row.maxAttempts &&
+    (row.status === "exhausted" ||
+      (row.status === "pending") === (row.attemptCount === 0))
+  );
+}
+function item(row: Candidate): LocalAiHoldItem {
   if (
     !sampleUuid(row.jobId) ||
-    !pair ||
-    row.quantity !== 1 ||
-    row.maxAttempts !== 1 ||
-    pair[0] !== row.attemptCount ||
-    pair[1] !== row.unitState ||
-    row.policy !== "deterministic-request-test-v1" ||
-    row.promptTemplateVersion !== "local-simulation-v1" ||
+    !(row.policy === null ? unmeteredShape(row) : meteredShape(row)) ||
+    !["local-simulation-v1", "practice-suggestion-v1"].includes(
+      row.promptTemplateVersion,
+    ) ||
     row.modelContractVersion !== "deterministic-local-v1" ||
     typeof row.expiredClaim !== "boolean" ||
     (row.status === "running" && row.leaseUntil === null)
@@ -137,8 +170,9 @@ function item(row: Candidate): LocalAiHoldItem {
     updatedAt: timestamp(row.updatedAt),
     leaseUntil: row.leaseUntil === null ? null : timestamp(row.leaseUntil),
     unitState: row.unitState,
-    policy: "deterministic-request-test-v1",
-    promptTemplateVersion: "local-simulation-v1",
+    policy: row.policy === null ? null : "deterministic-request-test-v1",
+    promptTemplateVersion:
+      row.promptTemplateVersion as LocalAiHoldItem["promptTemplateVersion"],
     modelContractVersion: "deterministic-local-v1",
   };
 }

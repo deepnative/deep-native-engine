@@ -317,19 +317,15 @@ export function workflowReviewStaffStore(
             kind: string | null;
             receipt: string | null;
           }>(
-            `SELECT actor_id AS actor,kind,receipt_id AS receipt FROM workflow_review_operations WHERE operation_id=$1`,
-            [operationId],
+            `SELECT actor_id AS actor,kind,receipt_id AS receipt FROM workflow_review_operations WHERE actor_id=$1 AND operation_id=$2`,
+            [c.actorId, operationId],
           )
         ).rows[0];
         if (!op) {
           await reviewActors(c, [], "platform_admin");
           return { kind: "ready" as const, grant: null };
         }
-        if (
-          op.actor !== c.actorId ||
-          !op.receipt ||
-          !["assign", "revoke"].includes(op.kind ?? "")
-        ) {
+        if (!op.receipt || !["assign", "revoke"].includes(op.kind ?? "")) {
           await reviewActors(c, [], "platform_admin");
           return reviewDeny();
         }
@@ -340,8 +336,8 @@ export function workflowReviewStaffStore(
             kind: string | null;
             receipt: string | null;
           }>(
-            `SELECT actor_id AS actor,kind,receipt_id AS receipt FROM workflow_review_operations WHERE operation_id=$1 FOR SHARE`,
-            [operationId],
+            `SELECT actor_id AS actor,kind,receipt_id AS receipt FROM workflow_review_operations WHERE actor_id=$1 AND operation_id=$2 FOR SHARE`,
+            [c.actorId, operationId],
           )
         ).rows[0];
         if (!isDeepStrictEqual(op, current)) return reviewDeny();
@@ -474,14 +470,13 @@ export function workflowReviewStaffStore(
             instruction: unknown;
             receipt: string | null;
           }>(
-            `SELECT actor_id AS actor,kind,instruction,receipt_id AS receipt FROM workflow_review_operations WHERE operation_id=$1`,
-            [operationId],
+            `SELECT actor_id AS actor,kind,instruction,receipt_id AS receipt FROM workflow_review_operations WHERE actor_id=$1 AND operation_id=$2`,
+            [c.actorId, operationId],
           )
         ).rows[0];
         if (
           previous &&
-          (previous.actor !== c.actorId ||
-            previous.kind !== "assign" ||
+          (previous.kind !== "assign" ||
             !isDeepStrictEqual(previous.instruction, value))
         )
           return { kind: "conflict" as const };
@@ -628,14 +623,13 @@ export function workflowReviewStaffStore(
             instruction: unknown;
             receipt: string | null;
           }>(
-            `SELECT actor_id AS actor,kind,instruction,receipt_id AS receipt FROM workflow_review_operations WHERE operation_id=$1`,
-            [operationId],
+            `SELECT actor_id AS actor,kind,instruction,receipt_id AS receipt FROM workflow_review_operations WHERE actor_id=$1 AND operation_id=$2`,
+            [c.actorId, operationId],
           )
         ).rows[0];
         if (
           previous &&
-          (previous.actor !== c.actorId ||
-            previous.kind !== "revoke" ||
+          (previous.kind !== "revoke" ||
             previous.receipt !== grantId ||
             !isDeepStrictEqual(previous.instruction, instruction))
         )
@@ -676,6 +670,9 @@ export function workflowReviewStaffStore(
     async read(token: string, grantId: string) {
       if (!allowed) return { kind: "unavailable" as const };
       if (!sampleUuid(grantId)) return { kind: "invalid" as const };
+      // Not "writing": expiry during commit stays a plain refusal for a read.
+      // The #40 NOTEREAD row below is in the transaction that releases the note,
+      // so a read that wasn't logged is never handed back.
       return reviewExecute(pool, token, false, async (c) => {
         const discovery = (
           await c.tx.query<{
@@ -690,7 +687,7 @@ export function workflowReviewStaffStore(
         if (!discovery || discovery.moderatorId !== c.actorId)
           return reviewDeny();
         const discovered = await discover(c, discovery.requestId);
-        await authorities(
+        const workspace = await authorities(
           c,
           discovered.memberId,
           c.actorId,
@@ -734,6 +731,19 @@ export function workflowReviewStaffStore(
           )
         ).rows[0];
         if (!note) return reviewDeny();
+        await c.tx.query(
+          `INSERT INTO workflow_review_read_audit(id,workspace_id,actor_id,grant_id,request_id,workflow_id,workflow_version,revision) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            randomUUID(),
+            workspace,
+            c.actorId,
+            grantId,
+            row.id,
+            row.workflowId,
+            row.workflowVersion,
+            row.revision,
+          ],
+        );
         return {
           kind: "ready" as const,
           workflowId: row.workflowId,

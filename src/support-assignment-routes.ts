@@ -1,3 +1,4 @@
+import { hostingText } from "./hosting-presentation.ts";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import type { ApplicationMode } from "./adapters.ts";
@@ -14,6 +15,7 @@ import {
   assignmentHistoryPage,
   assignmentReceiptPage,
   assignmentNoticePage,
+  takenReceiptPage,
   supportIntakeInboxPage,
   type AssignmentAttempt,
   type AssignmentRecovery,
@@ -93,7 +95,10 @@ export function mountSupportAssignmentRoutes(
         .status(404)
         .send(
           assignmentNoticePage(
-            "Local support assignment administration is unavailable in this configuration.",
+            hostingText(
+              "Local support assignment administration is unavailable in this configuration.",
+              "Support assignment administration is unavailable on this site.",
+            ),
           ),
         );
     const selected = staffCookie(req.headers.cookie);
@@ -305,6 +310,39 @@ export function mountSupportAssignmentRoutes(
             req.body.grantId,
           ),
           (value) => assignmentReceiptPage("Support assignment revoked", value),
+          true,
+          recovery,
+        );
+      } catch {
+        return failure(res, "unavailable", recovery);
+      }
+    }),
+  );
+  // ADMSUP-01/03 (#39): the administrator answers this request themselves.
+  app.post(
+    `${base}/take`,
+    route(async (req, res) => {
+      if (
+        !empty(req) ||
+        !fields(req.body, ["csrf", "requestId", "idempotencyKey", "confirm"]) ||
+        !assignmentId(req.body.requestId) ||
+        !assignmentId(req.body.idempotencyKey) ||
+        req.body.confirm !== "yes"
+      )
+        return failure(res, "denied");
+      const recovery = {
+        requestId: req.body.requestId,
+        key: req.body.idempotencyKey,
+      };
+      try {
+        return ready(
+          res,
+          await store!.take(
+            res.locals.assignmentCredential,
+            req.body.requestId,
+            req.body.idempotencyKey,
+          ),
+          takenReceiptPage,
           true,
           recovery,
         );

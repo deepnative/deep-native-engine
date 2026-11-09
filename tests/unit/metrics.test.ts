@@ -24,6 +24,7 @@ it("returns only defined synthetic aggregates to an authorized operator", async 
         submittedAssignment: 20,
         returnEligible: 30,
         crossContentReturned: 10,
+        reportedOutcome: 5,
         segments: {
           background: {
             explorer: {
@@ -35,6 +36,7 @@ it("returns only defined synthetic aggregates to an authorized operator", async 
               submittedAssignment: 5,
               returnEligible: 5,
               crossContentReturned: 0,
+              reportedOutcome: 0,
             },
           },
         },
@@ -49,8 +51,19 @@ it("returns only defined synthetic aggregates to an authorized operator", async 
   const snapshot = await metrics.snapshot("a".repeat(64));
   expect(query).toHaveBeenCalledWith(
     expect.stringContaining("p.revoked_at IS NULL"),
-    [hash("a".repeat(64))],
+    [hash("a".repeat(64)), false],
   );
+  expect(snapshot?.accounts).toBe("not-demo");
+  // DEMOACCT-04: a demo site asks for its demo accounts and says so.
+  const demo = await metricsStore({ query } as unknown as Pool, {
+    demoSite: true,
+  }).snapshot("a".repeat(64));
+  expect(query).toHaveBeenLastCalledWith(
+    expect.stringContaining("l.created_on_demo_site=$2"),
+    [hash("a".repeat(64)), true],
+  );
+  expect(demo?.accounts).toBe("demo");
+  expect(demo?.definitions.accounts).toContain("test data");
   expect(snapshot).toMatchObject({
     scope: "synthetic-local-preview",
     learning: {
@@ -106,3 +119,17 @@ it.each([
     });
   },
 );
+
+it("EXPORTLOG-01/02 logs only for a token the database accepts", async () => {
+  const token = "a".repeat(64);
+  expect(await disabledMetricsStore().logExport(token)).toBe(false);
+  const query = vi
+    .fn()
+    .mockResolvedValueOnce({ rowCount: 1 })
+    .mockResolvedValueOnce({ rowCount: 0 });
+  const metrics = metricsStore({ query } as unknown as Pool);
+  expect(await metrics.logExport(token)).toBe(true);
+  expect(await metrics.logExport(token)).toBe(false);
+  expect(query.mock.calls[0]![0]).toContain("INSERT INTO staff_export_events");
+  expect(query.mock.calls[0]![1]).not.toContain(token);
+});

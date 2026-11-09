@@ -698,6 +698,13 @@ it("describes local AI permission and every job state without leaking sample tex
         receiptId: null,
         grantedAt: null,
         withdrawnAt: null,
+        estimate: {
+          inputTokens: 11,
+          outputTokens: 256,
+          costPoints: 157,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
         jobs: [],
       },
     ],
@@ -717,23 +724,82 @@ it("describes local AI permission and every job state without leaking sample tex
         receiptId: "receipt-id",
         grantedAt: new Date(),
         withdrawnAt: null,
+        estimate: {
+          inputTokens: 11,
+          outputTokens: 256,
+          costPoints: 157,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
         jobs: [
           { id: "pending", status: "pending" },
           { id: "done", status: "succeeded" },
           { id: "running", status: "running" },
           { id: "held", status: "needs_reconciliation" },
+          {
+            id: "held-ran",
+            status: "needs_reconciliation",
+            testOutcome: {
+              outcome: "test-executed",
+              reason: "matching-test-record",
+              decidedAt: new Date("2026-11-08T10:00:00Z"),
+            },
+          },
+          {
+            id: "held-not-run",
+            status: "needs_reconciliation",
+            testOutcome: {
+              outcome: "test-not-executed",
+              reason: "operator-test-exercise",
+              decidedAt: new Date("2026-11-07T23:59:59Z"),
+            },
+          },
           { id: "failed", status: "failed" },
+          {
+            id: "timed-out",
+            status: "needs_reconciliation",
+            failure: "timeout",
+          },
+          {
+            id: "garbled",
+            status: "failed",
+            failure: "malformed",
+            canRetry: true,
+          },
+          { id: "garbled-last", status: "failed", failure: "malformed" },
         ],
       },
     ],
     "csrf",
   );
-  expect(active).toContain("Queue local simulation");
+  // Unfinished requests on this version: no new one is offered (#44 walk).
+  expect(active).not.toContain("Queue local simulation");
+  expect(active).toContain("already has a request that is not finished");
   expect(active).toContain("Withdraw permission");
   expect(active).toContain("Run local simulation");
   expect(active).toContain("Simulated locally. No provider request");
   expect(active).toContain("Outcome needs local reconciliation");
   expect(active).toContain("Local simulation unavailable or failed");
+  // #189 HOLDDEC: a recorded test outcome is labelled, dated, and never resolves the hold.
+  expect(active).toContain(
+    "recorded for this held request on 2026-11-08: it ran, matched to an invented test record.",
+  );
+  expect(active).toContain(
+    "on 2026-11-07: it did not run, recorded as an operator test exercise.",
+  );
+  expect(active.match(/A test outcome was recorded/g)).toHaveLength(2);
+  // #190 AIFAULT: the real failure is named, and a retry is offered only
+  // while tries remain.
+  expect(active).toContain(
+    "The AI step did not answer within 5 seconds, so it timed out.",
+  );
+  expect(active).toContain(
+    "The AI step answered, but not in the expected form, so nothing was shown or saved. Nothing was charged. You can try again.",
+  );
+  expect(active).toContain("Nothing was charged. It has used all its tries.");
+  expect(active.match(/Try the local simulation again/g)).toHaveLength(1);
+  expect(active).toContain('action="/evidence/local-ai/garbled/run"');
+  expect(active).not.toContain('action="/evidence/local-ai/garbled-last/run"');
   const paused = localAiConsentPage(
     [
       {
@@ -743,13 +809,29 @@ it("describes local AI permission and every job state without leaking sample tex
         receiptId: "receipt-id",
         grantedAt: new Date(),
         withdrawnAt: null,
-        jobs: [{ id: "pending", status: "pending" }],
+        estimate: {
+          inputTokens: 11,
+          outputTokens: 256,
+          costPoints: 157,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
+        jobs: [
+          { id: "pending", status: "pending" },
+          {
+            id: "garbled",
+            status: "failed",
+            failure: "malformed",
+            canRetry: true,
+          },
+        ],
       },
     ],
     "csrf",
     [],
     "paused",
   );
+  expect(paused).not.toContain("Try the local simulation again");
   expect(paused).toContain("Local simulations are paused");
   expect(paused).not.toContain("Queue local simulation</button>");
   expect(paused).not.toContain("Run local simulation</button>");
@@ -757,8 +839,147 @@ it("describes local AI permission and every job state without leaking sample tex
   expect(localAiConsentPage([], "csrf", [], "unavailable")).toContain(
     "Local simulations are unavailable",
   );
+  expect(localAiConsentPage([], "csrf")).toContain(
+    "You can have up to 3 unfinished requests at a time",
+  );
   expect(localAiControlPage(false, "csrf")).toContain("Pause local simulation");
   expect(localAiControlPage(true, "csrf")).toContain("Resume local simulation");
+  expect(localAiControlPage(true, "csrf")).toContain(
+    "Test spending ceiling unavailable. Metered test requests cannot run.",
+  );
+  const readout = localAiControlPage(false, "csrf", {
+    rateVersion: "simulated-<rates>",
+    ceilingPoints: 100000,
+    committedPoints: 199,
+    remainingPoints: 99801,
+  });
+  expect(readout).toContain(
+    "Simulated points at test rates simulated-&lt;rates&gt;, not money: ceiling 100000, committed 199, remaining 99801.",
+  );
+  expect(readout).toContain("no provider is called");
+  expect(readout).toContain('name="expected" value="100000"');
+  expect(readout).toContain("Change history unavailable.");
+  expect(readout).not.toContain("The test ceiling is full");
+  const full = localAiControlPage(
+    false,
+    "csrf",
+    {
+      rateVersion: "simulated-rates-v1",
+      ceilingPoints: 0,
+      committedPoints: 42,
+      remainingPoints: 0,
+    },
+    [
+      {
+        changedAt: new Date("2026-11-08T12:34:56Z"),
+        rateVersion: "simulated-<rates>",
+        previousPoints: 1000,
+        ceilingPoints: 0,
+        committedPoints: 42,
+      },
+    ],
+  );
+  expect(full).toContain("The test ceiling is full");
+  expect(full).toContain(
+    "2026-11-08 12:34 UTC: 1000 to 0 points (test rates simulated-&lt;rates&gt;), with 42 committed at the time.",
+  );
+  expect(
+    localAiControlPage(
+      false,
+      "csrf",
+      {
+        rateVersion: "simulated-rates-v1",
+        ceilingPoints: 10,
+        committedPoints: 0,
+        remainingPoints: 10,
+      },
+      [],
+    ),
+  ).toContain("No changes recorded yet.");
+});
+it("AICANCEL-01/02 a request cancelled by withdrawal reads as cancelled, and a real failure still reads as failed", () => {
+  const withdrawn = (status: string) =>
+    localAiConsentPage(
+      [
+        {
+          evidenceId: "sample-id",
+          name: "Invented sample.txt",
+          revisionNumber: 1,
+          receiptId: null,
+          grantedAt: new Date(),
+          withdrawnAt: new Date(),
+          estimate: {
+            inputTokens: 11,
+            outputTokens: 256,
+            costPoints: 157,
+            modelVersion: "simulated-model-v1",
+            rateVersion: "simulated-rates-v1",
+          },
+          jobs: [{ id: "job-id", status, testUnitState: "released" }],
+        },
+      ],
+      "csrf",
+    );
+  const cancelled = withdrawn("cancelled");
+  expect(cancelled).toContain(
+    "Cancelled when you withdrew permission. It never started.",
+  );
+  expect(cancelled).toContain(
+    "One local test request: released subject to expiry.",
+  );
+  expect(cancelled).not.toContain("unavailable or failed");
+  expect(withdrawn("exhausted")).toContain(
+    "Local simulation unavailable or failed",
+  );
+});
+it("WALK-01 a version with an unfinished request offers no new request until it finishes", () => {
+  const granted = (status: string) =>
+    localAiConsentPage(
+      [
+        {
+          evidenceId: "sample-id",
+          name: "Invented sample.txt",
+          revisionNumber: 1,
+          receiptId: "receipt-id",
+          grantedAt: new Date(),
+          withdrawnAt: null,
+          estimate: {
+            inputTokens: 11,
+            outputTokens: 256,
+            costPoints: 157,
+            modelVersion: "simulated-model-v1",
+            rateVersion: "simulated-rates-v1",
+          },
+          jobs: [{ id: "job-id", status }],
+        },
+      ],
+      "csrf",
+    );
+  for (const status of [
+    "pending",
+    "running",
+    "failed",
+    "needs_reconciliation",
+  ]) {
+    const page = granted(status);
+    expect(page).not.toContain('action="/evidence/local-ai/receipt-id/queue"');
+    expect(page).not.toContain(
+      'action="/evidence/local-ai/receipt-id/queue-metered"',
+    );
+    expect(page).toContain(
+      "This version already has a request that is not finished, so a new one can't be queued for it yet.",
+    );
+    // Withdrawing stays available.
+    expect(page).toContain('action="/evidence/local-ai/receipt-id/withdraw"');
+  }
+  for (const status of ["succeeded", "cancelled", "exhausted"]) {
+    const page = granted(status);
+    expect(page).toContain('action="/evidence/local-ai/receipt-id/queue"');
+    expect(page).toContain(
+      'action="/evidence/local-ai/receipt-id/queue-metered"',
+    );
+    expect(page).not.toContain("already has a request that is not finished");
+  }
 });
 it("keeps optional planning gated and renders escaped, unsent per-version drafts", () => {
   const off = careerPage({ enabled: false, entries: [], drafts: [] }, "csrf");
@@ -1954,7 +2175,7 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v33" as const,
+    version: "local-member-records-v44" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2072,6 +2293,80 @@ it("keeps an unattributed historical draft read-only beside fresh current-goal p
   expect(html).not.toContain('value="unattributed"');
 });
 
+it("AIHOLD-06/07 shows a held request as unknown, unrunnable and never as erased", () => {
+  const estimate = {
+    inputTokens: 11,
+    outputTokens: 256,
+    costPoints: 157,
+    modelVersion: "simulated-model-v1",
+    rateVersion: "simulated-rates-v1",
+  };
+  const base = {
+    evidenceId: "sample",
+    name: "Invented.txt",
+    revisionNumber: 1,
+    receiptId: null,
+    grantedAt: null,
+    withdrawnAt: null,
+    estimate,
+    jobs: [{ id: "held", status: "needs_reconciliation" }],
+  };
+  const retired = localAiConsentPage([{ ...base, retired: true }], "csrf");
+  expect(retired).toContain("so it cannot be used again");
+  expect(retired).toContain("its outcome is unknown and it stays held");
+  expect(retired).toContain("or confirm that anything was erased");
+  expect(retired).not.toContain("/grant");
+  expect(retired).not.toContain("/withdraw");
+  expect(retired).not.toContain("/evidence/local-ai/held/run");
+  const withdrawn = localAiConsentPage(
+    [{ ...base, withdrawnAt: new Date() }],
+    "csrf",
+  );
+  expect(withdrawn).toContain("/evidence/local-ai/sample/grant");
+  expect(withdrawn).toContain("its outcome is unknown and it stays held");
+  expect(withdrawn).not.toContain("/evidence/local-ai/held/run");
+  const cancelled = localAiConsentPage(
+    [{ ...base, jobs: [{ id: "closed", status: "exhausted" }] }],
+    "csrf",
+  );
+  expect(cancelled).not.toContain("its outcome is unknown");
+});
+
+it("STAFFHOLD-08 keeps a hold visible after its source is deleted, with no source action or erasure claim", () => {
+  const html = localAiConsentPage(
+    [
+      {
+        evidenceId: "",
+        name: "A source you deleted",
+        revisionNumber: 0,
+        receiptId: null,
+        grantedAt: null,
+        withdrawnAt: null,
+        retired: true,
+        sourceDeleted: true,
+        estimate: {
+          inputTokens: 0,
+          outputTokens: 256,
+          costPoints: 128,
+          modelVersion: "simulated-model-v1",
+          rateVersion: "simulated-rates-v1",
+        },
+        jobs: [{ id: "held-reference", status: "needs_reconciliation" }],
+      },
+    ],
+    "csrf",
+  );
+  expect(html).toContain("A source you deleted");
+  expect(html).toContain("its text and permission are gone");
+  expect(html).toContain("Deleting your account removes it");
+  expect(html).toContain("Request reference: held-reference");
+  expect(html).toContain("or confirm that anything was erased");
+  expect(html).not.toContain("Private version");
+  expect(html).not.toContain("so it cannot be used again");
+  expect(html).not.toContain("/run");
+  expect(html).not.toContain("/grant");
+  expect(html).not.toContain("<form");
+});
 it("distinguishes metered local test units and blocks repeat dispatch of terminal receipts", () => {
   const choices = [
     {
@@ -2081,6 +2376,13 @@ it("distinguishes metered local test units and blocks repeat dispatch of termina
       receiptId: "receipt",
       grantedAt: new Date(),
       withdrawnAt: null,
+      estimate: {
+        inputTokens: 11,
+        outputTokens: 256,
+        costPoints: 157,
+        modelVersion: "simulated-model-v1",
+        rateVersion: "simulated-rates-v1",
+      },
       jobs: [
         {
           id: "pending",
@@ -2101,12 +2403,62 @@ it("distinguishes metered local test units and blocks repeat dispatch of termina
     },
   ];
   const html = localAiConsentPage(choices, "csrf");
-  expect(html).toContain("Use one local test request");
+  // The pending request keeps a new one from being offered (#44 walk).
+  expect(html).not.toContain("Use one local test request");
   expect(html).toContain("Run local test request");
   expect(html).toContain("consumed");
   expect(html).toContain("released");
   expect(html).not.toContain('action="/evidence/local-ai/consumed/run"');
   expect(html).not.toContain('action="/evidence/local-ai/released/run"');
+  expect(html).toContain(
+    "This request has no cost estimate, so it cannot run.",
+  );
+  // The pre-queue estimate shows once nothing is unfinished on the version.
+  expect(
+    localAiConsentPage(
+      [{ ...choices[0]!, jobs: choices[0]!.jobs.slice(1) }],
+      "csrf",
+    ),
+  ).toContain(
+    "Estimate only: about 267 tokens and 157 simulated cost points (model simulated-model-v1, test rates simulated-rates-v1).",
+  );
+  const estimate = choices[0]!.estimate;
+  const budgeted = (costPoints: number) =>
+    localAiConsentPage(
+      [
+        {
+          ...choices[0]!,
+          jobs: [
+            {
+              id: "settled",
+              status: "succeeded",
+              testUnitState: "consumed" as const,
+              budget: {
+                estimate,
+                actual: { inputTokens: 11, outputTokens: 64, costPoints },
+              },
+            },
+            {
+              id: "held",
+              status: "needs_reconciliation",
+              testUnitState: "reserved" as const,
+              budget: { estimate },
+            },
+          ],
+        },
+      ],
+      "csrf",
+    );
+  const within = budgeted(42);
+  expect(within).toContain(
+    "Actual simulated use: 75 tokens and 42 cost points. Within the estimate.",
+  );
+  expect(within.match(/Actual simulated use/g)).toHaveLength(1);
+  expect(budgeted(158)).toContain(
+    "Over the estimate. You are still charged only one test request.",
+  );
+  expect(budgeted(157)).toContain("Within the estimate.");
+  expect(within).not.toContain("no cost estimate");
   const paused = localAiConsentPage(choices, "csrf", [], "paused");
   expect(paused).not.toContain("Use one local test request</button>");
   expect(paused).not.toContain("Run local test request</button>");

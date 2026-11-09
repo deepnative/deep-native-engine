@@ -1,104 +1,104 @@
 # QA-002: browser journey traceability and release gate
 
-Prepared 2026-09-23 for [QA-002 #17](https://github.com/deepnative/deep-native-engine/issues/17), with independent technical mapping approval recorded on [#94](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-5820945526) on 24 September. The `full-mvp-v1` source-to-case mapping is approved; the complete full-MVP browser suite remains **unimplemented and unexecuted**. This does not certify that the full MVP exists or that a release test has passed.
+Prepared 2026-09-23 for [QA-002 #17](https://github.com/deepnative/deep-native-engine/issues/17), with independent technical mapping approval recorded on [#94](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-5820945526) on 24 September and re-approved after the F-BUILD-06-D hold-rule rewording on [9 November](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6749610192). The `full-mvp-v1` source-to-case mapping is approved; the complete full-MVP browser suite remains **unimplemented and unexecuted**. This does not certify that the full MVP exists or that a release test has passed.
 
 ## Two denominators
 
 [`tests/e2e/scenarios.json`](../../tests/e2e/scenarios.json) contains the executable local learning slice under its own `version` and the preserved full-MVP inventory under `fullMvpVersion`. The latter has **27 source requirement families and 100 separately countable browser scenario IDs**:
 
-| Source family | Requirement families | Reserved full-release browser IDs | Current passing full-release IDs |
-| --- | ---: | ---: | ---: |
-| Original roadmap | ROADMAP-01 through ROADMAP-09: 9 | `F-ROADMAP-01-A` through `F-ROADMAP-09-D`: 36 | 0 |
-| Final build prompt | BUILD-01 through BUILD-10: 10 | `F-BUILD-01-A` through `F-BUILD-10-D`: 40 | 0 |
-| Expanded ecosystem direction | ECO-01 through ECO-08: 8 | `F-ECO-01-A` through `F-ECO-08-C`: 24 | 0 |
-| **Full release** | **27** | **100** | **0** |
+| Source family                |             Requirement families |             Reserved full-release browser IDs | Current passing full-release IDs |
+| ---------------------------- | -------------------------------: | --------------------------------------------: | -------------------------------: |
+| Original roadmap             | ROADMAP-01 through ROADMAP-09: 9 | `F-ROADMAP-01-A` through `F-ROADMAP-09-D`: 36 |                                0 |
+| Final build prompt           |    BUILD-01 through BUILD-10: 10 |     `F-BUILD-01-A` through `F-BUILD-10-D`: 40 |                                0 |
+| Expanded ecosystem direction |         ECO-01 through ECO-08: 8 |         `F-ECO-01-A` through `F-ECO-08-C`: 24 |                                0 |
+| **Full release**             |                           **27** |                                       **100** |                            **0** |
 
 Every family retains its source requirement text, actor, preconditions, end-to-end steps, expected result, issue links, risk, criticality and `outstanding` state. Each child case has a reserved browser ID plus its own action and observable result. Browser tests must use exactly `[F-…]` in their title. These are proposed acceptance scenarios; reserved IDs are not tests and do not count as passing. The local slice's passing IDs remain separate. The gate's full-MVP report names every uncovered ID, the 100-case denominator and the critical-case count.
 
-Each of the 100 cases now also names its mandatory `requiredChecks`: a concrete action and observable expected result for each required subcase. After the #158 ECO-04 moderation finding and #161 correction, the proposal has **206 required checks**, with 77 cases needing more than one and 23 requiring one. These checks are obligations *inside* the existing case IDs; they do not add passing IDs or change the 100-case/94-critical denominator. The check array is part of the mapping approval digest, so a later edit invalidates approval until reviewed again.
+Each of the 100 cases now also names its mandatory `requiredChecks`: a concrete action and observable expected result for each required subcase. After the #158 ECO-04 moderation finding and #161 correction, the proposal has **206 required checks**, with 77 cases needing more than one and 23 requiring one. These checks are obligations _inside_ the existing case IDs; they do not add passing IDs or change the 100-case/94-critical denominator. The check array is part of the mapping approval digest, so a later edit invalidates approval until reviewed again.
 
 The issue links in each family identify the implementation acceptance areas it exercises. Specific case actions and results are the concrete checks to use when those issues are delivered. Issue text and the immutable source archive remain authoritative for obligations that are not yet implemented; mapping overlap never deletes a case. The following relationships explain intentional cross-source overlap:
 
-| Original concern | Expanded/recovery concern | Separate evidence required |
-| --- | --- | --- |
-| ROADMAP-01 member to reviewer | BUILD-02 private assessment, ECO-01 general learner | Human assessment, cross-member denial and noncoding foundation entry each have distinct tests. |
-| ROADMAP-03 last slot/unit | BUILD-03 concurrency | Race, cancellation and replacement-credit history remain independent assertions. |
-| ROADMAP-04 pilot phases | BUILD-04 late return, BUILD-05 event disorder, ECO-07 optional offer | Original anniversary, late agreement, payment ordering and background/paid-tier separation all remain required. |
-| ROADMAP-05 AI consent/cost | BUILD-06 failure and injection, ECO-06 general study | Consent, budget, grounding, prompt isolation and noncareer study have distinct cases. |
-| ROADMAP-06 content versions | BUILD-07 retired template, ECO-05 contribution | Rubric pinning, template support and reviewed member publication are different lifecycles. |
-| ROADMAP-09 reconciliation/deletion | BUILD-08 privacy, BUILD-09 commercial truth, ECO-08 separate metrics | Billing exceptions, data deletion and honest metrics require separate evidence. |
+| Original concern                   | Expanded/recovery concern                                            | Separate evidence required                                                                                      |
+| ---------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| ROADMAP-01 member to reviewer      | BUILD-02 private assessment, ECO-01 general learner                  | Human assessment, cross-member denial and noncoding foundation entry each have distinct tests.                  |
+| ROADMAP-03 last slot/unit          | BUILD-03 concurrency                                                 | Race, cancellation and replacement-credit history remain independent assertions.                                |
+| ROADMAP-04 pilot phases            | BUILD-04 late return, BUILD-05 event disorder, ECO-07 optional offer | Original anniversary, late agreement, payment ordering and background/paid-tier separation all remain required. |
+| ROADMAP-05 AI consent/cost         | BUILD-06 failure and injection, ECO-06 general study                 | Consent, budget, grounding, prompt isolation and noncareer study have distinct cases.                           |
+| ROADMAP-06 content versions        | BUILD-07 retired template, ECO-05 contribution                       | Rubric pinning, template support and reviewed member publication are different lifecycles.                      |
+| ROADMAP-09 reconciliation/deletion | BUILD-08 privacy, BUILD-09 commercial truth, ECO-08 separate metrics | Billing exceptions, data deletion and honest metrics require separate evidence.                                 |
 
 ## Mapping audit and independent technical decision, 24 September 2026
 
 I compared all 27 family requirement strings with their [roadmap source](context/source-2026-09-15/outputs/contractor-platform/03-roadmap-and-backlog.md), [build-prompt source](context/source-2026-09-15/outputs/contractor-platform/02-codex-build-prompt.md), and [ecosystem source](context/ECOSYSTEM-JOURNEYS.md). All 27 retain the source wording. I then checked each of the 100 child IDs and its action/result against its family, including the separate IT, non-IT professional, and general learner paths. The following is the review record; A–D or A–C refer to the `F-<family>-<letter>` IDs in the register.
 
-| Family | Proposed case split checked against source |
-| --- | --- |
-| ROADMAP-01 | A pilot allowance; B foundation/assignment and publication without competence; C private assigned review; D revision/export. |
-| ROADMAP-02 | A cross-member denial; B assigned review; C revoked download; D editor isolation. |
-| ROADMAP-03 | A last slot; B last unit; C cancellation/no-show; D provider failure and staff time. |
-| ROADMAP-04 | A pilot; B explicit continuation; C direct annual/renewal; D payment and refund exception. Nonconversion is separately explicit in BUILD-04-B. |
-| ROADMAP-05 | A opt-out/provider mode; B limits; C timeout/retry; D sparse evidence/source/budget. |
-| ROADMAP-06 | A pinned rubric; B new version; C retired template; D document instruction isolation. |
-| ROADMAP-07 | A continued monthly allowance; B clinic; C funded support; D goal/renewal/contract claims. |
-| ROADMAP-08 | A cyber/product/project foundation; B uncovered specialty; C sale readiness; D project assignment. |
+| Family     | Proposed case split checked against source                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ROADMAP-01 | A pilot allowance; B foundation/assignment and publication without competence; C private assigned review; D revision/export.                     |
+| ROADMAP-02 | A cross-member denial; B assigned review; C revoked download; D editor isolation.                                                                |
+| ROADMAP-03 | A last slot; B last unit; C cancellation/no-show; D provider failure and staff time.                                                             |
+| ROADMAP-04 | A pilot; B explicit continuation; C direct annual/renewal; D payment and refund exception. Nonconversion is separately explicit in BUILD-04-B.   |
+| ROADMAP-05 | A opt-out/provider mode; B limits; C timeout/retry; D sparse evidence/source/budget.                                                             |
+| ROADMAP-06 | A pinned rubric; B new version; C retired template; D document instruction isolation.                                                            |
+| ROADMAP-07 | A continued monthly allowance; B clinic; C funded support; D goal/renewal/contract claims.                                                       |
+| ROADMAP-08 | A cyber/product/project foundation; B uncovered specialty; C sale readiness; D project assignment.                                               |
 | ROADMAP-09 | A booking exception; B early release/refund; C reconciliation; D owner and authorized-operator export with denial paths, deletion and retention. |
-| BUILD-01 | A cyber branch; B noncoding business analysis; C unavailable tailored review; D demo expert. |
-| BUILD-02 | A evidence revisions; B pinned authorized feedback; C outsider denial; D revoked reviewer link. |
-| BUILD-03 | A last slot race; B last credit race; C replacement credit; D attempt history. |
-| BUILD-04 | A pilot continuation; B no conversion/no further charge; C late agreement; D direct annual/renewal. |
-| BUILD-05 | A duplicate event; B out-of-order event; C refund/early release; D missing-event reconciliation. |
-| BUILD-06 | A grounded feedback; B sparse evidence; C injection isolation; D timeout/malformed output. |
-| BUILD-07 | A rubric pinning; B retired template; C workflow bytes/version; D sample tests. |
-| BUILD-08 | A owner export; B sharing revocation; C source/derived deletion; D retention exceptions. |
-| BUILD-09 | A demo/seed metrics; B unpublished offer; C uncovered capacity; D agreement snapshot. |
-| BUILD-10 | A mobile/keyboard; B validation/empty state; C loading/error recovery; D persisted flow. |
-| ECO-01 | A exploratory registration; B noncoding foundation; C private progress. This is the general learner path. |
-| ECO-02 | A IT assignment; B non-IT professional assignment; C access/readiness comparison. |
-| ECO-03 | A goal change/evidence; B return/resume; C empty/error recovery. |
-| ECO-04 | A bounded circle/private work; B reporting, scoped accountable moderator action and outsider/peer/revoked-moderator denials; C leave/revocation. |
-| ECO-05 | A attributed proposal; B authorized approval/rejection; C sharing revocation. |
-| ECO-06 | A general/professional study choice; B grounded opted-in help; C disabled provider/budget. |
-| ECO-07 | A optional offer/capacity; B explicit versioned acceptance; C cancellation/export/background change. |
-| ECO-08 | A separate outcome measures; B demo/self-report labels; C unauthorized drill-down. |
+| BUILD-01   | A cyber branch; B noncoding business analysis; C unavailable tailored review; D demo expert.                                                     |
+| BUILD-02   | A evidence revisions; B pinned authorized feedback; C outsider denial; D revoked reviewer link.                                                  |
+| BUILD-03   | A last slot race; B last credit race; C replacement credit; D attempt history.                                                                   |
+| BUILD-04   | A pilot continuation; B no conversion/no further charge; C late agreement; D direct annual/renewal.                                              |
+| BUILD-05   | A duplicate event; B out-of-order event; C refund/early release; D missing-event reconciliation.                                                 |
+| BUILD-06   | A grounded feedback; B sparse evidence; C injection isolation; D timeout/malformed output.                                                       |
+| BUILD-07   | A rubric pinning; B retired template; C workflow bytes/version; D sample tests.                                                                  |
+| BUILD-08   | A owner export; B sharing revocation; C source/derived deletion; D retention exceptions.                                                         |
+| BUILD-09   | A demo/seed metrics; B unpublished offer; C uncovered capacity; D agreement snapshot.                                                            |
+| BUILD-10   | A mobile/keyboard; B validation/empty state; C loading/error recovery; D persisted flow.                                                         |
+| ECO-01     | A exploratory registration; B noncoding foundation; C private progress. This is the general learner path.                                        |
+| ECO-02     | A IT assignment; B non-IT professional assignment; C access/readiness comparison.                                                                |
+| ECO-03     | A goal change/evidence; B return/resume; C empty/error recovery.                                                                                 |
+| ECO-04     | A bounded circle/private work; B reporting, scoped accountable moderator action and outsider/peer/revoked-moderator denials; C leave/revocation. |
+| ECO-05     | A attributed proposal; B authorized approval/rejection; C sharing revocation.                                                                    |
+| ECO-06     | A general/professional study choice; B grounded opted-in help; C disabled provider/budget.                                                       |
+| ECO-07     | A optional offer/capacity; B explicit versioned acceptance; C cancellation/export/background change.                                             |
+| ECO-08     | A separate outcome measures; B demo/self-report labels; C unauthorized drill-down.                                                               |
 
 The table covers all 27 families and all 100 IDs. For completeness, this is the check-count audit by case letter; the register itself records the action and observable assertion for each of the 206 checks.
 
-| Family | Required checks by case ID suffix |
-| --- | --- |
-| ROADMAP-01 | A:2, B:3, C:3, D:2 |
-| ROADMAP-02 | A:3, B:1, C:3, D:1 |
-| ROADMAP-03 | A:2, B:2, C:2, D:2 |
-| ROADMAP-04 | A:2, B:2, C:2, D:7 |
-| ROADMAP-05 | A:3, B:3, C:2, D:3 |
-| ROADMAP-06 | A:2, B:2, C:2, D:2 |
-| ROADMAP-07 | A:2, B:1, C:2, D:3 |
-| ROADMAP-08 | A:3, B:2, C:2, D:1 |
-| ROADMAP-09 | A:1, B:2, C:3, D:8 |
-| BUILD-01 | A:1, B:1, C:1, D:1 |
-| BUILD-02 | A:2, B:1, C:2, D:3 |
-| BUILD-03 | A:1, B:1, C:1, D:2 |
-| BUILD-04 | A:2, B:2, C:2, D:2 |
-| BUILD-05 | A:1, B:1, C:2, D:1 |
-| BUILD-06 | A:1, B:1, C:2, D:2 |
-| BUILD-07 | A:2, B:2, C:2, D:1 |
-| BUILD-08 | A:2, B:1, C:2, D:2 |
-| BUILD-09 | A:2, B:1, C:2, D:2 |
-| BUILD-10 | A:2, B:2, C:2, D:2 |
-| ECO-01 | A:2, B:1, C:2 |
-| ECO-02 | A:2, B:2, C:2 |
-| ECO-03 | A:2, B:2, C:2 |
-| ECO-04 | A:2, B:6, C:2 |
-| ECO-05 | A:2, B:3, C:2 |
-| ECO-06 | A:2, B:2, C:2 |
-| ECO-07 | A:2, B:2, C:3 |
-| ECO-08 | A:3, B:2, C:1 |
+| Family     | Required checks by case ID suffix |
+| ---------- | --------------------------------- |
+| ROADMAP-01 | A:2, B:3, C:3, D:2                |
+| ROADMAP-02 | A:3, B:1, C:3, D:1                |
+| ROADMAP-03 | A:2, B:2, C:2, D:2                |
+| ROADMAP-04 | A:2, B:2, C:2, D:7                |
+| ROADMAP-05 | A:3, B:3, C:2, D:3                |
+| ROADMAP-06 | A:2, B:2, C:2, D:2                |
+| ROADMAP-07 | A:2, B:1, C:2, D:3                |
+| ROADMAP-08 | A:3, B:2, C:2, D:1                |
+| ROADMAP-09 | A:1, B:2, C:3, D:8                |
+| BUILD-01   | A:1, B:1, C:1, D:1                |
+| BUILD-02   | A:2, B:1, C:2, D:3                |
+| BUILD-03   | A:1, B:1, C:1, D:2                |
+| BUILD-04   | A:2, B:2, C:2, D:2                |
+| BUILD-05   | A:1, B:1, C:2, D:1                |
+| BUILD-06   | A:1, B:1, C:2, D:2                |
+| BUILD-07   | A:2, B:2, C:2, D:1                |
+| BUILD-08   | A:2, B:1, C:2, D:2                |
+| BUILD-09   | A:2, B:1, C:2, D:2                |
+| BUILD-10   | A:2, B:2, C:2, D:2                |
+| ECO-01     | A:2, B:1, C:2                     |
+| ECO-02     | A:2, B:2, C:2                     |
+| ECO-03     | A:2, B:2, C:2                     |
+| ECO-04     | A:2, B:6, C:2                     |
+| ECO-05     | A:2, B:3, C:2                     |
+| ECO-06     | A:2, B:2, C:2                     |
+| ECO-07     | A:2, B:2, C:3                     |
+| ECO-08     | A:3, B:2, C:1                     |
 
-The formerly ambiguous alternatives are now explicit conjunctions. `F-ROADMAP-01-B` requires published eligible content to leave assessed competence and completed human review unset when there is no assessment; `F-ROADMAP-01-C` separately requires legitimate assigned-review behavior. `F-ROADMAP-09-D` requires owner export, member-authorized operator export, absent/expired/out-of-scope operator denials, and deletion/retention. `F-ECO-04-B` now requires an authorized moderator's reported-scope action with actor/reason audit and no unrelated private-work access, plus separate outsider, peer and revoked-moderator denials without a moderation effect or private disclosure. `F-ROADMAP-03-C` requires a tested cancellation policy **and** a tested no-show policy; `F-ROADMAP-03-D` separately tests provider failure. `F-ECO-06-C` requires both an unavailable-provider response and a budget-stop response. `F-ECO-07-C` requires cancellation rights, authorized export, **and** background-change isolation. A policy-dependent result such as restored *or* forfeited credit remains conditional on the declared policy, but both triggering paths and the corresponding dated outcome must be asserted. Other compound IDs explicitly separate payment event order, refund decisions, timeout and malformed output, owner and outsider reads, retired and unverified templates, consent and rejection, mobile and keyboard access, and empty and error recovery.
+The formerly ambiguous alternatives are now explicit conjunctions. `F-ROADMAP-01-B` requires published eligible content to leave assessed competence and completed human review unset when there is no assessment; `F-ROADMAP-01-C` separately requires legitimate assigned-review behavior. `F-ROADMAP-09-D` requires owner export, member-authorized operator export, absent/expired/out-of-scope operator denials, and deletion/retention. `F-ECO-04-B` now requires an authorized moderator's reported-scope action with actor/reason audit and no unrelated private-work access, plus separate outsider, peer and revoked-moderator denials without a moderation effect or private disclosure. `F-ROADMAP-03-C` requires a tested cancellation policy **and** a tested no-show policy; `F-ROADMAP-03-D` separately tests provider failure. `F-ECO-06-C` requires both an unavailable-provider response and a budget-stop response. `F-ECO-07-C` requires cancellation rights, authorized export, **and** background-change isolation. A policy-dependent result such as restored _or_ forfeited credit remains conditional on the declared policy, but both triggering paths and the corresponding dated outcome must be asserted. Other compound IDs explicitly separate payment event order, refund decisions, timeout and malformed output, owner and outsider reads, retired and unverified templates, consent and rejection, mobile and keyboard access, and empty and error recovery.
 
 The source-to-case comparison found no missing family, duplicate case ID, or justified change to the proposed denominator. The six noncritical IDs are ECO-02-A–C and ECO-03-A–C; all other 94 remain critical. ECO-04's source names QA-004 as well as CTP-005/020/021, so its register issue links now include #18. Overlap between ROADMAP and BUILD cases remains separately countable as described above. The gate protects the **approved mapping** from silent ID removal, substitution, or criticality downgrade; a deliberate scope change needs a new version and reviewed gate update. The independent technical review approved this mapping, while full-MVP browser coverage remains **0/100**. This audit neither runs those journeys nor certifies release readiness.
 
-The source strings, family IDs, case IDs, source links, issue links and critical flags are unchanged by the ECO-04 subcase correction. The approved `full-mvp-v1` mapping digest is `581083999c08f794b3814470a2e2a708f3708ff0ea6dd9785999ce5a1bdf3a45`. The preceding digests `0345855e5b331e2be1a4403a27f6af0128e0a1c3b83f9d50abaaef7bc623be81` and `14963de159ede2a79d43b963d0d7c974fc124538c7738ea1c36933fb90850631` no longer identify this mapping. After #158 requested changes, a [separate GPT-6 Astra/high reviewer in #163](https://github.com/deepnative/deep-native-engine/issues/163) compared all 206 checks to the three sources and browser evidence rule, then [approved the technical mapping on #94](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-5820945526). This records source-to-check approval only. Every full-MVP browser case still needs real, first-attempt execution and substantive assertion review.
+The source strings, family IDs, case IDs, source links, issue links and critical flags are unchanged by the ECO-04 subcase correction. The approved `full-mvp-v1` mapping digest is `62ea48e50e15d6a60576ba8bbdd5c513f6d345e03a857e3ac695c4d5ce93a33c`, re-approved on 2026-11-09 ([decision](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6749610192)) after the owner's 9 November 2026 hold rule reworded F-BUILD-06-D and the BUILD-06 family summary. The preceding digests `581083999c08f794b3814470a2e2a708f3708ff0ea6dd9785999ce5a1bdf3a45`, `331eb86cf6533d0e09088d75fdaf995d747aedb4aadcda84524fb068b0158935` (the first rewording, sent back for changes), `0345855e5b331e2be1a4403a27f6af0128e0a1c3b83f9d50abaaef7bc623be81` and `14963de159ede2a79d43b963d0d7c974fc124538c7738ea1c36933fb90850631` no longer identify this mapping. After #158 requested changes, a [separate GPT-6 Astra/high reviewer in #163](https://github.com/deepnative/deep-native-engine/issues/163) compared all 206 checks to the three sources and browser evidence rule, then [approved the technical mapping on #94](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-5820945526). This records source-to-check approval only. Every full-MVP browser case still needs real, first-attempt execution and substantive assertion review.
 
 ## Execution and failure rules
 
@@ -110,13 +110,157 @@ npm run verify:full-e2e
 
 The command accepts no caller-supplied browser report. It clears prior full-release artifacts, requires a clean Git revision and the tracked `tests/e2e/full-mvp-approval.json` decision, creates an isolated loopback PostgreSQL database and private storage, builds the app, and runs the complete `playwright.full.config.ts` suite itself. The Playwright metadata carries a freshly generated run ID and the tested commit/tree. The runner checks that the revision stayed clean and unchanged, the report came from this run on the registered browser matrix with no retries, and every browser execution has a retained trace archive. The report and trace hashes, run identity, exact revision, runtime and PostgreSQL version are recorded in `artifacts/full-release-verification.json`; database and storage cleanup are required for a pass. Missing approval, a changed mapping, stale or dirty source, absent/mismatched evidence, failed tests or cleanup fail the command.
 
-The [tracked approval file](../../tests/e2e/full-mvp-approval.json) records the [#163 independent technical decision](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-5820945526): the separate reviewer identity, decision URL and timestamp, and SHA-256 digest of `{ version: fullMvpVersion, projects, fullMvp }` using JSON serialization in `releaseMappingDigest`. The reviewer and decision comment are the authority; the digest binds the reviewed content and browser matrix. A later mapping or browser-matrix change invalidates this approval. A browser result cannot approve its own register. This is technical mapping approval only, not qualified content review, Phase B acceptance, or launch approval.
+The [tracked approval file](../../tests/e2e/full-mvp-approval.json) records the latest independent technical decision, now the [9 November 2026 re-approval](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6749610192) by an owner-chosen Claude Code reviewer session that replaced the [#163 decision](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-5820945526): the separate reviewer identity, decision URL and timestamp, and SHA-256 digest of `{ version: fullMvpVersion, projects, fullMvp }` using JSON serialization in `releaseMappingDigest`. The reviewer and decision comment are the authority; the digest binds the reviewed content and browser matrix. A later mapping or browser-matrix change invalidates this approval. A browser result cannot approve its own register. This is technical mapping approval only, not qualified content review, Phase B acceptance, or launch approval.
 
-The command fails closed when the full report is missing, empty, unmapped, incomplete, skipped, failed, retried, duplicated or below coverage. The release target is at least 99% of approved scenario IDs, 100% of critical IDs and 100% pass of executed required tests; the current matrix also requires every registered browser execution, so all 100 IDs must be present. A manually changed `status` cannot substitute for browser evidence. The present `tests/full-e2e/` directory contains thirty-four provisional ROADMAP-01-B, ROADMAP-02-A/B/C/D, ROADMAP-08-A/B/D, BUILD-01-A/B/C/D, BUILD-02-A/C/D, BUILD-08-A/B/C, BUILD-10-A/B/C/D, ECO-01, ECO-02, ECO-03, ECO-04-A, ECO-06-A and ECO-08-C cases. Despite mapping approval, a release run remains incomplete until every approved case is implemented and exercised. The local/provisional gates retain their separate denominators.
+The command fails closed when the full report is missing, empty, unmapped, incomplete, skipped, failed, retried, duplicated or below coverage. The release target is at least 99% of approved scenario IDs, 100% of critical IDs and 100% pass of executed required tests; the current matrix also requires every registered browser execution, so all 100 IDs must be present. A manually changed `status` cannot substitute for browser evidence. The present `tests/full-e2e/` directory contains forty-four provisional ROADMAP-01-B/D, ROADMAP-02-A/B/C/D, ROADMAP-05-A, ROADMAP-08-A/B/D, BUILD-01-A/B/C/D, BUILD-02-A/B/C/D, BUILD-03-A/B/D, BUILD-07-C, BUILD-08-A/B/C, BUILD-10-A/B/C/D, ECO-01, ECO-02, ECO-03, ECO-04-A/B/C, ECO-06-A/C and ECO-08-C cases. Despite mapping approval, a release run remains incomplete until every approved case is implemented and exercised. The local/provisional gates retain their separate denominators.
 
-For a full-release ID to pass on one registered browser, its **single first-attempt execution** must complete *every* listed required check. The browser test wraps each check’s action and assertions with `requiredCheck(index, async () => { … })`. That helper records a Playwright step and adds a runtime completion annotation only after the callback succeeds. The release gate compares the exact set of case-ID/index/content-digest annotations on **each** browser execution against the approved register and rejects missing, duplicated or stale checks. A passed marker is a structural completion signal, not proof that an assertion was meaningful: review the actual browser assertions and retained trace against every expected result when implementing the journey. Multiple report entries for the same case/browser remain invalid; a future split into separately countable IDs requires a new version, reviewed denominator and updated exact-inventory guard.
+For a full-release ID to pass on one registered browser, its **single first-attempt execution** must complete _every_ listed required check. The browser test wraps each check’s action and assertions with `requiredCheck(index, async () => { … })`. That helper records a Playwright step and adds a runtime completion annotation only after the callback succeeds. The release gate compares the exact set of case-ID/index/content-digest annotations on **each** browser execution against the approved register and rejects missing, duplicated or stale checks. A passed marker is a structural completion signal, not proof that an assertion was meaningful: review the actual browser assertions and retained trace against every expected result when implementing the journey. Multiple report entries for the same case/browser remain invalid; a future split into separately countable IDs requires a new version, reviewed denominator and updated exact-inventory guard.
 
-Unit probes deliberately corrupt source coverage and browser reports, including missing mapping, skipped/failed/retried tests, wrong browser, duplicate IDs, missing definition, false completion and an incomplete full-release matrix. The release command can now verify the reviewed mapping, but it cannot accept the local-slice report as input or pass with only the thirty-four implemented ROADMAP-01-B, ROADMAP-02-A/B/C/D, ROADMAP-08-A/B/D, BUILD-01-A/B/C/D, BUILD-02-A/C/D, BUILD-08-A/B/C, BUILD-10-A/B/C/D, ECO-01, ECO-02, ECO-03, ECO-04-A, ECO-06-A and ECO-08-C cases. Later scope changes must update the version, preserve provenance and record why any case is split or superseded. No passing local gate, documentation review or overlap table completes the member-to-reviewer, payment, participation or other full-MVP cases.
+Unit probes deliberately corrupt source coverage and browser reports, including missing mapping, skipped/failed/retried tests, wrong browser, duplicate IDs, missing definition, false completion and an incomplete full-release matrix. The release command can now verify the reviewed mapping, but it cannot accept the local-slice report as input or pass with only the seventy-five implemented ROADMAP-01-B/C/D, ROADMAP-02-A/B/C/D, ROADMAP-03-A/B, ROADMAP-05-A/D, ROADMAP-06-A/B/C/D, ROADMAP-07-B/D, ROADMAP-08-A/B/D, BUILD-01-A/B/C/D, BUILD-02-A/B/C/D, BUILD-03-A/B/D, BUILD-04-C, BUILD-05-A/B/D, BUILD-06-A/B/C/D, BUILD-07-A/B/C, BUILD-08-A/B/C, BUILD-09-A/B/D, BUILD-10-A/B/C/D, ECO-01, ECO-02, ECO-03, ECO-04-A/B/C, ECO-05-A/B/C, ECO-06-A/B/C, ECO-07-A/C and ECO-08-A/B/C cases. Later scope changes must update the version, preserve provenance and record why any case is split or superseded. No passing local gate, documentation review or overlap table completes the member-to-reviewer, payment, participation or other full-MVP cases.
+
+## November 2026 provisional tranche: ECO-08-A/B and BUILD-09-A
+
+Re-measured on 9 November 2026 (UTC): seventy-one IDs had provisional browser tests, including F-BUILD-09-B from [#785](https://github.com/deepnative/deep-native-engine/pull/785). Three more critical cases are now demonstrable with staff pages already on main, without a product change: seventy-four of 100 (sixty-eight of 94 critical). Accepted release evidence stays at **0/100**, and these results are not an approval.
+
+`tests/full-e2e/metrics-separation.spec.ts` runs each case on its own database. The fixture's main listener issues sample course billing; `configuredInvoiceListener()` adds a second listener on the same database with configured invoicing, so real and sample agreements and invoices exist side by side.
+
+- **ECO-08-A:** the learning and participation snapshot defines each learning and circle measure over retained members, reviewed contributions count distinct revisions with their own owner thresholds, and course agreement outcomes count accepted offers over offered agreements, exactly.
+- **ECO-08-B:** a sample agreement and invoice appear only in the labelled test groups of course agreement outcomes and invoice reconciliation, and never in the real figures. A member's self-assessed lesson completion is labelled as their own report on their page and as "not observed skill or formal assessment" in the snapshot and its JSON.
+- **BUILD-09-A:** a receipt on a sample invoice stays out of collected cash, which counts only the configured invoice's receipt. A sample agreement accepted and then cancelled stays out of the real acceptance and cancellation rates.
+
+Limits of this evidence:
+
+- "Demo" here means sample billing. When this tranche was recorded the learning snapshot had no demo marker for members, so ECO-08-B's demo check rests on agreements and invoices. Since [#123](https://github.com/deepnative/deep-native-engine/issues/123) DEMOACCT, member accounts created on a demo site are marked and left out of the snapshot on any other site; that is covered by its own PostgreSQL tests, not by this browser tranche.
+- The "seeded outcome" in BUILD-09-A is a sample course agreement and its cancellation. There are no seeded career outcomes.
+- With four or fewer members the learning and contribution values are suppressed, so ECO-08-A checks definitions and denominators, not values. The conversion counts are exact.
+- The configured listener is a second local test listener with invented issuer text. No payment provider, no money and no hosted configuration change.
+
+## November 2026 provisional tranche: BUILD-06-D
+
+Re-measured on 9 November 2026, after the ECO-08-A/B and BUILD-09-A tranche: seventy-four IDs had provisional browser tests. The owner decided on 9 November that an AI request whose outcome is unknown stays held, so F-BUILD-06-D was reworded to that rule ([#190](https://github.com/deepnative/deep-native-engine/issues/190)). It used to say a timed-out reservation is "restored or settled exactly once". Its ID, family and criticality are unchanged. The BUILD-06 family's `requirement` stays a verbatim quote of `02-codex-build-prompt.md`, whose "restores or settles the correct usage reservation" the owner's 9 November hold rule replaces for case D; the family's `expected` summary now says a reservation settles at most once and an unknown outcome stays held. With its test this makes seventy-five of 100 (sixty-nine of 94 critical). Accepted release evidence stays at **0/100**, and these results are not an approval.
+
+`tests/full-e2e/ai-step-faults.spec.ts` uses the test-only `DNE_TEST_AI_FAULTS` switch, which the full-e2e servers now turn on as the main browser server already does; marked invented text makes the AI step miss its 5-second deadline or answer in an unexpected form. A held test request that times out is named as a timeout; one that answers wrongly says its outcome is unknown. Both keep their test unit held once, with no settlement and no run or retry offered. An unmetered simulation that answers wrongly is named, and nothing is shown, saved or charged.
+
+Limits of this evidence:
+
+- There is no real provider. The deadline and the faults are local test switches, refused on hosted sites, so nothing here shows how a real provider times out or fails.
+- "Held" is a test unit and simulated ceiling points, not money. Releasing or settling a held request is left to a later decision; this case only shows it is never released or settled twice.
+
+## November 2026 provisional tranche: ROADMAP-06-C and BUILD-07-B
+
+Re-measured on 8 November 2026: sixty-eight IDs had provisional browser tests. Product slice [#769](https://github.com/deepnative/deep-native-engine/issues/769) lets each workflow template say whether it is currently supported, which makes two critical cases demonstrable: seventy of 100 (sixty-four of 94 critical). Accepted release evidence stays at **0/100**, and these results are not an approval.
+
+A template's support now comes from its own Git source release. It is current through its `next_review` date; after that date, or when the release marks it `support_state: unverified`, the list and its page say "Not currently supported", and its environment and verification details are shown as the last check only. A release marked `publication_state: retired` is no longer offered as a page or download, and the list names it under **Retired versions** by id, title and version.
+
+`tests/full-e2e/roadmap-06-c.spec.ts` lets a template's review date pass and then retires another. `tests/full-e2e/build-07-b.spec.ts` retires a template and then marks another unverified. Both change a fixture copy of the release between checks, served through `DNE_WORKFLOW_ROOT`, which only test mode accepts.
+
+Limits of this evidence:
+
+- Marking is a source release (editing the template file); there is no staff screen for it.
+- There are no maintained sample tests or known-failure records, so BUILD-07-D stays uncovered.
+- The real templates' review date is 27 November 2026. After it they will show as not currently supported until their release is re-reviewed.
+
+## November 2026 provisional tranche: BUILD-04-C and ROADMAP-07-B/D
+
+Re-measured on 8 November 2026: sixty-five IDs had provisional browser tests. This tranche adds three, all critical, making sixty-eight of 100 (sixty-two of 94 critical). Accepted release evidence stays at **0/100**, and these results are not an approval. The other thirty-two uncovered cases were surveyed against current behaviour and left out because each needs a product state or feature that doesn't exist yet. Examples are a stale, unverified or known-failure template state, staff cancellation of a hold with a replacement credit, no-show, early release, pilot phases with per-period grants, support capacity, and the 20/100 monthly limits.
+
+`tests/full-e2e/build-04-c.spec.ts` prepares a monthly course bundle and then moves its start date two months back in the isolated fixture database. F-BUILD-04-C shows that the member sees the offer as closed with no accept form, a direct acceptance is refused with 409, and the monthly run bills none of the missed months. A replacement the administrator prepares stays offered until the member explicitly accepts it, and is then the only agreement invoiced, for its own first period.
+
+`tests/full-e2e/roadmap-07-b.spec.ts` schedules a private practice event, registers the member and has the administrator record a present observation inside the real database window. F-ROADMAP-07-B shows that the member's seeded 60 coach minutes stay usable and unconsumed, that the grant's stored balance is unchanged, and that no coaching month or invoice exists.
+
+`tests/full-e2e/roadmap-07-d.spec.ts` covers a member who accepted a one-time bundle, has an administrator-set coaching rate and completed the starter exercise. F-ROADMAP-07-D changes the goal and shows that the starter plan and lesson move to the new goal, while the earlier exercise is kept but no longer counts. A second, renewal bundle stays offered through another goal change and the recurring run, and only the member's explicit acceptance creates its agreement and invoice, leaving the first agreement's terms unchanged. Afterwards the coaching rate is still version 1 at CAD 85.00, and no career, opportunity or contract record exists.
+
+**Defect found and fixed:** a course-billing offer could be accepted after its start date had passed. Acceptance then issued the first invoice for a past period, and the monthly run billed each missed month. Acceptance now closes at the offer's start date on the database clock, which is the same rule proposal creation already applied. The member's page names the closed offer in place of the form.
+
+Limits of this evidence:
+
+- The "standard continuation" and "renewal" are administrator-prepared course bundles. The product has no pilot or annual phase, so BUILD-04-C and ROADMAP-07-D show the acceptance rule for those agreements only.
+- BUILD-04-C stands in for time passing by moving the offer's start back in the isolated fixture database, with the terms guard off for that one statement.
+- The "group clinic" is a private invented rehearsal, not a staffed clinic, and the coach minutes are seeded test units.
+- "Training" is the member's own self-assessed starter exercise. Contract outcomes in the product are only the member's own unverified planning records, so ROADMAP-07-D shows that none appear.
+- Sample invoices only: no provider, no money, and no hosted configuration change.
+
+## November 2026 provisional tranche: ROADMAP-03-A/B, BUILD-09-D and ECO-07-A/C
+
+Re-measured on 7 November 2026: sixty IDs had provisional browser tests. This tranche adds five, all critical, making sixty-five of 100 (fifty-nine of 94 critical). Accepted release evidence stays at **0/100**: `verify:full-e2e` has not been run as a complete release, and these results are not an approval.
+
+`tests/full-e2e/roadmap-03.spec.ts` reuses the forced-overlap races from BUILD-03. F-ROADMAP-03-A races two members, each with one 60-minute unit, for the last window of a coach whose registry entry carries an invented qualification. One hold owns the slot. The loser sees why nothing was created, has no hold, receipt or reserve event, keeps a whole unit on their own balance page, and can hold a later window. F-ROADMAP-03-B races three devices of one member for three free windows against one last unit: one reservation commits, the member's page shows 0 usable and 60 held, no other window is offered, and the database refuses a negative counter.
+
+`tests/full-e2e/build-09-d.spec.ts` and `tests/full-e2e/eco-07.spec.ts` run on their own listener with sample invoices. F-BUILD-09-D compares the course bundle the member is shown with the stored agreement after acceptance, then shows a later proposal and a direct rewrite leave it unchanged. F-ECO-07-A shows the foundation's CAD 0.00 access apart from optional services, the historical coaching plans as unavailable with nothing to buy, a coaching rate only once the administrator records one, a prepared bundle with only its own prices, and coaching capacity disclosed as unverified. F-ECO-07-C cancels a monthly bundle: a month later only the member who did not cancel is invoiced, and the issued invoice stays. The member's own download contains the agreement, and changing the starting point creates no agreement, invoice or allowance.
+
+**Defect found and fixed:** Download my records left out the course-billing agreements a member had been offered or had accepted, so their terms, acceptance and cancellation weren't in the member's copy. The export is now `local-member-records-v39`, with an appended `invoicePlans` section (index 62) holding the member's own agreements, without the staff member who prepared them.
+
+Limits of this evidence:
+
+- ROADMAP-03 runs on sample holds the product labels as not a booking, with test minutes. It doesn't cover a booking, a qualified provider or payment, and the qualification is invented registry data.
+- The approved versioned offer in BUILD-09-D and ECO-07 is an administrator-prepared course bundle or an administrator-set coaching rate. Neither carries a quota, so BUILD-09-D's quota part is limited to the course list and cadence. The historical coaching plans can't be bought.
+- ECO-07-C stands in for a month passing by moving both agreements' first period back one month in the isolated fixture database, with the terms guard switched off for that one statement. The cancellation is a member's own, of future invoices only.
+- Sample invoices only: no provider, no money, and no hosted configuration change.
+
+## November 2026 provisional tranche: ECO-04-B/C, BUILD-02-B, BUILD-07-C and ROADMAP-01-D
+
+Re-measured on 5 November 2026 against `tests/e2e/scenarios.json` and `tests/full-e2e/`: thirty-four IDs had provisional browser tests. This tranche adds five, all critical, making thirty-nine of 100 (thirty-three of 94 critical). Accepted release evidence stays at **0/100**: `verify:full-e2e` has not been run as a complete release, and these results are not an approval.
+
+`tests/full-e2e/eco-04-discussion.spec.ts` runs against its own listener with `DNE_CIRCLE_DISCUSSION` explicitly enabled, because discussion is off by default. F-ECO-04-B covers all six checks: an outsider cannot read or post; a peer's report reaches a moderator only after an exact circle grant, without unrelated private text or member IDs; the moderator's hide and restore write an audit row with the acting moderator and reason, leave the other post alone, and cannot reach another circle or the author's private assignment attempt; and an outsider, a peer and a revoked moderator each get 403 with valid fields and no change to the post or audit. F-ECO-04-C leaves through the normal button, then replays the saved thread, discussion and reply form with 403 and no new post. The member keeps only their own contribution, and rejoining does not restore the earlier sharing choice.
+
+`tests/full-e2e/build-02-b.spec.ts` gives a reviewer one exact grant for one of a member's two queued samples. The other sample stays 403, a quote from it cannot be saved, and the published row names the authorized submission, source SHA-256 and version. `tests/full-e2e/roadmap-01-d.spec.ts` revises reviewed evidence, shows the feedback staying on the original bytes and version while the revision stays out of the earlier grant, then downloads a portfolio statement marked simulated. `tests/full-e2e/build-07-c.spec.ts` compares the downloaded bytes of all three reviewed workflows with their declared version-2 files, refuses other versions, and compares the shown environment, verification, readiness and limitations with that file.
+
+Limits of this evidence: moderation is synthetic, not staffed or qualified. Sample feedback is private human-authored feedback, not formal assessment, and consumes no review unit, so it does not meet F-ROADMAP-01-C. The ROADMAP-01-D portfolio statement comes from a separate assignment submission, not the reviewed sample, because linking them depends on [#545](https://github.com/deepnative/deep-native-engine/issues/545). The workflows state that they were checked by manual comparison with no software test execution, so BUILD-07-C proves that label is accurate, not that any software compatibility was tested.
+
+## November 2026 provisional tranche: BUILD-03-A/B/D, ROADMAP-05-A and ECO-06-C
+
+Re-measured on 6 November 2026: thirty-nine IDs had provisional browser tests. This tranche adds five, all critical, making forty-four of 100 (thirty-eight of 94 critical). Accepted release evidence stays at **0/100**: `verify:full-e2e` has not been run as a complete release, and these results are not an approval.
+
+`tests/full-e2e/build-03.spec.ts` forces real overlap. A test connection holds the contended row while two browsers submit and releases it only once PostgreSQL shows both requests waiting, so the product's own locks decide the result. F-BUILD-03-A races two members for one sample slot: one holds it, the other is refused, its allowance is untouched and it cannot read the winner's receipt. F-BUILD-03-B races one member's two devices for two free slots against one 60-minute allowance: one reservation commits, and a fresh allowance then makes the other slot reservable, so the refusal came from the spent credit. F-BUILD-03-D follows the loser from the refusal to another open slot, then has the winner withdraw. The receipt stays readable as released, the earlier ledger events are unchanged, one release event is added, and the member's export shows them.
+
+`tests/full-e2e/roadmap-05-a.spec.ts` covers a sample with no permission and replays of saved forms after permission is withdrawn: no job and no spent unit. The simulation then runs and says it is simulated. A separate listener runs the application in live mode with no provider settings, where AI shows as off and nothing can start, while the ordinary site still runs its simulation. `tests/full-e2e/eco-06-c.spec.ts` has an administrator pause simulation, which stops new and already queued work with no retry, while study reflection stays usable and creates no job. After resuming, a member spends their last study request. The next is refused with no extra charge or job, the balance reads as spent, and the no-allowance simulation still works.
+
+Limits of this evidence: BUILD-03 runs on sample holds that the product labels as not a booking, with test minutes, so it does not cover booking, a qualified provider or payment. The "cancelled" winner in BUILD-03-D is a member's own withdrawal; staff cancellation and a replacement credit do not exist, so F-BUILD-03-C stays open. No real AI provider exists here, so ROADMAP-05-A and ECO-06-C test a deterministic simulation. Hosting refuses live mode, so the live-mode check is an isolated listener, not a hosted configuration. In ECO-06-C, the pause stands in for disabling a provider, and the study request meters an evidence-summary simulation rather than the study reflection page, which does not meter or pause. The refusal page names what to check but has no direct link to those options; the journey confirms they work.
+
+## November 2026 provisional tranche: BUILD-05-D and ECO-05-A/B/C
+
+Re-measured on 7 November 2026: fifty-six IDs had provisional browser tests. This tranche adds four, all critical, making sixty of 100 (fifty-four of 94 critical). Accepted release evidence stays at **0/100**: `verify:full-e2e` has not been run as a complete release, and these results are not an approval.
+
+`tests/full-e2e/build-05.spec.ts` adds F-BUILD-05-D on its own listener with sample invoices and signed test events on. A signed test refund arrives for a payment whose event is deliberately never sent, so it is held. The administrator's reconciliation shows the signed test events as waiting, with one held event of CAD 30.00, and now flags that invoice ("Signed test event held and not applied") with a link to its staff invoice page, which lists the held row. When the missing payment arrives, the held refund applies once and the flag clears. Before this tranche the report counted held events only in total, so an operator could not tell which invoice was waiting. The new per-invoice flag (RECON-21) is not a cash mismatch and does not change the group status.
+
+`tests/full-e2e/eco-05.spec.ts` runs each case on its own listener with member contributions on, as on the hosted site. F-ECO-05-A saves and submits a proposal with its sources and rights notes and a rights confirmation for revision 1; it is not shared or in the library, and before acceptance there is no sharing choice and a direct request to share with members is refused. F-ECO-05-B has a moderator request changes on revision 1 and accept revision 2; after the owner shares it, a peer reads only revision 2 and a signed-out visitor cannot. A rejected proposal is redacted, offers no sharing and is not labelled qualified. An accepted proposal sent without the owner's consent ticked is refused with 422 and stays accepted and unshared. F-ECO-05-C withdraws sharing: the contribution leaves the list and its page returns 403, while the owner keeps the private source, the acceptance time and the original publication reference, and the database keeps the published and withdrawn times and the submitted, reviewed, accepted, published and sharing-withdrawn events.
+
+Limits of this evidence:
+
+- BUILD-05-D's events are invented and signed with a test key on a sample invoice. No provider, account or money is involved. The missing event is a payment that never arrives, not a provider outage.
+- The "editor" in ECO-05 is the product's contribution moderator. Acceptance is ordinary editorial review, not a qualified assessment, and shared contributions are member contributions, not curated library instruction.
+- The display attribution and member audience are chosen when sharing, after acceptance, not when proposing. Withdrawal removes the attribution by design, so the history keeps the times and events but not the attribution text.
+
+## November 2026 provisional tranche: BUILD-05-A/B and ROADMAP-01-C
+
+Re-measured on 7 November 2026: fifty-three IDs had provisional browser tests. This tranche adds three, all critical, making fifty-six of 100 (fifty of 94 critical). Accepted release evidence stays at **0/100**: `verify:full-e2e` has not been run as a complete release, and these results are not an approval.
+
+`tests/full-e2e/build-05.spec.ts` runs each case on its own listener and database with sample invoices and signed test events on, because those events are off by default and refused on any hosted site (#32). An administrator offers two invented courses and the member accepts a CAD 30.00 sample invoice. F-BUILD-05-A delivers one signed payment event, then the same bytes again, then the same event ID with a different amount: the replay is reported as a duplicate, the changed body gets 409, and the database, the member's invoice, the staff change history and the administrator's reconciliation each show exactly one CAD 30.00 test receipt. F-BUILD-05-B delivers a newer payment, then an older failure and an older success for the same payment: the failure moves no money, the older success is not applied, and the invoice stays paid with a zero balance on both the member's and the administrator's page.
+
+`tests/full-e2e/roadmap-01-c.spec.ts` runs on its own listener with the two review-minute settings the hosted site turns on. A member queues an invented sample. A workspace assignment alone does not open it; after an exact grant the assigned reviewer reads it, the owner reads and downloads it, and another member and an unassigned reviewer are refused. The member reserves 30 test minutes, an administrator grants that reviewer time on the exact reservation through the staff page, and the reviewer publishes criterion feedback recording 20 review and 10 preparation minutes. The feedback row names the submission, source SHA-256 and version; 30 minutes are consumed and none returned, and replaying the publication settles nothing more. The unassigned reviewer and the other member cannot view, draft or publish feedback on that sample.
+
+Limits of this evidence:
+
+- BUILD-05's events are invented and signed with a test key on sample invoices. No provider, account or money is involved, and the "paid agreement" is a sample course invoice, not a paid service agreement.
+- The reconciliation report showed applied signed events as simulated receipts, but not held or failed ones, so F-BUILD-05-D (a deliberately missing event) stayed open until #123 and the tranche above.
+- ROADMAP-01-C's grant of 30 test minutes is issued by a named fixture, not bought, and the staff accounts, workspace assignment and exact evidence grant are seeded. The product meters minutes, not a "30-minute unit".
+- A reviewer can still publish free feedback on a sample with no reservation, so this shows the reserved path consumes once; it does not show that every assigned review consumes a unit.
+- The feedback is private human-authored feedback on an invented sample, not a qualified or formal assessment.
+
+## November 2026 provisional tranche: ROADMAP-05-D, ROADMAP-06-A/B/D, BUILD-06-A/B/C, BUILD-07-A and ECO-06-B
+
+Re-measured on 6 November 2026: forty-four IDs had provisional browser tests. This tranche adds nine, all critical, making fifty-three of 100 (forty-seven of 94 critical). Accepted release evidence stays at **0/100**: `verify:full-e2e` has not been run as a complete release, and these results are not an approval.
+
+`tests/full-e2e/rubric-pinning.spec.ts` runs on its own listener with `DNE_ASSIGNMENT_HANDOFF` on. A member submits on version one, makes a private feedback copy and queues it, and an assigned reviewer publishes feedback. Publishing version two leaves the pinned reference, the feedback row and the member's pages unchanged, and a new member gets version two. `tests/full-e2e/practice-grounding.spec.ts` covers the opt-in refusal, comparisons that quote the member's own words and cite the exact source excerpt, the insufficient-evidence wording, refused sources (another goal, retired, unpublished) and a spent test request. `tests/full-e2e/instruction-isolation.spec.ts` runs instruction text through the simulation: another member's note stays out of the page, the export and the job record, no non-AI job or email notice appears, a loopback listener named in the text receives no request and the member stays refused from the staff tool.
+
+Limits of this evidence:
+
+- The hosted site leaves assignment feedback off ([#545](https://github.com/deepnative/deep-native-engine/issues/545)), so ROADMAP-06-A/B and BUILD-07-A do not describe it. The reviewer's grant is seeded, not made through the staff page.
+- That feedback is labelled as not a formal assessment. The product has no score. BUILD-07-A's "result" is a free-text simulated record written through the store, with no staff or member page; only its row is checked, and no numeric score is proved.
+- No real AI provider exists, so BUILD-06-A/B/C, ROADMAP-05-D, ROADMAP-06-D and ECO-06-B test deterministic pages. A comparison quotes text; nothing evaluates it, and there is no interview format.
+- The insufficient-evidence wording appears on every practice session, however long the response. It is not a judgement about sparse evidence.
+- The simulation has no model and no tools, so BUILD-06-C and ROADMAP-06-D show that text gets no route out through this code. They say nothing about how a real model handles injected instructions, and both must be retested against any real provider.
+- ROADMAP-05-D's budget is test units in a simulated request, with invented rates. It is not a spending ceiling on real money.
 
 ## Provisional ROADMAP-01-B, ROADMAP-02-A/B/C/D, ROADMAP-08-B/D, BUILD-01-A/B/C/D, BUILD-02-A/C/D, BUILD-08-A/B/C, BUILD-10-A/B/C/D and ECO journeys
 

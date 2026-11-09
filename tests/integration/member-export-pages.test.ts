@@ -293,9 +293,14 @@ it.each([
         owner.token,
         cursor,
       );
+      // Only the coach summary (v42) follows: every new member gets the
+      // default coaches.
       expect(fresh).toMatchObject({
         kind: "ready",
-        payload: { page: { complete: true, recordCount: 0 } },
+        payload: {
+          records: { coachAssignments: [{ coaches: expect.any(Number) }] },
+          page: { complete: true, recordCount: 1 },
+        },
       });
     } finally {
       current.resume.release();

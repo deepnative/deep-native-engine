@@ -7,6 +7,7 @@ import type {
   LedgerReconciliationCategory,
   LedgerReconciliationSnapshot,
 } from "../../src/ledger-reconciliation.ts";
+import { withHosting } from "../../src/hosting-presentation.ts";
 function fixture(): LedgerReconciliationSnapshot {
   return {
     scope: "synthetic-local-preview",
@@ -84,7 +85,7 @@ it("presents five zero categories without claiming use, mixed-unit totals or ext
     "attribution is unrecorded; timestamps do not prove it",
   );
   expect(html).toContain(
-    "Invoice, collected cash, provider, job and manual-source reconciliation are unavailable",
+    "This report does not compare invoices or collected cash; platform administrators have a separate invoice and cash reconciliation. Provider and job reconciliation are unavailable.",
   );
   expect(html).toContain(
     "Qualified capacity, booked service, revenue, actual cost and production entitlement policy are unavailable",
@@ -234,3 +235,13 @@ it.each([
     expect(html).not.toContain("<script");
   },
 );
+it("READABLE-19 the hosted ledger report drops local wording and keeps its limits", () => {
+  const html = withHosting(true, () => ledgerReconciliationPage(fixture()));
+  expect(html).toContain("OPERATOR · TEST RECORDS");
+  expect(html).toContain("<h1>Test-unit ledger reconciliation</h1>");
+  expect(html).toContain("What this report cannot establish");
+  expect(html).not.toMatch(/\blocal\b/i);
+  const local = ledgerReconciliationPage(fixture());
+  expect(local).toContain("SYNTHETIC LOCAL PREVIEW");
+  expect(local).toContain("<h1>Synthetic ledger reconciliation</h1>");
+});

@@ -61,18 +61,24 @@ export function coachingStatus(m: {
   returned?: boolean;
   totalCents?: string | number | null;
   paidCents?: string | number | null;
+  refundedCents?: string | number | null;
   voided?: boolean | null;
 }) {
   const total = m.totalCents == null ? null : Number(m.totalCents);
-  const paid = Number(m.paidCents ?? 0);
+  const paid = Number(m.paidCents ?? 0),
+    refunded = Number(m.refundedCents ?? 0);
   if (m.state === "invoiced")
     return m.voided
       ? "Void"
       : total === null
         ? "Invoiced"
-        : paid >= total
-          ? "Invoiced · Paid"
-          : `Invoiced · ${money(total - paid)} due`;
+        : refunded > 0
+          ? refunded === paid
+            ? "Invoiced · Refunded"
+            : "Invoiced · Partly refunded"
+          : paid >= total
+            ? "Invoiced · Paid"
+            : `Invoiced · ${money(total - paid)} due`;
   if (m.state === "submitted") return "Awaiting review";
   return m.returned ? "Returned for correction" : "Draft";
 }
@@ -216,7 +222,7 @@ export function mountCoachingRoutes(
         amount = v.rate
           ? coachingSubtotal(e?.minutes ?? 0, v.rate.cents)
           : null;
-      let body = `<section class="invoice-workspace${admin ? " portal-workspace" : ""}"><h1>${admin ? "Review monthly coaching" : "Monthly coaching hours"}</h1><p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p><p>${admin ? `Member: <strong>${escape(v.displayName ?? "Name needed")}</strong> · account reference <code>${escape(v.ownerId)}</code>` : "Choose the month you want to invoice, enter your coaching hours and minutes, then review the rate set by your administrator. Requesting an invoice submits the saved month for administrator review; it does not take payment. Coaching is optional; your learning access does not depend on a rate or invoice."}</p><form method="get" action="${base}"><label>Calendar month (UTC)<input type="month" name="month" value="${v.month}" max="${v.today}" required></label><button class="secondary">Open month</button></form><h2>${monthLabel(v.month)}</h2><p>Status: ${e ? escape(e.state) : "No saved draft or submission"}${e ? ` · revision ${e.revision}` : ""}</p>${e?.returnReason ? `<p role="status">Returned for correction: ${escape(e.returnReason)}</p>` : ""}<p>${v.rate ? `Applicable rate: ${money(v.rate.cents)} per hour · version ${v.rate.version} · effective ${monthLabel(v.rate.effectiveMonth)}` : "No rate is set for this month. Ask the administrator to enter your agreed rate before submitting; you can save a draft now."}</p>`;
+      let body = `<section class="invoice-workspace${admin ? " portal-workspace" : ""}"><h1>${admin ? "Review monthly coaching" : "Monthly coaching hours"}</h1><p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p><p>${admin ? `Member: <strong>${escape(v.displayName ?? "Name needed")}</strong> · account reference <code>${escape(v.ownerId)}</code>` : "Choose the month you want to invoice, enter your coaching hours and minutes, then review the rate set by your administrator. Requesting an invoice submits the saved month for administrator review; it does not take payment. Coaching is optional; your learning access does not depend on a rate or invoice."}</p><form method="get" action="${base}"><label>Calendar month (UTC)<input type="month" name="month" value="${v.month}" max="${v.today}" required></label><button class="secondary">Open month</button></form><h2>${monthLabel(v.month)}</h2><p>Status: ${e ? escape(e.state) : "No saved draft or submission"}${e ? ` · revision ${e.revision}` : ""}</p>${e?.returnReason ? `<p role="status">Returned for correction: ${escape(e.returnReason)}</p>` : ""}<p>${v.rate ? `Applicable rate: ${money(v.rate.cents)} per hour · version ${v.rate.version} · effective ${monthLabel(v.rate.effectiveMonth)}` : admin ? "No rate is set for this month. Set the rate below." : "No rate is set for this month. Ask the administrator to enter your agreed rate before submitting; you can save a draft now."}</p>`;
       if (admin)
         body += `<h2>Set member rate</h2><form method="post" action="${base}/rate">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", v.rateVersion)}<label>Effective month<input type="month" name="effectiveMonth" value="${v.month}" required></label><label>Hourly rate (CAD)<input name="rate" inputmode="decimal" required></label><button>Save hourly rate</button></form>`;
       if (e)

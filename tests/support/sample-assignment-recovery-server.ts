@@ -8,6 +8,7 @@ import { authorizationStore } from "../../src/authorization.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { memberExportStore } from "../../src/member-export.ts";
 import { sampleAssignmentStore } from "../../src/sample-assignment.ts";
+import { closeLoopback } from "./loopback-server.ts";
 
 /** Test-owned port0 application. Its sole fault occurs after PostgreSQL really
  * commits the first assignment receipt. Staff entry, reads and erasure use the
@@ -78,10 +79,8 @@ export async function startSampleAssignmentRecoveryServer(
     return {
       origin: options.origin,
       observation,
-      close: () =>
-        new Promise<void>((resolve, reject) =>
-          owned.close((error) => (error ? reject(error) : resolve())),
-        ),
+      // A browser preconnect would otherwise hold close() open (L183).
+      close: () => closeLoopback(owned),
     };
   } catch (error) {
     server?.close();

@@ -25,4 +25,4 @@ REALINPUT-01..04 are in `tests/unit/real-member-input.test.ts`, `tests/unit/app.
 
 ## Limits
 
-Legal terms, jurisdiction and a formal privacy notice remain on #12. This decision allows real input on these forms; it does not establish launch readiness. Backups are not erased by account deletion within their retention window.
+The owner decided on 9 November 2026 that Deep Native Inc. (Ontario, Canada) operates the service for people living in Canada first. Reviewed legal terms, the jurisdictional review and a formal privacy notice remain on #12. This decision allows real input on these forms; it does not establish launch readiness. Backups are not erased by account deletion within their retention window.

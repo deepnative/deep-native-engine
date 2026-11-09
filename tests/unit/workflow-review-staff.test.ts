@@ -405,7 +405,7 @@ it.each([{ instanceId: grantId }, { revision: 2 }])(
     ).toMatchObject({ kind: "conflict" });
   },
 );
-it.each(["actor", "kind", "instruction"])(
+it.each(["kind", "instruction"])(
   "WFREV-06 assignment key with changed %s conflicts",
   async (changed) => {
     const op = {
@@ -413,11 +413,9 @@ it.each(["actor", "kind", "instruction"])(
       kind: "assign",
       instruction: checked,
       receipt: grantId,
-      ...(changed === "actor"
-        ? { actor: moderatorId }
-        : changed === "kind"
-          ? { kind: "revoke" }
-          : { instruction: { ...checked, revision: 2 } }),
+      ...(changed === "kind"
+        ? { kind: "revoke" }
+        : { instruction: { ...checked, revision: 2 } }),
     };
     transaction([[intent], [source], [intent], [op]]);
     expect(
@@ -588,6 +586,7 @@ it("WFREV-03 only exact current permitted moderator obtains the original note", 
       [intent],
       [readingGrant],
       [{ note: "Invented exact permitted note" }],
+      [],
     ],
     moderatorId,
   );
@@ -600,6 +599,20 @@ it("WFREV-03 only exact current permitted moderator obtains the original note", 
     expiresAt: expires.toISOString(),
   });
   expect(t.query.mock.calls[5]![1]).toEqual([instanceId, 1]);
+  // NOTEREAD-01: the reading is logged, with no note text.
+  expect(t.query.mock.calls[6]![0]).toContain(
+    "INSERT INTO workflow_review_read_audit",
+  );
+  expect(t.query.mock.calls[6]![1]).toEqual([
+    expect.any(String),
+    "owned-workspace",
+    moderatorId,
+    grantId,
+    requestId,
+    "WF-001",
+    1,
+    1,
+  ]);
 });
 it.each(["receipt", "read", "inspect"] as const)(
   "WFREV staff %s invalid reference does not acquire authority",
@@ -660,7 +673,7 @@ it.each([
     kind: "denied",
   });
 });
-it.each(["actor", "kind", "receipt", "instruction"])(
+it.each(["kind", "receipt", "instruction"])(
   "WFREV-06 revoke original key changed %s conflicts",
   async (changed) => {
     const op = {
@@ -668,13 +681,11 @@ it.each(["actor", "kind", "receipt", "instruction"])(
       kind: "revoke",
       receipt: grantId,
       instruction: { grantId },
-      ...(changed === "actor"
-        ? { actor: moderatorId }
-        : changed === "kind"
-          ? { kind: "assign" }
-          : changed === "receipt"
-            ? { receipt: requestId }
-            : { instruction: { grantId: requestId } }),
+      ...(changed === "kind"
+        ? { kind: "assign" }
+        : changed === "receipt"
+          ? { receipt: requestId }
+          : { instruction: { grantId: requestId } }),
     };
     transaction([[discovery], [intent], [], [intent], [lockedGrant], [op]]);
     expect(
@@ -746,7 +757,7 @@ it.each([null, createdAt])(
   },
 );
 it("WFREV-06 unknown operation inspection never creates permission", async () => {
-  transaction([[]]);
+  const t = transaction([[]]);
   expect(await port().inspect(token, operationId)).toMatchObject({
     kind: "ready",
     grant: null,
@@ -756,14 +767,18 @@ it("WFREV-06 unknown operation inspection never creates permission", async () =>
     [],
     "platform_admin",
   );
+  // WFKEY (#42): the key is looked up only within the administrator's keys.
+  expect(t.query).toHaveBeenCalledWith(
+    expect.stringContaining("WHERE actor_id=$1 AND operation_id=$2"),
+    [adminId, operationId],
+  );
 });
 it.each([
-  { actor: moderatorId, kind: "assign", receipt: grantId },
   { actor: adminId, kind: "assign", receipt: null },
   { actor: adminId, kind: "request", receipt: grantId },
   { actor: adminId, kind: null, receipt: grantId },
 ])(
-  "WFREV-06 foreign/tombstoned/unrelated operation %j denies inspection",
+  "WFREV-06 tombstoned/unrelated operation %j denies inspection",
   async (op) => {
     transaction([[op]]);
     expect(await port().inspect(token, operationId)).toEqual({

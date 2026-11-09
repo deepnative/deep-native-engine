@@ -104,8 +104,10 @@ it("CM122-04 treats malformed or missing aggregates as suppressed instead of par
 
 const base: PreviewMetrics = {
   scope: "synthetic-local-preview",
+  accounts: "not-demo",
   asOf: new Date("2026-11-02T12:00:00Z"),
   definitions: {
+    accounts: "Not demo.",
     denominator: "Retained.",
     activated: "Opened.",
     selfAssessed: "Self.",
@@ -114,6 +116,7 @@ const base: PreviewMetrics = {
     submittedAssignment: "Submitted.",
     returnEligible: "Eligible.",
     crossContentReturned: "Returned.",
+    reportedOutcome: "Reported.",
     usefulness: "Useful.",
     segments: "Segments.",
     cohorts: "Cohorts.",

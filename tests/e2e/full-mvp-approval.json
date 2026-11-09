@@ -1,8 +1,8 @@
 {
   "status": "approved",
   "version": "full-mvp-v1",
-  "sha256": "581083999c08f794b3814470a2e2a708f3708ff0ea6dd9785999ce5a1bdf3a45",
-  "reviewer": "Codex dne-reviewer /root/qa002_corrected_mapping_review (GPT-6 Astra/high)",
-  "decisionUrl": "https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-5820945526",
-  "decidedAt": "2026-09-24T19:39:31Z"
+  "sha256": "62ea48e50e15d6a60576ba8bbdd5c513f6d345e03a857e3ac695c4d5ce93a33c",
+  "reviewer": "Claude Code independent reviewer session (Claude Opus 5.5), owner-chosen 9 Nov 2026",
+  "decisionUrl": "https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6749610192",
+  "decidedAt": "2026-11-09T19:40:27Z"
 }

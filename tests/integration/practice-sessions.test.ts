@@ -1020,10 +1020,14 @@ it.each(
             if (sql === "COMMIT") {
               commits++;
               if (delay === "commit-reply") {
+                // Wait a little past expiry. The store measures authority on the
+                // monotonic clock, while this loop reads PostgreSQL wall time; a
+                // small wall-clock adjustment in the host VM could otherwise end
+                // the delay a few milliseconds before the store's own deadline.
                 while (
                   !(
                     await pool.query(
-                      "SELECT clock_timestamp()>=$1::timestamptz expired",
+                      "SELECT clock_timestamp()>=$1::timestamptz+interval '50 milliseconds' expired",
                       [expires],
                     )
                   ).rows[0].expired

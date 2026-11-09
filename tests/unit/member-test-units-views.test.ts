@@ -97,3 +97,25 @@ it("TESTISSUE-08 an installed fixture reader links deliberate request/withdrawal
   expect(html).toContain("withdrawal does not mean it elapsed naturally");
   expect(html).not.toContain("<form");
 });
+it("ALLOW-01 links the monthly allowance only when claims are switched on", () => {
+  const link = 'href="/member/study-allowance"';
+  expect(memberTestUnitsPage(fixture(), true, true)).toContain(link);
+  expect(memberTestUnitsPage(fixture(), true, false)).not.toContain(link);
+  expect(memberTestUnitsPage(fixture())).not.toContain(link);
+});
+it("WALK-03 says 1 request, 1 session and 1 minute", () => {
+  const value = fixture();
+  value.categories = value.categories.map((row) => ({
+    ...row,
+    grants: 1,
+    usable: 2,
+    held: 1,
+  }));
+  const html = memberTestUnitsPage(value);
+  for (const unit of ["requests", "sessions", "minutes"])
+    expect(html).not.toMatch(new RegExp(`>1</span> ${unit}<`));
+  expect(html).toContain(">1</span> request<");
+  expect(html).toContain(">1</span> session<");
+  expect(html).toContain(">1</span> minute<");
+  expect(html).toContain(">2</span> requests<");
+});

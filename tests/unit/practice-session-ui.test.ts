@@ -10,6 +10,7 @@ import type {
 import { COOKIE, csrf } from "../../src/session.ts";
 import { withLoopback } from "../support/loopback-server.ts";
 import {
+  practiceSessionAllowanceNeededPage,
   practiceSessionStartPage,
   practiceSessionHistoryPage,
   practiceSessionPage,
@@ -27,6 +28,10 @@ const source: PracticeSessionSource = {
   promptVersion: "practice-v1",
   prompt: "Use <invented> detail.",
   sourceExcerpt: "Check <source> only.",
+  interview: {
+    promptVersion: "interview-practice-v1",
+    prompt: "Answer an invented interview question <safely>.",
+  },
 };
 const detail: PracticeSessionDetail = {
   id: sessionId,
@@ -505,4 +510,130 @@ it("REALINPUT-01/02 hosted practice sessions need no invented-information checkb
     expect(page.text).toContain("SIMULATED");
   }
   expect(pages[0]!.text).toContain("Leave out passwords");
+});
+it("MOCK-02/05 the start page says a unit is used only when it is, and a refusal offers the way forward", () => {
+  expect(practiceSessionStartPage(source, "c")).not.toContain(
+    "your monthly practice sessions",
+  );
+  expect(practiceSessionStartPage(source, "c", true)).toContain(
+    '<a href="/member/study-allowance">your monthly practice sessions</a>',
+  );
+  const refused = practiceSessionAllowanceNeededPage();
+  expect(refused).toContain("no new session was created");
+  expect(refused).toContain('href="/member/study-allowance"');
+});
+it("MOCK-05 a start without a unit is refused with the way forward", async () => {
+  const f = fixture();
+  f.practiceSessions.start.mockResolvedValue({ kind: "allowance-needed" });
+  const refused = await f.post(
+    `/library/${source.contentId}/practice-session/start`,
+    startFields,
+  );
+  expect(refused.status).toBe(409);
+  expect(refused.text).toContain("no new session was created");
+  expect(refused.text).toContain('href="/member/study-allowance"');
+});
+it("MOCK-07 the start page mentions units only when the setting is on", async () => {
+  const f = fixture();
+  expect(
+    (await f.get(`/library/${source.contentId}/practice-session`)).text,
+  ).not.toContain("your monthly practice sessions");
+  const on = app(f.db, {
+    origin,
+    secret,
+    practiceSessions: f.practiceSessions,
+    practiceSessionAllowance: true,
+  });
+  const body = await withLoopback(on, (server) =>
+    request(server)
+      .get(`/library/${source.contentId}/practice-session`)
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${token}`),
+  );
+  expect(body.text).toContain("your monthly practice sessions");
+});
+it("WALK-02 a refusal doesn't assume the member already claimed this month's sessions", () => {
+  const refused = practiceSessionAllowanceNeededPage();
+  expect(refused).not.toContain("no practice session units left");
+  expect(refused).toContain(
+    "haven't claimed this month's practice sessions, or you've used them all",
+  );
+});
+it("INTERVIEW-01 the start page offers interview practice second, separately, and writes nothing", async () => {
+  const f = fixture();
+  const page = await f.get(`/library/${source.contentId}/practice-session`);
+  expect(page.status).toBe(200);
+  const ordinary = page.text.indexOf(
+    'name="prompt_version" value="practice-v1"',
+  );
+  const optional = page.text.indexOf("Optional interview practice");
+  const pinned = page.text.indexOf(
+    'name="prompt_version" value="interview-practice-v1"',
+  );
+  expect(ordinary).toBeGreaterThan(-1);
+  expect(optional).toBeGreaterThan(ordinary);
+  expect(pinned).toBeGreaterThan(optional);
+  expect(page.text).toContain(
+    "Answer an invented interview question &lt;safely&gt;.",
+  );
+  expect(page.text).toContain(
+    "doesn't predict hiring, interview results or competence",
+  );
+  expect(
+    page.text.match(
+      /<form method="post" action="\/library\/SYN-840\/practice-session\/start" data-practice-purpose="(lesson|interview)">/g,
+    ),
+  ).toHaveLength(2);
+  // Each form keeps its own confirmation, button and purpose marker.
+  expect(
+    page.text.match(/I want to start private sample practice/g),
+  ).toHaveLength(1);
+  expect(
+    page.text.match(/I want to start private sample interview practice/g),
+  ).toHaveLength(1);
+  expect(page.text).toContain('data-practice-purpose="lesson"');
+  expect(page.text).toContain('data-practice-purpose="interview"');
+  expect(f.practiceSessions.start).not.toHaveBeenCalled();
+});
+it("INTERVIEW-04 the start route passes the chosen interview version through unchanged", async () => {
+  const f = fixture();
+  const r = await f.post(
+    `/library/${source.contentId}/practice-session/start`,
+    {
+      ...startFields,
+      prompt_version: "interview-practice-v1",
+    },
+  );
+  expect(r.status).toBe(303);
+  expect(f.practiceSessions.start).toHaveBeenLastCalledWith(token, {
+    contentId: source.contentId,
+    contentVersion: 1,
+    goal: "everyday",
+    promptVersion: "interview-practice-v1",
+  });
+});
+it("INTERVIEW-03/07 session and history pages name interview practice and predict nothing", () => {
+  const session = practiceSessionPage(
+    { ...detail, promptVersion: "interview-practice-v1" },
+    "c",
+  );
+  expect(session).toContain("Purpose: optional interview practice");
+  expect(session).toContain(
+    "doesn't predict hiring, interview results or competence",
+  );
+  expect(practiceSessionPage(detail, "c")).toContain(
+    "Purpose: lesson practice",
+  );
+  expect(practiceSessionPage(detail, "c")).not.toContain("interview");
+  const history = practiceSessionHistoryPage({
+    items: [
+      { ...detail, promptVersion: "interview-practice-v1" },
+      { ...detail, id: "22222222-2222-4222-8222-222222222222" },
+    ],
+    nextCursor: null,
+  });
+  expect(history).toContain(
+    "Optional interview practice · prompt interview-practice-v1",
+  );
+  expect(history).toContain("Lesson practice · prompt practice-v1");
 });

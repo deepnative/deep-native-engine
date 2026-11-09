@@ -6,6 +6,7 @@ import { page, escape } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import {
   parseInvoiceMoney,
+  invoicePaymentStatus,
   invoiceUuid,
   invoiceTotal,
 } from "./simple-invoice-values.ts";
@@ -179,14 +180,18 @@ export function mountSimpleInvoiceRoutes(
     return res.send(
       page(
         "Courses and invoices",
-        `<section class="invoice-workspace"><h1>Courses and invoices</h1><p class="account-links"><a class="button secondary" href="/account/billing">Billing recipient</a> <a class="button secondary" href="/account/coaching">Monthly coaching hours</a></p><p>Registration does not create a charge. Review your consolidated courses and billing terms before accepting. Recurring invoices never take payment automatically. Cancel an existing monthly agreement before accepting a replacement.</p>${result.value.plans.map((plan) => `<article id="plan-${plan.id}"><h2>Course bundle</h2><p><a href="/courses/proposals/${plan.id}">Reopen this proposal after sign-in</a></p><p>${plan.terms.sample ? "SAMPLE · NOT PAYABLE" : "Prepared course offer"} · ${escape(plan.state)}</p><ul>${plan.terms.courses.map((c) => `<li>${escape(c.description)} · ${escape(c.id)} version ${c.version} · CAD ${(c.amountCents / 100).toFixed(2)}</li>`).join("")}</ul><p>${plan.terms.cadence === "one_time" ? "One-time invoice" : "Monthly invoices until cancelled"} · starts ${escape(plan.terms.startsOn)} · tax CAD ${(plan.terms.taxCents / 100).toFixed(2)}</p><p><strong>${plan.terms.cadence === "monthly" ? "Total each month" : "Total"}: CAD ${(invoiceTotal(plan.terms) / 100).toFixed(2)}</strong></p><p>Invoice issuer: ${escape(plan.terms.issuer)}</p><p class="invoice-instructions">${escape(plan.terms.instructions)}</p>${plan.state === "offered" ? `<form method="post" action="${memberPath}/plans/${plan.id}/accept">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", plan.revision)}<label>Invoice recipient name<input name="name" maxlength="200" value="${escape(profile.value?.name ?? "")}" required></label><label>Invoice email<input type="email" name="email" maxlength="254" value="${escape(profile.value?.email ?? "")}" required></label><label class="check"><input type="checkbox" name="confirm" value="accept" required><span>I accept these exact courses and ${plan.terms.cadence === "monthly" ? "monthly recurring invoices until I cancel" : "one-time billing terms"}. Issued financial invoices can be retained for accounting after learning-account deletion.</span></label><button>Accept courses and create invoice</button></form>` : plan.state === "active" ? `<form method="post" action="${memberPath}/plans/${plan.id}/cancel">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", plan.revision)}<label class="check"><input type="checkbox" name="confirm" value="cancel" required><span>Stop future invoices; retain already issued invoices.</span></label><button class="secondary">Cancel future billing</button></form>` : ""}</article>`).join("") || "<p>No course bundle has been prepared for this account.</p>"}<h2>Your invoices</h2><ul>${result.value.invoices.map((i) => `<li><a href="${memberPath}/invoices/${i.id}">${escape(i.document.number)}</a> · CAD ${(i.totalCents / 100).toFixed(2)} · ${i.voidReason ? "Void" : i.paidCents === i.totalCents ? "Paid" : i.paidCents ? "Partially paid" : "Awaiting offline payment"} · ${i.document.sample ? "Sample, not payable" : "Invoice"}</li>`).join("")}</ul><p><a href="/learn">Return to learning</a> · <a href="/account">My account</a></p></section>`,
+        `<section class="invoice-workspace"><h1>Courses and invoices</h1><p class="account-links"><a class="button secondary" href="/account/billing">Billing recipient</a> <a class="button secondary" href="/account/coaching">Monthly coaching hours</a></p><p>Registration does not create a charge. Review your consolidated courses and billing terms before accepting. Recurring invoices never take payment automatically. Cancel an existing monthly agreement before accepting a replacement.</p>${result.value.plans.map((plan) => `<article id="plan-${plan.id}"><h2>Course bundle</h2><p><a href="/courses/proposals/${plan.id}">Reopen this proposal after sign-in</a></p><p>${plan.terms.sample ? "SAMPLE · NOT PAYABLE" : "Prepared course offer"} · ${escape(plan.state)}</p><ul>${plan.terms.courses.map((c) => `<li>${escape(c.description)} · ${escape(c.id)} version ${c.version} · CAD ${(c.amountCents / 100).toFixed(2)}</li>`).join("")}</ul><p>${plan.terms.cadence === "one_time" ? "One-time invoice" : "Monthly invoices until cancelled"} · starts ${escape(plan.terms.startsOn)} · tax CAD ${(plan.terms.taxCents / 100).toFixed(2)}</p><p><strong>${plan.terms.cadence === "monthly" ? "Total each month" : "Total"}: CAD ${(invoiceTotal(plan.terms) / 100).toFixed(2)}</strong></p><p>Invoice issuer: ${escape(plan.terms.issuer)}</p><p class="invoice-instructions">${escape(plan.terms.instructions)}</p>${plan.state === "offered" && plan.terms.startsOn < result.value.today ? `<p role="status">Acceptance closed on ${escape(plan.terms.startsOn)}. A proposal can be accepted only until its start date, so this one can no longer be accepted and will not bill any past month. Ask your administrator for a new proposal if you still want these courses.</p>` : plan.state === "offered" && result.value.unavailable[plan.id] ? `<p role="status">This proposal can no longer be accepted: ${escape(result.value.unavailable[plan.id]!.join(", "))} ${result.value.unavailable[plan.id]!.length === 1 ? "is" : "are"} not currently offered. No invoice was created. Ask your administrator for a new proposal if you still want these courses.</p>` : plan.state === "offered" ? `<form method="post" action="${memberPath}/plans/${plan.id}/accept">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", plan.revision)}<label>Invoice recipient name<input name="name" maxlength="200" value="${escape(profile.value?.name ?? "")}" required></label><label>Invoice email<input type="email" name="email" maxlength="254" value="${escape(profile.value?.email ?? "")}" required></label><label class="check"><input type="checkbox" name="confirm" value="accept" required><span>I accept these exact courses and ${plan.terms.cadence === "monthly" ? "monthly recurring invoices until I cancel" : "one-time billing terms"}. Issued financial invoices can be retained for accounting after learning-account deletion.</span></label><button>Accept courses and create invoice</button></form>` : plan.state === "active" ? `<form method="post" action="${memberPath}/plans/${plan.id}/cancel">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", plan.revision)}<label class="check"><input type="checkbox" name="confirm" value="cancel" required><span>Stop future invoices; retain already issued invoices.</span></label><button class="secondary">Cancel future billing</button></form>` : ""}</article>`).join("") || "<p>No course bundle has been prepared for this account.</p>"}<h2>Your invoices</h2>${result.value.invoices.length ? `<ul>${result.value.invoices.map((i) => `<li><a href="${memberPath}/invoices/${i.id}">${escape(i.document.number)}</a> · CAD ${(i.totalCents / 100).toFixed(2)} · ${invoicePaymentStatus(i)} · ${i.document.sample ? "Sample, not payable" : "Invoice"}</li>`).join("")}</ul>` : "<p>No invoices have been issued to this account yet.</p>"}<p><a href="/learn">Return to learning</a> · <a href="/account">My account</a></p></section>`,
       ),
     );
   });
   app.get(adminPath, async (req, res) => {
-    if (!valid(req, res, [], ["ownerId"])) return;
-    const selected = req.query.ownerId;
-    if (selected !== undefined && !invoiceUuid(selected))
+    if (!valid(req, res, [], ["ownerId", "prepared"])) return;
+    const selected = req.query.ownerId,
+      prepared = req.query.prepared;
+    if (
+      (selected !== undefined && !invoiceUuid(selected)) ||
+      (prepared !== undefined && (prepared !== "1" || selected === undefined))
+    )
       return error(res, "invalid", undefined, true);
     if (!store) return error(res, "unavailable", undefined, true);
     const r = await store.adminOverview(token(res), selected);
@@ -195,10 +200,15 @@ export function mountSimpleInvoiceRoutes(
     return res.send(
       page(
         "Course billing administration",
-        `<section class="invoice-workspace portal-workspace"><h1>Course billing administration</h1><p>Prepare courses for a registered student. No invoice is issued until the student accepts the exact terms.</p>${portalActions(
+        `<section class="invoice-workspace portal-workspace"><h1>Course billing administration</h1>${prepared ? '<p role="status">Course billing proposal prepared. The learner can now review and accept it in Courses and invoices.</p>' : ""}<p>Prepare courses for a registered student. No invoice is issued until the student accepts the exact terms.</p>${portalActions(
           [
             ["/operator", "Administration console"],
             ["/operator/coaching", "Monthly coaching"],
+            [
+              "/operator/invoice-reconciliation",
+              "Invoice and cash reconciliation",
+            ],
+            ["/operator/course-agreements", "Course agreement outcomes"],
           ],
         )}<section class="portal-card"><h2>Prepare course billing</h2><form method="post" action="${adminPath}/plans">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}<label for="invoice-owner">Learner</label><select id="invoice-owner" name="ownerId" required>${r.value.members.map((m) => `<option value="${m.id}">${escape(m.displayName ?? "Name needed")} · ${escape(m.id)}</option>`).join("")}</select><fieldset><legend>Consolidate courses</legend>${r.value.courses.map((c) => `<label class="check"><input type="checkbox" name="courses" value="${escape(JSON.stringify([c.id, c.version]))}"><span>${escape(c.title)} · ${escape(c.id)} version ${c.version}</span></label><label>Amount for ${escape(c.title)} (CAD)<input name="amount_${escape(c.id)}_${c.version}" inputmode="decimal" value="0.00"></label>`).join("")}</fieldset><label for="invoice-cadence">Billing</label><select id="invoice-cadence" name="cadence"><option value="one_time">One-time</option><option value="monthly">Recurring monthly</option></select><label>Starts on (UTC date)<input type="date" name="startsOn" required></label><label>Configured tax amount per invoice (CAD)<input name="tax" inputmode="decimal" value="0.00" required></label><button>Prepare course billing proposal</button></form></section><section class="portal-card"><h2>Recurring invoices</h2><form method="post" action="${adminPath}/due">${hidden("csrf", anti)}<button>Generate due recurring invoices</button></form></section><section class="portal-card"><h2>Issued invoice references</h2><ul class="portal-list">${r.value.invoices.map((i) => `<li><a href="${adminPath}/${i.id}">${i.id}</a> · ${escape(i.delivery)}</li>`).join("")}</ul></section></section>`,
       ),
@@ -227,13 +237,20 @@ export function mountSimpleInvoiceRoutes(
         return error(res, "invalid", undefined, admin);
       const r = await store.invoice(token(res), invoiceId, admin);
       if (r.kind !== "ready") return error(res, r.kind, undefined, admin);
-      let html = simpleInvoiceDocument(r.value.document);
+      let html = simpleInvoiceDocument(
+        r.value.document,
+        admin,
+        r.value.payments,
+        r.value.service,
+      );
       if (admin) {
         const i = r.value,
-          anti = csrf(token(res), options.secret);
+          anti = csrf(token(res), options.secret),
+          // WALK-04: offer only what the store would accept.
+          due = i.totalCents - i.paidCents;
         html = html.replace(
           "</main>",
-          `<section class="invoice-controls"><h2>Send the invoice</h2><p>Email status: ${i.document.sample && i.delivery === "sent" ? "Simulated; no email sent" : DELIVERY[i.delivery]}</p>${options.invoiceSender ? `<form method="post" action="${adminPath}/${i.id}/email">${hidden("csrf", anti)}${hidden("revision", i.revision)}${hidden("operationId", randomUUID())}<label class="check"><input type="checkbox" name="confirm" value="send" required><span>${i.document.sample ? "Simulate delivery only; no email will be sent." : "Send this individual invoice to its accepted billing recipient."}</span></label><button>${i.document.sample ? "Simulate invoice email" : "Send invoice email"}</button></form>` : "<p>Invoice email is not configured on this service, so nothing can be sent from here. The member can open this invoice under Courses and invoices.</p>"}<h2>Record verified offline funds</h2><form method="post" action="${adminPath}/${i.id}/payment">${hidden("csrf", anti)}${hidden("revision", i.revision)}${hidden("operationId", randomUUID())}<label>Amount received (CAD)<input name="amount" inputmode="decimal" required></label><label>Received on<input type="date" name="receivedOn" required></label><label class="check"><input type="checkbox" name="confirm" value="received" required><span>I verified these funds were received for this exact invoice.</span></label><button>Record offline payment</button></form><h2>Correct an unpaid invoice</h2><p>${i.document.coaching ? `Void the incorrect invoice, then <a href="/operator/coaching">return its coaching month for correction</a>. Paid or partially paid corrections are unavailable here and require financial review.` : "Void the incorrect invoice, then prepare a new proposal."} Issued details and recorded funds cannot be edited.</p><form method="post" action="${adminPath}/${i.id}/void">${hidden("csrf", anti)}${hidden("revision", i.revision)}${hidden("operationId", randomUUID())}<label>Reason<input name="reason" maxlength="500" required></label><label class="check"><input type="checkbox" name="confirm" value="void" required><span>Void this unpaid invoice. This does not cancel its course agreement or refund any funds.</span></label><button class="secondary">Void unpaid invoice</button></form></section></main>`,
+          `<section class="invoice-controls"><h2>Send the invoice</h2><p>Email status: ${i.document.sample && i.delivery === "sent" ? "Simulated; no email sent" : DELIVERY[i.delivery]}</p>${options.invoiceSender ? `<form method="post" action="${adminPath}/${i.id}/email">${hidden("csrf", anti)}${hidden("revision", i.revision)}${hidden("operationId", randomUUID())}<label class="check"><input type="checkbox" name="confirm" value="send" required><span>${i.document.sample ? "Simulate delivery only; no email will be sent." : "Send this individual invoice to its accepted billing recipient."}</span></label><button>${i.document.sample ? "Simulate invoice email" : "Send invoice email"}</button></form>` : "<p>Invoice email is not configured on this service, so nothing can be sent from here. The member can open this invoice under Courses and invoices.</p>"}${i.voidReason !== null ? "" : due <= 0 ? "<h2>Record offline funds received</h2><p>Nothing is left to receive on this invoice.</p>" : `<h2>Record offline funds received</h2><p>Balance still due: CAD ${(due / 100).toFixed(2)}. A receipt can't be more than this.</p><p>This is a manual record, not payment-provider verification. The member can read the reference, so never enter card numbers, CVV or bank credentials.</p><form method="post" action="${adminPath}/${i.id}/payment">${hidden("csrf", anti)}${hidden("revision", i.revision)}${hidden("operationId", randomUUID())}<label>Amount received (CAD)<input name="amount" inputmode="decimal" required></label><label>Received on<input type="date" name="receivedOn" required></label><label>Evidence reference<input name="evidence" maxlength="200" required></label><label class="check"><input type="checkbox" name="confirm" value="received" required><span>I verified these funds were received for this exact invoice.</span></label><button>Record offline payment</button></form>`}${i.paidCents - (i.refundedCents ?? 0) > 0 ? `<h2>Record an offline refund</h2><p>Use this after the money has actually gone back. It moves no money, cancels no agreement and does not reopen the balance.</p><form method="post" action="${adminPath}/${i.id}/refund">${hidden("csrf", anti)}${hidden("revision", i.revision)}${hidden("operationId", randomUUID())}<label>Amount refunded (CAD)<input name="amount" inputmode="decimal" required></label><label>Refunded on<input type="date" name="refundedOn" required></label><label>Evidence reference<input name="evidence" maxlength="200" required></label><label class="check"><input type="checkbox" name="confirm" value="refunded" required><span>I confirm this refund was sent for this exact invoice.</span></label><button>Record offline refund</button></form>` : ""}${i.voidReason !== null || i.paidCents !== 0 ? "" : `<h2>Correct an unpaid invoice</h2><p>${i.document.coaching ? `Void the incorrect invoice, then <a href="/operator/coaching">return its coaching month for correction</a>. Paid or partially paid corrections are unavailable here and require financial review.` : "Void the incorrect invoice, then prepare a new proposal."} Issued details and recorded funds cannot be edited.</p><form method="post" action="${adminPath}/${i.id}/void">${hidden("csrf", anti)}${hidden("revision", i.revision)}${hidden("operationId", randomUUID())}<label>Reason<input name="reason" maxlength="500" required></label><label class="check"><input type="checkbox" name="confirm" value="void" required><span>Void this unpaid invoice. This does not cancel its course agreement or refund any funds.</span></label><button class="secondary">Void unpaid invoice</button></form>`}</section></main>`,
         );
       }
       return res.send(html);
@@ -297,7 +314,10 @@ export function mountSimpleInvoiceRoutes(
         taxCents,
       });
       return r.kind === "ready"
-        ? res.redirect(303, adminPath)
+        ? res.redirect(
+            303,
+            `${adminPath}?ownerId=${encodeURIComponent(req.body.ownerId)}&prepared=1`,
+          )
         : error(res, r.kind, req.body.operationId, true);
     } catch {
       return error(res, "invalid", undefined, true);
@@ -312,7 +332,8 @@ export function mountSimpleInvoiceRoutes(
       : error(res, r.kind, undefined, true);
   });
   app.post(`${adminPath}/:id/payment`, async (req, res) => {
-    if (!valid(req, res, ["confirm", "amount", "receivedOn"])) return;
+    if (!valid(req, res, ["confirm", "amount", "receivedOn", "evidence"]))
+      return;
     if (!store) return error(res, "unavailable", undefined, true);
     const amount = parseInvoiceMoney(req.body.amount);
     if (req.body.confirm !== "received" || amount === null)
@@ -323,6 +344,26 @@ export function mountSimpleInvoiceRoutes(
       operationId: req.body.operationId,
       amountCents: amount,
       receivedOn: req.body.receivedOn,
+      evidence: String(req.body.evidence ?? "").trim(),
+    });
+    return r.kind === "ready"
+      ? res.redirect(303, `${adminPath}/${req.params.id}`)
+      : error(res, r.kind, req.body.operationId, true);
+  });
+  app.post(`${adminPath}/:id/refund`, async (req, res) => {
+    if (!valid(req, res, ["confirm", "amount", "refundedOn", "evidence"]))
+      return;
+    if (!store) return error(res, "unavailable", undefined, true);
+    const amount = parseInvoiceMoney(req.body.amount);
+    if (req.body.confirm !== "refunded" || amount === null)
+      return error(res, "invalid", undefined, true);
+    const r = await store.refund(token(res), {
+      invoiceId: req.params.id,
+      expectedRevision: Number(req.body.revision),
+      operationId: req.body.operationId,
+      amountCents: amount,
+      refundedOn: req.body.refundedOn,
+      evidence: String(req.body.evidence ?? "").trim(),
     });
     return r.kind === "ready"
       ? res.redirect(303, `${adminPath}/${req.params.id}`)

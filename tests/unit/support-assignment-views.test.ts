@@ -7,6 +7,7 @@ import {
   assignmentHistoryPage,
   assignmentReceiptPage,
   assignmentNoticePage,
+  takenReceiptPage,
   type AssignmentAttempt,
 } from "../../src/support-assignment-views.ts";
 import type { AssignmentHistory } from "../../src/support-assignment.ts";
@@ -242,4 +243,60 @@ it("STAFF-WINDOW-01 pre-fills an editable support window up to the operator's ex
       new Date("2026-11-02T18:04:05.678Z"),
     ),
   ).toContain('value="2026-10-06T13:00:00.000Z"');
+});
+it("ADMSUP-01 offers one confirmed 'answer myself' form per open request, each with its own submission key", () => {
+  const item = {
+    requestId: 'receipt<"',
+    receivedAt: at,
+    acknowledgedAt: null,
+    resolvedAt: null,
+    withdrawnAt: null,
+  };
+  let n = 0;
+  const html = supportIntakeInboxPage(
+    "csrf",
+    {
+      items: [
+        item,
+        { ...item, requestId: "second" },
+        { ...item, resolvedAt: at },
+        { ...item, withdrawnAt: at },
+      ],
+      nextCursor: null,
+    },
+    () => `key-${++n}`,
+  );
+  expect(html.match(/Answer this request myself/g)).toHaveLength(2);
+  expect(html).toContain('action="/operator/support-assignment/take"');
+  expect(html).toContain('name="idempotencyKey" value="key-1"');
+  expect(html).toContain('name="idempotencyKey" value="key-2"');
+  expect(html).toContain(
+    "I will answer request receipt&lt;&quot; myself until my administrator session ends.",
+  );
+  expect(html.match(/name="confirm" value="yes" required/g)).toHaveLength(2);
+  // The default key source produces a distinct UUID per form.
+  const keys = supportIntakeInboxPage("csrf", {
+    items: [item, item],
+    nextCursor: null,
+  }).match(/name="idempotencyKey" value="([^"]+)"/g)!;
+  expect(new Set(keys).size).toBe(2);
+});
+it("ADMSUP-01 the take receipt links to the granted request and says when access ends", () => {
+  const created = takenReceiptPage({
+    requestId: "req/<",
+    grantId: "grant&1",
+    disposition: "created",
+  });
+  expect(created).toContain("You can answer this request");
+  expect(created).toContain(
+    'href="/operator/support/req%2F%3C?grant=grant%261"',
+  );
+  expect(created).toContain("Access ends when your administrator session ends");
+  expect(created).toContain("requestId=req%2F%3C");
+  const replayed = takenReceiptPage({
+    requestId: "r",
+    grantId: "g",
+    disposition: "replayed",
+  });
+  expect(replayed).toContain("nothing new was recorded");
 });

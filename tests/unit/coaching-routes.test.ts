@@ -750,6 +750,24 @@ it("HOURTABLE-01/02/03 lists saved months as a table with hours, amount, status 
       paidCents: "0",
       voided: true,
     },
+    {
+      month: "2026-04",
+      state: "invoiced",
+      minutes: 60,
+      invoiceId,
+      totalCents: "12000",
+      paidCents: "12000",
+      refundedCents: "12000",
+    },
+    {
+      month: "2026-03",
+      state: "invoiced",
+      minutes: 60,
+      invoiceId,
+      totalCents: "12000",
+      paidCents: "12000",
+      refundedCents: "2000",
+    },
     { month: "2025-01", state: "draft", minutes: 45, returned: false },
   ];
   f.service.coachingOverview.mockResolvedValue(ready({ ...value, months }));
@@ -777,6 +795,9 @@ it("HOURTABLE-01/02/03 lists saved months as a table with hours, amount, status 
   expect(row("August 2026")).toContain("CAD 240.00");
   expect(row("August 2026")).toContain("Awaiting review");
   expect(row("July 2026")).toContain("Invoiced · Paid");
+  // MANPAY-04: a refunded month reads as refunded, never as paid or due.
+  expect(row("April 2026")).toContain("Invoiced · Refunded");
+  expect(row("March 2026")).toContain("Invoiced · Partly refunded");
   expect(row("July 2026")).toContain(
     `href="/account/purchases/invoices/${invoiceId}"`,
   );
@@ -819,4 +840,15 @@ it("HOURTABLE-01 prices drafts at the newest applicable rate and labels an invoi
   expect(
     mainHtml((await f.get(`/account/coaching?month=${month}`)).text),
   ).toContain("<p>No saved months.</p>");
+});
+
+it("GAPS-03 tells the administrator to set a missing rate, and the member to ask for one", async () => {
+  const f = fixture();
+  const none = ready({ ...value, rate: null, rateVersion: null });
+  f.service.coachingOverview.mockResolvedValue(none);
+  const member = (await f.get("/account/coaching")).text;
+  expect(member).toContain("Ask the administrator to enter your agreed rate");
+  const staff = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(staff).toContain("No rate is set for this month. Set the rate below.");
+  expect(staff).not.toContain("Ask the administrator");
 });

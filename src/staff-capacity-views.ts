@@ -1,0 +1,150 @@
+import { portalActions } from "./backend-portal-presentation.ts";
+import { readableTime } from "./display-time.ts";
+import { hostingText } from "./hosting-presentation.ts";
+import type {
+  CapacityGroup,
+  ReviewTimeCommitments,
+  StaffCapacitySnapshot,
+} from "./staff-capacity.ts";
+import { escape, page } from "./views.ts";
+
+const minutes = (value: number) => `${value} min`;
+function fields(rows: [string, string, string][]) {
+  return `<dl>${rows.map(([key, label, value]) => `<dt>${label}</dt><dd data-field="${key}">${value}</dd>`).join("")}</dl>`;
+}
+const heading = { coaching: "Coaching", "formal-review": "Formal review" };
+function groupSection(row: CapacityGroup) {
+  const statusText = {
+    empty:
+      "No current roster records. Available capacity is not recorded, which is not the same as none.",
+    consistent:
+      "Verified records leave room after their commitments and open slots. This does not confirm anyone can deliver it.",
+    discrepancies:
+      "Some verified records are committed past their capacity. They stay visible below. This report corrects nothing.",
+  }[row.status];
+  const key = (name: string) => `${row.service}.${name}`;
+  return `<section class="portal-card" data-capacity-group="${row.service}"><h2>${heading[row.service]}</h2><p role="status" data-capacity-status="${row.status}">${statusText}</p><h3>Verified roster records</h3><p>Records that pass the registry's own checks: a verifier, qualification, agreement and conflict references, active staff access and a verified backup. This report repeats those checks. It doesn't confirm anyone's qualifications.</p>${fields(
+    [
+      [key("covered"), "Verified records", String(row.covered)],
+      [key("capacity"), "Declared capacity", minutes(row.capacityMinutes)],
+      [
+        key("committed"),
+        "Declared committed, typed into the registry",
+        minutes(row.committedMinutes),
+      ],
+      [key("slots"), "Open future slots", minutes(row.slotMinutes)],
+      [key("held"), "Slots held by a member", String(row.heldSlots)],
+      [
+        key("available"),
+        "Available, per record, after commitments and open slots",
+        row.availableMinutes === null
+          ? "Not recorded"
+          : minutes(row.availableMinutes),
+      ],
+      [
+        key("overcommitted"),
+        `Committed past capacity (${row.overcommitted})`,
+        minutes(row.overcommitMinutes),
+      ],
+    ],
+  )}<h3>Not counted as available coverage</h3>${fields([
+    [
+      key("unverified"),
+      `Unverified records, not qualified coverage (${row.unverified})`,
+      `${minutes(row.unverifiedCapacityMinutes)} declared, ${minutes(row.unverifiedCommittedMinutes)} committed`,
+    ],
+    [
+      key("noBackup"),
+      `Verified, with no verified backup (${row.noBackup})`,
+      `${minutes(row.noBackupCapacityMinutes)} declared`,
+    ],
+    [
+      key("inactive"),
+      `Verified, staff access ended (${row.inactive})`,
+      `${minutes(row.inactiveCapacityMinutes)} declared`,
+    ],
+    [
+      key("notCurrent"),
+      "Expired, retired or not yet started",
+      String(row.notCurrent),
+    ],
+  ])}</section>`;
+}
+function reviewTimeSection(row: ReviewTimeCommitments) {
+  const statusText = {
+    empty: "No review time to compare.",
+    consistent:
+      "All granted review time sits with reviewers who have a verified roster record.",
+    discrepancies:
+      "Some review time is granted to reviewers with no current verified roster record. It stays visible here. This report corrects nothing.",
+  }[row.status];
+  return `<section class="portal-card" data-review-time><h2>Review time · Test data</h2><p>Invented review time from the review-time test records. It is shown beside the roster's declared commitments and never added to them.</p><p role="status" data-capacity-status="${row.status}">${statusText}</p>${fields(
+    [
+      [
+        "review.open",
+        `Open review time (${row.open})`,
+        minutes(row.openMinutes),
+      ],
+      [
+        "review.granted",
+        `Granted to a reviewer (${row.granted})`,
+        minutes(row.grantedMinutes),
+      ],
+      ["review.reviewers", "Reviewers holding grants", String(row.reviewers)],
+      [
+        "review.unrostered",
+        `Granted to reviewers with no verified roster record (${row.unrostered})`,
+        minutes(row.unrosteredMinutes),
+      ],
+      [
+        "review.unrosteredReviewers",
+        "Reviewers with no verified roster record",
+        String(row.unrosteredReviewers),
+      ],
+      [
+        "review.waiting",
+        `Waiting for a reviewer (${row.waiting})`,
+        minutes(row.waitingMinutes),
+      ],
+      ["review.completed", "Completed reviews", String(row.completed)],
+      ["review.used", "Review minutes used", minutes(row.reviewMinutes)],
+      [
+        "review.preparation",
+        "Preparation minutes used, counted once",
+        minutes(row.preparationMinutes),
+      ],
+    ],
+  )}</section>`;
+}
+export function staffCapacityPage(snapshot: StaffCapacitySnapshot) {
+  return page(
+    "Staff capacity",
+    `<article class="reading"><p class="eyebrow">STAFF · ${hostingText("PREVIEW RECORDS", "TEST DATA")} · NOT A LIVE FIGURE</p><h1>Staff capacity</h1><p>One read-only snapshot comparing the expert registry's declared capacity with its open slots and recorded review time. Coaching and formal review are shown apart and are never added together.</p><p>As of <time datetime="${escape(snapshot.asOf.toISOString())}">${readableTime(snapshot.asOf)}</time>. A later read may differ.</p>${portalActions(
+      [
+        ["/operator/experts", "Expert coverage registry"],
+        ["/operator", "Administration console"],
+      ],
+    )}${snapshot.groups.map(groupSection).join("")}${reviewTimeSection(snapshot.reviewTime)}<h2>What this report cannot establish</h2><ul><li>A roster record is not proof of qualification. Unverified records are never counted as available coverage.</li><li>Declared capacity and commitments are what staff typed into the registry. No timesheet, calendar or contract is compared.</li><li>Coach assignments to members use a member sign-in, not the staff identity the roster uses, so they can't be matched to roster records and aren't shown.</li><li>No staff cost, forecast, booked service or revenue is shown.</li><li>No staff names, identifiers or qualification, agreement or conflict references are shown. Nothing is corrected or stored.</li></ul><p><a href="/operator/staff-capacity">Read a fresh snapshot</a></p></article>`,
+  );
+}
+export function staffCapacityUnavailablePage(
+  kind: "denied" | "unavailable" | "live" | "query",
+) {
+  const message = {
+    denied: "This report is not available to this session.",
+    unavailable:
+      "The snapshot could not be confirmed. No figures are shown. Nothing is retried automatically.",
+    live: "This report is unavailable in live mode, so it shows no live figures.",
+    query:
+      "This report does not accept query fields or filters. Open the report using its original link.",
+  }[kind];
+  return page(
+    "Capacity report unavailable",
+    `<section class="error-page"><h1>Capacity report unavailable</h1><p role="alert">${message}</p>${portalActions(
+      [
+        ["/operator/staff-capacity", "Open the report"],
+        ["/operator", "Administration console"],
+      ],
+    )}</section>`,
+  );
+}

@@ -174,7 +174,7 @@ it("WFREV-01 checked preview for another owner denies before reading source", as
     }),
   ).toEqual({ kind: "denied" });
 });
-it.each(["actor", "kind", "instruction"])(
+it.each(["kind", "instruction"])(
   "WFREV-06 request original key with changed %s conflicts",
   async (changed) => {
     const op = {
@@ -182,11 +182,9 @@ it.each(["actor", "kind", "instruction"])(
       kind: "request",
       instruction: checked,
       receiptId: requestId,
-      ...(changed === "actor"
-        ? { actorId: instanceId }
-        : changed === "kind"
-          ? { kind: "withdraw" }
-          : { instruction: { ...checked, revision: 2 } }),
+      ...(changed === "kind"
+        ? { kind: "withdraw" }
+        : { instruction: { ...checked, revision: 2 } }),
     };
     transaction([[source], [op]]);
     expect(await port().request(token, input())).toMatchObject({
@@ -370,18 +368,22 @@ it("WFREV-07 invalid receipt and operation identifiers never acquire authority",
   expect(f.execute).not.toHaveBeenCalled();
 });
 it("WFREV-06 unknown original key is empty inspection rather than a noncommit promise", async () => {
-  transaction([[]]);
+  const t = transaction([[]]);
   expect(await port().inspect(token, operationId)).toMatchObject({
     kind: "ready",
     receipt: null,
   });
+  // WFKEY (#42): the key is looked up only within the signed-in member's keys.
+  expect(t.query).toHaveBeenCalledWith(
+    expect.stringContaining("WHERE actor_id=$1 AND operation_id=$2"),
+    [actorId, operationId],
+  );
 });
 it.each([
-  { actorId: instanceId, kind: "request", receiptId: requestId },
   { actorId, kind: "request", receiptId: null },
   { actorId, kind: "assign", receiptId: requestId },
 ])(
-  "WFREV-06 foreign or tombstoned operation %j denies inspection",
+  "WFREV-06 tombstoned or unrelated operation %j denies inspection",
   async (op) => {
     transaction([[op]]);
     expect(await port().inspect(token, operationId)).toEqual({
@@ -426,7 +428,7 @@ it.each([
   ).toEqual({ kind: "invalid" });
   expect(f.execute).not.toHaveBeenCalled();
 });
-it.each(["actor", "kind", "instruction"])(
+it.each(["kind", "instruction"])(
   "WFREV-06 withdrawal key with changed %s conflicts",
   async (changed) => {
     const op = {
@@ -434,11 +436,9 @@ it.each(["actor", "kind", "instruction"])(
       kind: "withdraw",
       instruction: { requestId },
       receiptId: requestId,
-      ...(changed === "actor"
-        ? { actorId: instanceId }
-        : changed === "kind"
-          ? { kind: "request" }
-          : { instruction: { requestId: instanceId } }),
+      ...(changed === "kind"
+        ? { kind: "request" }
+        : { instruction: { requestId: instanceId } }),
     };
     transaction([
       [{ workflowId: "WF-001", workflowVersion: 1 }],

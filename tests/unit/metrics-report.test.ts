@@ -1,3 +1,4 @@
+import { withHosting } from "../../src/hosting-presentation.ts";
 import {
   learningCohorts,
   learningDisclosure,
@@ -14,8 +15,10 @@ import { withLoopback } from "../support/loopback-server.ts";
 
 const snapshot: PreviewMetrics = {
   scope: "synthetic-local-preview",
+  accounts: "not-demo",
   asOf: new Date("2026-10-27T12:00:00Z"),
   definitions: {
+    accounts: "Only <non-demo> accounts.",
     denominator:
       "Retained accounts at asOf, excluding deleted records <private>.",
     activated: "Versioned lesson opens.",
@@ -26,6 +29,7 @@ const snapshot: PreviewMetrics = {
     returnEligible: "First lesson open at least 14 days ago.",
     crossContentReturned:
       "Of returnEligible, different content during days 7 to 14.",
+    reportedOutcome: "Member-reported <outcome>, not verified.",
     usefulness: "Self-report, with small groups suppressed.",
     segments: "Segments can overlap.",
     cohorts: "Cohort windows are fixed.",
@@ -43,6 +47,7 @@ const snapshot: PreviewMetrics = {
     submittedAssignment: 4,
     returnEligible: 20,
     crossContentReturned: 6,
+    reportedOutcome: 8,
   }),
   segments: learningSegments(
     {
@@ -56,6 +61,7 @@ const snapshot: PreviewMetrics = {
           submittedAssignment: 1,
           returnEligible: 5,
           crossContentReturned: 0,
+          reportedOutcome: 0,
         },
       },
     },
@@ -87,8 +93,17 @@ it("MR-01 renders every count with its meaning, denominator, timestamp and separ
     submittedAssignment: "Suppressed",
     returnEligible: "20-49",
     crossContentReturned: "5-19",
+    reportedOutcome: "5-19",
   }))
     expect(html).toContain(`data-metric="${name}">${value}</strong>`);
+  // #123 OUTCOME: labelled member-reported, never as verified.
+  expect(html).toContain("Member-reported career outcomes");
+  expect(html).toContain("Member-reported &lt;outcome&gt;, not verified.");
+  expect(html).toContain('<th scope="col">Reported an outcome</th>');
+  expect(html).toContain(
+    "Career outcomes appear only as member-reported counts",
+  );
+  expect(html).not.toContain("and career outcomes are not included");
   expect(html).toContain("Values are broad bands, not exact counts");
   expect(html).toContain('data-segment="background-explorer"');
   expect(html).toContain('data-segment="goal-build"');
@@ -131,7 +146,10 @@ it("MR-03 uses the selected actor and handles query, denial, failure and deliber
     next();
   });
   const read = vi.fn().mockResolvedValue(snapshot);
-  registerMetricsReportRoutes(app, { snapshot: read });
+  registerMetricsReportRoutes(app, {
+    snapshot: read,
+    logExport: vi.fn(),
+  });
   await withLoopback(app, async (server) => {
     const good = await request(server)
       .get("/operator/metrics/report")
@@ -166,4 +184,32 @@ it("MR-03 uses the selected actor and handles query, denial, failure and deliber
     await request(server).get("/operator/metrics/report").expect(200);
     expect(read).toHaveBeenCalledTimes(3);
   });
+});
+it("READABLE-19 the hosted metrics report drops local wording and stays not a business report", () => {
+  const html = withHosting(true, () => metricsReportPage(snapshot));
+  expect(html).toContain("PRIVATE STAFF SNAPSHOT · NOT A LIVE REPORT");
+  expect(html).toContain("This is not a live business report");
+  expect(html).not.toMatch(/\blocal\b/i);
+  expect(metricsReportPage(snapshot)).toContain("SYNTHETIC LOCAL PREVIEW");
+});
+
+it("DEMOACCT-05 the report says which accounts it counts, on a demo site and elsewhere", () => {
+  const live = metricsReportPage(snapshot);
+  expect(live).toContain(
+    '<p data-accounts="not-demo">Only &lt;non-demo&gt; accounts.</p>',
+  );
+  expect(live).toContain(
+    "Accounts created before a site stops being a demo stay demo accounts and are never counted here.",
+  );
+  expect(live).not.toContain("not yet separated");
+  const demo = metricsReportPage({
+    ...snapshot,
+    accounts: "demo",
+    definitions: { ...snapshot.definitions, accounts: "Demo <only>." },
+  });
+  expect(demo).toContain('<p data-accounts="demo">Demo &lt;only&gt;.</p>');
+  expect(demo).toContain(
+    "Demo accounts are test data, not evidence of live outcomes.",
+  );
+  expect(demo).not.toContain("stops being a demo");
 });

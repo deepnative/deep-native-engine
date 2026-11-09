@@ -1,10 +1,16 @@
 import { billingProfileStore } from "./billing-profile.ts";
+import { workflowTestRoot } from "./workflow-registry.ts";
 import { administratorEntry } from "./administrator-entry.ts";
 import { coachViewStore } from "./coach-view.ts";
 import { memberSharingStore } from "./member-sharing.ts";
+import { memberRecordAccessStore } from "./member-record-access.ts";
 import { accountRoleAdmin } from "./account-role-admin.ts";
 import { administratorDiagnostics } from "./administrator-diagnostics.ts";
-import { simpleInvoiceSettings } from "./simple-invoice-config.ts";
+import {
+  simpleInvoiceSettings,
+  testProviderEventKey,
+} from "./simple-invoice-config.ts";
+import { testProviderEventStore } from "./test-provider-events.ts";
 import { simpleInvoiceStore } from "./simple-invoice-store.ts";
 import { learningWorkspaceStore } from "./learning-workspace-store.ts";
 import { learningWorkspacePublicationStore } from "./learning-workspace-publication.ts";
@@ -40,11 +46,12 @@ import { app } from "./app.ts";
 import { authorizationStore } from "./authorization.ts";
 import { evidenceStore, fileObjectStorage } from "./evidence.ts";
 import { uploadAdmissionStore } from "./upload-admission.ts";
+import { anonymousWriteAdmissionStore } from "./anonymous-write-admission.ts";
 import { preparedObjectStorage } from "./prepared-sample-storage.ts";
 import { preparedSampleStore } from "./prepared-samples.ts";
 import { assignmentEvidenceStore } from "./assignment-evidence.ts";
 import { assignmentObjectStorage } from "./assignment-evidence-storage.ts";
-import { deterministicRegistry } from "./adapters.ts";
+import { deterministicRegistry, testAiFaults } from "./adapters.ts";
 import { localAiConsentStore } from "./local-ai-consent.ts";
 import { localAiControlStore } from "./local-ai-control.ts";
 import { catalogStore, seedDraftPack } from "./catalog.ts";
@@ -60,9 +67,15 @@ import { circleGrantAdminStore } from "./circle-grant-admin.ts";
 import { circleStore } from "./circles.ts";
 import { metricsStore } from "./metrics.ts";
 import { ledgerReconciliationStore } from "./ledger-reconciliation.ts";
+import { invoiceReconciliationStore } from "./invoice-reconciliation.ts";
+import { staffCapacityStore } from "./staff-capacity.ts";
+import { myStaffTimeStore } from "./my-staff-time.ts";
+import { agreementOutcomesStore } from "./agreement-outcomes.ts";
 import { localAiHoldInspectionStore } from "./local-ai-hold-inspection.ts";
+import { localAiHoldDecisionStore } from "./local-ai-hold-decisions.ts";
 import { memberTestUnitsStore } from "./member-test-units.ts";
 import { studyUnitFixtureStore } from "./study-unit-fixtures.ts";
+import { studyAllowanceStore } from "./study-allowances.ts";
 import { attemptStore } from "./attempts.ts";
 import { practiceStore } from "./practice.ts";
 import { practiceSessionStore } from "./practice-sessions.ts";
@@ -75,6 +88,7 @@ import { availabilityStore } from "./availability.ts";
 import { manualObservationStore } from "./manual-observations.ts";
 import { assignmentReadinessStore } from "./assignment-readiness.ts";
 import { recoverPendingMemberDeletions } from "./deletion-recovery.ts";
+import { unstartedConnections } from "./listener-shutdown.ts";
 
 export function evidenceCapabilityClock(
   mode: string,
@@ -132,8 +146,16 @@ export async function start(env: NodeJS.ProcessEnv) {
     const invoices = invoiceSettings
       ? simpleInvoiceStore(pool, invoiceSettings)
       : undefined;
+    const testEventKey = testProviderEventKey(
+      env,
+      Boolean(settings.hosted),
+      invoiceSettings,
+    );
     const options = {
       simpleInvoices: invoices,
+      testProviderEvents: testEventKey
+        ? { key: testEventKey, store: testProviderEventStore(pool) }
+        : undefined,
       billingProfiles: billingProfileStore(pool),
       invoiceSender: !invoiceSettings
         ? undefined
@@ -147,6 +169,7 @@ export async function start(env: NodeJS.ProcessEnv) {
               )
             : undefined,
       ...settings,
+      workflowRoot: workflowTestRoot(settings.mode, env.DNE_WORKFLOW_ROOT),
       assignmentEvidence: assignmentEvidenceStore(pool, {
         enabled: settings.assignmentHandoff,
       }),
@@ -180,10 +203,16 @@ export async function start(env: NodeJS.ProcessEnv) {
         mode: settings.mode,
         enabled: settings.localTestUnitIssuance,
       }),
+      studyAllowances: studyAllowanceStore(pool, {
+        mode: settings.mode,
+        enabled: settings.localTestUnitIssuance,
+        practiceUnits: settings.practiceSessionAllowance,
+      }),
       staffEntry: staffEntryStore(pool),
       administratorEntry: administratorEntry(pool),
       coachView: coachViewStore(pool),
       memberSharing: memberSharingStore(pool),
+      memberRecordAccess: memberRecordAccessStore(pool),
       roleAdmin: accountRoleAdmin(pool),
       administratorDiagnostics: administratorDiagnostics(pool),
       workflowReviewStaff: workflowReviewStaffStore(
@@ -245,17 +274,31 @@ export async function start(env: NodeJS.ProcessEnv) {
         settings.secret,
         settings.circleDiscussion,
       ),
-      metrics: metricsStore(pool),
+      metrics: metricsStore(pool, { demoSite: settings.demoSite }),
       ledgerReconciliation: ledgerReconciliationStore(pool),
+      invoiceReconciliation: invoiceReconciliationStore(pool),
+      staffCapacity: staffCapacityStore(pool),
+      myStaffTime: myStaffTimeStore(pool),
+      agreementOutcomes: agreementOutcomesStore(pool),
       localHoldInspection: localAiHoldInspectionStore(pool, {
         mode: settings.mode,
         enabled: settings.localHoldInspectionReads,
         secret: Buffer.from(settings.secret, "hex"),
       }),
+      // HOLDDEC-11: decisions share the inspection switch, off by default.
+      localHoldDecisions: localAiHoldDecisionStore(pool, {
+        mode: settings.mode,
+        enabled: settings.localHoldInspectionReads,
+      }),
       memberTestUnits: memberTestUnitsStore(pool),
       attempts: attemptStore(pool),
       practice: practiceStore(pool),
-      practiceSessions: practiceSessionStore(pool),
+      practiceSessions: practiceSessionStore(pool, {
+        allowance: settings.practiceSessionAllowance,
+        // #200: local deterministic suggestions; config() rejects live hosting.
+        suggestions: { mode: settings.mode as "demo" | "test" },
+      }),
+      practiceSessionAllowance: settings.practiceSessionAllowance,
       reviewTimeGrantAdmin: reviewTimeGrantAdminStore(
         pool,
         {
@@ -312,10 +355,16 @@ export async function start(env: NodeJS.ProcessEnv) {
       localAiConsent: localAiConsentStore(
         pool,
         objects,
-        deterministicRegistry(env, settings.mode as "demo" | "test"),
+        deterministicRegistry(env, settings.mode as "demo" | "test", {
+          aiFaults: testAiFaults(env, settings.mode, Boolean(settings.hosted)),
+        }),
       ),
       localAiControl: localAiControlStore(pool),
       uploadAdmission: uploadAdmissionStore(pool),
+      anonymousWrites: anonymousWriteAdmissionStore(pool, {
+        secret: settings.secret,
+        publicOnly: !settings.hosted,
+      }),
       evidence: evidenceStore(
         pool,
         objects,
@@ -327,8 +376,12 @@ export async function start(env: NodeJS.ProcessEnv) {
         ),
       ),
     };
-    const server = app(store(pool), options).listen(settings.port, "127.0.0.1");
+    const server = app(
+      store(pool, { demoSite: settings.demoSite }),
+      options,
+    ).listen(settings.port, "127.0.0.1");
     ownedServer = server;
+    const closeUnstarted = unstartedConnections(server);
     await new Promise<void>((resolve, reject) => {
       server.once("listening", resolve);
       server.once("error", reject);
@@ -386,9 +439,11 @@ export async function start(env: NodeJS.ProcessEnv) {
       close: async () => {
         clearInterval(recoveryTimer);
         try {
-          await new Promise<void>((resolve, reject) =>
-            server.close((error) => (error ? reject(error) : resolve())),
-          );
+          await new Promise<void>((resolve, reject) => {
+            server.close((error) => (error ? reject(error) : resolve()));
+            // A browser preconnect would otherwise hold close() open (L189).
+            closeUnstarted();
+          });
         } finally {
           await activeRecovery;
           await pool.end();

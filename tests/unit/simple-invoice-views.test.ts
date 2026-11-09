@@ -114,3 +114,61 @@ it("HOUR04/08 prints explicit coaching quantity, rate version and preserved repl
     );
   }
 });
+
+it("TESTPAY-10 labels signed test entries as simulated and keeps manual wording to manual entries", () => {
+  const entry = {
+    amountCents: 100,
+    on: "2026-11-01",
+    evidence: "Test event evt-1",
+    verification: "signed_test_event" as const,
+  };
+  const all = simpleInvoiceDocument({ ...invoice }, false, [
+    { ...entry, kind: "receipt" },
+    { ...entry, kind: "refund" },
+    { ...entry, kind: "failure" },
+    { ...entry, kind: "held" },
+  ]);
+  for (const label of [
+    "Test receipt",
+    "Test refund",
+    "Test payment failed",
+    "Test event not applied",
+    "No payment provider checked them and no money moved",
+  ])
+    expect(all).toContain(label);
+  expect(all).not.toContain("Recorded manually by staff");
+  const mixed = simpleInvoiceDocument({ ...invoice }, true, [
+    { ...entry, kind: "receipt", recordedBy: "Signed test event" },
+    {
+      ...entry,
+      kind: "refund",
+      verification: "manual_unverified",
+      recordedBy: "Staff account 12345678",
+    },
+  ]);
+  expect(mixed).toContain("Recorded manually by staff");
+  expect(mixed).toContain("No payment provider checked them");
+  expect(mixed).toContain("Signed test event");
+  const manual = simpleInvoiceDocument({ ...invoice }, false, [
+    { ...entry, kind: "receipt", verification: "manual_unverified" },
+  ]);
+  expect(manual).not.toContain("No payment provider checked them");
+});
+
+it("SVC-07 shows the simulated service state only when one is given, saying nothing is provided", () => {
+  expect(simpleInvoiceDocument(invoice)).not.toContain("Service (simulated)");
+  for (const [service, words] of [
+    [{ state: "awaiting_payment" }, "Awaiting payment"],
+    [{ state: "ready", since: "2026-11-01" }, "Ready since 2026-11-01"],
+    [
+      { state: "withdrawn", since: "2026-11-02" },
+      "Withdrawn after a test refund on 2026-11-02",
+    ],
+  ] as const) {
+    const html = simpleInvoiceDocument(invoice, false, [], service);
+    expect(html).toContain("<h2>Service (simulated)</h2>");
+    expect(html).toContain(words);
+    expect(html).toContain("It provides nothing and grants no access");
+    expect(html).toContain("No payment provider checked it and no money moved");
+  }
+});

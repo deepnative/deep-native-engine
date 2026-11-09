@@ -708,6 +708,10 @@ progress {
 .reading h2 {
   font-size: 22px;
 }
+/* WALK-01: study requests and practice sessions are separate allowances. */
+.reading [data-allowance] {
+  margin-bottom: 35px;
+}
 .number {
   position: absolute;
   left: 0;
@@ -1284,6 +1288,13 @@ footer {
 .invoice-controls input {
   caret-color: var(--accent);
 }
+.invoice-payment-record td:nth-child(-n + 2),
+.invoice-payment-record td:last-child {
+  white-space: nowrap;
+}
+.invoice-payment-record td:nth-child(3) {
+  overflow-wrap: anywhere;
+}
 .invoice-document table {
   width: 100%;
   border-collapse: collapse;
@@ -1507,10 +1518,13 @@ footer {
   align-items: center;
   gap: 8px 16px;
 }
+/* #793: the current page is an underline, not a fill, so it never reads as a
+   button beside the outlined view switch or the filled account actions. */
 .main-navigation a[aria-current="page"],
 .guidance-header nav a[aria-current="page"] {
   color: var(--accent);
-  background: #eaf0ff;
+  background: transparent;
+  border-radius: 0;
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 @media (max-width: 760px) {
@@ -1653,6 +1667,13 @@ footer {
 .account-page > .profile-form form {
   margin-top: 20px;
 }
+/* ACCT-PLAIN-01: the section already has a divider and heading; the form's own
+   spacing and line are for /learn, where it stands alone. */
+.account-page > .account-delete .delete-form {
+  margin: 0;
+  padding-top: 0;
+  border-top: 0;
+}
 /* ACCT-LAYOUT-01..04: wide screens use the page width. The summary spans the
    top, with its text and links on full-width lines; email and sign-out sit
    beside the profile form. */
@@ -1661,9 +1682,9 @@ footer {
     max-width: none;
     display: grid;
     grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-    /* The last row takes the profile's extra height, so sign-out follows
-       email directly. */
-    grid-template-rows: auto auto auto 1fr;
+    /* The last row takes the profile's extra height, so each section on the
+       left follows the one above it directly. */
+    grid-template-rows: auto auto auto auto 1fr;
     column-gap: 56px;
     align-items: start;
   }
@@ -1675,7 +1696,7 @@ footer {
   }
   .account-page > .profile-form {
     grid-column: 2;
-    grid-row: 2 / span 3;
+    grid-row: 2 / span 4;
   }
 }
 
@@ -2073,10 +2094,12 @@ footer {
   margin: 12px 0 20px;
 }
 
-/* CONSOLECOACH-01: latest coaching month in the learner table. */
+/* CONSOLEMONTHS-01..03: coaching months in the learner table; each month
+   header names its month on a second line. */
 .member-table td.member-coaching {
   white-space: nowrap;
 }
+.member-table thead th span,
 .member-table td.member-coaching span {
   display: block;
   color: var(--muted);
