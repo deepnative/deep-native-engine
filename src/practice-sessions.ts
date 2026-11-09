@@ -392,14 +392,17 @@ export function practiceSessionStore(
                 suggestionState === "requested" ? "unknown" : suggestionState,
               text: suggestionText,
               requestedAt: suggestionRequestedAt!,
-              testOutcome:
-                testOutcome && testReason && testDecidedAt
-                  ? {
-                      outcome: testOutcome,
-                      reason: testReason,
-                      decidedAt: testDecidedAt,
-                    }
-                  : null,
+              // Only an unknown suggestion can carry a test outcome.
+              ...(suggestionState === "requested" && {
+                testOutcome:
+                  testOutcome && testReason && testDecidedAt
+                    ? {
+                        outcome: testOutcome,
+                        reason: testReason,
+                        decidedAt: testDecidedAt,
+                      }
+                    : null,
+              }),
             }
           : null,
       }),
