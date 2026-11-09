@@ -579,8 +579,6 @@ it("TESTPAY-01/02 passes the signed test event handler to the app only when enab
 it("OFFPUR-07 uses existing hosted mail only for explicitly configured invoices", async () => {
   const billing = {
     DNE_INVOICE_MODE: "configured",
-    DNE_INVOICE_ISSUER: "Configured test issuer",
-    DNE_INVOICE_PAYMENT_INSTRUCTIONS: "Configured test instructions",
     DNE_INVOICE_CURRENCY: "CAD",
   };
   server();
