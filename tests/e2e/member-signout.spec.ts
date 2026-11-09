@@ -412,6 +412,44 @@ test("[L281] NAV-01/03/04 finds account tools and deliberately signs out without
     await expect(
       page.getByText("You may lose access", { exact: false }),
     ).toBeVisible();
+    // SOUT-LAYOUT-01/02 (#793): the heading starts below the header like other
+    // task pages, and Stay signed in sits beside Sign out under the checkbox.
+    const original = page.viewportSize()!;
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const confirm = page.locator("main form"),
+      leave = confirm.getByRole("button", { name: "Sign out", exact: true }),
+      stay = confirm.getByRole("link", { name: "Stay signed in" }),
+      box = async (l: typeof leave) => (await l.boundingBox())!;
+    const header = await box(page.locator(".site-header")),
+      heading = await box(
+        page.getByRole("heading", { name: "Sign out", exact: true }),
+      );
+    expect(heading.y - (header.y + header.height)).toBeGreaterThanOrEqual(24);
+    const [leaveBox, stayBox, check] = [
+      await box(leave),
+      await box(stay),
+      await box(confirm.getByRole("checkbox")),
+    ];
+    expect(stayBox.y).toBe(leaveBox.y);
+    expect(stayBox.height).toBe(leaveBox.height);
+    expect(stayBox.x).toBeGreaterThan(leaveBox.x + leaveBox.width);
+    expect(check.y + check.height).toBeLessThan(leaveBox.y);
+    // SOUT-LAYOUT-03: at phone width both actions stack full width, no scroll.
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    const [phoneLeave, phoneStay] = [await box(leave), await box(stay)];
+    expect(phoneLeave.width).toBe(phoneStay.width);
+    expect(phoneLeave.x).toBeGreaterThanOrEqual(16);
+    expect(phoneStay.y).toBeGreaterThan(phoneLeave.y + phoneLeave.height);
+    await page.screenshot({
+      path: test.info().outputPath("sign-out-phone.png"),
+      fullPage: true,
+    });
+    await page.setViewportSize(original);
     expect((await members.session(f.token)).kind).toBe("active");
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     expect((await members.session(f.token)).kind).toBe("active");
