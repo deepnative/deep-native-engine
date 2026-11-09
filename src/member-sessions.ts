@@ -4,7 +4,7 @@ import type { Pool, PoolClient } from "pg";
 /**
  * #695 MULTISESSION: an account keeps one sign-in per browser. Each browser's
  * cookie fingerprint has its own member_sessions row, and the account's own
- * token_hash is a random value that no cookie hashes to (migration 129).
+ * token_hash is a random value that no cookie hashes to (migration 130).
  *
  * Every store finds the member with `hash(cookie)`. So that those lookups stay
  * as they are, this process remembers which account a browser currently

@@ -278,8 +278,8 @@ it("MULTISESSION-06 cookies issued before this change keep working after the mig
       "SELECT id FROM principals WHERE kind='member'",
     )
   ).rows[0]!.id;
-  // The shape before migration 129: the member row holds one browser's hash.
-  await pool.query("DELETE FROM schema_migrations WHERE version=129");
+  // The shape before migration 130: the member row holds one browser's hash.
+  await pool.query("DELETE FROM schema_migrations WHERE version=130");
   await pool.query("DELETE FROM member_sessions");
   await pool.query(
     "UPDATE principals SET token_hash=$2,separate_sessions=false WHERE id=$1",
