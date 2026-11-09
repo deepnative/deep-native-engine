@@ -105,7 +105,9 @@ interface Target {
   metered: boolean;
   unitState: string | null;
 }
-/** Authority, then workspace, job and grant, in the inspection lock order. */
+/** Authority, then workspace, job and grant, in the inspection lock order.
+ * The same two kinds of held request as hold inspection: invented sample
+ * requests and, since #189 PRACTICE-HOLD-02, unmetered practice suggestions. */
 async function authorized(
   tx: SampleTransaction,
   token: string,
@@ -130,7 +132,9 @@ async function authorized(
        FROM adapter_jobs j LEFT JOIN local_ai_test_unit_jobs b ON b.job_id=j.id
        LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id
        WHERE j.id=$1 AND j.member_id=$2 AND j.adapter='ai' AND j.mode IN ('demo','test')
-        AND j.operation='evidence-summary-local-v1'
+        AND ((j.operation='evidence-summary-local-v1' AND j.prompt_template_version='local-simulation-v1')
+         OR (j.operation='practice-suggestion-local-v1' AND j.prompt_template_version='practice-suggestion-v1'
+          AND b.job_id IS NULL))
        FOR ${lockJob} OF j`,
       [jobId, owner.memberId],
     )
