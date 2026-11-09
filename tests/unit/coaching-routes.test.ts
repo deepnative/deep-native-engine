@@ -852,3 +852,52 @@ it("GAPS-03 tells the administrator to set a missing rate, and the member to ask
   expect(staff).toContain("No rate is set for this month. Set the rate below.");
   expect(staff).not.toContain("Ask the administrator");
 });
+it("ISSUER-03 issues a configured coaching invoice with computed 13% HST and no tax field", async () => {
+  const f = fixture();
+  (f.service as Record<string, unknown>).tax = {
+    label: "HST",
+    registration: "713254472RT0001",
+    rateBasisPoints: 1300,
+  };
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...value,
+      sample: false,
+      entry: {
+        ...entry,
+        state: "submitted",
+        snapshot: { ...snapshot, sample: false },
+        submittedRevision: 2,
+      },
+    }),
+  );
+  const page = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(page).toContain("Issue the reviewed invoice");
+  expect(page).toContain("HST at 13% (CAD 23.40) is added");
+  expect(page).not.toContain('name="tax"');
+  const path = `/operator/coaching/${id}/issue`;
+  expect(
+    (await f.post(path, { month, action: "issue", confirm: "issue" })).status,
+  ).toBe(303);
+  expect(f.service.issueCoaching.mock.calls[0]![1]).not.toHaveProperty(
+    "taxCents",
+  );
+  // A typed tax is refused: the server sets HST.
+  expect(
+    (
+      await f.post(path, {
+        month,
+        action: "issue",
+        confirm: "issue",
+        tax: "0.00",
+      })
+    ).status,
+  ).toBe(403);
+  expect(f.service.issueCoaching).toHaveBeenCalledTimes(1);
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, sample: false }),
+  );
+  expect((await f.get("/account/coaching")).text).toContain(
+    "HST at 13% is added when the invoice is issued",
+  );
+});

@@ -20,25 +20,18 @@ it("OFFPUR-07 keeps invoices off until explicitly configured and isolates nonpay
     simpleInvoiceSettings({ DNE_INVOICE_MODE: "unknown" }, false),
   ).toThrow("must be");
 });
-it("OFFPUR-07 requires explicit issuer, offline instructions and currency before payable issuance", () => {
-  const env = {
-    DNE_INVOICE_MODE: "configured",
-    DNE_INVOICE_ISSUER: "Configured test issuer",
-    DNE_INVOICE_PAYMENT_INSTRUCTIONS: "Configured test instructions",
-    DNE_INVOICE_CURRENCY: "CAD",
-  };
-  expect(simpleInvoiceSettings(env, true)).toEqual({
+it("OFFPUR-07 requires explicit CAD before payable issuance; issuer facts come from the issuer record (ISSUER-01)", () => {
+  const env = { DNE_INVOICE_MODE: "configured", DNE_INVOICE_CURRENCY: "CAD" };
+  expect(simpleInvoiceSettings(env, true)).toMatchObject({
     sample: false,
-    issuer: env.DNE_INVOICE_ISSUER,
-    instructions: env.DNE_INVOICE_PAYMENT_INSTRUCTIONS,
+    issuer: "Deep Native Inc. · Ontario, Canada",
   });
   for (const change of [
-    { DNE_INVOICE_ISSUER: "" },
-    { DNE_INVOICE_PAYMENT_INSTRUCTIONS: "" },
     { DNE_INVOICE_CURRENCY: "USD" },
+    { DNE_INVOICE_CURRENCY: undefined },
   ])
     expect(() => simpleInvoiceSettings({ ...env, ...change }, true)).toThrow(
-      "requires issuer",
+      "CAD",
     );
 });
 

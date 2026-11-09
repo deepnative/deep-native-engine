@@ -22,6 +22,10 @@ const field = (page: Page, group: string, name: string) =>
 const cash = (page: Page, group: string, name: string) =>
   page.locator(`[data-invoice-group="${group}"] [data-field="${name}"]`);
 
+// Configured subtotals whose 13% HST brings the totals to CAD 40.00 and 50.00.
+const REAL_40 = "35.40",
+  REAL_50 = "44.25";
+
 async function setUp(f: Fixture) {
   await f.publishFixture();
   const admin = (await f.staff("platform_admin")).page;
@@ -43,7 +47,8 @@ async function offerAndAccept(
   await prepareBundle({ ...f, origin }, admin, reference, {
     amounts: [["FND-001", amount]],
     cadence: "one_time",
-    tax: "0.00",
+    // ISSUER-02: configured billing adds 13% HST, so it takes no typed tax.
+    ...(origin === f.origin ? { tax: "0.00" } : {}),
   });
   if (!accept) return undefined;
   await member.goto(origin + "/account/purchases");
@@ -98,8 +103,8 @@ test("[F-ECO-08-A] learning, participation, reviewed-contribution and paid-conve
       buyer = await f.member("professional", "work"),
       declined = await f.member("technical", "build");
     await selfAssess(f, learner);
-    await offerAndAccept(f, admin, buyer, realOrigin, "40.00");
-    await offerAndAccept(f, admin, declined, realOrigin, "40.00", false);
+    await offerAndAccept(f, admin, buyer, realOrigin, REAL_40);
+    await offerAndAccept(f, admin, declined, realOrigin, REAL_40, false);
 
     await admin.goto(f.origin + "/operator/metrics/report");
     const report = admin.locator("main");
@@ -244,7 +249,7 @@ test("[F-ECO-08-B] demo agreements and payments stay out of the real measures an
     await requiredCheck(1, async () => {
       await offerAndAccept(f, admin, demo, f.origin, "25.00");
       await expect(demo.locator("body")).toContainText("SAMPLE · NOT PAYABLE");
-      await offerAndAccept(f, admin, real, realOrigin, "40.00");
+      await offerAndAccept(f, admin, real, realOrigin, REAL_40);
       await expect(real.locator("body")).not.toContainText("SAMPLE");
 
       await admin.goto(f.origin + "/operator/course-agreements");
@@ -345,7 +350,7 @@ test("[F-BUILD-09-A] demo payments and seeded agreement outcomes are excluded fr
         admin,
         real,
         realOrigin,
-        "50.00",
+        REAL_50,
       );
       await recordPayment(admin, f.origin, demoInvoice!, "30.00", date);
       await recordPayment(admin, realOrigin, realInvoice!, "20.00", date);

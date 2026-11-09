@@ -15,7 +15,9 @@ import {
   invoiceText,
   invoiceTotal,
   invoiceUuid,
+  salesTaxCents,
   validInvoiceTerms,
+  type InvoiceTax,
   type InvoiceTerms,
 } from "./simple-invoice-values.ts";
 import { normalizedEmail } from "./member-email-access.ts";
@@ -88,6 +90,8 @@ export interface InvoiceSettings {
   sample: boolean;
   issuer: string;
   instructions: string;
+  /** ISSUER-02: configured invoices only; samples keep an invented typed tax. */
+  tax?: InvoiceTax;
 }
 const fail = (kind: InvoiceFailure["kind"]): InvoiceFailure => ({ kind });
 async function utcToday(tx: PracticeTransaction) {
@@ -318,6 +322,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
       paidCents: 0,
       instructions: plan.terms.instructions,
       sample: plan.terms.sample,
+      ...(plan.terms.tax ? { tax: plan.terms.tax } : {}),
     };
     await tx.query(
       "INSERT INTO simple_invoices(id,plan_id,owner_id,cycle,document,sample,total_cents) VALUES($1,$2,$3,$4,$5,$6,$7)",
@@ -730,7 +735,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         ownerId: string;
         month: string;
         expectedRevision: number;
-        taxCents: number;
+        /** Sample mode only: configured invoices compute HST. */
+        taxCents?: number;
         operationId: string;
       },
     ): Promise<InvoiceResult<{ invoiceId: string }>> {
@@ -739,7 +745,9 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         !invoiceUuid(input.ownerId) ||
         !coachingMonth(input.month) ||
         !invoiceCents(input.expectedRevision) ||
-        !invoiceCents(input.taxCents) ||
+        (settings.tax
+          ? input.taxCents !== undefined
+          : !invoiceCents(input.taxCents)) ||
         !invoiceUuid(input.operationId)
       )
         return fail("invalid");
@@ -763,7 +771,10 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         )
           return fail("conflict");
         const snapshot = entry.snapshot,
-          total = snapshot.subtotalCents + input.taxCents;
+          taxCents = settings.tax
+            ? salesTaxCents(snapshot.subtotalCents, settings.tax)
+            : input.taxCents!,
+          total = snapshot.subtotalCents + taxCents;
         if (
           snapshot.subtotalCents <= 0 ||
           !invoiceCents(total) ||
@@ -799,10 +810,11 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           ],
           billing: { kind: "one_time" },
           currency: "CAD",
-          taxCents: input.taxCents,
+          taxCents,
           paidCents: 0,
           instructions: settings.instructions,
           sample: snapshot.sample,
+          ...(settings.tax ? { tax: settings.tax } : {}),
           coaching: {
             month: snapshot.month,
             minutes: snapshot.minutes,
@@ -1015,13 +1027,15 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         courses: Array<{ id: string; version: number; amountCents: number }>;
         cadence: "one_time" | "monthly";
         startsOn: string;
-        taxCents: number;
+        /** Sample mode only: configured terms compute HST. */
+        taxCents?: number;
       },
     ): Promise<InvoiceResult<{ planId: string }>> {
       if (
         !input ||
         !invoiceUuid(input.ownerId) ||
         !invoiceUuid(input.operationId) ||
+        (settings.tax && input.taxCents !== undefined) ||
         !Array.isArray(input.courses) ||
         input.courses.length < 1 ||
         input.courses.length > 20 ||
@@ -1061,7 +1075,12 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           courses,
           cadence: input.cadence,
           startsOn: input.startsOn,
-          taxCents: input.taxCents,
+          taxCents: settings.tax
+            ? salesTaxCents(
+                courses.reduce((sum, c) => sum + c.amountCents, 0),
+                settings.tax,
+              )
+            : input.taxCents!,
           ...settings,
         };
         if (!validInvoiceTerms(terms)) return fail("invalid");
@@ -1597,6 +1616,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         return fail("unavailable");
       }
     },
+    /** ISSUER-02: forms omit the tax field when the server computes HST. */
+    tax: settings.tax,
   };
 }
 export type SimpleInvoiceStore = ReturnType<typeof simpleInvoiceStore>;

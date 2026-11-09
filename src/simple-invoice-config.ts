@@ -1,4 +1,4 @@
-import { invoiceText } from "./simple-invoice-values.ts";
+import { DEEP_NATIVE_INVOICE_ISSUER } from "./invoice-issuer.ts";
 import type { InvoiceSettings } from "./simple-invoice-store.ts";
 export function simpleInvoiceSettings(
   env: NodeJS.ProcessEnv,
@@ -18,17 +18,17 @@ export function simpleInvoiceSettings(
       instructions: "Sample invoice only. Do not send money.",
     };
   }
-  const issuer = env.DNE_INVOICE_ISSUER,
-    instructions = env.DNE_INVOICE_PAYMENT_INSTRUCTIONS;
+  // ISSUER-01 (#32): the issuer facts come from one reviewed record, not env.
   if (
-    !invoiceText(issuer, 500) ||
-    !invoiceText(instructions, 2000) ||
-    env.DNE_INVOICE_CURRENCY !== "CAD"
+    env.DNE_INVOICE_ISSUER !== undefined ||
+    env.DNE_INVOICE_PAYMENT_INSTRUCTIONS !== undefined
   )
     throw Error(
-      "Configured invoicing requires issuer, offline instructions and explicit CAD currency.",
+      "Configured invoicing uses the Deep Native Inc. issuer record; remove DNE_INVOICE_ISSUER and DNE_INVOICE_PAYMENT_INSTRUCTIONS.",
     );
-  return { sample: false, issuer, instructions };
+  if (env.DNE_INVOICE_CURRENCY !== "CAD")
+    throw Error("Configured invoicing requires explicit CAD currency.");
+  return { sample: false, ...DEEP_NATIVE_INVOICE_ISSUER };
 }
 /** TESTPAY-01/02: off unless set, and never on a host, including the demo site. */
 export function testProviderEventKey(
