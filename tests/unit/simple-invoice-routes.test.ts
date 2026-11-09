@@ -56,7 +56,12 @@ function fixture(disabled = false, noSender = false) {
     overview: vi
       .fn()
       .mockResolvedValue(
-        ready({ plans: [], invoices: [], today: "2026-10-31" }),
+        ready({
+          plans: [],
+          invoices: [],
+          today: "2026-10-31",
+          unavailable: {},
+        }),
       ),
     adminOverview: vi.fn().mockResolvedValue(
       ready({
@@ -177,6 +182,7 @@ it("OFFPUR-08/10 shows exact courses, explicit cadence and cancelled agreements 
         { ...invoice, voidReason: "wrong course" },
       ],
       today: "2026-10-31",
+      unavailable: {},
     }),
   );
   const r = await f.get(base);
@@ -213,6 +219,7 @@ it("BUILD-04-C closes an offer once its start date passes, with no accept form",
       ],
       invoices: [],
       today: "2026-11-01",
+      unavailable: {},
     }),
   );
   const r = await f.get(base);
@@ -221,6 +228,34 @@ it("BUILD-04-C closes an offer once its start date passes, with no accept form",
   expect(r.text).not.toContain("Acceptance closed on 2026-11-01.");
   // Only the offer starting today keeps its accept form.
   expect(r.text.match(/\/accept"/g)).toHaveLength(1);
+});
+it("BUILD-09-B names the courses an open offer no longer has, with no accept form", async () => {
+  const f = fixture(),
+    other = "00000000-0000-4000-8000-0000000000aa",
+    open = "00000000-0000-4000-8000-0000000000bb";
+  f.service.overview.mockResolvedValue(
+    ready({
+      plans: [
+        { id, terms, state: "offered", revision: 1 },
+        { id: other, terms, state: "offered", revision: 1 },
+        { id: open, terms, state: "offered", revision: 1 },
+      ],
+      invoices: [],
+      today: "2026-10-31",
+      unavailable: { [id]: ["FND-003"], [other]: ["FND-001", "<FND-9>"] },
+    }),
+  );
+  const r = await f.get(base);
+  expect(r.status).toBe(200);
+  expect(r.text).toContain(
+    "This proposal can no longer be accepted: FND-003 is not currently offered.",
+  );
+  expect(r.text).toContain(
+    "This proposal can no longer be accepted: FND-001, &lt;FND-9&gt; are not currently offered.",
+  );
+  // Only the offer whose courses are all still offered keeps its form.
+  expect(r.text.match(/\/accept"/g)).toEqual([`/accept"`]);
+  expect(r.text).toContain(`/plans/${open}/accept"`);
 });
 it("OFFPUR-05 denies query parameters, forged CSRF/origin and malformed form shapes", async () => {
   const f = fixture();
@@ -612,6 +647,7 @@ it("BILLPROFILE02/04 isolates profile validation, stale forms, unavailable outco
       plans: [{ id, terms, state: "offered", revision: 1 }],
       invoices: [],
       today: "2026-10-31",
+      unavailable: {},
     }),
   );
   r = await f.get(base);
@@ -922,6 +958,7 @@ it("WALK-02 tells a member with no invoices that none have been issued, and list
       plans: [],
       invoices: [{ ...invoice, document: { ...doc, sample: true } }],
       today: "2026-10-31",
+      unavailable: {},
     }),
   );
   const listed = (await f.get(base)).text;
