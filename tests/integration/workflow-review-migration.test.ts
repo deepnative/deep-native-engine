@@ -61,7 +61,9 @@ it("WFREV-08 populated migration063 upgrades without rewriting notes or inventin
       "CREATE VIEW authorized_staff_profiles AS SELECT * FROM staff_profiles",
     );
     // Current member projection only; keep the target legacy migration and marker unchanged.
-    await client.query("ALTER TABLE learners ADD COLUMN display_name text");
+    await client.query(
+      "ALTER TABLE learners ADD COLUMN display_name text, ADD COLUMN created_on_demo_site boolean NOT NULL DEFAULT false",
+    );
     const member = fresh(),
       other = fresh(),
       db = store(pool),
