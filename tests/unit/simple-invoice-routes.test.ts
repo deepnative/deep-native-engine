@@ -53,16 +53,14 @@ const invoice = {
 const ready = (value: unknown) => ({ kind: "ready", value });
 function fixture(disabled = false, noSender = false) {
   const service = {
-    overview: vi
-      .fn()
-      .mockResolvedValue(
-        ready({
-          plans: [],
-          invoices: [],
-          today: "2026-10-31",
-          unavailable: {},
-        }),
-      ),
+    overview: vi.fn().mockResolvedValue(
+      ready({
+        plans: [],
+        invoices: [],
+        today: "2026-10-31",
+        unavailable: {},
+      }),
+    ),
     adminOverview: vi.fn().mockResolvedValue(
       ready({
         members: [{ id }],
