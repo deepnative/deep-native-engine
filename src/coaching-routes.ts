@@ -24,6 +24,13 @@ import {
   monthLabel,
   type CoachingRate,
 } from "./coaching-values.ts";
+import {
+  adminTermsSection,
+  memberTermsSection,
+  parseCoachingTerms,
+  TERMS_FIELDS,
+  type CoachingTermsStore,
+} from "./coaching-terms.ts";
 import type {
   InvoiceFailure,
   SavedCoachingMonth,
@@ -129,6 +136,7 @@ export function mountCoachingRoutes(
     origin: string;
     secret: string;
     billingProfiles?: BillingProfileStore;
+    coachingTerms?: CoachingTermsStore;
   },
 ) {
   const token = (res: Response) => res.locals.token as string;
@@ -229,6 +237,21 @@ export function mountCoachingRoutes(
           ? coachingSubtotal(e?.minutes ?? 0, v.rate.cents)
           : null;
       let body = `<section class="invoice-workspace${admin ? " portal-workspace" : ""}"><h1>${admin ? "Review monthly coaching" : "Monthly coaching hours"}</h1><p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p><p>${admin ? `Member: <strong>${escape(v.displayName ?? "Name needed")}</strong> · account reference <code>${escape(v.ownerId)}</code>` : "Choose the month you want to invoice, enter your coaching hours and minutes, then review the rate set by your administrator. Requesting an invoice submits the saved month for administrator review; it does not take payment. Coaching is optional; your learning access does not depend on a rate or invoice."}</p><form method="get" action="${base}"><label>Calendar month (UTC)<input type="month" name="month" value="${v.month}" max="${v.today}" required></label><button class="secondary">Open month</button></form><h2>${monthLabel(v.month)}</h2><p>Status: ${e ? escape(e.state) : "No saved draft or submission"}${e ? ` · revision ${e.revision}` : ""}</p>${e?.returnReason ? `<p role="status">Returned for correction: ${escape(e.returnReason)}</p>` : ""}<p>${v.rate ? `Applicable rate: ${money(v.rate.cents)} per hour · version ${v.rate.version} · effective ${monthLabel(v.rate.effectiveMonth)}` : admin ? "No rate is set for this month. Set the rate below." : "No rate is set for this month. Ask the administrator to enter your agreed rate before submitting; you can save a draft now."}</p>`;
+      // #316 TERMS316-01/06: per-student coaching terms, beside the hours.
+      if (options.coachingTerms) {
+        const t = admin
+          ? await options.coachingTerms.forStudent(token(res), v.ownerId)
+          : await options.coachingTerms.own(token(res));
+        if (t.kind !== "ready")
+          return failure(res, t.kind === "invalid" ? "denied" : t.kind, admin);
+        body += admin
+          ? adminTermsSection(
+              t.value,
+              `${base}/terms`,
+              `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", t.value?.version ?? 0)}`,
+            )
+          : memberTermsSection(t.value);
+      }
       if (admin)
         body += `<h2>Set member rate</h2><form method="post" action="${base}/rate">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", v.rateVersion)}<label>Effective month<input type="month" name="effectiveMonth" value="${v.month}" required></label><label>Hourly rate (CAD)<input name="rate" inputmode="decimal" required></label><button>Save hourly rate</button></form>`;
       if (e)
@@ -275,6 +298,27 @@ export function mountCoachingRoutes(
       );
     });
   }
+  // #316 TERMS316-01..05: a platform administrator saves a new terms version.
+  app.post(`${adminPath}/:ownerId/terms`, async (req, res) => {
+    if (!valid(req, res, [...TERMS_FIELDS])) return;
+    if (!options.coachingTerms) return failure(res, "unavailable", true);
+    const values = parseCoachingTerms(req.body);
+    if (
+      values === null ||
+      !/^(0|[1-9]\d{0,8})$/.test(String(req.body.revision))
+    )
+      return failure(res, "invalid", true);
+    const ownerId = (req.params as Record<string, string>).ownerId!;
+    const r = await options.coachingTerms.save(token(res), {
+      ...values,
+      ownerId,
+      expectedVersion: Number(req.body.revision),
+      operationId: req.body.operationId,
+    });
+    return r.kind === "ready"
+      ? res.redirect(303, `${adminPath}/${ownerId}`)
+      : failure(res, r.kind, true);
+  });
   app.post(`${adminPath}/:ownerId/rate`, async (req, res) => {
     if (!valid(req, res, ["effectiveMonth", "rate"])) return;
     if (!store) return failure(res, "unavailable", true);

@@ -1,3 +1,5 @@
+import type { CoachingTermsStore } from "./coaching-terms.ts";
+import { termsPage } from "./demo-terms.ts";
 import { mountAdministratorDiagnostics } from "./administrator-diagnostics-routes.ts";
 import { OUTSIDE_MARKET_MESSAGE, servedCountry } from "./customer-market.ts";
 import { workQueueTools } from "./administrator-work-waiting-views.ts";
@@ -486,6 +488,7 @@ export function app(
     learningWorkspacePublication?: LearningWorkspacePublicationStore;
     programs?: ProgramStore;
     simpleInvoices?: SimpleInvoiceStore;
+    coachingTerms?: CoachingTermsStore;
     testProviderEvents?: TestProviderEvents;
     billingProfiles?: BillingProfileStore;
     invoiceSender?: InvoiceSender;
@@ -990,6 +993,7 @@ export function app(
     next();
   });
   app.get("/readiness", (_req, res) => res.send(readinessPage(mode, adapters)));
+  app.get("/terms", (_req, res) => res.send(termsPage()));
   const resumeSelection = (raw: string | undefined) =>
     invoiceResumeTarget(raw, options.secret) ??
     programResumeTarget(raw, options.secret);

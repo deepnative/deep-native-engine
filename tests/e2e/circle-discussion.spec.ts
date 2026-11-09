@@ -291,7 +291,7 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
       const exported = await (
         await peer.request.get(`${origin}/api/member/export`)
       ).json();
-      expect(exported.version).toBe("local-member-records-v44");
+      expect(exported.version).toBe("local-member-records-v45");
       expect(
         exported.records.circlePosts.map((row: { body: string }) => row.body),
       ).toEqual([reply]);

@@ -656,6 +656,16 @@ const sections = {
     "member_record_access a WHERE a.member_id=$1",
     "a.id",
   ),
+  // v45 appends #316: every version of the coaching terms an administrator set
+  // for the member, never which administrator.
+  coachingTerms: section(
+    `version,price_cents AS "priceCents",to_char(starts_on,'YYYY-MM-DD') AS "startsOn",
+    to_char(ends_on,'YYYY-MM-DD') AS "endsOn",to_char(renews_on,'YYYY-MM-DD') AS "renewsOn",
+    review_minutes AS "reviewMinutes",coaching_sessions AS "coachingSessions",
+    ai_requests AS "aiRequests",created_at AS "savedAt"`,
+    "coaching_terms WHERE owner_id=$1",
+    "version",
+  ),
 } as const;
 /** Section SQL, shared with the member-authorized operator download (#40). */
 export const MEMBER_EXPORT_SECTIONS = sections;
@@ -671,7 +681,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v44";
+  version: "local-member-records-v45";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -805,7 +815,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v44",
+          version: "local-member-records-v45",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

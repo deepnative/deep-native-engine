@@ -1348,6 +1348,22 @@ test("[L14] integration readiness labels every provider as simulated", async ({
     7,
   );
   await expect(page.getByText("configured", { exact: false })).toHaveCount(0);
+  // #12 TERMS-04: the footer leads to the demo terms, marked not legally reviewed.
+  await page
+    .getByRole("navigation", { name: "Site links" })
+    .getByRole("link", { name: "Terms and privacy" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Terms and privacy for this demo" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Accepted by Deep Native Inc. for this demo only. Not legally reviewed.",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "info@deepnative.io" }),
+  ).toHaveAttribute("href", "mailto:info@deepnative.io");
 });
 
 test("[L15] member identity owns one private workspace and direct API parameters cannot cross it", async ({
