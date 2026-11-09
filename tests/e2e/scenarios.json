@@ -2892,6 +2892,15 @@
       "expected": "Without coach minutes the section says a practice interview with a person needs coach minutes and no coach is booked, with no request link; with minutes it links to sample windows and says a sample hold isn't a booking; the reserved hold appears once as a sample hold with a coach, not a booking, held until its deadline; the simulated sessions are said to be read by no person; no sideways scrolling",
       "issues": [201],
       "critical": true
+    },
+    {
+      "id": "L325",
+      "actor": "Member whose AI step times out or answers in an unexpected form",
+      "preconditions": "Shared synthetic PostgreSQL database, one invented member with one test unit and two clean invented samples marked for a test-only timeout and malformed answer (DNE_TEST_AI_FAULTS, local test mode only); desktop/mobile Chromium; no provider",
+      "steps": "AIFAULT-07: the member runs a test request whose AI step never answers, reopens the page, then queues and runs a simulation that answers in an unexpected form and tries it again",
+      "expected": "The timed-out request is named as a timeout after the 5-second deadline, stays held with its test unit and ceiling points held once, no settlement and no run or retry offered; the malformed answer is named with nothing shown, saved or charged and one more try offered, which runs it again without saving output; no sideways scrolling",
+      "issues": [190],
+      "critical": false
     }
   ],
   "fullMvp": [

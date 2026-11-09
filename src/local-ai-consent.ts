@@ -20,6 +20,12 @@ import {
 export const LOCAL_AI_PURPOSE = "evidence-summary-local-v1";
 // #190: at most this many unfinished AI requests per member, across sources.
 export const LOCAL_AI_MEMBER_OPEN_LIMIT = 3;
+// #190: a started AI step that has not answered by this deadline is held as a
+// timeout. It is far inside the five-minute claim, so the claim never expires
+// first, and a late answer is ignored.
+export const LOCAL_AI_STEP_DEADLINE_MS = 5_000;
+// The store refuses a run once a request has used this many attempts.
+const LOCAL_AI_MAX_ATTEMPTS = 3;
 export const LOCAL_AI_STATEMENT_VERSION = "local-simulation-v1";
 export const LOCAL_AI_TEST_UNIT_POLICY = "deterministic-request-test-v1";
 const MODEL = "deterministic-local-v1";
@@ -51,6 +57,11 @@ export interface LocalAiChoice {
       reason: "matching-test-record" | "operator-test-exercise";
       decidedAt: Date;
     };
+    /** #190 The real failure, when it is known: the AI step missed its
+     * deadline (the request stays held), or answered in an unexpected form. */
+    failure?: "timeout" | "malformed";
+    /** #190 A failed simulation the member may run again. */
+    canRetry?: true;
   }>;
 }
 export interface LocalAiConsentStore {
@@ -136,7 +147,7 @@ type Job = {
 };
 
 const JOB_COLUMNS =
-  "SELECT j.id,j.status,j.safe_error,b.policy,r.state AS test_unit_state,e.rate_version,e.model_version,e.input_tokens AS estimated_input_tokens,e.output_tokens AS estimated_output_tokens,e.cost_points AS estimated_cost_points,s.input_tokens AS actual_input_tokens,s.output_tokens AS actual_output_tokens,s.cost_points AS actual_cost_points,d.outcome AS test_outcome,d.reason AS test_reason,d.decided_at AS test_decided_at FROM adapter_jobs j ";
+  "SELECT j.id,j.status,j.safe_error,j.attempt_count,b.policy,r.state AS test_unit_state,e.rate_version,e.model_version,e.input_tokens AS estimated_input_tokens,e.output_tokens AS estimated_output_tokens,e.cost_points AS estimated_cost_points,s.input_tokens AS actual_input_tokens,s.output_tokens AS actual_output_tokens,s.cost_points AS actual_cost_points,d.outcome AS test_outcome,d.reason AS test_reason,d.decided_at AS test_decided_at FROM adapter_jobs j ";
 const JOB_DETAILS =
   "LEFT JOIN local_ai_test_unit_jobs b ON b.job_id=j.id LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id LEFT JOIN ai_usage_estimates e ON e.job_id=j.id AND e.member_id=j.member_id LEFT JOIN ai_usage_settlements s ON s.job_id=j.id AND s.member_id=j.member_id LEFT JOIN local_ai_hold_test_decisions d ON d.job_id=j.id AND d.member_id=j.member_id ";
 const JOBS = JOB_COLUMNS + JOB_DETAILS;
@@ -148,6 +159,7 @@ type ListedJob = {
   id: string;
   status: string;
   safe_error: string | null;
+  attempt_count: number;
   policy?: string;
   test_unit_state?: string;
   rate_version?: string | null;
@@ -193,11 +205,25 @@ function jobBudget(job: ListedJob) {
 const refusedAfterClaim = (number: string) =>
   `status=CASE WHEN ${number}::int>1 THEN 'needs_reconciliation' ELSE 'exhausted' END,safe_error=CASE WHEN ${number}::int>1 THEN 'provider_outcome_unknown' ELSE 'provider_unavailable' END`;
 
+class StepDeadlinePassed extends Error {}
+/** Waits for the AI step until the deadline. Its late answer is dropped. */
+function withinDeadline<T>(step: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([
+    step,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new StepDeadlinePassed()), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 export function localAiConsentStore(
   pool: Pool,
   objects: ObjectStorage,
   registry: AdapterRegistry,
+  options: { stepDeadlineMs?: number } = {},
 ): LocalAiConsentStore {
+  const stepDeadlineMs = options.stepDeadlineMs ?? LOCAL_AI_STEP_DEADLINE_MS;
   // Runtime mode is checked even when a caller casts/forges the typed registry.
   if (registry.mode !== "demo" && registry.mode !== "test")
     return disabledLocalAiConsentStore();
@@ -445,6 +471,21 @@ export function localAiConsentStore(
     ).rows;
     return jobs.map(listedJob);
   }
+  function listedFailure(job: ListedJob) {
+    if (job.status === "needs_reconciliation")
+      return job.safe_error === "provider_timeout"
+        ? { failure: "timeout" as const }
+        : {};
+    if (job.status !== "failed") return {};
+    return {
+      ...(job.safe_error === "invalid_provider_response"
+        ? { failure: "malformed" as const }
+        : {}),
+      ...(job.attempt_count < LOCAL_AI_MAX_ATTEMPTS
+        ? { canRetry: true as const }
+        : {}),
+    };
+  }
   function listedJob(job: ListedJob) {
     return {
       id: job.id,
@@ -462,6 +503,7 @@ export function localAiConsentStore(
           }
         : {}),
       ...jobBudget(job),
+      ...listedFailure(job),
       ...(job.test_outcome
         ? {
             testOutcome: {
@@ -842,7 +884,7 @@ export function localAiConsentStore(
         }
         if (job.status !== "pending" && job.status !== "failed")
           return { status: job.status };
-        if (job.attempt_count >= 3) {
+        if (job.attempt_count >= LOCAL_AI_MAX_ATTEMPTS) {
           await client.query(
             "UPDATE adapter_jobs SET status='exhausted',safe_error='invalid_provider_response',updated_at=clock_timestamp() WHERE id=$1",
             [id],
@@ -933,13 +975,23 @@ export function localAiConsentStore(
             await restoreCommitment(client, id, claim.number);
             return { kind: "denied" };
           }
-          const output = await adapter.execute(LOCAL_AI_PURPOSE, { text });
+          const output = await withinDeadline(
+            adapter.execute(LOCAL_AI_PURPOSE, { text }),
+            stepDeadlineMs,
+          );
           result = validateAdapterResult(output, "ai", registry.mode);
           usage = readAiUsage(output);
-        } catch {
+        } catch (error) {
+          // A started step may have run either way, so both stay held. Only a
+          // missed deadline is named, so the member is told it timed out.
           await client.query(
-            "UPDATE adapter_jobs SET status='needs_reconciliation',attempt_token=NULL,lease_until=NULL,safe_error='provider_outcome_unknown' WHERE id=$1",
-            [id],
+            "UPDATE adapter_jobs SET status='needs_reconciliation',attempt_token=NULL,lease_until=NULL,safe_error=$2 WHERE id=$1",
+            [
+              id,
+              error instanceof StepDeadlinePassed
+                ? "provider_timeout"
+                : "provider_outcome_unknown",
+            ],
           );
           return {
             kind: "unavailable",
