@@ -169,10 +169,11 @@ it("queues identical keys once, rejects changed receipt collisions, and persists
   expect(await local.enqueue(own.token, own.receiptId, "same-key")).toEqual(
     first,
   );
+  // #42 AIKEY: another member's same key is their own, unused key.
   const other = await granted();
-  expect(await local.enqueue(other.token, other.receiptId, "same-key")).toEqual(
-    { kind: "conflict" },
-  );
+  const theirs = await local.enqueue(other.token, other.receiptId, "same-key");
+  expect(theirs.kind).toBe("queued");
+  expect(theirs).not.toEqual(first);
   if (first.kind !== "queued") throw Error("No job");
   expect(await local.run(own.token, first.jobId)).toMatchObject({
     kind: "completed",
