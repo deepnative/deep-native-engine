@@ -30,7 +30,7 @@ async function exportedRecords(member: Page, origin: string) {
       records: Record<string, Record<string, unknown>[]>;
       page: { nextCursor: string | null };
     };
-    expect(body.version).toBe("local-member-records-v44");
+    expect(body.version).toBe("local-member-records-v45");
     for (const [name, rows] of Object.entries(body.records))
       records[name] = [...(records[name] ?? []), ...rows];
     if (!body.page.nextCursor) return records;

@@ -1,3 +1,4 @@
+import { coachingTermsStore } from "./coaching-terms.ts";
 import { billingProfileStore } from "./billing-profile.ts";
 import { workflowTestRoot } from "./workflow-registry.ts";
 import { administratorEntry } from "./administrator-entry.ts";
@@ -153,6 +154,7 @@ export async function start(env: NodeJS.ProcessEnv) {
     );
     const options = {
       simpleInvoices: invoices,
+      coachingTerms: coachingTermsStore(pool),
       testProviderEvents: testEventKey
         ? { key: testEventKey, store: testProviderEventStore(pool) }
         : undefined,

@@ -1,3 +1,4 @@
+import type { CoachingTermsStore } from "./coaching-terms.ts";
 import { mountAdministratorDiagnostics } from "./administrator-diagnostics-routes.ts";
 import { OUTSIDE_MARKET_MESSAGE, servedCountry } from "./customer-market.ts";
 import { workQueueTools } from "./administrator-work-waiting-views.ts";
@@ -481,6 +482,7 @@ export function app(
     learningWorkspacePublication?: LearningWorkspacePublicationStore;
     programs?: ProgramStore;
     simpleInvoices?: SimpleInvoiceStore;
+    coachingTerms?: CoachingTermsStore;
     testProviderEvents?: TestProviderEvents;
     billingProfiles?: BillingProfileStore;
     invoiceSender?: InvoiceSender;
