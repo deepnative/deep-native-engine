@@ -85,6 +85,7 @@ import { memberExportStore } from "./member-export.ts";
 import { usefulnessStore } from "./usefulness.ts";
 import { workflowFeedbackStore } from "./workflow-feedback.ts";
 import { memberSlotHolds } from "./slot-holds.ts";
+import { sampleHoldCancellationStore } from "./sample-hold-cancellations.ts";
 import { availabilityStore } from "./availability.ts";
 import { manualObservationStore } from "./manual-observations.ts";
 import { assignmentReadinessStore } from "./assignment-readiness.ts";
@@ -291,6 +292,9 @@ export async function start(env: NodeJS.ProcessEnv) {
       localHoldDecisions: localAiHoldDecisionStore(pool, {
         mode: settings.mode,
         enabled: settings.localHoldInspectionReads,
+      }),
+      sampleHoldCancellations: sampleHoldCancellationStore(pool, {
+        mode: settings.mode,
       }),
       memberTestUnits: memberTestUnitsStore(pool),
       attempts: attemptStore(pool),

@@ -332,6 +332,11 @@ import {
 } from "./local-ai-hold-decisions.ts";
 import { registerLocalAiHoldDecisionRoutes } from "./local-ai-hold-decision-routes.ts";
 import {
+  disabledSampleHoldCancellationStore,
+  type SampleHoldCancellationStore,
+} from "./sample-hold-cancellations.ts";
+import { registerSampleHoldCancellationRoutes } from "./sample-hold-cancellation-routes.ts";
+import {
   disabledMemberTestUnitsStore,
   type MemberTestUnitsStore,
 } from "./member-test-units.ts";
@@ -507,6 +512,7 @@ export function app(
     agreementOutcomes?: AgreementOutcomesStore;
     localHoldInspection?: LocalAiHoldInspectionStore;
     localHoldDecisions?: LocalAiHoldDecisionStore;
+    sampleHoldCancellations?: SampleHoldCancellationStore;
     memberTestUnits?: MemberTestUnitsStore;
     studyUnitFixtures?: StudyUnitFixtureStore;
     studyAllowances?: StudyAllowanceStore;
@@ -1059,6 +1065,11 @@ export function app(
   registerLocalAiHoldDecisionRoutes(
     app,
     options.localHoldDecisions ?? disabledLocalAiHoldDecisionStore(),
+    mode,
+  );
+  registerSampleHoldCancellationRoutes(
+    app,
+    options.sampleHoldCancellations ?? disabledSampleHoldCancellationStore(),
     mode,
   );
   registerMemberTestUnitsRoutes(
