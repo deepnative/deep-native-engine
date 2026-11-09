@@ -137,7 +137,7 @@ Limits of this evidence:
 
 ## November 2026 provisional tranche: BUILD-06-D
 
-Re-measured on 9 November 2026, after the ECO-08-A/B and BUILD-09-A tranche: seventy-four IDs had provisional browser tests. The owner decided on 9 November that an AI request whose outcome is unknown stays held, so F-BUILD-06-D was reworded to that rule ([#190](https://github.com/deepnative/deep-native-engine/issues/190)). It used to say a timed-out reservation is "restored or settled exactly once". Its ID, family and criticality are unchanged. With its test this makes seventy-five of 100 (sixty-nine of 94 critical). Accepted release evidence stays at **0/100**, and these results are not an approval.
+Re-measured on 9 November 2026, after the ECO-08-A/B and BUILD-09-A tranche: seventy-four IDs had provisional browser tests. The owner decided on 9 November that an AI request whose outcome is unknown stays held, so F-BUILD-06-D was reworded to that rule ([#190](https://github.com/deepnative/deep-native-engine/issues/190)). It used to say a timed-out reservation is "restored or settled exactly once". Its ID, family and criticality are unchanged. The BUILD-06 family's `requirement` stays a verbatim quote of `02-codex-build-prompt.md`, whose "restores or settles the correct usage reservation" the owner's 9 November hold rule replaces for case D; the family's `expected` summary now says a reservation settles at most once and an unknown outcome stays held. With its test this makes seventy-five of 100 (sixty-nine of 94 critical). Accepted release evidence stays at **0/100**, and these results are not an approval.
 
 `tests/full-e2e/ai-step-faults.spec.ts` uses the test-only `DNE_TEST_AI_FAULTS` switch, which the full-e2e servers now turn on as the main browser server already does; marked invented text makes the AI step miss its 5-second deadline or answer in an unexpected form. A held test request that times out is named as a timeout; one that answers wrongly says its outcome is unknown. Both keep their test unit held once, with no settlement and no run or retry offered. An unmetered simulation that answers wrongly is named, and nothing is shown, saved or charged.
 
@@ -145,6 +145,8 @@ Limits of this evidence:
 
 - There is no real provider. The deadline and the faults are local test switches, refused on hosted sites, so nothing here shows how a real provider times out or fails.
 - "Held" is a test unit and simulated ceiling points, not money. Releasing or settling a held request is left to a later decision; this case only shows it is never released or settled twice.
+
+## November 2026 provisional tranche: ROADMAP-06-C and BUILD-07-B
 
 Re-measured on 8 November 2026: sixty-eight IDs had provisional browser tests. Product slice [#769](https://github.com/deepnative/deep-native-engine/issues/769) lets each workflow template say whether it is currently supported, which makes two critical cases demonstrable: seventy of 100 (sixty-four of 94 critical). Accepted release evidence stays at **0/100**, and these results are not an approval.
 
