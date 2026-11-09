@@ -45,7 +45,7 @@ it("COACHMOCK-01 without coach minutes the section explains the gate and offers 
 it("NOCOACH-01 the section says no coach can be booked yet, with or without minutes", () => {
   const sentence =
     "No coaches are available to book yet, so a practice interview with a person can't be arranged.";
-  for (const grants of [[], [{ id: "g", category: "coach_minutes" }]])
+  for (const grants of [[], [{ id: "g", category: "coach_minutes" as const }]])
     expect(
       coachPracticeSection(coachPracticeState({ grants, receipts: [] })),
     ).toContain(sentence);

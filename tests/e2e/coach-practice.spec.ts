@@ -89,6 +89,9 @@ test("[L324] COACHMOCK-06 a member sees the coach-minute gate, reserves a sample
       "A practice interview with a person needs coach minutes.",
     );
     await expect(section).toContainText("No coach is booked for you.");
+    await expect(section).toContainText(
+      "No coaches are available to book yet, so a practice interview with a person can't be arranged.",
+    );
     await expect(
       section.getByRole("link", { name: "sample coaching window" }),
     ).toHaveCount(0);
