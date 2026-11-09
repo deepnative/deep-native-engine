@@ -30,9 +30,11 @@ resource "azurerm_postgresql_flexible_server" "durable" {
   sku_name                      = "B_Standard_B1ms"
   storage_mb                    = 32768
   public_network_access_enabled = true
-  geo_redundant_backup_enabled  = false
-  auto_grow_enabled             = false
-  tags                          = module.onboard.tags
+  # #12 owner decision 9 Nov 2026: database backups are kept 30 days.
+  backup_retention_days        = 30
+  geo_redundant_backup_enabled = false
+  auto_grow_enabled            = false
+  tags                         = module.onboard.tags
   authentication {
     active_directory_auth_enabled = true
     password_auth_enabled         = false

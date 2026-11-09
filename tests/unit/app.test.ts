@@ -7118,6 +7118,7 @@ it("FOOTER-01 lists footer links as whole items without dot separators", async (
     "Local circles",
     "Workflow demonstrations",
     "Service status",
+    "Terms and privacy",
   ])
     expect(footer).toContain(`>${label}</a>`);
 });
