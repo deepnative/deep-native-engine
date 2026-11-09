@@ -1,4 +1,11 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import request from "supertest";
+import { app } from "../../src/app.ts";
+import type { PracticeSessionStore } from "../../src/practice-sessions.ts";
+import { COOKIE } from "../../src/session.ts";
+import type { MemberSlotHolds } from "../../src/slot-holds.ts";
+import type { Store } from "../../src/store.ts";
+import { withLoopback } from "../support/loopback-server.ts";
 import {
   coachPracticeSection,
   coachPracticeState,
@@ -119,4 +126,43 @@ it("COACHMOCK-05 a failed check says so, and the history page shows the section 
   expect(practiceSessionHistoryPage(history, { kind: "failed" })).toContain(
     "Practice interview with a coach",
   );
+});
+
+it("COACHMOCK-05 the history route checks holds on the first page only and survives a failed check", async () => {
+  const token = "c".repeat(64);
+  const db = {
+    session: vi.fn<Store["session"]>().mockResolvedValue({
+      kind: "active",
+      expiresAt: new Date(Date.now() + 3600000),
+      learner: { id: "member", background: "explorer", goal: "everyday" },
+    }),
+  } as unknown as Store;
+  const history = vi
+    .fn<PracticeSessionStore["history"]>()
+    .mockResolvedValue({ items: [], nextCursor: null });
+  const snapshot = vi
+    .fn<MemberSlotHolds["snapshot"]>()
+    .mockRejectedValue(new Error("synthetic read failure"));
+  const application = app(db, {
+    origin: "http://127.0.0.1:3000",
+    secret: "synthetic-coach-practice-route",
+    practiceSessions: { history } as unknown as PracticeSessionStore,
+    memberSlotHolds: { snapshot } as unknown as MemberSlotHolds,
+  });
+  const get = (path: string) =>
+    withLoopback(application, (server) =>
+      request(server)
+        .get(path)
+        .set("Host", "127.0.0.1:3000")
+        .set("Cookie", `${COOKIE}=${token}`),
+    );
+  const first = await get("/practice-sessions");
+  expect(first.status).toBe(200);
+  expect(first.text).toContain("We couldn't check your coach minutes");
+  expect(snapshot).toHaveBeenCalledWith(token);
+  snapshot.mockClear();
+  const later = await get("/practice-sessions?after=abc");
+  expect(later.status).toBe(200);
+  expect(later.text).not.toContain("Practice interview with a coach");
+  expect(snapshot).not.toHaveBeenCalled();
 });

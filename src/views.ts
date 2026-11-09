@@ -7,6 +7,10 @@ import {
   timeTag,
 } from "./display-time.ts";
 import { LEARNING_WORKSPACE_CONTENT } from "./learning-workspace-pack.ts";
+import {
+  coachPracticeSection,
+  type CoachPracticeState,
+} from "./coach-practice-views.ts";
 import { isReviewedAssignment } from "./reviewed-assignments.ts";
 import { isReviewedFoundation } from "./foundation-pack.ts";
 import {
@@ -1600,13 +1604,16 @@ export function practiceSessionStartPage(
     `<nav class="breadcrumb"><a href="/library/${encodeURIComponent(source.contentId)}">← Current lesson</a> · <a href="/practice-sessions">Private session history</a></nav><section class="reading"><p class="eyebrow">${hostingText("LOCAL PRACTICE · SIMULATED · UNREVIEWED · SAMPLE ONLY", "PRACTICE · SIMULATED · UNREVIEWED")}</p><h1>Start private practice session</h1><h2>${escape(source.title)}</h2><p>Source ${escape(source.contentId)} · version ${source.contentVersion}. Goal: ${escape(GOALS[source.goal])}. Prompt version: ${escape(source.promptVersion)}.</p><p>Opt into a private conversation${hostingText(" using invented or sample information only", "")}. Each saved response receives one ${hostingText("deterministic local ", "")}source comparison. No live AI provider, paid allowance or qualified reviewer is connected. This simulation cannot judge competence.</p><p>A session holds up to 15 response/comparison pairs, or 30 visible turns. These initial instructions do not count. Saved pairs stay in order and cannot be overwritten. Starting again returns the same exact source, goal and prompt slot.</p>${usesAllowance ? `<p>Starting a new session uses one of <a href="/member/study-allowance">your monthly practice sessions</a>. Returning to this session doesn't use another.</p>` : ""}<h2>Permitted source excerpt</h2><pre class="content-text">${escape(source.sourceExcerpt)}</pre><h2>Practice prompt</h2><p>${escape(source.prompt)}</p>${startForm(source.promptVersion, "Start or return to private session", "practice")}<h2>Optional interview practice</h2><p>If you'd like, try the same lesson as an invented interview question instead. It's a separate session with its own prompt version (${escape(source.interview.promptVersion)}) and the same 30-turn limit. Nobody chooses this for you, and your background or goal doesn't change it. ${interviewNotice.replace("This interview practice", "It")} There's no score.</p><h3>Interview prompt</h3><p>${escape(source.interview.prompt)}</p>${startForm(source.interview.promptVersion, "Start or return to interview practice", "interview practice")}<p>Your saved responses, comparisons and excerpts remain private until withdrawal or account deletion. Withdrawal keeps a content-free marker and cannot be undone. Previously downloaded copies cannot be recalled.</p><p><a href="/library/${encodeURIComponent(source.contentId)}/practice">Open one-note practice</a></p></section>`,
   );
 }
-export function practiceSessionHistoryPage(history: {
-  items: PracticeSessionSummary[];
-  nextCursor: string | null;
-}) {
+export function practiceSessionHistoryPage(
+  history: {
+    items: PracticeSessionSummary[];
+    nextCursor: string | null;
+  },
+  coach?: CoachPracticeState,
+) {
   return page(
     "Private session history",
-    `<section class="reading"><h1>Private session history</h1><p>Only your signed-in account can read these ${hostingText("local sample", "practice")} sessions. Each page lists at most 20 sessions. Stored pairs remain tied to their exact source, goal and prompt; unavailable sources do not generate new comparisons.</p>${history.items.length ? `<ol aria-label="Saved practice sessions">${history.items.map((item) => `<li><a href="/practice-sessions/${encodeURIComponent(item.id)}">${escape(item.contentId)} · version ${item.contentVersion} · ${escape(GOALS[item.goal])}</a><p>${practicePurposeLabel(item.promptVersion)} · prompt ${escape(item.promptVersion)} · started ${timeTag(item.createdAt)}${item.withdrawnAt ? ` · Withdrawn ${timeTag(item.withdrawnAt)}; response, comparison and excerpt text removed` : " · Private retained session"}</p></li>`).join("")}</ol>` : "<p>No private sessions are saved yet. Choose a published sample lesson to opt in.</p>"}${history.nextCursor ? `<p><a href="/practice-sessions?after=${encodeURIComponent(history.nextCursor)}">Next session page</a></p>` : ""}<p><a href="/learn">Return to learning</a> · <a href="/member/export">${privateRecordsLabel()}</a> · <a href="/practice">One-note practice history</a> · <a href="/library">Learning library</a></p></section>`,
+    `<section class="reading"><h1>Private session history</h1><p>Only your signed-in account can read these ${hostingText("local sample", "practice")} sessions. Each page lists at most 20 sessions. Stored pairs remain tied to their exact source, goal and prompt; unavailable sources do not generate new comparisons.</p>${history.items.length ? `<ol aria-label="Saved practice sessions">${history.items.map((item) => `<li><a href="/practice-sessions/${encodeURIComponent(item.id)}">${escape(item.contentId)} · version ${item.contentVersion} · ${escape(GOALS[item.goal])}</a><p>${practicePurposeLabel(item.promptVersion)} · prompt ${escape(item.promptVersion)} · started ${timeTag(item.createdAt)}${item.withdrawnAt ? ` · Withdrawn ${timeTag(item.withdrawnAt)}; response, comparison and excerpt text removed` : " · Private retained session"}</p></li>`).join("")}</ol>` : "<p>No private sessions are saved yet. Choose a published sample lesson to opt in.</p>"}${history.nextCursor ? `<p><a href="/practice-sessions?after=${encodeURIComponent(history.nextCursor)}">Next session page</a></p>` : ""}${coach ? coachPracticeSection(coach) : ""}<p><a href="/learn">Return to learning</a> · <a href="/member/export">${privateRecordsLabel()}</a> · <a href="/practice">One-note practice history</a> · <a href="/library">Learning library</a></p></section>`,
   );
 }
 export function practiceSessionPage(
