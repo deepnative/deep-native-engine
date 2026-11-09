@@ -65,7 +65,9 @@ const labels = (): Record<StaffRole, string> => ({
 });
 function links(role: StaffRole, tools: StaffTools) {
   const choices: [boolean, string, string][] = [];
-  choices.push([tools.myTime === true, "/review/my-time", "My booked time"]);
+  // #193: roster records name a coach or a reviewer, so only they get the link.
+  if (role === "coach" || role === "reviewer")
+    choices.push([tools.myTime === true, "/review/my-time", "My booked time"]);
   if (role === "editor" || role === "reviewer")
     choices.push([tools.library, "/editor/library", "Content workflow"]);
   if (role === "reviewer") {
