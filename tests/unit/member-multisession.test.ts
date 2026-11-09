@@ -110,6 +110,7 @@ async function signUp() {
       display_name: "Device Learner",
       background: "explorer",
       goal: "everyday",
+      signup_country: "CA",
       signup_email: ADDRESS,
       signup_password: PASSWORD,
     },
