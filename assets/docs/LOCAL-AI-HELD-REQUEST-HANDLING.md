@@ -52,6 +52,14 @@ No free text is accepted, so source text, prompts and provider messages cannot b
 - **Only a current exact assignment.** The operator needs an unrevoked, unexpired assignment to that request. Members, other operators and administrators are refused the same way. It is off whenever inspection is off, and never available in live mode.
 - **Deletion and erasure.** Deleting the source keeps the outcome with the hold. Once account deletion starts, the outcome can no longer be read. Erasure removes it.
 
+## Held practice suggestions
+
+A simulated practice suggestion ([#200](https://github.com/deepnative/deep-native-engine/issues/200)) whose outcome is unknown is a hold too. It uses no test unit, but its estimate stays committed on the platform test spending ceiling. An assigned operator records a test outcome on it the same way, with the same rules (PRACTICE-HOLD-02..04):
+
+- The suggestion stays unknown and the job stays held. No suggestion text is added, nothing is requested again, and the ceiling commitment is neither settled nor released.
+- The member's practice session page shows the outcome, its reason and the date under that pair, with the same "no AI provider confirmed it" wording. Their export shows it as `holdTestOutcome` on the job in `adapterJobs`. Neither shows the operator, the assignment, the test reference or the key, and another member sees nothing.
+- A suggestion that finished normally (ready or rejected) can't be assigned, so it can't take an outcome.
+
 ## Process for a held request
 
 1. **The member sees it.** The permission page says the outcome is unknown, that the request will not run again, and that nothing is confirmed erased. It shows a request reference, and a recorded test outcome once there is one.
@@ -90,9 +98,9 @@ Source deletion is never blocked. A request that never started, succeeded or clo
 
 - Requests closed as `exhausted` before this behaviour existed are not reclassified. No provider has ever been connected, so none of them reached one.
 - A first attempt refused just after its claim closes as `exhausted`, and a retry refused that way is held. Earlier attempts are not inspected: a retry is held even if every earlier attempt was refused before the AI step (#187, AIHOLD-08 to 10).
-- There is no retention period, automatic expiry or staff queue for holds. A live provider would need those decided first.
+- There is no retention period, automatic expiry or staff queue for holds. A live provider would need those decided first; they are deferred with the live provider to [#783](https://github.com/deepnative/deep-native-engine/issues/783).
 - The member sees a recorded test outcome on their page and in their export, but never which operator recorded it, the assignment, the test reference or the key.
-- A test outcome does not settle or release the test unit. That needs a release and charge policy tied to a real provider's evidence (#189).
+- A test outcome does not settle or release the test unit or a practice suggestion's ceiling commitment. That needs a release and charge policy tied to a real provider's evidence, deferred to [#783](https://github.com/deepnative/deep-native-engine/issues/783).
 - This process has had no legal or privacy review. It records current system behaviour and is not a commitment to members.
 
 ## Rollback

@@ -15,6 +15,10 @@ import {
   type PracticeSuggestionInput,
   type PracticeSuggestionProvider,
 } from "./practice-ai-suggestions.ts";
+import type {
+  HoldTestOutcome,
+  HoldTestReason,
+} from "./local-ai-hold-decisions.ts";
 import type { Pool } from "pg";
 import {
   practiceTransaction,
@@ -55,6 +59,14 @@ export interface PracticeSuggestionView {
   state: "ready" | "rejected" | "unknown";
   text: string | null;
   requestedAt: Date;
+  /** #189 PRACTICE-HOLD-03: a labelled TEST outcome an assigned operator
+   * recorded for an unknown one. Never the operator, assignment, test
+   * reference or key, and never a provider's confirmation. */
+  testOutcome?: {
+    outcome: HoldTestOutcome;
+    reason: HoldTestReason;
+    decidedAt: Date;
+  } | null;
 }
 export interface PracticeSessionExchange {
   sequence: number;
@@ -347,12 +359,18 @@ export function practiceSessionStore(
           suggestionState: "requested" | "ready" | "rejected" | null;
           suggestionText: string | null;
           suggestionRequestedAt: Date | null;
+          testOutcome: HoldTestOutcome | null;
+          testReason: HoldTestReason | null;
+          testDecidedAt: Date | null;
         }
       >(
         `SELECT e.sequence,e.response,e.comparison,e.source_excerpt AS "sourceExcerpt",e.accepted_at AS "acceptedAt",
-         g.state AS "suggestionState",g.suggestion AS "suggestionText",g.requested_at AS "suggestionRequestedAt"
+         g.state AS "suggestionState",g.suggestion AS "suggestionText",g.requested_at AS "suggestionRequestedAt",
+         d.outcome AS "testOutcome",d.reason AS "testReason",d.decided_at AS "testDecidedAt"
        FROM private_practice_exchanges e
        LEFT JOIN practice_ai_suggestions g ON g.session_id=e.session_id AND g.sequence=e.sequence
+       LEFT JOIN local_ai_hold_test_decisions d ON d.job_id=g.job_id AND d.member_id=g.member_id
+        AND g.state='requested'
        WHERE e.session_id=$1 ORDER BY e.sequence LIMIT 15`,
         [id],
       )
@@ -362,6 +380,9 @@ export function practiceSessionStore(
         suggestionState,
         suggestionText,
         suggestionRequestedAt,
+        testOutcome,
+        testReason,
+        testDecidedAt,
         ...pair
       }) => ({
         ...pair,
@@ -371,6 +392,14 @@ export function practiceSessionStore(
                 suggestionState === "requested" ? "unknown" : suggestionState,
               text: suggestionText,
               requestedAt: suggestionRequestedAt!,
+              testOutcome:
+                testOutcome && testReason && testDecidedAt
+                  ? {
+                      outcome: testOutcome,
+                      reason: testReason,
+                      decidedAt: testDecidedAt,
+                    }
+                  : null,
             }
           : null,
       }),

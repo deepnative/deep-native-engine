@@ -306,7 +306,7 @@ it("PRACTICE-HOLD-03 the owner's practice page and export show the test outcome 
   expect(JSON.stringify(theirs.payload)).not.toContain(f.jobId);
 });
 
-it("PRACTICE-HOLD-04 a finished suggestion takes no outcome, an unassigned operator is denied, and the member cannot record one", async () => {
+it("PRACTICE-HOLD-04 a finished suggestion cannot be assigned or take an outcome, an unassigned operator is denied, and the member cannot record one", async () => {
   const f = await assigned();
   const other = token();
   await auth.provisionStaff(other, "operator", f.expires);
@@ -317,7 +317,8 @@ it("PRACTICE-HOLD-04 a finished suggestion takes no outcome, an unassigned opera
   expect(await decisions.record(f.ownerToken, f.jobId, outcome())).toEqual({
     kind: "denied",
   });
-  // A suggestion that finished normally is not held, so it is closed.
+  // A suggestion that finished normally is not held, so it cannot be assigned
+  // and takes no outcome.
   const ok = practiceSessionStore(pool, { suggestions: { mode: "test" } });
   expect(
     await ok.append(f.ownerToken, f.sessionId, {
@@ -340,11 +341,10 @@ it("PRACTICE-HOLD-04 a finished suggestion takes no outcome, an unassigned opera
     f.expires,
     randomUUID(),
   );
-  if (grant.kind === "applied") {
-    expect(await decisions.record(f.operatorToken, ready, outcome())).toEqual({
-      kind: "closed",
-    });
-  } else expect(grant.kind).toBe("denied");
+  expect(grant.kind).toBe("denied");
+  expect(await decisions.record(f.operatorToken, ready, outcome())).toEqual({
+    kind: "denied",
+  });
   expect(
     (
       await pool.query(
