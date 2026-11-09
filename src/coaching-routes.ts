@@ -12,7 +12,11 @@ import {
   type DashboardSort,
   hours,
 } from "./coaching-dashboard-views.ts";
-import { parseInvoiceMoney } from "./simple-invoice-values.ts";
+import {
+  parseInvoiceMoney,
+  salesTaxCents,
+  taxRate,
+} from "./simple-invoice-values.ts";
 import {
   coachingSubtotal,
   coachingDuration,
@@ -209,7 +213,9 @@ export function mountCoachingRoutes(
       const v = r.value,
         e = v.entry,
         base = admin ? `${adminPath}/${v.ownerId}` : memberPath,
-        anti = csrf(token(res), options.secret);
+        anti = csrf(token(res), options.secret),
+        // ISSUER-03: configured invoices add HST computed by the server.
+        hst = store?.tax;
       const recipient =
         !admin && !e && options.billingProfiles
           ? await options.billingProfiles.suggest(token(res))
@@ -232,7 +238,7 @@ export function mountCoachingRoutes(
       if (!admin && (!e || e.state === "draft")) {
         body += `<h2>Save your draft</h2><form method="post" action="${base}/save">${form("save", e?.revision ?? 0)}<label>Whole hours<input name="hours" type="number" min="0" max="744" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label><label>Invoice recipient name<input name="name" autocomplete="name" maxlength="200" value="${escape(e?.name ?? recipient.value?.name ?? "")}" required></label><label>Invoice email<input name="email" type="email" autocomplete="email" maxlength="254" value="${escape(e?.email ?? recipient.value?.email ?? "")}" required></label><label>Company name (optional)<input name="company" autocomplete="organization" maxlength="200" value="${escape((e ? e.company : recipient.value?.company) ?? "")}"></label><p>Changes here are saved as your reusable billing recipient for later months. <a href="/account/billing">Edit reusable billing recipient</a>. This email is only the billing recipient; it does not change your sign-in identity.</p><button>Save coaching draft</button></form>`;
         if (e && v.rate && amount !== null)
-          body += `<h2>Confirm this saved draft</h2><p>Subtotal before separately supplied tax: <strong>${money(amount)}</strong>. ${amount === 0 ? "A zero-total submission creates no invoice." : "The administrator supplies tax when reviewing the invoice."}</p><form method="post" action="${base}/submit">${form("submit", e.revision)}${hidden("rateId", v.rate.id)}${hidden("sample", String(v.sample))}<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm this saved duration, recipient and exact rate version for ${v.month}. ${v.sample ? "This is a sample, not payable." : "I submit for configured offline invoicing; issued financial records may be retained after account deletion."}</span></label><button>Request coaching invoice</button></form>`;
+          body += `<h2>Confirm this saved draft</h2><p>Subtotal before ${hst ? escape(hst.label) : "separately supplied tax"}: <strong>${money(amount)}</strong>. ${amount === 0 ? "A zero-total submission creates no invoice." : hst ? `${escape(hst.label)} at ${taxRate(hst)} is added when the invoice is issued.` : "The administrator supplies tax when reviewing the invoice."}</p><form method="post" action="${base}/submit">${form("submit", e.revision)}${hidden("rateId", v.rate.id)}${hidden("sample", String(v.sample))}<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm this saved duration, recipient and exact rate version for ${v.month}. ${v.sample ? "This is a sample, not payable." : "I submit for configured offline invoicing; issued financial records may be retained after account deletion."}</span></label><button>Request coaching invoice</button></form>`;
         if (e && v.rate && amount === null)
           body +=
             '<p role="alert">The saved duration at this rate exceeds the invoice amount limit. Correct the draft or ask the administrator to review the rate.</p>';
@@ -248,7 +254,7 @@ export function mountCoachingRoutes(
           snapshot.subtotalCents > 0 &&
           snapshot.sample === v.sample
         )
-          body += `<h2>Issue the reviewed invoice</h2><form method="post" action="${base}/issue">${form("issue", e.revision)}<label>${v.sample ? "Invented sample tax (CAD)" : "Explicit tax amount (CAD)"}<input name="tax" inputmode="decimal" ${v.sample ? 'value="0.00"' : ""} required></label><label class="check"><input type="checkbox" name="confirm" value="issue" required><span>I reviewed this exact submitted revision and the separately supplied tax.</span></label><button>Issue coaching invoice</button></form>`;
+          body += `<h2>Issue the reviewed invoice</h2><form method="post" action="${base}/issue">${form("issue", e.revision)}${hst ? `<p>${escape(hst.label)} at ${taxRate(hst)} (${money(salesTaxCents(snapshot.subtotalCents, hst))}) is added to the subtotal.</p>` : `<label>${v.sample ? "Invented sample tax (CAD)" : "Explicit tax amount (CAD)"}<input name="tax" inputmode="decimal" ${v.sample ? 'value="0.00"' : ""} required></label>`}<label class="check"><input type="checkbox" name="confirm" value="issue" required><span>I reviewed this exact submitted revision and the ${hst ? `computed ${escape(hst.label)}` : "separately supplied tax"}.</span></label><button>Issue coaching invoice</button></form>`;
         else if (e.state === "submitted")
           body += `<p role="status">${snapshot?.sample !== v.sample ? "The submitted billing mode differs from current configuration. Return it and ask the member to explicitly confirm the current mode." : "This zero-total submission is retained. No invoice can be issued."}</p>`;
         body += `<h2>Return for correction</h2><p>An issued month can only be returned after its invoice is void and unpaid, with no delivery in progress or unconfirmed. Other financial corrections require administrator review outside this action.</p><form method="post" action="${base}/return">${form("return", e.revision)}<label>Correction reason<input name="reason" maxlength="500" required></label><button class="secondary">Return month for correction</button></form>`;
@@ -296,7 +302,8 @@ export function mountCoachingRoutes(
         save: ["hours", "minutes", "name", "email", "company"],
         submit: ["rateId", "sample", "confirm"],
         return: ["reason"],
-        issue: ["tax", "confirm"],
+        // ISSUER-03: a typed tax is refused when the server computes HST.
+        issue: store?.tax ? ["confirm"] : ["tax", "confirm"],
       }[action];
       if (!valid(req, res, ["month", "action", ...fields])) return;
       if (!store) return failure(res, "unavailable", admin);
@@ -315,7 +322,7 @@ export function mountCoachingRoutes(
         taxCents = parseInvoiceMoney(req.body.tax);
       if (
         (action === "save" && minutes === null) ||
-        (action === "issue" && taxCents === null) ||
+        (action === "issue" && !store?.tax && taxCents === null) ||
         (action === "submit" && !["true", "false"].includes(req.body.sample))
       )
         return failure(res, "invalid", admin);
@@ -343,7 +350,7 @@ export function mountCoachingRoutes(
               : await store.issueCoaching(token(res), {
                   ...input,
                   ownerId: (req.params as Record<string, string>).ownerId!,
-                  taxCents: taxCents!,
+                  ...(store?.tax ? {} : { taxCents: taxCents! }),
                 });
       if (r.kind !== "ready")
         return failure(res, r.kind, admin, req.body.operationId);

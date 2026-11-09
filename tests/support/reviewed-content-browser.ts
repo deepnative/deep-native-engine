@@ -177,15 +177,13 @@ export async function reviewedContentFixture(
       return { editor, reviewer, catalog };
     }
     // A second listener on the same database and storage with configured
-    // (not sample) invoicing, so one database can hold both real and sample
+    // (not sample) invoicing as Deep Native Inc. with 13% HST, so one database can hold both real and sample
     // course billing. Cookies ignore the port, so every session works on both.
     async function configuredInvoiceListener() {
       const other = await start({
         ...env,
+        // ISSUER-01 (#32): the issuer comes from src/invoice-issuer.ts.
         DNE_INVOICE_MODE: "configured",
-        DNE_INVOICE_ISSUER: "Invented configured issuer for a browser test",
-        DNE_INVOICE_PAYMENT_INSTRUCTIONS:
-          "Invented offline instructions for a browser test. Do not send money.",
         DNE_INVOICE_CURRENCY: "CAD",
         DNE_TEST_PROVIDER_EVENTS: "disabled",
       });

@@ -870,7 +870,9 @@ it("MANPAY-01/03/04 shows payment history, statuses and the refund form only whe
   expect(page.text).toContain("Staff account 12345678");
   expect(page.text).toContain("−CAD 1.00");
   expect(page.text).toContain("Recorded refund");
-  expect(page.text).toContain("Not verified by a payment provider");
+  expect(page.text).toContain(
+    "Recorded manually by staff when the offline payment was received",
+  );
   expect(page.text).toContain(">Record offline refund</button>");
   f.service.invoice.mockResolvedValueOnce(
     ready({ ...stored, refundedCents: 300 }),
@@ -903,7 +905,9 @@ it("MANPAY-03 shows the member a receipt-only record with no staff column or ref
   );
   const page = await f.get(`${base}/invoices/${id}`);
   expect(page.text).toContain("Invented reference");
-  expect(page.text).toContain("Not verified by a payment provider");
+  expect(page.text).toContain(
+    "Recorded manually by staff when the offline payment was received",
+  );
   expect(page.text).not.toContain("Recorded by");
   expect(page.text).not.toContain("does not reopen this balance");
   expect(page.text).not.toContain("Recorded refund");
@@ -965,6 +969,64 @@ it("WALK-02 tells a member with no invoices that none have been issued, and list
   const listed = (await f.get(base)).text;
   expect(listed).toMatch(/<h2>Your invoices<\/h2><ul><li>/);
   expect(listed).not.toContain("No invoices have been issued");
+});
+it("ISSUER-02 prepares configured course billing with computed 13% HST and no tax field", async () => {
+  const f = fixture();
+  (f.service as Record<string, unknown>).tax = {
+    label: "HST",
+    registration: "713254472RT0001",
+    rateBasisPoints: 1300,
+  };
+  const form = (await f.get(admin)).text;
+  expect(form).toContain("HST at 13% is added to each invoice");
+  expect(form).not.toContain('name="tax"');
+  const fields = {
+    ownerId: id,
+    courses: JSON.stringify(["FND-001", 2]),
+    "amount_FND-001_2": "100.00",
+    cadence: "one_time",
+    startsOn: "2026-11-30",
+  };
+  expect((await f.post(`${admin}/plans`, fields)).status).toBe(303);
+  expect(f.service.propose.mock.calls[0]![1]).not.toHaveProperty("taxCents");
+  expect(
+    (await f.post(`${admin}/plans`, { ...fields, tax: "0.00" })).status,
+  ).toBe(403);
+  expect(f.service.propose).toHaveBeenCalledTimes(1);
+  const hst = {
+    label: "HST",
+    registration: "713254472RT0001",
+    rateBasisPoints: 1300,
+  };
+  f.service.overview.mockResolvedValueOnce(
+    ready({
+      plans: [
+        {
+          id,
+          ownerId: id,
+          state: "offered",
+          revision: 1,
+          terms: {
+            ...terms,
+            courses: [{ ...terms.courses[0], amountCents: 10000 }],
+            cadence: "one_time",
+            startsOn: "2026-11-30",
+            taxCents: 1300,
+            sample: false,
+            issuer: "Deep Native Inc. · Ontario, Canada",
+            tax: hst,
+          },
+        },
+      ],
+      invoices: [],
+      today: "2026-11-09",
+      unavailable: {},
+    }),
+  );
+  const member = (await f.get(base)).text;
+  expect(member).toContain("HST 13% CAD 13.00");
+  expect(member).toContain("HST registration number 713254472RT0001");
+  expect(member).toContain("Total: CAD 113.00");
 });
 
 it("RECIPIENT-01/04/05 the billing recipient and course forms suggest the member and keep an optional company", async () => {

@@ -7,6 +7,24 @@ export interface InvoiceCourse {
   description: string;
   amountCents: number;
 }
+/** ISSUER-02: a sales tax the server computes from the subtotal, never typed. */
+export interface InvoiceTax {
+  label: "HST";
+  registration: string;
+  rateBasisPoints: number;
+}
+export const validInvoiceTax = (value: unknown): value is InvoiceTax =>
+  !!value &&
+  typeof value === "object" &&
+  (value as InvoiceTax).label === "HST" &&
+  invoiceText((value as InvoiceTax).registration, 40) &&
+  Number.isSafeInteger((value as InvoiceTax).rateBasisPoints) &&
+  (value as InvoiceTax).rateBasisPoints >= 0 &&
+  (value as InvoiceTax).rateBasisPoints <= 10000;
+/** Rounded half up to the cent; integers only, so no float drift. */
+export const salesTaxCents = (subtotalCents: number, tax: InvoiceTax) =>
+  Math.floor((subtotalCents * tax.rateBasisPoints + 5000) / 10000);
+export const taxRate = (tax: InvoiceTax) => `${tax.rateBasisPoints / 100}%`;
 export interface InvoiceTerms {
   courses: InvoiceCourse[];
   cadence: "one_time" | "monthly";
@@ -15,6 +33,8 @@ export interface InvoiceTerms {
   issuer: string;
   instructions: string;
   sample: boolean;
+  /** Present on configured terms prepared after the owner's HST decision. */
+  tax?: InvoiceTax;
 }
 export const invoiceUuid = (value: unknown): value is string =>
   typeof value === "string" &&
@@ -110,7 +130,11 @@ export function validInvoiceTerms(input: unknown): input is InvoiceTerms {
     invoiceTotal(value) > 0 &&
     invoiceText(value.issuer, 500) &&
     invoiceText(value.instructions, 2000) &&
-    typeof value.sample === "boolean"
+    typeof value.sample === "boolean" &&
+    (value.tax === undefined ||
+      (validInvoiceTax(value.tax) &&
+        value.taxCents ===
+          salesTaxCents(invoiceTotal(value) - value.taxCents, value.tax)))
   );
 }
 /** Each month derives from the original day, so January 31 never drifts to March 28. */
