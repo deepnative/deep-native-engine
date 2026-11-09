@@ -2885,7 +2885,7 @@
       "critical": true
     },
     {
-      "id": "L324",
+      "id": "L327",
       "actor": "Coach reading their own booked time, their backup, a staff member with no roster record and a refused member",
       "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, invented administrator, operator, two coaches with verified coaching records naming each other as backup, two future slots on the first coach's record and one member sample hold; desktop/mobile Chromium; no provider",
       "steps": "MYTIME-01/02/05/06/07: the coach follows My booked time from the staff page; the backup, the operator and the member open the same page",
