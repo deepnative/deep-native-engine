@@ -237,9 +237,51 @@ export function deterministicAdapter(
   };
 }
 
+export const TEST_AI_FAULT_MARKERS = {
+  timeout: "[dne-test-fault:timeout]",
+  malformed: "[dne-test-fault:malformed]",
+} as const;
+
+/** #190 AIFAULT: off unless set, only in test mode and never on a host. */
+export function testAiFaults(
+  env: NodeJS.ProcessEnv,
+  mode: ApplicationMode,
+  hosted: boolean,
+): boolean {
+  const value = env.DNE_TEST_AI_FAULTS ?? "disabled";
+  if (value !== "enabled" && value !== "disabled")
+    throw new Error("DNE_TEST_AI_FAULTS must be enabled or disabled.");
+  if (value === "disabled") return false;
+  if (mode !== "test" || hosted)
+    throw new Error("Test AI faults run only in local test mode.");
+  return true;
+}
+
+// Invented text carrying a marker makes the simulated AI step never answer or
+// answer in an unexpected form, so browser tests can reach those paths.
+function faultingAdapter(adapter: Adapter): Adapter {
+  return {
+    ...adapter,
+    async execute(operation, input) {
+      const text =
+        typeof input === "object" && input !== null
+          ? (input as { text?: unknown }).text
+          : undefined;
+      if (typeof text === "string") {
+        if (text.includes(TEST_AI_FAULT_MARKERS.timeout))
+          return new Promise<never>(() => {});
+        if (text.includes(TEST_AI_FAULT_MARKERS.malformed))
+          return { ...(await adapter.execute(operation, input)), message: "" };
+      }
+      return adapter.execute(operation, input);
+    },
+  };
+}
+
 export function deterministicRegistry(
   env: NodeJS.ProcessEnv,
   mode: "demo" | "test",
+  options: { aiFaults?: boolean } = {},
 ): AdapterRegistry {
   const enabled = new Map(
     adapterReadiness(env, mode).map((readiness) => [readiness.kind, readiness]),
@@ -256,7 +298,10 @@ export function deterministicRegistry(
         throw new Error(
           `${kind} execution is disabled in ${mode} application mode.`,
         );
-      return deterministicAdapter(kind, mode);
+      const adapter = deterministicAdapter(kind, mode);
+      return options.aiFaults && kind === "ai" && mode === "test"
+        ? faultingAdapter(adapter)
+        : adapter;
     },
   };
 }

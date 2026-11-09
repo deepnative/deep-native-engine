@@ -5,6 +5,7 @@ import { store } from "../../src/store.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { COOKIE } from "../../src/session.ts";
+import { TEST_AI_FAULT_MARKERS } from "../../src/adapters.ts";
 import { testPool } from "../support/database.ts";
 const pool = testPool(),
   members = store(pool),
@@ -28,13 +29,16 @@ async function signIn(page: Page, token: string) {
     },
   ]);
 }
-async function source(page: Page, token: string, title: string) {
+async function source(
+  page: Page,
+  token: string,
+  title: string,
+  text = "Invented private source for local test requests",
+) {
   await signIn(page, token);
   await page.goto("/evidence");
   await page.getByLabel("Sample title").fill(title);
-  await page
-    .getByLabel("Invented text sample")
-    .fill("Invented private source for local test requests");
+  await page.getByLabel("Invented text sample").fill(text);
   await page.getByLabel("I created this invented sample").check();
   await page.getByLabel("I explicitly allow this sample").check();
   await page.getByRole("button", { name: "Save private text sample" }).click();
@@ -448,4 +452,123 @@ test("[L321] AILIMIT-06 a member at the unfinished-request limit is told why and
   await expect(
     items[3]!.getByRole("button", { name: "Run local simulation" }),
   ).toBeVisible();
+});
+
+test("[L324] AIFAULT-07 a timed-out test request stays held once and a malformed simulation answer is named with one more try", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const token = randomBytes(32).toString("hex");
+  await members.create(token, { background: "explorer", goal: "everyday" });
+  const session = await members.session(token);
+  if (session.kind !== "active") throw Error("Synthetic member unavailable");
+  const memberId = session.learner.id;
+  try {
+    await ledger.grant(memberId, "study_requests", 1, randomUUID(), {
+      startsAt: "2020-01-01T00:00:00.000Z",
+      expiresAt: "2100-01-01T00:00:00.000Z",
+    });
+    const slow = await source(
+      page,
+      token,
+      `Invented slow ${randomUUID()}`,
+      `Invented source that never gets an answer ${TEST_AI_FAULT_MARKERS.timeout}`,
+    );
+    const garbled = await source(
+      page,
+      token,
+      `Invented garbled ${randomUUID()}`,
+      `Invented source with an unexpected answer ${TEST_AI_FAULT_MARKERS.malformed}`,
+    );
+    // Timeout: the AI step misses its deadline, and the request stays held.
+    await slow.item.getByLabel("Hold one existing local test request").check();
+    await slow.item
+      .getByRole("button", { name: "Use one local test request" })
+      .click();
+    await slow.item
+      .getByRole("button", { name: "Run local test request" })
+      .click();
+    await expect(
+      page.getByText(
+        "This attempt did not finish normally and will not retry automatically.",
+        { exact: false },
+      ),
+    ).toBeVisible({ timeout: 15_000 });
+    await page.goto("/evidence/local-ai");
+    await expect(
+      slow.item.getByText(
+        "The AI step did not answer within 5 seconds, so it timed out.",
+      ),
+    ).toBeVisible();
+    await expect(
+      slow.item.getByText("One local test request: held."),
+    ).toBeVisible();
+    await expect(
+      slow.item.getByRole("button", { name: /Run|Try/ }),
+    ).toHaveCount(0);
+    const held = await pool.query(
+      `SELECT j.status,j.safe_error,j.attempt_count,
+        (SELECT string_agg(c.state,',') FROM ai_spending_commitments c WHERE c.job_id=j.id) AS commitments,
+        (SELECT count(*)::int FROM ai_usage_settlements s WHERE s.job_id=j.id) AS settlements
+       FROM adapter_jobs j JOIN local_ai_test_unit_jobs b ON b.job_id=j.id WHERE j.member_id=$1`,
+      [memberId],
+    );
+    expect(held.rows).toEqual([
+      {
+        status: "needs_reconciliation",
+        safe_error: "provider_timeout",
+        attempt_count: 1,
+        commitments: "committed",
+        settlements: 0,
+      },
+    ]);
+    // Malformed answer: named, nothing saved, and one more try is offered.
+    await garbled.item
+      .getByRole("button", { name: "Queue local simulation" })
+      .click();
+    await garbled.item
+      .getByRole("button", { name: "Run local simulation" })
+      .click();
+    await expect(
+      page.getByText(
+        "This attempt did not finish normally and will not retry automatically.",
+        { exact: false },
+      ),
+    ).toBeVisible();
+    await page.goto("/evidence/local-ai");
+    await expect(
+      garbled.item.getByText(
+        "The AI step answered, but not in the expected form, so nothing was shown or saved. Nothing was charged. You can try again.",
+      ),
+    ).toBeVisible();
+    await expect(
+      garbled.item.getByRole("button", {
+        name: "Try the local simulation again",
+      }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await garbled.item
+      .getByRole("button", { name: "Try the local simulation again" })
+      .click();
+    await page.goto("/evidence/local-ai");
+    const tries = await pool.query(
+      "SELECT status,safe_error,attempt_count,provider_operation_reference FROM adapter_jobs WHERE member_id=$1 AND id NOT IN (SELECT job_id FROM local_ai_test_unit_jobs)",
+      [memberId],
+    );
+    expect(tries.rows).toEqual([
+      {
+        status: "failed",
+        safe_error: "invalid_provider_response",
+        attempt_count: 2,
+        provider_operation_reference: null,
+      },
+    ]);
+  } finally {
+    await evidence.removeWorkspace(token);
+    await members.remove(memberId);
+  }
 });

@@ -2883,6 +2883,15 @@
       "expected": "Real agreements read 4 offered, 2 of 4 (50%) accepted, 1 withdrawn and 1 of 2 (50%) cancelled after acceptance; the one test agreement is counted apart and never in the real figures; no member name, email, amount or agreement ID appears; no sideways scrolling; the operator is refused (403) with no figures",
       "issues": [123],
       "critical": true
+    },
+    {
+      "id": "L324",
+      "actor": "Member whose AI step times out or answers in an unexpected form",
+      "preconditions": "Shared synthetic PostgreSQL database, one invented member with one test unit and two clean invented samples marked for a test-only timeout and malformed answer (DNE_TEST_AI_FAULTS, local test mode only); desktop/mobile Chromium; no provider",
+      "steps": "AIFAULT-07: the member runs a test request whose AI step never answers, reopens the page, then queues and runs a simulation that answers in an unexpected form and tries it again",
+      "expected": "The timed-out request is named as a timeout after the 5-second deadline, stays held with its test unit and ceiling points held once, no settlement and no run or retry offered; the malformed answer is named with nothing shown, saved or charged and one more try offered, which runs it again without saving output; no sideways scrolling",
+      "issues": [190],
+      "critical": false
     }
   ],
   "fullMvp": [
