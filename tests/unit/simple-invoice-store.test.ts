@@ -265,6 +265,39 @@ it("OFFPUR-05 requires the original current member or billing administrator and 
   expect(f.observe).toHaveBeenCalledWith([expiry]);
   expect((await f.service.adminOverview(admin)).kind).toBe("ready");
 });
+it("BUILD-09-B lists an open offer's courses that are no longer offered to the member", async () => {
+  const unavailable = async (options: Parameters<typeof fixture>[0]) => {
+    const r = await fixture(options).service.overview(member);
+    if (r.kind !== "ready") throw Error("Expected overview");
+    return r.value.unavailable;
+  };
+  expect(await unavailable({})).toEqual({});
+  expect(await unavailable({ eligible: false })).toEqual({
+    [planId]: ["FND-001"],
+  });
+  // A retitled course is not the course the member was offered.
+  expect(
+    await unavailable({
+      plan: {
+        ...plan,
+        terms: {
+          ...terms,
+          courses: [
+            { ...terms.courses[0]!, description: "Another title" },
+            terms.courses[0]!,
+          ],
+        },
+      },
+    }),
+  ).toEqual({ [planId]: ["FND-001"] });
+  // Closed or settled offers are not checked: nothing there can be accepted.
+  expect(await unavailable({ eligible: false, today: "2026-11-01" })).toEqual(
+    {},
+  );
+  expect(
+    await unavailable({ eligible: false, plan: { ...plan, state: "active" } }),
+  ).toEqual({});
+});
 it("OFFPUR-01/08 prepares exact eligible course terms and rejects changed, missing or malformed proposals", async () => {
   const f = fixture();
   expect((await f.service.propose(admin, proposal)).kind).toBe("ready");

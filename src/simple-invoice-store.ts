@@ -81,6 +81,8 @@ export interface InvoiceOverview {
   invoices: StoredInvoice[];
   /** UTC date on the database clock; an offer closes once its start passes. */
   today: string;
+  /** Open offers that can't be accepted, by plan ID: the courses no longer offered. */
+  unavailable: Record<string, string[]>;
 }
 export interface InvoiceSettings {
   sample: boolean;
@@ -254,12 +256,15 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
       "INSERT INTO billing_change_events(actor_id,action,member_id,amount_cents) SELECT $1,$2,owner_id,$3 FROM simple_invoices WHERE id=$4",
       [actor, action, amountCents, invoiceId],
     );
-  async function coursesEligible(
+  // Course IDs in these terms that are no longer offered to this member as
+  // the exact published version and title they were proposed with.
+  async function unofferedCourses(
     tx: PracticeTransaction,
     ownerId: string,
     terms: InvoiceTerms,
     current = true,
   ) {
+    const missing: string[] = [];
     for (const course of terms.courses) {
       const row = (
         await tx.query<{ title: string }>(
@@ -267,10 +272,16 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           [course.id, course.version, ownerId, current],
         )
       ).rows[0];
-      if (!row || row.title !== course.description) return false;
+      if (!row || row.title !== course.description) missing.push(course.id);
     }
-    return true;
+    return missing;
   }
+  const coursesEligible = async (
+    tx: PracticeTransaction,
+    ownerId: string,
+    terms: InvoiceTerms,
+    current = true,
+  ) => !(await unofferedCourses(tx, ownerId, terms, current)).length;
   async function issue(
     tx: PracticeTransaction,
     plan: InvoicePlan,
@@ -841,9 +852,18 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             [actor],
           )
         ).rows.map(decodeInvoice);
+        const today = await utcToday(tx),
+          unavailable: Record<string, string[]> = {};
+        // BUILD-09-B: an open offer whose course is no longer published for
+        // this member cannot be accepted, so it is named rather than offered.
+        for (const plan of plans)
+          if (plan.state === "offered" && plan.terms.startsOn >= today) {
+            const missing = await unofferedCourses(tx, actor, plan.terms);
+            if (missing.length) unavailable[plan.id] = missing;
+          }
         return {
           kind: "ready",
-          value: { plans, invoices, today: await utcToday(tx) },
+          value: { plans, invoices, today, unavailable },
         };
       });
     },
