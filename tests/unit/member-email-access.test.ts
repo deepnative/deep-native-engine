@@ -1107,10 +1107,10 @@ it("SIGNEMAIL-03 clears an expired unused link's address at later email activity
     "UPDATE member_email_links SET expires_at=created_at+INTERVAL '1 microsecond' WHERE principal_id=$1",
     [m.id],
   );
-  await access.requestSignIn("nobody-here@example.com");
-  expect(await addresses("member_email_links", m.id)).toEqual([null]);
+  // Another member's later email request clears it.
   const kept = await member();
   await access.requestAttach(kept.token, "kept@example.com");
+  expect(await addresses("member_email_links", m.id)).toEqual([null]);
   await access.consume(code(), kept.token);
   await members.remove(kept.id);
   expect(

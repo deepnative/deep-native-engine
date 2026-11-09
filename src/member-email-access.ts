@@ -207,10 +207,6 @@ export function memberEmailAccess(
     const queued = await transaction<RequestOutcome | "queued">(
       pool,
       async (client) => {
-        // SIGNEMAIL-03: an unused link keeps its address only until it expires.
-        await client.query(
-          "UPDATE member_email_links SET address=NULL WHERE address IS NOT NULL AND expires_at<=clock_timestamp()",
-        );
         let principalId: string | undefined;
         if (purpose === "attach") {
           const principal = (
@@ -274,6 +270,15 @@ export function memberEmailAccess(
         await client.query(
           "UPDATE member_email_links SET consumed_at=clock_timestamp() WHERE principal_id=$1 AND consumed_at IS NULL",
           [principalId],
+        );
+        // SIGNEMAIL-03: an unused link keeps its address only until it
+        // expires. Clear expired ones after the member lock, skipping rows
+        // another request holds, so this never waits across members.
+        await client.query(
+          `UPDATE member_email_links SET address=NULL WHERE token_hash IN (
+             SELECT token_hash FROM member_email_links
+             WHERE address IS NOT NULL AND expires_at<=clock_timestamp()
+             FOR UPDATE SKIP LOCKED)`,
         );
         await client.query(
           `INSERT INTO member_email_links(token_hash,email_hash,principal_id,purpose,expires_at,address)
