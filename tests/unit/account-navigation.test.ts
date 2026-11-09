@@ -197,7 +197,8 @@ const KEPT_AFTER_DELETION = [
   "A note that an administrator looked up your email address, which keeps a fingerprint of the address, not the address.",
   "Counts that limit repeated sign-in and email attempts, tied to a fingerprint of your email address. Later sign-in activity on the site clears them once they are a day or 30 days old.",
   "A coach or administrator role you were given stays with your email address until an administrator removes it.",
-  "Copies in service backups go only when those backups expire.",
+  // #12 TERMS-05: the owner set 30-day backup retention on 9 Nov 2026.
+  "Copies in service backups are kept for up to 30 days, then they expire.",
 ];
 it.each([true, false])(
   "ERASE-06 the account page (hosted %s) says what stays after deletion before the delete button",
