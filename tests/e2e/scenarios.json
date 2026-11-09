@@ -4084,7 +4084,7 @@
       "actor": "AI-practice member and malicious document",
       "preconditions": "Consented job with bounded usage and deterministic failing providers",
       "steps": "Submit sparse interview, prompt-injection document, timeout and malformed output",
-      "expected": "Feedback cites member evidence; sparse result is honest; no cross-workspace/tool access; reservations settle once",
+      "expected": "Feedback cites member evidence; sparse result is honest; no cross-workspace/tool access; a reservation settles at most once and an unknown outcome stays held (the owner's 9 November 2026 hold rule replaces the requirement's restore-or-settle wording for case D)",
       "risk": "AI isolation; reliability; budget",
       "issues": [24, 31, 34],
       "critical": true,
@@ -4132,16 +4132,16 @@
         {
           "id": "F-BUILD-06-D",
           "steps": "Cause timeout and malformed provider output",
-          "expected": "Usage reservation is released or settled exactly once and the UI reports the real failure",
+          "expected": "A started metered request whose outcome is unknown keeps its usage reservation held once as an unknown outcome, never released, retried or settled, and the UI reports the real failure",
           "critical": true,
           "requiredChecks": [
             {
               "action": "Cause a provider timeout",
-              "expected": "The reservation is restored or settled exactly once and the UI reports the timeout"
+              "expected": "The reservation stays held once with no settlement or retry, and the UI reports the timeout"
             },
             {
               "action": "Cause malformed provider output",
-              "expected": "The reservation is restored or settled exactly once and the UI reports the malformed result"
+              "expected": "A metered reservation stays held once with no settlement and the UI reports the unknown outcome; an unmetered malformed result is reported with nothing shown, saved or charged"
             }
           ]
         }

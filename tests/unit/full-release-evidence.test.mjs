@@ -195,12 +195,12 @@ it("binds the tracked mapping approval to the independent technical decision", (
   expect(trackedApproval).toEqual({
     status: "approved",
     version: "full-mvp-v1",
-    sha256: "581083999c08f794b3814470a2e2a708f3708ff0ea6dd9785999ce5a1bdf3a45",
+    sha256: "62ea48e50e15d6a60576ba8bbdd5c513f6d345e03a857e3ac695c4d5ce93a33c",
     reviewer:
-      "Codex dne-reviewer /root/qa002_corrected_mapping_review (GPT-6 Astra/high)",
+      "Claude Code independent reviewer session (Claude Opus 5.5), owner-chosen 9 Nov 2026",
     decisionUrl:
-      "https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-5820945526",
-    decidedAt: "2026-09-24T19:39:31Z",
+      "https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6749610192",
+    decidedAt: "2026-11-09T19:40:27Z",
   });
   expect(assertMappingApproval(proposal, trackedApproval)).toBe(
     trackedApproval.sha256,
@@ -223,6 +223,8 @@ it("rejects preceding mapping digests and every post-approval check change", () 
   for (const digest of [
     oldApproval.sha256,
     "0345855e5b331e2be1a4403a27f6af0128e0a1c3b83f9d50abaaef7bc623be81",
+    "581083999c08f794b3814470a2e2a708f3708ff0ea6dd9785999ce5a1bdf3a45",
+    "331eb86cf6533d0e09088d75fdaf995d747aedb4aadcda84524fb068b0158935",
   ]) {
     expect(() =>
       assertMappingApproval(proposal, { ...oldApproval, sha256: digest }),
