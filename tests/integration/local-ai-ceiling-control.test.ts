@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { testPool } from "../support/database.ts";
+import { setTestCeiling } from "../support/ai-test-ceiling.ts";
 import { hash, migrate, store } from "../../src/store.ts";
 import { evidenceStore, type ObjectStorage } from "../../src/evidence.ts";
 import { deterministicRegistry } from "../../src/adapters.ts";
@@ -48,9 +49,7 @@ beforeEach(async () => {
   await pool.query(
     "INSERT INTO local_ai_control(singleton,paused) VALUES(true,false) ON CONFLICT(singleton) DO UPDATE SET paused=false",
   );
-  await pool.query(
-    "UPDATE ai_test_spending_ceiling SET ceiling_points=1000,committed_points=0",
-  );
+  await setTestCeiling(pool, { ceiling: 1000, committed: 0 });
   data.clear();
   execute.mockReset();
   execute.mockImplementation(registry.adapter("ai", "test").execute);
@@ -58,9 +57,7 @@ beforeEach(async () => {
 afterAll(async () => {
   // Leave the shared switch and ceiling usable for later files.
   await pool.query("UPDATE local_ai_control SET paused=false");
-  await pool.query(
-    "UPDATE ai_test_spending_ceiling SET ceiling_points=100000,committed_points=0",
-  );
+  await setTestCeiling(pool, { ceiling: 100000, committed: 0 });
   await pool.end();
 });
 
@@ -127,7 +124,7 @@ const change = (
 it("AICTL-01: raising a full test ceiling lets the member's next request fit", async () => {
   const admin = await administrator();
   const owner = await permitted();
-  await pool.query("UPDATE ai_test_spending_ceiling SET ceiling_points=100");
+  await setTestCeiling(pool, { ceiling: 100 });
   const refused = await local.enqueueMetered(
     owner.token,
     owner.receiptId,
@@ -332,4 +329,87 @@ it("AICTL-07: a ceiling stop racing dispatch claims serializes with no lost upda
     (await local.enqueueMetered(late.token, late.receiptId, randomUUID())).kind,
   ).toBe("ceiling_reached");
   expect(execute).toHaveBeenCalledTimes(completed);
+});
+
+it("AICTL-09: the database refuses an unrecorded change to the test ceiling", async () => {
+  for (const sql of [
+    "UPDATE ai_test_spending_ceiling SET ceiling_points=5000",
+    "UPDATE ai_test_spending_ceiling SET ceiling_points=0",
+    "UPDATE ai_test_spending_ceiling SET rate_version='simulated-rates-v2'",
+    "INSERT INTO ai_test_spending_ceiling(singleton,rate_version,ceiling_points,committed_points) VALUES(true,'simulated-rates-v1',5000,0) ON CONFLICT(singleton) DO UPDATE SET ceiling_points=5000",
+  ])
+    await expect(pool.query(sql), sql).rejects.toThrow(
+      /AI test ceiling changes only through a recorded change/,
+    );
+  // Setting the guard's own marker by hand does not help a direct update.
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      "SELECT set_config('dne.ai_test_ceiling_change','1000:5000',true)",
+    );
+    await expect(
+      client.query("UPDATE ai_test_spending_ceiling SET ceiling_points=5000"),
+    ).rejects.toThrow(/recorded change/);
+    await client.query("ROLLBACK");
+  } finally {
+    client.release();
+  }
+  expect(await ceiling()).toEqual({ ceiling: 1000, committed: 0 });
+  expect(await changes()).toEqual([]);
+});
+
+it("AICTL-10: the committed total moves only with its commitments", async () => {
+  const owner = await permitted();
+  const queued = await local.enqueueMetered(
+    owner.token,
+    owner.receiptId,
+    randomUUID(),
+  );
+  if (queued.kind !== "queued") throw Error("Expected queue");
+  expect((await local.run(owner.token, queued.jobId)).kind).toBe("completed");
+  expect(await ceiling()).toEqual({ ceiling: 1000, committed: 42 });
+  for (const sql of [
+    "UPDATE ai_test_spending_ceiling SET committed_points=0",
+    "UPDATE ai_test_spending_ceiling SET committed_points=committed_points+1",
+  ])
+    await expect(pool.query(sql), sql).rejects.toThrow(
+      /AI test ceiling changes only through a recorded change/,
+    );
+  expect(await ceiling()).toEqual({ ceiling: 1000, committed: 42 });
+});
+
+it("AICTL-11: the ceiling row cannot be removed", async () => {
+  await expect(
+    pool.query("DELETE FROM ai_test_spending_ceiling"),
+  ).rejects.toThrow(/AI test ceiling cannot be removed/);
+  await expect(pool.query("TRUNCATE ai_test_spending_ceiling")).rejects.toThrow(
+    /AI test ceiling cannot be removed/,
+  );
+  expect(await ceiling()).toEqual({ ceiling: 1000, committed: 0 });
+});
+
+it("AICTL-12: a recorded administrator change still applies, once", async () => {
+  const admin = await administrator();
+  const key = randomUUID();
+  expect(await change(admin.token, 1000, 3000, key)).toEqual({
+    kind: "changed",
+  });
+  expect(await change(admin.token, 1000, 3000, key)).toEqual({
+    kind: "replayed",
+  });
+  expect(await ceiling()).toEqual({ ceiling: 3000, committed: 0 });
+  expect(await changes()).toEqual([
+    {
+      administrator_id: admin.id,
+      rate_version: "simulated-rates-v1",
+      previous: 1000,
+      next: 3000,
+      committed: 0,
+    },
+  ]);
+  // A direct update afterwards is still refused.
+  await expect(
+    pool.query("UPDATE ai_test_spending_ceiling SET ceiling_points=1000"),
+  ).rejects.toThrow(/recorded change/);
 });

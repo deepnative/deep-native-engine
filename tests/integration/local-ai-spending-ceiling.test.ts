@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { testPool } from "../support/database.ts";
+import { setTestCeiling } from "../support/ai-test-ceiling.ts";
 import { migrate, store } from "../../src/store.ts";
 import { evidenceStore, type ObjectStorage } from "../../src/evidence.ts";
 import {
@@ -58,9 +59,7 @@ beforeEach(async () => {
   await pool.query(
     "INSERT INTO local_ai_control(singleton,paused) VALUES(true,false) ON CONFLICT(singleton) DO UPDATE SET paused=false",
   );
-  await pool.query(
-    "UPDATE ai_test_spending_ceiling SET ceiling_points=1000000,committed_points=0",
-  );
+  await setTestCeiling(pool, { ceiling: 1000000, committed: 0 });
   data.clear();
   execute.mockReset();
   execute.mockImplementation(registry.adapter("ai", "test").execute);
@@ -68,9 +67,7 @@ beforeEach(async () => {
 afterAll(async () => {
   // Leave the shared switch and ceiling usable for later files.
   await pool.query("UPDATE local_ai_control SET paused=false");
-  await pool.query(
-    "UPDATE ai_test_spending_ceiling SET ceiling_points=100000,committed_points=0",
-  );
+  await setTestCeiling(pool, { ceiling: 100000, committed: 0 });
   await pool.end();
 });
 
@@ -138,11 +135,7 @@ const committed = async () =>
     (await pool.query("SELECT committed_points FROM ai_test_spending_ceiling"))
       .rows[0].committed_points,
   );
-const room = (points: number) =>
-  pool.query(
-    "UPDATE ai_test_spending_ceiling SET ceiling_points=committed_points+$1",
-    [points],
-  );
+const room = (points: number) => setTestCeiling(pool, { room: points });
 const commitments = async (jobId: string) =>
   (
     await pool.query(
@@ -370,7 +363,7 @@ it("AICAP-08: shows platform admins a content-free readout, and erasure keeps th
   await grant(owner);
   const jobId = await queued(owner);
   await local.run(owner.token, jobId);
-  await pool.query("UPDATE ai_test_spending_ceiling SET ceiling_points=5000");
+  await setTestCeiling(pool, { ceiling: 5000 });
   const readout = await control.spending(token);
   expect(readout).toEqual({
     rateVersion: RATES,
