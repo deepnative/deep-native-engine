@@ -319,7 +319,7 @@ test("[L314] STAFFEXPORT-01, 02, 05 a member finds when staff opened their work 
     const exported = await (
       await page.request.get(`${origin}/api/member/export`)
     ).json();
-    expect(exported.version).toBe("local-member-records-v43");
+    expect(exported.version).toBe("local-member-records-v44");
     expect(
       exported.records.staffAccess
         .map(

@@ -50,6 +50,7 @@ export interface StaffTools {
   agreements?: boolean;
   /** #123 CAP: the staff capacity report is available here. */
   capacity?: boolean;
+  recordAccess?: boolean;
   /** #193 MYTIME: a staff member's own booked time is available here. */
   myTime?: boolean;
   localAi: boolean;
@@ -100,6 +101,11 @@ function links(role: StaffRole, tools: StaffTools) {
       ],
       [tools.experts, "/operator/experts", "Synthetic expert registry"],
       [tools.capacity === true, "/operator/staff-capacity", "Staff capacity"],
+      [
+        tools.recordAccess === true,
+        "/operator/member-records",
+        "Download a member's records (with their permission)",
+      ],
       [
         tools.metrics,
         "/operator/metrics/report",
