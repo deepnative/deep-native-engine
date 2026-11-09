@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import request from "supertest";
 import type { Server } from "node:http";
 import { app } from "../../src/app.ts";
+import { disabledMyStaffTimeStore } from "../../src/my-staff-time.ts";
 import type { Store } from "../../src/store.ts";
 import type { StaffEntryResult } from "../../src/staff-entry.ts";
 import { STAFF_ROLES } from "../../src/authorization.ts";
@@ -150,6 +151,22 @@ it.each(STAFF_ROLES)(
     expect(r.text).not.toContain(credential);
     expect(f.create).not.toHaveBeenCalled();
     expect(f.session).not.toHaveBeenCalled();
+  },
+);
+it.each(STAFF_ROLES)(
+  "MYTIME-07 My booked time is offered to a %s only when a roster record can name the role",
+  async (role) => {
+    const f = await fixture({ myStaffTime: disabledMyStaffTimeStore() }, true);
+    f.admit.mockImplementation(async () => ({
+      kind: "ready",
+      role,
+      deadline: performance.now() + 60000,
+    }));
+    const r = await get("/staff", `dne_staff=${credential}`).expect(200);
+    expect(r.text.includes('href="/review/my-time"')).toBe(
+      role === "coach" || role === "reviewer",
+    );
+    if (role === "coach") expect(r.text).not.toContain("No browser tools");
   },
 );
 it("STAFF-01-ROLES omits unavailable tools and allows only already established legacy entry when explicit state is absent", async () => {
