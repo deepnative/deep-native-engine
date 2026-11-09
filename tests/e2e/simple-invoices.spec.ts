@@ -462,10 +462,14 @@ test("[L309] signed test events reconcile out of order and read as simulated to 
         .filter({ hasText: "Recorded payment" })
         .locator("+ dd"),
     ).toHaveText("CAD 0.00");
+    await expect(member.getByText("Service (simulated)")).toHaveCount(0);
     const refund = { type: "refund.succeeded", amountCents: 1000 };
     expect(await (await deliver(refund)).json()).toEqual({ outcome: "held" });
     await member.reload();
     await expect(member.getByText("Test event not applied")).toBeVisible();
+    // SVC-07: a held refund leaves the simulated service awaiting payment.
+    const service = (page: typeof member) => page.locator(".invoice-service");
+    await expect(service(member)).toHaveText("Awaiting payment");
     expect(await (await deliver(payment)).json()).toEqual({
       outcome: "receipt",
     });
@@ -498,10 +502,18 @@ test("[L309] signed test events reconcile out of order and read as simulated to 
       member.getByText(/No payment provider checked them and no money moved/),
     ).toBeVisible();
     await expect(member.getByText("Recorded by")).toHaveCount(0);
+    // SVC-03/07: the payment applied the waiting refund, so the service is withdrawn.
+    await expect(service(member)).toContainText(
+      "Withdrawn after a test refund on",
+    );
+    await expect(
+      member.getByText(/It provides nothing and grants no access/),
+    ).toBeVisible();
     await admin.page.goto(f.origin + "/operator/invoices/" + invoiceId);
     await expect(
       admin.page.getByRole("table", { name: "Recorded receipts and refunds" }),
     ).toContainText("Signed test event");
+    await expect(service(admin.page)).toContainText("Withdrawn");
     await admin.page.goto(f.origin + "/operator/changes");
     await expect(
       admin.page.getByText(

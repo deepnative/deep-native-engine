@@ -2753,8 +2753,8 @@
       "id": "L309",
       "actor": "Billing administrator and member reading signed test events on a sample invoice",
       "preconditions": "Dedicated synthetic PostgreSQL database, sample invoices, signed test events enabled with an invented key, port0 server; desktop/mobile Chromium; no provider, no real money",
-      "steps": "TESTPAY-04/06/07/10: a member accepts one invented invoice; a badly signed event is refused; signed events arrive as refund, then payment, then a stale failure; the member and administrator reload; the administrator opens change history",
-      "expected": "The bad signature changes nothing; the held refund applies once its payment arrives; the stale failure leaves the invoice paid; both readers see test entries saying no payment provider checked them and no money moved; change history lists a signed test event, not a staff member; no sideways scrolling",
+      "steps": "TESTPAY-04/06/07/10: a member accepts one invented invoice; a badly signed event is refused; signed events arrive as refund, then payment, then a stale failure; the member and administrator reload; the administrator opens change history. SVC-03/07: each reload reads the simulated service state",
+      "expected": "The bad signature changes nothing; the held refund applies once its payment arrives; the stale failure leaves the invoice paid; both readers see test entries saying no payment provider checked them and no money moved; change history lists a signed test event, not a staff member; the simulated service is absent before any signed event, awaiting payment while the refund is held and withdrawn at the end, saying it provides nothing; no sideways scrolling",
       "issues": [32],
       "critical": true
     },
@@ -2909,6 +2909,15 @@
       "steps": "PRACTICE-AI-01/02/06/08: a member starts lesson practice, saves one response, asks for a simulated AI suggestion on that pair and reloads",
       "expected": "Saving and reading ask for nothing; the suggestion is labelled simulated and not reviewed by a person, quotes the member's exact words, cites the exact lesson id and version, says it is uncertain and gives no score; one request succeeds and reload shows the same suggestion with no second request offered; no sideways scrolling",
       "issues": [200],
+      "critical": true
+    },
+    {
+      "id": "L327",
+      "actor": "Coach reading their own booked time, their backup, a staff member with no roster record and a refused member",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, invented administrator, operator, two coaches with verified coaching records naming each other as backup, two future slots on the first coach's record and one member sample hold; desktop/mobile Chromium; no provider",
+      "steps": "MYTIME-01/02/05/06/07: the coach follows My booked time from the staff page; the backup, the operator and the member open the same page",
+      "expected": "The coach sees one record with 120 min open slots, 1 held slot at its start time and 120 min room left (300 declared - 60 committed - 120 slots); no member, grant, slot, record or staff ID, reference or cost appears; no sideways scrolling; the backup sees only their own record with nothing held; the operator sees that nothing is bookable; the member is refused (403) with no figures",
+      "issues": [193],
       "critical": true
     }
   ],

@@ -55,6 +55,7 @@ const profile = {
   display_name: "Signup Learner",
   background: "explorer",
   goal: "everyday",
+  signup_country: "CA",
 };
 
 let server: Server;
@@ -310,5 +311,86 @@ it("CREATEACCT-02 names the start form's sign-in fields as creating an account",
   );
   expect(welcome.text).toContain(
     '<a class="button landing-start" href="#your-path">Start my learning path</a>',
+  );
+});
+
+// #12 D01/D02: Deep Native Inc., Ontario, Canada; Canada first.
+it("MARKET-01 hosted signup asks where the person lives, with no preselected answer, and names the operator", async () => {
+  const page = await get("/", visitor());
+  expect(page.text).toContain(
+    '<label for="signup_country">Country where you live</label>',
+  );
+  expect(page.text).toMatch(
+    /<select id="signup_country" name="signup_country" required[^>]*><option value="" selected>Choose a country<\/option><option value="CA">Canada<\/option><option value="other">Another country<\/option><\/select>/,
+  );
+  expect(page.text).toContain(
+    "Deep Native Engine is operated by Deep Native Inc. in Ontario, Canada, and is offered to people living in Canada for now.",
+  );
+});
+
+it("MARKET-02/03 only people living in Canada can open an account, and nothing is saved or looked up otherwise", async () => {
+  const lookups = vi.spyOn(passwords, "emailAvailable");
+  for (const country of ["other", "", "US", "ca", "CA "]) {
+    const refused = await post(
+      "/start",
+      {
+        ...profile,
+        signup_country: country,
+        signup_email: "elsewhere@example.com",
+        signup_password: PASSWORD,
+      },
+      visitor(),
+    );
+    expect(refused.status).toBe(422);
+    expect(refused.text).toContain(
+      "Country where you live: Deep Native Engine is only offered to people living in Canada for now. Nothing was saved.",
+    );
+    expect(refused.text).toContain('aria-invalid="true"');
+    expect(refused.text).not.toContain(PASSWORD);
+  }
+  const { signup_country: _omitted, ...withoutCountry } = profile;
+  void _omitted;
+  const missing = await post(
+    "/start",
+    {
+      ...withoutCountry,
+      signup_email: "missing@example.com",
+      signup_password: PASSWORD,
+    },
+    visitor(),
+  );
+  expect(missing.status).toBe(422);
+  expect(lookups).not.toHaveBeenCalled();
+  expect(
+    (await pool.query("SELECT count(*)::int AS n FROM principals")).rows[0]!.n,
+  ).toBe(0);
+  lookups.mockRestore();
+
+  // Canada opens the account as before; the answer itself is not stored.
+  releaseDelivery = () => {};
+  const token = visitor();
+  const started = await post(
+    "/start",
+    {
+      ...profile,
+      signup_email: "canada@example.com",
+      signup_password: PASSWORD,
+    },
+    token,
+  );
+  expect(started.status).toBe(303);
+  expect((await members.session(token)).kind).toBe("active");
+  const kept = await post(
+    "/start",
+    {
+      ...profile,
+      signup_country: "other",
+      signup_email: "x@example.com",
+      signup_password: PASSWORD,
+    },
+    visitor(),
+  );
+  expect(kept.text).toContain(
+    '<option value="other" selected>Another country</option>',
   );
 });

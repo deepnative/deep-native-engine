@@ -33,17 +33,33 @@ const text = (body: string) => ({ text: body, reference: "test_abc" });
 
 it("PRACTICE-AI-01 the local provider's suggestion quotes the member, cites the exact version and passes validation", async () => {
   const provider = deterministicPracticeSuggestionProvider("test");
-  const raw = (await provider.suggest(input)) as { text: string };
+  const raw = (await provider.suggest(input)) as {
+    text: string;
+    reference: string;
+    usage: unknown;
+  };
   expect(raw.text.startsWith(LABEL)).toBe(true);
   expect(raw.text).toContain(QUOTE);
   expect(raw.text).toContain("SYN-840 v3");
-  expect(validatePracticeSuggestion(raw, input)).toEqual(raw);
+  expect(validatePracticeSuggestion(raw, input)).toEqual({
+    text: raw.text,
+    reference: raw.reference,
+  });
+  // #188: simulated usage at the test rates, bytes in and out.
+  expect(raw.usage).toEqual({
+    inputTokens: Math.ceil(
+      (Buffer.byteLength(input.response) +
+        Buffer.byteLength(input.sourceExcerpt)) /
+        4,
+    ),
+    outputTokens: Math.ceil(Buffer.byteLength(raw.text) / 4),
+  });
   expect(await provider.suggest(input)).toEqual(raw);
 
   const interview = { ...input, interview: true };
   const asked = (await provider.suggest(interview)) as { text: string };
   expect(asked.text).toContain(NOTICE);
-  expect(validatePracticeSuggestion(asked, interview)).toEqual(asked);
+  expect(validatePracticeSuggestion(asked, interview)?.text).toBe(asked.text);
   // Without the notice an interview suggestion is rejected.
   expect(validatePracticeSuggestion(raw, interview)).toBeNull();
 });
@@ -279,12 +295,13 @@ it("PRACTICE-AI-01/03/04 the route asks once and returns to the pair for every r
   expect(suggest).toHaveBeenLastCalledWith(token, sessionId, 2);
 });
 
-it("PRACTICE-AI-05/07 refusals say nothing was requested, and forged forms never reach the store", async () => {
+it("PRACTICE-AI-05/07/09 refusals say nothing was requested, and forged forms never reach the store", async () => {
   const suggest = vi.fn<NonNullable<PracticeSessionStore["suggest"]>>();
   const f = fixture(suggest);
   for (const [outcome, status, words] of [
     ["paused", 409, "paused on this service"],
     ["limit", 409, "3 unfinished AI requests"],
+    ["ceiling", 409, "test spending ceiling"],
     ["unavailable", 404, "unavailable for a suggestion"],
   ] as const) {
     suggest.mockResolvedValueOnce(outcome);

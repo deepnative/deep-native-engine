@@ -371,7 +371,11 @@ function signupApp(
 
 it("SIGNUP-01/05 starts the account even when saving the sign-in or sending the email fails", async () => {
   const f = fixture();
-  const fields = { signup_email: "a@example.com", signup_password: good };
+  const fields = {
+    signup_country: "CA",
+    signup_email: "a@example.com",
+    signup_password: good,
+  };
   const failingEmail = signupApp(f.access, () =>
     Promise.reject(new Error("provider down")),
   );

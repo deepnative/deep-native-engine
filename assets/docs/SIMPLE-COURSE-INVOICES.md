@@ -4,7 +4,7 @@ Students register through the existing learning page. Registration itself create
 
 A current platform administrator opens **Staff tools → Course billing and invoices**, selects that registered account, selects the exact published course items and their versions, enters each price and the tax amount, and chooses one-time or monthly billing. This prepares a proposal; it does not issue an invoice or silently change any enrolment, saved learning or access.
 
-The student reviews the complete proposal, issuer, instructions, total and schedule, supplies the individual billing name/email, and explicitly accepts. A proposal can be accepted only until its start date, judged on the database's UTC date. After that its page says acceptance has closed, a direct acceptance is refused, and nothing is billed for the months already past. Staff prepare a new proposal if the student still wants the courses. The resulting private invoice lists the accepted course items and amounts. Its immutable snapshot survives later source/profile/settings changes. Use the browser’s **Print → Save as PDF** to save it. Staff confirms actual received offline funds against that invoice; a student claim or partial payment is not full settlement. Offline records do not grant coaching, qualifications or mark a course complete.
+The student reviews the complete proposal, issuer, instructions, total and schedule, supplies the individual billing name/email, and explicitly accepts. A proposal can be accepted only until its start date, judged on the database's UTC date. After that its page says acceptance has closed, a direct acceptance is refused, and nothing is billed for the months already past. Staff prepare a new proposal if the student still wants the courses. The same holds when a course in the proposal is retired, replaced by a newer published version or no longer open to that student before acceptance: the page names the course that is no longer offered and shows no acceptance form, an acceptance form opened earlier is refused, and no invoice is created. The resulting private invoice lists the accepted course items and amounts. Its immutable snapshot survives later source/profile/settings changes. Use the browser’s **Print → Save as PDF** to save it. Staff confirms actual received offline funds against that invoice; a student claim or partial payment is not full settlement. Offline records do not grant coaching, qualifications or mark a course complete.
 
 ## One-time and recurring billing
 
@@ -31,6 +31,16 @@ The `X-DNE-Test-Signature` header is `sha256=` followed by the hex HMAC-SHA256 o
 - A refund that arrives before its payment is held, then applied once when the payment arrives. A payment on a void invoice, above the balance or repeated under a new ID is held with no money moved. Held events are shown as **Test event not applied** and stay held.
 - Events change only the invoice record. They grant no access or entitlement and don't change the agreement. A return address or redirect does nothing.
 - The invoice labels these entries as simulated, and staff change history lists them as signed test events, not as a staff member's act.
+
+### Simulated service state (#32 SVC)
+
+Once a signed test event reaches a sample invoice, the invoice shows **Service (simulated)**, a record separate from the invoice, its payment rows and the course agreement. It is stored as append-only rows in `sample_service_states` (migration 122), one per change, each naming the applied event that moved it. No row means awaiting payment.
+
+- **Awaiting payment** until signed test receipts cover the total. Staff manual receipts never move it, because nobody verified them.
+- **Ready** once they do. **Withdrawn** once a signed test refund brings what was received below the total. Both sums only grow, so a withdrawn service never becomes ready again and every arrival order ends in the same state.
+- Failures, held events, duplicates and stale failures don't change it.
+- It provides nothing and grants no access. The database refuses rows on real invoices, edits, deletes and repeats, and the rows go when their sample invoice is erased with its account.
+- Download my records doesn't include it yet; the member's own signed test events are already there.
 
 ## Corrections and correspondence
 

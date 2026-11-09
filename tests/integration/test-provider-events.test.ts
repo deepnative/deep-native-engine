@@ -611,3 +611,216 @@ it("TESTPAY-13 reports only applied test events as simulated, never failed or he
   expect(row.lateCents - before.lateCents).toBe(0);
   expect(row.mismatchedInvoices - before.mismatchedInvoices).toBe(0);
 });
+
+const services = async (invoiceId: string) =>
+  (
+    await pool.query<{ state: string; cause: string }>(
+      `SELECT state,cause_event_id AS cause FROM sample_service_states
+       WHERE invoice_id=$1 ORDER BY changed_at,state`,
+      [invoiceId],
+    )
+  ).rows;
+const page = (address: string, token: string) =>
+  withLoopback(enabled, (s) =>
+    request(s)
+      .get(address)
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${token}`),
+  );
+
+it("SVC-01 keeps the simulated service awaiting payment until signed receipts cover the total, whatever staff record manually", async () => {
+  const i = await issued();
+  ready(
+    await invoices.pay(admin, {
+      invoiceId: i.invoiceId,
+      expectedRevision: 1,
+      operationId: randomUUID(),
+      amountCents: 3000,
+      receivedOn: today,
+      evidence: "Invented bank reference",
+    }),
+  );
+  expect((await totals(i.invoiceId)).paid).toBe(3000);
+  expect(await services(i.invoiceId)).toEqual([]);
+  expect(ready(await invoices.invoice(i.token, i.invoiceId)).service).toBe(
+    undefined,
+  );
+});
+
+it("SVC-02 appends one ready record naming the event once signed receipts cover the total", async () => {
+  const i = await issued(),
+    first = event(i.invoiceId, { amountCents: 1000 });
+  expect((await deliver(first)).body).toEqual({ outcome: "receipt" });
+  expect(await services(i.invoiceId)).toEqual([]);
+  expect(ready(await invoices.invoice(i.token, i.invoiceId)).service).toEqual({
+    state: "awaiting_payment",
+  });
+  const rest = event(i.invoiceId, { amountCents: 2000, paymentRef: "pay-2" });
+  expect((await deliver(rest)).body).toEqual({ outcome: "receipt" });
+  expect(await deliver(rest)).toMatchObject({
+    body: { outcome: "duplicate" },
+  });
+  expect(await services(i.invoiceId)).toEqual([
+    { state: "ready", cause: rest.id },
+  ]);
+  expect(
+    ready(await invoices.invoice(i.token, i.invoiceId)).service,
+  ).toMatchObject({ state: "ready" });
+});
+
+it("SVC-03 withdraws a ready service after a refund, and every arrival order ends in the same service state", async () => {
+  const i = await issued();
+  await deliver(event(i.invoiceId));
+  const refund = event(i.invoiceId, {
+    type: "refund.succeeded",
+    amountCents: 500,
+  });
+  await deliver(refund);
+  expect(await services(i.invoiceId)).toEqual([
+    { state: "ready", cause: expect.any(String) },
+    { state: "withdrawn", cause: refund.id },
+  ]);
+  const shapes = [
+    { type: "payment.failed", paymentRef: "pay-0" },
+    { type: "payment.succeeded" },
+    { type: "refund.succeeded", amountCents: 1000 },
+  ];
+  for (const order of permutations(shapes)) {
+    const o = await issued();
+    for (const shape of order) await deliver(event(o.invoiceId, shape));
+    expect(ready(await invoices.invoice(o.token, o.invoiceId)).service).toEqual(
+      expect.objectContaining({ state: "withdrawn" }),
+    );
+    expect((await services(o.invoiceId)).at(-1)!.state).toBe("withdrawn");
+  }
+});
+
+it("SVC-04 leaves the service state alone for failures, held events, duplicates and stale failures", async () => {
+  const i = await issued(),
+    pay = event(i.invoiceId);
+  await deliver(pay);
+  const before = await services(i.invoiceId);
+  expect(before.map((s) => s.state)).toEqual(["ready"]);
+  for (const change of [
+    { type: "payment.failed", occurredAt: "2026-10-01T12:00:00.000Z" },
+    { paymentRef: "pay-extra" },
+    { type: "refund.succeeded", amountCents: 3001 },
+  ])
+    await deliver(event(i.invoiceId, change));
+  await deliver(pay);
+  expect(await services(i.invoiceId)).toEqual(before);
+});
+
+it("SVC-05 grants nothing when the simulated service is ready", async () => {
+  const i = await issued();
+  const snapshot = async () =>
+    (
+      await pool.query(
+        `SELECT (SELECT to_jsonb(p)-'updated_at' FROM simple_invoice_plans p WHERE p.id=$2) AS plan,
+          (SELECT count(*)::int FROM synthetic_entitlement_grants WHERE member_id=$1) AS grants,
+          (SELECT count(*)::int FROM synthetic_entitlement_events e JOIN synthetic_entitlement_grants g ON g.id=e.grant_id WHERE g.member_id=$1) AS events`,
+        [i.id, i.planId],
+      )
+    ).rows[0];
+  const before = await snapshot();
+  await deliver(event(i.invoiceId));
+  expect((await services(i.invoiceId)).map((s) => s.state)).toEqual(["ready"]);
+  expect(await snapshot()).toEqual(before);
+});
+
+it("SVC-06 refuses service records on real invoices, edits, deletes, repeats or a return to ready, and erases them with the sample", async () => {
+  const insert = (invoiceId: string, state: string, cause: string) =>
+    pool.query(
+      "INSERT INTO sample_service_states(id,invoice_id,state,cause_event_id) VALUES($1,$2,$3,$4)",
+      [randomUUID(), invoiceId, state, cause],
+    );
+  const real = await issued(realInvoices);
+  await expect(insert(real.invoiceId, "ready", "evt-x")).rejects.toThrow(
+    "sample",
+  );
+  const unpaid = await issued();
+  await expect(insert(unpaid.invoiceId, "ready", "evt-none")).rejects.toThrow(
+    "signed test event",
+  );
+  const i = await issued(),
+    pay = event(i.invoiceId),
+    refund = event(i.invoiceId, {
+      type: "refund.succeeded",
+      amountCents: 3000,
+    });
+  await deliver(pay);
+  await expect(insert(i.invoiceId, "ready", pay.id)).rejects.toThrow(
+    "sample_service_states_invoice_id_state_key",
+  );
+  await expect(
+    pool.query(
+      "UPDATE sample_service_states SET state='withdrawn' WHERE invoice_id=$1",
+      [i.invoiceId],
+    ),
+  ).rejects.toThrow("immutable");
+  await expect(
+    pool.query("DELETE FROM sample_service_states WHERE invoice_id=$1", [
+      i.invoiceId,
+    ]),
+  ).rejects.toThrow("immutable");
+  const back = await issued();
+  await deliver(event(back.invoiceId, { type: "refund.succeeded" }));
+  const backPay = event(back.invoiceId);
+  await deliver(backPay);
+  expect((await services(back.invoiceId)).map((s) => s.state)).toEqual([
+    "withdrawn",
+  ]);
+  await expect(insert(back.invoiceId, "ready", backPay.id)).rejects.toThrow(
+    "cannot become ready",
+  );
+  await deliver(refund);
+  await migrate(pool);
+  // Every migration re-runs at each start and must keep these rows.
+  expect(await services(i.invoiceId)).toHaveLength(2);
+  await pool.query("DELETE FROM principals WHERE id=$1", [i.id]);
+  expect(await services(i.invoiceId)).toEqual([]);
+});
+
+it("SVC-07 shows the simulated service to member and staff, saying nothing is provided", async () => {
+  const quiet = await issued();
+  expect(
+    (await page(`/account/purchases/invoices/${quiet.invoiceId}`, quiet.token))
+      .text,
+  ).not.toContain("Service (simulated)");
+  const i = await issued();
+  await deliver(event(i.invoiceId, { amountCents: 1000 }));
+  const waiting = await page(
+    `/account/purchases/invoices/${i.invoiceId}`,
+    i.token,
+  );
+  expect(waiting.text).toContain("Service (simulated)");
+  expect(waiting.text).toContain("Awaiting payment");
+  await deliver(event(i.invoiceId, { amountCents: 2000, paymentRef: "p2" }));
+  for (const text of [
+    (await page(`/account/purchases/invoices/${i.invoiceId}`, i.token)).text,
+    (await page(`/operator/invoices/${i.invoiceId}`, admin)).text,
+  ]) {
+    expect(text).toContain("Service (simulated)");
+    expect(text).toContain("Ready");
+    expect(text).toContain("It provides nothing and grants no access");
+  }
+});
+
+it("SVC-08 keeps the service awaiting payment when a signed receipt reaches a void invoice", async () => {
+  const voided = await issued();
+  ready(
+    await invoices.voidInvoice(admin, {
+      invoiceId: voided.invoiceId,
+      expectedRevision: 1,
+      operationId: randomUUID(),
+      reason: "Invented correction",
+    }),
+  );
+  expect((await deliver(event(voided.invoiceId))).body).toEqual({
+    outcome: "held",
+  });
+  expect(await services(voided.invoiceId)).toEqual([]);
+  expect(
+    ready(await invoices.invoice(voided.token, voided.invoiceId)).service,
+  ).toEqual({ state: "awaiting_payment" });
+});

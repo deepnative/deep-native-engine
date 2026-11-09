@@ -5,9 +5,9 @@
 **Prepared:** 23 September 2026
 
 **Accountable decision owner:** Tom Wu
-**State:** planning draft; no jurisdictional advice, owner acceptance, public policy, live registration or sales approval
+**State:** planning draft; D01 and D02 recorded as owner decisions on 9 November 2026. No jurisdictional advice, accepted public policy, live registration or sales approval
 
-The owner confirmed on 23 September that the operating legal entity, operating province/country and enabled customer countries are **not decided**. This document therefore gives the owner and qualified advisers a concrete review packet without treating a Canadian or Ontario example as the selected legal regime. It cannot satisfy PLAN-002's actual-entity, legal/tax determination and owner-review criteria until those decisions are recorded. The [current product direction](PRODUCT-DIRECTION.md) governs the audience and optional-offer boundaries; [PLAN-001](PLAN-001-SCOPE-RECONCILIATION.md) records the upstream scope decisions. The historical contractor package supplies hypotheses, not accepted terms.
+The owner confirmed on 23 September that the operating legal entity, operating province/country and enabled customer countries were not decided. **On 9 November 2026 the owner decided D01 and D02** ([#12 decision note](https://github.com/deepnative/deep-native-engine/issues/12#issuecomment-6732721591)): the operating entity is **Deep Native Inc., Ontario, Canada**, and the initial customer market is **Canada first** (customer-country allowlist: CA). Those are owner decisions, not legal advice: registration identifiers, the operating address, the authorized signer and qualified review of which Ontario and Canadian rules apply are still open. Every other decision below stays open, and the terms, privacy, consent and retention language in this document remains an unaccepted draft for qualified review.
 
 ## Decision register and evidence gates
 
@@ -15,8 +15,8 @@ The owner confirmed on 23 September that the operating legal entity, operating p
 
 | ID | Decision and observable acceptance evidence | Decision owner / specialist | Status and gate |
 | --- | --- | --- | --- |
-| D01 | Name the selling/contracting legal person, registration identifiers needed for agreements/invoices, operating address and province/country; record a verified source and authorized signer. | Tom Wu / corporate counsel and accountant | **Open.** Blocks real terms, provider accounts, invoices and sales. |
-| D02 | Approve the customer-country/province allowlist, member age/eligibility policy, language and support coverage, and how unsupported locations are refused before personal-data collection or checkout. | Tom Wu / jurisdictional counsel | **Open.** Blocks hosted real-member registration, country marketing and live offers. Do not infer Ontario or Canada from the owner's location. |
+| D01 | Name the selling/contracting legal person, registration identifiers needed for agreements/invoices, operating address and province/country; record a verified source and authorized signer. | Tom Wu / corporate counsel and accountant | **Owner decision recorded 9 Nov 2026:** Deep Native Inc., Ontario, Canada. **Still open:** registration identifiers, operating address, authorized signer and a verified source, recorded by the owner with the accountant/counsel. Real terms, provider accounts, invoices and sales stay blocked until then and until D03–D08 are accepted. |
+| D02 | Approve the customer-country/province allowlist, member age/eligibility policy, language and support coverage, and how unsupported locations are refused before personal-data collection or checkout. | Tom Wu / jurisdictional counsel | **Owner decision recorded 9 Nov 2026:** Canada first, customer-country allowlist CA. Hosted account signup now asks the country where the person lives and refuses anything but Canada before any lookup or save; the answer is not stored. **Still open:** province-level handling, member age/eligibility policy, language and support coverage, and jurisdictional review of the refusal and consent flow. Hosted real-member registration still also needs D07/D08. |
 | D03 | Classify each product separately: foundation learning/participation, digital content, AI-assisted features, individual coaching/review and events. Determine any education/training, consumer-contract or professional-service requirements in each enabled market. | Product owner / consumer and education counsel | **Open.** Blocks public product descriptions and final terms. A professional background is not the optional paid **Professional** offer. |
 | D04 | Approve versioned foundation access/pricing/limits and separately approve any optional coaching offer, capacity, dates, taxes and refund path. Show the same version before acceptance and on the retained receipt. | Tom Wu / product, operations, counsel and accountant | **Open; depends on the accepted [CTP-002 #19](https://github.com/deepnative/deep-native-engine/issues/19) offer decision.** Blocks checkout and pricing claims. CAD 3,000/9,000/12,000 remain coaching hypotheses only. |
 | D05 | Determine cancellation, renewal, cooling-off and refund rules for each applicable market and offer; record notice method, service-start exceptions, dispute owner and evidence retention. | Counsel / operations / Tom Wu | **Open.** Blocks final agreement and billing logic. A pilot never silently converts. |
@@ -76,7 +76,7 @@ Proposed rights default: the member keeps their contribution rights; an opt-in g
 
 ## Conditional official-source review, 23 September 2026
 
-These primary sources identify questions for advisers. They do not establish that a particular law applies to the undecided entity or markets. Recheck current law on the decision date.
+These primary sources identify questions for advisers. They do not establish that a particular law applies to Deep Native Inc. or to customers in Canada; that is the qualified review D01/D02 still need. Recheck current law on the decision date.
 
 | Topic | Official source and what it prompts us to verify |
 | --- | --- |

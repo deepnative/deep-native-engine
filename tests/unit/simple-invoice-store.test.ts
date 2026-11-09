@@ -119,6 +119,7 @@ function fixture(
     activeAgreement?: boolean;
     first?: string | null;
     payments?: unknown[];
+    services?: unknown[];
   } = {},
 ) {
   const result = (rows: unknown[], rowCount = rows.length) => ({
@@ -179,6 +180,8 @@ function fixture(
       ]);
     if (sql.includes("FROM simple_invoice_payments p"))
       return result(options.payments ?? []);
+    if (sql.includes("FROM sample_service_states"))
+      return result(options.services ?? []);
     if (sql.includes("FROM simple_invoice_plans b"))
       return result(options.due ? [{ id: planId, owner_id: ownerId }] : []);
     if (sql.startsWith("SELECT 1 FROM simple_invoice_plans"))
@@ -261,6 +264,39 @@ it("OFFPUR-05 requires the original current member or billing administrator and 
   expect((await f.service.overview(member)).kind).toBe("ready");
   expect(f.observe).toHaveBeenCalledWith([expiry]);
   expect((await f.service.adminOverview(admin)).kind).toBe("ready");
+});
+it("BUILD-09-B lists an open offer's courses that are no longer offered to the member", async () => {
+  const unavailable = async (options: Parameters<typeof fixture>[0]) => {
+    const r = await fixture(options).service.overview(member);
+    if (r.kind !== "ready") throw Error("Expected overview");
+    return r.value.unavailable;
+  };
+  expect(await unavailable({})).toEqual({});
+  expect(await unavailable({ eligible: false })).toEqual({
+    [planId]: ["FND-001"],
+  });
+  // A retitled course is not the course the member was offered.
+  expect(
+    await unavailable({
+      plan: {
+        ...plan,
+        terms: {
+          ...terms,
+          courses: [
+            { ...terms.courses[0]!, description: "Another title" },
+            terms.courses[0]!,
+          ],
+        },
+      },
+    }),
+  ).toEqual({ [planId]: ["FND-001"] });
+  // Closed or settled offers are not checked: nothing there can be accepted.
+  expect(await unavailable({ eligible: false, today: "2026-11-01" })).toEqual(
+    {},
+  );
+  expect(
+    await unavailable({ eligible: false, plan: { ...plan, state: "active" } }),
+  ).toEqual({});
 });
 it("OFFPUR-01/08 prepares exact eligible course terms and rejects changed, missing or malformed proposals", async () => {
   const f = fixture();
@@ -776,4 +812,41 @@ it("MANPAY-01/03 reads the record with numeric amounts and drops the actor unles
   expect(seen.kind === "ready" && seen.value.payments?.[0]?.recordedBy).toBe(
     "Removed staff account",
   );
+});
+
+it("SVC-07 reads the simulated service only once a signed test event reached the invoice", async () => {
+  const signed = {
+    kind: "failure",
+    amountCents: "100",
+    on: "2026-10-31",
+    evidence: "Test event evt-1",
+    verification: "signed_test_event",
+    recordedBy: null,
+  };
+  const manual = fixture({
+    payments: [{ ...signed, verification: "manual_unverified" }],
+    services: [{ state: "ready", since: "2026-10-31" }],
+  });
+  const plain = await manual.service.invoice(member, invoiceId);
+  expect(plain.kind === "ready" && "service" in plain.value).toBe(false);
+  expect(
+    manual.query.mock.calls.some(([sql]) =>
+      String(sql).includes("sample_service_states"),
+    ),
+  ).toBe(false);
+  const waiting = await fixture({ payments: [signed] }).service.invoice(
+    member,
+    invoiceId,
+  );
+  expect(waiting.kind === "ready" && waiting.value.service).toEqual({
+    state: "awaiting_payment",
+  });
+  const withdrawn = await fixture({
+    payments: [signed],
+    services: [{ state: "withdrawn", since: "2026-11-01" }],
+  }).service.invoice(member, invoiceId);
+  expect(withdrawn.kind === "ready" && withdrawn.value.service).toEqual({
+    state: "withdrawn",
+    since: "2026-11-01",
+  });
 });
