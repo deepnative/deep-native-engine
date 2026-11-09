@@ -6,6 +6,7 @@ import { catalogStore, seedDraftPack } from "../../src/catalog.ts";
 import { foundationImportStore } from "../../src/foundation-import.ts";
 import { reviewedFoundation } from "../../src/foundation-pack.ts";
 import { memberExportStore } from "../../src/member-export.ts";
+import { simpleInvoiceSettings } from "../../src/simple-invoice-config.ts";
 import {
   simpleInvoiceStore,
   type InvoiceResult,
@@ -186,11 +187,15 @@ it("MANPAY-01/03 keeps the actor, evidence and unverified status and shows the m
   expect(staffPage.text).toContain(
     `Staff account ${stored[0]!.actor_id!.slice(0, 8)}`,
   );
-  expect(staffPage.text).toContain("Not verified by a payment provider");
+  expect(staffPage.text).toContain(
+    "Recorded manually by staff when the offline payment was received",
+  );
   const own = await get(`/account/purchases/invoices/${i.invoiceId}`, i.token);
   expect(own.status).toBe(200);
   expect(own.text).toContain("Interac invented-1");
-  expect(own.text).toContain("Not verified by a payment provider");
+  expect(own.text).toContain(
+    "Recorded manually by staff when the offline payment was received",
+  );
   expect(own.text).not.toContain("Recorded by");
   expect(own.text).not.toContain("Staff account");
   expect(own.text).not.toContain(stored[0]!.actor_id!);
@@ -451,4 +456,82 @@ it("MANPAY-08 exports the member's own events and refund total without the staff
     ]),
   );
   expect(JSON.stringify(records.invoicePayments)).not.toContain("actor");
+});
+
+it("ISSUER-02/04 issues a configured course invoice with 13% HST from the issuer record", async () => {
+  const configured = simpleInvoiceSettings(
+      { DNE_INVOICE_MODE: "configured", DNE_INVOICE_CURRENCY: "CAD" },
+      true,
+    )!,
+    real = simpleInvoiceStore(pool, configured),
+    realApp = app(members, {
+      origin,
+      secret,
+      mode: "test",
+      simpleInvoices: real,
+    });
+  const m = await member(),
+    courses = [
+      { id: "FND-001", version: 2, amountCents: 7000 },
+      { id: "FND-002", version: 2, amountCents: 2999 },
+    ],
+    base = {
+      ownerId: m.id,
+      courses,
+      cadence: "one_time" as const,
+      startsOn: today,
+    };
+  // A typed tax is refused: only the server sets HST.
+  expect(
+    (
+      await real.propose(admin, {
+        ...base,
+        operationId: randomUUID(),
+        taxCents: 0,
+      })
+    ).kind,
+  ).toBe("invalid");
+  const { planId } = ready(
+    await real.propose(admin, { ...base, operationId: randomUUID() }),
+  );
+  const { invoiceId } = ready(
+    await real.accept(m.token, {
+      planId,
+      expectedRevision: 1,
+      operationId: randomUUID(),
+      name: "Invented student",
+      email: "invented-student@example.invalid",
+    }),
+  );
+  const row = (
+    await pool.query<{ total: number; document: Record<string, unknown> }>(
+      "SELECT total_cents::int AS total,document FROM simple_invoices WHERE id=$1",
+      [invoiceId],
+    )
+  ).rows[0]!;
+  // 13% of CAD 99.99 is 12.9987, rounded to 13.00.
+  expect(row.total).toBe(9999 + 1300);
+  expect(row.document).toMatchObject({
+    sample: false,
+    taxCents: 1300,
+    issuer: "Deep Native Inc. · Ontario, Canada",
+    instructions:
+      "Pay by Interac e-Transfer to info@deepnative.io or by cheque to Deep Native Inc.",
+    tax: {
+      label: "HST",
+      registration: "713254472RT0001",
+      rateBasisPoints: 1300,
+    },
+  });
+  const own = await withLoopback(realApp, (s) =>
+    request(s)
+      .get(`/account/purchases/invoices/${invoiceId}`)
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${m.token}`),
+  );
+  expect(own.status).toBe(200);
+  expect(own.text).toContain("HST registration number 713254472RT0001");
+  expect(own.text).toContain("<dt>HST (13%)</dt><dd>CAD 13.00</dd>");
+  expect(own.text).toContain("<dt>Total</dt><dd>CAD 112.99</dd>");
+  expect(own.text).not.toContain("SAMPLE");
 });

@@ -173,3 +173,38 @@ it("NOACCOUNT-01 tells an address with no account how to start, without a sign-i
     sender.sendNoAccount!("new@example.com", "https://engine.deepnative.io/"),
   ).rejects.toThrow("Email send was not confirmed");
 });
+
+it("ISSUER-06 names the issuer, HST registration and HST amount in a configured invoice email", async () => {
+  await azureInvoiceSender(
+    "https://invented.example.invalid",
+    "DoNotReply@invented.example.invalid",
+    "00000000-0000-4000-8000-000000000000",
+  ).send(
+    "learner@example.invalid",
+    {
+      number: "DN-invented",
+      issuedOn: "2026-11-09",
+      issuer: "Deep Native Inc. · Ontario, Canada",
+      billedTo: "Invented learner",
+      lines: [{ description: "Invented course", amountCents: 10000 }],
+      billing: { kind: "one_time" },
+      currency: "CAD",
+      taxCents: 1300,
+      paidCents: 0,
+      instructions:
+        "Pay by Interac e-Transfer to info@deepnative.io or by cheque to Deep Native Inc.",
+      sample: false,
+      tax: {
+        label: "HST",
+        registration: "713254472RT0001",
+        rateBasisPoints: 1300,
+      },
+    },
+    "https://engine.example.invalid/account/purchases/invoices/x",
+  );
+  const text = sdk.beginSend.mock.calls[0]![0].content.plainText as string;
+  expect(text).toContain("From: Deep Native Inc. · Ontario, Canada");
+  expect(text).toContain("HST registration number 713254472RT0001");
+  expect(text).toContain("HST (13%): CAD 13.00");
+  expect(text).toContain("Total: CAD 113.00");
+});
