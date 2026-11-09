@@ -2883,6 +2883,15 @@
       "expected": "Real agreements read 4 offered, 2 of 4 (50%) accepted, 1 withdrawn and 1 of 2 (50%) cancelled after acceptance; the one test agreement is counted apart and never in the real figures; no member name, email, amount or agreement ID appears; no sideways scrolling; the operator is refused (403) with no figures",
       "issues": [123],
       "critical": true
+    },
+    {
+      "id": "L324",
+      "actor": "Member asking for a simulated AI suggestion on a saved practice pair",
+      "preconditions": "Dedicated synthetic PostgreSQL database, one published invented lesson, port0 server; desktop/mobile Chromium; local deterministic test provider only",
+      "steps": "PRACTICE-AI-01/02/06/08: a member starts lesson practice, saves one response, asks for a simulated AI suggestion on that pair and reloads",
+      "expected": "Saving and reading ask for nothing; the suggestion is labelled simulated and not reviewed by a person, quotes the member's exact words, cites the exact lesson id and version, says it is uncertain and gives no score; one request succeeds and reload shows the same suggestion with no second request offered; no sideways scrolling",
+      "issues": [200],
+      "critical": true
     }
   ],
   "fullMvp": [

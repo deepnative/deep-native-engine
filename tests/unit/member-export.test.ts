@@ -103,7 +103,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v42",
+      version: "local-member-records-v43",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -226,8 +226,8 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    // Original indices0..59 remain; appended sections 60..66 are valid.
-    [2, 67, ...valid.slice(2)],
+    // Original indices0..59 remain; appended sections 60..67 are valid.
+    [2, 68, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -281,7 +281,7 @@ it.each([
     expect(result).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v42",
+        version: "local-member-records-v43",
         records: { [name]: [{ record: "Invented owned metadata" }] },
       },
     });
@@ -518,7 +518,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v42",
+        version: "local-member-records-v43",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -726,7 +726,7 @@ it("appends owned review accounting at indices 33-35 without moving existing sec
     expect(value).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v42",
+        version: "local-member-records-v43",
         records: { [name]: [{ id: "owned-accounting" }] },
       },
     });
@@ -759,7 +759,7 @@ it("appends safe source-deleted assignment receipts at index36 without moving an
   expect(value).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v42",
+      version: "local-member-records-v43",
       records: { sampleAssignmentOperations: [record] },
     },
   });
@@ -896,7 +896,7 @@ it("CONPUB-04 appends owner-only publication permissions at cursor index46 with 
   expect(result).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v42",
+      version: "local-member-records-v43",
       records: {
         proposalPublications: [{ state: "withdrawn", attribution: null }],
       },
@@ -1102,7 +1102,7 @@ it("EXPCOV-03/04 appends sample holds at index 63 and simulated assessment resul
   const names = Object.keys(result.payload.records);
   expect(names.indexOf("sampleHolds")).toBe(63);
   expect(names.indexOf("contentAssessments")).toBe(64);
-  expect(names).toHaveLength(67);
+  expect(names).toHaveLength(68);
   expect(result.payload.records.sampleHolds).toEqual([
     { id: "hold-b", state: "released" },
   ]);
@@ -1152,4 +1152,30 @@ it("EXPCOV-05/06 appends coach assignments at 65 and manual payment observations
   )!;
   expect(manual).toContain("synthetic_manual_observations WHERE member_id=$1");
   expect(manual).not.toMatch(/actor_id|idempotency_key|request_fingerprint/);
+});
+
+it("PRACTICE-AI-06 appends practice suggestions at 67, without the request fingerprint or provider reference", async () => {
+  const fake = fakePool({ id: "member-1" }, (sql) =>
+    sql.includes("FROM practice_ai_suggestions g")
+      ? [{ _key: ["s-1", 1], sessionId: "s-1", sequence: 1, state: "ready" }]
+      : [],
+  );
+  const result = await memberExportStore(fake.pool, secret).exportOwned(
+    "owner",
+    signed([2, 67, ["s-0", 1], 2, Date.now() + 60000]),
+  );
+  if (result.kind !== "ready") throw Error("Expected appended owner cursor");
+  expect(
+    Object.keys(result.payload.records).indexOf("practiceAiSuggestions"),
+  ).toBe(67);
+  expect(result.payload.records.practiceAiSuggestions).toEqual([
+    { sessionId: "s-1", sequence: 1, state: "ready" },
+  ]);
+  const query = fake.statements.find((sql) =>
+    sql.includes("FROM practice_ai_suggestions g"),
+  )!;
+  expect(query).toContain("g.member_id=$1 AND s.withdrawn_at IS NULL");
+  expect(query).not.toMatch(
+    /job_id|request_fingerprint|provider_operation_reference/,
+  );
 });

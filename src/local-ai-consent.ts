@@ -590,8 +590,9 @@ export function localAiConsentStore(
         );
         const open = (
           await client.query<{ open: number }>(
-            "SELECT count(*)::int AS open FROM adapter_jobs WHERE member_id=$1 AND adapter='ai' AND operation=$2 AND status IN ('pending','running','failed','needs_reconciliation')",
-            [authorization.row.owner_principal_id, LOCAL_AI_PURPOSE],
+            // Every member AI request counts, including practice suggestions (#200).
+            "SELECT count(*)::int AS open FROM adapter_jobs WHERE member_id=$1 AND adapter='ai' AND status IN ('pending','running','failed','needs_reconciliation')",
+            [authorization.row.owner_principal_id],
           )
         ).rows[0]!.open;
         // Refused before any unit, estimate, ceiling room or provider call.

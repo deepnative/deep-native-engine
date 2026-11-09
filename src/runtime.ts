@@ -291,6 +291,8 @@ export async function start(env: NodeJS.ProcessEnv) {
       practice: practiceStore(pool),
       practiceSessions: practiceSessionStore(pool, {
         allowance: settings.practiceSessionAllowance,
+        // #200: local deterministic suggestions; config() rejects live hosting.
+        suggestions: { mode: settings.mode as "demo" | "test" },
       }),
       practiceSessionAllowance: settings.practiceSessionAllowance,
       reviewTimeGrantAdmin: reviewTimeGrantAdminStore(
